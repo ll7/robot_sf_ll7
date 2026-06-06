@@ -24,6 +24,7 @@ import numpy as np
 from robot_sf.common.artifact_paths import get_repository_root
 
 PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v2"
+EVIDENCE_BUNDLE_SCHEMA_VERSION = "evidence_bundle.v1"
 SIZE_REPORT_SCHEMA_VERSION = "benchmark-artifact-size-report.v1"
 _VIDEO_SUFFIXES = {".mp4", ".gif", ".webm", ".mov"}
 _MARKER_FILES = ("manifest.json", "run_meta.json", "episodes.jsonl", "summary.json", "report.json")
@@ -53,6 +54,17 @@ class PublicationBundleResult:
 
     bundle_dir: Path
     archive_path: Path
+    manifest_path: Path
+    checksums_path: Path
+    file_count: int
+    total_bytes: int
+
+
+@dataclass(frozen=True)
+class EvidenceBundleResult:
+    """Paths and summary values produced by :func:`export_evidence_bundle`."""
+
+    bundle_dir: Path
     manifest_path: Path
     checksums_path: Path
     file_count: int
@@ -390,6 +402,134 @@ def _resolve_bundle_output_paths(
     if not bundle_dir.is_relative_to(target_root) or not archive_path.is_relative_to(target_root):
         raise ValueError("Bundle output must remain within out_dir")
     return target_root, bundle_dir, archive_path
+
+
+def _resolve_evidence_files(source_root: Path, files: list[Path]) -> list[Path]:
+    """Resolve user-selected evidence files relative to ``source_root``.
+
+    Returns:
+        Sorted source-root-relative paths.
+    """
+    root = source_root.resolve()
+    if not root.exists() or not root.is_dir():
+        raise FileNotFoundError(f"Evidence source root does not exist: {root}")
+    if not files:
+        raise ValueError("At least one evidence file is required")
+
+    resolved: list[Path] = []
+    for file_path in files:
+        candidate = file_path if file_path.is_absolute() else root / file_path
+        candidate = candidate.resolve()
+        if not candidate.is_relative_to(root):
+            raise ValueError(f"Evidence file escapes source root: {file_path}")
+        if not candidate.exists() or not candidate.is_file():
+            raise FileNotFoundError(f"Evidence file does not exist: {candidate}")
+        if candidate.is_symlink():
+            raise ValueError(f"Evidence bundle refuses symlink payloads: {candidate}")
+        resolved.append(candidate.relative_to(root))
+    return sorted(set(resolved), key=lambda value: value.as_posix())
+
+
+def export_evidence_bundle(
+    source_root: Path,
+    out_dir: Path,
+    *,
+    bundle_name: str,
+    files: list[Path],
+    command: str,
+    commit: str,
+    claim_boundary: str,
+    overwrite: bool = False,
+) -> EvidenceBundleResult:
+    """Export a compact reproducible evidence bundle.
+
+    The bundle layout contains:
+    - ``payload/``: exactly the selected compact evidence files.
+    - ``evidence_bundle_manifest.json``: schema-tagged provenance + file index.
+    - ``checksums.sha256``: SHA-256 checksums for all payload files.
+
+    Returns:
+        Paths and totals describing the exported bundle artifacts.
+    """
+    if not command.strip():
+        raise ValueError("Evidence bundle command is required")
+    if not commit.strip():
+        raise ValueError("Evidence bundle commit is required")
+    if not claim_boundary.strip():
+        raise ValueError("Evidence bundle claim_boundary is required")
+
+    target_name = bundle_name.strip()
+    _validate_bundle_name(target_name)
+    target_root = out_dir.resolve()
+    target_root.mkdir(parents=True, exist_ok=True)
+    bundle_dir = (target_root / target_name).resolve()
+    if not bundle_dir.is_relative_to(target_root):
+        raise ValueError("Evidence bundle output must remain within out_dir")
+
+    if overwrite:
+        if bundle_dir.exists():
+            if bundle_dir == target_root:
+                raise ValueError("Refusing to delete out_dir via overwrite")
+            shutil.rmtree(bundle_dir)
+    elif bundle_dir.exists():
+        raise FileExistsError(f"Evidence bundle output already exists: {bundle_dir}")
+
+    source = source_root.resolve()
+    selected_files = _resolve_evidence_files(source, files)
+    payload_root = bundle_dir / "payload"
+    payload_root.mkdir(parents=True, exist_ok=True)
+
+    entries: list[PublicationFileEntry] = []
+    total_bytes = 0
+    for rel in selected_files:
+        src = source / rel
+        dst = payload_root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        size_bytes = int(dst.stat().st_size)
+        total_bytes += size_bytes
+        entries.append(
+            PublicationFileEntry(
+                path=rel.as_posix(),
+                size_bytes=size_bytes,
+                sha256=_sha256_file(dst),
+                kind=_kind_for_path(rel),
+            )
+        )
+
+    entries = sorted(entries, key=lambda entry: entry.path)
+    checksums_path = bundle_dir / "checksums.sha256"
+    checksums_path.write_text(
+        "".join(f"{entry.sha256}  {entry.path}\n" for entry in entries),
+        encoding="utf-8",
+    )
+
+    manifest_payload = {
+        "schema_version": EVIDENCE_BUNDLE_SCHEMA_VERSION,
+        "created_at_utc": _utc_now_iso(),
+        "bundle_name": target_name,
+        "source_root": _to_repo_relative(source),
+        "command": command.strip(),
+        "commit": commit.strip(),
+        "claim_boundary": claim_boundary.strip(),
+        "policy": {
+            "large_raw_artifacts": "excluded",
+            "output_tree_mirroring": "forbidden",
+            "paper_or_benchmark_claim": "not_established_by_bundle_alone",
+        },
+        "totals": {"file_count": len(entries), "total_bytes": total_bytes},
+        "files": [asdict(entry) for entry in entries],
+    }
+    manifest_path = bundle_dir / "evidence_bundle_manifest.json"
+    manifest_path.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
+
+    return EvidenceBundleResult(
+        bundle_dir=bundle_dir,
+        manifest_path=manifest_path,
+        checksums_path=checksums_path,
+        file_count=len(entries),
+        total_bytes=total_bytes,
+    )
 
 
 def export_publication_bundle(

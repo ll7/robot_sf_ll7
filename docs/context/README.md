@@ -229,6 +229,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2434_ammv_scenario_sweep.md](issue_2434_ammv_scenario_sweep.md)
 
+* Issue #2463 Mechanism Signal Checker:
+
+  [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
@@ -502,6 +506,8 @@ knowledge, not every transient iteration detail.
   [issue_2037_artifact_compiler_smoke.md](issue_2037_artifact_compiler_smoke.md)
 * Issue #2040 Artifact Publication Workflow (2026-06-01):
   [issue_2040_artifact_publication_workflow.md](issue_2040_artifact_publication_workflow.md)
+* Issue #2460 Evidence Bundle v1:
+  [issue_2460_evidence_bundle_v1.md](issue_2460_evidence_bundle_v1.md)
 * Issue #2034 Platformization Roadmap (2026-06-01):
   [issue_2034_platformization_roadmap.md](issue_2034_platformization_roadmap.md)
 * Issue #1395 Learned Risk Model Launch Packet:
@@ -551,6 +557,8 @@ knowledge, not every transient iteration detail.
   [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md)
 * Issue #2236 Trace Mechanism Evidence Rubric (2026-06-04):
   [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md)
+* Issue #2463 Mechanism Signal Checker (2026-06-06):
+  [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md)
 * Issue #2263 Mechanism Activation Report Fields (2026-06-05):
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
 * Issue #2227 Mechanism Panel Readiness (2026-06-04):
@@ -646,7 +654,8 @@ knowledge, not every transient iteration detail.
 ## Evidence Bundles
 
 * [Evidence Bundles](evidence/README.md) documents the narrow policy for promoting small generated
-  artifacts out of `output/` into git. Current bundles include the
+  artifacts out of `output/` into git. [Issue #2460 Evidence Bundle v1](issue_2460_evidence_bundle_v1.md)
+  defines the explicit-file helper and schema contract. Current bundles include the
   [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md),
   [issue 1023 candidate-augmented preflight](evidence/issue_1023_candidate_augmented_preflight_2026-05-06/README.md),
   [issue 1023 candidate-augmented local full campaign](evidence/issue_1023_candidate_augmented_local_full_2026-05-06/README.md),
@@ -759,6 +768,9 @@ knowledge, not every transient iteration detail.
 * [Issue #1085 Pedestrian-Impact Aggregate Metrics](issue_1085_pedestrian_impact_metrics.md)
   defines the schema-backed `pedestrian-impact.v1` block, canonical aggregate reductions, and
   opt-in CLI path for pedestrian-impact benchmark outputs.
+* [Issue #2458 Human-Interaction Proxy Metrics](issue_2458_human_interaction_proxy_metrics.md)
+  defines the schema-backed `human-interaction-proxy.v1` block, simulation-proxy formulas, and
+  claim boundary for human-centered mechanism-report reductions.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.

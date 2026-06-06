@@ -418,6 +418,91 @@ def test_compute_aggregates_flattens_social_acceptability_block() -> None:
     assert metrics["social_proxemic_intrusion_area_m_s"]["mean"] == 0.6
 
 
+def test_compute_aggregates_flattens_human_interaction_proxy_block() -> None:
+    """Schema-backed human-interaction proxy reductions should aggregate as scalars."""
+    records = [
+        {
+            "episode_id": "ep-1",
+            "scenario_id": "sc-1",
+            "seed": 1,
+            "algo": "planner-a",
+            "metric_parameters": {
+                "threshold_signature": "default",
+                "threshold_profile": {
+                    "profile_id": "default",
+                    "collision_distance_m": 0.3,
+                    "near_miss_distance_m": 0.6,
+                    "comfort_force_threshold": 2.0,
+                },
+            },
+            "metrics": {
+                "success": True,
+                "human_interaction_proxy": {
+                    "schema_version": "human-interaction-proxy.v1",
+                    "status": "simulation_proxy",
+                    "parameters": {"proxemic_radius_m": 1.2, "yield_speed_mps": 0.1},
+                    "available": True,
+                    "sample_counts": {"pedestrians": 1, "timesteps": 4},
+                    "canonical_reductions": {
+                        "human_discomfort_exposure_m_s": 0.9,
+                        "intrusion_duration_s": 1.0,
+                        "time_to_yield_s": 0.5,
+                        "robot_yield_distance_m": 1.5,
+                        "pedestrian_path_deviation_proxy_m": 0.2,
+                        "group_split_intrusion_available": False,
+                    },
+                },
+            },
+        },
+        {
+            "episode_id": "ep-2",
+            "scenario_id": "sc-1",
+            "seed": 2,
+            "algo": "planner-a",
+            "metric_parameters": {
+                "threshold_signature": "default",
+                "threshold_profile": {
+                    "profile_id": "default",
+                    "collision_distance_m": 0.3,
+                    "near_miss_distance_m": 0.6,
+                    "comfort_force_threshold": 2.0,
+                },
+            },
+            "metrics": {
+                "success": True,
+                "human_interaction_proxy": {
+                    "schema_version": "human-interaction-proxy.v1",
+                    "status": "simulation_proxy",
+                    "parameters": {"proxemic_radius_m": 1.2, "yield_speed_mps": 0.1},
+                    "available": True,
+                    "sample_counts": {"pedestrians": 1, "timesteps": 4},
+                    "canonical_reductions": {
+                        "human_discomfort_exposure_m_s": 0.3,
+                        "intrusion_duration_s": 0.5,
+                        "time_to_yield_s": 0.0,
+                        "robot_yield_distance_m": 2.0,
+                        "pedestrian_path_deviation_proxy_m": 0.4,
+                        "group_split_intrusion_available": False,
+                    },
+                },
+            },
+        },
+    ]
+
+    flat = flatten_metrics(records[0])
+    assert "human_interaction_proxy" not in flat
+    assert flat["human_discomfort_exposure_m_s"] == 0.9
+    assert flat["human_proxy_yield_speed_mps"] == 0.1
+
+    summary = compute_aggregates(records, group_by="algo")
+
+    metrics = summary["planner-a"]
+    assert metrics["human_discomfort_exposure_m_s"]["mean"] == 0.6
+    assert metrics["intrusion_duration_s"]["mean"] == 0.75
+    assert metrics["time_to_yield_s"]["mean"] == 0.25
+    assert metrics["pedestrian_path_deviation_proxy_m"]["mean"] == pytest.approx(0.3)
+
+
 def _paired_contrast_records() -> list[dict]:
     """Build synthetic records with a planted paired effect for group B over group A."""
     values_a = [1.0, 2.0, 3.0, 4.0, 5.0]

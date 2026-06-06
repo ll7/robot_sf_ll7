@@ -25,7 +25,9 @@ Implemented categories:
   socnavbench_path_irregularity.
 - Experimental (optional): pedestrian-impact deltas for acceleration and
   heading turn-rate near-vs-far from the robot (enabled via
-  ``compute_all_metrics(..., experimental_ped_impact=True)``).
+  ``compute_all_metrics(..., experimental_ped_impact=True)``), plus diagnostic
+  human-interaction exposure proxies (enabled via
+  ``compute_all_metrics(..., experimental_human_interaction_proxy=True)``).
 
 Missing/optional data handling:
 - Empty pedestrian sets (K=0) return 0.0 for collision counts and ``NaN`` for distances where
@@ -550,6 +552,122 @@ def experimental_social_acceptability_metrics(
     metrics["social_proxemic_intrusion_area_m_s"] = float(np.sum(intrusion_depth) * data.dt)
     metrics["social_proxemic_min_clearance_m"] = float(np.min(clearances[finite]))
     return metrics
+
+
+def experimental_human_interaction_proxy_metrics(
+    data: EpisodeData,
+    *,
+    proxemic_radius_m: float = 1.2,
+    yield_speed_mps: float = 0.15,
+) -> dict[str, float]:
+    """Compute simulation-proxy human-interaction exposure metrics.
+
+    These reductions use only robot/pedestrian trajectories and footprint radii.
+    They are diagnostic simulation proxies for mechanism reports, not validated
+    human comfort, social compliance, or safety metrics.
+
+    Formulas:
+    - discomfort exposure: ``sum(max(radius - clearance, 0) * dt)`` in ``m*s``.
+    - intrusion duration: count of timesteps with any personal-space intrusion times ``dt``.
+    - time to yield: seconds from first intrusion to the first later robot speed below
+      ``yield_speed_mps``.
+    - robot yield distance: nearest center-distance to a pedestrian at the yield timestep.
+    - pedestrian path deviation proxy: mean per-pedestrian extra path length over straight-line
+      displacement, in meters.
+
+    Returns:
+        Mapping of ``human_proxy_*`` scalar metrics.
+    """
+    radius = (
+        float(proxemic_radius_m)
+        if math.isfinite(proxemic_radius_m) and proxemic_radius_m > 0.0
+        else 1.2
+    )
+    yield_speed = (
+        float(yield_speed_mps)
+        if math.isfinite(yield_speed_mps) and yield_speed_mps >= 0.0
+        else 0.15
+    )
+    dt = float(data.dt) if math.isfinite(float(data.dt)) and float(data.dt) > 0.0 else 1.0
+    step_count = int(data.robot_pos.shape[0]) if data.robot_pos.ndim >= 2 else 0
+    ped_count = int(data.peds_pos.shape[1]) if data.peds_pos.ndim >= 2 else 0
+    metrics: dict[str, float] = {
+        "human_proxy_available": 1.0 if step_count > 0 and ped_count > 0 else 0.0,
+        "human_proxy_proxemic_radius_m": radius,
+        "human_proxy_yield_speed_mps": yield_speed,
+        "human_proxy_ped_count": float(ped_count),
+        "human_proxy_timestep_count": float(step_count),
+        "human_discomfort_exposure_m_s": 0.0,
+        "intrusion_duration_s": 0.0,
+        "time_to_yield_s": float("nan"),
+        "robot_yield_distance_m": float("nan"),
+        "pedestrian_path_deviation_proxy_m": float("nan"),
+        "group_split_intrusion_available": 0.0,
+    }
+    if step_count <= 0 or ped_count == 0:
+        return metrics
+
+    clearances = _compute_clearance_matrix(data)
+    center_dists = _compute_distance_matrix(data)
+    finite_clearance = np.isfinite(clearances)
+    if finite_clearance.any():
+        intrusion_depth = np.where(
+            finite_clearance,
+            np.maximum(radius - clearances, 0.0),
+            0.0,
+        )
+        intrusion_mask = intrusion_depth > 0.0
+        intrusion_by_step = np.any(intrusion_mask, axis=1)
+        metrics["human_discomfort_exposure_m_s"] = float(np.sum(intrusion_depth) * dt)
+        metrics["intrusion_duration_s"] = float(np.count_nonzero(intrusion_by_step) * dt)
+
+        intrusion_indices = np.flatnonzero(intrusion_by_step)
+        if intrusion_indices.size > 0:
+            first_intrusion = int(intrusion_indices[0])
+            robot_speeds = _robot_speed_samples(data, dt=dt)
+            search_speeds = robot_speeds[first_intrusion:]
+            yield_offsets = np.flatnonzero(search_speeds <= yield_speed)
+            if yield_offsets.size > 0:
+                yield_step = first_intrusion + int(yield_offsets[0])
+                metrics["time_to_yield_s"] = float((yield_step - first_intrusion) * dt)
+                finite_dists = center_dists[yield_step, np.isfinite(center_dists[yield_step])]
+                if finite_dists.size > 0:
+                    metrics["robot_yield_distance_m"] = float(np.min(finite_dists))
+
+    metrics["pedestrian_path_deviation_proxy_m"] = _pedestrian_path_deviation_proxy(data.peds_pos)
+    return metrics
+
+
+def _robot_speed_samples(data: EpisodeData, *, dt: float) -> np.ndarray:
+    """Return one robot speed sample per trajectory timestep."""
+    if data.robot_vel.shape == data.robot_pos.shape and np.isfinite(data.robot_vel).any():
+        return np.linalg.norm(np.where(np.isfinite(data.robot_vel), data.robot_vel, 0.0), axis=1)
+    if data.robot_pos.shape[0] < 2:
+        return np.zeros((data.robot_pos.shape[0],), dtype=float)
+    step_vel = np.diff(data.robot_pos, axis=0) / dt
+    speeds = np.linalg.norm(np.where(np.isfinite(step_vel), step_vel, 0.0), axis=1)
+    return np.concatenate(([speeds[0]], speeds))
+
+
+def _pedestrian_path_deviation_proxy(peds_pos: np.ndarray) -> float:
+    """Return mean per-pedestrian extra path length over straight-line displacement."""
+    if peds_pos.ndim != 3 or peds_pos.shape[0] < 2 or peds_pos.shape[1] == 0:
+        return float("nan")
+
+    deviations: list[float] = []
+    for ped_idx in range(peds_pos.shape[1]):
+        traj = peds_pos[:, ped_idx, :]
+        finite_mask = np.isfinite(traj).all(axis=1)
+        finite_traj = traj[finite_mask]
+        if finite_traj.shape[0] < 2:
+            continue
+        segment_lengths = np.linalg.norm(np.diff(finite_traj, axis=0), axis=1)
+        path_length = float(np.sum(segment_lengths))
+        displacement = float(np.linalg.norm(finite_traj[-1] - finite_traj[0]))
+        deviations.append(max(path_length - displacement, 0.0))
+    if not deviations:
+        return float("nan")
+    return float(np.mean(deviations))
 
 
 # --- Metric stub functions ---
@@ -2411,16 +2529,18 @@ METRIC_NAMES: list[str] = [
 ]
 
 
-def compute_all_metrics(
+def compute_all_metrics(  # noqa: PLR0913
     data: EpisodeData,
     *,
     horizon: int,
     shortest_path_len: float | None = None,
     robot_max_speed: float | None = None,
     experimental_ped_impact: bool = False,
+    experimental_human_interaction_proxy: bool = False,
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
     social_proxemic_radius_m: float = 1.2,
+    human_proxy_yield_speed_mps: float = 0.15,
 ) -> dict[str, float]:
     """Compute all defined metrics for an episode and return them as a mapping.
 
@@ -2436,12 +2556,15 @@ def compute_all_metrics(
             ``None``, observed max speed (fallback ``1.0``) is used.
         experimental_ped_impact: Enable optional experimental ``ped_impact_*`` metrics that
             estimate near-vs-far pedestrian acceleration and turn-rate deltas.
+        experimental_human_interaction_proxy: Enable optional diagnostic ``human_proxy_*`` metrics
+            for mechanism reports. These are simulation proxies only.
         ped_impact_radius_m: Near/far distance threshold in meters used by experimental pedestrian
             impact metrics.
         ped_impact_window_steps: Trailing smoothing window length (timesteps) used by
             experimental pedestrian impact metrics.
         social_proxemic_radius_m: Personal-space radius used by exploratory social acceptability
             metrics when ``experimental_ped_impact`` is enabled.
+        human_proxy_yield_speed_mps: Robot speed threshold used to detect proxy yielding.
 
     Returns:
         dict[str, float]: Mapping from metric name (e.g., ``success``, ``force_q50``,
@@ -2542,6 +2665,14 @@ def compute_all_metrics(
                 proxemic_radius_m=social_proxemic_radius_m,
             )
         )
+    if experimental_human_interaction_proxy:
+        values.update(
+            experimental_human_interaction_proxy_metrics(
+                data,
+                proxemic_radius_m=social_proxemic_radius_m,
+                yield_speed_mps=human_proxy_yield_speed_mps,
+            )
+        )
     return values
 
 
@@ -2586,6 +2717,8 @@ def post_process_metrics(
         "ped_impact_turn_rate_delta_valid",
         "social_proxemic_ped_count",
         "social_proxemic_intrusion_steps",
+        "human_proxy_ped_count",
+        "human_proxy_timestep_count",
         "shield_decision_count",
         "shield_intervention_count",
         "shield_override_count",
@@ -2600,6 +2733,8 @@ def post_process_metrics(
         "time_to_goal_success_only_valid",
         "time_to_goal_ideal_ratio_valid",
         "social_proxemic_available",
+        "human_proxy_available",
+        "group_split_intrusion_available",
     ):
         if valid_key in metrics and metrics[valid_key] is not None:
             try:
@@ -2608,6 +2743,7 @@ def post_process_metrics(
                 pass
     _attach_pedestrian_impact_block(metrics)
     _attach_social_acceptability_block(metrics)
+    _attach_human_interaction_proxy_block(metrics)
     return _sanitize_metrics(metrics)
 
 
@@ -2687,6 +2823,51 @@ def _attach_social_acceptability_block(metrics: dict[str, Any]) -> None:
     }
 
 
+def _attach_human_interaction_proxy_block(metrics: dict[str, Any]) -> None:
+    """Attach a schema-backed human-interaction proxy block when flat metrics are present."""
+    if "human_proxy_proxemic_radius_m" not in metrics:
+        return
+
+    metrics["human_interaction_proxy"] = {
+        "schema_version": "human-interaction-proxy.v1",
+        "status": "simulation_proxy",
+        "parameters": {
+            "proxemic_radius_m": metrics.get("human_proxy_proxemic_radius_m"),
+            "yield_speed_mps": metrics.get("human_proxy_yield_speed_mps"),
+        },
+        "units": {
+            "discomfort_exposure": "m*s",
+            "duration": "s",
+            "time_to_yield": "s",
+            "distance": "m",
+            "path_deviation": "m",
+            "sample_counts": "count",
+        },
+        "available": metrics.get("human_proxy_available"),
+        "sample_counts": {
+            "pedestrians": metrics.get("human_proxy_ped_count"),
+            "timesteps": metrics.get("human_proxy_timestep_count"),
+        },
+        "canonical_reductions": {
+            "human_discomfort_exposure_m_s": metrics.get("human_discomfort_exposure_m_s"),
+            "intrusion_duration_s": metrics.get("intrusion_duration_s"),
+            "time_to_yield_s": metrics.get("time_to_yield_s"),
+            "robot_yield_distance_m": metrics.get("robot_yield_distance_m"),
+            "pedestrian_path_deviation_proxy_m": metrics.get("pedestrian_path_deviation_proxy_m"),
+            "group_split_intrusion_available": metrics.get("group_split_intrusion_available"),
+        },
+        "exclusions": {
+            "group_split_intrusion": (
+                "Not computed without group-membership or social-group labels in EpisodeData."
+            ),
+        },
+        "interpretation": (
+            "Diagnostic simulation-proxy metrics for mechanism reports only; not validated "
+            "human comfort, human-subject, safety, or paper-grade social-compliance evidence."
+        ),
+    }
+
+
 def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     """Remove NaN/inf metric entries to keep JSON serialization clean.
 
@@ -2724,6 +2905,7 @@ __all__ = [
     "curvature_mean",
     "distance_to_human_min",
     "energy",
+    "experimental_human_interaction_proxy_metrics",
     "experimental_social_acceptability_metrics",
     "failure_to_progress",
     "force_exceed_events",

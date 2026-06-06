@@ -37,6 +37,65 @@ evidence is not exempt from review merely because broad CSV filters exist: inspe
 representative rows, provenance fields, parent-issue conclusion alignment, and explicit claim
 boundary before merging an evidence-producing PR.
 
+## Evidence Bundle v1
+
+Use `evidence_bundle.v1` for the smallest reproducible packet that lets a future reviewer recover
+what compact evidence supported a claim boundary without depending on local `output/` contents.
+The helper is intentionally explicit-file-only:
+
+```bash
+uv run python scripts/tools/benchmark_publication_bundle.py evidence-bundle \
+  --source-root docs/context/evidence/<source-or-fixture> \
+  --out-dir docs/context/evidence \
+  --bundle-name <issue-or-claim-bundle> \
+  --file summary.json \
+  --file metric_table.csv \
+  --file trace_manifest.yaml \
+  --file claim_boundary.md \
+  --command "<canonical reproduction or validation command>" \
+  --commit <git-commit> \
+  --claim-boundary diagnostic_only_not_benchmark_evidence
+```
+
+Each bundle writes:
+
+- `payload/`: exactly the selected compact files;
+- `evidence_bundle_manifest.json`: `schema_version: evidence_bundle.v1`, command, commit,
+  claim boundary, source root, file index, sizes, SHA-256 checksums, and policy caveats;
+- `checksums.sha256`: checksum lines for every payload file.
+
+The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
+
+## Claim Readiness Check
+
+Before promoting compact evidence into a stronger claim, run the claim-readiness guardrail against
+the claim note and evidence path:
+
+```bash
+uv run python scripts/validation/check_claim_readiness.py \
+  --claim-file docs/context/issue_1542_manuscript_claim_evidence_map.md \
+  --evidence docs/context/evidence/<bundle-or-report>
+```
+
+The checker reports missing fields for evidence tier, comparator or baseline, mechanism activation,
+trace support, artifact provenance, seed or slice boundary, claim boundary, and fallback/degraded
+limitation handling. It is a guardrail only: readiness output does not establish scientific truth,
+benchmark success, safety, or paper-grade sufficiency.
+
+Required provenance fields:
+
+- `command`: the command that produced or validates the evidence;
+- `commit`: the repository commit associated with the evidence;
+- `claim_boundary`: the conservative interpretation boundary for the bundle;
+- `files`: compact, reviewable payload entries with `path`, `size_bytes`, `sha256`, and `kind`.
+
+Policy caveats:
+
+- large raw logs, videos, checkpoints, raw episode streams, and mirrored `output/` trees stay out;
+- a bundle makes evidence references reproducible, but does not by itself establish a
+  benchmark-strength, paper-grade, or scientifically sufficient claim;
+- fallback/degraded/diagnostic status must be preserved in `claim_boundary` or a payload note.
+
 ## Current Bundles
 
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that

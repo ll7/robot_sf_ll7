@@ -13,6 +13,9 @@ body:
         Research issues should preferably explain what claim boundary, hypothesis, negative
         result, synthesis decision, or durable experiment blocker they are meant to change. Treat
         that as adapted guidance, not a hard requirement for every small support issue.
+        Prefer the smallest issue that can produce one discriminating diagnostic table, trace,
+        decision, or experiment. Blocked and diagnostic-only outcomes are valid research results
+        when the claim boundary stays explicit.
   - type: textarea
     id: goal
     attributes:
@@ -27,6 +30,48 @@ body:
       label: Hypothesis
       description: State the expected result or decision this issue should test.
       placeholder: We expect that...
+    validations:
+      required: true
+  - type: textarea
+    id: competing_explanations
+    attributes:
+      label: Competing explanations
+      description: List plausible alternatives this issue should distinguish from the preferred hypothesis, or explain why comparison is blocked.
+      placeholder: |
+        1.
+        2.
+        3.
+        N/A - blocked:
+    validations:
+      required: true
+  - type: textarea
+    id: discriminating_evidence
+    attributes:
+      label: Discriminating evidence
+      description: Name the trace, metric, table, diagnostic, or experiment that separates the competing explanations, or explain the blocker.
+      placeholder: |
+        What evidence would make one explanation more plausible than the others?
+        N/A - blocked:
+    validations:
+      required: true
+  - type: textarea
+    id: mechanism_signal_required
+    attributes:
+      label: Mechanism signal required
+      description: Name the fields or observable mechanism signals that must change before any claim-strength upgrade, or explain why this is support-only.
+      placeholder: |
+        Which planner, scenario, trace, score, activation, command, or outcome fields must move?
+        N/A - support/docs-only:
+    validations:
+      required: true
+  - type: textarea
+    id: stop_rule
+    attributes:
+      label: Stop rule
+      description: State when to retire, narrow, block, or keep the mechanism diagnostic-only.
+      placeholder: |
+        When do we stop pursuing this mechanism or classify it as blocked/diagnostic-only?
+        If blocked or diagnostic-only, why does the claim class stay unchanged?
     validations:
       required: true
   - type: dropdown
@@ -71,7 +116,7 @@ body:
         Target claim or hypothesis:
         Comparator or baseline:
         Minimum valid evidence:
-        Decision or stop rule:
+        Decision routing:
         Expected artifacts:
         Parent issue / claim map / context note to update:
     validations:

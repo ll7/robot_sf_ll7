@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from robot_sf.benchmark.artifact_publication import (
+    export_evidence_bundle,
     export_publication_bundle,
     measure_artifact_size_ranges,
 )
@@ -99,6 +100,60 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow replacing an existing bundle directory/archive with the same name.",
     )
+
+    evidence = subparsers.add_parser(
+        "evidence-bundle",
+        help="Package selected compact evidence files with checksums and claim-boundary metadata.",
+    )
+    evidence.add_argument(
+        "--source-root",
+        type=Path,
+        required=True,
+        help="Directory containing the compact evidence files to include.",
+    )
+    evidence.add_argument(
+        "--out-dir",
+        type=Path,
+        required=True,
+        help="Destination directory for the evidence bundle folder.",
+    )
+    evidence.add_argument(
+        "--bundle-name",
+        type=str,
+        required=True,
+        help="Output bundle directory name.",
+    )
+    evidence.add_argument(
+        "--file",
+        type=Path,
+        action="append",
+        default=[],
+        help="Evidence file to include, relative to --source-root. Repeat for multiple files.",
+    )
+    evidence.add_argument(
+        "--command",
+        type=str,
+        dest="evidence_command",
+        required=True,
+        help="Canonical command that produced or validates the evidence.",
+    )
+    evidence.add_argument(
+        "--commit",
+        type=str,
+        required=True,
+        help="Repository commit associated with the evidence.",
+    )
+    evidence.add_argument(
+        "--claim-boundary",
+        type=str,
+        required=True,
+        help="Conservative claim boundary for the evidence bundle.",
+    )
+    evidence.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow replacing an existing evidence bundle directory with the same name.",
+    )
     return parser
 
 
@@ -141,6 +196,29 @@ def _run_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_evidence_bundle(args: argparse.Namespace) -> int:
+    """Execute the ``evidence-bundle`` subcommand."""
+    result = export_evidence_bundle(
+        args.source_root,
+        args.out_dir,
+        bundle_name=args.bundle_name,
+        files=list(args.file),
+        command=str(args.evidence_command),
+        commit=str(args.commit),
+        claim_boundary=str(args.claim_boundary),
+        overwrite=bool(args.overwrite),
+    )
+    payload = {
+        "bundle_dir": str(result.bundle_dir),
+        "manifest_path": str(result.manifest_path),
+        "checksums_path": str(result.checksums_path),
+        "file_count": result.file_count,
+        "total_bytes": result.total_bytes,
+    }
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run benchmark publication helper CLI and return a POSIX exit code."""
     parser = _build_parser()
@@ -149,6 +227,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_size_report(args)
     if args.command == "export":
         return _run_export(args)
+    if args.command == "evidence-bundle":
+        return _run_evidence_bundle(args)
     parser.error(f"Unsupported command: {args.command}")
     return 2  # pragma: no cover
 

@@ -169,6 +169,44 @@ Canonical pilot reductions:
 Missing pedestrian trajectories fail gracefully: availability is false, counts and intrusion
 reductions are zero, and minimum clearance is omitted from sanitized JSON output when unavailable.
 
+### Human-Interaction Proxy Metrics
+
+`compute_all_metrics(..., experimental_human_interaction_proxy=True)` emits a bounded
+`human_proxy_*` metric family plus a structured `metrics.human_interaction_proxy` block with
+`schema_version: human-interaction-proxy.v1`. These metrics are simulation proxies for
+mechanism-report discussion only. They are not validated human comfort, human-subject, safety, or
+paper-grade social-compliance metrics.
+
+Default parameters:
+
+- `human_proxy_proxemic_radius_m`: `1.2` meters of robot-pedestrian surface clearance.
+- `human_proxy_yield_speed_mps`: `0.15` meters per second robot-speed threshold for proxy yielding.
+
+Canonical reductions:
+
+- `human_discomfort_exposure_m_s`: sum of
+  `max(human_proxy_proxemic_radius_m - clearance_m, 0) * dt` across pedestrians and timesteps.
+  Unit: meter-seconds (`m*s`).
+- `intrusion_duration_s`: number of timesteps where at least one pedestrian has surface clearance
+  below `human_proxy_proxemic_radius_m`, multiplied by `dt`. Unit: seconds.
+- `time_to_yield_s`: elapsed time from the first proxemic intrusion timestep to the first later
+  timestep where robot speed is at or below `human_proxy_yield_speed_mps`. Omitted from sanitized
+  JSON output when no intrusion or no proxy-yield timestep exists.
+- `robot_yield_distance_m`: nearest center-to-center robot-pedestrian distance at the proxy-yield
+  timestep. Omitted when `time_to_yield_s` is unavailable.
+- `pedestrian_path_deviation_proxy_m`: mean per-pedestrian extra path length over straight-line
+  displacement. This is a trajectory irregularity proxy, not a measured intent or discomfort
+  signal.
+- `group_split_intrusion_available`: false for the current `EpisodeData` path because the episode
+  container does not include social-group membership labels. Group-split intrusion remains excluded
+  until a grouped-pedestrian contract exists.
+
+Episode records preserve the flat fields and include a structured block with parameters, units,
+sample counts, canonical reductions, exclusions, and an interpretation string. Aggregation flattens
+the structured block into scalar columns such as `human_discomfort_exposure_m_s`,
+`intrusion_duration_s`, `time_to_yield_s`, `robot_yield_distance_m`, and
+`pedestrian_path_deviation_proxy_m`.
+
 ### Motion Quality Metrics
 
 #### Smoothness (Jerk)

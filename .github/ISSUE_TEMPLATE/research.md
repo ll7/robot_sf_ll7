@@ -14,6 +14,28 @@ assignees: []
 **Hypothesis**
 <!-- What do we expect to find or prove? -->
 
+**Evidence grade / claim class**
+<!-- Mark observed, inferred, speculative, blocked, diagnostic-only, benchmark, or paper-facing. -->
+
+**Competing explanations**
+<!-- List plausible alternatives this work should distinguish, not just the preferred hypothesis. -->
+<!-- Use "N/A - blocked: ..." when blocked prerequisites prevent this comparison. -->
+1.
+2.
+3.
+
+**Discriminating evidence**
+<!-- What trace, metric, table, diagnostic, or experiment would separate the explanations above? -->
+<!-- Use "N/A - blocked: ..." when no discriminating evidence can be gathered yet. -->
+
+**Mechanism signal required**
+<!-- Which fields or observable mechanism signals must change for this to move the claim boundary? -->
+<!-- Use "N/A - support/docs-only: ..." when this is research-workflow support, not a mechanism probe. -->
+
+**Stop rule**
+<!-- When should this mechanism be retired, narrowed, marked blocked, or kept diagnostic-only? -->
+<!-- If the result is blocked or diagnostic-only, state why and keep the claim class unchanged. -->
+
 **Scientific motivation**
 <!-- Why is this research important? What gap does it fill? -->
 
@@ -62,6 +84,9 @@ assignees: []
 
 - [ ] Experimental setup is reproducible.
 - [ ] Baseline comparison is documented.
+- [ ] Competing explanations and discriminating evidence are addressed, or the result is marked blocked/diagnostic-only.
+- [ ] Evidence grade or claim class is explicit.
+- [ ] The mechanism signal and stop rule are recorded before any claim-strength upgrade.
 - [ ] Results are recorded and interpreted.
 - [ ] Analysis artifacts can be regenerated from versioned inputs.
 

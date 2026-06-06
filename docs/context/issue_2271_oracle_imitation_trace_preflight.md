@@ -105,5 +105,6 @@ Next smallest proof step: promote the generated train/validation trace manifests
 a durable artifact store with concrete retrieval aliases, or revise/rerun before any imitation
 training treats these local outputs as inputs.
 
-Machine-readable summary:
+Machine-readable summaries:
+`docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/summary.json`
 `docs/context/evidence/issue_2271_oracle_imitation_trace_preflight_2026-06-05/summary.json`

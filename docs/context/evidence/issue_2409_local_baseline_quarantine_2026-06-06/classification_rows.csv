@@ -1,0 +1,8 @@
+config_path,status,availability,decision,issue_2409_classification,artifact_exists_in_clean_worktree,next_action
+configs/baselines/ppo_issue_791_horizon100_12178.yaml,blocked,unavailable,unavailable_recover_or_retire,quarantined_absent,false,"Recover a durable checkpoint source with checksum before use, or retire/rewrite this config."
+configs/baselines/drl_vo_default.yaml,blocked,unavailable,unavailable_recover_or_retire,quarantined_absent,false,"Recover a durable checkpoint source with checksum before use, or retire/rewrite this config."
+configs/baselines/ppo_issue_856_all_scenarios_12223.yaml,blocked,unavailable,unavailable_retire_or_rewrite,retire_or_rewrite_candidate,false,"Treat as retire-pending; recover and prove provenance only if still useful, otherwise retire/rewrite."
+configs/baselines/sac_gate_socnav_struct.yaml,blocked,unavailable,unavailable_retire_or_rewrite,retire_or_rewrite_candidate,false,"Treat as retire-pending; recover and prove provenance only if still useful, otherwise retire/rewrite."
+configs/baselines/sac_gate_socnav_struct_ego.yaml,blocked,unavailable,unavailable_retire_or_rewrite,retire_or_rewrite_candidate,false,"Treat as retire-pending; recover and prove provenance only if still useful, otherwise retire/rewrite."
+configs/baselines/sac_gate_socnav_struct_ego_multi.yaml,blocked,unavailable,unavailable_retire_or_rewrite,retire_or_rewrite_candidate,false,"Treat as retire-pending; recover and prove provenance only if still useful, otherwise retire/rewrite."
+configs/baselines/sac_gate_socnav_struct_ego_safe.yaml,blocked,unavailable,unavailable_retire_or_rewrite,retire_or_rewrite_candidate,false,"Treat as retire-pending; recover and prove provenance only if still useful, otherwise retire/rewrite."

@@ -353,6 +353,14 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2409_local_baseline_quarantine_decision.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2409_local_baseline_quarantine_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749_summary.json
     status: evidence
     freshness: evidence

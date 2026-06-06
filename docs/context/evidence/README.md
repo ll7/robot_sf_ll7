@@ -76,6 +76,9 @@ boundary before merging an evidence-producing PR.
   decision-output vocabulary.
 - `issue_2313_local_baseline_quarantine_2026-06-05/`: compact metadata-only planner summary
   showing the seven absent local-only baseline rows are explicitly unavailable.
+- `issue_2409_local_baseline_quarantine_2026-06-06/`: compact follow-on synthesis showing Issue
+  #2313 already quarantined the seven local-only baseline rows and no durable artifact source was
+  newly found or claimed.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and

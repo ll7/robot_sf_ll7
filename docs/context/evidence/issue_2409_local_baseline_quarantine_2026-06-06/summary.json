@@ -1,0 +1,85 @@
+{
+  "claim_boundary": "Metadata-only quarantine synthesis; not benchmark evidence and not an artifact publication.",
+  "created_at": "2026-06-06T10:05:00Z",
+  "issue": 2409,
+  "parent_issue": 1764,
+  "predecessor_issue": 2313,
+  "rows": [
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "config_path": "configs/baselines/ppo_issue_791_horizon100_12178.yaml",
+      "decision": "unavailable_recover_or_retire",
+      "issue_2409_classification": "quarantined_absent",
+      "scanner_status": "blocked"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "config_path": "configs/baselines/drl_vo_default.yaml",
+      "decision": "unavailable_recover_or_retire",
+      "issue_2409_classification": "quarantined_absent",
+      "scanner_status": "blocked"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "config_path": "configs/baselines/ppo_issue_856_all_scenarios_12223.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "issue_2409_classification": "retire_or_rewrite_candidate",
+      "scanner_status": "blocked"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "config_path": "configs/baselines/sac_gate_socnav_struct.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "issue_2409_classification": "retire_or_rewrite_candidate",
+      "scanner_status": "blocked"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "issue_2409_classification": "retire_or_rewrite_candidate",
+      "scanner_status": "blocked"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego_multi.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "issue_2409_classification": "retire_or_rewrite_candidate",
+      "scanner_status": "blocked"
+    },
+    {
+      "artifact_exists_in_clean_worktree": false,
+      "availability": "unavailable",
+      "config_path": "configs/baselines/sac_gate_socnav_struct_ego_safe.yaml",
+      "decision": "unavailable_retire_or_rewrite",
+      "issue_2409_classification": "retire_or_rewrite_candidate",
+      "scanner_status": "blocked"
+    }
+  ],
+  "schema_version": "local-baseline-quarantine-decision.v1",
+  "summary": {
+    "blocked_references": 7,
+    "durable_references": 0,
+    "missing_artifacts_in_clean_worktree": 7,
+    "quarantined_absent": 2,
+    "retire_or_rewrite_candidate": 5,
+    "total_local_only_references": 7,
+    "unblocked_references": 0
+  },
+  "validation": [
+    {
+      "command": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/check_local_model_artifacts.py configs/baselines --json",
+      "result": "seven rows; all status=blocked and availability=unavailable"
+    },
+    {
+      "command": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/plan_model_artifact_promotion.py scan --json",
+      "result": "seven rows; all classification=unavailable and artifact.exists=false"
+    }
+  ]
+}

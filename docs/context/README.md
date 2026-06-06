@@ -501,6 +501,8 @@ knowledge, not every transient iteration detail.
   [issue_2277_local_artifact_classification.md](issue_2277_local_artifact_classification.md)
 * Issue #2313 local baseline quarantine:
   [issue_2313_local_baseline_quarantine.md](issue_2313_local_baseline_quarantine.md)
+* Issue #2409 local baseline quarantine decision:
+  [issue_2409_local_baseline_quarantine_decision.md](issue_2409_local_baseline_quarantine_decision.md)
 * Issue #1845 report grouping contracts:
   [issue_1845_report_grouping_contracts.md](issue_1845_report_grouping_contracts.md)
 * Learned local-navigation policy registry:

@@ -229,6 +229,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2434_ammv_scenario_sweep.md](issue_2434_ammv_scenario_sweep.md)
 
+* Issue #2463 Mechanism Signal Checker:
+
+  [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
@@ -553,6 +557,8 @@ knowledge, not every transient iteration detail.
   [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md)
 * Issue #2236 Trace Mechanism Evidence Rubric (2026-06-04):
   [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md)
+* Issue #2463 Mechanism Signal Checker (2026-06-06):
+  [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md)
 * Issue #2263 Mechanism Activation Report Fields (2026-06-05):
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
 * Issue #2227 Mechanism Panel Readiness (2026-06-04):

@@ -1,0 +1,137 @@
+name: multimodal_prediction_contract_issue_2476
+contract_kind: benchmark-proposal
+issue: 2476
+parent_issue: 2469
+evidence_tier: proposal
+benchmark_evidence: false
+status: proposed
+depends_on:
+  - issue: 2475
+    surface: probabilistic prediction interface
+    status: pending_pr
+    pr: 2495
+claim_boundary: >
+  This file defines the proposed benchmark contract for testing multimodal pedestrian prediction
+  in local planning. It is not an executed benchmark result and must not be used as evidence that
+  multimodal prediction improves Robot SF planner performance.
+
+research_question: Can multiple pedestrian future hypotheses improve local planning?
+
+scenario_surface:
+  candidate_matrices:
+    - configs/scenarios/classic_interactions_francis2023.yaml
+    - configs/scenarios/sanity_v1.yaml
+  required_scenario_families:
+    - blind_corner
+    - crossing
+    - bottleneck
+    - overtaking
+  selection_rule: >
+    Start with a smoke-sized matrix that includes at least one occlusion-sensitive interaction
+    and one open crossing. Promote to a broader matrix only after all comparator rows run without
+    fallback or degraded prediction inputs.
+
+comparators:
+  - key: reactive_no_prediction
+    role: baseline
+    required_mode: native
+    description: Planner uses current pedestrian state only.
+  - key: single_trajectory_prediction
+    role: baseline
+    required_mode: native
+    description: Planner receives one deterministic future per pedestrian.
+  - key: multimodal_equal_weight
+    role: treatment
+    required_mode: native
+    description: Planner receives multiple futures per pedestrian with normalized weights.
+  - key: multimodal_confidence_weighted
+    role: treatment
+    required_mode: native
+    description: Planner consumes hypothesis confidence when choosing actions.
+  - key: oracle_future_upper_bound
+    role: diagnostic_upper_bound
+    required_mode: diagnostic
+    description: >
+      Optional future-known diagnostic row. It may identify headroom, but it is not a deployable
+      planner and must be reported separately from benchmark success claims.
+
+required_prediction_contract:
+  interface_dependency: "PR #2495"
+  per_pedestrian_fields:
+    - pedestrian_id
+    - current_position_xy
+    - current_velocity_xy
+    - hypotheses
+  per_hypothesis_fields:
+    - trajectory_xy
+    - confidence
+    - dt
+    - horizon_steps
+    - covariance_xy_optional
+  invariants:
+    - confidence_sum_per_pedestrian_is_one
+    - all_hypotheses_share_dt_and_horizon_within_a_row
+    - sample_count_matches_hypothesis_count
+    - missing_prediction_inputs_fail_closed
+
+metrics:
+  primary:
+    - success_rate
+    - collision_rate
+    - minimum_pedestrian_distance
+    - time_to_goal
+  secondary:
+    - path_efficiency
+    - jerk_or_command_smoothness
+    - intervention_or_replan_count
+    - timeout_rate
+  interpretation_rule: >
+    Multimodal prediction is only considered promising if safety improves without a material
+    success-rate or time-to-goal regression against both reactive and single-trajectory baselines.
+
+required_trace_fields:
+  - planner_key
+  - prediction_mode
+  - prediction_source
+  - prediction_horizon_steps
+  - prediction_dt
+  - hypothesis_count_per_pedestrian
+  - hypothesis_confidence_vector
+  - selected_or_weighted_hypothesis_id
+  - fallback_or_degraded_reason
+  - collision
+  - success
+  - timeout
+  - min_pedestrian_distance
+  - time_to_goal
+
+fallback_policy:
+  fallback_is_success: false
+  degraded_is_success: false
+  required_status_values:
+    - native
+    - diagnostic
+    - not_available
+    - failed
+  rule: >
+    Any row that cannot satisfy the prediction interface must be marked not_available or failed.
+    Fallback or degraded prediction execution is not benchmark-strengthening evidence.
+
+stop_rule:
+  smoke_pass: >
+    All non-oracle comparator rows run natively on the smoke scenario set and emit the required
+    trace fields.
+  promote: >
+    Promote to a broader benchmark only when multimodal treatment rows improve at least one primary
+    safety metric without worsening success_rate relative to both baselines.
+  stop_or_revise: >
+    Stop or revise if single-trajectory prediction and multimodal rows are indistinguishable on
+    smoke traces, or if multimodal rows require fallback/degraded inputs.
+
+first_executable_follow_up:
+  issue: 2496
+  recommended_issue_title: "benchmark: add executable multimodal prediction smoke"
+  waits_for: "PR #2495 merged"
+  minimum_proof: >
+    A runner-visible smoke config or test fixture that produces native reactive, single-trajectory,
+    and multimodal rows with the required trace fields.

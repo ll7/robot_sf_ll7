@@ -1,4 +1,4 @@
-# Issue #2476 Multimodal Prediction Benchmark Contract
+# Issue #2476 Multimodal Prediction Benchmark Contract (2026-06-06)
 
 Status: proposal, not benchmark evidence.
 

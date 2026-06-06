@@ -373,6 +373,10 @@ entries:
     status: proposal
     freshness: maintained
     area: learned_policy
+  - path: docs/context/issue_2474_signalized_crossing_benchmark.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2475_probabilistic_prediction_interface.md
     status: current
     freshness: dated

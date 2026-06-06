@@ -211,6 +211,7 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
 def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: Path) -> None:
     """Final PR proof should fail early when analytics extras are missing."""
     repo = tmp_path / "repo"
+    stale_repo = tmp_path / "stale-repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
     script_dir.mkdir(parents=True)
@@ -262,6 +263,9 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
         capture_output=True,
         text=True,
     )
+    stale_repo.mkdir()
+    subprocess.run(["git", "init"], cwd=stale_repo, check=True, capture_output=True, text=True)
+    (stale_repo / "untracked-marker").write_text("stale outer checkout\n", encoding="utf-8")
 
     result = subprocess.run(
         [str(script_dir / "pr_ready_check.sh")],
@@ -271,6 +275,7 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
             "PR_READY_MODE": "final",
             "BASE_REF": "origin/main",
+            "REPO_ROOT": str(stale_repo),
         },
         capture_output=True,
         text=True,

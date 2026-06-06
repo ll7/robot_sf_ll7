@@ -531,6 +531,8 @@ knowledge, not every transient iteration detail.
   [issue_2478_uncertainty_scenario_belief.md](issue_2478_uncertainty_scenario_belief.md)
 * Issue #2479 Real-Trajectory Scenario Prior Scope (2026-06-06):
   [issue_2479_real_trajectory_scenario_prior.md](issue_2479_real_trajectory_scenario_prior.md)
+* Issue #2474 Signalized Pedestrian Crossing Benchmark Scope (2026-06-06):
+  [issue_2474_signalized_crossing_benchmark.md](issue_2474_signalized_crossing_benchmark.md)
 * Issue #2475 Probabilistic Prediction Interface (2026-06-06):
   [issue_2475_probabilistic_prediction_interface.md](issue_2475_probabilistic_prediction_interface.md)
 * Issue #1638 local model path preflight:

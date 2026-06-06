@@ -1,0 +1,152 @@
+schema_version: signalized-crossing-benchmark-contract.v1
+name: signalized_pedestrian_crossing_issue_2474
+issue: 2474
+parent_issue: 2469
+evidence_tier: proposal_with_proxy_smoke_path
+benchmark_evidence: false
+status: scoped_benchmark_direction
+claim_boundary: >
+  This manifest defines a signalized pedestrian crossing benchmark direction and an
+  existing proxy smoke path. It does not prove forced-waiting reasoning, crossing-legality
+  compliance, traffic-signal realism, or planner performance. Existing wait_at and timing
+  perturbation controls are proxy semantics until explicit signal-state runtime support exists.
+
+contract_surfaces:
+  benchmark_spec: docs/benchmark_spec.md
+  fallback_policy: docs/context/issue_691_benchmark_fallback_policy.md
+  scenario_checklist: docs/scenario_spec_checklist.md
+  urban_crossing_archetype: configs/scenarios/archetypes/classic_urban_crossing.yaml
+  crossing_archetype: configs/scenarios/archetypes/classic_crossing.yaml
+  group_crossing_archetype: configs/scenarios/archetypes/classic_group_crossing.yaml
+  proxy_intersection_wait_scenario: configs/scenarios/single/francis2023_intersection_wait.yaml
+  proxy_phase_grid: configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml
+  issue_2474_note: docs/context/issue_2474_signalized_crossing_benchmark.md
+  tests: tests/benchmark/test_signalized_crossing_benchmark_manifest.py
+
+scenario_families:
+  - key: protected_pedestrian_walk_phase
+    description: >
+      Robot approaches a crossing while pedestrians have legal walk priority; compliant behavior
+      requires yielding before entering the conflict zone.
+    nearest_existing_proxy: configs/scenarios/single/francis2023_intersection_wait.yaml
+    required_runtime_status: future_signal_state_required
+    initial_case_ids:
+      - protected_walk_single_pedestrian
+      - protected_walk_group_crossing
+  - key: robot_green_pedestrian_dont_walk
+    description: >
+      Robot may proceed while pedestrians should wait; benchmark should distinguish lawful robot
+      progress from unsafe pedestrian conflict handling.
+    nearest_existing_proxy: configs/scenarios/archetypes/classic_urban_crossing.yaml
+    required_runtime_status: future_signal_state_required
+    initial_case_ids:
+      - robot_green_empty_crosswalk
+      - robot_green_late_pedestrian_incursion
+  - key: phase_transition_yellow_clearance
+    description: >
+      Signal changes while robot and pedestrians approach the crossing; planner should handle
+      forced waiting and clearance timing without fallback rows.
+    nearest_existing_proxy: configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml
+    required_runtime_status: proxy_smoke_available
+    initial_case_ids:
+      - red_to_walk_release
+      - walk_to_clearance_delay
+      - clearance_to_dont_walk_block
+
+signal_phase_semantics:
+  future_explicit_fields:
+    - signal_id
+    - phase
+    - phase_elapsed_s
+    - phase_remaining_s
+    - robot_right_of_way
+    - pedestrian_right_of_way
+    - conflict_zone_id
+    - legality_state
+  phase_values:
+    - robot_green_pedestrian_dont_walk
+    - pedestrian_walk_robot_red
+    - clearance_yellow
+    - all_red
+  proxy_fields_available_now:
+    - wait_at
+    - start_delay_s
+    - single_pedestrian_wait_duration_offset
+    - single_pedestrian_start_delay_offset
+    - single_pedestrian_speed_offset
+  planner_observable_policy: >
+    A future executable benchmark must declare whether signal phase is planner-observable,
+    hidden, or only encoded through pedestrian motion. Mixed visibility modes must not be
+    aggregated without an explicit observation-track caveat.
+
+required_metrics:
+  existing_metrics:
+    - success
+    - collisions
+    - near_misses
+    - min_distance
+    - time_to_goal_norm
+    - ped_impact_accel_delta_mean
+    - ped_impact_turn_rate_delta_mean
+  new_signal_metrics:
+    - forced_wait_duration_s
+    - conflict_zone_entry_on_red_count
+    - illegal_crossing_state_count
+    - signal_phase_violation_count
+    - post_walk_release_latency_s
+    - clearance_phase_blocking_time_s
+
+required_trace_fields:
+  existing_trace_like_fields:
+    - scenario_id
+    - seed
+    - scenario_params
+    - metrics
+    - outcome.collision_event
+    - algorithm_metadata.planner_kinematics.execution_mode
+  future_signal_trace_fields:
+    - signal_phase_timeline
+    - robot_crossing_zone_entry_exit
+    - pedestrian_crossing_zone_entry_exit
+    - right_of_way_state_by_step
+    - forced_wait_intervals
+    - signal_legality_events
+
+fallback_and_reporting_policy:
+  benchmark_success_requires:
+    - native_or_declared_adapter_execution
+    - explicit signal-state semantics for signalized rows
+    - no fallback/degraded/not_available row counted as benchmark success
+    - planner observation mode and signal observability declared
+  proxy_smoke_allowed_for:
+    - validating current scenario/perturbation plumbing
+    - exercising wait_at and phase-grid timing controls
+    - recording implementation blockers before explicit signal runtime support
+  proxy_smoke_not_allowed_for:
+    - forced_waiting_reasoning_claim
+    - signal_legality_claim
+    - benchmark_leaderboard_row
+
+first_smoke_or_spike:
+  type: proxy_smoke_then_signal_runtime_issue
+  proxy_config: configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml
+  proxy_validation_commands:
+    - uv run pytest tests/scenario_certification/test_scenario_perturbation_preflight.py -q
+  future_implementation_spike:
+    title: add explicit signal phase state to one crossing scenario
+    files_likely_touched:
+      - robot_sf/nav/map_config.py
+      - robot_sf/training/scenario_loader.py
+      - robot_sf/benchmark/map_runner.py
+      - robot_sf/benchmark/schemas/episode.schema.v1.json
+      - tests/benchmark/
+      - tests/scenario_certification/
+    stop_rule: >
+      Stop at one loadable scenario and one trace-field smoke before any planner comparison.
+
+recommended_follow_up_issue:
+  title: "benchmark: add one executable signalized crossing smoke scenario"
+  rationale: >
+    Implement explicit signal-state runtime fields for one crossing scenario, emit trace fields,
+    and run a one-planner smoke. Do not claim forced-waiting reasoning until that smoke passes
+    without fallback and a benchmark issue defines comparison baselines.

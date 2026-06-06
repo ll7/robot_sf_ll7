@@ -192,6 +192,8 @@ knowledge, not every transient iteration detail.
   [issue_2472_intent_conditioned_behavior.md](issue_2472_intent_conditioned_behavior.md)
 * Issue #2473 Cyclist Interaction Benchmark Scope:
   [issue_2473_cyclist_interaction_benchmark.md](issue_2473_cyclist_interaction_benchmark.md)
+* Issue #2459 SocNavBench / HuNavSim Mapping:
+  [issue_2459_socnavbench_hunavsim_mapping.md](issue_2459_socnavbench_hunavsim_mapping.md)
 * Issue #2476 Multimodal Prediction Benchmark Contract:
   [issue_2476_multimodal_prediction_benchmark.md](issue_2476_multimodal_prediction_benchmark.md)
 * Issue #2496 Multimodal Prediction Contract Smoke:

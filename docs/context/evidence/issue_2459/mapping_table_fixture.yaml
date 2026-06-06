@@ -1,0 +1,180 @@
+# SocNavBench/HuNavSim mapping fixture — proposal only, not benchmark evidence.
+schema_version: interop-mapping.v1
+status: proposal
+description: >
+  Structured mapping between Robot SF metric/scenario concepts and their SocNavBench or HuNavSim
+  analogues. All entries are literature-positioning analogues, not simulator-equivalence claims.
+mapping:
+  # --- Metrics ---
+  - robot_sf_concept: socnavbench_path_length
+    analogue_framework: socnavbench
+    analogue_name: path_length
+    analogue_source: >
+      SocNavBench cost_functions (vendored third_party/socnavbench/metrics/cost_functions.py)
+    relationship: direct_source_analogue
+    missing_semantics_from_robot_sf: >
+      Robot SF exposes a SocNavBench-derived metric name, but this proposal fixture
+      does not include fixture-level parity proof against upstream SocNavBench outputs.
+    claim_boundary: >
+      Direct conceptual/API analogue in the vendored subset. Does not claim that
+      Robot SF path-length outcomes generalise to SocNavBench test scenarios or real-world settings.
+
+  - robot_sf_concept: socnavbench_path_length_ratio
+    analogue_framework: socnavbench
+    analogue_name: path_length_ratio
+    analogue_source: >
+      SocNavBench cost_functions (vendored third_party/socnavbench/metrics/cost_functions.py)
+    relationship: direct_source_analogue
+    missing_semantics_from_robot_sf: >
+      Same missing fixture-level parity proof caveat as socnavbench_path_length.
+    claim_boundary: Same as socnavbench_path_length.
+
+  - robot_sf_concept: socnavbench_path_irregularity
+    analogue_framework: socnavbench
+    analogue_name: path_irregularity
+    analogue_source: >
+      SocNavBench cost_functions (vendored third_party/socnavbench/metrics/cost_functions.py)
+    relationship: direct_source_analogue
+    missing_semantics_from_robot_sf: >
+      Same missing fixture-level parity proof caveat as socnavbench_path_length.
+    claim_boundary: Same as socnavbench_path_length.
+
+  - robot_sf_concept: personal_space_cost (vendored)
+    analogue_framework: socnavbench
+    analogue_name: personal_space_objective
+    analogue_source: >
+      SocNavBench objectives (vendored third_party/socnavbench/objectives/personal_space_cost.py)
+    relationship: direct_source_analogue
+    missing_semantics_from_robot_sf: >
+      Vendored objective is a source-level analogue; this proposal fixture does not
+      run objective parity fixtures.
+    claim_boundary: Same as socnavbench_path_length.
+
+  # --- Planner adapters ---
+  - robot_sf_concept: SocNavBenchSamplingAdapter
+    analogue_framework: socnavbench
+    analogue_name: Sampling planner
+    analogue_source: >
+      SocNavBench planners (vendored third_party/socnavbench/planners/)
+    relationship: adapter_from_vendored
+    missing_semantics_from_robot_sf: >
+      Full SocNavBench re-entry gate
+      (docs/context/issue_562_socnav_bench_reentry.md) restricts benchmark use. Adapter execution
+      mode, not native SocNavBench runtime mode.
+    claim_boundary: >
+      Adapter maps Robot SF observations to SocNavBench planner interface. Does not
+      claim planner behavior is identical to upstream SocNavBench benchmark runs, nor that the
+      adapter recovers full SocNavBench scenario fidelity.
+
+  - robot_sf_concept: SocNavBenchComplexPolicy
+    analogue_framework: socnavbench
+    analogue_name: Complex policy planner
+    analogue_source: >
+      SocNavBench planners (vendored third_party/socnavbench/planners/)
+    relationship: adapter_from_vendored
+    missing_semantics_from_robot_sf: >
+      Full SocNavBench re-entry gate applies. Adapter execution mode.
+    claim_boundary: Same as SocNavBenchSamplingAdapter.
+
+  # --- Observations ---
+  - robot_sf_concept: socnav_struct observation mode
+    analogue_framework: socnavbench
+    analogue_name: Structured observation
+    analogue_source: SocNavBench observation schema
+    relationship: inspired_by
+    missing_semantics_from_robot_sf: >
+      Robot SF adds RobotEnv-specific fields
+      (ego_state, goal_relative, pedestrian_state, obstacle_clusters) not in upstream SocNavBench
+      specification. Not validated against SocNavBench canonical observation fixtures.
+    claim_boundary: >
+      Observation shape and naming follow SocNavBench convention. Does not claim
+      Robot SF socnav_struct is byte-identical to any upstream SocNavBench observation format.
+
+  # --- Scenarios ---
+  - robot_sf_concept: SVG map + YAML manifest scenario definition
+    analogue_framework: socnavbench
+    analogue_name: >
+      SocNavBench scenario definitions (JSON configs with map, robot, pedestrian, goal)
+    analogue_source: SocNavBench params/central_params.py, config files
+    relationship: analogous_design
+    missing_semantics_from_robot_sf: >
+      SocNavBench scenarios reference third-party map datasets (ETH,
+      S3DIS) with mesh/point-cloud geometry. Robot SF uses 2D SVG walkable-area maps. Pedestrian
+      density, robot start/goal annotation conventions differ.
+    claim_boundary: >
+      Both use config-first scenario definition. Does not claim scenario semantics,
+      difficulty calibration, or failure-mode coverage transfer between the two frameworks.
+
+  - robot_sf_concept: scenario certification (scenario_cert.v1)
+    analogue_framework: socnavbench
+    analogue_name: >
+      Not directly present in SocNavBench. SocNavBench scenarios are assumed valid
+      by construction from curated datasets.
+    analogue_source: N/A
+    relationship: no_direct_analogue
+    missing_semantics_from_robot_sf: >
+      Robot SF certification is a geometric/kinodynamic feasibility
+      gate with explicit failure classes (invalid, infeasible, hard_but_solvable). SocNavBench has
+      no equivalent certification pipeline.
+    claim_boundary: >
+      Certification is Robot SF-specific. SocNavBench scenarios may contain
+      configurations that would fail Robot SF certification; this is not a defect in either framework.
+
+  - robot_sf_concept: benchmark metrics (success, collision, near_miss, etc.)
+    analogue_framework: hunavsim
+    analogue_name: >
+      HuNavSim benchmark metrics
+    analogue_source: HuNavSim paper (arXiv:2305.01303)
+    relationship: source_level_analogue
+    missing_semantics_from_robot_sf: >
+      The HuNavSim paper describes a social-navigation metric suite. Robot SF uses
+      SnQI for composite social navigation quality and separate near-miss/collision metrics.
+      In-repo HuNavSim support: none. No adapter, fixture, data, or config reference exists.
+    claim_boundary: >
+      Both frameworks measure navigation outcomes in social scenarios. Does not claim
+      metric equivalence, calibration parity, or that Robot SF metrics map to HuNavSim definitions.
+      No HuNavSim benchmark rows exist in Robot SF.
+
+  - robot_sf_concept: pedestrian behavior models (Social Force, ORCA)
+    analogue_framework: hunavsim
+    analogue_name: >
+      HuNavSim human-navigation behavior models
+    analogue_source: HuNavSim paper (arXiv:2305.01303)
+    relationship: source_level_analogue
+    missing_semantics_from_robot_sf: >
+      The HuNavSim paper reports a richer human-navigation behavior simulator.
+      Robot SF has Social Force + ORCA with limited group/role support and no in-repo
+      HuNavSim adapter, fixture, data, or behavior-profile parity check.
+    claim_boundary: >
+      Both use force-based and velocity-obstacle pedestrian models. Does not claim
+      model parity, behavioral diversity equivalence, or that Robot SF pedestrian dynamics reproduce
+      HuNavSim benchmark outcomes.
+
+  - robot_sf_concept: SNQI (Social Navigation Quality Indicator)
+    analogue_framework: socnavbench
+    analogue_name: >
+      SocNavBench does not define an equivalent composite quality metric. Individual
+      cost terms (personal_space, path_length, path_irregularity) exist but are not weighted into
+      a single score.
+    analogue_source: N/A
+    relationship: no_direct_analogue
+    missing_semantics_from_robot_sf: >
+      SNQI composite weighting, time-normalisation, and difficulty
+      calibration are Robot SF-specific. SocNavBench evaluates per-cost-term tradeoffs separately.
+    claim_boundary: >
+      SNQI is Robot SF-specific. Cost-term deltas to SocNavBench metrics exist but
+      are not equivalent to a composite quality comparison.
+
+  - robot_sf_concept: adversarial scenario search (robot_sf/adversarial/)
+    analogue_framework: socnavbench
+    analogue_name: >
+      SocNavBench does not define an equivalent adversarial search framework.
+      Scenarios are authored from real-world data.
+    analogue_source: N/A
+    relationship: no_direct_analogue
+    missing_semantics_from_robot_sf: >
+      Adversarial search over spawn perturbation, route offset,
+      and timing is Robot SF-specific. No equivalent in SocNavBench scenario vocabulary.
+    claim_boundary: >
+      Adversarial search is a Robot SF methodology extension. SocNavBench scenarios
+      are not designed for adversarial perturbation, so the absence of an analogue is expected.

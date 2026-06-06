@@ -485,6 +485,14 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2459_socnavbench_hunavsim_mapping.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2459/mapping_table_fixture.yaml
+    status: proposal
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2476_multimodal_prediction_benchmark.md
     status: proposal
     freshness: maintained

@@ -6,6 +6,46 @@ Computes time-series metrics and classifies timeout driver.
 import json
 import sys
 from pathlib import Path
+from typing import Any
+
+
+def _numeric_list(value: Any) -> list[float] | None:
+    """Normalize a JSON value to a numeric list when possible."""
+    if not isinstance(value, list):
+        return None
+    normalized = []
+    for item in value:
+        if not isinstance(item, int | float) or isinstance(item, bool):
+            return None
+        normalized.append(float(item))
+    return normalized
+
+
+def _recorded_bool(record: dict, *keys: str) -> bool | None:
+    """Return the first explicit boolean value recorded under any key."""
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, bool):
+            return value
+    return None
+
+
+def _scoring_slowed_progress(record: dict, out: dict) -> bool | None:
+    """Conservatively infer whether actuation-aware scoring slowed route progress."""
+    recorded = _recorded_bool(
+        record,
+        "whether_actuation_aware_scoring_slowed_progress",
+        "actuation_aware_scoring_slowed_progress",
+    )
+    if recorded is not None:
+        return recorded
+    progress = out["progress_over_time"]
+    speeds = out["command_speed_profile"]
+    if not progress or not speeds:
+        return None
+    stalled = max(progress) - min(progress) < 1e-3
+    conservative_commands = max(speeds) < 0.05
+    return stalled and conservative_commands
 
 
 def analyze_amv(record: dict) -> dict:
@@ -18,11 +58,10 @@ def analyze_amv(record: dict) -> dict:
         "timeout_driver": None,
         "whether_actuation_aware_scoring_slowed_progress": None,
     }
-    prog = record.get("progress")
-    out["progress_over_time"] = prog if isinstance(prog, list) else None
-    out["clipping_over_time"] = record.get("clipping")
-    out["saturation_over_time"] = record.get("saturation")
-    out["command_speed_profile"] = record.get("command_speeds")
+    out["progress_over_time"] = _numeric_list(record.get("progress"))
+    out["clipping_over_time"] = _numeric_list(record.get("clipping"))
+    out["saturation_over_time"] = _numeric_list(record.get("saturation"))
+    out["command_speed_profile"] = _numeric_list(record.get("command_speeds"))
     # simple heuristics
     try:
         if out["command_speed_profile"] and max(out["command_speed_profile"]) < 0.05:
@@ -36,6 +75,7 @@ def analyze_amv(record: dict) -> dict:
             out["timeout_driver"] = "other_or_unclassified"
     except Exception:
         out["timeout_driver"] = "unknown"
+    out["whether_actuation_aware_scoring_slowed_progress"] = _scoring_slowed_progress(record, out)
     return out
 
 

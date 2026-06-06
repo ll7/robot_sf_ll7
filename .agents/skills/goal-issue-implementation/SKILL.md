@@ -319,14 +319,20 @@ Route remaining issues by their blocker:
 4. Make the successful claim visible in the issue/project surfaces: move the issue to `In progress`
    or `state:running`, assign the actor when practical, and add a concise issue comment with the
    claim ref, machine/thread, planned branch, and stale-claim cleanup condition.
-5. Create/checkout the isolated implementation branch. For non-trivial local changes, prefer a
+5. Create or update the active delegation ledger described in
+   `.agents/skills/goal-autopilot/SKILL.md` with the claim ref/status, issue, branch/worktree,
+   owned files or modules, route/run IDs, validation plan, cleanup status, and next action. Update
+   it after every delegated worker start/completion/failure, before any CI wait or compaction-prone
+   pause, and after PR creation and claim release. Record route success separately from task
+   success.
+6. Create/checkout the isolated implementation branch. For non-trivial local changes, prefer a
    linked worktree and follow `AGENTS.md` "Fresh Worktree Bootstrap" for location, naming,
    machine-context symlink, environment setup, and early `origin/main` freshness.
-6. Implement only in-scope behavior and required tests/docs.
-7. Validate using the narrowest meaningful level first, then expand.
-8. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
-9. Prepare proof and branch handoff via `gh-pr-opener`.
-10. Open PR, release the transient claim with
+7. Implement only in-scope behavior and required tests/docs.
+8. Validate using the narrowest meaningful level first, then expand.
+9. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
+10. Prepare proof and branch handoff via `gh-pr-opener`.
+11. Open PR, release the transient claim with
     `uv run python scripts/dev/issue_claim.py release <issue-number>` once the PR visibly covers the
     issue, then report and move to next queue item. If the run abandons the issue before PR opening,
     release the claim only after recording the blocker or handoff.

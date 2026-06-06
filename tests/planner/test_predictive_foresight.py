@@ -112,8 +112,9 @@ def test_crossing_count_only_counts_crossings_inside_front_corridor() -> None:
         dtype=np.float32,
     )
     mask = np.array([1.0, 1.0], dtype=np.float32)
+    valid_idx = np.where(mask > 0.5)[0]
 
-    count = encoder._crossing_count(future=future, mask=mask, steps=3)
+    count = encoder._crossing_count(future=future, valid_idx=valid_idx, steps=3)
     assert count == 1.0
 
 

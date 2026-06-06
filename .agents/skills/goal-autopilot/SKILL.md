@@ -110,6 +110,45 @@ labels or project state; resolve review threads; or make final benchmark, paper,
 unless the user explicitly grants that permission. Their output is route evidence that must be
 reviewed and validated before phase completion.
 
+### Active Delegation Ledger
+
+For long-running or delegated goal runs, maintain one compact active-state ledger in the common Git
+directory so it survives linked worktrees, context compaction, and branch cleanup without entering
+the PR diff:
+
+```bash
+LEDGER_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
+mkdir -p "$LEDGER_DIR"
+```
+
+Use a short Markdown or YAML file such as
+`$LEDGER_DIR/issue-<number>-delegation-ledger.md` or `$LEDGER_DIR/pr-<number>-delegation-ledger.md`.
+This ledger is a handoff checklist, not a replacement for GitHub issues, PR bodies, issue-claim
+refs, worker artifacts, validation logs, or final summaries.
+
+Track only the fields needed to resume safely in under one minute:
+
+- route: provider/tool, model or agent role, run ID or artifact path, and route status;
+- task state: issue/PR number, phase, branch, worktree, claim ref/status, and next action;
+- ownership: files or modules the delegate may read or edit;
+- validation: commands planned/run, pass/fail state, and any blocker signature;
+- PR/CI: PR URL or number, head SHA, review state, CI state, and merge-ready state;
+- cleanup: app-agent or worker close status, claim release status, worktree/artifact decision.
+
+Distinguish route success from task success. A delegate command exiting zero or producing a report
+only proves `route_status: completed`; the parent phase is not complete until the main agent has
+reviewed the output, integrated any edits, run the required validation, updated GitHub state, and
+recorded cleanup.
+
+Update the ledger:
+
+- after a claim is acquired and the implementation worktree/branch is created;
+- after each delegated route starts, including `delegation_skipped: <reason>` entries;
+- after worker completion, failure, or cancellation;
+- after PR creation, before any CI wait, and after CI/review state changes;
+- after merge success/failure, claim release, worker close, and worktree/artifact cleanup;
+- before any compaction-prone wait, handoff, or final response while active work remains.
+
 Transitions:
 - After `implement`, proceed to `review`.
 - After `review`, proceed to `merge`.

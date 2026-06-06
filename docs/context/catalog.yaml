@@ -93,6 +93,14 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2404_amv_timeout_decomposition_decision.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2404_amv_timeout_decomposition_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2259_amv_clipping_success_boundary.md
     status: current
     freshness: evidence

@@ -525,6 +525,8 @@ knowledge, not every transient iteration detail.
   [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md)
 * Issue #1966 ScenarioBelief Interface Design (2026-06-01):
   [issue_1966_scenario_belief_interface.md](issue_1966_scenario_belief_interface.md)
+* Issue #2477 ScenarioBelief Contract Bridge (2026-06-06):
+  [issue_2477_scenario_belief_contract.md](issue_2477_scenario_belief_contract.md)
 * Issue #2475 Probabilistic Prediction Interface (2026-06-06):
   [issue_2475_probabilistic_prediction_interface.md](issue_2475_probabilistic_prediction_interface.md)
 * Issue #1638 local model path preflight:

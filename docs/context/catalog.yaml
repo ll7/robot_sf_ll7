@@ -361,6 +361,10 @@ entries:
     status: current
     freshness: dated
     area: learned_policy
+  - path: docs/context/issue_2477_scenario_belief_contract.md
+    status: current
+    freshness: maintained
+    area: learned_policy
   - path: docs/context/issue_2475_probabilistic_prediction_interface.md
     status: current
     freshness: dated

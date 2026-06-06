@@ -60,7 +60,7 @@ class _RouteHypothesisPath:
     blocked_cell: tuple[int, int] | None = None
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", default="hybrid_rule_v3_waypoint2_route_lookahead8")
@@ -80,7 +80,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-hypotheses", type=int, default=2)
     parser.add_argument("--block-radius-cells", type=int, default=3)
     parser.add_argument("--block-stride-cells", type=int, default=8)
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _first_float(value: Any, default: float) -> float:
@@ -633,9 +633,9 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
     return lines
 
 
-def main() -> int:  # noqa: C901, PLR0915
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
     """Run the topology-hypothesis diagnostic trace."""
-    args = parse_args()
+    args = parse_args(argv)
     funnel = _load_yaml(args.funnel_config)
     stages = funnel.get("stages")
     if not isinstance(stages, dict) or args.stage not in stages:

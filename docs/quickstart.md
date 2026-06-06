@@ -10,6 +10,9 @@ guides remain in their existing Markdown locations.
   support.
 - [Benchmark Runner And Metrics](benchmark.md) includes the local smoke benchmark demo:
   `uv run python scripts/demo/run_robot_sf_smoke.py`.
+- [Benchmark Runner And Metrics](benchmark.md) also includes a one-command mechanism-aware
+  diagnostic reproduction:
+  `uv run python scripts/demo/reproduce_mechanism_report.py --case topology-primary-route`.
 - The social-navigation benchmark quickstart lives outside the Sphinx source tree at
   `specs/120-social-navigation-benchmark-plan/quickstart.md`.
 

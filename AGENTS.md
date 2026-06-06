@@ -317,7 +317,10 @@ resolving lint or test failures locally before requesting review.
   decision, claim boundary, benchmark report, registry, context note, or synthesis surface the tool
   will update. Disposable local `output/` files do not count as durable proof unless represented by
   a tracked manifest, registry entry, context note, or external artifact pointer. Small support
-  helpers that are not intended to support research interpretation may state `NA` with that reason.
+  helpers that are not intended to support research interpretation may state `NA - support helper`
+  with that reason. Trace-panel generators, topology-score instrumentation, seed-sufficiency
+  analysis, and why-report generation are research-facing examples that need first use or a
+  concrete follow-up.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

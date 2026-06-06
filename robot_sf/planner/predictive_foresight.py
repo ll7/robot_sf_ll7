@@ -147,18 +147,19 @@ class PredictiveForesightEncoder:
         state, mask, robot_pos, robot_heading = self._adapter._build_model_input(observation)
         future = self._adapter._predict_trajectories(state, mask)
         steps = self._adapter._effective_rollout_steps(future_peds=future, mask=mask)
+        valid_idx = np.where(mask > 0.5)[0]
         min_clearance = self._adapter._min_predicted_distance(
             future_peds=future,
             mask=mask,
             steps=steps,
         )
-        ttc_risk = self._ttc_risk(future=future, mask=mask, steps=steps)
-        crossing_count = self._crossing_count(future=future, mask=mask, steps=steps)
-        gap_scores = self._gap_scores(future=future, mask=mask, steps=steps)
+        ttc_risk = self._ttc_risk(future=future, valid_idx=valid_idx, steps=steps)
+        crossing_count = self._crossing_count(future=future, valid_idx=valid_idx, steps=steps)
+        gap_scores = self._gap_scores(future=future, valid_idx=valid_idx, steps=steps)
         flow_alignment = self._flow_alignment(
             observation=observation,
             state=state,
-            mask=mask,
+            valid_idx=valid_idx,
             robot_pos=robot_pos,
             robot_heading=robot_heading,
         )
@@ -183,20 +184,17 @@ class PredictiveForesightEncoder:
             "uncertainty": np.array([0.0], dtype=np.float32),
         }
 
-    def _ttc_risk(self, *, future: np.ndarray, mask: np.ndarray, steps: int) -> float:
+    def _ttc_risk(self, *, future: np.ndarray, valid_idx: np.ndarray, steps: int) -> float:
         """Summarize short-horizon close-approach risk against a stationary robot origin.
 
         Returns:
             float: Non-negative TTC-style risk summary.
         """
         threshold = float(self.config.near_distance)
-        if threshold <= 0.0 or future.size == 0:
+        if threshold <= 0.0 or future.size == 0 or valid_idx.size == 0:
             return 0.0
         penalty = 0.0
         dt = max(float(self.config.rollout_dt), 1e-3)
-        valid_idx = np.where(mask > 0.5)[0]
-        if valid_idx.size == 0:
-            return 0.0
         for t in range(min(int(steps), future.shape[1])):
             valid = future[valid_idx, t, :]
             if valid.size == 0:
@@ -206,13 +204,12 @@ class PredictiveForesightEncoder:
             penalty += float(np.sum(shortfall / (float(t + 1) * dt + 1e-6)))
         return penalty
 
-    def _crossing_count(self, *, future: np.ndarray, mask: np.ndarray, steps: int) -> float:
+    def _crossing_count(self, *, future: np.ndarray, valid_idx: np.ndarray, steps: int) -> float:
         """Count predicted agents entering the front corridor and crossing the centerline.
 
         Returns:
             float: Number of unique predicted corridor-crossing agents.
         """
-        valid_idx = np.where(mask > 0.5)[0]
         if valid_idx.size == 0:
             return 0.0
         length = float(self.config.front_corridor_length)
@@ -235,13 +232,12 @@ class PredictiveForesightEncoder:
                 count += 1
         return float(count)
 
-    def _gap_scores(self, *, future: np.ndarray, mask: np.ndarray, steps: int) -> np.ndarray:
+    def _gap_scores(self, *, future: np.ndarray, valid_idx: np.ndarray, steps: int) -> np.ndarray:
         """Estimate left/right gap openness in the front corridor.
 
         Returns:
             np.ndarray: Two-element `[left_gap, right_gap]` openness estimate.
         """
-        valid_idx = np.where(mask > 0.5)[0]
         width = float(self.config.front_corridor_half_width)
         length = float(self.config.front_corridor_length)
         left = width
@@ -268,7 +264,7 @@ class PredictiveForesightEncoder:
         *,
         observation: dict[str, Any],
         state: np.ndarray,
-        mask: np.ndarray,
+        valid_idx: np.ndarray,
         robot_pos: np.ndarray,
         robot_heading: float,
     ) -> float:
@@ -277,7 +273,6 @@ class PredictiveForesightEncoder:
         Returns:
             float: Alignment score in `[-1, 1]`.
         """
-        valid_idx = np.where(mask > 0.5)[0]
         if valid_idx.size == 0:
             return 0.0
         _robot_state, goal_state, _ped_state = self._adapter._socnav_fields(observation)

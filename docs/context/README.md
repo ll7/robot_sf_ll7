@@ -267,6 +267,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2274_hybrid_component_matrix.md](issue_2274_hybrid_component_matrix.md)
 
+* Issue #2410 hybrid-learning component readiness refresh:
+
+  [issue_2410_hybrid_component_readiness_refresh.md](issue_2410_hybrid_component_readiness_refresh.md)
+
 * Issue #2231 mechanism-aware ranking comparison:
 
   [issue_2231_mechanism_aware_ranking.md](issue_2231_mechanism_aware_ranking.md)
@@ -1149,3 +1153,6 @@ why a change was made rather than a full issue execution transcript.
   classifies learned risk, ORCA-residual BC, oracle imitation, shielded PPO repair, and BC
   warm-start PPO before Issue #1489 synthesis. It records blockers, next actions, and the
   conclusion that Issue #1489 remains blocked from comparative synthesis.
+* [Issue #2410 Hybrid-Learning Component Readiness Refresh](issue_2410_hybrid_component_readiness_refresh.md)
+  refreshes the component matrix after the ORCA-residual v1 progress-probe launch-packet revision
+  and keeps Issue #1489 blocked from comparative synthesis.

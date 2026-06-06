@@ -1,0 +1,78 @@
+{
+  "schema_version": "robot-sf-topology-selection-score-decision.v1",
+  "issue": 2403,
+  "generated_at": "2026-06-06T09:05:00+00:00",
+  "claim_boundary": "analysis-only synthesis of the Issue #2307 instrumented topology rerun; not benchmark-strength mitigation evidence",
+  "source_diagnostic": {
+    "issue": 2307,
+    "summary_path": "docs/context/evidence/issue_2307_topology_score_diagnostic_2026-06-05/summary.json",
+    "diagnostic_status": "diagnostic_complete",
+    "candidate": "topology_guided_hybrid_rule_v0",
+    "stage": "full_matrix",
+    "scenario_id": "classic_realworld_double_bottleneck_high",
+    "seed": 111,
+    "horizon": 160,
+    "git_hash": "d9ce46a9d1ee8197bbb8116a02378ee1e5f55308"
+  },
+  "related_issues_checked": [
+    2258,
+    2282,
+    2307,
+    2393
+  ],
+  "rerun_decision": {
+    "additional_rerun_performed": false,
+    "reason": "Issue #2307 already reran the same topology diagnostic slice after Issue #2282 score instrumentation and promoted the exact requested field block."
+  },
+  "decision_output": "primary_route_overselected",
+  "decision_rationale": {
+    "no_alternatives_generated": "rejected: 98 scored alternative opportunities and 90 ok hypothesis frames were present",
+    "alternatives_invalid": "rejected: scored alternatives were evaluated and rejected by lower topology selection score, not by a validity failure",
+    "primary_route_overselected": "accepted: rejected scored alternatives consistently lost by lower_topology_selection_score and topology-command influence never switched away from primary_route",
+    "topology_not_relevant_for_case": "rejected: topology command influenced 33 steps, all inheriting primary_route",
+    "revision_candidate_found": "partial: Issue #2393 names topology_hypothesis_near_parity_diversity_gate_v0 as the next diagnostic-only revision candidate"
+  },
+  "topology_selection": {
+    "per_frame_hypothesis_count": {
+      "insufficient_hypotheses": 70,
+      "ok": 90
+    },
+    "alternative_hypothesis_count": {
+      "steps_with_score_payload": 98,
+      "steps_with_alternative_hypothesis": 98
+    },
+    "selected_hypothesis": {
+      "route_selector_counts": {
+        "primary_route": 97,
+        "masked_cell_87_79": 1
+      },
+      "topology_command_influence_counts": {
+        "primary_route": 33
+      }
+    },
+    "score_margin_to_primary_route": {
+      "alternative_margin_count": 98,
+      "min": 0.0,
+      "median": 0.4056854309944198,
+      "max": 8.214213684774414
+    },
+    "rejection_reason": {
+      "lower_topology_selection_score": 98
+    },
+    "switch_opportunity_count": 98,
+    "hypothesis_switch_count": 0
+  },
+  "notable_rows": [
+    {
+      "step": 35,
+      "finding": "route selector chose masked_cell_87_79 on a numerical tie with primary_route, but local command source was dynamic_window and topology_command_influence stayed null",
+      "score_margin_to_selected": 1.7763568394002505e-15
+    },
+    {
+      "step": 1,
+      "finding": "primary_route selected; masked_cell_71_87 rejected by lower_topology_selection_score",
+      "score_margin_to_selected": 0.4686291570846386
+    }
+  ],
+  "next_research_direction": "Use the Issue #2393 near-parity diversity-gate preflight to revise upstream topology hypothesis scoring/selection before downstream planner-command tuning."
+}

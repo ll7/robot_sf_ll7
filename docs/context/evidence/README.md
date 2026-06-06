@@ -106,6 +106,9 @@ boundary before merging an evidence-producing PR.
   reports from the May 4 run.
 - `issue_1692_topology_hypothesis_probe_2026-05-30/`: compact diagnostic-only evidence for the
   topology-hypothesis trace probe on `classic_realworld_double_bottleneck_high` seed 111.
+- `issue_2403_topology_selection_score_2026-06-06/`: compact analysis-only synthesis mapping the
+  Issue #2307 instrumented topology rerun onto the Issue #2403 requested selection-score fields and
+  decision-output vocabulary.
 - `issue_1904_scenario_perturbation_pilot_2026-05-31/`: compact diagnostic-only paired
   no-op-versus-route-offset pilot summary for the first #1610 scenario perturbation criticality
   slice.

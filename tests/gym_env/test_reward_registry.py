@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reward import (
     build_reward_curriculum_function,
@@ -242,6 +244,46 @@ def test_simple_ped_and_punish_action_rewards_cover_collision_and_action_branche
     penalized = punish_action_reward(meta, punish_action=True)
     unpenalized = punish_action_reward(meta, punish_action=False)
     assert penalized < unpenalized
+
+
+def test_punish_action_reward_matches_legacy_action_delta_for_common_inputs() -> None:
+    """Action-change reward should match the previous NumPy norm formula exactly."""
+    base_meta = {
+        "max_sim_steps": 100,
+        "is_pedestrian_collision": False,
+        "is_robot_collision": False,
+        "is_obstacle_collision": False,
+        "is_route_complete": False,
+    }
+    cases = [
+        ([1.0, -2.0], [0.25, 0.5]),
+        ((1.0, -2.0), (0.25, 0.5)),
+        (np.array([1.0, -2.0]), np.array([0.25, 0.5])),
+        ([1.0, -2.0, 3.0], [0.25, 0.5, 0.0]),
+    ]
+
+    for action, last_action in cases:
+        meta = {**base_meta, "action": action, "last_action": last_action}
+        expected = punish_action_reward(meta, punish_action=False) - 0.1 * float(
+            np.linalg.norm(np.array(action) - np.array(last_action))
+        )
+        assert math.isclose(punish_action_reward(meta), expected)
+
+
+def test_punish_action_reward_skips_action_penalty_when_disabled_or_unavailable() -> None:
+    """No action penalty should be applied for disabled punishment or first step."""
+    meta = {
+        "max_sim_steps": 100,
+        "is_pedestrian_collision": False,
+        "is_robot_collision": False,
+        "is_obstacle_collision": False,
+        "is_route_complete": False,
+        "action": [1.0, 0.0],
+        "last_action": None,
+    }
+    first_step = punish_action_reward(meta)
+    disabled = punish_action_reward({**meta, "last_action": [0.0, 0.0]}, punish_action=False)
+    assert math.isclose(first_step, disabled)
 
 
 def test_simple_ped_reward_ignores_legacy_robot_goal_flag_without_route_complete() -> None:

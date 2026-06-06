@@ -158,6 +158,9 @@ boundary before merging an evidence-producing PR.
   naming the missing activation trace needed for definitive attribution.
 - `issue_2306_static_recenter_activation_trace_2026-06-05/`: compact instrumented rerun evidence
   showing static recentering stayed inactive on the unsolved held-out row from Issue #2221.
+- `issue_2402_static_recenter_activation_2026-06-06/`: compact analysis-only synthesis mapping the
+  Issue #2306 instrumented static-recenter rerun onto the Issue #2402 requested activation fields
+  and decision-output vocabulary.
 - `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
   Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
   and baseline artifact URIs despite a valid launch packet fixture.

@@ -1,0 +1,6 @@
+decision_output,classification,evidence_summary
+mechanism_inactive,accepted,"Accepted for classic_station_platform_medium: activation_count=0, terminal outcome unchanged failure, and no selected static-recenter command source."
+mechanism_active_but_irrelevant,rejected,"No row recorded static-recenter activation, so unchanged outcomes cannot be attributed to active-but-irrelevant behavior."
+comparator_already_solved_case,accepted,"Accepted for francis2023_intersection_wait: baseline and mechanism candidate both succeeded with no near misses or collisions."
+scenario_lacks_target_failure_mode,secondary,"The solved row lacks a rescue target; the unsolved row is classified directly as mechanism_inactive."
+missing_instrumentation,rejected,"Issue #2306 filled the activation instrumentation gap left by Issue #2266."

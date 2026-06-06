@@ -1,0 +1,6 @@
+component,current_classification,validator_tier,evaluation_slice,verdict,synthesis_eligible,blocker,next_action
+learned_risk_model_v1,blocked,launch_packet,not_run,pending,false,Trace inputs still lack durable artifact URIs/checksums suitable for training and downstream evaluation,Complete trace-manifest preflight/promotion before training
+orca_residual_bc_v1,diagnostic-only,failed,smoke,revise,false,V0 smoke produced fail-closed low-progress evidence; Issue 2398 only prepared a v1 progress-probe launch packet,Run v1 bounded smoke on a SLURM-capable host before nominal escalation
+oracle_imitation_v1,blocked,launch_packet,not_run,pending,false,Trace collection/preflight remains dataset-prep evidence without promoted downstream navigation evidence,Promote durable dataset/manifest pointers before imitation training or evaluation
+shielded_ppo_repair_v1,diagnostic-only,smoke_only,smoke,continue,false,Positive guarded smoke is still single-row diagnostic evidence only,Continue only to nominal-sanity with guard diagnostics preserved
+bc_warm_start_ppo_v10,negative,launch_packet,not_run,stop,false,Continuation was cancelled with tail success rate 0 and no deployable final checkpoint or policy-analysis comparison,Do not rerun the same continuation; reopen only through objective redesign or intermediate-checkpoint analysis

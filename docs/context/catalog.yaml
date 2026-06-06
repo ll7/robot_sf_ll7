@@ -461,6 +461,10 @@ entries:
     status: evidence
     freshness: evidence
     area: predictive_planner
+  - path: docs/context/issue_2472_intent_conditioned_behavior.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2473_cyclist_interaction_benchmark.md
     status: proposal
     freshness: maintained

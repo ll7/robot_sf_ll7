@@ -1,0 +1,172 @@
+# Proposal-grade scenario contract for issue #2472.
+#
+# This file records authored intent metadata only. It does not change scenario
+# runner behavior, train a human model, replace Social Force, or certify realism.
+
+contracts:
+  - schema_version: scenario_contract.v1
+    id: francis2023_intersection_wait_intent_conditioned_contract
+    scenario_ref:
+      source: configs/scenarios/single/francis2023_intersection_wait.yaml
+      scenario_name: francis2023_intersection_wait
+      scenario_family: francis2023_intersection_wait
+    odd:
+      environment_type: indoor_corridor
+      map_family: francis2023_intersection
+      density: low
+      flow: crossing_with_authored_wait
+      assumptions:
+        - Intent labels describe authored pedestrian behavior; they are not learned from data.
+        - The intersection-wait pedestrian uses deterministic trajectory and wait annotations.
+        - The contract scopes an actor-model direction and remains exploratory until trace and
+          benchmark evidence exist.
+    actors:
+      - id: robot
+        kind: robot
+        count:
+          minimum: 1
+          maximum: 1
+        motion_model: configured_robot_policy
+        assumptions:
+          - Robot behavior is supplied by the selected planner and is not changed by this contract.
+      - id: intent_conditioned_pedestrian
+        kind: pedestrian
+        count:
+          minimum: 1
+          maximum: 1
+        motion_model: authored_waypoints_with_waits_and_intent_metadata
+        assumptions:
+          - Existing runtime knobs encode trajectory, wait_at, start delay, speed, and role-like
+            behavior, but do not yet emit a runtime intent state.
+          - The initial smoke should use one deterministic pedestrian before any broader behavior
+            model or realism claim.
+    invariants:
+      - id: intent_metadata_not_runtime_model
+        scope: authoring
+        severity: required
+        description: Intent labels in this contract must remain metadata until runtime trace support exists.
+      - id: no_realism_claim_without_data
+        scope: pre_run
+        severity: required
+        description: Do not claim pedestrian realism or planner-ranking changes from this contract alone.
+      - id: smoke_requires_trace_fields
+        scope: pre_run
+        severity: required
+        description: An executable smoke must emit intent/phase fields before it can support intent-specific interpretation.
+    observables:
+      - id: collision_rate
+        metric: collision_rate
+        source: benchmark_episode_metrics
+        required: true
+        interpretation: Safety outcome remains necessary but not sufficient for intent-conditioned behavior claims.
+      - id: wait_release_latency_s
+        metric: wait_release_latency_s
+        source: future_intent_trace_fields
+        required: false
+        interpretation: Future field for measuring whether a waiting intent releases as authored.
+      - id: intent_phase_by_step
+        metric: intent_phase_by_step
+        source: future_trace_extension
+        required: false
+        interpretation: Future trace field needed to distinguish crossing, waiting, and release phases.
+    termination_conditions:
+      - id: route_success
+        reason: success
+        source: benchmark_runner
+        description: The robot reaches its configured route goal.
+      - id: safety_collision
+        reason: collision
+        source: benchmark_runner
+        description: Robot collision remains a safety failure, not proof of intent-model realism.
+      - id: horizon_timeout
+        reason: max_steps
+        source: benchmark_runner
+        description: Max-step termination must be interpreted with planner and intent trace evidence.
+    certification:
+      schema_version: scenario_cert.v1
+      required_before_benchmark_claim: true
+      expected_eligibility: unknown
+      notes: This proposal contract records behavior intent only; scenario_cert.v1 remains the eligibility gate.
+    benchmark_eligibility:
+      intended_use: exploratory
+      requires_certification: true
+      claim_boundary: >
+        Use this contract to audit intent-conditioned behavior metadata only. It is not evidence
+        that intent-conditioned pedestrians are realistic, that Social Force has been replaced, or
+        that planner rankings change.
+      eligibility_hooks:
+        - Runtime traces must include intent label, intent phase, and behavior parameter provenance.
+        - A one-scenario smoke must run without fallback or degraded execution before planner interpretation.
+        - Data-grounded validation is required before any realism claim.
+    provenance:
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2472
+      authored_by: robot_sf_ll7
+      source_files:
+        - configs/scenarios/single/francis2023_intersection_wait.yaml
+        - docs/single_pedestrians.md
+        - docs/scenario_contracts.md
+        - robot_sf/analysis_workbench/schemas/simulation_trace_export.v1.json
+      notes: >
+        The intersection-wait scenario already carries authored wait/crossing behavior and is a
+        compact first smoke candidate for intent trace metadata.
+    extensions:
+      intent_conditioned_behavior.v1:
+        status: proposal_metadata_only
+        benchmark_evidence: false
+        intent_vocabulary:
+          crossing:
+            description: Pedestrian moves through a robot-relevant conflict or crossing zone.
+            existing_knobs:
+              - trajectory
+              - speed_m_s
+          waiting:
+            description: Pedestrian pauses before release or crossing.
+            existing_knobs:
+              - wait_at
+              - start_delay_s
+          following:
+            description: Pedestrian maintains motion relative to a robot or actor target.
+            existing_knobs:
+              - role
+              - role_target_id
+              - role_offset
+          overtaking:
+            description: Pedestrian passes a slower actor along a shared route.
+            existing_knobs:
+              - trajectory
+              - speed_m_s
+          group_join:
+            description: Pedestrian moves toward or joins another pedestrian group.
+            existing_knobs:
+              - role
+              - role_target_id
+        first_smoke_scenario:
+          source: configs/scenarios/single/francis2023_intersection_wait.yaml
+          scenario_name: francis2023_intersection_wait
+          selected_intents:
+            - waiting
+            - crossing
+          rationale: Existing trajectory and wait_at annotations make this the smallest first smoke target.
+        required_future_trace_fields:
+          - pedestrian_id
+          - intent_label
+          - intent_phase
+          - behavior_role
+          - behavior_target_id
+          - behavior_parameters
+          - wait_interval_s
+          - release_event_step
+          - intent_source
+        current_trace_gap:
+          current_trace_fields:
+            - id
+            - position
+            - velocity
+          missing_for_intent_interpretation:
+            - intent_label
+            - intent_phase
+            - behavior_role
+            - behavior_parameters
+        stop_rule: >
+          Stop at one executable trace metadata smoke before training a behavior model, replacing
+          Social Force, or making planner-ranking claims.

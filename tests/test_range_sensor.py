@@ -10,6 +10,7 @@ from robot_sf.sensor.range_sensor import (
     euclid_dist,
     lidar_ray_offsets,
     lidar_ray_scan,
+    lidar_ray_scan_ranges_only,
     lidar_sensor_space,
     lineseg_line_intersection_distance,
     range_postprocessing,
@@ -650,3 +651,87 @@ def test_scan_noise_array_zero_noise_preserved():
     ranges_1, _ = lidar_ray_scan(((1.0, 1.0), 0.0), occ, settings)
     ranges_2, _ = lidar_ray_scan(((1.0, 1.0), 0.0), occ, settings)
     assert np.array_equal(ranges_1, ranges_2)
+
+
+def test_lidar_ray_scan_ranges_only_matches_first_element():
+    """Ranges-only scan output equals lidar_ray_scan(...)[0] for various poses."""
+    obstacle_coords = np.array([[3.0, -1.0, 3.0, 1.0]])
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+    )
+    settings = LidarScannerSettings(max_scan_dist=10.0, num_rays=8, scan_noise=[0.0, 0.0])
+
+    for heading in [0.0, np.pi / 4, np.pi, -np.pi / 2, 2.5 * np.pi]:
+        pose = ((1.0, 1.0), heading)
+        ranges_ref = lidar_ray_scan(pose, occ, settings)[0]
+        ranges_only = lidar_ray_scan_ranges_only(pose, occ, settings)
+        np.testing.assert_array_equal(ranges_only, ranges_ref)
+
+
+def test_lidar_ray_scan_ranges_only_buffer_reuse():
+    """Repeated calls with different headings correctly overwrite the buffer."""
+    obstacle_coords = np.array([[3.0, -1.0, 3.0, 1.0]])
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+    )
+    settings = LidarScannerSettings(max_scan_dist=10.0, num_rays=4, scan_noise=[0.0, 0.0])
+
+    heading_a = 0.0
+    heading_b = np.pi / 3
+
+    ranges_a = lidar_ray_scan_ranges_only(((1.0, 1.0), heading_a), occ, settings)
+    ranges_b = lidar_ray_scan_ranges_only(((1.0, 1.0), heading_b), occ, settings)
+
+    ref_a = lidar_ray_scan(((1.0, 1.0), heading_a), occ, settings)[0]
+    ref_b = lidar_ray_scan(((1.0, 1.0), heading_b), occ, settings)[0]
+
+    np.testing.assert_array_equal(ranges_a, ref_a)
+    np.testing.assert_array_equal(ranges_b, ref_b)
+
+
+def test_lidar_ray_scan_angles_isolated_from_ranges_only_buffer():
+    """Public lidar_ray_scan returned angles remain correct after buffer mutation."""
+    obstacle_coords = np.array([[3.0, -1.0, 3.0, 1.0]])
+    ped_coords = np.empty((0, 2), dtype=np.float64)
+    occ = ContinuousOccupancy(
+        width=10.0,
+        height=10.0,
+        get_agent_coords=lambda: (1.0, 1.0),
+        get_goal_coords=lambda: (9.0, 9.0),
+        get_obstacle_coords=lambda: obstacle_coords,
+        get_pedestrian_coords=lambda: ped_coords,
+    )
+    settings = LidarScannerSettings(
+        max_scan_dist=10.0,
+        num_rays=4,
+        visual_angle_portion=1.0,
+        scan_noise=[0.0, 0.0],
+    )
+
+    heading_1 = 0.0
+    heading_2 = np.pi / 2
+
+    # First scan with full API
+    _ranges_1, angles_1 = lidar_ray_scan(((1.0, 1.0), heading_1), occ, settings)
+
+    # Ranges-only call mutates private buffer
+    lidar_ray_scan_ranges_only(((1.0, 1.0), heading_2), occ, settings)
+
+    # Second full scan — must not alias or be contaminated by the buffer
+    _ranges_2, angles_2 = lidar_ray_scan(((1.0, 1.0), heading_1), occ, settings)
+
+    expected = np.mod(heading_1 + settings.ray_offsets, 2.0 * np.pi)
+    np.testing.assert_allclose(angles_1, expected, atol=1e-12, rtol=1e-12)
+    np.testing.assert_allclose(angles_2, expected, atol=1e-12, rtol=1e-12)

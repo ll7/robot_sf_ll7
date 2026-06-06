@@ -147,6 +147,7 @@ class LidarScannerSettings:
     angle_opening: Range = field(init=False)
     scan_noise_array: np.ndarray = field(init=False)
     ray_offsets: np.ndarray = field(init=False)
+    _ray_angles_buffer: np.ndarray = field(init=False)
 
     def __post_init__(self):
         """Validate scanner settings and derive derived fields.
@@ -172,6 +173,7 @@ class LidarScannerSettings:
         scan_noise_arr = np.array(self.scan_noise, dtype=np.float64)
         scan_noise_arr.flags.writeable = False
         self.scan_noise_array = scan_noise_arr
+        self._ray_angles_buffer = np.zeros(self.num_rays, dtype=np.float64)
 
     @classmethod
     def ego_pedestrian_lidar(cls) -> "LidarScannerSettings":
@@ -436,6 +438,68 @@ def lidar_ray_offsets(num_rays: int, visual_angle_portion: float) -> np.ndarray:
     return angles
 
 
+def _lidar_ray_scan_impl(
+    pose: RobotPose,
+    occ: ContinuousOccupancy,
+    settings: LidarScannerSettings,
+    ray_angles_out: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Shared scan body for public lidar_ray_scan and lidar_ray_scan_ranges_only.
+
+    Computes ray angles into the provided ``ray_angles_out`` buffer, performs
+    raycasting, and applies range postprocessing.
+
+    Args:
+        pose: ``((x, y), heading)`` scanner pose in world coordinates and radians.
+        occ: Continuous occupancy provider.
+        settings: Scanner settings.
+        ray_angles_out: Pre-allocated output buffer for ray angles. Must have
+            shape ``(settings.num_rays,)`` and dtype float64.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: ``(ranges, ray_angles)`` where ranges are
+        per-ray distances and ray_angles are the absolute ray directions.
+    """
+    (pos_x, pos_y), robot_orient = pose
+    scan_noise = settings.scan_noise_array
+    scan_dist = settings.max_scan_dist
+
+    ped_pos = occ.pedestrian_coords
+    obstacles = occ.obstacle_coords
+    dynamic_robot_circles = (
+        _dynamic_objects_to_circle_array(occ) if settings.detect_other_robots else None
+    )
+
+    np.add(robot_orient, settings.ray_offsets, out=ray_angles_out)
+    np.mod(ray_angles_out, 2.0 * np.pi, out=ray_angles_out)
+
+    if isinstance(occ, EgoPedContinuousOccupancy):
+        enemy_pos = np.array([occ.enemy_coords])
+        ranges = raycast(
+            (pos_x, pos_y),
+            obstacles,
+            scan_dist,
+            ped_pos,
+            occ.ped_radius,
+            ray_angles_out,
+            enemy_pos=enemy_pos,
+            enemy_radius=occ.enemy_radius,
+            other_robot_circles=dynamic_robot_circles,
+        )
+    else:
+        ranges = raycast(
+            (pos_x, pos_y),
+            obstacles,
+            scan_dist,
+            ped_pos,
+            occ.ped_radius,
+            ray_angles_out,
+            other_robot_circles=dynamic_robot_circles,
+        )
+    range_postprocessing(ranges, scan_noise, scan_dist)
+    return ranges, ray_angles_out
+
+
 def lidar_ray_scan(
     pose: RobotPose,
     occ: ContinuousOccupancy,
@@ -459,47 +523,34 @@ def lidar_ray_scan(
         ``ranges`` are per-ray distances with shape ``(settings.num_rays,)`` and
         ``ray_angles`` are absolute ray angles in radians with the same shape.
     """
-
-    (pos_x, pos_y), robot_orient = pose
-    scan_noise = settings.scan_noise_array
-    scan_dist = settings.max_scan_dist
-
-    ped_pos = occ.pedestrian_coords
-    obstacles = occ.obstacle_coords
-    dynamic_robot_circles = (
-        _dynamic_objects_to_circle_array(occ) if settings.detect_other_robots else None
-    )
-
-    ray_offsets = settings.ray_offsets
-    two_pi = 2.0 * np.pi
-    ray_angles = robot_orient + ray_offsets
-    np.mod(ray_angles, two_pi, out=ray_angles)
-
-    if isinstance(occ, EgoPedContinuousOccupancy):
-        enemy_pos = np.array([occ.enemy_coords])
-        ranges = raycast(
-            (pos_x, pos_y),
-            obstacles,
-            scan_dist,
-            ped_pos,
-            occ.ped_radius,
-            ray_angles,
-            enemy_pos=enemy_pos,
-            enemy_radius=occ.enemy_radius,
-            other_robot_circles=dynamic_robot_circles,
-        )
-    else:
-        ranges = raycast(
-            (pos_x, pos_y),
-            obstacles,
-            scan_dist,
-            ped_pos,
-            occ.ped_radius,
-            ray_angles,
-            other_robot_circles=dynamic_robot_circles,
-        )
-    range_postprocessing(ranges, scan_noise, scan_dist)
+    ray_angles = np.empty(settings.num_rays, dtype=np.float64)
+    ranges, ray_angles = _lidar_ray_scan_impl(pose, occ, settings, ray_angles)
     return ranges, ray_angles
+
+
+def lidar_ray_scan_ranges_only(
+    pose: RobotPose,
+    occ: ContinuousOccupancy,
+    settings: LidarScannerSettings,
+) -> np.ndarray:
+    """Simulate a radial LiDAR scan returning only ranges, no ray angles.
+
+    This lightweight variant of :func:`lidar_ray_scan` reuses a private work
+    buffer on the settings object to avoid allocating a new ray_angles array
+    on every call. Intended for hot env-internal closures that discard the
+    directional information.
+
+    Args:
+        pose: ``((x, y), heading)`` scanner pose in world coordinates and radians.
+        occ: Continuous occupancy provider.
+        settings: Scanner settings controlling range, field of view, ray count,
+            noise, and dynamic-object detection.
+
+    Returns:
+        numpy.ndarray: Per-ray distances with shape ``(settings.num_rays,)``.
+    """
+    ranges, _ray_angles = _lidar_ray_scan_impl(pose, occ, settings, settings._ray_angles_buffer)
+    return ranges
 
 
 def lidar_sensor_space(num_rays: int, max_scan_dist: float) -> spaces.Box:

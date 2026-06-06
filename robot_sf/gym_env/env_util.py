@@ -22,7 +22,7 @@ from robot_sf.sensor.image_sensor import (
     image_sensor_space,
 )
 from robot_sf.sensor.image_sensor_fusion import ImageSensorFusion
-from robot_sf.sensor.range_sensor import lidar_ray_scan, lidar_sensor_space
+from robot_sf.sensor.range_sensor import lidar_ray_scan_ranges_only, lidar_sensor_space
 from robot_sf.sensor.sensor_fusion import (
     SensorFusion,
     fused_sensor_space,
@@ -184,7 +184,9 @@ def init_collision_and_sensors(
             Returns:
                 np.ndarray: Ray scan distances from lidar.
             """
-            return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
+            return lidar_ray_scan_ranges_only(
+                sim.robots[r_id].pose, occupancies[r_id], lidar_config
+            )
 
         def target_sensor(r_id=r_id):
             """Capture target/goal sensor observations for the specified robot.
@@ -477,7 +479,7 @@ def init_ped_collision_and_sensors(
         Returns:
             np.ndarray: Ray scan distances from lidar.
         """
-        return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
+        return lidar_ray_scan_ranges_only(sim.robots[r_id].pose, occupancies[r_id], lidar_config)
 
     def target_sensor(r_id=0):
         """Capture target/goal sensor observations for the robot.
@@ -535,7 +537,7 @@ def init_ped_collision_and_sensors(
         Returns:
             np.ndarray: Ray scan distances from lidar for ego pedestrian.
         """
-        return lidar_ray_scan(sim.ego_ped.pose, occupancies[1], ego_ped_lidar_config)[0]
+        return lidar_ray_scan_ranges_only(sim.ego_ped.pose, occupancies[1], ego_ped_lidar_config)
 
     def target_sensor_ego_ped():
         """Capture target/goal sensor observations for the ego pedestrian.
@@ -728,7 +730,9 @@ def init_collision_and_sensors_with_image(
             Returns:
                 np.ndarray: Ray scan distances from lidar.
             """
-            return lidar_ray_scan(sim.robots[r_id].pose, occupancies[r_id], lidar_config)[0]
+            return lidar_ray_scan_ranges_only(
+                sim.robots[r_id].pose, occupancies[r_id], lidar_config
+            )
 
         def target_sensor(r_id=r_id):
             """Capture target/goal sensor observations for the specified robot.

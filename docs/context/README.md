@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_2282_topology_selection_instrumentation.md](issue_2282_topology_selection_instrumentation.md)
 * Issue #2307 topology score diagnostic:
   [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md)
+* Issue #2393 topology selection preflight:
+  [issue_2393_topology_selection_preflight.md](issue_2393_topology_selection_preflight.md)
 * Issue #2266 Static-Recenter Activation Diagnostic 2026-06-05:
   [issue_2266_static_recenter_activation.md](issue_2266_static_recenter_activation.md)
 * Issue #2306 Static-Recenter Activation Trace 2026-06-05:
@@ -542,6 +544,8 @@ knowledge, not every transient iteration detail.
   [issue_2258_topology_primary_route_audit.md](issue_2258_topology_primary_route_audit.md)
 * Issue #2307 topology score diagnostic:
   [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md)
+* Issue #2393 topology selection preflight:
+  [issue_2393_topology_selection_preflight.md](issue_2393_topology_selection_preflight.md)
 * Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:

@@ -55,6 +55,7 @@
     "stdout_log_id": "12749-issue1475-orca-residual-bc.out",
     "stderr_log_id": "12749-issue1475-orca-residual-bc.err",
     "local_output_boundary": "raw SLURM outputs remain ignored local artifacts; this tracked summary preserves reviewable identifiers and checksums only",
+    "checksum_manifest_id": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749.SHA256SUMS",
     "summary_json": {
       "local_artifact_id": "policy_search/orca_residual_guarded_ppo_v0/smoke/issue1475_smoke/summary.json",
       "sha256": "c08b9c64458acf3366b90f87d0b09c0c398c0f9eb2b4b36aa0b21759f1b9883f"

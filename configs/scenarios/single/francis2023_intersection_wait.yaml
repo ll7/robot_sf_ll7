@@ -21,6 +21,12 @@ scenarios:
     note: intersection wait
   robot_config: {}
   metadata:
+    purpose: Intent-conditioned behavior smoke candidate with authored waiting and crossing phases.
+    authoring:
+      status: draft
+      template: francis2023-single-pedestrian
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2472
+      benchmark_evidence: false
     figure: 7g
     archetype: intersection_wait
     flow: cross

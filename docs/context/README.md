@@ -184,6 +184,8 @@ knowledge, not every transient iteration detail.
   [issue_2275_predictive_v2_fate.md](issue_2275_predictive_v2_fate.md)
 * Issue #2411 predictive-v2 child classification:
   [issue_2411_predictive_v2_child_classification.md](issue_2411_predictive_v2_child_classification.md)
+* Issue #2470 RL Adversarial Pedestrian Policy Scope:
+  [issue_2470_rl_adversarial_pedestrian_policy.md](issue_2470_rl_adversarial_pedestrian_policy.md)
 * Issue #2471 Diffusion Scenario Generation Feasibility Scope:
   [issue_2471_diffusion_scenario_generation_feasibility.md](issue_2471_diffusion_scenario_generation_feasibility.md)
 * Issue #2472 Intent-Conditioned Pedestrian Behavior Scope:

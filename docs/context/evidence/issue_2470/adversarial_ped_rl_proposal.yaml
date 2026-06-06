@@ -1,0 +1,120 @@
+# RL Adversarial Pedestrian Policy — Action-Space and Reward Schema Proposal
+# Part of Issue #2470 launch-packet scope — proposal evidence only, not training or claim.
+# This YAML is a proposal template for the action-space → config transformer interface.
+
+action_space_proposal:
+  version: 1
+  policy: adversarial_ped_rl.v1
+  description: >
+    High-level NPC control actions for an RL adversarial pedestrian policy.
+    Actions are produced at scenario-initialization granularity (not per sim step).
+
+  # ---------- Top-level action bundle ----------
+  action_bundle:
+    num_npcs: 1  # fixed for v0 smoke; expandable in follow-up
+    per_npc_fields:
+      - name: pedestrian_spawn
+        type: discrete
+        description: Spawn zone index into the map's spawn-zone inventory
+        range: [0, 15]
+      - name: route_choice
+        type: discrete
+        description: Goal/route index into the map's reachable waypoint set
+        range: [0, 31]
+      - name: start_time
+        type: continuous
+        description: Seconds after episode start before NPC appears
+        range: [0.0, 10.0]
+        unit: s
+      - name: speed
+        type: continuous
+        description: NPC walking speed along its route
+        range: [0.3, 2.5]
+        unit: m/s
+      - name: pause_duration
+        type: continuous
+        description: Duration NPC waits at pause point or before starting
+        range: [0.0, 15.0]
+        unit: s
+      - name: group_behavior
+        type: discrete
+        description: Group behavior mode
+        choices:
+          0: solo
+          1: join_random_group
+          2: lead_group
+          3: follow_group
+
+  # ---------- Config mapping ----------
+  config_mapping:
+    target_type: "SinglePedestrianDefinition"
+    field_map:
+      pedestrian_spawn: "start"       # mapped to Pose2D via spawn-zone lookup
+      route_choice: "goal"            # mapped to Pose2D via waypoint lookup
+      start_time: "start_delay_s"
+      speed: "speed_m_s"
+      pause_duration: "wait_at[0].duration_s"
+      group_behavior: "role"          # mapped to role string: solo→null, join→"join", etc.
+
+  # ---------- Reward terms ----------
+  reward_terms:
+    collision:
+      weight: 1.0
+      condition: "robot collides with any NPC pedestrian"
+      type: "sparse"
+    near_miss:
+      weight: 0.3
+      condition: "robot passes within near_miss_threshold_m (0.5m default) of NPC"
+      type: "dense (per-step)"
+    low_progress:
+      weight: 0.1
+      condition: "robot forward progress < min_progress_m over N-step window"
+      type: "dense (per-step)"
+    timeout_bonus:
+      weight: 0.5
+      condition: "robot fails route within max_sim_steps"
+      type: "episode-end"
+
+  penalty_terms:
+    invalid_spawn:
+      weight: -10.0
+      condition: "spawn overlaps obstacle or is off-map"
+    degenerate_route:
+      weight: -10.0
+      condition: "route unreachable from spawn or self-intersecting"
+    zero_speed_stall:
+      weight: -2.0
+      condition: "all NPCs speed ≈ 0 or infinite pause"
+    group_overflow:
+      weight: -1.0
+      condition: "group size exceeds max or groups overlap"
+
+  # ---------- Degeneracy rejection criteria ----------
+  degeneracy_checks:
+    - name: speed_below_minimum
+      condition: "speed < 0.01 m/s"
+      action: "reject → invalidity_penalty, no sim step"
+    - name: spawn_overlap
+      condition: "spawn position overlaps obstacle or is outside walkable area"
+      action: "reject → invalidity_penalty, no sim step"
+    - name: route_unreachable
+      condition: "no path from spawn to goal on walkable graph"
+      action: "reject → invalidity_penalty, no sim step"
+    - name: temporal_overflow
+      condition: "start_time + pause_duration > episode_duration_s"
+      action: "reject → invalidity_penalty, no sim step"
+    - name: group_inconsistency
+      condition: "circular group reference or target_ped_id invalid"
+      action: "reject → invalidity_penalty, no sim step"
+    - name: repeat_degenerate
+      condition: "identical to previously rejected action within tolerance"
+      action: "log duplicate; reject with invalidity_penalty"
+
+  # ---------- Validation gate ----------
+  validation:
+    deterministic_smoke_passed: false   # to be filled after first executable spike
+    fail_closed_rejection_proven: false
+    reward_term_decomposition_verified: false
+    action_to_config_transform_proven: false
+    gate_passed: false
+    gate_fail_reason: "proposal_template_not_executed"

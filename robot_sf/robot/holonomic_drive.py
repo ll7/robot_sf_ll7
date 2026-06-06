@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from gymnasium import spaces
 
-from robot_sf.common.math_utils import wrap_angle_pi
+from robot_sf.common.math_utils import clip_scalar, wrap_angle_pi
 
 if TYPE_CHECKING:
     from robot_sf.common.types import PolarVec2D, RobotPose
@@ -104,8 +104,8 @@ class HolonomicDriveRobot:
         cmd_x = float(action[0])
         cmd_y = float(action[1])
         if self.config.command_mode == "vx_vy":
-            vx = float(np.clip(cmd_x, -self.config.max_speed, self.config.max_speed))
-            vy = float(np.clip(cmd_y, -self.config.max_speed, self.config.max_speed))
+            vx = float(clip_scalar(cmd_x, -self.config.max_speed, self.config.max_speed))
+            vy = float(clip_scalar(cmd_y, -self.config.max_speed, self.config.max_speed))
             speed = float(np.hypot(vx, vy))
             if speed > self.config.max_speed:
                 scale = self.config.max_speed / max(speed, 1e-9)
@@ -115,9 +115,9 @@ class HolonomicDriveRobot:
             if speed > 1e-9:
                 heading = float(np.arctan2(vy, vx))
         else:
-            v = float(np.clip(cmd_x, -self.config.max_speed, self.config.max_speed))
+            v = float(clip_scalar(cmd_x, -self.config.max_speed, self.config.max_speed))
             omega = float(
-                np.clip(cmd_y, -self.config.max_angular_speed, self.config.max_angular_speed)
+                clip_scalar(cmd_y, -self.config.max_angular_speed, self.config.max_angular_speed)
             )
             heading = wrap_angle_pi(heading + omega * dt)
             vx = v * cos(heading)

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from robot_sf.common.math_utils import clip_scalar
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 
 if TYPE_CHECKING:
@@ -61,16 +62,16 @@ def holonomic_to_diff_drive_action(
     heading_error = _wrap_angle(desired_heading - heading)
 
     angular = float(
-        np.clip(cfg.angular_gain * heading_error, -max_angular_speed, max_angular_speed),
+        clip_scalar(cfg.angular_gain * heading_error, -max_angular_speed, max_angular_speed),
     )
     slowdown = max(0.0, 1.0 - cfg.heading_slowdown * abs(heading_error) / pi)
     linear = speed * slowdown
     if cfg.allow_backwards and abs(heading_error) > (pi / 2):
         linear *= -1.0
     if cfg.allow_backwards:
-        linear = float(np.clip(linear, -max_linear_speed, max_linear_speed))
+        linear = float(clip_scalar(linear, -max_linear_speed, max_linear_speed))
     else:
-        linear = float(np.clip(linear, 0.0, max_linear_speed))
+        linear = float(clip_scalar(linear, 0.0, max_linear_speed))
 
     return np.array([linear, angular], dtype=float)
 

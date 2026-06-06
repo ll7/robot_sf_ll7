@@ -57,6 +57,34 @@ def test_holonomic_drive_unicycle_mode_updates_heading() -> None:
     assert robot.current_speed[1] == pytest.approx(1.0)
 
 
+def test_holonomic_drive_vx_vy_over_limit_clipped() -> None:
+    """Over-limit vx/vy commands clip to max_speed."""
+    cfg = HolonomicDriveSettings(max_speed=1.0, command_mode="vx_vy")
+    robot = HolonomicDriveRobot(cfg)
+    robot.apply_action((100.0, 100.0), d_t=1.0)
+    vx, vy = robot.state.velocity_xy
+    speed = np.hypot(vx, vy)
+    # Should be bounded at or below max_speed
+    assert speed <= 1.0 + 1e-9
+
+
+def test_holonomic_drive_unicycle_over_limit_linear_clipped() -> None:
+    """Over-limit linear speed in unicycle mode clips to max_speed."""
+    cfg = HolonomicDriveSettings(max_speed=1.0, max_angular_speed=5.0, command_mode="unicycle_vw")
+    robot = HolonomicDriveRobot(cfg)
+    robot.apply_action((100.0, 0.0), d_t=1.0)
+    assert robot.state.velocity_vw[0] <= 1.0 + 1e-9
+
+
+def test_holonomic_drive_unicycle_over_limit_angular_clipped() -> None:
+    """Over-limit angular speed in unicycle mode clips to max_angular_speed."""
+    cfg = HolonomicDriveSettings(max_speed=5.0, max_angular_speed=0.5, command_mode="unicycle_vw")
+    robot = HolonomicDriveRobot(cfg)
+    robot.apply_action((0.0, 100.0), d_t=1.0)
+    assert robot.current_speed[1] <= 0.5 + 1e-9
+    assert robot.current_speed[1] >= -0.5 - 1e-9
+
+
 def test_holonomic_drive_invalid_command_mode_rejected() -> None:
     """Invalid command_mode values should fail during settings construction."""
     with pytest.raises(ValueError, match="command_mode"):

@@ -6,6 +6,7 @@ from math import cos, sin
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.common.math_utils import clip_scalar
 from robot_sf.common.types import DifferentialDriveAction, PolarVec2D, RobotPose, Vec2D
 
 WheelSpeedState = tuple[float, float]
@@ -110,9 +111,9 @@ class DifferentialDriveMotion:
         """
         dot_x = velocity[0] + action[0]
         dot_orient = velocity[1] + action[1]
-        dot_x = np.clip(dot_x, self.config.min_linear_speed, self.config.max_linear_speed)
+        dot_x = clip_scalar(dot_x, self.config.min_linear_speed, self.config.max_linear_speed)
         angular_max = self.config.max_angular_speed
-        dot_orient = np.clip(dot_orient, -angular_max, angular_max)
+        dot_orient = clip_scalar(dot_orient, -angular_max, angular_max)
         return dot_x, dot_orient
 
     def _resulting_wheel_speeds(self, movement: PolarVec2D) -> WheelSpeedState:

@@ -5,6 +5,7 @@ This package provides navigation-related functionality including:
 - Motion planning adapters for grid-based planners
 - Global route management
 - Obstacle definitions
+- Probabilistic pedestrian prediction types and protocol
 """
 
 from robot_sf.nav.motion_planning_adapter import (
@@ -14,9 +15,17 @@ from robot_sf.nav.motion_planning_adapter import (
     map_definition_to_motion_planning_grid,
     visualize_grid,
 )
+from robot_sf.nav.predictive_types import (
+    ProbabilisticPrediction,
+    ProbabilisticPredictor,
+    TrajectoryDistribution,
+)
 
 __all__ = [
     "MotionPlanningGridConfig",
+    "ProbabilisticPrediction",
+    "ProbabilisticPredictor",
+    "TrajectoryDistribution",
     "count_obstacle_cells",
     "get_obstacle_statistics",
     "map_definition_to_motion_planning_grid",

@@ -1,0 +1,98 @@
+{
+  "schema_version": "ammv-trace-annotation-summary.v1",
+  "issue": 2430,
+  "parent_issue": 2159,
+  "source_issue": 2428,
+  "created_at": "2026-06-06T12:25:00Z",
+  "claim_boundary": "diagnostic-only frame-level parity check; not benchmark-strength or paper-facing evidence",
+  "source_traces": [
+    "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json",
+    "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json"
+  ],
+  "result": {
+    "scenario_id": "classic_head_on_corridor_low",
+    "seed": 111,
+    "planner_ids": [
+      "default_social_force",
+      "ammv_social_force"
+    ],
+    "frame_count_per_trace": 20,
+    "step_range": [
+      0,
+      19
+    ],
+    "time_s_range": [
+      0.1,
+      2.0
+    ],
+    "per_frame_max_abs_delta": 0.0,
+    "per_frame_equal_fields": [
+      "step",
+      "time_s",
+      "robot",
+      "pedestrians",
+      "planner.event",
+      "planner.selected_action",
+      "planner.ammv.pedestrian_force_vectors"
+    ],
+    "source_metadata_differs": true,
+    "annotation_sufficient_for": "telemetry_parity_case",
+    "annotation_insufficient_for": "behavioral_delta_case",
+    "recommended_next_decision": "use another selected row or seed if the #2159 lane needs AMMV behavioral-difference evidence"
+  },
+  "anchor_frames": [
+    {
+      "step": 0,
+      "time_s": 0.1,
+      "reason": "peak recorded AMMV force-vector norm and peak positive angular command in this 20-frame window",
+      "selected_action": {
+        "linear_velocity": 2.0,
+        "angular_velocity": 0.2047055421214461
+      },
+      "force_norms": [
+        0.15019068768377383,
+        0.49179476294156366
+      ],
+      "total_force_norm": 0.6419854506253375
+    },
+    {
+      "step_range": [
+        16,
+        17
+      ],
+      "time_s_range": [
+        1.7,
+        1.8
+      ],
+      "reason": "selected angular velocity changes sign from positive to negative",
+      "angular_velocity_before": 0.01631229185414007,
+      "angular_velocity_after": -0.00537307638143103
+    },
+    {
+      "step": 19,
+      "time_s": 2.0,
+      "reason": "last promoted frame in the selected export window",
+      "selected_action": {
+        "linear_velocity": 2.0,
+        "angular_velocity": -0.06093844961326944
+      },
+      "force_norms": [
+        0.006499003353233889,
+        0.10418452562009721
+      ],
+      "total_force_norm": 0.1106835289733311
+    }
+  ],
+  "missing_fields_for_richer_annotation": [
+    "outcome or terminal-status metadata inside the trace export",
+    "reward, collision, or success metric fields inside the trace export",
+    "planner-force decomposition beyond aggregate per-pedestrian AMMV force vectors",
+    "command-source or arbitration timeline fields",
+    "a second selected AMMV row or seed with observed planner-state/action differences"
+  ],
+  "validation": [
+    "python -m json.tool docs/context/evidence/issue_2430_ammv_trace_annotation_2026-06-06/summary.json",
+    "local Python comparison found per-frame max absolute delta 0.0 between the two promoted trace frame streams",
+    "load_simulation_trace_export loads both source traces as simulation_trace_export.v1 with 20 frames"
+  ]
+}

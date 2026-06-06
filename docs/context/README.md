@@ -217,6 +217,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md)
 
+* Issue #2430 AMMV trace annotation decision:
+
+  [issue_2430_ammv_trace_annotation.md](issue_2430_ammv_trace_annotation.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)

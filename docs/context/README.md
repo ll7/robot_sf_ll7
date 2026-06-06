@@ -144,6 +144,8 @@ knowledge, not every transient iteration detail.
   [issue_2393_topology_selection_preflight.md](issue_2393_topology_selection_preflight.md)
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
+* Issue #2389 mechanism-aware evaluation thread:
+  [issue_2389_mechanism_aware_evaluation_thread.md](issue_2389_mechanism_aware_evaluation_thread.md)
 * Issue #2266 Static-Recenter Activation Diagnostic 2026-06-05:
   [issue_2266_static_recenter_activation.md](issue_2266_static_recenter_activation.md)
 * Issue #2306 Static-Recenter Activation Trace 2026-06-05:

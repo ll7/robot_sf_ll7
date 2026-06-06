@@ -2,6 +2,7 @@
 
 Issue: [#2387](https://github.com/ll7/robot_sf_ll7/issues/2387)
 Related synthesis thread: [#2389](https://github.com/ll7/robot_sf_ll7/issues/2389)
+Thread scaffold: [issue_2389_mechanism_aware_evaluation_thread.md](issue_2389_mechanism_aware_evaluation_thread.md)
 Status: current research-status surface; not benchmark evidence.
 
 ## Purpose

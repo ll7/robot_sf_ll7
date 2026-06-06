@@ -502,6 +502,8 @@ knowledge, not every transient iteration detail.
   [issue_2037_artifact_compiler_smoke.md](issue_2037_artifact_compiler_smoke.md)
 * Issue #2040 Artifact Publication Workflow (2026-06-01):
   [issue_2040_artifact_publication_workflow.md](issue_2040_artifact_publication_workflow.md)
+* Issue #2460 Evidence Bundle v1:
+  [issue_2460_evidence_bundle_v1.md](issue_2460_evidence_bundle_v1.md)
 * Issue #2034 Platformization Roadmap (2026-06-01):
   [issue_2034_platformization_roadmap.md](issue_2034_platformization_roadmap.md)
 * Issue #1395 Learned Risk Model Launch Packet:
@@ -646,7 +648,8 @@ knowledge, not every transient iteration detail.
 ## Evidence Bundles
 
 * [Evidence Bundles](evidence/README.md) documents the narrow policy for promoting small generated
-  artifacts out of `output/` into git. Current bundles include the
+  artifacts out of `output/` into git. [Issue #2460 Evidence Bundle v1](issue_2460_evidence_bundle_v1.md)
+  defines the explicit-file helper and schema contract. Current bundles include the
   [h500 policy-search evidence](evidence/policy_search_h500_2026-05-06/README.md),
   [issue 1023 candidate-augmented preflight](evidence/issue_1023_candidate_augmented_preflight_2026-05-06/README.md),
   [issue 1023 candidate-augmented local full campaign](evidence/issue_1023_candidate_augmented_local_full_2026-05-06/README.md),

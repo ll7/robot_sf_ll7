@@ -249,6 +249,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_release
+  - path: docs/context/issue_2430_ammv_trace_annotation.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2430_ammv_trace_annotation_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
   - path: docs/context/issue_2263_mechanism_activation_report_fields.md
     status: current
     freshness: maintained

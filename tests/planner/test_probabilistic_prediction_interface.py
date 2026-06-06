@@ -102,6 +102,30 @@ class TestTrajectoryDistribution:
         assert td.confidence == 0.85
         assert td.pedestrian_id == 3
 
+    def test_arrays_and_scalar_fields_are_normalized(self) -> None:
+        """Float arrays and numpy scalars should be normalized for consumers."""
+        mean = np.zeros((8, 2), dtype=np.float64)
+        std = np.full((8, 2), 0.05, dtype=np.float64)
+        cov = np.tile(np.eye(2, dtype=np.float64) * 0.0025, (8, 1, 1))
+
+        td = TrajectoryDistribution(
+            mean=mean,
+            std=std,
+            covariance=cov,
+            confidence=np.float64(0.75),
+            pedestrian_id=np.int64(4),
+        )
+
+        assert td.mean.dtype == np.float32
+        assert td.std is not None
+        assert td.std.dtype == np.float32
+        assert td.covariance is not None
+        assert td.covariance.dtype == np.float32
+        assert type(td.confidence) is float
+        assert td.confidence == 0.75
+        assert type(td.pedestrian_id) is int
+        assert td.pedestrian_id == 4
+
     def test_invalid_confidence_is_rejected(self) -> None:
         """Confidence must stay in the documented [0, 1] interval."""
         mean = np.zeros((8, 2), dtype=np.float32)
@@ -151,6 +175,21 @@ class TestProbabilisticPrediction:
         assert pred.timestamp == 10.0
         assert pred.sample_count == 16
         assert pred.metadata["mode"] == "cvar"
+
+    def test_metadata_scalar_fields_are_normalized(self) -> None:
+        """Numpy scalar metadata should be normalized to plain Python scalars."""
+        pred = ProbabilisticPrediction(
+            prediction_horizon=np.float32(1.6),
+            prediction_dt=np.float64(0.2),
+            timestamp=np.float64(10.0),
+            sample_count=np.int64(16),
+        )
+
+        assert type(pred.prediction_horizon) is float
+        assert type(pred.prediction_dt) is float
+        assert type(pred.timestamp) is float
+        assert type(pred.sample_count) is int
+        assert pred.sample_count == 16
 
     def test_invalid_prediction_metadata_is_rejected(self) -> None:
         """Prediction horizon, timestep, and sample count should be contract-checked."""

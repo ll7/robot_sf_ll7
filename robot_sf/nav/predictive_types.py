@@ -29,13 +29,23 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 
-def _require_float_array(name: str, value: NDArray[np.float32], *, ndim: int) -> None:
-    """Validate a numeric prediction array enough to enforce the public contract."""
+def _require_float_array(
+    name: str,
+    value: NDArray[np.float32],
+    *,
+    ndim: int,
+) -> NDArray[np.float32]:
+    """Validate and normalize a numeric prediction array for the public contract.
+
+    Returns:
+        Float32 array with the same shape as the input.
+    """
     array = np.asarray(value)
     if array.ndim != ndim or array.shape[-1] != 2:
         raise ValueError(f"{name} must have shape (T, 2)" if ndim == 2 else f"{name} invalid")
     if not np.issubdtype(array.dtype, np.floating):
         raise ValueError(f"{name} must use a floating dtype")
+    return array.astype(np.float32, copy=False)
 
 
 @dataclass
@@ -65,19 +75,22 @@ class TrajectoryDistribution:
 
     def __post_init__(self) -> None:
         """Validate shape and confidence fields for one pedestrian trajectory."""
-        _require_float_array("mean", self.mean, ndim=2)
+        self.mean = _require_float_array("mean", self.mean, ndim=2)
         if self.std is not None:
-            _require_float_array("std", self.std, ndim=2)
-            if np.asarray(self.std).shape != np.asarray(self.mean).shape:
+            self.std = _require_float_array("std", self.std, ndim=2)
+            if self.std.shape != self.mean.shape:
                 raise ValueError("std must match mean shape")
         if self.covariance is not None:
             covariance = np.asarray(self.covariance)
-            expected_shape = (np.asarray(self.mean).shape[0], 2, 2)
+            expected_shape = (self.mean.shape[0], 2, 2)
             if covariance.shape != expected_shape:
                 raise ValueError("covariance must have shape (T, 2, 2)")
             if not np.issubdtype(covariance.dtype, np.floating):
                 raise ValueError("covariance must use a floating dtype")
-        if not 0.0 <= float(self.confidence) <= 1.0:
+            self.covariance = covariance.astype(np.float32, copy=False)
+        self.confidence = float(self.confidence)
+        self.pedestrian_id = int(self.pedestrian_id)
+        if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("confidence must be in [0, 1]")
 
 
@@ -112,11 +125,15 @@ class ProbabilisticPrediction:
 
     def __post_init__(self) -> None:
         """Validate shared prediction metadata fields."""
-        if float(self.prediction_horizon) < 0.0:
+        self.prediction_horizon = float(self.prediction_horizon)
+        self.prediction_dt = float(self.prediction_dt)
+        self.timestamp = float(self.timestamp)
+        self.sample_count = int(self.sample_count)
+        if self.prediction_horizon < 0.0:
             raise ValueError("prediction_horizon must be non-negative")
-        if float(self.prediction_dt) <= 0.0:
+        if self.prediction_dt <= 0.0:
             raise ValueError("prediction_dt must be positive")
-        if int(self.sample_count) < 1:
+        if self.sample_count < 1:
             raise ValueError("sample_count must be at least 1")
 
 

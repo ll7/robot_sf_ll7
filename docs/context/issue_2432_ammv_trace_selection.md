@@ -63,6 +63,12 @@ The next smallest useful proof step is one of:
 Until one of those paths exists, keep this lane diagnostic-only and classify the current
 head-on-corridor seed slice as a blocked behavioral-difference source.
 
+Issue #2434 followed the first option with a compact five-family classic scenario screen. It still
+found no non-identical default/AMMV frame-level or episode-metric pair, so the broader adapter-mode
+AMMV panel lane should now prefer direct mechanism traces or richer AMMV activation instrumentation
+over more classic-family screening. See
+[issue_2434_ammv_scenario_sweep.md](issue_2434_ammv_scenario_sweep.md).
+
 ## Evidence
 
 Tracked compact evidence:

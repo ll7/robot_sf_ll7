@@ -79,6 +79,11 @@ action, planner event, and `ammv.pedestrian_force_vectors`. See
 The current AMMV behavioral-difference lane therefore needs a different scenario/family, direct
 planner-mode trace source, or extra instrumentation before more annotation/panel work is useful.
 
+Issue #2434 subsequently screened five classic close-interaction scenario families with nested
+frame-level traces and episode metrics and still found no non-identical default/AMMV pair. That
+broadens the stop signal for adapter-mode AMMV panel selection while remaining diagnostic-only. See
+[issue_2434_ammv_scenario_sweep.md](issue_2434_ammv_scenario_sweep.md).
+
 ## Missing Fields
 
 Richer annotation would need at least one of:

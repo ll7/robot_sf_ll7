@@ -1,0 +1,19 @@
+{
+  "schema": "predictive_v2_child_classification.v1",
+  "issue": 2411,
+  "parent_issue": 1490,
+  "date": "2026-06-06",
+  "head_sha": "71857ab14b0df44fcc0518bfb2659e6ce217d694",
+  "prior_decision_issue": 2275,
+  "prior_decision": "stop_old_predictive_v2_expansion",
+  "classification": {
+    "1490": "decision-required",
+    "1505": "close",
+    "1506": "close",
+    "1507": "narrow",
+    "2275": "keep"
+  },
+  "recommendation": "Close or keep explicitly superseded the old 1505/1506 execution paths, narrow 1507 only to closeout synthesis if retained, and ask for a maintainer lifecycle decision on parent 1490.",
+  "stale_execution_risk": "Running the old predictive-v2 four-way expansion would contradict the negative Issue 1543 audit, the failed Issue 1897 coupling gate, and the Issue 2275 stop-old-expansion decision.",
+  "claim_boundary": "Issue-routing synthesis only; no new predictive-v2 benchmark, training run, model artifact, or paper-facing planner claim."
+}

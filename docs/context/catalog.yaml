@@ -357,6 +357,14 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2411_predictive_v2_child_classification.md
+    status: current
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2411_predictive_v2_child_classification_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained

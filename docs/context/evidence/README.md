@@ -86,6 +86,9 @@ boundary before merging an evidence-producing PR.
 - `issue_2432_ammv_trace_selection_2026-06-06/`: compact three-seed AMMV/default trace-selection
   check showing the local Issue #2168 head-on-corridor slice still has no non-identical
   behavioral-difference pair.
+- `issue_2434_ammv_scenario_sweep_2026-06-06/`: compact five-family AMMV/default episode-metric
+  screen showing the selected classic close-interaction adapter slice still has no non-identical
+  pair.
 - `issue_2313_local_baseline_quarantine_2026-06-05/`: compact metadata-only planner summary
   showing the seven absent local-only baseline rows are explicitly unavailable.
 - `issue_2409_local_baseline_quarantine_2026-06-06/`: compact follow-on synthesis showing the

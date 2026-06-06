@@ -58,6 +58,12 @@ adapter-mode head-on-corridor slice. Use
 [issue_2432_ammv_trace_selection.md](issue_2432_ammv_trace_selection.md) before selecting more AMMV
 panels from the same slice.
 
+Issue #2434 then screened five classic close-interaction scenario families at the episode-metric
+level. It also found no non-identical default/AMMV pair, so the AMMV panel lane should pivot to
+direct mechanism traces, richer activation instrumentation, or a deliberately more sensitive
+diagnostic family before spending more annotation effort. See
+[issue_2434_ammv_scenario_sweep.md](issue_2434_ammv_scenario_sweep.md).
+
 ## Validation
 
 ```bash

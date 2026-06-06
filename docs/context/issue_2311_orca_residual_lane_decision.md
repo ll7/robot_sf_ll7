@@ -17,6 +17,15 @@ progress under the guarded runtime contract, then rerun the same bounded smoke g
 Uncertainty: 0.30. The evidence clearly rejects blind rerun and nominal escalation, but it does not
 fully separate a weak residual target from a too-small BC dataset without another bounded revision.
 
+## Follow-Up Status
+
+Issue [#2390](https://github.com/ll7/robot_sf_ll7/issues/2390) implements the selected
+`revise_residual_objective` route as `orca_residual_guarded_ppo_progress_v1`: a smoke-only
+progress probe that keeps the hard guard authoritative, increases the forward residual envelope
+from `0.25` to `0.35`, and uses the existing ORCA-prior v2 progress-comparison margin value
+`0.08`. This is only a launch-packet revision until the bounded #1475 smoke rerun produces durable
+evidence.
+
 ## Evidence Table
 
 | Mechanism | Source issue | Evidence tier | Config | Seeds | Artifacts | Metrics | Verdict | Caveats |

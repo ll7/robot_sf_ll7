@@ -5,10 +5,16 @@ slurm_handoff: docs/context/policy_search/SLURM/005_orca_residual_bc_lineage.md
 
 objective:
   method: behavior_cloning_residual
-  target: bounded_policy_action_minus_orca_action
+  target: progress_probe_bounded_policy_action_minus_orca_action
   teacher_policy: ppo_leader
   base_policy: orca
   full_training_in_packet: false
+  revision_id: orca_residual_progress_probe_v1
+  revision_reason: >-
+    Job 12749 produced a guard-clean timeout_low_progress row, so this revision
+    tests whether a modestly larger forward residual envelope and the existing
+    ORCA-prior v2 progress-comparison margin can recover route progress without
+    weakening the hard guard.
 
 observation_contract:
   source: runtime_socnav_struct
@@ -26,8 +32,8 @@ observation_contract:
     - privileged_map_solution
 
 residual_bounds:
-  candidate_config: configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml
-  linear_delta: 0.25
+  candidate_config: configs/policy_search/candidates/orca_residual_guarded_ppo_progress_v1.yaml
+  linear_delta: 0.35
   angular_delta: 0.35
   applied_before_guard: true
   hard_guard_authoritative: true
@@ -38,7 +44,7 @@ artifact_lineage:
     - role: teacher_policy_checkpoint
       uri: artifact://models-2026-05-registry-v1/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417.zip
     - role: candidate_surface
-      path: configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml
+      path: configs/policy_search/candidates/orca_residual_guarded_ppo_progress_v1.yaml
   planned_output_artifacts:
     - role: residual_dataset_manifest
       uri: wandb-artifact://pending/issue-1428/orca-residual-bc-dataset-manifest:smoke
@@ -71,12 +77,15 @@ comparison_references:
   orca_residual_guarded_ppo_v0:
     candidate_id: orca_residual_guarded_ppo_v0
     source: docs/context/policy_search/reports/2026-05-20_orca_residual_guarded_ppo_v0_smoke.md
+  orca_residual_guarded_ppo_progress_v1:
+    candidate_id: orca_residual_guarded_ppo_progress_v1
+    source: configs/policy_search/candidates/orca_residual_guarded_ppo_progress_v1.yaml
 
 expected_outputs:
   residual_dataset_manifest: wandb-artifact://pending/issue-1428/orca-residual-bc-dataset-manifest:smoke
-  candidate_yaml: configs/policy_search/candidates/orca_residual_guarded_ppo_v0.yaml
-  checkpoint_pointer: wandb-artifact://pending/issue-1428/orca-residual-bc-policy:smoke
-  diagnostic_report_path: wandb-artifact://pending/issue-1428/orca-residual-bc-diagnostics:smoke
+  candidate_yaml: configs/policy_search/candidates/orca_residual_guarded_ppo_progress_v1.yaml
+  checkpoint_pointer: wandb-artifact://pending/issue-1428/orca-residual-bc-policy-progress-v1:smoke
+  diagnostic_report_path: wandb-artifact://pending/issue-1428/orca-residual-bc-diagnostics-progress-v1:smoke
   residual_contribution_diagnostics: docs/context/evidence/issue_1428_orca_residual_lineage_2026-05-24/diagnostic_contract.json
   guard_veto_fallback_status: docs/context/evidence/issue_1428_orca_residual_lineage_2026-05-24/diagnostic_contract.json
 
@@ -90,7 +99,7 @@ execution_boundary:
   dataset_command_shape: >-
     uv run python scripts/training/collect_expert_trajectories.py --policy-id
     ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
-    --dataset-id issue_1428_orca_residual_bc_smoke --episodes 3
+    --dataset-id issue_1428_orca_residual_bc_progress_v1_smoke --episodes 3
     --scenario-config configs/scenarios/single/planner_sanity_simple.yaml
     --training-config
     configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
@@ -101,7 +110,7 @@ execution_boundary:
     configs/training/orca_residual/orca_residual_bc_issue_1475_smoke_pretrain.yaml
   smoke_candidate_command_shape: >-
     LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 uv run python
-    scripts/validation/run_policy_search_candidate.py --candidate orca_residual_guarded_ppo_v0
+    scripts/validation/run_policy_search_candidate.py --candidate orca_residual_guarded_ppo_progress_v1
     --candidate-registry <materialized-runtime-registry> --stage smoke --workers 1
   slurm_command_shape: >-
     scripts/dev/sbatch_orca_residual_bc_issue1475.sh --dry-run --no-status

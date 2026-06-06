@@ -13,6 +13,7 @@ import numpy as np
 from gymnasium import spaces
 from loguru import logger
 from shapely.geometry import LineString
+from shapely.prepared import prep
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
@@ -284,10 +285,16 @@ class SocNavObservationFusion:
             )
         self._buf_ped_positions = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
         self._buf_ped_velocities = np.zeros((self.max_pedestrians, 2), dtype=np.float32)
+        self._cache_static_map_def_id = None
+        self._cache_static_obstacles_id = None
+        self._cache_static_prepared: list[tuple[Any, Any]] = []
 
     def reset_cache(self) -> None:
-        """No-op to match the SensorFusion interface."""
+        """Reset internal caches to match the SensorFusion interface."""
         self._last_heading = None
+        self._cache_static_map_def_id = None
+        self._cache_static_obstacles_id = None
+        self._cache_static_prepared = []
 
     def _robot_velocity_xy(self, wrapped_heading: float) -> np.ndarray:
         """Return the robot world-frame planar velocity for the structured observation."""
@@ -372,11 +379,51 @@ class SocNavObservationFusion:
             )
         return visible
 
+    def _rebuild_static_occlusion_cache(self) -> None:
+        """Build prepared-geometry cache from current simulator obstacle polygons."""
+        map_def = getattr(self.simulator, "map_def", None)
+        obstacles = getattr(map_def, "obstacles", None) if map_def is not None else None
+        self._cache_static_map_def_id = id(map_def) if map_def is not None else None
+        self._cache_static_obstacles_id = id(obstacles) if obstacles is not None else None
+        prepared_polys: list[tuple[Any, Any]] = []
+        if obstacles:
+            for obstacle in obstacles:
+                polygons = (
+                    obstacle.iter_polygons()
+                    if hasattr(obstacle, "iter_polygons")
+                    else [getattr(obstacle, "geometry", None)]
+                )
+                for polygon in polygons:
+                    if polygon is None or getattr(polygon, "is_empty", False):
+                        continue
+                    prepared_polys.append((prep(polygon), polygon))
+        self._cache_static_prepared = prepared_polys
+
     def _statically_occluded(self, *, robot_pos: np.ndarray, ped_pos: np.ndarray) -> bool:
-        """Return whether static map geometry blocks line of sight to a pedestrian."""
-        obstacles = getattr(getattr(self.simulator, "map_def", None), "obstacles", []) or []
+        """Return whether static map geometry blocks line of sight to a pedestrian.
+
+        Uses a Shapely prepared-geometry cache that refreshes when
+        ``simulator.map_def`` identity or ``map_def.obstacles`` identity changes.
+        Semantics: occluded iff the line segment intersects the polygon interior
+        (intersects without mere boundary touch).
+        """
+        map_def = getattr(self.simulator, "map_def", None)
+        obstacles = getattr(map_def, "obstacles", None) if map_def is not None else None
         if not obstacles:
+            self._cache_static_map_def_id = id(map_def) if map_def is not None else None
+            self._cache_static_obstacles_id = None
+            self._cache_static_prepared = []
             return False
+
+        cache_valid = self._cache_static_map_def_id == id(
+            map_def
+        ) and self._cache_static_obstacles_id == id(obstacles)
+        if not cache_valid:
+            self._rebuild_static_occlusion_cache()
+
+        if not self._cache_static_prepared:
+            return False
+
         segment = LineString(
             [
                 (float(robot_pos[0]), float(robot_pos[1])),
@@ -385,17 +432,10 @@ class SocNavObservationFusion:
         )
         if segment.length <= 0.0:
             return False
-        for obstacle in obstacles:
-            polygons = (
-                obstacle.iter_polygons()
-                if hasattr(obstacle, "iter_polygons")
-                else [getattr(obstacle, "geometry", None)]
-            )
-            for polygon in polygons:
-                if polygon is None or getattr(polygon, "is_empty", False):
-                    continue
-                if segment.intersects(polygon) and not segment.touches(polygon):
-                    return True
+
+        for prep_geom, raw_poly in self._cache_static_prepared:
+            if prep_geom.intersects(segment) and not segment.touches(raw_poly):
+                return True
         return False
 
     def next_obs(self) -> dict[str, Any]:

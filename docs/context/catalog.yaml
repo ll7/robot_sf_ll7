@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-04
+updated_at: 2026-06-06
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -44,6 +44,18 @@ entries:
   - path: docs/context/artifact_evidence_vocabulary.md
     status: current
     freshness: policy
+    area: benchmark_evidence
+  - path: docs/context/issue_1584_socnav_unavailable_row_policy.md
+    status: current
+    freshness: policy
+    area: benchmark_evidence
+  - path: docs/context/issue_2397_socnavbench_control_status_2026-06-06.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2397_socnavbench_control_status_2026-06-06.json
+    status: evidence
+    freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_1436_reproducibility_flaky_acceptance.md
     status: current

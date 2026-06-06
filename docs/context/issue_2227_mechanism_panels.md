@@ -84,6 +84,13 @@ a diagnostic rendered example; static recentering and topology-guided recovery s
 trace pairs." The Issue #2428 bundle remains diagnostic-only and should not be cited as benchmark or
 paper-facing evidence.
 
+Issue #2432 then checked the full local Issue #2168 seed slice (`111..113`) with 100-frame
+default/AMMV step traces. All three seed pairs were frame-identical over robot state, pedestrian
+state, selected action, planner event, and `ammv.pedestrian_force_vectors`, so this
+head-on-corridor adapter-mode slice remains blocked as behavioral-difference panel input. The AMMV
+target now needs a different scenario/family, direct planner-mode mechanism trace, or additional
+instrumentation before further panel work is useful.
+
 ## Evidence Manifest
 
 The compact audit manifest is tracked at:

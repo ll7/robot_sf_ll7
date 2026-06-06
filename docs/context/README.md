@@ -221,6 +221,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2430_ammv_trace_annotation.md](issue_2430_ammv_trace_annotation.md)
 
+* Issue #2432 AMMV trace selection decision:
+
+  [issue_2432_ammv_trace_selection.md](issue_2432_ammv_trace_selection.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
@@ -659,6 +663,7 @@ knowledge, not every transient iteration detail.
   [Issue #1416 Converted-Map Cache Evidence](evidence/issue_1416_converted_map_cache_2026-05-20/README.md),
   [Issue #852 queue-fill single-factor batch evidence](evidence/issue_852_queue_fill_batch_2026-06-06/README.md),
   [Issue #2428 AMMV mechanism trace panels](evidence/issue_2428_mechanism_trace_panels_2026-06-06/README.md),
+  [Issue #2432 AMMV trace selection evidence](evidence/issue_2432_ammv_trace_selection_2026-06-06/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 

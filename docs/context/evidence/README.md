@@ -83,11 +83,14 @@ boundary before merging an evidence-producing PR.
 - `issue_2430_ammv_trace_annotation_2026-06-06/`: compact frame-level parity decision showing the
   Issue #2428 selected default/AMMV trace pair is telemetry-rich but frame-identical, so it is not
   behavioral-difference evidence.
+- `issue_2432_ammv_trace_selection_2026-06-06/`: compact three-seed AMMV/default trace-selection
+  check showing the local Issue #2168 head-on-corridor slice still has no non-identical
+  behavioral-difference pair.
 - `issue_2313_local_baseline_quarantine_2026-06-05/`: compact metadata-only planner summary
   showing the seven absent local-only baseline rows are explicitly unavailable.
-- `issue_2409_local_baseline_quarantine_2026-06-06/`: compact follow-on synthesis showing Issue
-  #2313 already quarantined the seven local-only baseline rows and no durable artifact source was
-  newly found or claimed.
+- `issue_2409_local_baseline_quarantine_2026-06-06/`: compact follow-on synthesis showing the
+  Issue #2313 quarantine already covered the seven local-only baseline rows and no durable artifact
+  source was newly found or claimed.
 - `issue_1454_s10_preflight_2026-05-22/`: compact preflight evidence for the staged S10 fixed-h100
   and scenario-horizon h500 robustness configs.
 - `issue_1454_stage_a_fixed_h100_2026-05-22/`: compact Stage A full-campaign, analyzer, and

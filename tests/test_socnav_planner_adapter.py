@@ -671,6 +671,43 @@ def test_prediction_adapter_adaptive_lattice_expands_near_field(monkeypatch):
     assert len(candidates) > base_count
 
 
+def test_prediction_adapter_candidate_set_computes_min_pred_dist_once(monkeypatch):
+    """_candidate_set should call _min_predicted_distance exactly once for the shared near horizon."""
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+    cfg = SocNavPlannerConfig(
+        predictive_near_field_distance=2.5,
+        predictive_candidate_speeds=(0.0, 0.5, 1.0),
+        predictive_candidate_heading_deltas=(-np.pi / 8, 0.0, np.pi / 8),
+        predictive_near_field_speed_samples=(0.1, 0.2),
+        predictive_near_field_heading_deltas=(-np.pi / 2, 0.0, np.pi / 2),
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+
+    future = np.zeros((1, 4, 2), dtype=np.float32)
+    future[0, :, 0] = 0.8
+    mask = np.array([1.0], dtype=np.float32)
+
+    call_count = 0
+    original = PredictionPlannerAdapter._min_predicted_distance
+
+    def counting_min_pred_dist(self, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_min_predicted_distance", counting_min_pred_dist)
+
+    candidates = adapter._candidate_set(future_peds=future, mask=mask)
+    assert call_count == 1, f"Expected 1 call to _min_predicted_distance, got {call_count}"
+
+    base_count = len(cfg.predictive_candidate_speeds) * len(cfg.predictive_candidate_heading_deltas)
+    assert len(candidates) > base_count
+
+
 def test_prediction_adapter_reverse_candidates_appear_in_near_field(monkeypatch):
     """Reverse candidates should be added when explicitly enabled in close-contact regimes."""
 

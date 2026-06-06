@@ -2,10 +2,14 @@
 """Extract topology diagnostic score instrumentation for issue #2307.
 Reads JSONL diagnostic traces and emits per-row fields required by the issue.
 """
-import sys, json
+
+import json
+import sys
 from pathlib import Path
 
+
 def extract_topology(record: dict) -> dict:
+    """Extract topology score-selection fields from one diagnostic row."""
     out = {
         "per_frame_hypothesis_count": None,
         "alternative_hypothesis_count": None,
@@ -27,11 +31,14 @@ def extract_topology(record: dict) -> dict:
     if out["selected_hypothesis"] is None and "score_components" in record:
         sc = record.get("score_components")
         if isinstance(sc, list) and sc:
-            out["selected_hypothesis"] = sc[0].get("hypothesis") if isinstance(sc[0], dict) else None
+            out["selected_hypothesis"] = (
+                sc[0].get("hypothesis") if isinstance(sc[0], dict) else None
+            )
     return out
 
 
-def main():
+def main() -> None:
+    """Run the topology extractor CLI."""
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
@@ -41,15 +48,16 @@ def main():
         sys.exit(2)
     res = []
     with p.open() as f:
-        for i,line in enumerate(f):
+        for i, line in enumerate(f):
             try:
                 rec = json.loads(line)
-            except Exception:
+            except json.JSONDecodeError:
                 continue
             out = extract_topology(rec)
             out["_row_index"] = i
             res.append(out)
     print(json.dumps(res, indent=2))
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()

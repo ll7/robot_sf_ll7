@@ -5,12 +5,64 @@ This is intentionally small and defensive for local analysis runs.
 
 Usage: python scripts/analysis/extract_activation_from_trace.py <trace.jsonl> [--row-id ID]
 """
-import sys
+
 import json
+import sys
 from pathlib import Path
 
+
+def _command_source(record: dict) -> str | None:
+    if "command_source" in record:
+        return record.get("command_source")
+    selected_command = record.get("selected_command")
+    if isinstance(selected_command, dict):
+        return selected_command.get("source")
+    return None
+
+
+def _command_source_changed(record: dict) -> bool | None:
+    sources = [
+        event.get("source")
+        for event in record.get("command_history", [])
+        if isinstance(event, dict)
+    ]
+    return (len(set(sources)) > 1) if sources else None
+
+
+def _progress_delta_after_activation(record: dict, first_step: int | None) -> float | None:
+    progress = record.get("progress")
+    if not isinstance(progress, list) or first_step is None:
+        return None
+    after = progress[first_step : first_step + 5]
+    return (after[-1] - after[0]) if len(after) >= 2 else None
+
+
+def _mean_position(points: list) -> tuple[float, float] | None:
+    valid_points = [
+        point for point in points if isinstance(point, list | tuple) and len(point) >= 2
+    ]
+    if not valid_points:
+        return None
+    x_mean = sum(point[0] for point in valid_points) / len(valid_points)
+    y_mean = sum(point[1] for point in valid_points) / len(valid_points)
+    return (x_mean, y_mean)
+
+
+def _trajectory_delta(record: dict, first_step: int | None) -> float | None:
+    trajectory = record.get("trajectory")
+    if not isinstance(trajectory, list) or first_step is None:
+        return None
+    pre_mean = _mean_position(trajectory[max(0, first_step - 3) : first_step])
+    post_mean = _mean_position(trajectory[first_step : first_step + 3])
+    if pre_mean is None or post_mean is None:
+        return None
+    dx = post_mean[0] - pre_mean[0]
+    dy = post_mean[1] - pre_mean[1]
+    return (dx * dx + dy * dy) ** 0.5
+
+
 def extract_activation(record: dict) -> dict:
-    # Best-effort extraction from common trace keys; return None-able fields
+    """Extract the activation review fields from one compact trace row."""
     out = {
         "activation_count": None,
         "first_activation_step": None,
@@ -27,55 +79,23 @@ def extract_activation(record: dict) -> dict:
     out["activation_count"] = len(acts) if acts else 0
     if acts:
         out["first_activation_step"] = acts[0].get("step") if isinstance(acts[0], dict) else acts[0]
-    # selected_command_source heuristic
-    if "command_source" in record:
-        out["selected_command_source"] = record.get("command_source")
-    elif "selected_command" in record and isinstance(record["selected_command"], dict):
-        out["selected_command_source"] = record["selected_command"].get("source")
-    # command_source_changed: compare first/last
+    out["selected_command_source"] = _command_source(record)
+    out["command_source_changed"] = _command_source_changed(record)
     try:
-        sources = [e.get("source") for e in record.get("command_history", []) if isinstance(e, dict)]
-        out["command_source_changed"] = (len(set(sources)) > 1) if sources else None
-    except Exception:
-        out["command_source_changed"] = None
-    # progress delta heuristics
-    try:
-        prog = record.get("progress")
-        if isinstance(prog, list) and out["first_activation_step"] is not None:
-            step = int(out["first_activation_step"])
-            after = prog[step:step+5]
-            out["progress_delta_after_activation"] = (after[-1] - after[0]) if len(after) >= 2 else None
-    except Exception:
-        out["progress_delta_after_activation"] = None
-    # trajectory_delta: naive L2 difference between pre/post small windows
-    try:
-        traj = record.get("trajectory")
-        if isinstance(traj, list) and out["first_activation_step"] is not None:
-            s = int(out["first_activation_step"])
-            pre = traj[max(0, s-3):s]
-            post = traj[s:s+3]
-            def mean_pos(arr):
-                pts = [p for p in arr if isinstance(p, (list, tuple)) and len(p) >= 2]
-                if not pts:
-                    return None
-                x = sum(p[0] for p in pts)/len(pts)
-                y = sum(p[1] for p in pts)/len(pts)
-                return (x,y)
-            prem = mean_pos(pre)
-            postm = mean_pos(post)
-            if prem and postm:
-                dx = postm[0]-prem[0]
-                dy = postm[1]-prem[1]
-                out["trajectory_delta"] = (dx*dx+dy*dy)**0.5
-    except Exception:
-        out["trajectory_delta"] = None
-    # terminal outcome changed: compare terminal fields if present
+        first_step = (
+            int(out["first_activation_step"]) if out["first_activation_step"] is not None else None
+        )
+    except (TypeError, ValueError):
+        first_step = None
+    out["progress_delta_after_activation"] = _progress_delta_after_activation(record, first_step)
+    out["trajectory_delta"] = _trajectory_delta(record, first_step)
     if "terminal_outcome" in record:
         out["terminal_outcome_changed"] = record.get("terminal_outcome")
     return out
 
 
-def main():
+def main() -> None:
+    """Run the activation extractor CLI."""
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
@@ -102,6 +122,7 @@ def main():
             out["_row_index"] = i
             results.append(out)
     print(json.dumps(results, indent=2))
+
 
 if __name__ == "__main__":
     main()

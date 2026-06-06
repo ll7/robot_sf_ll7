@@ -1,0 +1,82 @@
+{
+  "artifacts": [
+    {
+      "artifact_id": "trajectory_panel_ammv_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--5fde302d5414e476",
+      "artifact_kind": "figure",
+      "caption_file": {
+        "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/captions.md",
+        "sha256": "9916290151154b451bbb9c3c711c3803f781a41bbb83e68f1103ec1fc22ce76e"
+      },
+      "category": "other",
+      "claim_boundary": "diagnostic_only",
+      "generation_command": "uv run python scripts/tools/render_trajectory_panels.py --trace docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json --trace docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json --output-dir docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels",
+      "generation_commit": "f768503a",
+      "outputs": {
+        "pdf": {
+          "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_ammv_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--5fde302d5414e476.pdf",
+          "sha256": "3f32592f5cfc0f4a3ab235780a81ff274fda35edfdbc8986bb04ea02780ceee4"
+        },
+        "png": {
+          "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_ammv_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--5fde302d5414e476.png",
+          "sha256": "924d010ab3ae92db35579ce9c291785dfd32c83f5fdb9a33eedd10912cd529fd"
+        }
+      },
+      "panel_type": "trajectory_panel",
+      "source_files": [
+        {
+          "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
+          "source_sha256": "2adb64c71028ba4abe1837884e90784e258c0d973d95abbb0aeb10ca776e3e6a"
+        }
+      ],
+      "source_kind": "simulation_trace_export",
+      "trace_source": {
+        "episode_id": "classic_head_on_corridor_low--111--5fde302d5414e476",
+        "generated_by": "scripts.tools.build_simulation_trace_export from ammv_social_force_first.jsonl source_sha256:f4bf98cd3808",
+        "planner_id": "ammv_social_force",
+        "scenario_id": "classic_head_on_corridor_low",
+        "seed": 111
+      }
+    },
+    {
+      "artifact_id": "trajectory_panel_default_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--b05ccbf52ac7ab9b",
+      "artifact_kind": "figure",
+      "caption_file": {
+        "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/captions.md",
+        "sha256": "9916290151154b451bbb9c3c711c3803f781a41bbb83e68f1103ec1fc22ce76e"
+      },
+      "category": "other",
+      "claim_boundary": "diagnostic_only",
+      "generation_command": "uv run python scripts/tools/render_trajectory_panels.py --trace docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json --trace docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json --output-dir docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels",
+      "generation_commit": "f768503a",
+      "outputs": {
+        "pdf": {
+          "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_default_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--b05ccbf52ac7ab9b.pdf",
+          "sha256": "a58b44815768e4251ef59c301dd19e0ee111a9c38fd60627c035c84a13bfcfdc"
+        },
+        "png": {
+          "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_default_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--b05ccbf52ac7ab9b.png",
+          "sha256": "5841a9b7407091f2cf614f87b12a37adb32f879354d6db41aeef008da9722f44"
+        }
+      },
+      "panel_type": "trajectory_panel",
+      "source_files": [
+        {
+          "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json",
+          "source_sha256": "dced5a98d549bfe68541dfe123497360478eabebf679f077c9425eda5c61306f"
+        }
+      ],
+      "source_kind": "simulation_trace_export",
+      "trace_source": {
+        "episode_id": "classic_head_on_corridor_low--111--b05ccbf52ac7ab9b",
+        "generated_by": "scripts.tools.build_simulation_trace_export from default_social_force_first.jsonl source_sha256:57a608cfe3fe",
+        "planner_id": "default_social_force",
+        "scenario_id": "classic_head_on_corridor_low",
+        "seed": 111
+      }
+    }
+  ],
+  "captions_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/captions.md",
+  "generation_command": "uv run python scripts/tools/render_trajectory_panels.py --trace docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json --trace docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json --output-dir docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels",
+  "generation_commit": "f768503a",
+  "schema_version": "trajectory_panel_manifest.v1"
+}

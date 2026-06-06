@@ -213,6 +213,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2405_amv_step_export_decision.md](issue_2405_amv_step_export_decision.md)
 
+* Issue #2428 AMMV mechanism trace panels:
+
+  [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
@@ -539,6 +543,8 @@ knowledge, not every transient iteration detail.
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
 * Issue #2227 Mechanism Panel Readiness (2026-06-04):
   [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md)
+* Issue #2428 AMMV Mechanism Trace Panels (2026-06-06):
+  [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md)
 * Issue #2270 Mechanism Panel Candidate Manifest (2026-06-05):
   [issue_2270_panel_candidate_manifest.md](issue_2270_panel_candidate_manifest.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):
@@ -648,6 +654,7 @@ knowledge, not every transient iteration detail.
   [Issue #1344 Paired AMV Primary Evidence](evidence/issue_1344_paired_amv_primary_2026-05-20/README.md),
   [Issue #1416 Converted-Map Cache Evidence](evidence/issue_1416_converted_map_cache_2026-05-20/README.md),
   [Issue #852 queue-fill single-factor batch evidence](evidence/issue_852_queue_fill_batch_2026-06-06/README.md),
+  [Issue #2428 AMMV mechanism trace panels](evidence/issue_2428_mechanism_trace_panels_2026-06-06/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 

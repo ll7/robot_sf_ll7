@@ -288,6 +288,10 @@ class SocNavObservationFusion:
         self._cache_static_map_def_id = None
         self._cache_static_obstacles_id = None
         self._cache_static_prepared: list[tuple[Any, Any]] = []
+        self._cache_position_cap_map_def_id: int | None = None
+        self._cache_position_cap_value: np.ndarray | None = None
+        self._cache_position_cap_width: float | None = None
+        self._cache_position_cap_height: float | None = None
 
     def reset_cache(self) -> None:
         """Reset internal caches to match the SensorFusion interface."""
@@ -295,6 +299,39 @@ class SocNavObservationFusion:
         self._cache_static_map_def_id = None
         self._cache_static_obstacles_id = None
         self._cache_static_prepared = []
+        self._cache_position_cap_map_def_id = None
+        self._cache_position_cap_value = None
+        self._cache_position_cap_width = None
+        self._cache_position_cap_height = None
+
+    def _position_cap(self) -> np.ndarray:
+        """Return cached map position cap, refreshing when map_def identity or dimensions change.
+
+        Avoids allocating a new array every step via ``_map_position_cap``.
+        """
+        map_def = getattr(self.simulator, "map_def", None)
+        if map_def is not None:
+            width = float(getattr(map_def, "width", 0.0) or 0.0)
+            height = float(getattr(map_def, "height", 0.0) or 0.0)
+            map_def_id = id(map_def)
+            cache_valid = (
+                self._cache_position_cap_map_def_id == map_def_id
+                and self._cache_position_cap_width == width
+                and self._cache_position_cap_height == height
+            )
+            if not cache_valid:
+                self._cache_position_cap_map_def_id = map_def_id
+                self._cache_position_cap_width = width
+                self._cache_position_cap_height = height
+                self._cache_position_cap_value = _map_position_cap(map_def)
+        elif self._cache_position_cap_map_def_id is not None:
+            self._cache_position_cap_map_def_id = None
+            self._cache_position_cap_value = _map_position_cap(None)
+            self._cache_position_cap_width = None
+            self._cache_position_cap_height = None
+        if self._cache_position_cap_value is None:
+            self._cache_position_cap_value = _map_position_cap(None)
+        return self._cache_position_cap_value
 
     def _robot_velocity_xy(self, wrapped_heading: float) -> np.ndarray:
         """Return the robot world-frame planar velocity for the structured observation."""
@@ -501,7 +538,7 @@ class SocNavObservationFusion:
             else np.zeros(2, dtype=np.float32)
         )
 
-        position_cap = _map_position_cap(self.simulator.map_def)
+        position_cap = self._position_cap()
 
         def _clip_positions(values: np.ndarray) -> np.ndarray:
             """Clip world positions into the representable map extent.

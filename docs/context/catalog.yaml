@@ -149,6 +149,14 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2403_topology_selection_score_decision.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2403_topology_selection_score_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/mechanism_closure_status.md
     status: current
     freshness: maintained

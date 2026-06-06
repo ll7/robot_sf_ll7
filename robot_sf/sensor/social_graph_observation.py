@@ -8,7 +8,6 @@ optional static-obstacle state.
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -97,13 +96,17 @@ class SocialGraphObservationAdapter:
     """Stateful adapter that maintains a bounded pedestrian feature history."""
 
     def __init__(self, config: SocialGraphObservationConfig | None = None) -> None:
-        """Create an adapter with an empty history buffer."""
+        """Create an adapter with an empty preallocated history buffer."""
         self.config = config or SocialGraphObservationConfig()
-        self._history: deque[np.ndarray] = deque(maxlen=self.config.history_steps)
+        H = self.config.history_steps
+        M = self.config.max_pedestrians
+        F = len(PEDESTRIAN_FEATURE_NAMES)
+        self._buffer = np.zeros((H, M, F), dtype=np.float32)
+        self._filled = 0
 
     def reset(self) -> None:
         """Clear cached pedestrian history between episodes."""
-        self._history.clear()
+        self._filled = 0
 
     def build(
         self,
@@ -123,12 +126,13 @@ class SocialGraphObservationAdapter:
             obstacle_segments=obstacle_segments,
         )
         current = graph["pedestrian_features"]
-        if not self._history:
-            for _ in range(self.config.history_steps):
-                self._history.append(current.copy())
+        if self._filled < self.config.history_steps:
+            self._buffer[:] = current[np.newaxis, :, :]
+            self._filled = self.config.history_steps
         else:
-            self._history.append(current.copy())
-        graph["pedestrian_history"] = np.stack(list(self._history), axis=0).astype(np.float32)
+            self._buffer[:-1] = self._buffer[1:]
+            self._buffer[-1] = current
+        graph["pedestrian_history"] = self._buffer.copy()
         return graph
 
 

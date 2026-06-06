@@ -151,9 +151,11 @@ knowledge, not every transient iteration detail.
 * Issue #2266 Static-Recenter Activation Diagnostic 2026-06-05:
   [issue_2266_static_recenter_activation.md](issue_2266_static_recenter_activation.md)
 * Issue #2306 Static-Recenter Activation Trace 2026-06-05:
-  [issue_2306_static_recenter_activation_trace.md](issue_2306_static_recenter_activation_trace.md)
+[issue_2306_static_recenter_activation_trace.md](issue_2306_static_recenter_activation_trace.md)
+* Issue #2402 static-recenter activation decision:
+  [issue_2402_static_recenter_activation_decision.md](issue_2402_static_recenter_activation_decision.md)
 * Issue #2261 Static-Recenter Slice-Local Explanation:
-  [issue_2261_static_recenter_slice_local.md](issue_2261_static_recenter_slice_local.md)
+[issue_2261_static_recenter_slice_local.md](issue_2261_static_recenter_slice_local.md)
 * Issue #1573 Root-Layout Inventory:
   [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md)
 * Root layout structured migration 2026-06-01:

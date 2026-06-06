@@ -159,6 +159,30 @@ Transitions:
 
 Do not reorder phases or skip a phase that has eligible work.
 
+### Delegated Lifecycle Cleanup Checkpoint
+
+Before each phase transition, after delegated work is integrated or rejected, run a
+lifecycle cleanup checkpoint. Distinguish the two delegate types:
+
+- **Codex app subagents** (GoalIssueImplementationAgent, GoalPRReviewAgent, etc.):
+  call `close_agent` with result summary after edits are integrated or the proposal
+  is rejected. Do not leave subagent sessions open across phase boundaries.
+- **External codex-agent-worker subprocesses**: confirm the subprocess has exited
+  (no zombie/lingering process) and verify expected artifacts exist or are explicitly
+  discarded. Record `worker completed` with exit code and artifact path or discard
+  rationale.
+
+Record cleanup status in the ledger, handoff notes, or self-review companion using
+one of:
+
+- `worker completed` — external subprocess exited cleanly, artifacts confirmed.
+- `app agent closed` — Codex subagent session closed after integration/rejection.
+- `no active process remains` — neither subagent nor worker process remains open.
+- `cleanup_failed` — close/confirm failed; record the error and escalate.
+
+A phase is not complete until the cleanup checkpoint passes for every delegate used
+in that phase.
+
 ## Delegation Failure Recovery
 
 Each delegate skill may fail. Handle failures per phase:

@@ -1,0 +1,338 @@
+{
+  "active_followup_not_preserved_as_complete": {
+    "job_id": 12751,
+    "name": "gse-852-asym231",
+    "reason": "job was still in flight at preservation time; final evidence should be added after completion",
+    "state_at_last_check": "RUNNING",
+    "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/wu9vx2tq"
+  },
+  "artifact_status": {
+    "durable_external_pointer": "W&B run URLs per job; completed logs report successful W&B file/artifact sync",
+    "local_output_is_durable": false,
+    "raw_logs_and_checkpoints": "ignored local output caches; see SHA256SUMS for source-artifact checksums",
+    "tracked_compact_evidence": "docs/context/evidence/issue_852_queue_fill_batch_2026-06-06"
+  },
+  "base_commit": "5faaa318d609f87730757d7fbda65b799178b5c5",
+  "branch": "gse-queue-fill-20260605",
+  "commit": "5faaa318d609f87730757d7fbda65b799178b5c5",
+  "created_at": "2026-06-06",
+  "evidence_claim": "completed diagnostic training evidence for issue-852 queue-fill single-factor runs",
+  "issue": 852,
+  "result_interpretation": {
+    "caveat": "diagnostic single-factor training evidence only; not paper-grade or benchmark proof without downstream artifact/provenance review and comparison gating",
+    "strongest_completed_best_collision": 0.0857,
+    "strongest_completed_best_snqi": 0.2632,
+    "strongest_completed_best_success": 0.9143,
+    "strongest_completed_job": 12750,
+    "strongest_completed_policy_id": "ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231"
+  },
+  "runs": [
+    {
+      "arm": "reward_curriculum_only",
+      "config": "configs/training/ppo/ablations/single_factor/reward_curriculum_only_10m_env22_seed231.yaml",
+      "horizon": "10M",
+      "job": {
+        "elapsed": "16:20:34",
+        "end": "2026-06-06T00:11:17",
+        "exit_code": "0:0",
+        "id": 12750,
+        "name": "gse-852-rwd231",
+        "node": "auxme-imech172",
+        "partition": "a30",
+        "qos": "a30-gpu",
+        "start": "2026-06-05T07:50:43",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_reward_curriculum.sl",
+      "local_output_root": "output/slurm/issue791-reward-curriculum-job-12750",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.0857,
+          "comfort_exposure": 0.0034,
+          "eval_avg_step_reward": 0.5441,
+          "eval_episode_return": 23.1802,
+          "eval_step": 6815744,
+          "meets_convergence": false,
+          "path_efficiency": 0.8258,
+          "selection_metric": "success_rate",
+          "snqi": 0.2632,
+          "success_rate": 0.9143
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.1429,
+          "comfort_exposure": 0.0268,
+          "eval_avg_step_reward": 0.5041,
+          "eval_episode_return": 21.1419,
+          "eval_step": 10000000,
+          "path_efficiency": 0.8294,
+          "snqi": 0.0401,
+          "success_rate": 0.8571
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.1993,
+          "mean_success_rate": 0.7986,
+          "total_timesteps_executed": 10000000,
+          "wall_clock_hours": 16.331
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231",
+      "run_id": "ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118",
+      "seed": 231,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "output/slurm/issue791-reward-curriculum-job-12750/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_best.summary.json",
+        "eval_timeline_json": "output/slurm/issue791-reward-curriculum-job-12750/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118.json",
+        "policy_zip": "output/slurm/issue791-reward-curriculum-job-12750/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231.zip",
+        "run_summary_json": "output/slurm/issue791-reward-curriculum-job-12750/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed231_20260605T055118.json",
+        "slurm_log": "output/slurm/12750-issue791-reward-curriculum.out"
+      },
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/8sq89hfw"
+    },
+    {
+      "arm": "reward_curriculum_only",
+      "config": "configs/training/ppo/ablations/single_factor/reward_curriculum_only_1m_env22_seed231.yaml",
+      "horizon": "1M",
+      "job": {
+        "elapsed": "01:49:28",
+        "end": "2026-06-06T02:00:45",
+        "exit_code": "0:0",
+        "id": 12752,
+        "name": "gse-852-rwd1m231",
+        "node": "auxme-imech172",
+        "partition": "a30",
+        "qos": "a30-gpu",
+        "start": "2026-06-06T00:11:17",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_reward_curriculum.sl",
+      "local_output_root": "output/slurm/issue791-reward-curriculum-job-12752",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.4143,
+          "comfort_exposure": 0.0593,
+          "eval_avg_step_reward": 0.2077,
+          "eval_episode_return": 7.0729,
+          "eval_step": 1000000,
+          "meets_convergence": false,
+          "path_efficiency": 0.8361,
+          "selection_metric": "success_rate",
+          "snqi": -0.8894,
+          "success_rate": 0.5714
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.4143,
+          "comfort_exposure": 0.0593,
+          "eval_avg_step_reward": 0.2077,
+          "eval_episode_return": 7.0729,
+          "eval_step": 1000000,
+          "path_efficiency": 0.8361,
+          "snqi": -0.8894,
+          "success_rate": 0.5714
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.5786,
+          "mean_success_rate": 0.4,
+          "total_timesteps_executed": 1000000,
+          "wall_clock_hours": 1.8173
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231",
+      "run_id": "ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139",
+      "seed": 231,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "output/slurm/issue791-reward-curriculum-job-12752/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_best.summary.json",
+        "eval_timeline_json": "output/slurm/issue791-reward-curriculum-job-12752/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139.json",
+        "policy_zip": "output/slurm/issue791-reward-curriculum-job-12752/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231.zip",
+        "run_summary_json": "output/slurm/issue791-reward-curriculum-job-12752/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_1m_env22_seed231_20260605T221139.json",
+        "slurm_log": "output/slurm/12752-issue791-reward-curriculum.out"
+      },
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/13oeq9wv"
+    },
+    {
+      "arm": "reward_curriculum_only",
+      "config": "configs/training/ppo/ablations/single_factor/reward_curriculum_only_10m_env22_seed1337.yaml",
+      "horizon": "10M",
+      "job": {
+        "elapsed": "08:01:04",
+        "end": "2026-06-05T15:51:47",
+        "exit_code": "0:0",
+        "id": 12753,
+        "name": "gse-852-rwd1337",
+        "node": "auxme-imech091",
+        "partition": "l40s",
+        "qos": "l40s-gpu",
+        "start": "2026-06-05T07:50:43",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_reward_curriculum.sl",
+      "local_output_root": "output/slurm/issue791-reward-curriculum-job-12753",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.1571,
+          "comfort_exposure": 0.0346,
+          "eval_avg_step_reward": 0.1936,
+          "eval_episode_return": 19.7147,
+          "eval_step": 6291456,
+          "meets_convergence": false,
+          "path_efficiency": 0.8405,
+          "selection_metric": "success_rate",
+          "snqi": -0.0534,
+          "success_rate": 0.8429
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.1571,
+          "comfort_exposure": 0.0199,
+          "eval_avg_step_reward": 0.1911,
+          "eval_episode_return": 19.6207,
+          "eval_step": 10000000,
+          "path_efficiency": 0.8422,
+          "snqi": -0.0019,
+          "success_rate": 0.8429
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.2357,
+          "mean_success_rate": 0.7621,
+          "total_timesteps_executed": 10000000,
+          "wall_clock_hours": 8.0098
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337",
+      "run_id": "ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106",
+      "seed": 1337,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "output/slurm/issue791-reward-curriculum-job-12753/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_best.summary.json",
+        "eval_timeline_json": "output/slurm/issue791-reward-curriculum-job-12753/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106.json",
+        "policy_zip": "output/slurm/issue791-reward-curriculum-job-12753/benchmarks/expert_policies/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337.zip",
+        "run_summary_json": "output/slurm/issue791-reward-curriculum-job-12753/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_reward_curriculum_only_10m_env22_seed1337_20260605T055106.json",
+        "slurm_log": "output/slurm/12753-issue791-reward-curriculum.out"
+      },
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/qex6vida"
+    },
+    {
+      "arm": "asymmetric_critic_only",
+      "config": "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_10m_env22_seed1337.yaml",
+      "horizon": "10M",
+      "job": {
+        "elapsed": "09:10:52",
+        "end": "2026-06-05T17:56:12",
+        "exit_code": "0:0",
+        "id": 12754,
+        "name": "gse-852-asym1337",
+        "node": "auxme-imech093",
+        "partition": "l40s",
+        "qos": "l40s-gpu",
+        "start": "2026-06-05T08:45:20",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_asymmetric_critic.sl",
+      "local_output_root": "output/slurm/issue791-asymmetric-critic-job-12754",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.1571,
+          "comfort_exposure": 0.0205,
+          "eval_avg_step_reward": 0.1944,
+          "eval_episode_return": 20.8994,
+          "eval_step": 7864320,
+          "meets_convergence": false,
+          "path_efficiency": 0.8399,
+          "selection_metric": "success_rate",
+          "snqi": -0.0397,
+          "success_rate": 0.8429
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.1571,
+          "comfort_exposure": 0.0173,
+          "eval_avg_step_reward": 0.1908,
+          "eval_episode_return": 18.8246,
+          "eval_step": 10000000,
+          "path_efficiency": 0.8274,
+          "snqi": -0.0625,
+          "success_rate": 0.8286
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.2621,
+          "mean_success_rate": 0.735,
+          "total_timesteps_executed": 10000000,
+          "wall_clock_hours": 9.1714
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337",
+      "run_id": "ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542",
+      "seed": 1337,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "output/slurm/issue791-asymmetric-critic-job-12754/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_best.summary.json",
+        "eval_timeline_json": "output/slurm/issue791-asymmetric-critic-job-12754/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542.json",
+        "policy_zip": "output/slurm/issue791-asymmetric-critic-job-12754/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337.zip",
+        "run_summary_json": "output/slurm/issue791-asymmetric-critic-job-12754/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_10m_env22_seed1337_20260605T064542.json",
+        "slurm_log": "output/slurm/12754-issue791-asymmetric-critic.out"
+      },
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/s4bdmdlc"
+    },
+    {
+      "arm": "asymmetric_critic_only",
+      "config": "configs/training/ppo/ablations/single_factor/asymmetric_critic_only_1m_env22_seed1337.yaml",
+      "horizon": "1M",
+      "job": {
+        "elapsed": "01:02:18",
+        "end": "2026-06-05T16:54:05",
+        "exit_code": "0:0",
+        "id": 12755,
+        "name": "gse-852-asym1m1337",
+        "node": "auxme-imech091",
+        "partition": "l40s",
+        "qos": "l40s-gpu",
+        "start": "2026-06-05T15:51:47",
+        "state": "COMPLETED"
+      },
+      "launcher": "SLURM/Auxme/issue_791_asymmetric_critic.sl",
+      "local_output_root": "output/slurm/issue791-asymmetric-critic-job-12755",
+      "metrics": {
+        "best_checkpoint": {
+          "collision_rate": 0.4857,
+          "comfort_exposure": 0.0365,
+          "eval_avg_step_reward": -0.2416,
+          "eval_episode_return": 4.1666,
+          "eval_step": 917504,
+          "meets_convergence": false,
+          "path_efficiency": 0.8424,
+          "selection_metric": "success_rate",
+          "snqi": -1.06,
+          "success_rate": 0.5143
+        },
+        "final_checkpoint": {
+          "collision_rate": 0.4857,
+          "comfort_exposure": 0.0429,
+          "eval_avg_step_reward": -0.1652,
+          "eval_episode_return": 4.9361,
+          "eval_step": 1000000,
+          "path_efficiency": 0.8555,
+          "snqi": -1.0885,
+          "success_rate": 0.5
+        },
+        "run_summary": {
+          "mean_collision_rate": 0.6607,
+          "mean_success_rate": 0.3089,
+          "total_timesteps_executed": 1000000,
+          "wall_clock_hours": 1.0326
+        }
+      },
+      "policy_id": "ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337",
+      "run_id": "ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201",
+      "seed": 1337,
+      "source_artifacts": {
+        "best_checkpoint_summary_json": "output/slurm/issue791-asymmetric-critic-job-12755/benchmarks/expert_policies/checkpoints/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_best.summary.json",
+        "eval_timeline_json": "output/slurm/issue791-asymmetric-critic-job-12755/benchmarks/ppo_imitation/eval_timeline/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201.json",
+        "policy_zip": "output/slurm/issue791-asymmetric-critic-job-12755/benchmarks/expert_policies/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337.zip",
+        "run_summary_json": "output/slurm/issue791-asymmetric-critic-job-12755/benchmarks/ppo_imitation/runs/ppo_expert_issue_852_asymmetric_critic_only_1m_env22_seed1337_20260605T135201.json",
+        "slurm_log": "output/slurm/12755-issue791-asymmetric-critic.out"
+      },
+      "wandb_run": "https://wandb.ai/ll7/robot_sf/runs/7fg4zth4"
+    }
+  ],
+  "status": "tracked_compact_evidence_with_wandb_pointers",
+  "warnings": [
+    "Local output paths are ignored and worktree-local; use W&B pointers or SHA256SUMS rather than assuming output/ exists elsewhere.",
+    "Known map/route warnings occurred in logs: uni_campus_big.svg obstacle_13 self-intersection and some generated straight-line routes.",
+    "The 1M filler jobs are low-budget diagnostics and should not be compared as converged 10M policy candidates."
+  ],
+  "worktree": "../robot_sf_ll7.worktrees/gse-queue-fill-20260605"
+}

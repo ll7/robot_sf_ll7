@@ -461,6 +461,14 @@ entries:
     status: evidence
     freshness: evidence
     area: predictive_planner
+  - path: docs/context/issue_2471_diffusion_scenario_generation_feasibility.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2471/scenario_generation_manifest_schema.yaml
+    status: proposal
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2472_intent_conditioned_behavior.md
     status: proposal
     freshness: maintained

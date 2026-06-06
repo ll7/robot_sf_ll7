@@ -1,0 +1,62 @@
+# Diffusion Scenario Generation Manifest Schema Proposal
+# Part of Issue #2471 feasibility scope — interface evidence only, not training or realism.
+# This YAML is a proposal template. Fields marked REQUIRED are the minimum viable contract.
+
+# ---------------------------------------------------------------------------
+# Top-level: extends the existing scenarios.schema.json "map-based" branch.
+# A diffusion-generated scenario must be a valid scenario manifest first, then
+# it may add the "diffusion_generator" block below.
+# ---------------------------------------------------------------------------
+
+# ---- Core scenario fields (inherited from scenarios.schema.json) ----
+name: "diffusion_generated_corridor_crowding_v1"          # REQUIRED
+scenario_type: "diffusion_generated"                       # REQUIRED: discriminator
+map_file: "maps/svg_maps/classic_head_on_corridor.svg"     # REQUIRED: base map
+simulation_config: "configs/sim/francis2023_default.yaml"   # REQUIRED
+robot_config: "configs/robots/default_diff_drive.yaml"      # optional
+seeds: [101, 102, 103]                                      # REQUIRED: per-episode seeds
+metadata:
+  generation_date: "2026-06-06"
+  author: "issue_2471_proposal"
+  plausibility: "synthetic"                                  # REQUIRED: never "real"
+
+# ---- Diffusion generator provenance block ----
+diffusion_generator:                                        # REQUIRED for diffusion scenarios
+  generator_id: "diffusion_scenario_unet_v0_20260606"       # REQUIRED
+  generator_commit: "abc123def456..."                       # REQUIRED: training/export commit
+  training_archive_hash: "sha256-..."                       # REQUIRED: SHA-256 of failure archive
+  training_seed: 42                                         # REQUIRED
+  inference_seed: 7                                         # REQUIRED
+  sampling_params:
+    steps: 50
+    guidance_scale: 1.5
+    scheduler: "ddpm"
+    model_architecture: "simple_unet_1d_temporal"
+  generated_scenario_id: "diffusion_a1b2c3d4"               # REQUIRED: unique in diffusion_ namespace
+  certification:                                            # REQUIRED after gate step 2
+    status: "not_run"                                       # from certify_scenario_file output
+    schema_version: "scenario_cert.v1"
+
+# ---- Failure archive provenance (the training data source) ----
+training_data:
+  archive_source: "docs/context/evidence/issue_2471/failure_archive_manifest.yaml"
+  num_traces: 50
+  map_geometries: ["classic_head_on_corridor", "classic_urban_crossing", "francis2023_blind_corner"]
+  planners: ["orca", "social_force", "teb"]
+  mechanism_labels_present:
+    - collision
+    - timeout
+    - stuck
+    - off_route
+  train_split_seed: 42
+  val_split_seed: 43
+
+# ---- Validation gate results (to be filled after certification) ----
+validation:
+  schema_valid: false
+  certification_status: "not_run"
+  determinism_match: false
+  archive_lineage_verified: false
+  planner_smoke_passed: []
+  gate_passed: false                                        # all 5 gates must pass
+  gate_fail_reason: "proposal_template_not_certified"

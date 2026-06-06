@@ -169,6 +169,10 @@ If these local filters appear exhausted or dominated by blocked/SLURM-only work,
 broad queue scout before declaring the queue empty. Prefer a cheap local or Qwen scan plus one
 substantial Copilot pass when available; treat scout output as a lead only, and confirm any proposed
 candidate with local `gh issue view` evidence before selecting, claiming, or reporting it as ready.
+When live labels conflict with recently merged dependency PRs, closeout comments, or issue links,
+perform a stale-blocker recheck before skipping the issue. Route one scout specifically to answer
+whether the blocker is still true, then confirm the answer with REST `gh api` or local `git`
+evidence before changing labels or selecting the next issue.
 
 The audit should classify whether each remaining issue is actually implementable on the current
 machine and with the available durable artifacts. If a supposedly ready issue needs unavailable

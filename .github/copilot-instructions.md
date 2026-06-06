@@ -42,6 +42,10 @@ It is everyones guide on how to use this repository effectively.
 - For risk-proportional validation planning, use `.agents/skills/quality-playbook/SKILL.md` for
   non-trivial changes, `.agents/skills/agentic-eval/SKILL.md` for AI-workflow artifacts, and
   `.agents/skills/review-and-refactor/SKILL.md` for narrow review-then-refactor passes.
+- Treat delegated or sidecar model output as `route_evidence`: useful planning/review signal that
+  still needs local validation before it supports merge, benchmark, paper-facing, or issue-close
+  claims. Sparse or missing worker result/status artifacts are route failures, not negative
+  findings.
 - For doc synchronization, use `.agents/skills/update-docs-on-code-change/SKILL.md` when code
   changes would make docs stale.
 - Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work.

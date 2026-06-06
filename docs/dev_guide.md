@@ -298,6 +298,10 @@ For GitHub issue batches and Project #5 updates, follow the batch-first workflow
   following `docs/templates/github.project5-cache.example.json`.
 - Check `gh api rate_limit` before large batches and leave Project #5 writes pending when GraphQL
   is exhausted instead of retry-looping.
+- For low-GraphQL or long autonomous publication runs, keep a REST-first command ledger covering
+  PR creation, commit check-run polling, issue comments, labels, merge, and branch cleanup. Treat
+  remote branch deletion reporting a missing ref after merge as a cleanup caveat to record, not as
+  evidence that the merge failed; verify the merged PR or base branch SHA instead.
 
 ### Context note workflow
 
@@ -311,6 +315,10 @@ handoff context in Markdown instead of leaving them trapped in chat or PR histor
 - Link notes to the related issue/PR, canonical docs, validation commands, and replacement notes.
 - Use `.agents/skills/context-note-maintainer/SKILL.md` when the task includes creating or
   refreshing context notes.
+- For docs/context-only changes, use the cheap consistency gate by default: inspect the diff,
+  verify changed README/INDEX/catalog links, and run the docs proof consistency check or its
+  targeted tests. State explicitly when benchmark, simulator, or full PR readiness gates were not
+  run because the branch only changes discoverability or workflow text.
 
 ### Agent memory conventions
 

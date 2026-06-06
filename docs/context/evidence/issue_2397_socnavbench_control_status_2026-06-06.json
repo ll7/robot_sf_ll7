@@ -1,0 +1,66 @@
+{
+  "schema": "data_staging_summary.v1",
+  "issue": 2397,
+  "parent_issue": 1456,
+  "created_at": "2026-06-06",
+  "commit": "30207f041884a8fc039ec28df7ba037b48778f0b",
+  "asset_family": "socnavbench-control",
+  "source": {
+    "source_url": "https://github.com/CMU-TBD/SocNavBench",
+    "access": "license-gated/manual acquisition",
+    "redistribution": "external SocNavBench/S3DIS assets are not redistributed by Robot SF"
+  },
+  "commands": [
+    {
+      "command": "uv run python scripts/tools/manage_external_data.py --json check socnavbench-control",
+      "exit_code": 2,
+      "status": "incomplete",
+      "ok": false,
+      "missing_required_paths": [
+        "wayptnav_data"
+      ],
+      "matched_required_paths": []
+    },
+    {
+      "command": "uv run python scripts/tools/manage_external_data.py --json check socnavbench-s3dis-eth",
+      "exit_code": 2,
+      "status": "incomplete",
+      "ok": false,
+      "missing_required_paths": [
+        "sd3dis/stanford_building_parser_dataset/mesh/ETH",
+        "sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+      ],
+      "matched_required_paths": []
+    },
+    {
+      "command": "uv run python scripts/tools/prepare_socnav_assets.py",
+      "exit_code": 2,
+      "status": "MISSING_REQUIRED_ASSETS",
+      "ok": false,
+      "missing_required_paths": [
+        "wayptnav_data",
+        "sbpd_dataset",
+        "sbpd_traversibles"
+      ]
+    }
+  ],
+  "observed_present": [
+    "third_party/socnavbench vendored code subset"
+  ],
+  "observed_missing": [
+    "third_party/socnavbench/wayptnav_data",
+    "third_party/socnavbench/sd3dis/stanford_building_parser_dataset",
+    "third_party/socnavbench/sd3dis/stanford_building_parser_dataset/traversibles",
+    "third_party/socnavbench/sd3dis/stanford_building_parser_dataset/mesh/ETH",
+    "third_party/socnavbench/sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+  ],
+  "downstream_row_policy": {
+    "row_status": "unavailable/excluded",
+    "availability_status": "not_available",
+    "benchmark_success": false,
+    "availability_reason": "missing_socnavbench_control_pipeline_assets",
+    "counts_as_benchmark_evidence": false
+  },
+  "result_classification": "analysis_only_fail_closed_status",
+  "next_empirical_action": "Stage licensed SocNavBench control/S3DIS assets under third_party/socnavbench via the documented manual path, then rerun the schematic asset check and issue #562 focused fail-fast probe."
+}

@@ -6,7 +6,13 @@ Related issues: [#2168](https://github.com/ll7/robot_sf_ll7/issues/2168),
 [#2269](https://github.com/ll7/robot_sf_ll7/issues/2269),
 [#2281](https://github.com/ll7/robot_sf_ll7/issues/2281)  
 Date: 2026-06-05  
-Status: failed-closed trace-export blocker; no durable trace export promoted.
+Status: historical failed-closed trace-export blocker; partially superseded by Issue #2405.
+
+Update 2026-06-06: Issue #2405 added the missing benchmark-worker pass-through for
+`--record-simulation-step-trace` and proved one selected default/AMMV row per side can export as
+loader-valid `simulation_trace_export.v1`. This note remains the historical failed-closed probe for
+the pre-#2396 path; it should not be read as saying the single-row diagnostic export path is still
+blocked.
 
 ## Decision
 

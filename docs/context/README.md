@@ -209,6 +209,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2309_amv_trace_export_blocker.md](issue_2309_amv_trace_export_blocker.md)
 
+* Issue #2405 AMV step-export decision:
+
+  [issue_2405_amv_step_export_decision.md](issue_2405_amv_step_export_decision.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)

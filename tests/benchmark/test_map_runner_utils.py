@@ -4005,6 +4005,7 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
                 "track_schema_version": "track-v1",
                 "synthetic_actuation_profile": None,
                 "latency_stress_profile": None,
+                "record_simulation_step_trace": True,
             },
         )
     )
@@ -4015,6 +4016,7 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
     assert captured["observation_level"] == "tracked_agents_no_noise"
     assert captured["benchmark_track"] == "lidar"
     assert captured["track_schema_version"] == "track-v1"
+    assert captured["record_simulation_step_trace"] is True
     assert record["algorithm_metadata"]["benchmark_track"]["benchmark_track"] == "lidar"
 
 

@@ -35,6 +35,20 @@ These outputs are a local demo only. They are not durable benchmark evidence and
 for paper-facing or promotion claims unless promoted separately with the repository's normal
 artifact provenance and validation process.
 
+## Mechanism-Aware Diagnostic Reproduction
+
+For a bounded one-command reproduction of a mechanism-aware diagnostic case, run:
+
+```bash
+uv run python scripts/demo/reproduce_mechanism_report.py --case topology-primary-route
+```
+
+The command wraps the topology-hypothesis diagnostic for the double-bottleneck route case and
+writes disposable local artifacts under `output/demo/mechanism_report/topology_primary_route/`.
+Its claim boundary is `diagnostic_only_not_benchmark_success`: a successful run shows that the
+local diagnostic path can expose topology hypotheses for the selected case, not that the planner is
+better, benchmark-successful, or paper-grade.
+
 Benchmark outcomes are separate from dense training rewards. Benchmark claims must rely on
 schema-checked episode records, deterministic metrics, termination/outcome fields, and explicit
 runtime/readiness metadata; training reward totals are not benchmark-success evidence. See

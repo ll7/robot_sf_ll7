@@ -318,6 +318,7 @@ def _handle_run(args) -> int:
             observation_level=getattr(args, "observation_level", None),
             benchmark_track=getattr(args, "benchmark_track", None),
             track_schema_version=getattr(args, "track_schema_version", None),
+            record_simulation_step_trace=bool(getattr(args, "record_simulation_step_trace", False)),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
                 if getattr(args, "observation_noise", None)
@@ -1607,6 +1608,11 @@ def _add_run_subparser(
         "--track-schema-version",
         default=None,
         help="Optional version slug for the benchmark-track metadata contract.",
+    )
+    p.add_argument(
+        "--record-simulation-step-trace",
+        action="store_true",
+        help="Embed analysis-only per-step trace frames in each aggregate episode row.",
     )
     p.add_argument(
         "--structured-output",

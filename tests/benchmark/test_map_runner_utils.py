@@ -2496,6 +2496,7 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
         algo="goal",
         algo_config_path=None,
         scenario_path=Path("."),
+        record_simulation_step_trace=True,
         synthetic_actuation_profile={
             "name": "amv-actuation-stress-v0",
             "profile_version": "v0",
@@ -2526,6 +2527,20 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     assert first_step["distance_to_goal_m"] == pytest.approx(math.sqrt(2.0))
     assert any(step["command_clipped"] is True for step in trace["steps"])
     assert any(step["yaw_rate_saturated"] is True for step in trace["steps"])
+    step_trace = record["algorithm_metadata"]["simulation_step_trace"]
+    assert step_trace["schema_version"] == "simulation-step-trace.v1"
+    assert step_trace["dt"] == pytest.approx(0.1)
+    assert len(step_trace["steps"]) == 4
+    first_frame = step_trace["steps"][0]
+    assert first_frame["step"] == 0
+    assert first_frame["time_s"] == pytest.approx(0.1)
+    assert first_frame["robot"]["position"] == [0.0, 0.0]
+    assert first_frame["robot"]["heading"] == pytest.approx(0.0)
+    assert first_frame["robot"]["velocity"] == [0.0, 0.0]
+    assert first_frame["pedestrians"] == []
+    assert first_frame["planner"]["selected_action"]["linear_velocity"] == pytest.approx(0.0)
+    assert first_frame["planner"]["amv"]["requested_linear_m_s"] == pytest.approx(3.0)
+    assert first_frame["planner"]["amv"]["yaw_rate_saturated"] is False
     assert float(record["metrics"]["command_clip_fraction"]) > 0.0
     assert float(record["metrics"]["yaw_rate_saturation_fraction"]) > 0.0
     assert record["metrics"]["signed_braking_peak_m_s2"] == pytest.approx(0.0)

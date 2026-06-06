@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_2282_topology_selection_instrumentation.md](issue_2282_topology_selection_instrumentation.md)
 * Issue #2307 topology score diagnostic:
   [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md)
+* Mechanism closure status:
+  [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2266 Static-Recenter Activation Diagnostic 2026-06-05:
   [issue_2266_static_recenter_activation.md](issue_2266_static_recenter_activation.md)
 * Issue #2306 Static-Recenter Activation Trace 2026-06-05:

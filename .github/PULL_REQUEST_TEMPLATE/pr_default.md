@@ -47,6 +47,16 @@ that make no research claim, set fields to `NA` and state why.
 - Result route: stop / revise / narrow / continue / NA
 - Follow-up question or issue for weak, negative, or non-transfer results:
 
+## Next Empirical Action
+Required when evidence is missing, blocked, diagnostic-only, or negative. For docs-only, support,
+or already-complete evidence PRs, set fields to `NA` and state why.
+
+- Rerun needed: yes / no / NA
+- Extractor or analysis tool needed: yes / no / NA
+- Artifact missing or unavailable:
+- Stop / revise / continue decision:
+- Proposed child issue or existing follow-up:
+
 ## Validation / Proof
 For research/benchmark/metric/paper-facing analysis-tool PRs: include one
 representative use on durable/versioned input (tracked config, model

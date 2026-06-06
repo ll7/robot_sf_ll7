@@ -313,6 +313,10 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/evidence/issue_852_queue_fill_batch_2026-06-06/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/policy_search/reports/2026-06-05_orca_residual_guarded_ppo_v0_smoke.md
     status: evidence
     freshness: evidence

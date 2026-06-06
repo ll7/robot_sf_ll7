@@ -43,8 +43,9 @@ For a bounded one-command reproduction of a mechanism-aware diagnostic case, run
 uv run python scripts/demo/reproduce_mechanism_report.py --case topology-primary-route
 ```
 
-The command wraps the topology-hypothesis diagnostic for the double-bottleneck route case and
-writes disposable local artifacts under `output/demo/mechanism_report/topology_primary_route/`.
+The command wraps the topology-hypothesis diagnostic for the `topology_guided_hybrid_rule_v0`
+candidate, whose registry `claim_scope` is `diagnostic_only`, on the double-bottleneck route case.
+It writes disposable local artifacts under `output/demo/mechanism_report/topology_primary_route/`.
 Its claim boundary is `diagnostic_only_not_benchmark_success`: a successful run shows that the
 local diagnostic path can expose topology hypotheses for the selected case, not that the planner is
 better, benchmark-successful, or paper-grade.

@@ -17,7 +17,7 @@ def test_diagnostic_args_for_default_case_use_disposable_output(tmp_path: Path) 
     argv = quickstart.diagnostic_args_for_case(case, tmp_path)
 
     assert "--candidate" in argv
-    assert "hybrid_rule_v3_waypoint2_route_lookahead8" in argv
+    assert "topology_guided_hybrid_rule_v0" in argv
     assert "--stage" in argv
     assert "full_matrix" in argv
     assert "--scenario-name" in argv
@@ -46,7 +46,7 @@ def test_run_case_preserves_underlying_exit_code(monkeypatch, tmp_path: Path, ca
     assert "--output-dir" in calls[0]
     stdout = capsys.readouterr().out
     assert quickstart.CLAIM_BOUNDARY in stdout
-    assert "preserving fail-closed exit code" in stdout
+    assert "preserving fail-closed diagnostic exit code 2" in stdout
 
 
 def test_main_defaults_to_topology_primary_route(monkeypatch, tmp_path: Path) -> None:

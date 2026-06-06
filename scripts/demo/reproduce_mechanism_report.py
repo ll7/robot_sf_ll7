@@ -38,11 +38,12 @@ CASES: dict[str, ReproductionCase] = {
         name="topology-primary-route",
         description=(
             "Topology-hypothesis diagnostic on the double-bottleneck case used to inspect "
-            "whether the planner exposes at least two local route hypotheses."
+            "whether the diagnostic-only topology-guided planner exposes at least two local "
+            "route hypotheses."
         ),
         diagnostic_args=(
             "--candidate",
-            "hybrid_rule_v3_waypoint2_route_lookahead8",
+            "topology_guided_hybrid_rule_v0",
             "--stage",
             "full_matrix",
             "--scenario-name",
@@ -100,8 +101,8 @@ def run_case(*, case_name: str, output_root: Path = DEFAULT_OUTPUT_ROOT) -> int:
         print("Diagnostic reproduction completed.")
     else:
         print(
-            "Diagnostic reproduction did not produce sufficient topology hypotheses; "
-            "preserving fail-closed exit code."
+            "Diagnostic reproduction did not complete successfully; preserving fail-closed "
+            f"diagnostic exit code {exit_code}."
         )
     return exit_code
 

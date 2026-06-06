@@ -134,6 +134,8 @@ knowledge, not every transient iteration detail.
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #2232 planner mechanism transfer benchmark protocol:
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
+* Active research-lane scientific states:
+  [research_lane_states.md](research_lane_states.md)
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
 * Issue #2282 topology selection instrumentation smoke:

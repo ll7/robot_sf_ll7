@@ -445,7 +445,7 @@ class ScenarioBelief:
                 ],
                 "position_confidence": round(float(self.ego.position.confidence), 6),
                 "velocity_confidence": round(float(self.ego.velocity.confidence), 6),
-                "heading": round(float(self.ego.heading), 6),
+                "heading": round(float(_wrap_angle(self.ego.heading)), 6),
             },
             "goals": [
                 {

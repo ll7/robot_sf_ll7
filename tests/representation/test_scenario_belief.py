@@ -348,6 +348,7 @@ def test_to_uncertainty_report_preserves_covariance_and_class_probabilities() ->
     """to_uncertainty_report should preserve uncertainty fields that to_socnav_struct drops."""
     env_config = RobotSimulationConfig()
     simulator = _simulator_fixture()
+    simulator.robots[0].pose = ((0.0, 0.0), 4.0)
     belief = scenario_belief_from_simulator_oracle(
         simulator,
         env_config=env_config,
@@ -355,6 +356,7 @@ def test_to_uncertainty_report_preserves_covariance_and_class_probabilities() ->
     )
 
     report = belief.to_uncertainty_report()
+    legacy_obs = belief.to_socnav_struct()
 
     assert "agents" in report
     assert "ego" in report
@@ -373,6 +375,7 @@ def test_to_uncertainty_report_preserves_covariance_and_class_probabilities() ->
     assert "position_covariance_xy" in report["ego"]
     assert "velocity_covariance_xy" in report["ego"]
     assert report["ego"]["class_probabilities"] == {"ego_robot": 1.0}
+    assert report["ego"]["heading"] == pytest.approx(float(legacy_obs["robot"]["heading"][0]))
 
     assert "goals" in report
     assert "current_covariance_xy" in report["goals"][0]

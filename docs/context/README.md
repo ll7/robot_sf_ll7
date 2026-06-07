@@ -287,6 +287,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2543_trace_failure_predicates.md](issue_2543_trace_failure_predicates.md)
 
+* Issue #2544 mechanism-aware suite smoke:
+
+  [issue_2544_mechanism_aware_suite_smoke.md](issue_2544_mechanism_aware_suite_smoke.md)
+
 * Issue #2547 counterfactual mechanism taxonomy:
 
   [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)

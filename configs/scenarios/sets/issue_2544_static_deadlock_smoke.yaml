@@ -1,0 +1,36 @@
+## Issue #2544 static-deadlock mechanism-aware smoke matrix
+#
+# Purpose:
+#   Bind the proposal-only #2452 `static_deadlock_recovery` suite to a tiny executable
+#   scenario matrix for smoke-level operability checks. This matrix is not benchmark-strength
+#   evidence and must not be used for planner ranking.
+#
+# Canonical smoke command shape:
+#   robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml \
+#     --out output/benchmarks/issue_2544_static_deadlock_smoke/<planner>/episodes.jsonl \
+#     --algo <planner> --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none \
+#     --record-simulation-step-trace --no-resume --benchmark-profile baseline-safe
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_bottleneck.yaml
+  - ../archetypes/classic_head_on_corridor.yaml
+  - ../archetypes/issue_596_static_obstacles.yaml
+
+select_scenarios:
+  - classic_bottleneck_low
+  - classic_head_on_corridor_low
+  - narrow_passage
+
+scenario_overrides:
+  seeds: [111]
+  metadata:
+    mechanism_aware_suite_id: static_deadlock_recovery
+    issue: 2544
+    evidence_tier: diagnostic_smoke
+    claim_boundary: >
+      Smoke-level suite operability check only; not planner ranking, transfer evidence, or
+      benchmark-strength mechanism proof.
+
+map_search_paths:
+  - ../../../maps/svg_maps

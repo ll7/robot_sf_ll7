@@ -1,0 +1,52 @@
+{
+  "title": "Why-First Report: AMV Actuation Timeout Diagnostics",
+  "planner": "actuation_aware_hybrid_rule_v0",
+  "scenario_id": "classic_cross_trap_high",
+  "outcome": "synthetic command clipping improved, but both matched candidates still timed out with route progress effectively blocked",
+  "execution_status": "failed",
+  "metrics": {
+    "baseline_command_clip_steps": 22,
+    "intervention_command_clip_steps": 15,
+    "command_clip_fraction_delta": -0.0875,
+    "final_route_progress_delta_m": -0.03211319524147263,
+    "final_distance_to_goal_delta_m": 0.03211319524147352,
+    "yaw_rate_saturation_fraction_delta": 0.0,
+    "success": false
+  },
+  "mechanism_activation": {
+    "name": "synthetic_amv_actuation_feasibility",
+    "status": "active_but_irrelevant_to_completion",
+    "evidence": "Issue #2443 shows command clipping fell from 22 to 15 steps, but Issue #2440 closes the timeout driver as route_task_progress_blocked_after_feasibility_improvement"
+  },
+  "failure_mechanism": {
+    "label": "route_task_progress_blocked_after_feasibility_improvement",
+    "rationale": "Reduced clipping and zero yaw saturation did not move final route progress or success, so command feasibility was not the immediate completion blocker on this slice"
+  },
+  "paired_comparator": {
+    "name": "hybrid_rule_v3_fast_progress_baseline",
+    "outcome": "baseline and actuation-aware intervention both ended timeout_low_progress with nearly identical final route progress",
+    "delta": {
+      "command_clip_steps": -7,
+      "command_clip_fraction": -0.0875,
+      "final_route_progress_m": -0.03211319524147263,
+      "mean_avg_speed_m_s": 0.004727562557943961
+    }
+  },
+  "trace_evidence": [
+    "docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json",
+    "docs/context/evidence/issue_2404_amv_timeout_decomposition_2026-06-06/summary.json",
+    "docs/context/evidence/issue_2443_amv_trace_review_2026-06-07/summary.json",
+    "docs/context/issue_2443_amv_trace_review.md",
+    "docs/context/issue_2440_amv_timeout_closure.md"
+  ],
+  "alternative_explanations": [
+    "Raw simulation_trace_export.v1 frame and event IDs are unavailable in the compact artifacts",
+    "Deadlock and oscillation detectors are unavailable, so unrelated navigation deadlock cannot be fully ruled out",
+    "Speed-cap binding and scoring conservativeness are only partially instrumented and are not selected as primary explanations"
+  ],
+  "decision": {
+    "action": "revise",
+    "rationale": "Actuation-aware scoring should not be broadened as a planner-improvement mechanism from this slice because feasibility improved without route-progress or success movement",
+    "next_step": "Investigate route-progress geometry or task-completion blockers, or use #2446 only to assess actuation feasibility as a diagnostic ranking dimension"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "claim_boundary": "smoke operability and reportability only; not planner ranking or benchmark-strength mechanism evidence",
+  "classification": "diagnostic_revise",
+  "created_at": "2026-06-07T19:41:31Z",
+  "follow_up_issue": 2586,
+  "issue": 2544,
+  "planners": {
+    "orca": {
+      "execution_status": "completed_missing_required_trace_fields",
+      "required_trace_fields_missing": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "row_status"
+      ],
+      "required_trace_fields_present": [
+        "execution_mode"
+      ],
+      "rows": 3,
+      "status_counts": {
+        "failure": 1,
+        "success": 2
+      },
+      "success_count": 2,
+      "termination_counts": {
+        "max_steps": 1,
+        "success": 2
+      }
+    },
+    "social_force": {
+      "execution_status": "completed_missing_required_trace_fields",
+      "required_trace_fields_missing": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "row_status"
+      ],
+      "required_trace_fields_present": [
+        "execution_mode"
+      ],
+      "rows": 3,
+      "status_counts": {
+        "failure": 3
+      },
+      "success_count": 0,
+      "termination_counts": {
+        "max_steps": 3
+      }
+    }
+  },
+  "raw_output_policy": "Raw JSONL remained worktree-local and disposable; this summary/table/report are the durable tracked evidence.",
+  "required_trace_fields": [
+    "low_progress_window",
+    "recenter_activation_count",
+    "distance_to_goal_delta",
+    "local_minimum_indicator",
+    "execution_mode",
+    "row_status"
+  ],
+  "result": {
+    "decision": "revise_before_benchmark_candidate",
+    "execution_completed": true,
+    "fallback_degraded_rows_explicit": "top-level status counts recorded; no fallback/degraded rows observed in this smoke",
+    "figure_or_table_candidate": "docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/suite_smoke_table.csv",
+    "reason": "The suite executes for two native/core planners, but required static-deadlock mechanism trace fields are absent from the episode rows.",
+    "why_first_report_generated": true
+  },
+  "scenario_ids": [
+    "classic_bottleneck_low",
+    "classic_head_on_corridor_low",
+    "narrow_passage"
+  ],
+  "scenario_matrix": "configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml",
+  "schema_version": "mechanism-aware-suite-smoke-summary.v1",
+  "seed_budget": [
+    111
+  ],
+  "suite_id": "static_deadlock_recovery",
+  "target_mechanism": "static_deadlock_or_local_minimum",
+  "validation": [
+    "rtk uv run pytest tests/benchmark/test_issue_2452_mechanism_aware_suites.py -q",
+    "rtk uv run robot_sf_bench --quiet validate-config --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml",
+    "rtk uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml --out <worktree-local-output>/social_force/episodes.jsonl --schema robot_sf/benchmark/schemas/episode.schema.v1.json --algo social_force --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none --record-simulation-step-trace --no-resume --benchmark-profile baseline-safe --socnav-missing-prereq-policy fail-fast --external-log-noise suppress --structured-output json",
+    "rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml --out <worktree-local-output>/orca/episodes.jsonl --schema robot_sf/benchmark/schemas/episode.schema.v1.json --algo orca --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none --record-simulation-step-trace --no-resume --benchmark-profile baseline-safe --socnav-missing-prereq-policy fail-fast --external-log-noise suppress --structured-output json"
+  ]
+}

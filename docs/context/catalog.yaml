@@ -21,6 +21,10 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: configs/benchmarks/issue_2456_amv_local_nav_suite_v0.yaml
     status: proposal
     freshness: maintained
@@ -80,6 +84,26 @@ entries:
   - path: docs/context/issue_2220_failure_mechanism_taxonomy.md
     status: current
     freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_2544_mechanism_aware_suite_smoke.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/suite_smoke_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/why_first_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/why_first_report.md
+    status: evidence
+    freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_2547_counterfactual_mechanism_taxonomy.md
     status: current

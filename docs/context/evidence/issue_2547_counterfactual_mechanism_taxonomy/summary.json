@@ -1,0 +1,27 @@
+{
+  "claim_boundary": "counterfactual pair taxonomy/reportability only; not causal or benchmark-strength mechanism evidence",
+  "created_at": "2026-06-07T21:12:00Z",
+  "implemented_fields": [
+    "changed_factor",
+    "mechanism_taxonomy.label",
+    "mechanism_taxonomy.mechanism_hypothesis",
+    "mechanism_taxonomy.expected_metric_direction",
+    "mechanism_taxonomy.validity_constraints",
+    "pair_report.base_scenario_id",
+    "pair_report.counterfactual_scenario_id",
+    "pair_report.artifact_manifest_ref",
+    "pair_report.expected_vs_observed_metric_change"
+  ],
+  "issue": 2547,
+  "result": {
+    "expected_vs_observed_status_without_smoke_metrics": "not_available",
+    "mechanism_label": "clearance_pressure",
+    "taxonomy_schema_version": "counterfactual_mechanism_taxonomy.v1",
+    "target_pair_schema": "counterfactual_scenario_pair.v1"
+  },
+  "schema_version": "counterfactual-mechanism-taxonomy-proof.v1",
+  "validation": [
+    "rtk uv run pytest tests/tools/test_create_counterfactual_scenario_pair.py -q",
+    "rtk uv run ruff check scripts/tools/create_counterfactual_scenario_pair.py tests/tools/test_create_counterfactual_scenario_pair.py"
+  ]
+}

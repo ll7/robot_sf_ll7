@@ -81,6 +81,14 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2547_counterfactual_mechanism_taxonomy.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2547_counterfactual_mechanism_taxonomy/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1272_validation_falsification_strategy.md
     status: current
     freshness: policy

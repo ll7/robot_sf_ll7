@@ -74,3 +74,33 @@ def test_issue_2527_intent_metadata_reaches_trace_and_summary_fields() -> None:
     assert summary["status"] == "diagnostic_metadata_only"
     assert summary["benchmark_evidence"] is False
     assert summary["trace_field_source"].endswith("pedestrians[]")
+
+
+def test_issue_2527_mixed_single_pedestrian_intent_metadata_stays_aligned() -> None:
+    """Per-pedestrian opt-in should not drift onto a later single pedestrian."""
+    scenario = _scenario_payload()
+    first_ped = scenario["single_pedestrians"][0]
+    scenario["metadata"].pop("intent_conditioned_behavior")
+    scenario["single_pedestrians"].append(
+        {
+            "id": "h2",
+            "goal": None,
+            "trajectory": [[13.0, 17.5], [13.0, 4.0]],
+        }
+    )
+
+    intent_metadata = _single_pedestrian_intent_metadata(scenario)
+    frames = _trace_pedestrians(
+        np.array([[14.0, 15.0], [13.0, 12.0]], dtype=float),
+        np.array([[14.0, 15.0], [13.0, 12.0]], dtype=float),
+        0.1,
+        intent_metadata,
+    )
+    summary = _intent_conditioned_behavior_summary(scenario, intent_metadata)
+
+    assert first_ped["id"] == "h1"
+    assert len(intent_metadata) == 2
+    assert frames[0]["pedestrian_id"] == "h1"
+    assert "pedestrian_id" not in frames[1]
+    assert summary is not None
+    assert [ped["pedestrian_id"] for ped in summary["pedestrians"]] == ["h1"]

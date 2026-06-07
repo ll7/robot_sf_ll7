@@ -2820,7 +2820,7 @@ def _trace_pedestrians(
     positions: np.ndarray,
     previous_positions: np.ndarray | None,
     dt_seconds: float,
-    intent_metadata: list[dict[str, Any]] | None = None,
+    intent_metadata: list[dict[str, Any] | None] | None = None,
 ) -> list[dict[str, Any]]:
     """Build trace-export pedestrian frames from simulator position buffers.
 
@@ -2853,12 +2853,14 @@ def _trace_pedestrians(
         if single_offset is not None and ped_idx >= single_offset:
             single_idx = ped_idx - single_offset
             if 0 <= single_idx < len(intent_metadata or []):
-                frame.update(_intent_trace_payload(intent_metadata[single_idx], velocity))
+                metadata = (intent_metadata or [])[single_idx]
+                if metadata is not None:
+                    frame.update(_intent_trace_payload(metadata, velocity))
         pedestrians.append(frame)
     return pedestrians
 
 
-def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[str, Any]]:
+def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[str, Any] | None]:
     """Return authored intent metadata aligned with scenario single pedestrians."""
     scenario_metadata = (
         scenario.get("metadata") if isinstance(scenario.get("metadata"), dict) else {}
@@ -2873,9 +2875,11 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
         if isinstance(scenario.get("single_pedestrians"), list)
         else []
     )
-    result: list[dict[str, Any]] = []
+    result: list[dict[str, Any] | None] = []
+    has_intent_metadata = False
     for idx, ped in enumerate(single_peds):
         if not isinstance(ped, dict):
+            result.append(None)
             continue
         ped_metadata = ped.get("metadata") if isinstance(ped.get("metadata"), dict) else {}
         intent = (
@@ -2884,6 +2888,7 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
             else {}
         )
         if not intent and not scenario_intent:
+            result.append(None)
             continue
         wait_at = ped.get("wait_at") if isinstance(ped.get("wait_at"), list) else []
         trajectory = ped.get("trajectory") if isinstance(ped.get("trajectory"), list) else []
@@ -2899,6 +2904,7 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
             for rule in wait_at
             if isinstance(rule, dict) and rule.get("wait_s") is not None
         ]
+        has_intent_metadata = True
         result.append(
             {
                 "single_index": idx,
@@ -2923,7 +2929,7 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
                 },
             }
         )
-    return result
+    return result if has_intent_metadata else []
 
 
 def _intent_trace_payload(metadata: dict[str, Any], velocity: np.ndarray) -> dict[str, Any]:
@@ -2956,10 +2962,13 @@ def _intent_trace_payload(metadata: dict[str, Any], velocity: np.ndarray) -> dic
 
 def _intent_conditioned_behavior_summary(
     scenario: dict[str, Any],
-    intent_metadata: list[dict[str, Any]],
+    intent_metadata: list[dict[str, Any] | None],
 ) -> dict[str, Any] | None:
     """Return an analysis-only summary for authored intent-conditioned fixtures."""
     if not intent_metadata:
+        return None
+    summarized_pedestrians = [metadata for metadata in intent_metadata if metadata is not None]
+    if not summarized_pedestrians:
         return None
     return {
         "schema_version": "intent-conditioned-behavior-summary.v1",
@@ -2971,7 +2980,7 @@ def _intent_conditioned_behavior_summary(
             "Authored intent metadata records fixture phases only; it is not data-grounded "
             "human behavior evidence and must not be used as a planner-ranking claim."
         ),
-        "pedestrians": intent_metadata,
+        "pedestrians": summarized_pedestrians,
     }
 
 

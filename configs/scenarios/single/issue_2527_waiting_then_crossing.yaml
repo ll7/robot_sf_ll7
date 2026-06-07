@@ -46,6 +46,32 @@ scenarios:
       claim_boundary: >
         This fixture records authored waiting/crossing intent phases for trace smoke testing only.
         It does not prove realistic pedestrian intent modeling or planner-ranking changes.
+    signal_state:
+      schema_version: signal-state-proxy.v1
+      status: proxy_diagnostic_only
+      signal_id: issue_2564_wait_cross_proxy
+      conflict_zone_id: francis2023_intersection_crosswalk_proxy
+      planner_observable: false
+      observation_mode: trace_metadata_only
+      benchmark_evidence: false
+      claim_boundary: >
+        Proxy signal-state metadata only; this fixture does not prove traffic-signal realism,
+        crossing-legality compliance, forced-waiting reasoning, or planner-ranking changes.
+      phase_timeline:
+      - phase: robot_green_pedestrian_dont_walk
+        intent_phase: waiting
+        start_s: 0.0
+        end_s: 2.0
+        robot_right_of_way: true
+        pedestrian_right_of_way: false
+        legality_state: pedestrian_wait_required
+      - phase: pedestrian_walk_robot_red
+        intent_phase: crossing
+        start_s: 2.0
+        end_s: null
+        robot_right_of_way: false
+        pedestrian_right_of_way: true
+        legality_state: pedestrian_crossing_allowed
     plausibility:
       status: unverified
       verified_on: null

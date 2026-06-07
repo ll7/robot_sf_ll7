@@ -19,6 +19,7 @@ contract_surfaces:
   crossing_archetype: configs/scenarios/archetypes/classic_crossing.yaml
   group_crossing_archetype: configs/scenarios/archetypes/classic_group_crossing.yaml
   proxy_intersection_wait_scenario: configs/scenarios/single/francis2023_intersection_wait.yaml
+  signal_state_proxy_scenario: configs/scenarios/single/issue_2527_waiting_then_crossing.yaml
   proxy_phase_grid: configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml
   issue_2474_note: docs/context/issue_2474_signalized_crossing_benchmark.md
   tests: tests/benchmark/test_signalized_crossing_benchmark_manifest.py
@@ -69,6 +70,7 @@ signal_phase_semantics:
     - clearance_yellow
     - all_red
   proxy_fields_available_now:
+    - signal_state
     - wait_at
     - start_delay_s
     - single_pedestrian_wait_duration_offset

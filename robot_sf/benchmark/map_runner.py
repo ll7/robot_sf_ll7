@@ -2884,6 +2884,11 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
         if isinstance(scenario_metadata.get("intent_conditioned_behavior"), dict)
         else {}
     )
+    scenario_signal_state = (
+        scenario_metadata.get("signal_state")
+        if isinstance(scenario_metadata.get("signal_state"), dict)
+        else None
+    )
     single_peds = (
         scenario.get("single_pedestrians")
         if isinstance(scenario.get("single_pedestrians"), list)
@@ -2941,6 +2946,7 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
                     "role": ped.get("role"),
                     "role_target_id": ped.get("role_target_id"),
                 },
+                **({"signal_state": scenario_signal_state} if scenario_signal_state else {}),
             }
         )
     return result if has_intent_metadata else []
@@ -3039,13 +3045,59 @@ def _intent_trace_payload(metadata: dict[str, Any], velocity: np.ndarray) -> dic
         phase = str(phases[0])
     else:
         phase = "authored_motion"
-    return {
+    payload = {
         "pedestrian_id": metadata["pedestrian_id"],
         "intent_label": metadata["intent_label"],
         "intent_phase": phase,
         "intent_source": metadata["intent_source"],
         "claim_boundary": metadata["claim_boundary"],
         "behavior_parameters": metadata["behavior_parameters"],
+    }
+    signal_payload = _signal_state_trace_payload(metadata.get("signal_state"), phase)
+    if signal_payload is not None:
+        payload["signal_state"] = signal_payload
+    return payload
+
+
+def _signal_state_trace_payload(signal_state: Any, intent_phase: str) -> dict[str, Any] | None:
+    """Return proxy signal-state trace metadata for the current authored intent phase."""
+    if not isinstance(signal_state, dict):
+        return None
+    phase_timeline = (
+        signal_state.get("phase_timeline")
+        if isinstance(signal_state.get("phase_timeline"), list)
+        else []
+    )
+    matching_phase = next(
+        (
+            phase
+            for phase in phase_timeline
+            if isinstance(phase, dict) and str(phase.get("intent_phase")) == intent_phase
+        ),
+        None,
+    )
+    if matching_phase is None:
+        matching_phase = next(
+            (phase for phase in phase_timeline if isinstance(phase, dict)),
+            {},
+        )
+    return {
+        "schema_version": str(signal_state.get("schema_version") or "signal-state-proxy.v1"),
+        "status": str(signal_state.get("status") or "proxy_diagnostic_only"),
+        "signal_id": str(signal_state.get("signal_id") or "unknown_signal"),
+        "conflict_zone_id": str(signal_state.get("conflict_zone_id") or "unknown_conflict_zone"),
+        "phase": str(matching_phase.get("phase") or "unknown"),
+        "intent_phase": intent_phase,
+        "robot_right_of_way": bool(matching_phase.get("robot_right_of_way", False)),
+        "pedestrian_right_of_way": bool(matching_phase.get("pedestrian_right_of_way", False)),
+        "legality_state": str(matching_phase.get("legality_state") or "unknown"),
+        "planner_observable": bool(signal_state.get("planner_observable", False)),
+        "observation_mode": str(signal_state.get("observation_mode") or "trace_metadata_only"),
+        "benchmark_evidence": bool(signal_state.get("benchmark_evidence", False)),
+        "claim_boundary": str(
+            signal_state.get("claim_boundary")
+            or "Proxy signal-state metadata only; not benchmark evidence."
+        ),
     }
 
 
@@ -3125,7 +3177,7 @@ def _intent_conditioned_behavior_summary(
     summarized_pedestrians = [metadata for metadata in intent_metadata if metadata is not None]
     if not summarized_pedestrians:
         return None
-    return {
+    summary = {
         "schema_version": "intent-conditioned-behavior-summary.v1",
         "scenario_name": _scenario_id(scenario),
         "status": "diagnostic_metadata_only",
@@ -3137,6 +3189,35 @@ def _intent_conditioned_behavior_summary(
         ),
         "pedestrians": summarized_pedestrians,
     }
+    signal_state = next(
+        (
+            metadata.get("signal_state")
+            for metadata in summarized_pedestrians
+            if isinstance(metadata.get("signal_state"), dict)
+        ),
+        None,
+    )
+    if isinstance(signal_state, dict):
+        summary["signal_state"] = {
+            "schema_version": str(signal_state.get("schema_version") or "signal-state-proxy.v1"),
+            "status": str(signal_state.get("status") or "proxy_diagnostic_only"),
+            "signal_id": str(signal_state.get("signal_id") or "unknown_signal"),
+            "conflict_zone_id": str(
+                signal_state.get("conflict_zone_id") or "unknown_conflict_zone"
+            ),
+            "planner_observable": bool(signal_state.get("planner_observable", False)),
+            "observation_mode": str(signal_state.get("observation_mode") or "trace_metadata_only"),
+            "benchmark_evidence": bool(signal_state.get("benchmark_evidence", False)),
+            "claim_boundary": str(
+                signal_state.get("claim_boundary")
+                or "Proxy signal-state metadata only; not benchmark evidence."
+            ),
+            "trace_fields": [
+                "pedestrians[].signal_state",
+                "pedestrians[].intent_phase",
+            ],
+        }
+    return summary
 
 
 def _cyclist_like_vru_summary(

@@ -557,6 +557,14 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2564_signal_state_proxy_smoke.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2564_signal_state_proxy_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2526_cyclist_vru_smoke.md
     status: current
     freshness: maintained

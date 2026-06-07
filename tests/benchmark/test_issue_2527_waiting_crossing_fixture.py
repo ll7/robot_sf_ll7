@@ -31,12 +31,18 @@ def test_issue_2527_fixture_validates_and_declares_claim_boundary() -> None:
     report = validate_scenario_file(FIXTURE_PATH)
     scenario = _scenario_payload()
     intent = scenario["metadata"]["intent_conditioned_behavior"]
+    signal_state = scenario["metadata"]["signal_state"]
 
     assert report.ok is True
     assert scenario["name"] == "issue_2527_waiting_then_crossing"
     assert scenario["metadata"]["authoring"]["benchmark_evidence"] is False
     assert intent["status"] == "diagnostic_metadata_only"
     assert "does not prove" in intent["claim_boundary"]
+    assert signal_state["status"] == "proxy_diagnostic_only"
+    assert signal_state["benchmark_evidence"] is False
+    assert signal_state["planner_observable"] is False
+    assert signal_state["phase_timeline"][0]["phase"] == "robot_green_pedestrian_dont_walk"
+    assert signal_state["phase_timeline"][1]["phase"] == "pedestrian_walk_robot_red"
 
 
 def test_issue_2527_intent_metadata_reaches_trace_and_summary_fields() -> None:
@@ -49,6 +55,7 @@ def test_issue_2527_intent_metadata_reaches_trace_and_summary_fields() -> None:
     assert intent_metadata[0]["intent_label"] == "waiting_then_crossing"
     assert intent_metadata[0]["intent_phases"] == ["waiting", "crossing"]
     assert intent_metadata[0]["behavior_parameters"]["wait_interval_s"] == [2.0]
+    assert intent_metadata[0]["signal_state"]["signal_id"] == "issue_2564_wait_cross_proxy"
 
     waiting_frame = _trace_pedestrians(
         np.array([[14.0, 15.0]], dtype=float),
@@ -69,11 +76,20 @@ def test_issue_2527_intent_metadata_reaches_trace_and_summary_fields() -> None:
     assert waiting_frame["intent_phase"] == "waiting"
     assert waiting_frame["intent_source"] == "authored_scenario_metadata"
     assert "not data-grounded" in waiting_frame["claim_boundary"]
+    assert waiting_frame["signal_state"]["phase"] == "robot_green_pedestrian_dont_walk"
+    assert waiting_frame["signal_state"]["pedestrian_right_of_way"] is False
     assert crossing_frame["intent_phase"] == "crossing"
+    assert crossing_frame["signal_state"]["phase"] == "pedestrian_walk_robot_red"
+    assert crossing_frame["signal_state"]["pedestrian_right_of_way"] is True
     assert summary is not None
     assert summary["status"] == "diagnostic_metadata_only"
     assert summary["benchmark_evidence"] is False
     assert summary["trace_field_source"].endswith("pedestrians[]")
+    assert summary["signal_state"]["status"] == "proxy_diagnostic_only"
+    assert summary["signal_state"]["trace_fields"] == [
+        "pedestrians[].signal_state",
+        "pedestrians[].intent_phase",
+    ]
 
 
 def test_issue_2527_mixed_single_pedestrian_intent_metadata_stays_aligned() -> None:

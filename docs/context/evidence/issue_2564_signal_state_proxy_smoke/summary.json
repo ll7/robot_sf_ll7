@@ -1,0 +1,33 @@
+{
+  "schema_version": "issue_2564_signal_state_smoke_summary.v1",
+  "scenario": "issue_2527_waiting_then_crossing",
+  "planner": "goal",
+  "episodes": 1,
+  "summary_counts": {
+    "total_jobs": 1,
+    "successful_jobs": 1,
+    "failed_jobs": 0
+  },
+  "trace_steps": 80,
+  "signal_frame_count": 80,
+  "signal_phases": [
+    "pedestrian_walk_robot_red",
+    "robot_green_pedestrian_dont_walk"
+  ],
+  "first_signal_frame": {
+    "step_index": null,
+    "intent_phase": "waiting",
+    "signal_phase": "robot_green_pedestrian_dont_walk",
+    "pedestrian_right_of_way": false,
+    "robot_right_of_way": true
+  },
+  "last_signal_frame": {
+    "step_index": null,
+    "intent_phase": "crossing",
+    "signal_phase": "pedestrian_walk_robot_red",
+    "pedestrian_right_of_way": true,
+    "robot_right_of_way": false
+  },
+  "benchmark_evidence": false,
+  "result_classification": "proxy_diagnostic_smoke"
+}

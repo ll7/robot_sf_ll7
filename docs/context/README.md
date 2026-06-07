@@ -204,6 +204,8 @@ knowledge, not every transient iteration detail.
   [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md)
 * Issue #2527 Waiting-Then-Crossing Fixture:
   [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md)
+* Issue #2564 Signal-State Proxy Smoke:
+  [issue_2564_signal_state_proxy_smoke.md](issue_2564_signal_state_proxy_smoke.md)
 * Issue #2473 Cyclist Interaction Benchmark Scope:
   [issue_2473_cyclist_interaction_benchmark.md](issue_2473_cyclist_interaction_benchmark.md)
 * Issue #2459 SocNavBench / HuNavSim Mapping:

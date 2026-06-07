@@ -184,6 +184,8 @@ knowledge, not every transient iteration detail.
   [issue_2275_predictive_v2_fate.md](issue_2275_predictive_v2_fate.md)
 * Issue #2411 predictive-v2 child classification:
   [issue_2411_predictive_v2_child_classification.md](issue_2411_predictive_v2_child_classification.md)
+* Issue #2468 Adversarial Scenario Generation Roadmap:
+  [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md)
 * Issue #2470 RL Adversarial Pedestrian Policy Scope:
   [issue_2470_rl_adversarial_pedestrian_policy.md](issue_2470_rl_adversarial_pedestrian_policy.md)
 * Issue #2471 Diffusion Scenario Generation Feasibility Scope:
@@ -432,6 +434,8 @@ knowledge, not every transient iteration detail.
   [issue_1272_validation_falsification_strategy.md](issue_1272_validation_falsification_strategy.md)
 * Issue #1432 Adaptive Test Strategy Claim Audit (2026-05-22):
   [adaptive_test_claim_audit_2026-05.md](adaptive_test_claim_audit_2026-05.md)
+* Issue #2468 Adversarial Scenario Generation Roadmap (2026-06-07):
+  [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):

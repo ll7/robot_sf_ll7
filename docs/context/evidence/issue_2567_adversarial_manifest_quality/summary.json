@@ -35,8 +35,7 @@
       "count": 3,
       "mean_distance": 1.499197,
       "min_distance": 0.585564,
-      "max_distance": 2.060612,
-      "note": "Distance excludes scenario_seed; duplicate hashing still includes scenario_seed."
+      "max_distance": 2.060612
     },
     "planner_outcomes": {
       "available": true,

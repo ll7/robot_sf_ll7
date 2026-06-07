@@ -450,7 +450,131 @@ def _selection_score_example(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _summarize_hypotheses(steps: list[dict[str, Any]]) -> dict[str, Any]:
+def _terminal_outcome(done_info: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return compact terminal-outcome evidence for the diagnostic trace."""
+    last_step = steps[-1] if steps else {}
+    meta = done_info.get("meta") if isinstance(done_info.get("meta"), dict) else {}
+    if not meta and isinstance(last_step.get("meta"), dict):
+        meta = last_step["meta"]
+
+    success = bool(done_info.get("success", last_step.get("is_success", False)))
+    pedestrian_collision = bool(
+        meta.get("is_pedestrian_collision", last_step.get("is_pedestrian_collision", False))
+    )
+    obstacle_collision = bool(
+        meta.get("is_obstacle_collision", last_step.get("is_obstacle_collision", False))
+    )
+    robot_collision = bool(
+        meta.get("is_robot_collision", last_step.get("is_robot_collision", False))
+    )
+    terminated = bool(done_info.get("terminated", last_step.get("terminated", False)))
+    truncated = bool(done_info.get("truncated", last_step.get("truncated", False)))
+
+    if success:
+        outcome = "success"
+    elif pedestrian_collision:
+        outcome = "pedestrian_collision"
+    elif obstacle_collision:
+        outcome = "obstacle_collision"
+    elif robot_collision:
+        outcome = "robot_collision"
+    elif truncated:
+        outcome = "truncated"
+    elif terminated:
+        outcome = "terminated_without_success"
+    else:
+        outcome = "horizon_exhausted"
+
+    return {
+        "outcome": outcome,
+        "step": done_info.get("step", last_step.get("step")),
+        "terminated": terminated,
+        "truncated": truncated,
+        "success": success,
+        "is_pedestrian_collision": pedestrian_collision,
+        "is_obstacle_collision": obstacle_collision,
+        "is_robot_collision": robot_collision,
+    }
+
+
+def _corrective_behavior_summary(
+    steps: list[dict[str, Any]],
+    *,
+    selected_source_counts: Counter[str],
+    influence_counts: Counter[str],
+    progress_by_rank: dict[str, dict[str, Any]],
+    hypothesis_switch_count: int,
+    terminal_outcome: dict[str, Any],
+) -> dict[str, Any]:
+    """Classify whether topology near-parity evidence reached corrective behavior."""
+    topology_command_steps = int(selected_source_counts.get("topology_hypothesis", 0))
+    non_primary_influence_steps = int(
+        sum(
+            count
+            for hypothesis_id, count in influence_counts.items()
+            if hypothesis_id != "primary_route"
+        )
+    )
+    progress_values = [
+        float(row["progress_delta_m"])
+        for row in progress_by_rank.values()
+        if row.get("progress_delta_m") is not None
+    ]
+    max_progress_delta = max(progress_values, default=None)
+    positive_route_progress = max_progress_delta is not None and max_progress_delta > _EPS
+    terminal_success = bool(terminal_outcome.get("success", False))
+
+    has_corrective_signal = (
+        topology_command_steps > 0
+        and bool(influence_counts)
+        and positive_route_progress
+        and terminal_success
+    )
+    if has_corrective_signal and non_primary_influence_steps > 0:
+        decision = "continue"
+        rationale = (
+            "Topology hypothesis commands influenced the local command stream, at least one "
+            "non-primary route was selected, route progress was positive, and the slice succeeded."
+        )
+    elif has_corrective_signal:
+        decision = "revise"
+        rationale = (
+            "Topology commands influenced a successful progressing slice, but the influence stayed "
+            "on the primary route; keep the lane diagnostic and revise toward non-primary corrective "
+            "behavior."
+        )
+    elif topology_command_steps > 0 or bool(influence_counts):
+        decision = "revise"
+        rationale = (
+            "Topology signals reached command arbitration, but route progress or terminal outcome "
+            "does not yet support corrective behavior."
+        )
+    else:
+        decision = "stop"
+        rationale = (
+            "This slice did not show topology command influence, so selection diversity alone is "
+            "insufficient corrective-behavior evidence."
+        )
+
+    return {
+        "selected_route_counts": dict(sorted(influence_counts.items())),
+        "selected_source_counts": dict(sorted(selected_source_counts.items())),
+        "topology_command_steps": topology_command_steps,
+        "non_primary_topology_command_steps": non_primary_influence_steps,
+        "hypothesis_switch_count": int(hypothesis_switch_count),
+        "max_route_progress_delta_m": max_progress_delta,
+        "positive_route_progress": positive_route_progress,
+        "terminal_outcome": terminal_outcome,
+        "decision": decision,
+        "decision_rationale": rationale,
+        "claim_boundary": "diagnostic_only_not_benchmark_success",
+    }
+
+
+def _summarize_hypotheses(
+    steps: list[dict[str, Any]],
+    done_info: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Aggregate hypothesis availability, route progress, and selected sources."""
     selected_source_counts = Counter(
         str(row.get("selected_local_command_source") or "unknown") for row in steps
@@ -527,6 +651,7 @@ def _summarize_hypotheses(steps: list[dict[str, Any]]) -> dict[str, Any]:
         if len(selection_score_examples) < 10 and (example := _selection_score_example(row)):
             selection_score_examples.append(example)
 
+    terminal = _terminal_outcome(done_info or {}, steps)
     return {
         "topology_status_counts": dict(sorted(availability_counts.items())),
         "selected_source_counts": dict(sorted(selected_source_counts.items())),
@@ -535,6 +660,14 @@ def _summarize_hypotheses(steps: list[dict[str, Any]]) -> dict[str, Any]:
         "hypothesis_switch_count": hypothesis_switch_count,
         "topology_command_influence_examples": influence_examples,
         "topology_selection_score_examples": selection_score_examples,
+        "corrective_behavior": _corrective_behavior_summary(
+            steps,
+            selected_source_counts=selected_source_counts,
+            influence_counts=influence_counts,
+            progress_by_rank=progress_by_rank,
+            hypothesis_switch_count=hypothesis_switch_count,
+            terminal_outcome=terminal,
+        ),
     }
 
 
@@ -554,6 +687,8 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
         f"- Selected local command sources: `{summary['selected_source_counts']}`",
         f"- Topology command influence counts: `{summary['topology_command_influence_counts']}`",
         f"- Hypothesis switch count: `{summary['hypothesis_switch_count']}`",
+        f"- Corrective-behavior decision: `{summary['corrective_behavior']['decision']}`",
+        f"- Terminal outcome: `{summary['corrective_behavior']['terminal_outcome']['outcome']}`",
         "",
         "## Hypothesis Progress",
         "",
@@ -568,6 +703,24 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
             f"{row['last_remaining_distance_m']} | {row['progress_delta_m']} | "
             f"{row['min_static_clearance_m']} | {row['min_dynamic_clearance_m']} |"
         )
+
+    corrective = summary["corrective_behavior"]
+    lines.extend(
+        [
+            "",
+            "## Corrective Behavior",
+            "",
+            f"- Decision: `{corrective['decision']}`",
+            f"- Rationale: {corrective['decision_rationale']}",
+            f"- Selected routes: `{corrective['selected_route_counts']}`",
+            f"- Selected sources: `{corrective['selected_source_counts']}`",
+            f"- Topology-command steps: `{corrective['topology_command_steps']}`",
+            f"- Non-primary topology-command steps: `{corrective['non_primary_topology_command_steps']}`",
+            f"- Max route-progress delta: `{corrective['max_route_progress_delta_m']}`",
+            f"- Terminal outcome: `{corrective['terminal_outcome']}`",
+            "",
+        ]
+    )
 
     if summary["topology_command_influence_examples"]:
         lines.extend(
@@ -810,7 +963,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
                     }
         env.close()
 
-    summary = _summarize_hypotheses(steps)
+    summary = _summarize_hypotheses(steps, done_info)
     has_sufficient_hypotheses = any(row.get("topology_status") == "ok" for row in steps)
     diagnostic_status = "diagnostic_complete" if has_sufficient_hypotheses else "not_available"
     payload = {

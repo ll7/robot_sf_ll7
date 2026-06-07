@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections import Counter
+
 import numpy as np
 
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from scripts.validation.run_topology_hypothesis_diagnostics import (
+    _corrective_behavior_summary,
     _distinct_path,
     _extract_pedestrians,
     _find_alternative_paths,
@@ -13,6 +16,7 @@ from scripts.validation.run_topology_hypothesis_diagnostics import (
     _path_dynamic_clearance,
     _RouteHypothesisPath,
     _summarize_hypotheses,
+    _terminal_outcome,
     _topology_signature,
 )
 
@@ -166,7 +170,125 @@ def test_path_dynamic_clearance_reports_pedestrian_clearance_to_polyline() -> No
     assert _path_dynamic_clearance(path, pedestrians, ped_radius=0.3) == 0.7
 
 
-def test_summarize_hypotheses_counts_sources_and_progress() -> None:
+def test_terminal_outcome_classifies_success_and_collisions() -> None:
+    """Terminal summaries should preserve success and collision outcomes."""
+    assert _terminal_outcome(
+        {"step": 17, "success": True, "terminated": True, "meta": {}},
+        [],
+    ) == {
+        "outcome": "success",
+        "step": 17,
+        "terminated": True,
+        "truncated": False,
+        "success": True,
+        "is_pedestrian_collision": False,
+        "is_obstacle_collision": False,
+        "is_robot_collision": False,
+    }
+
+    assert (
+        _terminal_outcome(
+            {
+                "step": 5,
+                "success": False,
+                "terminated": True,
+                "meta": {"is_obstacle_collision": True},
+            },
+            [],
+        )["outcome"]
+        == "obstacle_collision"
+    )
+
+
+def test_terminal_outcome_classifies_horizon_exhaustion_from_last_step() -> None:
+    """Missing done_info should fall back to the last recorded step."""
+    assert _terminal_outcome(
+        {},
+        [
+            {
+                "step": 159,
+                "is_success": False,
+                "terminated": False,
+                "truncated": False,
+                "meta": {},
+            }
+        ],
+    ) == {
+        "outcome": "horizon_exhausted",
+        "step": 159,
+        "terminated": False,
+        "truncated": False,
+        "success": False,
+        "is_pedestrian_collision": False,
+        "is_obstacle_collision": False,
+        "is_robot_collision": False,
+    }
+
+
+def test_corrective_behavior_summary_classifies_continue() -> None:
+    """A successful non-primary influenced slice should classify as continue."""
+    summary = _corrective_behavior_summary(
+        [],
+        selected_source_counts=Counter({"topology_hypothesis": 4, "dynamic_window": 1}),
+        influence_counts=Counter({"primary_route": 1, "masked_cell_5_12": 3}),
+        progress_by_rank={"0": {"progress_delta_m": 2.0}},
+        hypothesis_switch_count=1,
+        terminal_outcome={"success": True, "outcome": "success"},
+    )
+
+    assert summary["decision"] == "continue"
+    assert summary["non_primary_topology_command_steps"] == 3
+    assert summary["positive_route_progress"] is True
+    assert summary["claim_boundary"] == "diagnostic_only_not_benchmark_success"
+
+
+def test_corrective_behavior_summary_revises_primary_only_influence() -> None:
+    """Primary-only influence is useful but not non-primary corrective evidence."""
+    summary = _corrective_behavior_summary(
+        [],
+        selected_source_counts=Counter({"topology_hypothesis": 2}),
+        influence_counts=Counter({"primary_route": 2}),
+        progress_by_rank={"0": {"progress_delta_m": 1.0}},
+        hypothesis_switch_count=0,
+        terminal_outcome={"success": True, "outcome": "success"},
+    )
+
+    assert summary["decision"] == "revise"
+    assert summary["non_primary_topology_command_steps"] == 0
+
+
+def test_corrective_behavior_summary_revises_without_terminal_success() -> None:
+    """Command influence without terminal success should classify as revise."""
+    summary = _corrective_behavior_summary(
+        [],
+        selected_source_counts=Counter({"topology_hypothesis": 2}),
+        influence_counts=Counter({"masked_cell_84_103": 2}),
+        progress_by_rank={"0": {"progress_delta_m": 0.2}},
+        hypothesis_switch_count=0,
+        terminal_outcome={"success": False, "outcome": "horizon_exhausted"},
+    )
+
+    assert summary["decision"] == "revise"
+    assert summary["non_primary_topology_command_steps"] == 2
+    assert summary["positive_route_progress"] is True
+
+
+def test_corrective_behavior_summary_stops_without_command_influence() -> None:
+    """Selection-only diversity should not count as corrective behavior."""
+    summary = _corrective_behavior_summary(
+        [],
+        selected_source_counts=Counter({"dynamic_window": 3}),
+        influence_counts=Counter(),
+        progress_by_rank={"0": {"progress_delta_m": 1.0}},
+        hypothesis_switch_count=0,
+        terminal_outcome={"success": True, "outcome": "success"},
+    )
+
+    assert summary["decision"] == "stop"
+    assert summary["topology_command_steps"] == 0
+
+
+def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() -> None:
     """The summary should preserve selected-source counts and route-progress deltas."""
     summary = _summarize_hypotheses(
         [
@@ -227,28 +349,48 @@ def test_summarize_hypotheses_counts_sources_and_progress() -> None:
                 ],
             },
         ]
+        + [
+            {
+                "topology_status": "ok",
+                "selected_local_command_source": "topology_hypothesis",
+                "topology_command_influence": {"selected_hypothesis_id": "masked_cell_5_12"},
+                "topology_hypotheses": [
+                    {
+                        "rank": 0,
+                        "corridor_name": "left_corridor_0",
+                        "route_remaining_distance_m": 7.0,
+                        "static_clearance_min_m": 0.25,
+                        "dynamic_clearance_min_m": 1.2,
+                    }
+                ],
+            }
+        ],
+        {"step": 2, "terminated": True, "success": True, "meta": {}},
     )
 
-    assert summary["topology_status_counts"] == {"ok": 2}
+    assert summary["topology_status_counts"] == {"ok": 3}
     assert summary["selected_source_counts"] == {
         "dynamic_window": 1,
         "path_follow_0.5m": 1,
+        "topology_hypothesis": 1,
     }
     assert summary["hypothesis_progress_by_rank"]["0"] == {
-        "samples": 2,
+        "samples": 3,
         "first_corridor_name": "left_corridor_0",
         "last_corridor_name": "left_corridor_0",
         "first_remaining_distance_m": 10.0,
-        "last_remaining_distance_m": 8.25,
-        "progress_delta_m": 1.75,
+        "last_remaining_distance_m": 7.0,
+        "progress_delta_m": 3.0,
         "min_static_clearance_m": 0.2,
         "min_dynamic_clearance_m": 1.0,
     }
     assert summary["topology_command_influence_counts"] == {
-        "masked_cell_5_12": 1,
+        "masked_cell_5_12": 2,
         "primary_route": 1,
     }
     assert summary["hypothesis_switch_count"] == 1
+    assert summary["corrective_behavior"]["decision"] == "continue"
+    assert summary["corrective_behavior"]["terminal_outcome"]["outcome"] == "success"
     assert summary["topology_selection_score_examples"] == [
         {
             "step": -1,

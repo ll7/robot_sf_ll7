@@ -93,6 +93,7 @@ the claim boundary with new evidence.
 | `tentabot_value_scorer_v0` | Learned-style value-scorer spike | `uv run python scripts/validation/run_policy_search_candidate.py --candidate tentabot_value_scorer_v0 --stage smoke`; upstream Tentabot remains source-side only. |
 | `actuation_aware_hybrid_rule_v0` | Synthetic AMV actuation diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate actuation_aware_hybrid_rule_v0 --stage amv_actuation_smoke`; not calibrated hardware evidence. |
 | `adaptive_proxemic_selector_v0` | Proxemic selector diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate adaptive_proxemic_selector_v0 --stage smoke` |
+| `adaptive_proxemic_selector_v1` | Proxemic selector diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate adaptive_proxemic_selector_v1 --stage smoke`; neutral-default selector remains diagnostic-only. |
 | `mpc_clearance_guarded_v1` | NMPC clearance diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate mpc_clearance_guarded_v1 --stage smoke` |
 | `planner_selector_v2_diagnostic` | Adaptive ensemble diagnostic | `uv run python scripts/validation/run_policy_search_candidate.py --candidate planner_selector_v2_diagnostic --stage smoke` |
 | `orca_residual_guarded_ppo_v0` | Runtime residual prototype | Smoke-only runtime surface; learned residual training/checkpoint lineage is pending. |

@@ -803,6 +803,9 @@ knowledge, not every transient iteration detail.
 * [Issue #2452 Mechanism-Aware Local-Navigation Suites (proposal)](issue_2452_mechanism_aware_local_nav_suites.md)
   defines seven proposed local-navigation suite contracts that group existing scenario IDs by
   failure mechanism, required traces, metrics, and claim boundaries.
+* [Issue #2453 Planner Mechanism Cards](issue_2453_planner_mechanism_cards.md)
+  records mechanism, activation, positive/negative evidence, transfer status, and next-proof
+  boundaries for active planner research candidates.
 * [Issue #2443 AMV Actuation Trace Review](issue_2443_amv_trace_review.md)
   records the compact progress-vs-clipping review for the matched AMV actuation-smoke pair and
   fails closed on missing raw frame/event IDs.

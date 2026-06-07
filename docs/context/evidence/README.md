@@ -247,6 +247,9 @@ Policy caveats:
 - `issue_2438_static_recenter_activation_closure_2026-06-07/`: compact diagnostic-only closure for
   Issue #2438, reusing the Issue #2306/#2402 activation evidence and stopping the current held-out
   transfer route without another rerun.
+- `issue_2588_static_deadlock_controlled_trace/`: compact controlled-trace summary for the
+  Issue #2452 static-deadlock suite after Issue #2586 reportability, showing one active
+  trace-change row and no terminal success rescue.
 - `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
   Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
   and baseline artifact URIs despite a valid launch packet fixture.

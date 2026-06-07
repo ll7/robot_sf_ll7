@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,14 @@ DEFAULT_FUNNEL = Path(
     "configs/policy_search/transfer/issue_2221_static_recenter_heldout_smoke.yaml"
 )
 DEFAULT_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
+STATIC_DEADLOCK_REQUIRED_TRACE_FIELDS = [
+    "low_progress_window",
+    "recenter_activation_count",
+    "distance_to_goal_delta",
+    "local_minimum_indicator",
+    "execution_mode",
+    "row_status",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -72,10 +81,33 @@ def _xy(step: dict[str, Any]) -> np.ndarray:
     return np.array([float(step.get("robot_x_m", 0.0)), float(step.get("robot_y_m", 0.0))])
 
 
+def _execution_mode(record: dict[str, Any]) -> str | None:
+    """Return the nested planner execution mode when present."""
+    metadata = record.get("algorithm_metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    planner_kinematics = metadata.get("planner_kinematics")
+    planner_kinematics = planner_kinematics if isinstance(planner_kinematics, dict) else {}
+    mode = planner_kinematics.get("execution_mode")
+    return str(mode) if mode is not None else None
+
+
+def _missing_static_deadlock_trace_fields(record: dict[str, Any]) -> list[str]:
+    """Return missing static-deadlock suite trace fields for one episode record."""
+    missing: list[str] = []
+    for field in STATIC_DEADLOCK_REQUIRED_TRACE_FIELDS:
+        if field == "execution_mode":
+            if _execution_mode(record) is None:
+                missing.append(field)
+        elif field not in record:
+            missing.append(field)
+    return missing
+
+
 def _episode_summary(record: dict[str, Any]) -> dict[str, Any]:
     """Return compact terminal fields for one record."""
     metrics = record.get("metrics")
     metrics = metrics if isinstance(metrics, dict) else {}
+    missing_trace_fields = _missing_static_deadlock_trace_fields(record)
     return {
         "status": record.get("status"),
         "termination_reason": record.get("termination_reason"),
@@ -83,7 +115,46 @@ def _episode_summary(record: dict[str, Any]) -> dict[str, Any]:
         "steps": int(record.get("steps", 0)),
         "near_misses": int(metrics.get("near_misses", 0) or 0),
         "collisions": int(metrics.get("collisions", 0) or 0),
+        "row_status": record.get("row_status"),
+        "execution_mode": _execution_mode(record),
+        "low_progress_window": record.get("low_progress_window"),
+        "recenter_activation_count": int(record.get("recenter_activation_count", 0) or 0),
+        "distance_to_goal_delta": record.get("distance_to_goal_delta"),
+        "local_minimum_indicator": record.get("local_minimum_indicator"),
+        "missing_required_trace_fields": missing_trace_fields,
+        "all_required_trace_fields_present": not missing_trace_fields,
     }
+
+
+def _terminal_outcome_summary(episode_summary: dict[str, Any]) -> dict[str, Any]:
+    """Return only terminal outcome fields from an enriched episode summary."""
+    return {
+        "status": episode_summary.get("status"),
+        "termination_reason": episode_summary.get("termination_reason"),
+        "success": episode_summary.get("success"),
+        "steps": episode_summary.get("steps"),
+        "near_misses": episode_summary.get("near_misses"),
+        "collisions": episode_summary.get("collisions"),
+    }
+
+
+def _paired_row_status(
+    *,
+    baseline_terminal: dict[str, Any],
+    mechanism_terminal: dict[str, Any],
+) -> str:
+    """Classify a baseline/intervention pair for controlled-trace accounting."""
+    terminals = [baseline_terminal, mechanism_terminal]
+    if any(not terminal.get("all_required_trace_fields_present") for terminal in terminals):
+        return "excluded"
+    if any(terminal.get("row_status") == "failed" for terminal in terminals):
+        return "failed"
+    execution_modes = {terminal.get("execution_mode") for terminal in terminals}
+    if "fallback" in execution_modes or "degraded" in execution_modes:
+        return "degraded"
+    if any(mode in {None, "not_available"} for mode in execution_modes):
+        return "unavailable"
+    return "completed"
 
 
 def _activation_summary(
@@ -135,13 +206,27 @@ def _activation_summary(
 
     baseline_terminal = _episode_summary(baseline_record)
     mechanism_terminal = _episode_summary(mechanism_record)
-    terminal_changed = baseline_terminal != mechanism_terminal
+    terminal_changed = _terminal_outcome_summary(baseline_terminal) != _terminal_outcome_summary(
+        mechanism_terminal
+    )
+    trace_changed = bool(
+        source_changed
+        or trajectory_delta not in {None, 0.0}
+        or baseline_terminal.get("low_progress_window")
+        != mechanism_terminal.get("low_progress_window")
+        or baseline_terminal.get("local_minimum_indicator")
+        != mechanism_terminal.get("local_minimum_indicator")
+        or baseline_terminal.get("distance_to_goal_delta")
+        != mechanism_terminal.get("distance_to_goal_delta")
+    )
     if baseline_terminal["success"] and mechanism_terminal["success"]:
         classification = "comparator_already_solved_case"
     elif not activated:
         classification = "mechanism_inactive"
-    elif not terminal_changed:
-        classification = "mechanism_active_but_irrelevant"
+    elif terminal_changed:
+        classification = "mechanism_active_terminal_changed"
+    elif trace_changed:
+        classification = "mechanism_active_trace_changed"
     else:
         classification = "mechanism_active_but_irrelevant"
 
@@ -150,14 +235,52 @@ def _activation_summary(
         "seed": baseline_record.get("seed"),
         "baseline": baseline_terminal,
         "mechanism": mechanism_terminal,
+        "paired_row_status": _paired_row_status(
+            baseline_terminal=baseline_terminal,
+            mechanism_terminal=mechanism_terminal,
+        ),
         "activation_count": len(activated),
         "first_activation_step": first_activation_step,
         "selected_command_source": selected_sources,
         "command_source_changed": source_changed,
+        "trace_changed": trace_changed,
         "progress_delta_after_activation": progress_delta_after_activation,
         "trajectory_delta_m": trajectory_delta,
         "terminal_outcome_changed": terminal_changed,
         "classification": classification,
+    }
+
+
+def _trace_run_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return aggregate controlled-trace accounting for activation rows."""
+    classification_counts = Counter(str(row.get("classification", "unknown")) for row in rows)
+    paired_row_status_counts = Counter(str(row.get("paired_row_status", "unknown")) for row in rows)
+    baseline_row_status_counts = Counter(
+        str(row.get("baseline", {}).get("row_status", "missing")) for row in rows
+    )
+    mechanism_row_status_counts = Counter(
+        str(row.get("mechanism", {}).get("row_status", "missing")) for row in rows
+    )
+    missing_required_trace_fields = {
+        f"{row.get('scenario_id')}:{row.get('seed')}": {
+            "baseline": row.get("baseline", {}).get("missing_required_trace_fields", []),
+            "mechanism": row.get("mechanism", {}).get("missing_required_trace_fields", []),
+        }
+        for row in rows
+        if row.get("baseline", {}).get("missing_required_trace_fields")
+        or row.get("mechanism", {}).get("missing_required_trace_fields")
+    }
+    return {
+        "rows": len(rows),
+        "classification_counts": dict(sorted(classification_counts.items())),
+        "paired_row_status_counts": dict(sorted(paired_row_status_counts.items())),
+        "baseline_row_status_counts": dict(sorted(baseline_row_status_counts.items())),
+        "mechanism_row_status_counts": dict(sorted(mechanism_row_status_counts.items())),
+        "all_required_trace_fields_present": not missing_required_trace_fields,
+        "missing_required_trace_fields": missing_required_trace_fields,
+        "activation_count_total": int(
+            sum(int(row.get("activation_count", 0) or 0) for row in rows)
+        ),
     }
 
 
@@ -253,6 +376,8 @@ def main() -> None:
         "dt": dt,
         "baseline_candidate": args.baseline_candidate,
         "mechanism_candidate": args.mechanism_candidate,
+        "required_trace_fields": STATIC_DEADLOCK_REQUIRED_TRACE_FIELDS,
+        "summary": _trace_run_summary(rows),
         "rows": rows,
     }
     args.output_json.parent.mkdir(parents=True, exist_ok=True)

@@ -65,5 +65,7 @@ rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench --quie
 ## Claim Boundary
 
 The change proves static-deadlock trace-field reportability for the bounded #2544 smoke matrix. It
-does not prove planner ranking, mechanism benefit, transfer, or benchmark-candidate status. Follow-up
-issue #2588 tracks the next controlled baseline/intervention trace slice.
+does not prove planner ranking, mechanism benefit, transfer, or benchmark-candidate status.
+Successor issue #2588 ran the next controlled baseline/intervention trace slice and classified it
+as `controlled_trace_negative_mixed`; see
+[issue_2588_static_deadlock_controlled_trace.md](issue_2588_static_deadlock_controlled_trace.md).

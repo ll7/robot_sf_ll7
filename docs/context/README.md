@@ -800,6 +800,9 @@ knowledge, not every transient iteration detail.
 * [Issue #2456 AMV Local Navigation Evaluation Suite (proposal)](issue_2456_amv_local_nav_evaluation_suite.md)
   defines the proposed AMV local navigation suite structure with eight evaluation dimensions,
   evidence-boundary classification, and related issue links.
+* [Issue #2452 Mechanism-Aware Local-Navigation Suites (proposal)](issue_2452_mechanism_aware_local_nav_suites.md)
+  defines seven proposed local-navigation suite contracts that group existing scenario IDs by
+  failure mechanism, required traces, metrics, and claim boundaries.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.

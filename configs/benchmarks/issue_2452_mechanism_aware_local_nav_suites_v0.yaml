@@ -1,0 +1,316 @@
+name: issue_2452_mechanism_aware_local_nav_suites_v0
+contract_kind: benchmark-suite-proposal
+issue: 2452
+evidence_tier: proposal
+benchmark_evidence: false
+status: proposed
+
+registry_id: mechanism_aware_local_nav_suites_v0
+schema_version: mechanism_aware_local_nav_suites.v0
+suite_version: "0"
+claim_boundary: >
+  This file defines proposed mechanism-aware local-navigation benchmark suites and their
+  required trace and metric surfaces. It is launch infrastructure only: it does not establish
+  benchmark results, planner rankings, mechanism transfer, AMV realism, paper-facing claims, or
+  evidence that any listed intervention improves navigation. Every suite below requires a later
+  executable run on native or explicitly eligible adapter rows before it can support evidence.
+
+purpose: >
+  Group existing Robot SF scenario IDs into small mechanism-aware local-navigation suite contracts
+  so follow-up benchmark work can ask why a planner succeeds or fails instead of relying on
+  aggregate success and collision rates alone.
+
+related_issues:
+  - issue: 2220
+    role: taxonomy_source
+    status: current_synthesis
+    claim: >
+      Supplies the failure-mechanism vocabulary used by these suite IDs. This manifest does not
+      promote taxonomy labels to observed causal proof.
+  - issue: 2232
+    role: transfer_protocol
+    status: proposal
+    claim: >
+      Supplies the transfer-evidence boundary. This manifest does not establish transfer support.
+  - issue: 2389
+    role: research_thread
+    status: diagnostic_synthesis
+    claim: >
+      Supplies current stop, revise, and blocked directions for mechanism-aware evaluation. This
+      manifest preserves that diagnostic-only boundary.
+  - issue: 2447
+    role: publication_guard
+    status: open
+    claim: >
+      Requires nonzero mechanism signal before mechanism-panel publication. These suites must not
+      be used for publication panels until that gate is satisfied.
+
+suite_schema:
+  required_fields:
+    - suite_id
+    - target_mechanism
+    - scenario_ids
+    - seed_set
+    - baseline_candidates
+    - intervention_candidates
+    - required_trace_fields
+    - required_metrics
+    - minimum_evidence_tier
+    - claim_boundary
+  evidence_tiers:
+    proposal: Structure only; no executable evidence.
+    diagnostic_smoke: One bounded native or eligible-adapter run with row-status accounting.
+    controlled_trace: Matched baseline/intervention rows with required trace fields present.
+    benchmark_candidate: Controlled trace evidence across the declared seed set without fallback,
+      degraded, failed, or not-available rows in the compared set.
+
+suites:
+  - suite_id: static_deadlock_recovery
+    target_mechanism: static_deadlock_or_local_minimum
+    scenario_ids:
+      - classic_bottleneck_low
+      - classic_head_on_corridor_low
+      - narrow_passage
+    seed_set: [111, 112, 113]
+    baseline_candidates:
+      - orca
+      - social_force
+      - hybrid_rule_base
+    intervention_candidates:
+      - static_recenter_only
+      - escape_recenter_pair
+    required_trace_fields:
+      - low_progress_window
+      - recenter_activation_count
+      - distance_to_goal_delta
+      - local_minimum_indicator
+      - execution_mode
+      - row_status
+    required_metrics:
+      - success_rate
+      - timeout_rate
+      - progress_per_step
+      - minimum_clearance_m
+      - deadlock_count
+    minimum_evidence_tier: controlled_trace
+    claim_boundary: >
+      May only evaluate whether a predeclared static-deadlock intervention activates and changes
+      progress on the listed rows. It does not establish broad planner improvement.
+
+  - suite_id: topology_hypothesis_selection
+    target_mechanism: route_or_topology_mismatch
+    scenario_ids:
+      - classic_realworld_double_bottleneck_high
+      - classic_t_intersection_medium
+      - symmetry_ambiguous_choice
+    seed_set: [111, 112, 113]
+    baseline_candidates:
+      - hybrid_rule_base
+      - orca
+    intervention_candidates:
+      - topology_guidance
+      - near_parity_selector
+    required_trace_fields:
+      - route_candidate_count
+      - selected_route_id
+      - selected_route_rank
+      - selection_score_margin
+      - non_primary_route_available
+      - command_source
+      - row_status
+    required_metrics:
+      - success_rate
+      - route_progress_ratio
+      - minimum_clearance_m
+      - selection_flip_rate
+      - near_miss_rate
+    minimum_evidence_tier: controlled_trace
+    claim_boundary: >
+      May only test route-selection behavior on frozen rows with visible selector diagnostics. It
+      does not establish mechanism transfer or topology-aware superiority.
+
+  - suite_id: dynamic_phase_sensitivity
+    target_mechanism: dynamic_phase_or_order_sensitivity
+    scenario_ids:
+      - francis2023_intersection_wait
+      - francis2023_join_group
+      - classic_merging_low
+    seed_set: [111, 112, 113]
+    baseline_candidates:
+      - orca
+      - social_force
+      - hybrid_rule_base
+    intervention_candidates:
+      - phase_robust_planner
+      - timing_aware_yielding
+    required_trace_fields:
+      - pedestrian_phase_offset_s
+      - pedestrian_speed_scale
+      - yield_start_time_s
+      - nearest_pedestrian_id
+      - time_to_collision_min_s
+      - row_status
+    required_metrics:
+      - success_rate
+      - collision_rate
+      - minimum_clearance_m
+      - wait_time_s
+      - phase_sensitivity_delta
+    minimum_evidence_tier: controlled_trace
+    claim_boundary: >
+      May only evaluate paired timing, speed, or wait perturbations on the listed scenarios. It
+      does not prove real-world pedestrian intent handling.
+
+  - suite_id: proxemic_tradeoff
+    target_mechanism: proxemic_or_clearance_tradeoff
+    scenario_ids:
+      - classic_group_crossing_high
+      - classic_overtaking_medium
+      - classic_t_intersection_medium
+    seed_set: [111, 112, 113]
+    baseline_candidates:
+      - orca
+      - social_force
+      - hybrid_rule_base
+    intervention_candidates:
+      - proxemic_cost_tuned
+      - exposure_aware_selector
+    required_trace_fields:
+      - force_exposure_steps
+      - comfort_exposure_steps
+      - minimum_clearance_m
+      - pedestrian_density
+      - speed_profile
+      - row_status
+    required_metrics:
+      - success_rate
+      - average_speed_m_s
+      - minimum_clearance_m
+      - near_miss_rate
+      - force_exposure_rate
+      - comfort_exposure_rate
+    minimum_evidence_tier: controlled_trace
+    claim_boundary: >
+      May only classify progress-clearance tradeoffs when exposure metrics and safety gates are
+      present beside success. It does not establish a preferred social-comfort weighting.
+
+  - suite_id: actuation_feasibility
+    target_mechanism: actuation_or_command_saturation
+    scenario_ids:
+      - classic_head_on_corridor_low
+      - classic_overtaking_medium
+      - classic_bottleneck_high
+    seed_set: [111, 112, 113]
+    baseline_candidates:
+      - social_force
+      - orca
+      - goal
+    intervention_candidates:
+      - actuation_aware_hybrid_rule
+      - command_projection_guard
+    required_trace_fields:
+      - command_clip_fraction
+      - yaw_rate_saturation_fraction
+      - signed_braking_peak_m_s2
+      - infeasible_rate
+      - projection_rate
+      - row_status
+    required_metrics:
+      - success_rate
+      - timeout_rate
+      - command_clip_fraction
+      - yaw_rate_saturation_fraction
+      - infeasible_rate
+    minimum_evidence_tier: controlled_trace
+    claim_boundary: >
+      May only evaluate synthetic or proxy actuation stress when actuation metadata is emitted. It
+      does not establish hardware-calibrated AMV validity.
+
+  - suite_id: guard_domination
+    target_mechanism: guard_or_handoff_domination
+    scenario_ids:
+      - classic_crossing_low
+      - classic_bottleneck_low
+      - classic_head_on_corridor_low
+    seed_set: [111, 112, 113]
+    baseline_candidates:
+      - guarded_ppo
+      - orca_residual
+      - hybrid_rule_base
+    intervention_candidates:
+      - guard_ablation
+      - handoff_contract_probe
+    required_trace_fields:
+      - guard_veto_count
+      - guard_reason
+      - raw_action
+      - guarded_action
+      - command_source
+      - fallback_or_degraded_status
+      - row_status
+    required_metrics:
+      - success_rate
+      - collision_rate
+      - progress_per_step
+      - guard_veto_rate
+      - timeout_rate
+    minimum_evidence_tier: diagnostic_smoke
+    claim_boundary: >
+      May only diagnose whether guards or adapters dominate the action path. It does not claim the
+      guarded or learned policy itself is better or worse without matched controls.
+
+  - suite_id: learned_low_progress
+    target_mechanism: learned_policy_low_progress
+    scenario_ids:
+      - classic_cross_trap_low
+      - classic_group_crossing_high
+      - classic_head_on_corridor_low
+    seed_set: [111, 112, 113]
+    baseline_candidates:
+      - orca
+      - hybrid_rule_base
+    intervention_candidates:
+      - guarded_ppo
+      - orca_residual
+      - learned_risk_model
+    required_trace_fields:
+      - learned_action
+      - residual_contribution_norm
+      - progress_per_step
+      - timeout_reason
+      - policy_checkpoint_uri
+      - artifact_checksum
+      - row_status
+    required_metrics:
+      - success_rate
+      - timeout_rate
+      - progress_per_step
+      - collision_rate
+      - residual_contribution_norm_mean
+    minimum_evidence_tier: diagnostic_smoke
+    claim_boundary: >
+      May only diagnose low-progress learned or learned-adjacent rows when checkpoint provenance
+      and contribution traces are available. It does not establish a learned-policy benchmark rank.
+
+fallback_policy:
+  fallback_is_success: false
+  degraded_is_success: false
+  not_available_is_success: false
+  failed_is_success: false
+  rule: >
+    Fallback, degraded, failed, missing, partial, and not-available rows must remain visible in
+    row-status accounting and excluded from suite-strengthening evidence unless the issue
+    explicitly measures that unavailable mode.
+
+stop_rule:
+  initial_structure: >
+    Stop at proposal status until a follow-up issue binds one suite to executable configs, native or
+    eligible adapter planner rows, and durable row-status artifacts.
+  promote: >
+    Promote a suite only after every required trace field and metric is present on matched baseline
+    and intervention rows for the declared seed set, with no fallback or degraded rows counted as
+    success evidence.
+  revise: >
+    Revise the suite if a listed scenario cannot execute under the required trace contract, if a
+    mechanism label maps poorly to the #2220 taxonomy, or if #2447 blocks publication due to zero
+    mechanism signal.

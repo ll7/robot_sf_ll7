@@ -10,6 +10,9 @@ Related surfaces:
 - Adversarial scenario search: `robot_sf/adversarial/` (search-based NPC spawn/route perturbation)
 - Adversarial generation protocol: `docs/context/issue_1457_adversarial_generation_protocol.md`
 - Adversarial failure archive: `docs/context/issue_1237_adversarial_failure_archive.md`
+- Adversarial manifest smoke: `docs/context/issue_2562_adversarial_manifest_smoke.md`
+- Adversarial manifest quality metrics: `docs/context/issue_2567_adversarial_manifest_quality.md`
+- Learned-expansion gate: `docs/context/issue_2568_adversarial_expansion_gate.md`
 - NPC ped behavior: `robot_sf/ped_npc/ped_behavior.py` (CrowdedZone, FollowRoute, SinglePedestrian)
 - Pedestrian definition: `robot_sf/nav/map_config.py:SinglePedestrianDefinition`
 - Adversarial force module: `robot_sf/ped_npc/adversial_ped_force.py`
@@ -174,6 +177,12 @@ The recommended first executable spike (that does not require RL training) is:
 The spike proves the action→config pipeline, the reward decomposition, and the rejection
 criteria — all without any training, GPU, or learned behavior.
 
+Before any broad RL adversary training, the generated action-to-config batches must also satisfy
+the Issue #2568 learned-expansion gate: run through the Issue #2562 manifest-smoke path, summarize
+validity, degeneracy, duplicate/novelty, perturbation, and planner-yield signals with the
+Issue #2567 quality metrics, and keep the result labeled diagnostic unless a later certified
+benchmark issue supplies durable benchmark proof.
+
 ## Stop Rule
 
 Work on this issue is complete when all of the following hold:
@@ -202,6 +211,8 @@ first:
 - [ ] A benchmark-config manifest that enumerates the planner/scenario combinations for
       adversary training (adversary trains against multiple planners to avoid overfitting)
 - [ ] Replay traces from the deterministic smoke as baseline comparison data
+- [ ] An Issue #2567-style quality summary for the manifest batch that will seed or evaluate the
+      learned adversary, linked through the Issue #2568 gate.
 
 ### Compute (estimate for a v0 proof-of-concept PPO adversary)
 - [ ] CPU-only training for v0: feasible for 1-NPC adversary with ~4 GB RAM and ~1 hour per
@@ -236,6 +247,10 @@ It does **not**:
 A reward decomposition records a proposed optimization target; the action-to-config
 transformer, simulation smoke, and rejection-criteria spike remain separate gates that must
 be completed before any adversary-training claim is made.
+
+The Issue #2568 gate is an additional workflow gate: even after the transformer smoke exists,
+broad RL expansion must show useful, non-degenerate manifest-batch behavior under the Issue #2567
+metrics before training is treated as ready.
 
 ## Validation
 

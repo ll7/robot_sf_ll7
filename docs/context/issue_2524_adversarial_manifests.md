@@ -15,7 +15,7 @@ Related surfaces:
 
 This issue implements the first bounded `adversarial_scenario_manifest.v1` candidate generator
 and validator, following the common-manifest recommendation from
-[issue #2468](https://github.com/ll7/robot_sf_ll7/issues/2468). The generator accepts any
+[Issue #2468](https://github.com/ll7/robot_sf_ll7/issues/2468). The generator accepts any
 `SearchSpaceConfig`-compatible search space and produces deterministic candidate manifests with
 fail-closed validation.
 
@@ -120,11 +120,14 @@ JSON parsed successfully, and the context catalog consistency check passed.
   is made.
 - The generator is bounded to `SearchSpaceConfig`-compatible random search. RL, diffusion, or
   LLM-assisted generators would need their own adapters to emit the same manifest schema.
+- Broad RL, diffusion, or learned-proposal expansion must also pass the Issue #2562 planner-smoke
+  path and Issue #2567 quality metrics under the Issue #2568 learned-expansion gate before it is
+  treated as ready.
 
 ## Follow-Up Risks
 
 - The manifest schema is intentionally minimal. Additional fields (pedestrian lists, route overrides,
-  objective weights) should be added when the panel candidate manifest (#2270) or the RL adversary
-  (#2470) needs them.
+  objective weights) should be added when the panel candidate manifest (Issue #2270) or the RL
+  adversary (Issue #2470) needs them.
 - The `evidence_boundary` field is a string caveat, not an enforced gate. A future certifier or
   benchmark runner should reject manifests that claim benchmark evidence without separate promotion.

@@ -11,6 +11,9 @@ Related surfaces:
 - Scenario certification: `robot_sf/scenario_certification/v1.py`
 - Adversarial generation protocol: `docs/context/issue_1457_adversarial_generation_protocol.md`
 - Adversarial failure archive: `docs/context/issue_1237_adversarial_failure_archive.md`
+- Adversarial manifest smoke: `docs/context/issue_2562_adversarial_manifest_smoke.md`
+- Adversarial manifest quality metrics: `docs/context/issue_2567_adversarial_manifest_quality.md`
+- Learned-expansion gate: `docs/context/issue_2568_adversarial_expansion_gate.md`
 - Failure mechanism classifier: `docs/context/issue_2012_failure_mechanism_classifier.md`
 - Scenario contract docs: `docs/scenario_contracts.md`
 - Scenario config archetypes: `configs/scenarios/archetypes/`
@@ -88,6 +91,13 @@ The validation gate must pass all of:
 
 Scenarios that fail any validation gate are rejected fail-closed and recorded as
 `diffusion_generation_failed` — they must not enter benchmark scenario sets.
+
+Before diffusion training or broad generated-scenario expansion starts, the proposed generated
+manifest batches must also pass the Issue #2568 workflow gate: run an Issue #2562-style manifest
+smoke, summarize Issue #2567 quality metrics, and reject or label as diagnostic any invalid,
+duplicate, degenerate, fallback/degraded, or low-yield batch. This gate does not certify realism or
+benchmark strength; it only prevents learned generation from proceeding on unproven manifest
+behavior.
 
 ## Compute And Data Prerequisites
 Before any diffusion training is attempted, the worktree must satisfy:
@@ -168,6 +178,10 @@ It does **not**:
 A scenario manifest schema records a proposed interface; scenario certification, trace evidence,
 and data-grounded validation remain separate gates that must be completed before any diffusion
 claim is made.
+
+The Issue #2568 gate is the current cross-method workflow gate for broad learned adversarial
+expansion. Passing it is prerequisite hygiene, not evidence that diffusion produces realistic or
+benchmark-useful scenarios.
 
 ## Validation
 ```bash

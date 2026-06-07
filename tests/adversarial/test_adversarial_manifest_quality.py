@@ -11,6 +11,7 @@ import yaml
 from robot_sf.adversarial.config import CandidateSpec, Pose2D
 from robot_sf.adversarial.manifest_quality import (
     MANIFEST_QUALITY_SCHEMA_VERSION,
+    _load_records,
     summarize_adversarial_manifest_quality,
 )
 from robot_sf.adversarial.manifest_quality import main as quality_cli_main
@@ -63,6 +64,15 @@ def _write_manifest(path: Path, controls: dict, status: str) -> None:
     )
 
 
+def _write_manifest_without_schema(path: Path, controls: dict, status: str) -> None:
+    payload = _manifest_payload(controls, status)
+    del payload["schema_version"]
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+
 def test_summarize_manifest_rates_and_novelty(tmp_path: Path) -> None:
     controls_a = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
     controls_b = _candidate_controls(start_x=1.5, start_y=2.0, goal_x=5.0, goal_y=2.0)
@@ -87,6 +97,17 @@ def test_summarize_manifest_rates_and_novelty(tmp_path: Path) -> None:
     assert result.unique_hash_count == 3
     assert result.novelty_rate == 0.75
     assert result.duplicate_rate == 0.25
+
+
+def test_missing_manifest_schema_version_stays_none(tmp_path: Path) -> None:
+    controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    manifest_path = tmp_path / "a.yaml"
+    _write_manifest_without_schema(manifest_path, controls, "valid")
+
+    records, parse_errors = _load_records([manifest_path], reference_vector=None)
+
+    assert parse_errors == []
+    assert records[0].schema_version is None
 
 
 def test_summarize_perturbation_distance(tmp_path: Path) -> None:
@@ -250,6 +271,41 @@ def test_aggregate_success_yield_requires_count_like_sum(tmp_path: Path) -> None
     assert planner.episodes == 2
     assert planner.failure_count is None
     assert planner.failure_yield is None
+
+
+def test_aggregate_episode_count_preserves_written_zero(tmp_path: Path) -> None:
+    controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    _write_manifest(tmp_path / "a.yaml", controls, "valid")
+
+    smoke_summary = tmp_path / "smoke_summary.json"
+    smoke_summary.write_text(
+        json.dumps(
+            {
+                "planner_runs": [
+                    {
+                        "planner": "empty",
+                        "written": 0,
+                        "total_jobs": 2,
+                        "metrics": {
+                            "success": {"sum": 0.0},
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = summarize_adversarial_manifest_quality(
+        [tmp_path],
+        smoke_summary_json=smoke_summary,
+    )
+
+    assert result.planner_outcomes is not None
+    planner = result.planner_outcomes.planners[0]
+    assert planner.episodes == 0
+    assert planner.failure_count == 0
+    assert planner.failure_yield == 0.0
 
 
 def test_manifest_quality_cli_writes_output_json(tmp_path: Path) -> None:

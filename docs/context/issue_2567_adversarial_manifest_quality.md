@@ -92,6 +92,6 @@ uv run python scripts/tools/summarize_adversarial_manifest_quality.py \
   --output-json output/adversarial/issue2567_quality_cli_smoke/quality_summary.json
 ```
 
-Observed result: manifest-quality and existing manifest tests passed with `49 passed`; Ruff check
+Observed result: manifest-quality and existing manifest tests passed with `51 passed`; Ruff check
 and format check passed; the CLI smoke produced `adversarial_manifest_quality_summary.v1` with
 aggregate planner yields from the tracked #2562 summary.

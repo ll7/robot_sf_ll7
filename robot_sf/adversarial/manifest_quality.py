@@ -356,6 +356,8 @@ def _load_records(
             status = _manifest_status(payload)
             status = status if status in VALID_STATUSES else "invalid"
             manifest_hash = _manifest_hash(payload)
+            schema_version = payload.get("schema_version")
+            schema_version = str(schema_version) if schema_version is not None else None
             perturbation_distance = None
             if reference_vector is not None:
                 candidate_vector = _control_vector(controls)
@@ -374,7 +376,7 @@ def _load_records(
                 ManifestQualityRecord(
                     path=manifest_path.as_posix(),
                     status=status,
-                    schema_version=str(payload.get("schema_version")),
+                    schema_version=schema_version,
                     normalized_control_hash=manifest_hash,
                     perturbation_distance=perturbation_distance,
                 )
@@ -571,7 +573,9 @@ def _summarize_planner_run_from_aggregates(
 
     episodes = _safe_int(metrics.get("episodes"))
     if episodes is None:
-        episodes = _safe_int(run.get("written")) or _safe_int(run.get("total_jobs"))
+        episodes = _safe_int(run.get("written"))
+        if episodes is None:
+            episodes = _safe_int(run.get("total_jobs"))
     success_count = _count_like_sum(_metric_stat(metrics, "success", "sum"), episodes)
     failure_count = None
     failure_yield = None

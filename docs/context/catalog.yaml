@@ -265,6 +265,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/dissertation_claim_export_candidate_report.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/mechanism_closure_status.md
     status: current
     freshness: maintained

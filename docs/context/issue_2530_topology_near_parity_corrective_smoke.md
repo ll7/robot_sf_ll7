@@ -62,11 +62,12 @@ meters. This is a useful negative/diagnostic result: topology should stay in `re
 
 ## Next Direction
 
-The next smallest proof step is a paired or broadened diagnostic that distinguishes whether the
-failure is mainly hypothesis availability, weak command arbitration, horizon/route-progress
-accounting, or near-parity parameterization. The run should keep the diagnostic-only boundary and
-compare against a gate-disabled or baseline-local-policy slice before treating any outcome as
-planner improvement.
+[#2563](issue_2563_topology_corrective_revision.md) selects
+`primary_route_reuse_penalty_under_near_parity_alternatives` as the next concrete revision
+hypothesis. The next smallest proof step is a paired diagnostic that tests whether that penalty
+preserves non-primary topology-command influence while improving route progress or terminal
+behavior. The run should keep the diagnostic-only boundary and compare against a gate-disabled or
+baseline-local-policy slice before treating any outcome as planner improvement.
 
 ## Validation
 

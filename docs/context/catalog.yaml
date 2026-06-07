@@ -225,6 +225,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2563_topology_corrective_revision.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/mechanism_closure_status.md
     status: current
     freshness: maintained

@@ -545,6 +545,14 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2524_adversarial_manifests.md
+    status: current
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_2524_adversarial_manifests/summary.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
   - path: docs/context/issue_2527_waiting_crossing_fixture.md
     status: current
     freshness: maintained

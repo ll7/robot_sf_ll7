@@ -2,7 +2,7 @@
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/2228>
 
-Status: current navigation dashboard as of 2026-06-05.
+Status: current navigation dashboard as of 2026-06-07.
 
 ## Purpose
 
@@ -41,6 +41,11 @@ Status vocabulary:
 
 ## Queue Guidance
 
+Issue #2571 adds a compact next-cycle queue for the current research focus: adversarial manifest
+quality, oracle trace artifact access, and coupled signal-state/ScenarioBelief uncertainty
+semantics. Use [issue_2571_active_research_queue.md](issue_2571_active_research_queue.md) as the
+handoff surface for that queue, while keeping GitHub issues as the executable work system.
+
 Given the current evidence state, the next research-result issues should favor work that moves a
 claim boundary rather than adding another local diagnostic with the same limitation:
 
@@ -54,9 +59,12 @@ claim boundary rather than adding another local diagnostic with the same limitat
    follow-through.
 4. Keep topology benchmark and leaderboard claims frozen until the #2563 primary-route
    reuse-penalty hypothesis is tested in a paired diagnostic such as issue #2540.
-5. Use learned-policy work only when it changes the interface or proof gate, not when it repeats the
+5. Keep adversarial RL/diffusion expansion gated on #2567/#2568 until the manifest smoke has
+   quality metrics, and keep oracle-imitation training gated on #2561/#2569 until durable trace
+   artifact access exists.
+6. Use learned-policy work only when it changes the interface or proof gate, not when it repeats the
    generic continuation path already classified in the learned-policy synthesis.
-6. Use simulator-speed work when the research queue is exhausted or when speed unlocks a named
+7. Use simulator-speed work when the research queue is exhausted or when speed unlocks a named
    benchmark/proof run.
 
 ## Update Triggers

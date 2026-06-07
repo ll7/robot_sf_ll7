@@ -1,0 +1,133 @@
+{
+  "issue": 2530,
+  "candidate": "topology_guided_hybrid_rule_v0",
+  "revision": "topology_hypothesis_near_parity_diversity_gate_v0",
+  "classification": "revise",
+  "diagnostic_status": "diagnostic_complete",
+  "claim_boundary": "diagnostic_only_not_benchmark_success",
+  "scenario_id": "classic_realworld_double_bottleneck_high",
+  "stage": "full_matrix",
+  "seed": 111,
+  "horizon": 160,
+  "source_command": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 PYGAME_HIDE_SUPPORT_PROMPT=1 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_topology_hypothesis_diagnostics.py --candidate topology_guided_hybrid_rule_v0 --stage full_matrix --scenario-name classic_realworld_double_bottleneck_high --seed 111 --horizon 160 --max-hypotheses 3 --min-hypotheses 2 --output-dir <ignored-diagnostic-output-dir>",
+  "source_revision_context": "Generated from the issue-2530 worktree after applying the corrective-behavior summary changes in this PR; final branch-head validation is recorded in the PR.",
+  "raw_output_retention": "Raw diagnostic trace and generated Markdown report remained in the ignored local artifact tree; this tracked summary is the durable reviewable evidence.",
+  "topology_status_counts": {
+    "insufficient_hypotheses": 70,
+    "ok": 90
+  },
+  "selected_local_command_source_counts": {
+    "dynamic_window": 121,
+    "path_follow_0.5m": 2,
+    "route_guide": 4,
+    "topology_hypothesis": 33
+  },
+  "route_selector_selected_hypothesis_counts": {
+    "masked_cell_71_79": 17,
+    "masked_cell_71_80": 2,
+    "masked_cell_71_81": 2,
+    "masked_cell_71_82": 2,
+    "masked_cell_71_83": 1,
+    "masked_cell_71_84": 2,
+    "masked_cell_71_87": 1,
+    "masked_cell_83_103": 1,
+    "masked_cell_84_103": 7,
+    "masked_cell_85_103": 2,
+    "masked_cell_87_79": 5,
+    "primary_route": 56
+  },
+  "selected_row_near_parity_gate_reasons": {
+    "eligible_near_parity_alternative": 14,
+    "route_distance_exceeds_slack": 25,
+    "selected_non_primary_near_parity": 42,
+    "static_clearance_floor_failed": 17
+  },
+  "topology_command_influence_counts": {
+    "masked_cell_84_103": 6,
+    "masked_cell_85_103": 1,
+    "primary_route": 26
+  },
+  "corrective_behavior": {
+    "selected_route_counts": {
+      "masked_cell_84_103": 6,
+      "masked_cell_85_103": 1,
+      "primary_route": 26
+    },
+    "topology_command_steps": 33,
+    "non_primary_topology_command_steps": 7,
+    "hypothesis_switch_count": 3,
+    "max_route_progress_delta_m": 0.16812408921843236,
+    "positive_route_progress": true,
+    "terminal_outcome": {
+      "outcome": "horizon_exhausted",
+      "step": 159,
+      "terminated": false,
+      "truncated": false,
+      "success": false,
+      "is_pedestrian_collision": false,
+      "is_obstacle_collision": false,
+      "is_robot_collision": false
+    },
+    "decision": "revise",
+    "decision_rationale": "Topology signals reached command arbitration, but route progress or terminal outcome does not yet support corrective behavior."
+  },
+  "hypothesis_progress_by_rank": {
+    "0": {
+      "samples": 108,
+      "first_corridor_name": "left_corridor_0",
+      "last_corridor_name": "right_corridor_0",
+      "first_remaining_distance_m": 2.3313708846386088,
+      "last_remaining_distance_m": 15.725483633921867,
+      "progress_delta_m": -13.394112749283257,
+      "min_static_clearance_m": 0.20000000298023224,
+      "min_dynamic_clearance_m": 0.6522960007333864
+    },
+    "1": {
+      "samples": 90,
+      "first_corridor_name": "right_corridor_1",
+      "last_corridor_name": "right_corridor_1",
+      "first_remaining_distance_m": 16.099495176512836,
+      "last_remaining_distance_m": 16.388225343594442,
+      "progress_delta_m": -0.2887301670816065,
+      "min_static_clearance_m": 0.20000000298023224,
+      "min_dynamic_clearance_m": 0.6510872404758408
+    },
+    "2": {
+      "samples": 35,
+      "first_corridor_name": "right_corridor_2",
+      "last_corridor_name": "left_corridor_2",
+      "first_remaining_distance_m": 15.727922295722157,
+      "last_remaining_distance_m": 15.559798206503725,
+      "progress_delta_m": 0.16812408921843236,
+      "min_static_clearance_m": 0.20000000298023224,
+      "min_dynamic_clearance_m": 0.6392461414108603
+    }
+  },
+  "non_primary_selection_examples": [
+    {
+      "hypothesis_id": "masked_cell_71_87",
+      "near_parity_gate_reason": "selected_non_primary_near_parity",
+      "selection_score": -14.796652452074925,
+      "primary_vs_best_alternative_route_distance": 0.4686291570846386,
+      "selected_static_clearance_min_m": 0.20000000298023224,
+      "best_alternative_static_clearance_min_m": 0.20000000298023224
+    },
+    {
+      "hypothesis_id": "masked_cell_71_84",
+      "near_parity_gate_reason": "selected_non_primary_near_parity",
+      "selection_score": -13.665281585317713,
+      "primary_vs_best_alternative_route_distance": 0.4686291570846457,
+      "selected_static_clearance_min_m": 0.20000000298023224,
+      "best_alternative_static_clearance_min_m": 0.20000000298023224
+    },
+    {
+      "hypothesis_id": "masked_cell_71_84",
+      "near_parity_gate_reason": "selected_non_primary_near_parity",
+      "selection_score": -13.46528158233748,
+      "primary_vs_best_alternative_route_distance": 0.4686291570846457,
+      "selected_static_clearance_min_m": 0.20000000298023224,
+      "best_alternative_static_clearance_min_m": 0.20000000298023224
+    }
+  ],
+  "interpretation": "The near-parity gate still produces non-primary selection and reaches command arbitration, but this h160 slice exhausts the horizon without success. Treat the topology lane as revise, not benchmark improvement evidence."
+}

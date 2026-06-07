@@ -200,6 +200,8 @@ knowledge, not every transient iteration detail.
   [issue_2472_intent_conditioned_behavior.md](issue_2472_intent_conditioned_behavior.md)
 * Issue #2524 Adversarial Scenario Manifest Generation:
   [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
+* Issue #2562 Adversarial Manifest Planner Smoke:
+  [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md)
 * Issue #2526 Cyclist-Like VRU Smoke:
   [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md)
 * Issue #2527 Waiting-Then-Crossing Fixture:
@@ -452,6 +454,8 @@ knowledge, not every transient iteration detail.
   [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md)
 * Issue #2524 Adversarial Scenario Manifest Generation (2026-06-07):
   [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
+* Issue #2562 Adversarial Manifest Planner Smoke (2026-06-07):
+  [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):

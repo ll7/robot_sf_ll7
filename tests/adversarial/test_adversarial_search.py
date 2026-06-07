@@ -28,6 +28,9 @@ from robot_sf.adversarial.config import (
 )
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.materialize import (
+    materialize_manifest_route_overrides,
+    materialize_manifest_scenario_payload,
+    materialize_manifest_single_pedestrian_override,
     materialize_multi_ped_scenario_payload,
     materialize_multi_ped_single_pedestrian_overrides,
 )
@@ -40,6 +43,7 @@ from robot_sf.adversarial.samplers import (
     OptunaCandidateSampler,
     RandomCandidateSampler,
 )
+from robot_sf.adversarial.scenario_manifest import build_manifest
 from robot_sf.adversarial.seed_sensitivity import (
     SeedSensitivityPerturbation,
     run_seed_sensitivity,
@@ -569,6 +573,122 @@ def test_multi_ped_materialized_scenario_payload_is_yaml_safe() -> None:
     assert loaded["scenarios"][0]["metadata"]["adversarial_multi_ped"]["schema_version"] == (
         "adversarial-multi-ped.v1"
     )
+
+
+def test_manifest_materializes_single_pedestrian_override() -> None:
+    """A valid single-ped manifest should bridge to scenario-loader overrides."""
+    manifest = build_manifest(_candidate(17), generator=None)
+
+    override = materialize_manifest_single_pedestrian_override(
+        manifest,
+        pedestrian_id="crossing_probe",
+    )
+
+    assert override["id"] == "crossing_probe"
+    assert override["start"] == [1.0, 2.0]
+    assert override["goal"] == [5.0, 2.0]
+    assert override["speed_m_s"] == pytest.approx(1.0)
+    assert override["start_delay_s"] == pytest.approx(0.0)
+    assert override["metadata"]["adversarial_schema_version"] == (
+        "adversarial_scenario_manifest.v1"
+    )
+    assert override["metadata"]["adversarial_scenario_seed"] == 17
+    assert override["metadata"]["validation_status"] == "valid"
+    assert override["metadata"]["normalized_control_hash"]
+
+
+def test_manifest_materializes_scenario_payload_with_template_merge() -> None:
+    """A valid manifest should produce a runnable scenario payload from a template."""
+    manifest = build_manifest(_candidate(23))
+    template = {
+        "scenarios": [
+            {
+                "name": "crossing_ttc_template",
+                "map_id": "classic_cross_trap",
+                "simulation_config": {"max_episode_steps": 30, "ped_density": 0.2},
+                "metadata": {"archetype": "test"},
+            }
+        ]
+    }
+
+    payload = materialize_manifest_scenario_payload(manifest, template)
+
+    scenario = payload["scenarios"][0]
+    assert scenario["name"] == "crossing_ttc_template_manifest_0000"
+    assert scenario["seeds"] == [23]
+    assert scenario["simulation_config"]["ped_density"] == 0.2
+    assert scenario["simulation_config"]["route_spawn_seed"] == 23
+    assert scenario["simulation_config"]["peds_speed_mult"] == pytest.approx(1.0)
+    assert scenario["metadata"]["archetype"] == "test"
+    assert scenario["metadata"]["adversarial_scenario_manifest"]["schema_version"] == (
+        "adversarial_scenario_manifest.v1"
+    )
+    assert scenario["metadata"]["adversarial_manifest_runtime"]["benchmark_frozen"] is False
+    assert scenario["single_pedestrians"][0]["id"] == "manifest_candidate_0000"
+
+
+def test_manifest_materializes_route_overrides_for_route_smoke() -> None:
+    """A manifest route candidate should produce route overrides for benchmark smoke runs."""
+    manifest = build_manifest(_candidate(23))
+
+    route_payload = materialize_manifest_route_overrides(manifest)
+    scenario_payload = materialize_manifest_scenario_payload(
+        manifest,
+        {
+            "scenarios": [
+                {
+                    "name": "crossing_ttc_template",
+                    "map_id": "classic_cross_trap",
+                    "simulation_config": {"max_episode_steps": 30, "ped_density": 0.2},
+                }
+            ]
+        },
+        route_file_name="routes/candidate_0000_route_overrides.yaml",
+    )
+
+    assert route_payload == {
+        "robot_routes": [
+            {
+                "spawn_id": 100000,
+                "goal_id": 100000,
+                "waypoints": [[1.0, 2.0], [5.0, 2.0]],
+            }
+        ],
+        "ped_routes": [],
+    }
+    scenario = scenario_payload["scenarios"][0]
+    assert scenario["route_overrides_file"] == "routes/candidate_0000_route_overrides.yaml"
+    assert "single_pedestrians" not in scenario
+
+
+def test_manifest_route_overrides_reject_missing_pose_coordinate() -> None:
+    """Malformed pose mappings should fail closed with a clear coordinate error."""
+    manifest = build_manifest(_candidate(23))
+    assert manifest.candidate_controls is not None
+    del manifest.candidate_controls["start"]["x"]
+
+    with pytest.raises(ValueError, match="requires both 'x' and 'y' keys"):
+        materialize_manifest_route_overrides(manifest)
+
+
+def test_manifest_materialization_rejects_degenerate_manifest() -> None:
+    """Invalid or degenerate manifests should fail closed before planner execution."""
+    manifest = build_manifest(
+        CandidateSpec(
+            start=Pose2D(1.0, 1.0),
+            goal=Pose2D(1.0, 1.0),
+            spawn_time_s=0.0,
+            pedestrian_speed_mps=0.0,
+            pedestrian_delay_s=0.0,
+            scenario_seed=1,
+        )
+    )
+
+    with pytest.raises(ValueError, match="only valid manifests"):
+        materialize_manifest_scenario_payload(
+            manifest,
+            {"scenarios": [{"name": "template", "map_id": "classic_cross_trap"}]},
+        )
 
 
 def test_multi_ped_config_converts_to_runtime_single_pedestrians_with_metadata() -> None:

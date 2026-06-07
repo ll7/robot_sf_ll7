@@ -168,6 +168,8 @@ knowledge, not every transient iteration detail.
   [issue_2402_static_recenter_activation_decision.md](issue_2402_static_recenter_activation_decision.md)
 * Issue #2438 static-recenter activation closure:
   [issue_2438_static_recenter_activation_closure.md](issue_2438_static_recenter_activation_closure.md)
+* Issue #2566 static-recenter inactive propagation:
+  [issue_2566_static_recenter_inactive_propagation.md](issue_2566_static_recenter_inactive_propagation.md)
 * Issue #2261 Static-Recenter Slice-Local Explanation:
 [issue_2261_static_recenter_slice_local.md](issue_2261_static_recenter_slice_local.md)
 * Issue #1573 Root-Layout Inventory:

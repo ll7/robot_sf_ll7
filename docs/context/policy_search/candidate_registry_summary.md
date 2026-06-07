@@ -50,6 +50,7 @@ not headline promotion without a separate issue and evidence decision.
 | `proxemic_profile_conservative_issue_1676` | `diagnostic_only` | `diagnostic_only` | Conservative proxemic/comfort profile. |
 | `proxemic_profile_neutral_issue_1676` | `diagnostic_only` | `diagnostic_only` | Neutral profile used as middle setting. |
 | `proxemic_profile_open_issue_1676` | `diagnostic_only` | `diagnostic_only` | Open comfort profile with higher expected near-miss risk. |
+| `issue_2170_static_recenter_only` | `diagnostic_only` | `diagnostic_only` | One-factor static-recenter diagnostic: local h500 component signal remains useful for activation-targeted slices, but #2438 classifies the current held-out transfer route as `mechanism_inactive`, so it must not be used as transfer or benchmark evidence. |
 | `topology_guided_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Masked-route topology-hypothesis selector adding a bounded selected-hypothesis command to the existing hybrid-rule safety scorer; current lane is `revise` after #2530, and the #2563 primary-route reuse-penalty proposal must pass a paired diagnostic before any benchmark claim. |
 | `actuation_aware_hybrid_rule_v0` | `diagnostic_only` | `diagnostic_only` | Synthetic AMV actuation scorer; not calibrated hardware evidence. |
 | `planner_selector_v2_diagnostic` | `diagnostic_only` | `diagnostic_only` | Deterministic selector over existing local candidates using predeclared topology/seed diagnostics and current local pedestrian context; not benchmark-strength evidence. |

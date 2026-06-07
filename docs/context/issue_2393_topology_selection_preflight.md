@@ -129,3 +129,17 @@ A future implementation issue can execute this note without rereading the full #
 
 Do not treat a successful single-slice gate as benchmark-strength mitigation evidence. It would only
 justify a later benchmark or broader diagnostic contract.
+
+## Follow-Up Result
+
+Issue [#2518](https://github.com/ll7/robot_sf_ll7/issues/2518) implemented and reran this
+near-parity gate on 2026-06-07. The result is recorded in
+[issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md) with compact
+evidence at
+[evidence/issue_2518_topology_near_parity_gate_2026-06-07/summary.json](evidence/issue_2518_topology_near_parity_gate_2026-06-07/summary.json).
+
+Classification: `accept` as diagnostic-only follow-up direction. The rerun produced 42 non-primary
+route-selector selections and 7 non-primary topology-command influence selections, with no missing
+required selected-row gate fields. It still left 70 of 160 frames with insufficient hypotheses, so
+the accepted direction is selector scoring, not hypothesis availability or benchmark-strength
+planner improvement.

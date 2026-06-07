@@ -49,6 +49,10 @@ def extract_topology(record: dict) -> dict:
         "rejection_reason": None,
         "score_margin_to_primary_route": None,
         "switch_opportunity_count": None,
+        "primary_vs_best_alternative_route_distance": None,
+        "near_parity_gate_reason": None,
+        "selected_static_clearance_min_m": None,
+        "best_alternative_static_clearance_min_m": None,
     }
     # heuristics: look for 'topology_instrumentation' or 'score_components'
     topo = _topology_payload(record)
@@ -58,6 +62,14 @@ def extract_topology(record: dict) -> dict:
     out["rejection_reason"] = topo.get("rejection_reason")
     out["score_margin_to_primary_route"] = topo.get("score_margin_to_primary_route")
     out["switch_opportunity_count"] = topo.get("switch_opportunity_count")
+    out["primary_vs_best_alternative_route_distance"] = topo.get(
+        "primary_vs_best_alternative_route_distance"
+    )
+    out["near_parity_gate_reason"] = topo.get("near_parity_gate_reason")
+    out["selected_static_clearance_min_m"] = topo.get("selected_static_clearance_min_m")
+    out["best_alternative_static_clearance_min_m"] = topo.get(
+        "best_alternative_static_clearance_min_m"
+    )
     # fallback: inspect score_components list
     if out["selected_hypothesis"] is None and "score_components" in record:
         out["selected_hypothesis"] = _score_component_hypothesis(record.get("score_components"))

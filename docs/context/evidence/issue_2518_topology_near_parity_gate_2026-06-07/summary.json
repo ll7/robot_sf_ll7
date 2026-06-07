@@ -1,0 +1,147 @@
+{
+  "issue": 2518,
+  "classification": "accept",
+  "claim_boundary": "diagnostic_only_not_benchmark_success",
+  "candidate": "topology_guided_hybrid_rule_v0",
+  "revision": "topology_hypothesis_near_parity_diversity_gate_v0",
+  "scenario_id": "classic_realworld_double_bottleneck_high",
+  "stage": "full_matrix",
+  "seed": 111,
+  "horizon": 160,
+  "canonical_command_context": "docs/context/issue_2518_topology_near_parity_gate.md",
+  "diagnostic_status": "diagnostic_complete",
+  "topology_status_counts": {
+    "ok": 90,
+    "insufficient_hypotheses": 70
+  },
+  "route_selector_selected_hypothesis_counts": {
+    "primary_route": 56,
+    "masked_cell_71_79": 17,
+    "masked_cell_84_103": 7,
+    "masked_cell_87_79": 5,
+    "masked_cell_71_84": 2,
+    "masked_cell_71_82": 2,
+    "masked_cell_71_81": 2,
+    "masked_cell_71_80": 2,
+    "masked_cell_85_103": 2,
+    "masked_cell_71_87": 1,
+    "masked_cell_71_83": 1,
+    "masked_cell_83_103": 1
+  },
+  "route_selector_non_primary_selection_count": 42,
+  "route_selector_non_primary_selection_steps": [
+    1,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    102,
+    104
+  ],
+  "selected_row_near_parity_gate_reasons": {
+    "selected_non_primary_near_parity": 42,
+    "route_distance_exceeds_slack": 25,
+    "static_clearance_floor_failed": 17,
+    "eligible_near_parity_alternative": 14
+  },
+  "required_selected_ok_field_missing_counts": {
+    "primary_vs_best_alternative_route_distance": 0,
+    "near_parity_gate_reason": 0,
+    "selected_static_clearance_min_m": 0,
+    "best_alternative_static_clearance_min_m": 0
+  },
+  "selected_local_command_source_counts": {
+    "dynamic_window": 121,
+    "path_follow_0.5m": 2,
+    "route_guide": 4,
+    "topology_hypothesis": 33
+  },
+  "topology_command_influence_counts": {
+    "primary_route": 26,
+    "masked_cell_84_103": 6,
+    "masked_cell_85_103": 1
+  },
+  "topology_command_non_primary_influence_count": 7,
+  "topology_command_non_primary_influence_steps": [
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96
+  ],
+  "non_primary_selection_examples": [
+    {
+      "step": 1,
+      "hypothesis_id": "masked_cell_71_87",
+      "score": -15.296652452074925,
+      "selection_score": -14.796652452074925,
+      "near_parity_gate_reason": "selected_non_primary_near_parity",
+      "primary_vs_best_alternative_route_distance": 0.4686291570846386,
+      "selected_static_clearance_min_m": 0.20000000298023224,
+      "best_alternative_static_clearance_min_m": 0.20000000298023224
+    },
+    {
+      "step": 16,
+      "hypothesis_id": "masked_cell_71_80",
+      "score": -12.930966991874225,
+      "selection_score": -12.430966991874225,
+      "near_parity_gate_reason": "selected_non_primary_near_parity",
+      "primary_vs_best_alternative_route_distance": 0.0,
+      "selected_static_clearance_min_m": 0.20000000298023224,
+      "best_alternative_static_clearance_min_m": 0.20000000298023224
+    },
+    {
+      "step": 90,
+      "hypothesis_id": "masked_cell_84_103",
+      "score": -7.57705638775465,
+      "selection_score": -7.07705638775465,
+      "near_parity_gate_reason": "selected_non_primary_near_parity",
+      "primary_vs_best_alternative_route_distance": 0.0,
+      "selected_static_clearance_min_m": 0.20000000298023224,
+      "best_alternative_static_clearance_min_m": 0.20000000298023224
+    }
+  ],
+  "interpretation": "The near-parity diversity gate moves the upstream route selector off primary_route on 42 scored frames and reaches non-primary topology-command influence on 7 frames in the bounded slice. This accepts the revision as diagnostic-only follow-up evidence, not benchmark-strength planner promotion evidence.",
+  "limitations": [
+    "70 of 160 frames still had insufficient topology hypotheses, so this does not solve hypothesis availability.",
+    "The accepted result is a single-scenario, single-seed diagnostic slice and must not be reported as benchmark success.",
+    "The diversity bonus is a diagnostic tie-break parameter, not a production planner tuning claim."
+  ]
+}

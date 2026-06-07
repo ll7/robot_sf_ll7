@@ -34,6 +34,11 @@ _TOPOLOGY_KEYS = {
     "topology_command_speed",
     "topology_command_heading_gain",
     "topology_command_turn_in_place_error",
+    "near_parity_diversity_gate_enabled",
+    "near_parity_route_distance_slack_m",
+    "near_parity_route_distance_slack_ratio",
+    "near_parity_static_clearance_floor_m",
+    "near_parity_diversity_bonus",
     "route_hypothesis",
 }
 
@@ -59,6 +64,11 @@ class TopologyGuidedLocalPolicyConfig:
     topology_command_speed: float = 0.35
     topology_command_heading_gain: float = 1.0
     topology_command_turn_in_place_error: float = 0.25
+    near_parity_diversity_gate_enabled: bool = False
+    near_parity_route_distance_slack_m: float = 0.75
+    near_parity_route_distance_slack_ratio: float = 0.05
+    near_parity_static_clearance_floor_m: float = 0.05
+    near_parity_diversity_bonus: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -172,18 +182,186 @@ def _annotate_topology_selection(
     selected: dict[str, Any],
 ) -> None:
     """Annotate topology hypotheses with rank, score margin, and rejection reason."""
-    selected_score = float(selected["score"])
+    selected_score = float(selected.get("selection_score", selected["score"]))
     for score_rank, item in enumerate(
-        sorted(hypotheses, key=lambda item: float(item["score"]), reverse=True)
+        sorted(
+            hypotheses,
+            key=lambda item: float(item.get("selection_score", item["score"])),
+            reverse=True,
+        )
     ):
         item["score_rank"] = int(score_rank)
-        item["score_margin_to_selected"] = float(selected_score - float(item["score"]))
+        item["score_margin_to_selected"] = float(
+            selected_score - float(item.get("selection_score", item["score"]))
+        )
         if item["hypothesis_id"] == selected["hypothesis_id"]:
             item["selection_outcome"] = "selected"
             item["rejection_reason"] = None
         else:
             item["selection_outcome"] = "rejected"
-            item["rejection_reason"] = "lower_topology_selection_score"
+            item["rejection_reason"] = item.get(
+                "selection_rejection_reason",
+                "lower_topology_selection_score",
+            )
+
+
+def _finite_optional_float(value: Any) -> float | None:
+    """Return a finite float or ``None`` for optional diagnostic fields."""
+    if isinstance(value, int | float | np.integer | np.floating):
+        candidate = float(value)
+        if np.isfinite(candidate):
+            return candidate
+    return None
+
+
+def _near_parity_blocker_reason(
+    *,
+    route_delta: float | None,
+    primary_route: float | None,
+    primary_clearance: float | None,
+    alt_clearance: float | None,
+    config: TopologyGuidedLocalPolicyConfig,
+) -> str | None:
+    """Return the first reason the near-parity alternative is ineligible."""
+    if route_delta is None:
+        return "missing_route_distance"
+    if primary_clearance is None or alt_clearance is None:
+        return "missing_static_clearance"
+    absolute_slack = float(config.near_parity_route_distance_slack_m)
+    ratio_slack = max(primary_route or 0.0, _EPS) * float(
+        config.near_parity_route_distance_slack_ratio
+    )
+    route_near_parity = route_delta <= absolute_slack or route_delta <= ratio_slack
+    clearance_ok = alt_clearance + float(config.near_parity_static_clearance_floor_m) >= (
+        primary_clearance
+    )
+    if not route_near_parity:
+        return "route_distance_exceeds_slack"
+    if not clearance_ok:
+        return "static_clearance_floor_failed"
+    return None
+
+
+def _annotate_near_parity_gate(
+    config: TopologyGuidedLocalPolicyConfig,
+    hypotheses: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Annotate and optionally adjust hypotheses for the near-parity diversity gate.
+
+    Returns:
+        Top-level diagnostic fields for the selected topology decision.
+    """
+    primary = next(
+        (item for item in hypotheses if str(item.get("hypothesis_id")) == "primary_route"),
+        None,
+    )
+    alternatives = [
+        item for item in hypotheses if str(item.get("hypothesis_id")) != "primary_route"
+    ]
+    diagnostic = {
+        "near_parity_gate_enabled": bool(config.near_parity_diversity_gate_enabled),
+        "near_parity_gate_reason": "disabled",
+        "primary_vs_best_alternative_route_distance": None,
+        "selected_static_clearance_min_m": None,
+        "best_alternative_static_clearance_min_m": None,
+    }
+    for item in hypotheses:
+        item["selection_score"] = float(item["score"])
+        item["near_parity_gate_reason"] = "disabled"
+        item["primary_vs_best_alternative_route_distance"] = None
+        item["selected_static_clearance_min_m"] = None
+        item["best_alternative_static_clearance_min_m"] = None
+    best_alternative = (
+        max(
+            alternatives,
+            key=lambda item: float(item.get("selection_score", item["score"])),
+        )
+        if alternatives
+        else None
+    )
+
+    missing_reason = None
+    if primary is None:
+        missing_reason = "missing_primary_route"
+    elif best_alternative is None:
+        missing_reason = "no_alternative_hypothesis"
+    if missing_reason is not None:
+        diagnostic["near_parity_gate_reason"] = missing_reason
+        return diagnostic
+
+    primary_route = _finite_optional_float(primary.get("route_remaining_distance_m"))
+    alt_route = _finite_optional_float(best_alternative.get("route_remaining_distance_m"))
+    primary_clearance = _finite_optional_float(primary.get("static_clearance_min_m"))
+    alt_clearance = _finite_optional_float(best_alternative.get("static_clearance_min_m"))
+    if primary_route is not None and alt_route is not None:
+        route_delta = float(alt_route - primary_route)
+        diagnostic["primary_vs_best_alternative_route_distance"] = route_delta
+    else:
+        route_delta = None
+    diagnostic["best_alternative_static_clearance_min_m"] = alt_clearance
+
+    for item in hypotheses:
+        item["primary_vs_best_alternative_route_distance"] = route_delta
+        item["best_alternative_static_clearance_min_m"] = alt_clearance
+
+    if not bool(config.near_parity_diversity_gate_enabled):
+        return diagnostic
+    blocker_reason = _near_parity_blocker_reason(
+        route_delta=route_delta,
+        primary_route=primary_route,
+        primary_clearance=primary_clearance,
+        alt_clearance=alt_clearance,
+        config=config,
+    )
+    if blocker_reason is not None:
+        diagnostic["near_parity_gate_reason"] = blocker_reason
+        best_alternative["near_parity_gate_reason"] = blocker_reason
+        return diagnostic
+
+    best_alternative["selection_score"] = float(best_alternative["score"]) + float(
+        config.near_parity_diversity_bonus
+    )
+    best_alternative["near_parity_gate_reason"] = "eligible_near_parity_alternative"
+    if float(best_alternative["selection_score"]) > float(primary["selection_score"]):
+        primary["selection_rejection_reason"] = "near_parity_diversity_gate"
+    diagnostic["near_parity_gate_reason"] = "eligible_near_parity_alternative"
+    return diagnostic
+
+
+def _finalize_near_parity_gate_diagnostic(
+    config: TopologyGuidedLocalPolicyConfig,
+    hypotheses: list[dict[str, Any]],
+    selected: dict[str, Any],
+    diagnostic: dict[str, Any],
+) -> dict[str, Any]:
+    """Add selected-hypothesis near-parity fields after scoring.
+
+    Returns:
+        Updated top-level diagnostic mapping.
+    """
+    selected_clearance = selected.get("static_clearance_min_m")
+    selected_non_primary = str(selected.get("hypothesis_id")) != "primary_route"
+    eligible_gate = str(diagnostic["near_parity_gate_reason"]) == "eligible_near_parity_alternative"
+    selected_score = _finite_optional_float(selected.get("selection_score", selected.get("score")))
+    raw_score = _finite_optional_float(selected.get("score"))
+    gate_boost_applied = (
+        selected_score is not None and raw_score is not None and selected_score > raw_score
+    )
+    reason = (
+        "selected_non_primary_near_parity"
+        if bool(config.near_parity_diversity_gate_enabled)
+        and selected_non_primary
+        and eligible_gate
+        and gate_boost_applied
+        else str(diagnostic["near_parity_gate_reason"])
+    )
+    diagnostic["selected_static_clearance_min_m"] = selected_clearance
+    diagnostic["near_parity_gate_reason"] = reason
+    for item in hypotheses:
+        item["selected_static_clearance_min_m"] = selected_clearance
+        if item["hypothesis_id"] == selected["hypothesis_id"]:
+            item["near_parity_gate_reason"] = reason
+    return diagnostic
 
 
 def build_topology_guided_local_policy_config(
@@ -233,6 +411,19 @@ def build_topology_guided_local_policy_config(
         topology_command_turn_in_place_error=float(
             raw.get("topology_command_turn_in_place_error", 0.25)
         ),
+        near_parity_diversity_gate_enabled=bool(
+            raw.get("near_parity_diversity_gate_enabled", False)
+        ),
+        near_parity_route_distance_slack_m=float(
+            raw.get("near_parity_route_distance_slack_m", 0.75)
+        ),
+        near_parity_route_distance_slack_ratio=float(
+            raw.get("near_parity_route_distance_slack_ratio", 0.05)
+        ),
+        near_parity_static_clearance_floor_m=float(
+            raw.get("near_parity_static_clearance_floor_m", 0.05)
+        ),
+        near_parity_diversity_bonus=float(raw.get("near_parity_diversity_bonus", 0.0)),
     )
 
 
@@ -394,7 +585,17 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 "hypothesis_count": 0,
                 "min_hypotheses": int(self.topology_config.min_hypotheses),
             }
-        selected = max(hypotheses, key=lambda item: float(item["score"]))
+        near_parity = _annotate_near_parity_gate(self.topology_config, hypotheses)
+        selected = max(
+            hypotheses,
+            key=lambda item: float(item.get("selection_score", item["score"])),
+        )
+        near_parity = _finalize_near_parity_gate_diagnostic(
+            self.topology_config,
+            hypotheses,
+            selected,
+            near_parity,
+        )
         _annotate_topology_selection(hypotheses, selected=selected)
         return {
             "status": "ok",
@@ -403,6 +604,8 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             "selected_hypothesis_id": selected["hypothesis_id"],
             "selected_rank": int(selected["rank"]),
             "selected_score": float(selected["score"]),
+            "selection_score": float(selected.get("selection_score", selected["score"])),
+            **near_parity,
             "hypotheses": hypotheses,
         }
 

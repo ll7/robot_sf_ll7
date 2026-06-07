@@ -150,6 +150,8 @@ knowledge, not every transient iteration detail.
   [issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md)
 * Issue #2530 topology near-parity corrective-behavior smoke:
   [issue_2530_topology_near_parity_corrective_smoke.md](issue_2530_topology_near_parity_corrective_smoke.md)
+* Issue #2563 Topology Corrective Revision Proposal 2026-06-07:
+  [issue_2563_topology_corrective_revision.md](issue_2563_topology_corrective_revision.md)
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:

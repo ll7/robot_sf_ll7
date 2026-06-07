@@ -648,6 +648,10 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2453_planner_mechanism_cards.md
+    status: current
+    freshness: maintained
+    area: policy_search
   - path: docs/context/issue_2456_amv_local_nav_evaluation_suite.md
     status: proposal
     freshness: maintained

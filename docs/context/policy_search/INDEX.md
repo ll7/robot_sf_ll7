@@ -26,6 +26,7 @@ It points to the smallest authority surface for common agent questions.
 | Selector ORCA-extra h80 rerun | `../issue_2178_selector_orca_extra_h80.md` | Corrected selector-only comparison after proving `rvo2`; diagnostic-only h80 evidence. |
 | One-factor h500 component run | `../issue_2180_one_factor_h500.md` | Complete h500 execution of the #2170 manifest; recentering is the clearest positive component signal. |
 | Component effect synthesis | `../issue_2182_component_effect_synthesis.md` | Closeout synthesis for #2104 component classifications and acceptance mapping. |
+| Planner mechanism cards | `../issue_2453_planner_mechanism_cards.md` | Active planner mechanism claims, activation signals, positive/negative evidence, transfer status, and next-proof boundaries. |
 
 ## Lifecycle Routing
 

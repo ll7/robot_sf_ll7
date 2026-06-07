@@ -38,6 +38,26 @@ transfer, benchmark success, or paper-grade mechanism proof.
 Mechanism and activation detection uses conservative key-fragment matching across the trace payload.
 False positives should route a pair to follow-up review, not to a stronger claim.
 
+## Mechanism Panel Publication Rule
+
+Before a trace pair is rendered, published, or routed as mechanism-panel evidence, panel work should
+record one of the checker classifications above. The minimum acceptable record is the checker output
+or an equivalent validation note that names the baseline trace, intervention trace, command, commit,
+classification, and any missing fields.
+
+Use the classifications as follows:
+
+- `rendering_sanity`: the panel may be kept as a loader/rendering sanity fixture, not as a
+  behavioral-difference or mechanism claim.
+- `qualitative_illustration`: the panel may illustrate a scene or behavior change, but it should
+  not be cited as mechanism evidence without a follow-up signal explanation.
+- `mechanism_difference_candidate`: the pair can proceed to mechanism-panel review, still bounded
+  by the trace-mechanism rubric and any benchmark row-status caveats.
+
+An explicit null-result demonstration is allowed when the point of the panel is to show that a
+candidate pair has no mechanism-relevant signal. In that case, label it as diagnostic/null evidence
+and avoid mechanism-difference language.
+
 ## Proof Surface
 
 `tests/validation/test_check_mechanism_signal.py` covers zero-delta, behavior-only delta,

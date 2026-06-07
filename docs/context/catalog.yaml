@@ -17,6 +17,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: configs/benchmarks/issue_2452_mechanism_aware_local_nav_suites_v0.yaml
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: configs/benchmarks/issue_2456_amv_local_nav_suite_v0.yaml
     status: proposal
     freshness: maintained
@@ -632,6 +636,10 @@ entries:
     status: current
     freshness: maintained
     area: platformization
+  - path: docs/context/issue_2452_mechanism_aware_local_nav_suites.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2456_amv_local_nav_evaluation_suite.md
     status: proposal
     freshness: maintained

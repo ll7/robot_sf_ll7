@@ -489,6 +489,14 @@ entries:
     status: evidence
     freshness: evidence
     area: predictive_planner
+  - path: docs/context/issue_2468_adversarial_generation_roadmap.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2468/adversarial_generation_roadmap.yaml
+    status: proposal
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2470_rl_adversarial_pedestrian_policy.md
     status: proposal
     freshness: maintained

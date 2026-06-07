@@ -1,0 +1,148 @@
+# Adversarial Scenario Generation Roadmap Proposal
+# Issue #2468; proposal/synthesis evidence only, not benchmark evidence.
+
+roadmap:
+  issue: 2468
+  version: 1
+  evidence_tier: proposal_synthesis
+  claim_boundary: >
+    Defines research direction, common manifest fields, validity gates, and first spike.
+    Does not train RL or diffusion models and does not generate benchmark-strength evidence.
+
+  method_lanes:
+    - family: bounded_search
+      examples:
+        - random
+        - optuna_tpe
+        - guided_route_search
+      readiness: current_first_lane
+      data_compute_need: low_to_moderate
+      interpretability: high
+      claim_boundary: development_stress_test_until_certified
+    - family: rl_adversary
+      examples:
+        - high_level_npc_action_to_config
+      readiness: after_deterministic_transformer_smoke
+      data_compute_need: moderate_to_high
+      interpretability: medium
+      claim_boundary: proposal_until_transform_reward_and_fail_closed_smoke
+    - family: diffusion_or_generative_manifest
+      examples:
+        - scenario_perturbation_manifest_generator
+      readiness: after_failure_archive_schema_and_certification_interface
+      data_compute_need: high
+      interpretability: medium_to_low
+      claim_boundary: proposal_interface_until_archive_lineage_determinism_certification_and_smoke
+    - family: learned_proposal_model
+      examples:
+        - failure_archive_ranker
+        - nearest_neighbor_proposal
+      readiness: after_labeled_failure_archive
+      data_compute_need: moderate
+      interpretability: medium_to_high
+      claim_boundary: diagnostic_until_held_out_archive_and_manifest_validation
+    - family: llm_to_structured_manifest
+      examples:
+        - natural_language_brainstorm_to_yaml
+      readiness: assistant_only_after_schema_compilation
+      data_compute_need: low
+      interpretability: medium_after_validation
+      claim_boundary: never_evidence_without_deterministic_manifest_validation
+
+  common_manifest_minimum:
+    schema_id: adversarial_scenario_manifest.v1
+    required_groups:
+      source_and_target:
+        - source_map
+        - source_scenario
+        - scenario_family
+        - planner_target
+      generator_provenance:
+        - generator_family
+        - generator_id
+        - generator_commit
+        - generator_seed
+        - search_or_training_config
+      candidate_controls:
+        - pedestrians
+        - robot_start
+        - robot_goal
+        - route_overrides
+        - timing
+        - speed
+        - waits
+        - phase_offsets
+        - objective_weights
+      validity_record:
+        - schema_status
+        - route_reachability
+        - map_bounds
+        - overlap_checks
+        - temporal_bounds
+        - duplicate_hash
+      execution_status:
+        allowed_values:
+          - not_run
+          - valid_pending_run
+          - valid_behavioral_failure
+          - success
+          - invalid_candidate
+          - simulation_error
+          - fallback
+          - degraded
+          - not_available
+      evidence_boundary:
+        allowed_values:
+          - development_stress_test
+          - diagnostic_only
+          - benchmark_candidate
+          - promoted_benchmark_evidence
+
+  controllable_parameters:
+    - scenario_seed
+    - generator_seed
+    - pedestrian_spawn_or_start_zone
+    - pedestrian_goal_or_route_choice
+    - pedestrian_start_delay_s
+    - pedestrian_phase_offset_s
+    - pedestrian_speed_m_s
+    - pedestrian_wait_or_pause_duration_s
+    - group_size_or_role
+    - robot_start_or_goal_override
+    - objective_weights
+    - map_geometry_mutation_deferred_to_v2
+
+  validity_checks:
+    - schema_parses
+    - durable_source_map_and_scenario_present
+    - starts_goals_and_routes_in_bounds
+    - obstacle_clearance_and_overlap_checks_pass
+    - route_reachability_passes
+    - timing_speed_wait_phase_density_and_group_bounds_pass
+    - generator_family_seed_objective_source_config_and_duplicate_hash_recorded
+    - planner_available_in_required_mode
+    - simulation_setup_has_no_exception_fallback_or_degraded_substitution
+
+  degenerate_rejections:
+    - zero_length_route
+    - unreachable_route
+    - zero_speed_stall
+    - infinite_wait_blocking
+    - start_goal_or_robot_overlap
+    - duplicate_normalized_control_hash
+    - fallback_or_degraded_execution_used_as_success
+    - unconstrained_natural_language_edits_without_structured_manifest
+
+  recommended_first_spike:
+    name: adversarial_scenario_manifest_v1_validator_smoke
+    evidence_tier: proposal_interface_smoke
+    scope:
+      - define_common_manifest_schema_or_typed_validator
+      - add_one_existing_search_candidate_fixture
+      - add_one_mock_rl_action_to_config_fixture
+      - add_one_mock_diffusion_or_proposal_fixture
+      - reject_malformed_unreachable_duplicate_and_temporal_overflow_fixtures
+    stop_rule: >
+      Stop after schema validation and fail-closed rejection proof. Do not train
+      RL or diffusion models, do not publish planner rankings, and do not promote
+      generated scenarios to benchmark evidence in this spike.

@@ -1,4 +1,4 @@
-# Issue #2568 Adversarial Expansion Gate 2026-06-07
+# Issue #2568 Adversarial Expansion Gate (2026-06-07)
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/2568>
 

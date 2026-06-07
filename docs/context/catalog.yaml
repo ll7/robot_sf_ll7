@@ -229,6 +229,10 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2570_topology_revise_status_propagation.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/mechanism_closure_status.md
     status: current
     freshness: maintained

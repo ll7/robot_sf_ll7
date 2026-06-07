@@ -62,6 +62,13 @@ current held-out static-recenter smoke is an inactive-mechanism negative for the
 future work should either predeclare a slice where the recenter gate should activate or prioritize
 other route-progress mechanisms.
 
+## Successor Closure
+
+Issue #2438 later asked for the same held-out activation fields as a missing-evidence closure. The
+Issue #2306 rerun and this Issue #2402 field mapping already satisfy that contract, so
+[issue_2438_static_recenter_activation_closure.md](issue_2438_static_recenter_activation_closure.md)
+records the stop-current-heldout-transfer recommendation without another simulator rerun.
+
 ## Evidence
 
 - Field-mapped #2402 summary:

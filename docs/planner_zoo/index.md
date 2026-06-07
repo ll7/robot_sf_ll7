@@ -99,6 +99,15 @@ the claim boundary with new evidence.
 | `orca_residual_guarded_ppo_v0` | Runtime residual prototype | Smoke-only runtime surface; learned residual training/checkpoint lineage is pending. |
 | `orca_residual_guarded_ppo_progress_v1` | Runtime residual progress probe | Smoke-only #1475 rerun candidate; hard guards remain authoritative and no learned-residual evidence exists until the bounded smoke artifact is promoted. |
 
+## External Framework Assessments
+
+These rows are not planner-zoo candidates. They keep source-harness and adapter decisions
+discoverable before anyone opens a wrapper or benchmark issue.
+
+| Framework | Status | Boundary |
+| --- | --- | --- |
+| Navground | Prototype-only assessment | [`docs/context/issue_2442_navground_assessment.md`](../context/issue_2442_navground_assessment.md) records a local `navground==0.7.0` import and behavior-command smoke for ORCA, HRVO, HL, and SocialForce through `2WDiff`; no dependency, adapter, registry row, or benchmark claim was added. |
+
 ## Learned-Policy Intake
 
 Learned policies need additional checks before they can support benchmark claims: checkpoint

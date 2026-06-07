@@ -1,0 +1,68 @@
+{
+  "schema_version": "robot-sf-amv-timeout-closure.v1",
+  "issue": 2440,
+  "generated_at": "2026-06-07T02:30:00+00:00",
+  "evidence_tier": "analysis_only",
+  "decision_output": "feasibility_improved_but_route_blocked",
+  "amv_timeout_decomposition": {
+    "scenario_id": "classic_cross_trap_high",
+    "seed": 101,
+    "candidate": "hybrid_rule_v3_fast_progress vs actuation_aware_hybrid_rule_v0",
+    "success": false,
+    "termination_reason": "max_steps; timeout_low_progress for both rows",
+    "progress_over_time_available": true,
+    "clipping_over_time_available": true,
+    "saturation_over_time_available": true,
+    "command_speed_profile_available": true,
+    "route_progress_blocked": true,
+    "speed_cap_binding": "partial_not_primary",
+    "scoring_too_conservative": "partial_not_primary",
+    "unrelated_navigation_deadlock": "not_instrumented",
+    "likely_timeout_driver": "route_task_progress_blocked_after_feasibility_improvement"
+  },
+  "matched_row_summary": {
+    "baseline": {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "success": false,
+      "failure_mode": "timeout_low_progress",
+      "command_clip_steps": 22,
+      "command_clip_fraction": 0.275,
+      "final_route_progress_m": 12.904024665994092,
+      "final_distance_to_goal_m": 3.6078725186171776,
+      "mean_avg_speed_m_s": 1.662309936770821,
+      "yaw_rate_saturation_fraction": 0.0
+    },
+    "intervention": {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "success": false,
+      "failure_mode": "timeout_low_progress",
+      "command_clip_steps": 15,
+      "command_clip_fraction": 0.1875,
+      "final_route_progress_m": 12.87191147075262,
+      "final_distance_to_goal_m": 3.639985713858651,
+      "mean_avg_speed_m_s": 1.667037499328765,
+      "yaw_rate_saturation_fraction": 0.0
+    },
+    "delta_intervention_minus_baseline": {
+      "command_clip_steps": -7,
+      "command_clip_fraction": -0.0875,
+      "final_route_progress_m": -0.03211319524147263,
+      "final_distance_to_goal_m": 0.03211319524147352,
+      "mean_avg_speed_m_s": 0.004727562557943961,
+      "yaw_rate_saturation_fraction": 0.0
+    }
+  },
+  "coverage": {
+    "decomposition_table": "covered",
+    "route_progress_vs_success_explanation": "covered",
+    "continue_revise_stop_recommendation": "stop_broad_planner_variants",
+    "synthetic_vs_calibrated_boundary": "covered"
+  },
+  "source_artifacts": [
+    "docs/context/issue_2259_amv_clipping_success_boundary.md",
+    "docs/context/issue_2404_amv_timeout_decomposition_decision.md",
+    "docs/context/issue_2443_amv_trace_review.md",
+    "docs/context/evidence/issue_2443_amv_trace_review_2026-06-07/summary.json"
+  ],
+  "next_research_direction": "Keep actuation-aware scoring diagnostic-only for planner improvement; use #2446 for evaluation/ranking-dimension analysis or open route-progress geometry work separately."
+}

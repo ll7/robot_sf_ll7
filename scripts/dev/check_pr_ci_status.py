@@ -15,6 +15,7 @@ from typing import Any
 
 FAILURE_CONCLUSIONS = {
     "failure",
+    "error",
     "cancelled",
     "timed_out",
     "action_required",
@@ -63,6 +64,31 @@ def _parse_pr_view_json(stdout: str) -> tuple[dict[str, Any] | None, str | None]
     return data, None
 
 
+def _rollup_conclusion(check: dict[str, Any]) -> str:
+    """Return a normalized conclusion for check-run and legacy-status rollup entries."""
+    conclusion = check.get("conclusion")
+    if conclusion:
+        return str(conclusion).lower()
+    state = check.get("state")
+    if state:
+        return str(state).lower()
+    return "pending"
+
+
+def _rollup_status(check: dict[str, Any]) -> str:
+    """Return a normalized lifecycle status for check-run and legacy-status rollup entries."""
+    status = check.get("status")
+    if status:
+        return str(status).lower()
+    state = check.get("state")
+    if not state:
+        return "completed"
+    state_str = str(state).lower()
+    if state_str in {"success", "failure", "error"}:
+        return "completed"
+    return state_str
+
+
 def _fetch_ci_status(
     pr_number: str,
     backoff: float = 0.0,
@@ -106,17 +132,16 @@ def _fetch_ci_status(
     # Classify overall CI state.
     conclusions: dict[str, int] = {}
     for check in rollup:
-        c = str(check.get("conclusion") or "pending").lower()
+        c = _rollup_conclusion(check)
         conclusions[c] = conclusions.get(c, 0) + 1
 
     states: dict[str, int] = {}
     for check in rollup:
-        s = str(check.get("status") or "completed").lower()
+        s = _rollup_status(check)
         states[s] = states.get(s, 0) + 1
 
     failure_count = sum(conclusions.get(conclusion, 0) for conclusion in FAILURE_CONCLUSIONS)
     pending_count = sum(states.get(status, 0) for status in PENDING_STATUSES)
-    pending_count += conclusions.get("pending", 0)
     if failure_count:
         overall = "failure"
     elif pending_count or not rollup:

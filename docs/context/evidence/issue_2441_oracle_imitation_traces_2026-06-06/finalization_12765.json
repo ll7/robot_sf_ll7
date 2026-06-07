@@ -1,0 +1,52 @@
+{
+  "artifact_status": "all_required_present",
+  "artifacts": [
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "output/slurm/issue1470-oracle-imitation-traces-job-12765/oracle_imitation/issue1470_evaluation_candidate_traces/oracle_candidate_trace_manifest.json",
+      "required": true,
+      "role": "expected",
+      "sha256": "31d1a67b3fa425d092f9fa8ba687aa77323c775afae163df910a20e47959a7e4",
+      "size_bytes": 28228
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "output/slurm/issue1470-oracle-imitation-traces-job-12765/oracle_imitation/issue1470_evaluation_candidate_traces/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
+      "required": true,
+      "role": "expected",
+      "sha256": "2a3c1397d4c23962497386ab92c23db243dce7097a2eaa2df9594164a26fdc3c",
+      "size_bytes": 54695
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "output/slurm/12765-issue1470-oracle-imitation-traces.out",
+      "required": false,
+      "role": "optional",
+      "sha256": "caf3f661ac1fd894dc347e5f9502de5dd1a0a27d00b43685ce2ceb3e3b2044b3",
+      "size_bytes": 30140
+    },
+    {
+      "exists": true,
+      "kind": "file",
+      "path": "output/slurm/12765-issue1470-oracle-imitation-traces.err",
+      "required": false,
+      "role": "optional",
+      "sha256": "16f5d435c25773a7b730d011be31386994f08f9ea40c0342ba8365e881c7f6c4",
+      "size_bytes": 9480
+    }
+  ],
+  "claim_boundary": "compact local finalization manifest only; not durable benchmark evidence until artifacts have durable retrieval URIs and policy-specific validation",
+  "classification": "success",
+  "generated_at": "2026-06-07T10:10:15.251907+00:00",
+  "issue_number": 2441,
+  "issue_update_markdown": "SLURM finalization for job `12765`:\n\n- classification: `success`\n- job state: `COMPLETED`\n- artifact status: `all_required_present`\n- claim boundary: compact local finalization manifest only; not durable benchmark evidence until artifacts have durable retrieval URIs and policy-specific validation\n\n| Artifact | Required | Status | SHA256 |\n| --- | --- | --- | --- |\n| `output/slurm/issue1470-oracle-imitation-traces-job-12765/oracle_imitation/issue1470_evaluation_candidate_traces/oracle_candidate_trace_manifest.json` | true | present | `31d1a67b3fa425d092f9fa8ba687aa77323c775afae163df910a20e47959a7e4` |\n| `output/slurm/issue1470-oracle-imitation-traces-job-12765/oracle_imitation/issue1470_evaluation_candidate_traces/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl` | true | present | `2a3c1397d4c23962497386ab92c23db243dce7097a2eaa2df9594164a26fdc3c` |\n| `output/slurm/12765-issue1470-oracle-imitation-traces.out` | false | present | `caf3f661ac1fd894dc347e5f9502de5dd1a0a27d00b43685ce2ceb3e3b2044b3` |\n| `output/slurm/12765-issue1470-oracle-imitation-traces.err` | false | present | `16f5d435c25773a7b730d011be31386994f08f9ea40c0342ba8365e881c7f6c4` |\n\nNext action: Review checksums, promote artifacts to a durable store if downstream work depends on them, and cite only this compact manifest until durable URIs exist.",
+  "job_id": "12765",
+  "job_state": "COMPLETED",
+  "ledger_update_markdown": "| #2441 | `12765` | `success` | `all_required_present` | Review checksums, promote artifacts to a durable store if downstream work depends on them, and cite only this compact manifest until durable URIs exist. |",
+  "next_action": "Review checksums, promote artifacts to a durable store if downstream work depends on them, and cite only this compact manifest until durable URIs exist.",
+  "notes": "",
+  "schema_version": "robot-sf-slurm-job-finalization.v1"
+}

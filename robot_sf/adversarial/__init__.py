@@ -24,6 +24,19 @@ from robot_sf.adversarial.samplers import (
     OptunaCandidateSampler,
     RandomCandidateSampler,
 )
+from robot_sf.adversarial.scenario_manifest import (
+    AdversarialScenarioManifest,
+    GeneratorInfo,
+    ManifestCategory,
+    SourceLineage,
+    ValidationRecord,
+    build_manifest,
+    compute_control_hash,
+    generate_manifests,
+    validate_candidate_manifest,
+    validate_manifest_payload,
+    write_manifest_yaml,
+)
 from robot_sf.adversarial.search import run_adversarial_search
 from robot_sf.adversarial.seed_sensitivity import (
     SeedSensitivityPerturbation,
@@ -33,9 +46,12 @@ from robot_sf.adversarial.seed_sensitivity import (
 )
 
 __all__ = [
+    "AdversarialScenarioManifest",
     "CandidateEvaluation",
     "CandidateSpec",
     "CoordinateRefinementSampler",
+    "GeneratorInfo",
+    "ManifestCategory",
     "MultiPedAdversarialConfig",
     "MultiPedCandidateSpec",
     "OptunaCandidateSampler",
@@ -47,11 +63,19 @@ __all__ = [
     "SeedSensitivityPerturbation",
     "SeedSensitivityReplay",
     "SeedSensitivitySummary",
+    "SourceLineage",
+    "ValidationRecord",
+    "build_manifest",
     "build_multi_ped_adversarial_robot_config",
+    "compute_control_hash",
+    "generate_manifests",
     "materialize_multi_ped_scenario_payload",
     "materialize_multi_ped_single_pedestrian_overrides",
     "multi_ped_config_to_single_pedestrian_definitions",
     "run_adversarial_search",
     "run_seed_sensitivity",
+    "validate_candidate_manifest",
+    "validate_manifest_payload",
     "validate_multi_ped_runtime_plausibility",
+    "write_manifest_yaml",
 ]

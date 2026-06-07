@@ -198,6 +198,8 @@ knowledge, not every transient iteration detail.
   [issue_2471_diffusion_scenario_generation_feasibility.md](issue_2471_diffusion_scenario_generation_feasibility.md)
 * Issue #2472 Intent-Conditioned Pedestrian Behavior Scope:
   [issue_2472_intent_conditioned_behavior.md](issue_2472_intent_conditioned_behavior.md)
+* Issue #2524 Adversarial Scenario Manifest Generation:
+  [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
 * Issue #2527 Waiting-Then-Crossing Fixture:
   [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md)
 * Issue #2473 Cyclist Interaction Benchmark Scope:
@@ -444,6 +446,8 @@ knowledge, not every transient iteration detail.
   [adaptive_test_claim_audit_2026-05.md](adaptive_test_claim_audit_2026-05.md)
 * Issue #2468 Adversarial Scenario Generation Roadmap (2026-06-07):
   [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md)
+* Issue #2524 Adversarial Scenario Manifest Generation (2026-06-07):
+  [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):

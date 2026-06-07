@@ -198,6 +198,8 @@ knowledge, not every transient iteration detail.
   [issue_2471_diffusion_scenario_generation_feasibility.md](issue_2471_diffusion_scenario_generation_feasibility.md)
 * Issue #2472 Intent-Conditioned Pedestrian Behavior Scope:
   [issue_2472_intent_conditioned_behavior.md](issue_2472_intent_conditioned_behavior.md)
+* Issue #2527 Waiting-Then-Crossing Fixture:
+  [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md)
 * Issue #2473 Cyclist Interaction Benchmark Scope:
   [issue_2473_cyclist_interaction_benchmark.md](issue_2473_cyclist_interaction_benchmark.md)
 * Issue #2459 SocNavBench / HuNavSim Mapping:

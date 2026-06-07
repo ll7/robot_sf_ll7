@@ -2820,6 +2820,7 @@ def _trace_pedestrians(
     positions: np.ndarray,
     previous_positions: np.ndarray | None,
     dt_seconds: float,
+    intent_metadata: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build trace-export pedestrian frames from simulator position buffers.
 
@@ -2830,6 +2831,11 @@ def _trace_pedestrians(
     if positions.size == 0:
         return []
     pedestrians: list[dict[str, Any]] = []
+    single_offset = (
+        max(0, int(np.asarray(positions).shape[0]) - len(intent_metadata))
+        if intent_metadata
+        else None
+    )
     for ped_idx, ped_pos in enumerate(np.asarray(positions, dtype=float)):
         if (
             previous_positions is not None
@@ -2839,14 +2845,134 @@ def _trace_pedestrians(
             velocity = (ped_pos - previous_positions[ped_idx]) / dt_seconds
         else:
             velocity = np.zeros(2, dtype=float)
-        pedestrians.append(
+        frame = {
+            "id": int(ped_idx),
+            "position": [float(ped_pos[0]), float(ped_pos[1])],
+            "velocity": [float(velocity[0]), float(velocity[1])],
+        }
+        if single_offset is not None and ped_idx >= single_offset:
+            single_idx = ped_idx - single_offset
+            if 0 <= single_idx < len(intent_metadata or []):
+                frame.update(_intent_trace_payload(intent_metadata[single_idx], velocity))
+        pedestrians.append(frame)
+    return pedestrians
+
+
+def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return authored intent metadata aligned with scenario single pedestrians."""
+    scenario_metadata = (
+        scenario.get("metadata") if isinstance(scenario.get("metadata"), dict) else {}
+    )
+    scenario_intent = (
+        scenario_metadata.get("intent_conditioned_behavior")
+        if isinstance(scenario_metadata.get("intent_conditioned_behavior"), dict)
+        else {}
+    )
+    single_peds = (
+        scenario.get("single_pedestrians")
+        if isinstance(scenario.get("single_pedestrians"), list)
+        else []
+    )
+    result: list[dict[str, Any]] = []
+    for idx, ped in enumerate(single_peds):
+        if not isinstance(ped, dict):
+            continue
+        ped_metadata = ped.get("metadata") if isinstance(ped.get("metadata"), dict) else {}
+        intent = (
+            ped_metadata.get("intent_conditioned_behavior")
+            if isinstance(ped_metadata.get("intent_conditioned_behavior"), dict)
+            else {}
+        )
+        if not intent and not scenario_intent:
+            continue
+        wait_at = ped.get("wait_at") if isinstance(ped.get("wait_at"), list) else []
+        trajectory = ped.get("trajectory") if isinstance(ped.get("trajectory"), list) else []
+        phases = intent.get("intent_phases")
+        if not isinstance(phases, list) or not phases:
+            phases = ["waiting", "crossing"] if wait_at and trajectory else ["authored_motion"]
+        label = str(
+            intent.get("intent_label")
+            or ("waiting_then_crossing" if wait_at and trajectory else "authored_single_pedestrian")
+        )
+        wait_intervals = [
+            float(rule.get("wait_s"))
+            for rule in wait_at
+            if isinstance(rule, dict) and rule.get("wait_s") is not None
+        ]
+        result.append(
             {
-                "id": int(ped_idx),
-                "position": [float(ped_pos[0]), float(ped_pos[1])],
-                "velocity": [float(velocity[0]), float(velocity[1])],
+                "single_index": idx,
+                "pedestrian_id": str(ped.get("id") or f"single_{idx}"),
+                "intent_label": label,
+                "intent_phases": [str(phase) for phase in phases],
+                "intent_source": str(intent.get("intent_source") or "authored_scenario_metadata"),
+                "claim_boundary": str(
+                    intent.get("claim_boundary")
+                    or "Authored scenario metadata only; not data-grounded human intent evidence."
+                ),
+                "behavior_parameters": {
+                    "trajectory_waypoint_count": len(trajectory),
+                    "wait_at": wait_at,
+                    "wait_interval_s": wait_intervals,
+                    "start_delay_s": float(ped.get("start_delay_s", 0.0) or 0.0),
+                    "speed_m_s": (
+                        float(ped["speed_m_s"]) if ped.get("speed_m_s") is not None else None
+                    ),
+                    "role": ped.get("role"),
+                    "role_target_id": ped.get("role_target_id"),
+                },
             }
         )
-    return pedestrians
+    return result
+
+
+def _intent_trace_payload(metadata: dict[str, Any], velocity: np.ndarray) -> dict[str, Any]:
+    """Build optional per-pedestrian authored-intent trace fields.
+
+    Returns:
+        dict[str, Any]: JSON-serializable intent fields for one trace pedestrian.
+    """
+    phases = (
+        metadata.get("intent_phases") if isinstance(metadata.get("intent_phases"), list) else []
+    )
+    speed = float(np.linalg.norm(velocity))
+    if "waiting" in phases and speed <= 1e-6:
+        phase = "waiting"
+    elif "crossing" in phases:
+        phase = "crossing"
+    elif phases:
+        phase = str(phases[0])
+    else:
+        phase = "authored_motion"
+    return {
+        "pedestrian_id": metadata["pedestrian_id"],
+        "intent_label": metadata["intent_label"],
+        "intent_phase": phase,
+        "intent_source": metadata["intent_source"],
+        "claim_boundary": metadata["claim_boundary"],
+        "behavior_parameters": metadata["behavior_parameters"],
+    }
+
+
+def _intent_conditioned_behavior_summary(
+    scenario: dict[str, Any],
+    intent_metadata: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return an analysis-only summary for authored intent-conditioned fixtures."""
+    if not intent_metadata:
+        return None
+    return {
+        "schema_version": "intent-conditioned-behavior-summary.v1",
+        "scenario_name": _scenario_id(scenario),
+        "status": "diagnostic_metadata_only",
+        "benchmark_evidence": False,
+        "trace_field_source": "algorithm_metadata.simulation_step_trace.steps[].pedestrians[]",
+        "claim_boundary": (
+            "Authored intent metadata records fixture phases only; it is not data-grounded "
+            "human behavior evidence and must not be used as a planner-ranking claim."
+        ),
+        "pedestrians": intent_metadata,
+    }
 
 
 def _command_action_payload(command: Any) -> dict[str, float]:
@@ -3425,6 +3551,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     synthetic_actuation_trace: list[dict[str, Any]] = []
     planner_decision_trace: list[dict[str, Any]] = []
     simulation_step_trace: list[dict[str, Any]] = []
+    single_pedestrian_intent_metadata = _single_pedestrian_intent_metadata(scenario)
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
@@ -3558,6 +3685,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             peds,
                             previous_trace_ped_pos,
                             dt_seconds,
+                            single_pedestrian_intent_metadata,
                         ),
                         "planner": planner_payload,
                     }
@@ -3792,6 +3920,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "initial_goal_distance_m": initial_goal_distance,
             "steps": simulation_step_trace,
         }
+    intent_summary = _intent_conditioned_behavior_summary(
+        scenario,
+        single_pedestrian_intent_metadata,
+    )
+    if intent_summary is not None:
+        algo_meta["intent_conditioned_behavior"] = intent_summary
     if actuation_controller is not None:
         actuation_summary = actuation_controller.summary()
         algo_meta["synthetic_actuation"] = {

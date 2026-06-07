@@ -1,0 +1,64 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: issue_2527_waiting_then_crossing
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 160
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    trajectory:
+    - - 14.0
+      - 17.5
+    - - 14.0
+      - 15.0
+    - - 14.0
+      - 4.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 2.0
+      note: authored wait before crossing
+    metadata:
+      intent_conditioned_behavior:
+        schema_version: intent-conditioned-pedestrian-fixture.v1
+        intent_label: waiting_then_crossing
+        intent_phases:
+        - waiting
+        - crossing
+        intent_source: authored_scenario_metadata
+        benchmark_evidence: false
+        claim_boundary: >
+          Authored fixture metadata only; not data-grounded human behavior evidence.
+    note: issue #2527 waiting then crossing fixture
+  robot_config: {}
+  metadata:
+    purpose: Minimal intent-conditioned pedestrian fixture for a waiting-then-crossing smoke.
+    behavior: wait
+    authoring:
+      status: draft
+      template: francis2023-single-pedestrian
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2527
+      benchmark_evidence: false
+    intent_conditioned_behavior:
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      claim_boundary: >
+        This fixture records authored waiting/crossing intent phases for trace smoke testing only.
+        It does not prove realistic pedestrian intent modeling or planner-ranking changes.
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: "Fixture-only diagnostic; copied from the #2472 first smoke candidate."
+      metrics_updated_on: null
+      metrics:
+        min_distance: null
+        mean_distance: null
+        robot_ped_within_5m_frac: null
+        ped_force_mean: null
+        force_q95: null
+  seeds:
+  - 2527
+  - 2528

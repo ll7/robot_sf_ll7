@@ -200,6 +200,8 @@ knowledge, not every transient iteration detail.
   [issue_2472_intent_conditioned_behavior.md](issue_2472_intent_conditioned_behavior.md)
 * Issue #2524 Adversarial Scenario Manifest Generation:
   [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
+* Issue #2526 Cyclist-Like VRU Smoke:
+  [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md)
 * Issue #2527 Waiting-Then-Crossing Fixture:
   [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md)
 * Issue #2473 Cyclist Interaction Benchmark Scope:

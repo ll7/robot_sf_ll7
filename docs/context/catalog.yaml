@@ -557,6 +557,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2526_cyclist_vru_smoke.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2473_cyclist_interaction_benchmark.md
     status: proposal
     freshness: maintained

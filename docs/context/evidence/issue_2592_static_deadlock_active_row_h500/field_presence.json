@@ -1,0 +1,49 @@
+{
+  "schema_version": "static-deadlock-horizon-sensitivity-field-presence.v1",
+  "issue": 2592,
+  "all_required_trace_fields_present": true,
+  "rows": [
+    {
+      "pair_id": "static_recenter_only_h500",
+      "required_trace_fields": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "execution_mode",
+        "row_status"
+      ],
+      "all_required_trace_fields_present": true,
+      "missing_required_trace_fields": {},
+      "baseline_all_required_present": true,
+      "intervention_all_required_present": true,
+      "baseline_missing": [],
+      "intervention_missing": [],
+      "baseline_execution_mode": "adapter",
+      "intervention_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "intervention_row_status": "completed"
+    },
+    {
+      "pair_id": "escape_recenter_pair_h500",
+      "required_trace_fields": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "execution_mode",
+        "row_status"
+      ],
+      "all_required_trace_fields_present": true,
+      "missing_required_trace_fields": {},
+      "baseline_all_required_present": true,
+      "intervention_all_required_present": true,
+      "baseline_missing": [],
+      "intervention_missing": [],
+      "baseline_execution_mode": "adapter",
+      "intervention_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "intervention_row_status": "completed"
+    }
+  ]
+}

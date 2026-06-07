@@ -76,4 +76,6 @@ This result extends the #2588 static-deadlock controlled trace to the semantic e
 It does not establish planner improvement because the only active intervention row changed trace
 state without terminal success. Benchmark-candidate promotion would require a separately
 predeclared broader contract, such as horizon sensitivity or a broader scenario slice, with no
-fallback/degraded/failed rows counted as success.
+fallback/degraded/failed rows counted as success. Successor Issue #2592 ran that active row under
+h500 and found a delayed terminal rescue in both recenter pairings; see
+[issue_2592_static_deadlock_active_row_h500.md](issue_2592_static_deadlock_active_row_h500.md).

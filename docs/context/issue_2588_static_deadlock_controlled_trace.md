@@ -79,3 +79,6 @@ promotion would require a separately predeclared broader contract. Successor Iss
 semantic `escape_recenter_pair` controlled trace at the same 120-step horizon and reached the same
 `controlled_trace_negative_mixed` boundary without terminal success rescue; see
 [issue_2590_escape_recenter_static_deadlock_controlled_trace.md](issue_2590_escape_recenter_static_deadlock_controlled_trace.md).
+Issue #2592 then reran the shared active row under h500 and found a delayed terminal rescue in both
+recenter pairings; see
+[issue_2592_static_deadlock_active_row_h500.md](issue_2592_static_deadlock_active_row_h500.md).

@@ -23,9 +23,38 @@ from robot_sf.scenario_certification.perturbation_preflight import (
 )
 
 COUNTERFACTUAL_PAIR_SCHEMA_VERSION = "counterfactual_scenario_pair.v1"
+MECHANISM_TAXONOMY_SCHEMA_VERSION = "counterfactual_mechanism_taxonomy.v1"
 CLAIM_BOUNDARY = "candidate mechanism-test inputs only; not benchmark evidence"
 _SUCCESS_EVIDENCE_CANDIDATE = "eligible_success_evidence_candidate"
 _SUPPORTED_FEATURES = frozenset({"robot_route_offset"})
+MECHANISM_TAXONOMY_LABELS = (
+    "clearance_pressure",
+    "bottleneck_negotiation",
+    "occlusion_exposure",
+    "signal_compliance",
+    "cyclist_interaction",
+    "actuation_clipping",
+)
+_MECHANISM_TAXONOMY_BY_FEATURE = {
+    "robot_route_offset": {
+        "label": "clearance_pressure",
+        "label_source": MECHANISM_TAXONOMY_SCHEMA_VERSION,
+        "mechanism_hypothesis": (
+            "A bounded robot-route offset changes clearance pressure while holding the scenario, "
+            "planner, and seed fixed."
+        ),
+        "expected_metric_direction": {
+            "clearance_min_distance_m": "direction_depends_on_offset_sign",
+            "collision_or_near_miss_risk": "may_increase_when_offset_reduces_clearance",
+            "success": "no_directional_claim_from_pair_manifest",
+        },
+        "validity_constraints": [
+            "baseline and intervention must both pass perturbation preflight",
+            "seed and source scenario must remain unchanged",
+            "single pair is a mechanism hypothesis input, not causal evidence",
+        ],
+    }
+}
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -140,6 +169,7 @@ def create_pair_manifest(
             "parameters": dict(parameters),
         },
         "changed_feature": family.name,
+        "changed_factor": family.name,
         "unchanged_controls": {
             "scenario_config": scenario_config.as_posix(),
             "source_scenario_id": source,
@@ -154,6 +184,11 @@ def create_pair_manifest(
             "target_surface": family_entry.target_surface,
             "semantic_boundary": family_entry.semantic_boundary,
         },
+        "mechanism_taxonomy": _mechanism_taxonomy_for_feature(family.name),
+        "pair_report": _pair_report(
+            source=source,
+            feature=family.name,
+        ),
         "claim_boundary": CLAIM_BOUNDARY,
         "perturbation_manifest": perturbation_manifest,
         "preflight": preflight_payload,
@@ -187,6 +222,39 @@ def _intervention_parameters(*, feature: str, magnitude: float) -> dict[str, flo
         "dx_m": magnitude,
         "dy_m": 0.0,
         "max_magnitude_m": max_magnitude,
+    }
+
+
+def _mechanism_taxonomy_for_feature(feature: str) -> dict[str, Any]:
+    """Return the explicit mechanism taxonomy row for a supported feature.
+
+    Returns:
+        Mechanism taxonomy row.
+    """
+    row = _MECHANISM_TAXONOMY_BY_FEATURE.get(feature)
+    if row is None:
+        raise CounterfactualPairError(f"missing mechanism taxonomy for feature: {feature}")
+    label = row.get("label")
+    if label not in MECHANISM_TAXONOMY_LABELS:
+        raise CounterfactualPairError(f"unsupported mechanism taxonomy label: {label!r}")
+    return dict(row)
+
+
+def _pair_report(*, source: str, feature: str) -> dict[str, Any]:
+    """Return reportability metadata for why-first consumers.
+
+    Returns:
+        Counterfactual pair report row.
+    """
+    return {
+        "base_scenario_id": source,
+        "counterfactual_scenario_id": source,
+        "changed_factor": feature,
+        "artifact_manifest_ref": "perturbation_manifest",
+        "expected_vs_observed_metric_change": {
+            "status": "not_available",
+            "reason": "no smoke-run metrics were supplied to this pair manifest",
+        },
     }
 
 

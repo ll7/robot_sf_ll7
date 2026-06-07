@@ -287,6 +287,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2543_trace_failure_predicates.md](issue_2543_trace_failure_predicates.md)
 
+* Issue #2547 counterfactual mechanism taxonomy:
+
+  [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)

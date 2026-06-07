@@ -26,6 +26,9 @@ benchmark-improvement claim:
   `revise`.
 - [#2563](issue_2563_topology_corrective_revision.md) selected one next hypothesis, not a completed
   mechanism implementation.
+- [#2522](issue_2522_why_first_diagnostics.md) generated a why-first report that preserves the same
+  `revise` boundary and classifies the current failure as
+  `topology_signal_without_route_progress`.
 
 ## Surfaces Updated
 
@@ -40,6 +43,10 @@ and claim boundaries:
 - [policy_search/candidate_registry_summary.md](policy_search/candidate_registry_summary.md):
   topology candidate summary now names the diagnostic-only `revise` boundary and removes the
   duplicate row.
+- [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md): why-first reporting
+  now points topology interpretation at the Issue #2530 / Issue #2563 lineage instead of treating
+  selection diversity as corrective evidence; the generated artifact is
+  [topology_near_parity_why_first_report.md](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md).
 
 Historical evidence notes and old policy-search reports were not rewritten when they already state
 their own local claim boundary. They remain provenance for the chain above, not current queue

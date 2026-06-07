@@ -370,6 +370,11 @@ knowledge, not every transient iteration detail.
 * Issue #2440 AMV timeout closure:
 
   [issue_2440_amv_timeout_closure.md](issue_2440_amv_timeout_closure.md)
+* Issue #2522 why-first diagnostics:
+
+  [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
+  ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),
+  [AMV report](evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md))
 * Issue #2259 AMV Clipping Versus Success Boundary:
 
   [issue_2259_amv_clipping_success_boundary.md](issue_2259_amv_clipping_success_boundary.md)
@@ -682,6 +687,10 @@ knowledge, not every transient iteration detail.
   [issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md)
 * Issue #2530 topology near-parity corrective-behavior smoke:
   [issue_2530_topology_near_parity_corrective_smoke.md](issue_2530_topology_near_parity_corrective_smoke.md)
+* Issue #2522 topology and AMV why-first diagnostics:
+  [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
+  ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),
+  [AMV report](evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md))
 * Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
@@ -865,6 +874,9 @@ knowledge, not every transient iteration detail.
 * [Issue #2440 AMV Timeout Closure](issue_2440_amv_timeout_closure.md)
   closes the timeout-driver classification as `feasibility_improved_but_route_blocked` and keeps
   actuation-aware scoring diagnostic-only for planner improvement.
+* [Issue #2522 Why-First Diagnostics](issue_2522_why_first_diagnostics.md)
+  publishes generated why-first reports for the topology near-parity and AMV actuation timeout
+  diagnostics while preserving both lanes at `revise`.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.

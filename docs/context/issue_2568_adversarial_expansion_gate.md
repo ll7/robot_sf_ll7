@@ -51,7 +51,7 @@ weakness for RL/diffusion.
 Searches on 2026-06-07 found:
 
 - Issue #2470 and Issue #2471 are closed proposal/interface notes, not active training issues.
-- Issue #2521 is an open empirical-followups epic whose freeze note mentioned broad diffusion/RL
+- Issue #2521 is an open empirical follow-ups epic whose freeze note mentioned broad diffusion/RL
   work. It was updated with a GitHub comment during this issue so downstream execution sees
   Issue #2568, not manifest generation alone, as the active learned-expansion gate.
 - Issue #1488 is an older blocked bounded-search umbrella, not a learned/RL/diffusion expansion issue.

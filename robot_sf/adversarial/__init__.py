@@ -11,6 +11,9 @@ from robot_sf.adversarial.config import (
     SearchSpaceConfig,
 )
 from robot_sf.adversarial.materialize import (
+    materialize_manifest_route_overrides,
+    materialize_manifest_scenario_payload,
+    materialize_manifest_single_pedestrian_override,
     materialize_multi_ped_scenario_payload,
     materialize_multi_ped_single_pedestrian_overrides,
 )
@@ -69,6 +72,9 @@ __all__ = [
     "build_multi_ped_adversarial_robot_config",
     "compute_control_hash",
     "generate_manifests",
+    "materialize_manifest_route_overrides",
+    "materialize_manifest_scenario_payload",
+    "materialize_manifest_single_pedestrian_override",
     "materialize_multi_ped_scenario_payload",
     "materialize_multi_ped_single_pedestrian_overrides",
     "multi_ped_config_to_single_pedestrian_definitions",

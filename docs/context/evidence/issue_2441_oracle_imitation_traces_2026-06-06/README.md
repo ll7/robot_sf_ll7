@@ -3,12 +3,14 @@
 Date: 2026-06-06
 
 This bundle preserves compact evidence for the Issue #2441 follow-up to parent Issue #1470. It
-records two completed SLURM trace-collection jobs:
+records four completed SLURM trace-collection jobs:
 
 | Job | Partition | Split | State | Rows | Success | Collision | Near Miss |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: |
 | `12762` | `a30` | `train` | `COMPLETED` | 6 | 0.6667 | 0.1667 | 0.1667 |
 | `12763` | `l40s` | `validation` | `COMPLETED` | 3 | 0.3333 | 0.0000 | 0.0000 |
+| `12764` | `a30` | `evaluation` | `COMPLETED` | 3 | 0.6667 | 0.3333 | 0.3333 |
+| `12765` | `l40s` | `evaluation` | `COMPLETED` | 3 | 0.6667 | 0.3333 | 0.3333 |
 
 The source candidate was `hybrid_rule_v3_static_margin0_waypoint2`, collected through
 `configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml`,
@@ -24,7 +26,8 @@ classic slices remain weak:
 
 - train classic: 4 episodes, success `0.5`, collision `0.25`, near miss `0.25`;
 - validation classic: 2 episodes, success `0.0`, collision `0.0`, near miss `0.0`;
-- validation failures include `bottleneck_yield_failure` and `timeout_low_progress`.
+- validation failures include `bottleneck_yield_failure` and `timeout_low_progress`;
+- evaluation classic: 2 episodes, success `0.5`, collision `0.5`, near miss `0.5`.
 
 The source candidate can produce trace rows, but the observed classic-slice failures mean these
 results should be treated as diagnostic dataset-prep evidence, not proof of a high-quality oracle.
@@ -37,8 +40,11 @@ The manifests preserve the launch-packet split contract:
 - validation seeds: `101, 102, 103`;
 - evaluation seeds: `111, 112, 113`.
 
-Only train and validation were collected in this queue-fill pass. Evaluation rows remain
-uncollected, so no evaluation examples leaked into the tracked train/validation evidence.
+The initial queue-fill pass collected train and validation only. Evaluation rows were collected in
+follow-up jobs `12764` and `12765`, so no evaluation examples leaked into the tracked
+train/validation evidence. The two evaluation jobs are metric-consistent duplicate collection
+checks on `a30` and `l40s`; their raw checksums differ because the local manifests and JSONL files
+encode run-specific details, so this bundle preserves both finalizers separately.
 
 ## Artifact Decision
 
@@ -49,6 +55,10 @@ Tracked here:
   job.
 - `finalization_12763.json` / `finalization_12763.md`: required-artifact checksums for the
   validation job.
+- `finalization_12764.json` / `finalization_12764.md`: required-artifact checksums for the first
+  evaluation job.
+- `finalization_12765.json` / `finalization_12765.md`: required-artifact checksums for the second
+  evaluation job.
 - `SHA256SUMS`: checksums for this tracked evidence bundle.
 
 Not tracked:
@@ -64,9 +74,9 @@ given concrete retrieval pointers.
 ## Validation
 
 ```bash
-sacct -j 12762,12763 --format=JobID,JobName%24,State,ExitCode,Partition,Elapsed,Start,End -P
+sacct -j 12762,12763,12764,12765 --format=JobID,JobName%24,State,ExitCode,Partition,Elapsed,Start,End -P
 jq empty docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/summary.json
-sha256sum -c docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/SHA256SUMS
+(cd docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06 && sha256sum -c SHA256SUMS)
 ```
 
 Result classification: `completed_pending_artifact_promotion`.

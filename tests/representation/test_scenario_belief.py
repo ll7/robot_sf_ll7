@@ -342,3 +342,63 @@ def test_tracked_agent_metadata_to_debug_dict_produces_deterministic_output() ->
     assert debug["is_coasted"] is False
     # second call should match
     assert meta.to_debug_dict() == debug
+
+
+def test_to_uncertainty_report_preserves_covariance_and_class_probabilities() -> None:
+    """to_uncertainty_report should preserve uncertainty fields that to_socnav_struct drops."""
+    env_config = RobotSimulationConfig()
+    simulator = _simulator_fixture()
+    belief = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    report = belief.to_uncertainty_report()
+
+    assert "agents" in report
+    assert "ego" in report
+    assert len(report["agents"]) == 2
+
+    first_agent = report["agents"][0]
+    assert "class_probabilities" in first_agent
+    assert "position_covariance_xy" in first_agent
+    assert "velocity_covariance_xy" in first_agent
+    assert "position_confidence" in first_agent
+    assert "velocity_confidence" in first_agent
+    assert first_agent["class_probabilities"] == {"pedestrian": 0.98}
+    assert first_agent["position_confidence"] == pytest.approx(0.98)
+
+    assert "class_probabilities" in report["ego"]
+    assert "position_covariance_xy" in report["ego"]
+    assert "velocity_covariance_xy" in report["ego"]
+    assert report["ego"]["class_probabilities"] == {"ego_robot": 1.0}
+
+    assert "goals" in report
+    assert "current_covariance_xy" in report["goals"][0]
+    assert "next_covariance_xy" in report["goals"][0]
+
+
+def test_to_socnav_struct_fails_closed_for_uncertainty_consumption() -> None:
+    """to_socnav_struct output lacks uncertainty fields; consumers must not find them."""
+    env_config = RobotSimulationConfig()
+    simulator = _simulator_fixture()
+    belief = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    obs = belief.to_socnav_struct()
+
+    # Fail-closed: the legacy projection drops covariance and class-probability keys.
+    with pytest.raises(KeyError):
+        _ = obs["position_covariance_xy"]
+    with pytest.raises(KeyError):
+        _ = obs["covariance"]
+    robot = obs["robot"]
+    assert "covariance" not in robot
+    assert "confidence" not in robot
+    pedestrians = obs["pedestrians"]
+    assert "covariance" not in pedestrians
+    assert "class_probabilities" not in pedestrians

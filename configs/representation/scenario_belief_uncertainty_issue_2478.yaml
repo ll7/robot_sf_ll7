@@ -17,6 +17,7 @@ contract_surfaces:
   base_contract_manifest: configs/representation/scenario_belief_contract_issue_2477.yaml
   base_contract_note: docs/context/issue_2477_scenario_belief_contract.md
   uncertainty_note: docs/context/issue_2478_uncertainty_scenario_belief.md
+  consumer_smoke_note: docs/context/issue_2528_scenario_belief_consumer_smoke.md
   tests:
     - tests/representation/test_scenario_belief.py
     - tests/representation/test_scenario_belief_uncertainty_manifest.py
@@ -92,6 +93,11 @@ consumer_boundaries:
     method: ScenarioBelief.diagnostic_summary
     uncertainty_behavior: summarizes visibility and missing-data counts only
     compatibility_rule: diagnostic-only summary, not planner or benchmark improvement evidence
+  - key: uncertainty_report
+    method: ScenarioBelief.to_uncertainty_report
+    uncertainty_behavior: preserves covariance, class probabilities, confidence, and existence probability for all projection-eligible agents
+    compatibility_rule: diagnostic report, not a policy observation; agents are visibility-filtered and capped per max_pedestrians
+    parent_issue: 2528
 
 known_gaps:
   - heading uncertainty is not represented yet; heading remains a scalar legacy field

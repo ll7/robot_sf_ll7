@@ -552,6 +552,8 @@ knowledge, not every transient iteration detail.
   [issue_2477_scenario_belief_contract.md](issue_2477_scenario_belief_contract.md)
 * Issue #2478 Uncertainty-Aware ScenarioBelief Contract (2026-06-06):
   [issue_2478_uncertainty_scenario_belief.md](issue_2478_uncertainty_scenario_belief.md)
+* Issue #2528 ScenarioBelief Consumer Smoke (2026-06-07):
+  [issue_2528_scenario_belief_consumer_smoke.md](issue_2528_scenario_belief_consumer_smoke.md)
 * Issue #2479 Real-Trajectory Scenario Prior Scope (2026-06-06):
   [issue_2479_real_trajectory_scenario_prior.md](issue_2479_real_trajectory_scenario_prior.md)
 * Issue #2474 Signalized Pedestrian Crossing Benchmark Scope (2026-06-06):

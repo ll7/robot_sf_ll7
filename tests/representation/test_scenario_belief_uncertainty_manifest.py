@@ -158,3 +158,17 @@ def test_uncertainty_manifest_keeps_non_benchmark_claim_boundary() -> None:
     assert "does not prove" in claim_boundary
     assert any("heading uncertainty" in str(gap) for gap in known_gaps)
     assert hasattr(ScenarioBelief, "to_socnav_struct")
+    assert hasattr(ScenarioBelief, "to_uncertainty_report")
+
+
+def test_uncertainty_manifest_consumer_boundary_uncertainty_report_exists() -> None:
+    """The #2528 consumer boundary should reference an existing method."""
+    manifest = _manifest()
+    boundaries = manifest["consumer_boundaries"]
+    report_boundary = [
+        b for b in boundaries if b.get("method") == "ScenarioBelief.to_uncertainty_report"
+    ]
+    assert len(report_boundary) == 1, "consumer_boundaries must include uncertainty_report entry"
+    entry = report_boundary[0]
+    assert entry["uncertainty_behavior"] != ""
+    assert entry["parent_issue"] == 2528

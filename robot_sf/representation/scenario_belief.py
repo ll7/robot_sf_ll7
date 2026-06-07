@@ -402,6 +402,85 @@ class ScenarioBelief:
             "agents": [agent.to_debug_dict() for agent in self.agents],
         }
 
+    def to_uncertainty_report(self) -> dict[str, Any]:
+        """Project belief into a diagnostic report preserving all uncertainty fields.
+
+        This is the uncertainty-preserving consumer projection for local planner analysis.
+        Unlike to_socnav_struct() which drops covariance, class_probabilities, and confidence
+        for backward compatibility, this report preserves all uncertainty metadata.
+
+        This is diagnostic-only evidence. It does not claim benchmark improvement,
+        SNQI movement, or paper-facing performance.
+
+        Returns:
+            dict[str, Any]: Deterministic report with covariance, class probabilities,
+                and confidence for ego, goals, and visibility-filtered agents.
+        """
+        visible_agents = tuple(
+            agent for agent in self.agents if agent.visibility_state is VisibilityState.VISIBLE
+        )
+        robot_pos = self._clip_position(self.ego.position.as_array())
+
+        ordered_agents = sorted(
+            visible_agents,
+            key=lambda agent: (
+                float(np.linalg.norm(agent.position.as_array() - robot_pos)),
+                agent.entity_id,
+            ),
+        )[: self.max_pedestrians]
+
+        return {
+            "schema_version": self.schema_version,
+            "frame_id": self.frame_id,
+            "sim_time_s": round(float(self.sim_time_s), 6),
+            "ego": {
+                "class_probabilities": {
+                    lbl: round(float(p), 6) for lbl, p in sorted(_class_probabilities(self.ego))
+                },
+                "position_covariance_xy": [
+                    [round(float(v), 6) for v in row] for row in self.ego.position.covariance_xy
+                ],
+                "velocity_covariance_xy": [
+                    [round(float(v), 6) for v in row] for row in self.ego.velocity.covariance_xy
+                ],
+                "position_confidence": round(float(self.ego.position.confidence), 6),
+                "velocity_confidence": round(float(self.ego.velocity.confidence), 6),
+                "heading": round(float(self.ego.heading), 6),
+            },
+            "goals": [
+                {
+                    "current_covariance_xy": [
+                        [round(float(v), 6) for v in row] for row in g.current.covariance_xy
+                    ],
+                    "next_covariance_xy": [
+                        [round(float(v), 6) for v in row] for row in g.next.covariance_xy
+                    ],
+                    "current_confidence": round(float(g.current.confidence), 6),
+                    "next_confidence": round(float(g.next.confidence), 6),
+                }
+                for g in self.goals
+            ],
+            "agents": [
+                {
+                    "entity_id": a.entity_id,
+                    "class_probabilities": {
+                        lbl: round(float(p), 6) for lbl, p in sorted(_class_probabilities(a))
+                    },
+                    "position_covariance_xy": [
+                        [round(float(v), 6) for v in row] for row in a.position.covariance_xy
+                    ],
+                    "velocity_covariance_xy": [
+                        [round(float(v), 6) for v in row] for row in a.velocity.covariance_xy
+                    ],
+                    "position_confidence": round(float(a.position.confidence), 6),
+                    "velocity_confidence": round(float(a.velocity.confidence), 6),
+                    "existence_probability": round(float(a.existence_probability), 6),
+                    "visibility_state": a.visibility_state.value,
+                }
+                for a in ordered_agents
+            ],
+        }
+
     def _clip_position(self, values: np.ndarray) -> np.ndarray:
         """Clip position-like values to the representable map extent.
 
@@ -410,6 +489,11 @@ class ScenarioBelief:
         """
         position_cap = np.asarray(self.map_size, dtype=np.float32)
         return np.clip(values, 0.0, position_cap).astype(np.float32)
+
+
+def _class_probabilities(entity: EntityBelief) -> tuple[tuple[str, float], ...]:
+    """Return explicit or default class-probability metadata for an entity."""
+    return entity.class_probabilities or ((entity.entity_type, 1.0),)
 
 
 def _in_policy_projection(

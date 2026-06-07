@@ -1,0 +1,31 @@
+## Issue #2594 broader h500 static-deadlock recenter slice
+#
+# Purpose:
+#   Extend the #2592 selected active-row h500 rescue signal to the predeclared
+#   #2588/#2590 3-scenario x 3-seed controlled slice. This remains controlled
+#   horizon-sensitivity trace evidence, not planner ranking or benchmark-candidate proof.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_bottleneck.yaml
+  - ../archetypes/classic_head_on_corridor.yaml
+  - ../archetypes/issue_596_static_obstacles.yaml
+
+select_scenarios:
+  - classic_bottleneck_low
+  - classic_head_on_corridor_low
+  - narrow_passage
+
+scenario_overrides:
+  seeds: [111, 112, 113]
+  metadata:
+    mechanism_aware_suite_id: static_deadlock_recovery
+    issue: 2594
+    evidence_tier: controlled_trace_horizon_sensitivity
+    claim_boundary: >
+      Broader h500 matched baseline/intervention static-deadlock trace slice for
+      delayed-rescue mechanism accounting only; not planner ranking, mechanism
+      transfer, benchmark-candidate evidence, or paper-facing proof.
+
+map_search_paths:
+  - ../../../maps/svg_maps

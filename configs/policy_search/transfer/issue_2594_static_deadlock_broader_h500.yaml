@@ -1,0 +1,23 @@
+stage_order:
+  - full_matrix
+
+stages:
+  full_matrix:
+    scenario_matrix: configs/scenarios/sets/issue_2594_static_deadlock_broader_h500.yaml
+    seed_list: [111, 112, 113]
+    benchmark_profile: experimental
+    horizon: 500
+    dt: 0.1
+    workers: 1
+    requires_slurm: false
+    paper_facing: false
+    mechanism_transfer:
+      issue: 2594
+      mechanism: static_deadlock_recovery
+      transfer_axis: broader_h500_static_recenter_slice
+      candidate_pairs:
+        - baseline_candidate: hybrid_rule_v3_fast_progress
+          intervention_candidate: issue_2170_static_recenter_only
+        - baseline_candidate: issue_2170_static_escape_only
+          intervention_candidate: issue_2170_static_escape_recenter_no_transit
+      claim_boundary: controlled_trace_horizon_sensitivity

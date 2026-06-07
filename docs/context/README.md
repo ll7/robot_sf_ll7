@@ -307,6 +307,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2592_static_deadlock_active_row_h500.md](issue_2592_static_deadlock_active_row_h500.md)
 
+* Issue #2594 broader h500 static-deadlock recenter slice:
+
+  [issue_2594_static_deadlock_broader_h500.md](issue_2594_static_deadlock_broader_h500.md)
+
 * Issue #2547 counterfactual mechanism taxonomy:
 
   [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)

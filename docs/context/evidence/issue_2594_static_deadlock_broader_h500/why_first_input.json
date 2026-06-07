@@ -1,0 +1,56 @@
+{
+  "title": "Issue #2594 Broader H500 Static-Deadlock Recenter Slice",
+  "planner": "static_recenter_only and escape_recenter_pair broader h500 static-deadlock slice",
+  "scenario_id": "static_deadlock_recovery: 3 scenarios x 3 seeds, h500",
+  "execution_status": "controlled_trace_horizon_sensitivity",
+  "outcome": "Both h500 recenter pairings completed the predeclared 3-scenario x 3-seed static-deadlock slice with all required trace fields. Each pairing reproduced terminal rescue on classic_bottleneck_low seed 113, while the remaining 16 pair-rows were already solved by both comparator and intervention.",
+  "failure_mechanism": {
+    "label": "horizon_limited_static_deadlock_or_local_minimum",
+    "rationale": "The only unsolved baseline row in the broader slice remained a 500-step low-progress local minimum, while recentering removed the local-minimum indicator and reached success at step 122."
+  },
+  "mechanism_activation": {
+    "name": "static_recenter",
+    "status": "broader_delayed_rescue_supported",
+    "evidence": "Both intervention candidates had four positive static_recenter decision terms beginning at step 7 on classic_bottleneck_low seed 113 and converted the matched baseline failure into terminal success."
+  },
+  "paired_comparator": {
+    "name": "two broader h500 recenter pairings",
+    "outcome": "`hybrid_rule_v3_fast_progress` versus `issue_2170_static_recenter_only` and `issue_2170_static_escape_only` versus `issue_2170_static_escape_recenter_no_transit` each produced 8 already-solved rows and 1 `mechanism_active_terminal_changed` row.",
+    "delta": {
+      "pair_rows": 18,
+      "terminal_rescue_pair_rows": 2,
+      "already_solved_pair_rows": 16,
+      "classification": "broader_delayed_rescue_supported"
+    }
+  },
+  "metrics": {
+    "pair_rows": 18,
+    "completed_pair_rows": 18,
+    "terminal_rescue_pair_rows": 2,
+    "already_solved_pair_rows": 16,
+    "activation_count_total": 8,
+    "intervention_success_steps": [
+      122
+    ],
+    "baseline_failure_steps": [
+      500
+    ],
+    "required_fields_present": true
+  },
+  "trace_evidence": {
+    "summary": "docs/context/evidence/issue_2594_static_deadlock_broader_h500/summary.json",
+    "field_presence": "docs/context/evidence/issue_2594_static_deadlock_broader_h500/field_presence.json",
+    "table": "docs/context/evidence/issue_2594_static_deadlock_broader_h500/broader_h500_table.csv",
+    "raw_output_policy": "raw activation_trace JSON files were worktree-local and summarized into tracked compact evidence"
+  },
+  "alternative_explanations": [
+    "The broader 3x3 slice contained only one unsolved active row; the other rows cannot show a rescue because both comparator and intervention already succeeded.",
+    "The longer h500 stop rule differs from the h120 controlled traces and should not be presented as direct planner-ranking improvement.",
+    "Both intervention candidates share the same observed recenter behavior on the active row, so this supports a static-recenter horizon-sensitivity claim rather than a broader planner-family claim."
+  ],
+  "decision": {
+    "action": "continue",
+    "rationale": "The predeclared broader h500 slice supports the delayed-rescue mechanism signal, but the evidence remains concentrated in one unsolved active row and is not benchmark-candidate proof.",
+    "next_step": "Synthesize the static-deadlock recenter claim boundary or predeclare a harder unsolved-row expansion before any promotion beyond controlled trace evidence."
+  }
+}

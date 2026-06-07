@@ -339,6 +339,9 @@ knowledge, not every transient iteration detail.
 * Issue #2404 AMV timeout decomposition decision:
 
   [issue_2404_amv_timeout_decomposition_decision.md](issue_2404_amv_timeout_decomposition_decision.md)
+* Issue #2440 AMV timeout closure:
+
+  [issue_2440_amv_timeout_closure.md](issue_2440_amv_timeout_closure.md)
 * Issue #2259 AMV Clipping Versus Success Boundary:
 
   [issue_2259_amv_clipping_success_boundary.md](issue_2259_amv_clipping_success_boundary.md)
@@ -811,6 +814,9 @@ knowledge, not every transient iteration detail.
 * [Issue #2443 AMV Actuation Trace Review](issue_2443_amv_trace_review.md)
   records the compact progress-vs-clipping review for the matched AMV actuation-smoke pair and
   fails closed on missing raw frame/event IDs.
+* [Issue #2440 AMV Timeout Closure](issue_2440_amv_timeout_closure.md)
+  closes the timeout-driver classification as `feasibility_improved_but_route_blocked` and keeps
+  actuation-aware scoring diagnostic-only for planner improvement.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.

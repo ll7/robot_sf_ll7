@@ -1,0 +1,55 @@
+{
+  "schema_version": "scenario_belief_planner_projection_smoke.v1",
+  "issue": 2538,
+  "date": "2026-06-07",
+  "status": "diagnostic_interface_smoke",
+  "claim_boundary": "ScenarioBelief uncertainty metadata can reach one stream_gap-compatible planner observation sidecar and unsupported planners fail closed on a fixture.",
+  "not_benchmark_evidence": true,
+  "implementation": {
+    "adapter": "robot_sf/planner/scenario_belief_adapter.py",
+    "planner_consumer": "robot_sf/planner/stream_gap.py",
+    "test_file": "tests/planner/test_stream_gap_planner.py"
+  },
+  "consumer": {
+    "supported_planner_key": "stream_gap",
+    "uncertainty_sidecar_path": "observation.pedestrians.uncertainty",
+    "compatibility_payload_path": "observation.pedestrians.uncertainty_compatibility",
+    "compatibility_schema": "scenario-belief-planner-projection.v1",
+    "unsupported_behavior": "fail_closed_without_uncertainty_sidecar"
+  },
+  "validation": [
+    {
+      "command": "uv run pytest tests/planner/test_stream_gap_planner.py -k \"uncertainty or scenario_belief\" -q",
+      "result": "pass",
+      "summary": "10 passed, 4 deselected"
+    },
+    {
+      "command": "uv run pytest tests/planner/test_stream_gap_planner.py tests/representation/test_scenario_belief.py tests/representation/test_scenario_belief_uncertainty_manifest.py -q",
+      "result": "pass",
+      "summary": "32 passed"
+    },
+    {
+      "command": "uv run ruff check robot_sf/planner/scenario_belief_adapter.py tests/planner/test_stream_gap_planner.py",
+      "result": "pass"
+    },
+    {
+      "command": "uv run ruff format --check robot_sf/planner/scenario_belief_adapter.py tests/planner/test_stream_gap_planner.py",
+      "result": "pass"
+    },
+    {
+      "command": "uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml",
+      "result": "pass"
+    },
+    {
+      "command": "BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh",
+      "result": "pass",
+      "summary": "9 changed files"
+    }
+  ],
+  "limitations": [
+    "Unit-level fixture only.",
+    "No runtime environment-step ScenarioBelief producer is wired into planner selection.",
+    "No planner performance, safety, SNQI, calibration, or benchmark claim."
+  ],
+  "next_step": "Connect a runtime ScenarioBelief producer or observation builder to the planner projection and rerun as an end-to-end smoke."
+}

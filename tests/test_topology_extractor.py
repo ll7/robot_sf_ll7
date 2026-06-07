@@ -20,10 +20,18 @@ def test_topology_extractor_fields():
         "rejection_reason",
         "score_margin_to_primary_route",
         "switch_opportunity_count",
+        "primary_vs_best_alternative_route_distance",
+        "near_parity_gate_reason",
+        "selected_static_clearance_min_m",
+        "best_alternative_static_clearance_min_m",
     ]
     for k in keys:
         assert k in out
     assert out["selected_hypothesis"] == "primary_route"
+    assert out["primary_vs_best_alternative_route_distance"] == 0.2
+    assert out["near_parity_gate_reason"] == "eligible_near_parity_alternative"
+    assert out["selected_static_clearance_min_m"] == 0.4
+    assert out["best_alternative_static_clearance_min_m"] == 0.38
 
 
 def test_topology_fallback_uses_selected_or_highest_score():

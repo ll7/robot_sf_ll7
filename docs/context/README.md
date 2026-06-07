@@ -146,6 +146,8 @@ knowledge, not every transient iteration detail.
   [issue_2393_topology_selection_preflight.md](issue_2393_topology_selection_preflight.md)
 * Issue #2403 topology selection-score decision:
   [issue_2403_topology_selection_score_decision.md](issue_2403_topology_selection_score_decision.md)
+* Issue #2518 topology near-parity gate diagnostic:
+  [issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md)
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:
@@ -638,6 +640,8 @@ knowledge, not every transient iteration detail.
   [issue_2393_topology_selection_preflight.md](issue_2393_topology_selection_preflight.md)
 * Issue #2403 topology selection-score decision:
   [issue_2403_topology_selection_score_decision.md](issue_2403_topology_selection_score_decision.md)
+* Issue #2518 topology near-parity gate diagnostic:
+  [issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md)
 * Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:

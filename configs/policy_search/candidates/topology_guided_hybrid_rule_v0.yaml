@@ -12,6 +12,11 @@ params:
   max_path_overlap: 0.88
   length_weight: 1.0
   static_clearance_weight: 0.6
+  near_parity_diversity_gate_enabled: true
+  near_parity_route_distance_slack_m: 0.75
+  near_parity_route_distance_slack_ratio: 0.05
+  near_parity_static_clearance_floor_m: 0.05
+  near_parity_diversity_bonus: 0.5
   fail_closed_on_missing_inputs: true
   fail_closed_on_insufficient_hypotheses: false
   topology_command_enabled: true

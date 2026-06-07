@@ -92,6 +92,12 @@ def test_topology_guided_selector_finds_two_distinct_route_hypotheses() -> None:
     assert selected["route_corridor"]["route_waypoint_world"]
     assert selected["static_clearance_min_m"] is not None
     assert decision["selected_score"] == selected["score"]
+    assert decision["selection_score"] == selected["selection_score"]
+    assert decision["near_parity_gate_enabled"] is False
+    assert decision["near_parity_gate_reason"] == "disabled"
+    assert decision["primary_vs_best_alternative_route_distance"] is not None
+    assert decision["selected_static_clearance_min_m"] is not None
+    assert decision["best_alternative_static_clearance_min_m"] is not None
     assert selected["selection_outcome"] == "selected"
     assert selected["rejection_reason"] is None
     assert selected["score_components"].keys() == {
@@ -101,6 +107,40 @@ def test_topology_guided_selector_finds_two_distinct_route_hypotheses() -> None:
     assert all(item["selection_outcome"] == "rejected" for item in rejected)
     assert all(item["rejection_reason"] == "lower_topology_selection_score" for item in rejected)
     assert all(item["score_margin_to_selected"] >= 0.0 for item in decision["hypotheses"])
+
+
+def test_near_parity_gate_can_select_non_primary_hypothesis() -> None:
+    """The diagnostic gate should be able to promote a near-parity alternative route."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            near_parity_diversity_gate_enabled=True,
+            near_parity_route_distance_slack_m=100.0,
+            near_parity_route_distance_slack_ratio=100.0,
+            near_parity_static_clearance_floor_m=100.0,
+            near_parity_diversity_bonus=100.0,
+        )
+    )
+
+    decision = planner._hypotheses_for_observation(_obs(occupied_cells=_two_gap_wall()))
+
+    assert decision["status"] == "ok"
+    assert decision["near_parity_gate_enabled"] is True
+    assert decision["selected_hypothesis_id"] != "primary_route"
+    assert decision["near_parity_gate_reason"] == "selected_non_primary_near_parity"
+    assert decision["primary_vs_best_alternative_route_distance"] is not None
+    assert decision["selected_static_clearance_min_m"] is not None
+    assert decision["best_alternative_static_clearance_min_m"] is not None
+    selected = next(
+        item
+        for item in decision["hypotheses"]
+        if item["hypothesis_id"] == decision["selected_hypothesis_id"]
+    )
+    primary = next(
+        item for item in decision["hypotheses"] if item["hypothesis_id"] == "primary_route"
+    )
+    assert selected["selection_score"] > selected["score"]
+    assert primary["selection_outcome"] == "rejected"
+    assert primary["rejection_reason"] == "near_parity_diversity_gate"
 
 
 def test_topology_guided_policy_fails_closed_without_required_inputs() -> None:

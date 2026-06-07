@@ -322,7 +322,8 @@ def _annotate_near_parity_gate(
         config.near_parity_diversity_bonus
     )
     best_alternative["near_parity_gate_reason"] = "eligible_near_parity_alternative"
-    primary["selection_rejection_reason"] = "near_parity_diversity_gate"
+    if float(best_alternative["selection_score"]) > float(primary["selection_score"]):
+        primary["selection_rejection_reason"] = "near_parity_diversity_gate"
     diagnostic["near_parity_gate_reason"] = "eligible_near_parity_alternative"
     return diagnostic
 
@@ -340,9 +341,18 @@ def _finalize_near_parity_gate_diagnostic(
     """
     selected_clearance = selected.get("static_clearance_min_m")
     selected_non_primary = str(selected.get("hypothesis_id")) != "primary_route"
+    eligible_gate = str(diagnostic["near_parity_gate_reason"]) == "eligible_near_parity_alternative"
+    selected_score = _finite_optional_float(selected.get("selection_score", selected.get("score")))
+    raw_score = _finite_optional_float(selected.get("score"))
+    gate_boost_applied = (
+        selected_score is not None and raw_score is not None and selected_score > raw_score
+    )
     reason = (
         "selected_non_primary_near_parity"
-        if bool(config.near_parity_diversity_gate_enabled) and selected_non_primary
+        if bool(config.near_parity_diversity_gate_enabled)
+        and selected_non_primary
+        and eligible_gate
+        and gate_boost_applied
         else str(diagnostic["near_parity_gate_reason"])
     )
     diagnostic["selected_static_clearance_min_m"] = selected_clearance

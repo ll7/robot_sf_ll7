@@ -299,6 +299,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2588_static_deadlock_controlled_trace.md](issue_2588_static_deadlock_controlled_trace.md)
 
+* Issue #2590 escape-recenter static-deadlock controlled trace:
+
+  [issue_2590_escape_recenter_static_deadlock_controlled_trace.md](issue_2590_escape_recenter_static_deadlock_controlled_trace.md)
+
 * Issue #2547 counterfactual mechanism taxonomy:
 
   [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)

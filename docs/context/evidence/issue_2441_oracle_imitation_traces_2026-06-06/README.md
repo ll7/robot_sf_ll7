@@ -76,7 +76,7 @@ given concrete retrieval pointers.
 ```bash
 sacct -j 12762,12763,12764,12765 --format=JobID,JobName%24,State,ExitCode,Partition,Elapsed,Start,End -P
 jq empty docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/summary.json
-sha256sum -c docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/SHA256SUMS
+(cd docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06 && sha256sum -c SHA256SUMS)
 ```
 
 Result classification: `completed_pending_artifact_promotion`.

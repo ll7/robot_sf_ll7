@@ -10,6 +10,8 @@ import pytest
 from scripts.dev.watch_pr_ci_status import (
     DEFAULT_BASELINE_SECONDS,
     DEFAULT_MULTIPLIER,
+    _duration_seconds,
+    _parse_timestamp,
     fetch_recent_successful_ci_durations,
     main,
     wait_budget_seconds,
@@ -144,3 +146,47 @@ def test_main_returns_timeout_exit_code(capsys: pytest.CaptureFixture[str]) -> N
     assert rc == 2
     payload = json.loads(capsys.readouterr().out)
     assert payload["final_status"] == "timeout"
+
+
+def test_parse_timestamp_accepts_any_and_returns_none_for_invalid() -> None:
+    """_parse_timestamp should handle Any input gracefully."""
+    assert _parse_timestamp(None) is None
+    assert _parse_timestamp("") is None
+    assert _parse_timestamp(42) is None
+    assert _parse_timestamp("not-a-timestamp") is None
+    assert _parse_timestamp("2026-06-01T00:00:00Z") is not None
+
+
+def test_duration_seconds_handles_timezone_mismatch() -> None:
+    """_duration_seconds should return None on tz-aware/naive TypeError."""
+    result = _duration_seconds("2026-06-01T00:00:00+00:00", "2026-06-01T00:10:00")
+    assert result is None
+
+
+def test_terminal_state_returns_immediate_error() -> None:
+    """CLOSED/MERGED PR state should return error without polling."""
+    fetch_status = MagicMock(
+        return_value={
+            "status": "ok",
+            "state": "CLOSED",
+            "pr": 42,
+            "head_sha": "abc123",
+            "checks": {},
+        }
+    )
+    result = watch_pr_ci_status(
+        pr_number="42",
+        fetch_status=fetch_status,
+        fetch_durations=MagicMock(),
+    )
+    assert result.final_status == "error"
+    assert "CLOSED" in result.error or "closed" in result.error
+
+
+def test_main_valueerror_on_invalid_args(capsys: pytest.CaptureFixture[str]) -> None:
+    """main should catch ValueError for invalid --multiplier."""
+    rc = main(["42", "--multiplier", "-1"])
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "ERROR" in captured.err
+    assert "multiplier" in captured.err

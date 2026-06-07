@@ -71,20 +71,26 @@ def wait_budget_seconds(baseline_seconds: int, multiplier: float) -> int:
     return math.ceil(baseline_seconds * multiplier)
 
 
-def _parse_timestamp(value: str | None) -> datetime | None:
+def _parse_timestamp(value: Any) -> datetime | None:
     """Parse a GitHub timestamp."""
-    if not value:
+    if not isinstance(value, str) or not value:
         return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
-def _duration_seconds(start: str | None, end: str | None) -> int | None:
+def _duration_seconds(start: Any, end: Any) -> int | None:
     """Return elapsed whole seconds for a GitHub run timestamp pair."""
     started = _parse_timestamp(start)
     completed = _parse_timestamp(end)
     if started is None or completed is None:
         return None
-    return max(int((completed - started).total_seconds()), 0)
+    try:
+        return max(int((completed - started).total_seconds()), 0)
+    except TypeError:
+        return None
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -210,6 +216,21 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
                 error=str(last_status.get("error") or "unknown status error"),
                 drift_sample=None,
             )
+        state = str(last_status.get("state") or "").upper()
+        if state in {"CLOSED", "MERGED"}:
+            return WatchResult(
+                pr=last_status.get("pr", pr_number),
+                head_sha=head_sha,
+                expected_head_sha=expected_head_sha,
+                baseline_seconds=baseline_seconds,
+                multiplier=multiplier,
+                budget_seconds=budget_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                final_status="error",
+                checks=last_status.get("checks", {}),
+                error=f"PR is in terminal state: {state}",
+                drift_sample=None,
+            )
         if expected_head_sha and head_sha and head_sha != expected_head_sha:
             return WatchResult(
                 pr=last_status.get("pr", pr_number),
@@ -331,6 +352,9 @@ def main(argv: list[str] | None = None) -> int:
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         print(f"ERROR watching PR CI: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"ERROR: Invalid argument: {exc}", file=sys.stderr)
         return 1
     print(result.to_json() if args.json else format_human(result))
     if result.final_status == "success":

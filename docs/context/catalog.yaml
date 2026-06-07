@@ -169,6 +169,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2438_static_recenter_activation_closure.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2438_static_recenter_activation_closure_2026-06-07/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2261_static_recenter_slice_local.md
     status: current
     freshness: evidence

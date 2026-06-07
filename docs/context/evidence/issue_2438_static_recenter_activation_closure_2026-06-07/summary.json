@@ -1,0 +1,70 @@
+{
+  "schema_version": "robot-sf-static-recenter-activation-closure.v1",
+  "issue": 2438,
+  "generated_at": "2026-06-07T05:10:00+00:00",
+  "evidence_tier": "diagnostic_only",
+  "claim_boundary": "Closure synthesis of existing Issue #2306 and Issue #2402 static-recenter activation evidence; not benchmark-strength, transfer, planner-improvement, or paper-facing evidence.",
+  "source_diagnostics": [
+    {
+      "issue": 2306,
+      "summary_path": "docs/context/evidence/issue_2306_static_recenter_activation_trace_2026-06-05/summary.json",
+      "role": "instrumented_rerun"
+    },
+    {
+      "issue": 2402,
+      "summary_path": "docs/context/evidence/issue_2402_static_recenter_activation_2026-06-06/summary.json",
+      "role": "requested_field_mapping"
+    }
+  ],
+  "rerun_decision": {
+    "additional_rerun_performed": false,
+    "reason": "Issue #2306 already reran the same held-out static-recenter smoke with activation instrumentation, and Issue #2402 already mapped the requested fields."
+  },
+  "smoke_contract": {
+    "baseline_candidate": "hybrid_rule_v3_fast_progress",
+    "intervention_candidate": "issue_2170_static_recenter_only",
+    "scenario_matrix": "configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml",
+    "seed_list": [
+      111
+    ],
+    "horizon": 500
+  },
+  "mechanism_activation": [
+    {
+      "mechanism_id": "static_recenter",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 111,
+      "baseline_candidate": "hybrid_rule_v3_fast_progress",
+      "intervention_candidate": "issue_2170_static_recenter_only",
+      "activation_count": 0,
+      "first_activation_step": null,
+      "selected_command_source": [],
+      "command_source_changed": false,
+      "progress_delta_after_activation": null,
+      "trajectory_delta_m": 0.0,
+      "terminal_outcome_changed": false,
+      "likely_failure_reason": "static_recenter_gate_did_not_activate_on_unsolved_heldout_row",
+      "classification": "mechanism_inactive"
+    },
+    {
+      "mechanism_id": "static_recenter",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 111,
+      "baseline_candidate": "hybrid_rule_v3_fast_progress",
+      "intervention_candidate": "issue_2170_static_recenter_only",
+      "activation_count": 0,
+      "first_activation_step": null,
+      "selected_command_source": [],
+      "command_source_changed": false,
+      "progress_delta_after_activation": null,
+      "trajectory_delta_m": 0.0,
+      "terminal_outcome_changed": false,
+      "likely_failure_reason": "baseline_already_solved_case_no_recenter_rescue_target",
+      "classification": "comparator_already_solved_case"
+    }
+  ],
+  "overall_issue_2438_decision": "mechanism_inactive",
+  "secondary_context": "The solved intersection-wait row is comparator_already_solved_case; the unsolved station-platform row controls the overall Issue #2438 decision.",
+  "recommendation": "stop_current_heldout_transfer_route",
+  "next_research_direction": "Do not tune or promote static recentering from this held-out smoke. Continue only with a predeclared slice where static recentering should activate and where the same activation fields can distinguish inactive, active-but-irrelevant, and successful rescue behavior."
+}

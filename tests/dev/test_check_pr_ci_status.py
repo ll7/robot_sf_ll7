@@ -20,6 +20,7 @@ def test_format_human_success() -> None:
         "state": "OPEN",
         "mergeable": "MERGEABLE",
         "branch": "fix-thing",
+        "head_sha": "abc123",
         "checks": {
             "total": 3,
             "overall": "failure",
@@ -34,6 +35,7 @@ def test_format_human_success() -> None:
     assert "Fix the thing" in output
     assert "OPEN" in output
     assert "MERGEABLE" in output
+    assert "abc123" in output
     assert "checks: failure" in output
     assert "success=2" in output
     assert "failure=1" in output
@@ -81,6 +83,7 @@ def test_main_with_explicit_pr_and_failure_exit(
             "state": "OPEN",
             "mergeable": "MERGEABLE",
             "headRefName": "broken",
+            "headRefOid": "abc123",
             "statusCheckRollup": [
                 {"conclusion": "success", "status": "completed", "name": "lint"},
                 {"conclusion": "failure", "status": "completed", "name": "test"},
@@ -102,6 +105,7 @@ def test_main_with_explicit_pr_and_failure_exit(
     assert "PR #42" in captured.out
     assert "failure=1" in captured.out
     assert "checks: failure" in captured.out
+    assert "abc123" in captured.out
 
 
 def test_main_with_startup_failure_exit(capsys: pytest.CaptureFixture) -> None:
@@ -188,6 +192,7 @@ def test_main_json_output(capsys: pytest.CaptureFixture) -> None:
     payload = json.loads(captured.out)
     assert payload["status"] == "ok"
     assert payload["pr"] == 7
+    assert payload["head_sha"] == ""
     assert payload["checks"]["overall"] == "pending"
 
 

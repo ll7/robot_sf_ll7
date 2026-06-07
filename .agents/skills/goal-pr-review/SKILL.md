@@ -102,7 +102,10 @@ Avoid loops:
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
 8. Update `merge-ready` only after full proof bar closes.
-9. Update the active ledger before any CI wait or final handoff. Route completion is not task
+9. When CI is the only remaining external gate, put the PR in `awaiting_ci` and use
+   `.agents/skills/goal-autopilot/SKILL.md` "Async CI Wait Policy" instead of idling the review
+   loop when other safe PR or cycle work remains.
+10. Update the active ledger before any CI wait or final handoff. Route completion is not task
    completion until the main agent has verified proof, GitHub state, and cleanup.
 
 ## Proof and Validation

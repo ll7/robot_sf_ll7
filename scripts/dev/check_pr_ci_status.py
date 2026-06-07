@@ -85,7 +85,7 @@ def _fetch_ci_status(
             "view",
             pr_number,
             "--json",
-            "number,title,state,mergeable,headRefName,statusCheckRollup,reviews",
+            "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
         ]
     )
     if result.returncode != 0:
@@ -143,6 +143,7 @@ def _fetch_ci_status(
         "state": data.get("state", "unknown"),
         "mergeable": data.get("mergeable", "unknown"),
         "branch": data.get("headRefName", ""),
+        "head_sha": data.get("headRefOid", ""),
         "checks": {
             "total": len(rollup),
             "overall": overall,
@@ -162,7 +163,8 @@ def _format_human(data: dict[str, Any]) -> str:
     lines: list[str] = []
     lines.append(f"PR #{data['pr']}: {data['title']}")
     lines.append(
-        f"  state: {data['state']}  |  mergeable: {data['mergeable']}  |  branch: {data['branch']}"
+        f"  state: {data['state']}  |  mergeable: {data['mergeable']}  |  "
+        f"branch: {data['branch']}  |  head: {data.get('head_sha', '')}"
     )
 
     checks = data.get("checks", {})

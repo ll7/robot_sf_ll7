@@ -138,6 +138,8 @@ knowledge, not every transient iteration detail.
   [research_lane_states.md](research_lane_states.md)
 * Issue #2571 Active Research Queue:
   [issue_2571_active_research_queue.md](issue_2571_active_research_queue.md)
+* Dissertation claim-export candidate report:
+  [dissertation_claim_export_candidate_report.md](dissertation_claim_export_candidate_report.md)
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
 * Issue #2282 topology selection instrumentation smoke:

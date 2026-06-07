@@ -283,6 +283,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md)
 
+* Issue #2543 trace failure predicates:
+
+  [issue_2543_trace_failure_predicates.md](issue_2543_trace_failure_predicates.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)

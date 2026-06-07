@@ -760,6 +760,14 @@ entries:
     status: current
     freshness: maintained
     area: manual_control_trace
+  - path: docs/context/issue_2543_trace_failure_predicates.md
+    status: current
+    freshness: maintained
+    area: manual_control_trace
+  - path: docs/context/evidence/issue_2543_trace_failure_predicates/summary.json
+    status: evidence
+    freshness: evidence
+    area: manual_control_trace
   - path: docs/context/evidence/issue_2263_mechanism_activation_fields_2026-06-05/summary.json
     status: evidence
     freshness: evidence

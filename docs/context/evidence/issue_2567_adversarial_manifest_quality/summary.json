@@ -1,0 +1,70 @@
+{
+  "schema_version": "adversarial_manifest_quality_evidence.v1",
+  "issue": 2567,
+  "date": "2026-06-07",
+  "result_classification": "quality_metric_path_smoke_passed",
+  "evidence_boundary": "quality-signal-only: generator health and pre-benchmark gate metrics; no planner benchmark claim.",
+  "inputs": {
+    "search_space": "configs/adversarial/crossing_ttc_space.yaml",
+    "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+    "generator_seed": 42,
+    "generated_manifest_count": 4,
+    "reference_candidate_index": 0,
+    "smoke_summary_json": "docs/context/evidence/issue_2562_adversarial_manifest_smoke/summary.json"
+  },
+  "quality_summary": {
+    "schema_version": "adversarial_manifest_quality_summary.v1",
+    "manifest_count": 3,
+    "parse_failures": 0,
+    "status_counts": {
+      "valid": 3
+    },
+    "rates": {
+      "validity_rate": 1.0,
+      "invalid_rate": 0.0,
+      "degenerate_rate": 0.0
+    },
+    "novelty": {
+      "hashable_count": 3,
+      "unique_hash_count": 3,
+      "duplicate_hash_count": 0,
+      "novelty_rate": 1.0,
+      "duplicate_rate": 0.0
+    },
+    "perturbation_from_reference": {
+      "count": 3,
+      "mean_distance": 1.499197,
+      "min_distance": 0.585564,
+      "max_distance": 2.060612,
+      "note": "Distance excludes scenario_seed; duplicate hashing still includes scenario_seed."
+    },
+    "planner_outcomes": {
+      "available": true,
+      "source": "aggregate_metrics",
+      "planners": [
+        {
+          "planner": "goal",
+          "episodes": 2,
+          "failure_count": 0,
+          "failure_yield": 0.0,
+          "near_miss_count": null,
+          "near_miss_yield": null
+        },
+        {
+          "planner": "social_force",
+          "episodes": 2,
+          "failure_count": 2,
+          "failure_yield": 1.0,
+          "near_miss_count": null,
+          "near_miss_yield": null
+        }
+      ]
+    }
+  },
+  "validation": [
+    "uv run pytest tests/adversarial/test_adversarial_manifest_quality.py tests/adversarial/test_adversarial_scenario_manifest.py -q",
+    "uv run ruff check robot_sf/adversarial/manifest_quality.py robot_sf/adversarial/__init__.py scripts/tools/summarize_adversarial_manifest_quality.py tests/adversarial/test_adversarial_manifest_quality.py",
+    "uv run ruff format --check robot_sf/adversarial/manifest_quality.py robot_sf/adversarial/__init__.py scripts/tools/summarize_adversarial_manifest_quality.py tests/adversarial/test_adversarial_manifest_quality.py"
+  ],
+  "artifact_policy": "Raw generated manifests and CLI output remained under ignored output/ and are disposable; this compact JSON preserves the reviewable result."
+}

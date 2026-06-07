@@ -75,6 +75,7 @@ rtk python -m json.tool docs/context/evidence/issue_2588_static_deadlock_control
 This result moves the #2452 static-deadlock suite from reportability-only smoke to a bounded
 controlled-trace result for one intervention. It does not establish planner improvement because the
 only active intervention row changed trace state without terminal success. Benchmark-candidate
-promotion would require a separately predeclared broader contract. Follow-up issue #2590 tracks the
-next `escape_recenter_pair` controlled trace, with an explicit choice of same horizon, longer
-horizon, or another justified stop rule before any benchmark-candidate discussion.
+promotion would require a separately predeclared broader contract. Successor Issue #2590 ran the
+semantic `escape_recenter_pair` controlled trace at the same 120-step horizon and reached the same
+`controlled_trace_negative_mixed` boundary without terminal success rescue; see
+[issue_2590_escape_recenter_static_deadlock_controlled_trace.md](issue_2590_escape_recenter_static_deadlock_controlled_trace.md).

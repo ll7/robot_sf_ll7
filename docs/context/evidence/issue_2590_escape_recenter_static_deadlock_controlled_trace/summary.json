@@ -1,0 +1,90 @@
+{
+  "schema_version": "static-deadlock-controlled-trace-summary.v1",
+  "issue": 2590,
+  "parent_issues": [
+    2452,
+    2544,
+    2586,
+    2588
+  ],
+  "suite_id": "static_deadlock_recovery",
+  "evidence_tier": "controlled_trace",
+  "classification": "controlled_trace",
+  "result": {
+    "decision": "controlled_trace_negative_mixed",
+    "execution_completed": true,
+    "row_status_complete": true,
+    "trace_fields_present": true,
+    "why_first_report_generated": true,
+    "table": "docs/context/evidence/issue_2590_escape_recenter_static_deadlock_controlled_trace/controlled_trace_table.csv",
+    "reason": "The matched 3-scenario x 3-seed escape-only versus escape+recenter slice completed with all required fields. Recenter activated in one matched pair and changed the trace/local-minimum state but did not produce a terminal success rescue; four pairs were inactive and four were already solved by both candidates."
+  },
+  "funnel_config": "configs/policy_search/transfer/issue_2590_escape_recenter_static_deadlock_controlled_trace.yaml",
+  "scenario_matrix": "configs/scenarios/sets/issue_2590_escape_recenter_static_deadlock_controlled_trace.yaml",
+  "baseline_candidate": "issue_2170_static_escape_only",
+  "intervention_candidate": "issue_2170_static_escape_recenter_no_transit",
+  "horizon": 120,
+  "dt": 0.1,
+  "seed_budget": [
+    111,
+    112,
+    113
+  ],
+  "required_trace_fields": [
+    "low_progress_window",
+    "recenter_activation_count",
+    "distance_to_goal_delta",
+    "local_minimum_indicator",
+    "execution_mode",
+    "row_status"
+  ],
+  "summary": {
+    "activation_count_total": 4,
+    "all_required_trace_fields_present": true,
+    "baseline_row_status_counts": {
+      "completed": 9
+    },
+    "classification_counts": {
+      "comparator_already_solved_case": 4,
+      "mechanism_active_trace_changed": 1,
+      "mechanism_inactive": 4
+    },
+    "mechanism_row_status_counts": {
+      "completed": 9
+    },
+    "missing_required_trace_fields": {},
+    "paired_row_status_counts": {
+      "completed": 9
+    },
+    "rows": 9
+  },
+  "active_rows": [
+    {
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 113,
+      "classification": "mechanism_active_trace_changed",
+      "activation_count": 4,
+      "first_activation_step": 7,
+      "trace_changed": true,
+      "terminal_outcome_changed": false,
+      "baseline_success": false,
+      "intervention_success": false,
+      "baseline_local_minimum": true,
+      "intervention_local_minimum": false,
+      "baseline_distance_delta_m": -5.362883858009397,
+      "intervention_distance_delta_m": -0.16697032140408608,
+      "trajectory_delta_m": 19.43532710849805,
+      "progress_delta_after_activation": {
+        "baseline_m": 0.0,
+        "mechanism_m": -17.975442964418352,
+        "mechanism_minus_baseline_m": -17.975442964418352
+      }
+    }
+  ],
+  "claim_boundary": "Matched escape-only versus escape+recenter static-deadlock trace slice only; not benchmark-candidate evidence, planner ranking, mechanism transfer, or paper-facing proof.",
+  "raw_output_policy": "Raw activation_trace.json remained worktree-local and is summarized into tracked compact evidence.",
+  "validation": [
+    "rtk uv run robot_sf_bench --quiet validate-config --matrix configs/scenarios/sets/issue_2590_escape_recenter_static_deadlock_controlled_trace.yaml",
+    "rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/validation/run_static_recenter_activation_trace.py --funnel-config configs/policy_search/transfer/issue_2590_escape_recenter_static_deadlock_controlled_trace.yaml --baseline-candidate issue_2170_static_escape_only --mechanism-candidate issue_2170_static_escape_recenter_no_transit --stage full_matrix --output-json <worktree-local-output>/activation_trace.json"
+  ]
+}

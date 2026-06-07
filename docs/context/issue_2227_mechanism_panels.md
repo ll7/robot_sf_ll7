@@ -53,6 +53,15 @@ Do not generate decorative or generic panels for #2227 from unrelated fixtures. 
 mechanism-specific trace pairs, a panel bundle would risk implying visual evidence that the
 repository does not actually preserve.
 
+Before publishing future #2227 mechanism panels as anything stronger than rendering sanity, apply
+the nonzero mechanism-signal gate from
+[issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md). A candidate pair
+must record `rendering_sanity`, `qualitative_illustration`, `mechanism_difference_candidate`, or an
+explicit diagnostic null-result classification. Only `mechanism_difference_candidate` should be
+routed as mechanism-panel evidence, and even then it remains diagnostic unless the
+[issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md)
+requirements and row-status caveats are satisfied.
+
 The correct next step is a targeted trace-generation pass, not a full benchmark matrix:
 
 1. Select one static-recentering baseline/intervention pair from the issue #2170/#2180 one-factor

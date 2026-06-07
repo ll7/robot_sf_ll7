@@ -1,0 +1,96 @@
+{
+  "schema_version": "robot-sf-amv-trace-review.v1",
+  "issue": 2443,
+  "generated_at": "2026-06-07T01:15:00+00:00",
+  "evidence_tier": "analysis_only",
+  "result_classification": "feasibility_improved_but_route_blocked",
+  "claim_boundary": "Analysis-only review of tracked compact Issue #2308/#2404 AMV trace summaries. This is not benchmark-strength, calibrated AMV, hardware, safety, planner-ranking, or paper-facing evidence.",
+  "source_artifacts": [
+    "docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json",
+    "docs/context/evidence/issue_2404_amv_timeout_decomposition_2026-06-06/summary.json"
+  ],
+  "amv_trace_review": {
+    "baseline_candidate": "hybrid_rule_v3_fast_progress",
+    "intervention_candidate": "actuation_aware_hybrid_rule_v0",
+    "scenario_id": "classic_cross_trap_high",
+    "seed": 101,
+    "stage": "amv_actuation_smoke",
+    "horizon": 80,
+    "trace_export_paths": [],
+    "trace_export_status": "raw_simulation_trace_export_v1_unavailable",
+    "candidate_ids": [
+      "hybrid_rule_v3_fast_progress",
+      "actuation_aware_hybrid_rule_v0"
+    ],
+    "frame_ids": [],
+    "event_ids": [],
+    "frame_event_id_status": "blocked_not_in_compact_artifact",
+    "progress_timeline_available": true,
+    "clipping_timeline_available": true,
+    "speed_saturation_available": true,
+    "speed_cap_binding_available": "partial",
+    "deadlock_detector_available": false,
+    "likely_failure_driver": "route_task_progress_blocked_after_feasibility_improvement",
+    "result_classification": "feasibility_improved_but_route_blocked"
+  },
+  "matched_row_summary": {
+    "baseline": {
+      "candidate": "hybrid_rule_v3_fast_progress",
+      "success": false,
+      "failure_mode": "timeout_low_progress",
+      "termination_reason": "max_steps",
+      "command_clip_steps": 22,
+      "command_clip_fraction": 0.275,
+      "yaw_rate_saturation_steps": 0,
+      "yaw_rate_saturation_fraction": 0.0,
+      "final_route_progress_m": 12.904024665994092,
+      "final_distance_to_goal_m": 3.6078725186171776,
+      "mean_avg_speed_m_s": 1.662309936770821
+    },
+    "intervention": {
+      "candidate": "actuation_aware_hybrid_rule_v0",
+      "success": false,
+      "failure_mode": "timeout_low_progress",
+      "termination_reason": "max_steps",
+      "command_clip_steps": 15,
+      "command_clip_fraction": 0.1875,
+      "yaw_rate_saturation_steps": 0,
+      "yaw_rate_saturation_fraction": 0.0,
+      "final_route_progress_m": 12.87191147075262,
+      "final_distance_to_goal_m": 3.639985713858651,
+      "mean_avg_speed_m_s": 1.667037499328765
+    },
+    "delta_intervention_minus_baseline": {
+      "command_clip_steps": -7,
+      "command_clip_fraction": -0.0875,
+      "yaw_rate_saturation_fraction": 0.0,
+      "final_route_progress_m": -0.03211319524147263,
+      "final_distance_to_goal_m": 0.03211319524147352,
+      "mean_avg_speed_m_s": 0.004727562557943961,
+      "last_10_step_progress_delta_m": 0.12100258841798175
+    }
+  },
+  "missing_field_blockers": [
+    {
+      "field": "frame_ids",
+      "status": "unavailable",
+      "reason": "The tracked compact #2308/#2404 artifacts preserve windowed trace summaries but not raw simulation_trace_export.v1 frame identifiers."
+    },
+    {
+      "field": "event_ids",
+      "status": "unavailable",
+      "reason": "The tracked compact #2308/#2404 artifacts preserve candidate/window summaries but not raw step-event identifiers."
+    },
+    {
+      "field": "deadlock_detector",
+      "status": "unavailable",
+      "reason": "No deadlock or oscillation detector is present in the tracked trace summary."
+    }
+  ],
+  "decision": {
+    "answer": "Reduced command clipping did not improve success because route/task progress remained blocked; speed-cap binding and conservative scoring are only partially instrumented and are not the primary explanation on this slice.",
+    "next_research_direction": "Keep actuation-aware scoring diagnostic-only. Investigate route-progress geometry or task-completion blockers before proposing another actuation-aware planner variant.",
+    "update_targets": [2159, 2227, 2440],
+    "update_status": "posted_to_issues_2159_2227_2440"
+  }
+}

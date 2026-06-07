@@ -803,6 +803,9 @@ knowledge, not every transient iteration detail.
 * [Issue #2452 Mechanism-Aware Local-Navigation Suites (proposal)](issue_2452_mechanism_aware_local_nav_suites.md)
   defines seven proposed local-navigation suite contracts that group existing scenario IDs by
   failure mechanism, required traces, metrics, and claim boundaries.
+* [Issue #2443 AMV Actuation Trace Review](issue_2443_amv_trace_review.md)
+  records the compact progress-vs-clipping review for the matched AMV actuation-smoke pair and
+  fails closed on missing raw frame/event IDs.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.

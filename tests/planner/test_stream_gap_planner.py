@@ -142,6 +142,25 @@ def test_stream_gap_uncertainty_gating_fails_closed_for_malformed_metadata() -> 
     assert planner.last_uncertainty_gate["reason"] == "malformed_uncertainty_metadata"
 
 
+def test_stream_gap_uncertainty_gating_fails_closed_for_malformed_covariance() -> None:
+    """Malformed covariance rows must not crash the planner."""
+    observation = _obs(
+        goal=(4.0, 0.0),
+        ped_positions=[(0.8, 0.0)],
+        ped_velocities=[(0.0, 0.0)],
+    )
+    agent = _single_blocker_uncertainty_agent()
+    agent["position_covariance_xy"] = None
+    observation["pedestrians"]["uncertainty"] = [agent]
+
+    planner = StreamGapPlannerAdapter(StreamGapPlannerConfig(uncertainty_gating_enabled=True))
+    v, _ = planner.plan(observation)
+
+    assert v == 0.0
+    assert planner.last_uncertainty_gate["status"] == "fail_closed"
+    assert planner.last_uncertainty_gate["reason"] == "malformed_uncertainty_metadata"
+
+
 def test_build_stream_gap_config_parses_uncertainty_gating_fields() -> None:
     """YAML config parsing should expose the diagnostic uncertainty-gating knobs."""
     cfg = build_stream_gap_config(

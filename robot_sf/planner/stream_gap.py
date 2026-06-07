@@ -136,10 +136,10 @@ class StreamGapPlannerAdapter:
         try:
             existence = float(row.get("existence_probability"))
             confidence = float(row.get("position_confidence"))
+            class_probability = self._class_probability(row, "pedestrian")
+            variance = self._position_variance(row)
         except (TypeError, ValueError):
             return None
-        class_probability = self._class_probability(row, "pedestrian")
-        variance = self._position_variance(row)
         if (
             not np.isfinite(existence)
             or not np.isfinite(confidence)

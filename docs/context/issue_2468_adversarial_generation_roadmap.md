@@ -17,10 +17,10 @@ Related surfaces:
 
 ## Result
 
-Robot SF already has the most credible first adversarial lane: bounded search over explicit
-scenario and route perturbations. The next research direction should not jump directly to RL or
-diffusion training. It should first define a common `adversarial_scenario_manifest.v1` envelope
-that every generator family must emit before any planner run is interpreted.
+Robot SF already has an executable first adversarial lane: bounded search over explicit scenario
+and route perturbations. The next research direction should not jump directly to RL or diffusion
+training. It should first define a common `adversarial_scenario_manifest.v1` envelope that every
+generator family must emit before any planner run is interpreted.
 
 The recommended first spike is a manifest/schema plus fail-closed validator smoke. It should
 normalize one existing search-generated candidate, one mock RL action-to-config fixture, and one

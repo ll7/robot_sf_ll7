@@ -163,7 +163,8 @@ def _materialize_matrix(
         )
         scenario = payload["scenarios"][0]
         scenarios.append(scenario)
-        assert manifest.validation is not None
+        if manifest.validation is None:
+            raise ValueError(f"Manifest at candidate {candidate_index} has no validation metadata")
         rows.append(
             {
                 "candidate_index": candidate_index,

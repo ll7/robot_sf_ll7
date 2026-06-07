@@ -445,6 +445,14 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2538_scenario_belief_planner_projection.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2538_scenario_belief_planner_projection/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_2479_real_trajectory_scenario_prior.md
     status: proposal
     freshness: maintained

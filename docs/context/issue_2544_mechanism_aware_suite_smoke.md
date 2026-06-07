@@ -64,7 +64,7 @@ rtk uv run python scripts/tools/generate_why_first_report.py --input docs/contex
 
 The smoke shows the proposed suite can be bound to executable rows for two native/core planners and
 reported in a why-first format. It also shows the current runner output is missing the trace fields
-needed to interpret metric deltas as static-deadlock mechanism evidence. The next proof step is to
-add or bind runner instrumentation for the missing static-deadlock trace fields before promoting
-the suite beyond diagnostic smoke; follow-up issue #2586 tracks that instrumentation/reportability
-work.
+needed to interpret metric deltas as static-deadlock mechanism evidence. Follow-up issue #2586
+added those trace/reportability fields; see
+[issue_2586_static_deadlock_trace_fields.md](issue_2586_static_deadlock_trace_fields.md). The suite
+still remains diagnostic until a controlled baseline/intervention slice is run.

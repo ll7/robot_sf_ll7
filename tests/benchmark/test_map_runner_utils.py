@@ -2936,7 +2936,11 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
         lambda metrics, **kwargs: metrics,
     )
 
-    scenario = {"name": "s1", "simulation_config": {"max_episode_steps": 999}}
+    scenario = {
+        "name": "s1",
+        "simulation_config": {"max_episode_steps": 999},
+        "metadata": {"mechanism_aware_suite_id": "static_deadlock_recovery"},
+    }
     record = _run_map_episode(
         scenario,
         seed=1,
@@ -2948,10 +2952,24 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
         algo="goal",
         algo_config_path=None,
         scenario_path=Path("."),
+        record_simulation_step_trace=True,
     )
     assert dummy_env.step_calls == 50
     assert record["steps"] == 50
     assert record["termination_reason"] == "max_steps"
+    assert record["row_status"] == "completed"
+    assert record["recenter_activation_count"] == 0
+    assert record["distance_to_goal_delta"]["initial_distance_to_goal_m"] == pytest.approx(
+        math.sqrt(2.0)
+    )
+    assert record["distance_to_goal_delta"]["final_distance_to_goal_m"] == pytest.approx(
+        math.sqrt(2.0)
+    )
+    assert record["distance_to_goal_delta"]["delta_m"] == pytest.approx(0.0)
+    assert record["low_progress_window"]["active"] is True
+    assert record["low_progress_window"]["progress_delta_m"] == pytest.approx(0.0)
+    assert record["local_minimum_indicator"]["is_local_minimum"] is True
+    assert record["local_minimum_indicator"]["status"] == "detected"
 
 
 def test_run_map_episode_stops_immediately_on_route_complete(

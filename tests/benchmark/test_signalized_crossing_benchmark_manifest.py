@@ -25,6 +25,9 @@ def test_signalized_crossing_manifest_references_existing_surfaces() -> None:
 
     for rel_path in surfaces.values():
         assert (REPO_ROOT / str(rel_path)).exists(), rel_path
+    assert surfaces["signal_state_proxy_scenario"] == (
+        "configs/scenarios/single/issue_2527_waiting_then_crossing.yaml"
+    )
 
 
 def test_scenario_families_distinguish_proxy_and_future_signal_runtime() -> None:
@@ -50,7 +53,9 @@ def test_signal_phase_contract_lists_future_fields_and_current_proxy_fields() ->
     future_fields = set(phase["future_explicit_fields"])
     proxy_fields = set(phase["proxy_fields_available_now"])
     assert {"phase", "phase_remaining_s", "legality_state"}.issubset(future_fields)
-    assert {"wait_at", "single_pedestrian_wait_duration_offset"}.issubset(proxy_fields)
+    assert {"wait_at", "signal_state", "single_pedestrian_wait_duration_offset"}.issubset(
+        proxy_fields
+    )
     assert "planner-observable" in phase["planner_observable_policy"]
 
 

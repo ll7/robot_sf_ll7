@@ -253,6 +253,9 @@ Policy caveats:
 - `issue_2590_escape_recenter_static_deadlock_controlled_trace/`: compact controlled-trace summary
   for the Issue #2452 `escape_recenter_pair` follow-up, showing the same active trace-change row
   and no terminal success rescue against the escape-only baseline.
+- `issue_2592_static_deadlock_active_row_h500/`: compact h500 horizon-sensitivity summary for the
+  shared active static-recenter row, showing both recenter pairings reached success at step 122
+  while matched baselines remained 500-step local-minimum failures.
 - `issue_2273_learned_risk_trace_preflight_2026-06-05/`: compact trace-status preflight for
   Issue #2273 / parent Issue #1472, recording that learned-risk training still lacks durable trace
   and baseline artifact URIs despite a valid launch packet fixture.

@@ -303,6 +303,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2590_escape_recenter_static_deadlock_controlled_trace.md](issue_2590_escape_recenter_static_deadlock_controlled_trace.md)
 
+* Issue #2592 static-deadlock active-row h500 horizon sensitivity:
+
+  [issue_2592_static_deadlock_active_row_h500.md](issue_2592_static_deadlock_active_row_h500.md)
+
 * Issue #2547 counterfactual mechanism taxonomy:
 
   [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)

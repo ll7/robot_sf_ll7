@@ -11,6 +11,9 @@ import yaml
 
 from scripts.tools import run_adversarial_manifest_smoke as smoke
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCHEMA = _REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+
 
 def _write_template(path: Path) -> None:
     path.write_text(
@@ -64,7 +67,6 @@ def test_run_smoke_materializes_valid_manifest_and_summarizes_planner_runs(
     space = tmp_path / "space.yaml"
     output_dir = tmp_path / "output"
     summary_json = tmp_path / "summary.json"
-    schema = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
     _write_template(template)
     _write_space(space)
     calls: list[dict[str, Any]] = []
@@ -99,7 +101,7 @@ def test_run_smoke_materializes_valid_manifest_and_summarizes_planner_runs(
         max_valid=1,
         output_dir=output_dir,
         summary_json=summary_json,
-        schema=schema,
+        schema=_SCHEMA,
         generator_family="random",
         planner=["goal", "social_force"],
         horizon=12,
@@ -159,7 +161,7 @@ def test_run_smoke_reports_no_valid_manifests_without_planner_run(
         max_valid=1,
         output_dir=tmp_path / "output",
         summary_json=tmp_path / "summary.json",
-        schema=Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
+        schema=_SCHEMA,
         generator_family="random",
         planner=["goal"],
         horizon=12,

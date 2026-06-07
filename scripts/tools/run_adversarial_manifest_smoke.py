@@ -97,6 +97,7 @@ def _write_manifest_batch(
 
     manifest_rows: list[dict[str, Any]] = []
     manifests_dir = output_dir / "manifests"
+    manifests_dir.mkdir(parents=True, exist_ok=True)
     for manifest in manifests:
         index = manifest.generator.candidate_index if manifest.generator is not None else 0
         path = manifests_dir / f"candidate_{index:04d}.yaml"

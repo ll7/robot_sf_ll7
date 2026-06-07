@@ -146,9 +146,7 @@ def materialize_manifest_single_pedestrian_override(
             "spawn_time_s": spawn_time_s,
             "delay_s": delay_s,
             "pedestrian_speed_mps": float(controls["pedestrian_speed_mps"]),
-            "validation_status": manifest.validation.status.value
-            if manifest.validation is not None
-            else "unknown",
+            "validation_status": manifest.validation.status.value,
         },
     }
 
@@ -291,6 +289,8 @@ def _pose_waypoint(controls: dict[str, Any], name: str) -> list[float]:
     pose = controls.get(name)
     if not isinstance(pose, dict):
         raise ValueError(f"manifest candidate_controls.{name} must be a mapping")
+    if "x" not in pose or "y" not in pose:
+        raise ValueError(f"manifest candidate_controls.{name} requires both 'x' and 'y' keys")
     return [float(pose["x"]), float(pose["y"])]
 
 

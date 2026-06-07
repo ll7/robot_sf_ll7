@@ -661,6 +661,16 @@ def test_manifest_materializes_route_overrides_for_route_smoke() -> None:
     assert "single_pedestrians" not in scenario
 
 
+def test_manifest_route_overrides_reject_missing_pose_coordinate() -> None:
+    """Malformed pose mappings should fail closed with a clear coordinate error."""
+    manifest = build_manifest(_candidate(23))
+    assert manifest.candidate_controls is not None
+    del manifest.candidate_controls["start"]["x"]
+
+    with pytest.raises(ValueError, match="requires both 'x' and 'y' keys"):
+        materialize_manifest_route_overrides(manifest)
+
+
 def test_manifest_materialization_rejects_degenerate_manifest() -> None:
     """Invalid or degenerate manifests should fail closed before planner execution."""
     manifest = build_manifest(

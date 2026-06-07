@@ -10,6 +10,13 @@ from robot_sf.adversarial.config import (
     SearchRunResult,
     SearchSpaceConfig,
 )
+from robot_sf.adversarial.manifest_quality import (
+    MANIFEST_QUALITY_SCHEMA_VERSION,
+    ManifestsQualitySummary,
+    PlannerOutcome,
+    PlannerOutcomeSummary,
+    summarize_adversarial_manifest_quality,
+)
 from robot_sf.adversarial.materialize import (
     materialize_manifest_route_overrides,
     materialize_manifest_scenario_payload,
@@ -49,15 +56,19 @@ from robot_sf.adversarial.seed_sensitivity import (
 )
 
 __all__ = [
+    "MANIFEST_QUALITY_SCHEMA_VERSION",
     "AdversarialScenarioManifest",
     "CandidateEvaluation",
     "CandidateSpec",
     "CoordinateRefinementSampler",
     "GeneratorInfo",
     "ManifestCategory",
+    "ManifestsQualitySummary",
     "MultiPedAdversarialConfig",
     "MultiPedCandidateSpec",
     "OptunaCandidateSampler",
+    "PlannerOutcome",
+    "PlannerOutcomeSummary",
     "Pose2D",
     "RandomCandidateSampler",
     "SearchConfig",
@@ -80,6 +91,7 @@ __all__ = [
     "multi_ped_config_to_single_pedestrian_definitions",
     "run_adversarial_search",
     "run_seed_sensitivity",
+    "summarize_adversarial_manifest_quality",
     "validate_candidate_manifest",
     "validate_manifest_payload",
     "validate_multi_ped_runtime_plausibility",

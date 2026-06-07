@@ -16,7 +16,7 @@ below, implement the named gate issue before scheduling the downstream training 
 
 | Thread | Current evidence | Next concrete issue | Gate before expansion |
 | --- | --- | --- | --- |
-| Adversarial manifest quality | Issue #2524/PR #2559 added validator-backed adversarial manifest generation, and Issue #2562/PR #2572 proved a route-materialized planner smoke path. This is diagnostic-only: the smoke proves executability, not scenario usefulness or learned-policy value. | [#2567](https://github.com/ll7/robot_sf_ll7/issues/2567) should quantify manifest validity, degeneracy, and route/materialization quality. | [#2568](https://github.com/ll7/robot_sf_ll7/issues/2568) keeps RL/diffusion adversarial expansion gated until #2562 and #2567 show useful, non-degenerate manifest behavior. |
+| Adversarial manifest quality | Issue #2524/PR #2559 added validator-backed adversarial manifest generation, Issue #2562/PR #2572 proved a route-materialized planner smoke path, and Issue #2567 defines a compact quality-metric path. These are diagnostic or pre-benchmark signals only. | Use [issue_2567_adversarial_manifest_quality.md](issue_2567_adversarial_manifest_quality.md) to compare manifest validity, degeneracy, novelty, perturbation distance, and smoke-yield signals before expansion. | [#2568](https://github.com/ll7/robot_sf_ll7/issues/2568) keeps RL/diffusion adversarial expansion gated until generated batches show useful, non-degenerate manifest behavior under the #2567 metrics. |
 | Oracle trace artifact access | PR #2556 finalized trace manifests/checksums for the #2441 oracle-imitation runs, but downstream consumers still need durable trace access rather than worktree-local `output/` assumptions. | [#2561](https://github.com/ll7/robot_sf_ll7/issues/2561) must promote durable pointers, checksums, and split routing for downstream training access. | [#2569](https://github.com/ll7/robot_sf_ll7/issues/2569) keeps oracle-imitation training gated until durable artifact access is available. |
 | Scenario semantics and uncertainty | PR #2555 added the waiting-then-crossing fixture metadata, PR #2537 added the first ScenarioBelief uncertainty consumer smoke, Issue #2564/PR #2573 proved a trace-only signal-state proxy smoke, and Issue #2565/PR #2574 proved an uncertainty-aware stream-gap planner-input smoke. These are diagnostic-only. | The next useful issue should bridge signal state, ScenarioBelief uncertainty, or stream-gap uncertainty into a runtime/observation contract rather than adding another isolated smoke. | Treat signalized crossing and ScenarioBelief uncertainty as a coupled dependency pair; do not claim planner improvement until a runtime consumer or planner-observable contract exists. |
 
@@ -34,7 +34,8 @@ below, implement the named gate issue before scheduling the downstream training 
 - Active dashboard: [issue_2228_research_dashboard.md](issue_2228_research_dashboard.md)
 - Scientific lane states: [research_lane_states.md](research_lane_states.md)
 - Adversarial manifest evidence: [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md),
-  [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md)
+  [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md),
+  [issue_2567_adversarial_manifest_quality.md](issue_2567_adversarial_manifest_quality.md)
 - Oracle trace evidence: [evidence/issue_2441_oracle_imitation_traces_2026-06-06/README.md](evidence/issue_2441_oracle_imitation_traces_2026-06-06/README.md)
 - Scenario semantics evidence: [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md),
   [issue_2528_scenario_belief_consumer_smoke.md](issue_2528_scenario_belief_consumer_smoke.md),

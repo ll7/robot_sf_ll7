@@ -8,7 +8,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from scripts.dev.check_pr_ci_status import _fetch_ci_status, _format_human, main
+from scripts.dev.check_pr_ci_status import (
+    _fetch_ci_status,
+    _format_human,
+    _rollup_conclusion,
+    _rollup_status,
+    main,
+)
 
 
 def test_format_human_success() -> None:
@@ -159,6 +165,133 @@ def test_main_with_explicit_pr_and_success(
     captured = capsys.readouterr()
     assert "PR #1" in captured.out
     assert "checks: success" in captured.out
+
+
+def test_main_treats_successful_legacy_status_as_success(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Legacy commit statuses expose state without conclusion/status fields."""
+    mock_data = json.dumps(
+        {
+            "number": 2537,
+            "title": "legacy status",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "legacy-status",
+            "statusCheckRollup": [
+                {"conclusion": "success", "status": "completed", "name": "ci"},
+                {"state": "success", "name": "CodeRabbit"},
+            ],
+            "reviews": [{"state": "COMMENTED"}],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["2537", "--json"])
+
+    assert rc == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["checks"]["overall"] == "success"
+    assert payload["checks"]["by_conclusion"] == {"success": 2}
+    assert payload["checks"]["by_status"] == {"completed": 2}
+    assert payload["checks"]["names"] == ["CodeRabbit", "ci"]
+
+
+def test_main_preserves_pending_legacy_status(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Pending legacy commit statuses should still block success."""
+    mock_data = json.dumps(
+        {
+            "number": 2,
+            "title": "pending legacy",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "pending-legacy",
+            "statusCheckRollup": [
+                {"conclusion": "success", "status": "completed", "name": "ci"},
+                {"state": "pending", "name": "external-status"},
+            ],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["2", "--json"])
+
+    assert rc == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["checks"]["overall"] == "pending"
+    assert payload["checks"]["by_conclusion"] == {"success": 1, "pending": 1}
+    assert payload["checks"]["by_status"] == {"completed": 1, "pending": 1}
+
+
+def test_main_treats_error_legacy_status_as_failure(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Legacy error states should fail CI preflight."""
+    mock_data = json.dumps(
+        {
+            "number": 3,
+            "title": "error legacy",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "error-legacy",
+            "statusCheckRollup": [
+                {"state": "error", "name": "external-status"},
+            ],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["3"])
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "checks: failure" in captured.out
+    assert "error=1" in captured.out
+
+
+@pytest.mark.parametrize(
+    ("check", "expected"),
+    [
+        ({"conclusion": "SUCCESS", "state": "failure"}, "success"),
+        ({"conclusion": None, "state": "SUCCESS"}, "success"),
+        ({"state": ""}, "pending"),
+        ({}, "pending"),
+    ],
+)
+def test_rollup_conclusion_prefers_conclusion_then_state(
+    check: dict[str, object],
+    expected: str,
+) -> None:
+    """Conclusion normalization should handle check-run and legacy-status entries."""
+    assert _rollup_conclusion(check) == expected
+
+
+@pytest.mark.parametrize(
+    ("check", "expected"),
+    [
+        ({"status": "IN_PROGRESS", "state": "success"}, "in_progress"),
+        ({"status": "", "state": "SUCCESS"}, "completed"),
+        ({"state": "FAILURE"}, "completed"),
+        ({"state": "ERROR"}, "completed"),
+        ({"state": "PENDING"}, "pending"),
+        ({}, "completed"),
+    ],
+)
+def test_rollup_status_prefers_status_then_legacy_state(
+    check: dict[str, object],
+    expected: str,
+) -> None:
+    """Lifecycle status normalization should avoid double-counting legacy pending checks."""
+    assert _rollup_status(check) == expected
 
 
 def test_main_json_output(capsys: pytest.CaptureFixture) -> None:

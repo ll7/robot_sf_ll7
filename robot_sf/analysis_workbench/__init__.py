@@ -14,14 +14,22 @@ from robot_sf.analysis_workbench.trace_annotation import (
     load_trace_annotation_set,
     trace_annotation_set_from_dict,
 )
+from robot_sf.analysis_workbench.trace_failure_predicates import (
+    TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
+    TraceFailurePredicate,
+    extract_trace_failure_predicates,
+)
 
 __all__ = [
     "SIMULATION_TRACE_EXPORT_SCHEMA_VERSION",
     "TRACE_ANNOTATION_SET_SCHEMA_VERSION",
+    "TRACE_FAILURE_PREDICATE_SCHEMA_VERSION",
     "SimulationTraceExport",
     "SimulationTraceExportValidationError",
     "TraceAnnotationSet",
     "TraceAnnotationSetValidationError",
+    "TraceFailurePredicate",
+    "extract_trace_failure_predicates",
     "load_simulation_trace_export",
     "load_trace_annotation_set",
     "simulation_trace_export_from_dict",

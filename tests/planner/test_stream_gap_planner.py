@@ -180,6 +180,28 @@ def test_build_stream_gap_config_parses_uncertainty_gating_fields() -> None:
     assert cfg.uncertainty_max_position_variance == pytest.approx(0.75)
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("uncertainty_min_existence_probability", 1.5, "within"),
+        ("uncertainty_min_position_confidence", float("nan"), "finite"),
+        ("uncertainty_min_class_probability", -0.1, "within"),
+        ("uncertainty_max_position_variance", -1.0, "non-negative"),
+    ],
+)
+def test_stream_gap_config_rejects_invalid_uncertainty_thresholds(
+    field: str,
+    value: float,
+    match: str,
+) -> None:
+    """Invalid uncertainty thresholds should fail before planner input gating."""
+    with pytest.raises(ValueError, match=match):
+        StreamGapPlannerConfig(**{field: value})
+
+    with pytest.raises(ValueError, match=match):
+        build_stream_gap_config({field: value})
+
+
 def test_stream_gap_approaches_when_gap_is_soon() -> None:
     """Planner should creep/approach when a free window starts shortly ahead."""
     planner = StreamGapPlannerAdapter(

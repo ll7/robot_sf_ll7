@@ -47,6 +47,24 @@ class StreamGapPlannerConfig:
     uncertainty_min_class_probability: float = 0.5
     uncertainty_max_position_variance: float = 1.0
 
+    def __post_init__(self) -> None:
+        """Validate uncertainty-gating thresholds used by ``_uncertainty_keep_mask``."""
+        probability_fields = {
+            "uncertainty_min_existence_probability": self.uncertainty_min_existence_probability,
+            "uncertainty_min_position_confidence": self.uncertainty_min_position_confidence,
+            "uncertainty_min_class_probability": self.uncertainty_min_class_probability,
+        }
+        for name, value in probability_fields.items():
+            if not np.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be finite and within [0.0, 1.0]")
+        if (
+            not np.isfinite(self.uncertainty_max_position_variance)
+            or self.uncertainty_max_position_variance < 0.0
+        ):
+            raise ValueError(
+                "uncertainty_max_position_variance must be a finite non-negative value"
+            )
+
 
 class StreamGapPlannerAdapter:
     """Wait-for-gap and commit planner for lateral pedestrian streams."""

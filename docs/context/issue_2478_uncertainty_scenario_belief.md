@@ -50,6 +50,10 @@ git diff --check
 
 ## Follow-Up Boundary
 
-Heading uncertainty is still a known gap because heading remains a scalar legacy field. The next
-useful spike is a planner- or analysis-facing consumer that reads covariance directly; until then,
-uncertainty-aware planner improvement should remain unclaimed.
+Heading uncertainty is still a known gap because heading remains a scalar legacy field.
+
+Issue #2528 adds `ScenarioBelief.to_uncertainty_report()` as the first uncertainty-preserving
+consumer projection, with fail-closed tests proving that `to_socnav_struct()` drops all uncertainty
+fields. That is the consumer path that reads covariance directly; uncertainty-aware planner
+improvement beyond this diagnostic consumer should remain unclaimed unless a planner-facing
+projection is added and benchmarked.

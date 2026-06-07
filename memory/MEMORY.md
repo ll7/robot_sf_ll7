@@ -53,8 +53,8 @@ files that agents read on demand.
 ### Current Research Queue
 
 - [Issue #2571 Active Research Queue](../docs/context/issue_2571_active_research_queue.md)
-  Current next-cycle research handoff for adversarial manifest quality, oracle trace artifact
-  access, and coupled signal-state/ScenarioBelief uncertainty semantics.
+  Current next-cycle research handoff for adversarial manifest quality/learned-expansion gating,
+  oracle trace artifact access, and coupled signal-state/ScenarioBelief uncertainty semantics.
 
 ### `workflows/`
 

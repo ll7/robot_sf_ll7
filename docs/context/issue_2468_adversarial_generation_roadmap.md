@@ -11,6 +11,9 @@ Related surfaces:
 - RL adversarial pedestrian proposal: `docs/context/issue_2470_rl_adversarial_pedestrian_policy.md`
 - Diffusion scenario-generation feasibility proposal:
   `docs/context/issue_2471_diffusion_scenario_generation_feasibility.md`
+- Manifest planner smoke: `docs/context/issue_2562_adversarial_manifest_smoke.md`
+- Manifest quality metrics: `docs/context/issue_2567_adversarial_manifest_quality.md`
+- Learned-expansion gate: `docs/context/issue_2568_adversarial_expansion_gate.md`
 - Scenario certification: `docs/scenario_certification.md`
 - Scenario zoo adversarial row: `docs/scenario_zoo/index.md`
 - Proposal artifact: `docs/context/evidence/issue_2468/adversarial_generation_roadmap.yaml`
@@ -22,10 +25,17 @@ and route perturbations. The next research direction should not jump directly to
 training. It should first define a common `adversarial_scenario_manifest.v1` envelope that every
 generator family must emit before any planner run is interpreted.
 
-The recommended first spike is a manifest/schema plus fail-closed validator smoke. It should
+The recommended first spike was a manifest/schema plus fail-closed validator smoke. It should
 normalize one existing search-generated candidate, one mock RL action-to-config fixture, and one
 mock diffusion/proposal fixture into the same manifest envelope, then reject malformed and
 degenerate variants before simulation. This is proposal/interface evidence, not benchmark evidence.
+
+As of Issue #2524, Issue #2562, Issue #2567, and Issue #2568, broad RL, diffusion, or
+learned-proposal expansion is gated on a concrete manifest-smoke plus quality-metric summary.
+Manifest validity alone is not enough: generated batches must report validity, degeneracy,
+duplicate/novelty, perturbation, and planner-smoke yield signals before any learned expansion
+proceeds, and those signals remain pre-benchmark diagnostics until a later certified benchmark
+issue proves more.
 
 ## Method Comparison
 
@@ -99,7 +109,7 @@ Implement a common adversarial scenario manifest validator and fixture smoke:
 1. Define `adversarial_scenario_manifest.v1` as a small schema or typed validator around the fields
    above.
 2. Add three tiny fixtures: an existing bounded-search candidate, a mock RL action-to-config
-   candidate following issue #2470, and a mock diffusion/proposal candidate following issue #2471.
+   candidate following Issue #2470, and a mock diffusion/proposal candidate following Issue #2471.
 3. Prove that valid fixtures pass schema/provenance/route-control checks without running a full
    benchmark.
 4. Prove that malformed, unreachable, duplicate, and temporal-overflow fixtures fail closed with
@@ -110,6 +120,12 @@ Stop rule: stop the spike after schema validation and fail-closed rejection proo
 or diffusion, do not publish planner rankings, and do not promote generated scenarios into
 benchmark evidence until a follow-up issue supplies certification plus executable planner proof on
 durable inputs.
+
+Current learned-expansion gate: before broad RL, diffusion, or learned-proposal training, use the
+Issue #2562 smoke path and Issue #2567 quality metrics as described in
+[issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md). Treat
+invalid, duplicate, degenerate, fallback, degraded, simulation-error, or not-available rows as
+exclusions or limitations, not adversarial success.
 
 ## Remaining Risks
 

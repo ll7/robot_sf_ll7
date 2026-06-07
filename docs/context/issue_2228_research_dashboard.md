@@ -59,9 +59,10 @@ claim boundary rather than adding another local diagnostic with the same limitat
    follow-through.
 4. Keep topology benchmark and leaderboard claims frozen until the #2563 primary-route
    reuse-penalty hypothesis is tested in a paired diagnostic such as issue #2540.
-5. Keep adversarial RL/diffusion expansion gated on #2567/#2568 until the manifest smoke has
-   quality metrics, and keep oracle-imitation training gated on #2561/#2569 until durable trace
-   artifact access exists.
+5. Keep adversarial RL/diffusion expansion gated on
+   [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md): #2562
+   smoke and #2567 quality metrics are prerequisite diagnostics, not benchmark evidence. Keep
+   oracle-imitation training gated on #2561/#2569 until durable trace artifact access exists.
 6. Use learned-policy work only when it changes the interface or proof gate, not when it repeats the
    generic continuation path already classified in the learned-policy synthesis.
 7. Use simulator-speed work when the research queue is exhausted or when speed unlocks a named

@@ -98,7 +98,8 @@ Each cycle iteration follows a fixed phase order:
 Before each phase, run a delegation checkpoint:
 
 - Choose the routed helper role for the phase when `ai-delegation-routing` is active:
-  queue scout, PR blocker reviewer, bounded editor, validation verifier, or discovery scout.
+  queue scout, PR blocker reviewer, bounded editor, validation verifier, CI wait monitor, or
+  discovery scout.
 - Start at least one eligible routed worker or Spark sidecar for any phase likely to exceed about
   10 minutes, unless the next action is a local-only publication step or all routes are unavailable.
 - If no helper is used, record `delegation_skipped: <reason>` with one of: `tiny`,
@@ -109,6 +110,39 @@ Publication and final judgment remain local: delegates must not push, open, or m
 labels or project state; resolve review threads; or make final benchmark, paper, or safety claims
 unless the user explicitly grants that permission. Their output is `route_evidence` that must be
 reviewed and validated before phase completion, not benchmark or claim proof by itself.
+
+### Async CI Wait Policy
+
+Do not idle the main autopilot thread on routine GitHub CI waits when other safe work remains.
+When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
+
+1. Record the PR number, expected head SHA, current CI state, and static wait budget in the active
+   ledger. The default budget is `ceil(920s * 1.3) = 1196s`, unless a newer committed skill/doc
+   baseline has replaced it.
+2. Start one read-only `ci_wait_monitor` route or Codex app/Spark sidecar for that PR:
+
+   ```bash
+   uv run python scripts/dev/watch_pr_ci_status.py <pr-number> \
+     --expected-head-sha <head-sha> --json
+   ```
+
+3. Continue with non-conflicting work on the main thread: review other PRs, merge already-green
+   `merge-ready` PRs, or run bounded discovery. Do not mutate the waiting PR branch or resolve its
+   final readiness while its monitor is active.
+4. When the monitor returns, the main agent must review the result against the current PR head SHA
+   before applying `merge-ready`, merging, or reporting completion.
+
+The wait helper uses the stable default budget on normal runs. It samples recent successful CI
+runtime only when CI is still pending after the budget expires, and then reports drift evidence plus
+a recommended baseline. Do not change the committed default wait baseline after one ordinary slow
+run; update it only after repeated over-budget evidence or an obvious CI workflow change.
+
+Treat monitor exit states as follows:
+
+- `success`: CI is green for the expected head SHA; reassess readiness locally.
+- `failure`: leave the PR open, record the failing checks, and continue the cycle.
+- `timeout`: keep the PR in `awaiting_ci`, record the drift sample, and continue other work.
+- `error`: record stale head, auth, API, or parsing failure; do not trust the waiter for readiness.
 
 ### Active Delegation Ledger
 
@@ -136,6 +170,8 @@ Track only the fields needed to resume safely in under one minute:
 - ownership: files or modules the delegate may read or edit;
 - validation: commands planned/run, pass/fail state, and any blocker signature;
 - PR/CI: PR URL or number, head SHA, review state, CI state, and merge-ready state;
+- CI wait: baseline seconds, multiplier, budget seconds, poll interval, deadline, monitor
+  route/run ID, expected head SHA, final status, and drift sample when collected;
 - cleanup: app-agent or worker close status, claim release status, worktree/artifact decision.
 
 Distinguish route success from task success. A delegate command exiting zero or producing a report

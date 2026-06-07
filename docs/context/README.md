@@ -202,6 +202,8 @@ knowledge, not every transient iteration detail.
   [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
 * Issue #2562 Adversarial Manifest Planner Smoke:
   [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md)
+* Issue #2565 Uncertainty-Aware Stream-Gap Gating Smoke:
+  [issue_2565_uncertainty_gating_smoke.md](issue_2565_uncertainty_gating_smoke.md)
 * Issue #2526 Cyclist-Like VRU Smoke:
   [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md)
 * Issue #2527 Waiting-Then-Crossing Fixture:
@@ -570,6 +572,8 @@ knowledge, not every transient iteration detail.
   [issue_2478_uncertainty_scenario_belief.md](issue_2478_uncertainty_scenario_belief.md)
 * Issue #2528 ScenarioBelief Consumer Smoke (2026-06-07):
   [issue_2528_scenario_belief_consumer_smoke.md](issue_2528_scenario_belief_consumer_smoke.md)
+* Issue #2565 Uncertainty-Aware Stream-Gap Gating Smoke (2026-06-07):
+  [issue_2565_uncertainty_gating_smoke.md](issue_2565_uncertainty_gating_smoke.md)
 * Issue #2479 Real-Trajectory Scenario Prior Scope (2026-06-06):
   [issue_2479_real_trajectory_scenario_prior.md](issue_2479_real_trajectory_scenario_prior.md)
 * Issue #2474 Signalized Pedestrian Crossing Benchmark Scope (2026-06-06):

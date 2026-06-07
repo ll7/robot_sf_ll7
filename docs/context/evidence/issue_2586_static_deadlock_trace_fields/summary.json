@@ -1,0 +1,95 @@
+{
+  "schema_version": "static-deadlock-trace-fields-summary.v1",
+  "issue": 2586,
+  "parent_issue": 2544,
+  "suite_id": "static_deadlock_recovery",
+  "scenario_matrix": "configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml",
+  "scenario_ids": [
+    "classic_bottleneck_low",
+    "classic_head_on_corridor_low",
+    "narrow_passage"
+  ],
+  "seed_budget": [
+    111
+  ],
+  "created_at": "2026-06-07T20:22:29Z",
+  "classification": "diagnostic_revise",
+  "claim_boundary": "trace-field reportability smoke only; not planner ranking or benchmark-candidate evidence",
+  "required_trace_fields": [
+    "low_progress_window",
+    "recenter_activation_count",
+    "distance_to_goal_delta",
+    "local_minimum_indicator",
+    "execution_mode",
+    "row_status"
+  ],
+  "all_required_fields_present": true,
+  "planners": {
+    "social_force": {
+      "rows": 3,
+      "success_count": 0,
+      "status_counts": {
+        "failure": 3
+      },
+      "termination_counts": {
+        "max_steps": 3
+      },
+      "row_status_counts": {
+        "completed": 3
+      },
+      "all_required_fields_present": true,
+      "missing_required_fields_by_scenario": {
+        "classic_bottleneck_low": [],
+        "classic_head_on_corridor_low": [],
+        "narrow_passage": []
+      },
+      "local_minimum_indicator_detected_rows": 1,
+      "low_progress_active_rows": 1,
+      "recenter_activation_count_total": 0,
+      "execution_mode": "adapter"
+    },
+    "orca": {
+      "rows": 3,
+      "success_count": 2,
+      "status_counts": {
+        "failure": 1,
+        "success": 2
+      },
+      "termination_counts": {
+        "max_steps": 1,
+        "success": 2
+      },
+      "row_status_counts": {
+        "completed": 3
+      },
+      "all_required_fields_present": true,
+      "missing_required_fields_by_scenario": {
+        "classic_bottleneck_low": [],
+        "classic_head_on_corridor_low": [],
+        "narrow_passage": []
+      },
+      "local_minimum_indicator_detected_rows": 0,
+      "low_progress_active_rows": 0,
+      "recenter_activation_count_total": 0,
+      "execution_mode": "adapter"
+    }
+  },
+  "result": {
+    "decision": "revise_before_benchmark_candidate",
+    "execution_completed": true,
+    "trace_fields_present": true,
+    "reason": "The static-deadlock suite rows now emit the required trace/reportability fields, but the smoke is one seed and baseline planners only, with no matched intervention comparison.",
+    "table_candidate": "docs/context/evidence/issue_2586_static_deadlock_trace_fields/suite_smoke_table.csv",
+    "why_first_report_generated": true,
+    "follow_up_issue": 2588
+  },
+  "raw_output_policy": "Raw JSONL remained worktree-local and disposable; this summary/table/report are the durable tracked evidence.",
+  "validation": [
+    "rtk uv run pytest tests/benchmark/test_issue_2452_mechanism_aware_suites.py tests/benchmark/test_map_runner_utils.py::test_run_map_episode_does_not_stop_on_waypoint_only_success -q",
+    "rtk uv run ruff check robot_sf/benchmark/map_runner.py tests/benchmark/test_map_runner_utils.py",
+    "rtk uv run robot_sf_bench --quiet validate-config --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml",
+    "rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml --out <worktree-local-output>/social_force/episodes.jsonl --schema robot_sf/benchmark/schemas/episode.schema.v1.json --algo social_force --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none --record-simulation-step-trace --no-resume --benchmark-profile baseline-safe --socnav-missing-prereq-policy fail-fast --external-log-noise suppress --structured-output json",
+    "rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml --out <worktree-local-output>/orca/episodes.jsonl --schema robot_sf/benchmark/schemas/episode.schema.v1.json --algo orca --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none --record-simulation-step-trace --no-resume --benchmark-profile baseline-safe --socnav-missing-prereq-policy fail-fast --external-log-noise suppress --structured-output json"
+  ],
+  "follow_up_issue": 2588
+}

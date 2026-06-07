@@ -291,6 +291,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2544_mechanism_aware_suite_smoke.md](issue_2544_mechanism_aware_suite_smoke.md)
 
+* Issue #2586 static-deadlock trace fields:
+
+  [issue_2586_static_deadlock_trace_fields.md](issue_2586_static_deadlock_trace_fields.md)
+
 * Issue #2547 counterfactual mechanism taxonomy:
 
   [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)

@@ -105,6 +105,30 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2586_static_deadlock_trace_fields.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/field_presence.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/suite_smoke_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/why_first_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/why_first_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2547_counterfactual_mechanism_taxonomy.md
     status: current
     freshness: maintained

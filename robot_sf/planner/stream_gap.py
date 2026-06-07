@@ -41,6 +41,12 @@ class StreamGapPlannerConfig:
     commit_speed: float = 0.95
     commit_hold_steps: int = 6
 
+    uncertainty_gating_enabled: bool = False
+    uncertainty_min_existence_probability: float = 0.5
+    uncertainty_min_position_confidence: float = 0.5
+    uncertainty_min_class_probability: float = 0.5
+    uncertainty_max_position_variance: float = 1.0
+
 
 class StreamGapPlannerAdapter:
     """Wait-for-gap and commit planner for lateral pedestrian streams."""
@@ -49,6 +55,11 @@ class StreamGapPlannerAdapter:
         """Initialize adapter and commit-mode state."""
         self.config = config or StreamGapPlannerConfig()
         self._commit_steps_remaining = 0
+        self.last_uncertainty_gate: dict[str, Any] = {
+            "schema_version": "stream-gap-uncertainty-gate.v1",
+            "enabled": bool(self.config.uncertainty_gating_enabled),
+            "status": "not_evaluated",
+        }
 
     @staticmethod
     def _as_xy(values: Any) -> np.ndarray:
@@ -61,6 +72,190 @@ class StreamGapPlannerAdapter:
         if arr.ndim != 2 or arr.shape[-1] != 2:
             return np.zeros((0, 2), dtype=float)
         return arr
+
+    @staticmethod
+    def _class_probability(row: dict[str, Any], class_name: str) -> float | None:
+        """Return one class probability from a ScenarioBelief uncertainty row."""
+        probabilities = row.get("class_probabilities")
+        if not isinstance(probabilities, dict):
+            return None
+        value = probabilities.get(class_name)
+        if value is None:
+            return None
+        probability = float(value)
+        if not np.isfinite(probability):
+            return None
+        return probability
+
+    @staticmethod
+    def _position_variance(row: dict[str, Any]) -> float | None:
+        """Return average positional variance from a 2x2 covariance matrix."""
+        covariance = np.asarray(row.get("position_covariance_xy"), dtype=float)
+        if covariance.shape != (2, 2) or not np.all(np.isfinite(covariance)):
+            return None
+        if not np.allclose(covariance, covariance.T, atol=1e-6):
+            return None
+        return float(np.trace(covariance) / 2.0)
+
+    def _fail_closed_uncertainty_gate(self, *, count: int, reason: str) -> np.ndarray:
+        """Record a fail-closed uncertainty gate and keep every deterministic row.
+
+        Returns:
+            np.ndarray: All-true mask preserving deterministic pedestrian input rows.
+        """
+        self.last_uncertainty_gate.update(
+            {
+                "status": "fail_closed",
+                "reason": reason,
+                "kept_count": int(count),
+                "dropped_count": 0,
+                "dropped_reasons": [],
+            }
+        )
+        return np.ones(count, dtype=bool)
+
+    def _uncertainty_rows(self, pedestrians: dict[str, Any], count: int) -> list[Any] | None:
+        """Return uncertainty sidecar rows, or ``None`` when malformed or incomplete."""
+        raw = pedestrians.get("uncertainty")
+        if isinstance(raw, dict):
+            raw = raw.get("agents")
+        if not isinstance(raw, list) or len(raw) < count:
+            return None
+        return raw[:count]
+
+    def _uncertainty_row_metrics(
+        self,
+        row: dict[str, Any],
+    ) -> tuple[float, float, float, float] | None:
+        """Parse one uncertainty row into gating metrics.
+
+        Returns:
+            tuple[float, float, float, float] | None: Existence probability, position
+            confidence, class probability, and position variance, or ``None`` when malformed.
+        """
+        try:
+            existence = float(row.get("existence_probability"))
+            confidence = float(row.get("position_confidence"))
+        except (TypeError, ValueError):
+            return None
+        class_probability = self._class_probability(row, "pedestrian")
+        variance = self._position_variance(row)
+        if (
+            not np.isfinite(existence)
+            or not np.isfinite(confidence)
+            or class_probability is None
+            or variance is None
+        ):
+            return None
+        return existence, confidence, class_probability, variance
+
+    @staticmethod
+    def _uncertainty_drop_reasons(
+        *,
+        existence: float,
+        confidence: float,
+        class_probability: float,
+        variance: float,
+        thresholds: dict[str, float],
+    ) -> list[str]:
+        """Return threshold failures for one parsed uncertainty row."""
+        reasons: list[str] = []
+        if existence < thresholds["min_existence_probability"]:
+            reasons.append("existence_probability_below_threshold")
+        if confidence < thresholds["min_position_confidence"]:
+            reasons.append("position_confidence_below_threshold")
+        if class_probability < thresholds["min_class_probability"]:
+            reasons.append("class_probability_below_threshold")
+        if variance > thresholds["max_position_variance"]:
+            reasons.append("position_variance_above_threshold")
+        return reasons
+
+    def _uncertainty_keep_mask(
+        self,
+        *,
+        pedestrians: dict[str, Any],
+        count: int,
+    ) -> np.ndarray:
+        """Return which pedestrian rows survive opt-in ScenarioBelief uncertainty gating."""
+        keep = np.ones(count, dtype=bool)
+        self.last_uncertainty_gate = {
+            "schema_version": "stream-gap-uncertainty-gate.v1",
+            "enabled": bool(self.config.uncertainty_gating_enabled),
+            "status": "disabled",
+            "input_count": int(count),
+            "kept_count": int(count),
+            "dropped_count": 0,
+            "dropped_reasons": [],
+        }
+        if count <= 0:
+            self.last_uncertainty_gate["status"] = "empty"
+            return keep
+        if not bool(self.config.uncertainty_gating_enabled):
+            return keep
+
+        if "uncertainty" not in pedestrians:
+            return self._fail_closed_uncertainty_gate(
+                count=count,
+                reason="missing_uncertainty_metadata",
+            )
+        rows = self._uncertainty_rows(pedestrians, count)
+        if rows is None:
+            return self._fail_closed_uncertainty_gate(
+                count=count,
+                reason="malformed_uncertainty_metadata",
+            )
+
+        thresholds = {
+            "min_existence_probability": float(self.config.uncertainty_min_existence_probability),
+            "min_position_confidence": float(self.config.uncertainty_min_position_confidence),
+            "min_class_probability": float(self.config.uncertainty_min_class_probability),
+            "max_position_variance": float(self.config.uncertainty_max_position_variance),
+        }
+        dropped_reasons: list[dict[str, Any]] = []
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                return self._fail_closed_uncertainty_gate(
+                    count=count,
+                    reason="malformed_uncertainty_metadata",
+                )
+            metrics = self._uncertainty_row_metrics(row)
+            if metrics is None:
+                return self._fail_closed_uncertainty_gate(
+                    count=count,
+                    reason="malformed_uncertainty_metadata",
+                )
+            existence, confidence, class_probability, variance = metrics
+            reasons = self._uncertainty_drop_reasons(
+                existence=existence,
+                confidence=confidence,
+                class_probability=class_probability,
+                variance=variance,
+                thresholds=thresholds,
+            )
+            if reasons:
+                keep[index] = False
+                dropped_reasons.append(
+                    {
+                        "row_index": int(index),
+                        "entity_id": row.get("entity_id"),
+                        "reasons": reasons,
+                        "existence_probability": existence,
+                        "position_confidence": confidence,
+                        "class_probability": class_probability,
+                        "position_variance": variance,
+                    }
+                )
+
+        self.last_uncertainty_gate.update(
+            {
+                "status": "applied",
+                "thresholds": thresholds,
+                "kept_count": int(np.count_nonzero(keep)),
+                "dropped_count": int(count - np.count_nonzero(keep)),
+                "dropped_reasons": dropped_reasons,
+            }
+        )
+        return keep
 
     def _extract_state(
         self, observation: dict[str, Any]
@@ -100,7 +295,10 @@ class StreamGapPlannerAdapter:
         )
         count = int(count_arr[0]) if count_arr.size else ped_pos.shape[0]
         count = max(0, min(count, ped_pos.shape[0]))
-        return robot_pos, heading, goal_pos, ped_pos[:count], ped_vel[:count]
+        ped_pos = ped_pos[:count]
+        ped_vel = ped_vel[:count]
+        keep = self._uncertainty_keep_mask(pedestrians=pedestrians, count=count)
+        return robot_pos, heading, goal_pos, ped_pos[keep], ped_vel[keep]
 
     def _goal_frame(
         self,
@@ -284,6 +482,15 @@ def build_stream_gap_config(cfg: dict[str, Any] | None) -> StreamGapPlannerConfi
         approach_speed=float(cfg.get("approach_speed", 0.35)),
         commit_speed=float(cfg.get("commit_speed", 0.95)),
         commit_hold_steps=int(cfg.get("commit_hold_steps", 6)),
+        uncertainty_gating_enabled=bool(cfg.get("uncertainty_gating_enabled", False)),
+        uncertainty_min_existence_probability=float(
+            cfg.get("uncertainty_min_existence_probability", 0.5)
+        ),
+        uncertainty_min_position_confidence=float(
+            cfg.get("uncertainty_min_position_confidence", 0.5)
+        ),
+        uncertainty_min_class_probability=float(cfg.get("uncertainty_min_class_probability", 0.5)),
+        uncertainty_max_position_variance=float(cfg.get("uncertainty_max_position_variance", 1.0)),
     )
 
 

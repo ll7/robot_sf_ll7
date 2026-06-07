@@ -425,6 +425,14 @@ entries:
     status: current
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2565_uncertainty_gating_smoke.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2565_uncertainty_gating_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_2479_real_trajectory_scenario_prior.md
     status: proposal
     freshness: maintained

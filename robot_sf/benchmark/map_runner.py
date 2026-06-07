@@ -3072,7 +3072,7 @@ def _signal_state_trace_payload(signal_state: Any, intent_phase: str) -> dict[st
         (
             phase
             for phase in phase_timeline
-            if isinstance(phase, dict) and str(phase.get("intent_phase")) == intent_phase
+            if isinstance(phase, dict) and phase.get("intent_phase") == intent_phase
         ),
         None,
     )

@@ -1,0 +1,18 @@
+stage_order:
+  - full_matrix
+
+stages:
+  full_matrix:
+    scenario_matrix: configs/scenarios/sets/issue_2588_static_deadlock_controlled_trace.yaml
+    seed_list: [111, 112, 113]
+    benchmark_profile: experimental
+    horizon: 120
+    dt: 0.1
+    workers: 1
+    requires_slurm: false
+    paper_facing: false
+    mechanism_transfer:
+      issue: 2588
+      mechanism: static_deadlock_recovery
+      transfer_axis: controlled_static_recenter_intervention
+      claim_boundary: controlled_trace_diagnostic

@@ -1,0 +1,90 @@
+{
+  "active_rows": [
+    {
+      "activation_count": 4,
+      "baseline_distance_delta_m": -5.362883858009397,
+      "baseline_local_minimum": true,
+      "baseline_success": false,
+      "classification": "mechanism_active_trace_changed",
+      "first_activation_step": 7,
+      "intervention_distance_delta_m": -0.16697032140408608,
+      "intervention_local_minimum": false,
+      "intervention_success": false,
+      "progress_delta_after_activation": {
+        "baseline_m": 0.0,
+        "mechanism_m": -17.975442964418352,
+        "mechanism_minus_baseline_m": -17.975442964418352
+      },
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 113,
+      "terminal_outcome_changed": false,
+      "trace_changed": true,
+      "trajectory_delta_m": 19.43532710849805
+    }
+  ],
+  "baseline_candidate": "hybrid_rule_v3_fast_progress",
+  "claim_boundary": "Matched baseline/intervention static-deadlock trace slice only; not benchmark-candidate evidence, planner ranking, mechanism transfer, or paper-facing proof.",
+  "classification": "controlled_trace",
+  "dt": 0.1,
+  "evidence_tier": "controlled_trace",
+  "funnel_config": "configs/policy_search/transfer/issue_2588_static_deadlock_controlled_trace.yaml",
+  "horizon": 120,
+  "intervention_candidate": "issue_2170_static_recenter_only",
+  "issue": 2588,
+  "parent_issues": [
+    2452,
+    2544,
+    2586
+  ],
+  "raw_output_policy": "Raw activation_trace.json remained worktree-local and is summarized into tracked compact evidence.",
+  "required_trace_fields": [
+    "low_progress_window",
+    "recenter_activation_count",
+    "distance_to_goal_delta",
+    "local_minimum_indicator",
+    "execution_mode",
+    "row_status"
+  ],
+  "result": {
+    "decision": "controlled_trace_negative_mixed",
+    "execution_completed": true,
+    "reason": "The matched 3-scenario x 3-seed baseline/intervention slice completed with all required fields. Static recenter activated in one matched pair and changed the trace/local-minimum state but did not produce a terminal success rescue; four pairs were inactive and four were already solved by both candidates.",
+    "row_status_complete": true,
+    "table": "docs/context/evidence/issue_2588_static_deadlock_controlled_trace/controlled_trace_table.csv",
+    "trace_fields_present": true,
+    "why_first_report_generated": true
+  },
+  "scenario_matrix": "configs/scenarios/sets/issue_2588_static_deadlock_controlled_trace.yaml",
+  "schema_version": "static-deadlock-controlled-trace-summary.v1",
+  "seed_budget": [
+    111,
+    112,
+    113
+  ],
+  "suite_id": "static_deadlock_recovery",
+  "summary": {
+    "activation_count_total": 4,
+    "all_required_trace_fields_present": true,
+    "baseline_row_status_counts": {
+      "completed": 9
+    },
+    "classification_counts": {
+      "comparator_already_solved_case": 4,
+      "mechanism_active_trace_changed": 1,
+      "mechanism_inactive": 4
+    },
+    "mechanism_row_status_counts": {
+      "completed": 9
+    },
+    "missing_required_trace_fields": {},
+    "paired_row_status_counts": {
+      "completed": 9
+    },
+    "rows": 9
+  },
+  "validation": [
+    "rtk uv run pytest tests/validation/test_static_recenter_activation_trace.py -q",
+    "rtk uv run robot_sf_bench --quiet validate-config --matrix configs/scenarios/sets/issue_2588_static_deadlock_controlled_trace.yaml",
+    "rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/validation/run_static_recenter_activation_trace.py --funnel-config configs/policy_search/transfer/issue_2588_static_deadlock_controlled_trace.yaml --baseline-candidate hybrid_rule_v3_fast_progress --mechanism-candidate issue_2170_static_recenter_only --stage full_matrix --output-json <worktree-local-output>/activation_trace.json"
+  ]
+}

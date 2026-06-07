@@ -1,0 +1,30 @@
+## Issue #2588 static-deadlock controlled trace matrix
+#
+# Purpose:
+#   Promote the #2544 one-seed static-deadlock smoke into a bounded matched
+#   baseline/intervention trace slice for the #2452 `static_deadlock_recovery` suite.
+#   This matrix is still a controlled trace, not planner-ranking or benchmark-candidate evidence.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_bottleneck.yaml
+  - ../archetypes/classic_head_on_corridor.yaml
+  - ../archetypes/issue_596_static_obstacles.yaml
+
+select_scenarios:
+  - classic_bottleneck_low
+  - classic_head_on_corridor_low
+  - narrow_passage
+
+scenario_overrides:
+  seeds: [111, 112, 113]
+  metadata:
+    mechanism_aware_suite_id: static_deadlock_recovery
+    issue: 2588
+    evidence_tier: controlled_trace
+    claim_boundary: >
+      Bounded matched baseline/intervention trace slice for static-deadlock mechanism
+      accounting only; not planner ranking, mechanism transfer, or benchmark-candidate evidence.
+
+map_search_paths:
+  - ../../../maps/svg_maps

@@ -57,7 +57,12 @@ known_negative_evidence:
   - docs/context/issue_2306_static_recenter_activation_trace.md and
     docs/context/issue_2402_static_recenter_activation_decision.md record zero activations on the
     inspected held-out rows, so the unsolved held-out row is an inactive-mechanism negative.
-transfer_status: slice_local; no held-out transfer support from the current pilot.
+  - docs/context/issue_2438_static_recenter_activation_closure.md closes the current held-out route
+    as `mechanism_inactive` and recommends stopping unless a future activation-targeted slice is
+    predeclared.
+transfer_status: >
+  slice_local for the h500 diagnostic component; stop the current held-out transfer route because
+  static recentering was inactive on the unsolved held-out row.
 claim_boundary: diagnostic-only mechanism card; not planner-ranking, transfer, or benchmark evidence.
 canonical_smoke_command: >
   uv run python scripts/validation/run_policy_search_candidate.py --candidate
@@ -213,7 +218,7 @@ canonical_smoke_command: >
 
 | Candidate | Current strongest signal | Next smallest useful proof |
 | --- | --- | --- |
-| `issue_2170_static_recenter_only` | Slice-local positive with held-out inactive-mechanism negative. | Predeclare a static-obstacle slice where activation should occur, then preserve activation and command-source fields. |
+| `issue_2170_static_recenter_only` | Local h500 diagnostic positive with #2438 held-out `mechanism_inactive` closure. | Stop the current held-out transfer route; only reopen via a predeclared static-obstacle slice where activation should occur, preserving activation and command-source fields. |
 | `topology_guided_hybrid_rule_v0` | Alternatives exist, but scoring overselects `primary_route`. | Implement or test the near-parity diversity gate and require real non-primary selection, not numerical ties. |
 | `actuation_aware_hybrid_rule_v0` | Synthetic command feasibility improves while route progress remains blocked. | Analyze route-progress geometry or task-completion blockers before more actuation scoring variants. |
 | `orca_residual_guarded_ppo_v0` | Runtime surface executes without guard saturation, but low progress remains. | Revise residual objective/diagnostics and require durable raw/bounded residual magnitude fields. |

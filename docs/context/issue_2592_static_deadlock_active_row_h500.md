@@ -75,4 +75,6 @@ rtk python -m json.tool docs/context/evidence/issue_2592_static_deadlock_active_
 This result supports a narrow `delayed_rescue_candidate` hypothesis for a selected static-deadlock
 active row. It does not establish planner improvement across the suite. A broader predeclared h500
 slice or scenario/seed probe is required before any benchmark-candidate, transfer, or paper-facing
-claim. Follow-up Issue #2594 tracks that broader h500 static-deadlock slice.
+claim. Follow-up Issue #2594 ran the predeclared 3x3 h500 slice and supported the delayed rescue on
+the same unsolved active row, but most broader rows were already solved and the result remains
+controlled-trace evidence.

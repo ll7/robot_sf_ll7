@@ -1,0 +1,140 @@
+{
+  "schema_version": "static-deadlock-broader-h500-summary.v1",
+  "issue": 2594,
+  "parent_issues": [
+    2452,
+    2588,
+    2590,
+    2592
+  ],
+  "suite_id": "static_deadlock_recovery",
+  "evidence_tier": "controlled_trace_horizon_sensitivity",
+  "classification": "broader_delayed_rescue_supported",
+  "result": {
+    "decision": "broader_delayed_rescue_supported",
+    "execution_completed": true,
+    "row_status_complete": true,
+    "trace_fields_present": true,
+    "pair_rows": 18,
+    "completed_pair_rows": 18,
+    "terminal_rescue_pair_rows": 2,
+    "already_solved_pair_rows": 16,
+    "reason": "The predeclared 3-scenario x 3-seed h500 static-deadlock slice completed for both recenter pairings with all required trace fields. Both pairings reproduced terminal rescue on the only unsolved active row, classic_bottleneck_low seed 113, while the other 16 pair-rows were already solved by both baseline and intervention candidates."
+  },
+  "funnel_config": "configs/policy_search/transfer/issue_2594_static_deadlock_broader_h500.yaml",
+  "scenario_matrix": "configs/scenarios/sets/issue_2594_static_deadlock_broader_h500.yaml",
+  "horizon": 500,
+  "dt": 0.1,
+  "seed_budget": [
+    111,
+    112,
+    113
+  ],
+  "scenario_ids": [
+    "classic_bottleneck_low",
+    "classic_head_on_corridor_low",
+    "narrow_passage"
+  ],
+  "pair_count": 2,
+  "pair_summaries": [
+    {
+      "pair_id": "static_recenter_only_h500_broader",
+      "semantic_intervention": "static_recenter_only",
+      "baseline_candidate": "hybrid_rule_v3_fast_progress",
+      "intervention_candidate": "issue_2170_static_recenter_only",
+      "rows": 9,
+      "paired_row_status_counts": {
+        "completed": 9
+      },
+      "baseline_row_status_counts": {
+        "completed": 9
+      },
+      "mechanism_row_status_counts": {
+        "completed": 9
+      },
+      "classification_counts": {
+        "comparator_already_solved_case": 8,
+        "mechanism_active_terminal_changed": 1
+      },
+      "activation_count_total": 4,
+      "all_required_trace_fields_present": true,
+      "missing_required_trace_fields": {},
+      "terminal_rescue_rows": [
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "seed": 113,
+          "activation_count": 4,
+          "first_activation_step": 7,
+          "baseline_success": false,
+          "intervention_success": true,
+          "baseline_steps": 500,
+          "intervention_steps": 122,
+          "baseline_termination_reason": "terminated",
+          "intervention_termination_reason": "success",
+          "baseline_low_progress": true,
+          "intervention_low_progress": false,
+          "baseline_local_minimum": true,
+          "intervention_local_minimum": false,
+          "baseline_distance_delta_m": -5.362883858009397,
+          "intervention_distance_delta_m": 0.015123114943855986,
+          "trajectory_delta_m": 19.618349212020885,
+          "mechanism_minus_baseline_progress_after_activation_m": -18.158254008873836
+        }
+      ],
+      "raw_output": "<worktree-local-output>/static_recenter_only_activation_trace.json"
+    },
+    {
+      "pair_id": "escape_recenter_pair_h500_broader",
+      "semantic_intervention": "escape_recenter_pair",
+      "baseline_candidate": "issue_2170_static_escape_only",
+      "intervention_candidate": "issue_2170_static_escape_recenter_no_transit",
+      "rows": 9,
+      "paired_row_status_counts": {
+        "completed": 9
+      },
+      "baseline_row_status_counts": {
+        "completed": 9
+      },
+      "mechanism_row_status_counts": {
+        "completed": 9
+      },
+      "classification_counts": {
+        "comparator_already_solved_case": 8,
+        "mechanism_active_terminal_changed": 1
+      },
+      "activation_count_total": 4,
+      "all_required_trace_fields_present": true,
+      "missing_required_trace_fields": {},
+      "terminal_rescue_rows": [
+        {
+          "scenario_id": "classic_bottleneck_low",
+          "seed": 113,
+          "activation_count": 4,
+          "first_activation_step": 7,
+          "baseline_success": false,
+          "intervention_success": true,
+          "baseline_steps": 500,
+          "intervention_steps": 122,
+          "baseline_termination_reason": "terminated",
+          "intervention_termination_reason": "success",
+          "baseline_low_progress": true,
+          "intervention_low_progress": false,
+          "baseline_local_minimum": true,
+          "intervention_local_minimum": false,
+          "baseline_distance_delta_m": -5.362883858009397,
+          "intervention_distance_delta_m": 0.015123114943855986,
+          "trajectory_delta_m": 19.618349212020885,
+          "mechanism_minus_baseline_progress_after_activation_m": -18.158254008873836
+        }
+      ],
+      "raw_output": "<worktree-local-output>/escape_recenter_pair_activation_trace.json"
+    }
+  ],
+  "claim_boundary": "Predeclared broader h500 static-deadlock controlled trace slice. Supports delayed rescue on the only unsolved active row in this 3x3 slice, but does not establish planner ranking, benchmark-candidate status, mechanism transfer, or paper-facing proof.",
+  "raw_output_policy": "Raw activation trace JSON files remained worktree-local and are summarized into tracked compact evidence.",
+  "validation": [
+    "rtk uv run robot_sf_bench --quiet validate-config --matrix configs/scenarios/sets/issue_2594_static_deadlock_broader_h500.yaml",
+    "rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/validation/run_static_recenter_activation_trace.py --funnel-config configs/policy_search/transfer/issue_2594_static_deadlock_broader_h500.yaml --baseline-candidate hybrid_rule_v3_fast_progress --mechanism-candidate issue_2170_static_recenter_only --stage full_matrix --output-json <worktree-local-output>/static_recenter_only_activation_trace.json",
+    "rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/validation/run_static_recenter_activation_trace.py --funnel-config configs/policy_search/transfer/issue_2594_static_deadlock_broader_h500.yaml --baseline-candidate issue_2170_static_escape_only --mechanism-candidate issue_2170_static_escape_recenter_no_transit --stage full_matrix --output-json <worktree-local-output>/escape_recenter_pair_activation_trace.json"
+  ]
+}

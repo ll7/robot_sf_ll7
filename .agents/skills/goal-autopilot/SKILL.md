@@ -179,6 +179,44 @@ only proves `route_status: completed`; the parent phase is not complete until th
 reviewed the output, integrated any edits, run the required validation, updated GitHub state, and
 recorded cleanup.
 
+### Usage Pause Guard
+
+When a user-defined Codex usage threshold is active, treat a `codex-usage-status`
+`threshold_decision.status: stop` result as a hard paused state for the autopilot
+loop, not as another recoverable phase outcome.
+
+Persist the stop decision in the common Git directory before returning so repeated
+automatic continue prompts can short-circuit without rereading repo state, rerunning
+GitHub operations, or restarting delegation:
+
+```bash
+PAUSE_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/codex-agent-runs/active"
+mkdir -p "$PAUSE_DIR"
+# Write compact JSON/YAML/Markdown such as:
+# $PAUSE_DIR/usage-pause.md
+```
+
+The pause record should include the observed timestamp, threshold window,
+remaining percentage, threshold percentage, and whether the user may explicitly
+override the guardrail.
+
+While the usage pause is active:
+
+- do not run repo, worktree, GitHub, benchmark, validation, or delegation commands;
+- do not call usage-check tooling again on automatic "continue" prompts unless a
+  recorded cooldown has elapsed or the user explicitly asks for current usage;
+- do not load broad skill or repository context just to restate the pause;
+- respond to repeated automatic continue prompts with one compact sentence such as
+  `Paused: weekly remaining 13% < 28%. No actions.`;
+- keep the active goal incomplete unless a real completion audit already proved
+  all requirements before the pause fired.
+
+Resume only when the user explicitly overrides the stop guardrail, or when a fresh
+usage check requested by the user or allowed by the cooldown reports remaining
+budget at or above the threshold. If the first stop check happens while required
+cleanup is already in progress, finish only the minimal cleanup or follow-up issue
+creation named by the user's guardrail, then enter the persisted paused state.
+
 Update the ledger:
 
 - after a claim is acquired and the implementation worktree/branch is created;

@@ -2,10 +2,10 @@
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/2557>
 
-This bundle preserves compact evidence from the first four completed real 10M-step seed-replica
+This bundle preserves compact evidence from the first five completed real 10M-step seed-replica
 runs for the Issue #2557 reward-curriculum follow-up. It is partial training evidence only, not a
-complete seed-batch result: seeds 503, 504, and 507 were still running, and seeds 508-516 were
-pending, when this bundle was created on 2026-06-08.
+complete seed-batch result: seeds 503, 504, and 508 were still running, and seeds 509-516 were
+pending, when this bundle was refreshed on 2026-06-08.
 
 ## Claim Boundary
 
@@ -28,13 +28,14 @@ The source worktree was
 | 502 | 12768 | a30 | <https://wandb.ai/ll7/robot_sf/runs/usp2vcrl> | 0.914286 | 0.085714 | 0.275673 |
 | 505 | 12771 | l40s | <https://wandb.ai/ll7/robot_sf/runs/7t40agqo> | 0.871429 | 0.128571 | 0.071857 |
 | 506 | 12772 | l40s | <https://wandb.ai/ll7/robot_sf/runs/76r3v1jb> | 0.885714 | 0.114286 | 0.067319 |
+| 507 | 12773 | l40s | <https://wandb.ai/ll7/robot_sf/runs/fe3ll0gb> | 0.828571 | 0.171429 | -0.020554 |
 
-Aggregate over these four final 10M-checkpoint rows:
+Aggregate over these five final 10M-checkpoint rows:
 
-- Mean success rate: 0.896429.
-- Mean collision rate: 0.103571.
-- Mean SNQI: 0.169702.
-- Mean evaluation episode return: 22.249741.
+- Mean success rate: 0.882857.
+- Mean collision rate: 0.117143.
+- Mean SNQI: 0.131651.
+- Mean evaluation episode return: 21.769519.
 
 ## Files
 

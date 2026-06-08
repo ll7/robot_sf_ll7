@@ -1,6 +1,6 @@
 {
   "schema_version": "issue_2557_reward_curriculum_partial.v1",
-  "generated_utc": "2026-06-08T05:45:00Z",
+  "generated_utc": "2026-06-08T13:56:00Z",
   "source_commit": "0e0f98a4fefe9faedc3eed31f2085af9618914e3",
   "branch": "issue-2557-gse-night-seeds",
   "claim_boundary": "partial_training_evidence_not_full_seed_batch",
@@ -76,6 +76,24 @@
       "run_summary_sha256": "9df72766b7fd35ccb3715ba389e1433873ab00911ec3c6804a01042642401431",
       "eval_timeline_sha256": "b86f7a94711a36b4eaac869c8b32badb13ebbbdc914e33319cd6df7dc77d5c5b",
       "source_config_sha256": "7963f73fd615dc43da664926ef5bb79d85bb6109bae6e52ad86204c28297f531"
+    },
+    {
+      "seed": 507,
+      "job_id": 12773,
+      "partition": "l40s",
+      "run_id": "ppo_expert_issue_2557_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_seed507_fixed_20260608T032008",
+      "eval_step": 10000000,
+      "success_rate": 0.8285714285714286,
+      "collision_rate": 0.17142857142857143,
+      "snqi": -0.020553723778310204,
+      "eval_episode_return": 19.84863109213117,
+      "comfort_exposure": 0.01825396825396825,
+      "path_efficiency": 0.8392880040072708,
+      "wall_clock_hours": 8.519190901563917,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/fe3ll0gb",
+      "run_summary_sha256": "898a978cfa56c13a67cf72d2bd178039dbb884945e03d9793042a10fd7e1268d",
+      "eval_timeline_sha256": "9eff4af61b32d119e99c0d1d02ab90f8c3de23ee9bf3c9f13ef932c0f5254051",
+      "source_config_sha256": "d297dfc73c6f66b4b440a983a4a753fa90c6e43fc242d2a760b5971d96fe0827"
     }
   ]
 }

@@ -177,7 +177,7 @@ Policy caveats:
   split-check, metric summary, and source checksums for the Issue #2441 train/validation
   oracle-imitation trace collection; raw traces remain local-only until durable promotion.
 - `issue_2557_reward_curriculum_partial_2026-06-08/`: compact partial 10M-step reward-curriculum
-  seed-replica evidence for the first four completed Issue #2557 training jobs, with W&B pointers
+  seed-replica evidence for the first five completed Issue #2557 training jobs, with W&B pointers
   and an explicit incomplete-batch claim boundary.
 - `issue_1318_teb_corridor_deadlock_2026-05-20/`: compact TEB/ORCA/hybrid-rule
   classic-merging corridor-deadlock comparison summary for issue #1318.

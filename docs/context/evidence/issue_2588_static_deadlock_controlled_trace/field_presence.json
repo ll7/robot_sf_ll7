@@ -1,0 +1,78 @@
+{
+  "all_required_trace_fields_present": true,
+  "issue": 2588,
+  "required_trace_fields": [
+    "low_progress_window",
+    "recenter_activation_count",
+    "distance_to_goal_delta",
+    "local_minimum_indicator",
+    "execution_mode",
+    "row_status"
+  ],
+  "rows": [
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 111
+    },
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 112
+    },
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 113
+    },
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111
+    },
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 112
+    },
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 113
+    },
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "narrow_passage",
+      "seed": 111
+    },
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "narrow_passage",
+      "seed": 112
+    },
+    {
+      "baseline_missing_required_trace_fields": [],
+      "intervention_missing_required_trace_fields": [],
+      "paired_row_status": "completed",
+      "scenario_id": "narrow_passage",
+      "seed": 113
+    }
+  ],
+  "schema_version": "static-deadlock-controlled-trace-field-presence.v1"
+}

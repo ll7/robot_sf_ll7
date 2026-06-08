@@ -21,6 +21,10 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: configs/benchmarks/issue_2456_amv_local_nav_suite_v0.yaml
     status: proposal
     freshness: maintained
@@ -81,6 +85,154 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2544_mechanism_aware_suite_smoke.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/suite_smoke_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/why_first_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2544_mechanism_aware_suite_smoke/why_first_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2586_static_deadlock_trace_fields.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/field_presence.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/suite_smoke_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/why_first_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2586_static_deadlock_trace_fields/why_first_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2588_static_deadlock_controlled_trace.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2588_static_deadlock_controlled_trace/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2588_static_deadlock_controlled_trace/field_presence.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2588_static_deadlock_controlled_trace/controlled_trace_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2588_static_deadlock_controlled_trace/why_first_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2588_static_deadlock_controlled_trace/why_first_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2590_escape_recenter_static_deadlock_controlled_trace.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2590_escape_recenter_static_deadlock_controlled_trace/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2590_escape_recenter_static_deadlock_controlled_trace/field_presence.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2590_escape_recenter_static_deadlock_controlled_trace/controlled_trace_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2590_escape_recenter_static_deadlock_controlled_trace/why_first_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2590_escape_recenter_static_deadlock_controlled_trace/why_first_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2592_static_deadlock_active_row_h500.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2592_static_deadlock_active_row_h500/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2592_static_deadlock_active_row_h500/field_presence.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2592_static_deadlock_active_row_h500/horizon_sensitivity_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2592_static_deadlock_active_row_h500/why_first_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2592_static_deadlock_active_row_h500/why_first_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2594_static_deadlock_broader_h500.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2594_static_deadlock_broader_h500/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2594_static_deadlock_broader_h500/field_presence.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2594_static_deadlock_broader_h500/broader_h500_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2594_static_deadlock_broader_h500/why_first_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2594_static_deadlock_broader_h500/why_first_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2547_counterfactual_mechanism_taxonomy.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2547_counterfactual_mechanism_taxonomy/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1272_validation_falsification_strategy.md
     status: current
     freshness: policy
@@ -126,6 +278,30 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_2443_amv_trace_review_2026-06-07/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2522_why_first_diagnostics.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2522_why_first_diagnostics/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_input.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence
@@ -224,6 +400,26 @@ entries:
   - path: docs/context/evidence/issue_2530_topology_near_parity_corrective_smoke_2026-06-07/summary.json
     status: evidence
     freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2563_topology_corrective_revision.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_2570_topology_revise_status_propagation.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_2566_static_recenter_inactive_propagation.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_2571_active_research_queue.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/dissertation_claim_export_candidate_report.md
+    status: current
+    freshness: maintained
     area: benchmark_evidence
   - path: docs/context/mechanism_closure_status.md
     status: current
@@ -425,6 +621,22 @@ entries:
     status: current
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2565_uncertainty_gating_smoke.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2565_uncertainty_gating_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/issue_2538_scenario_belief_planner_projection.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2538_scenario_belief_planner_projection/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_2479_real_trajectory_scenario_prior.md
     status: proposal
     freshness: maintained
@@ -545,7 +757,47 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2524_adversarial_manifests.md
+    status: current
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_2524_adversarial_manifests/summary.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/issue_2562_adversarial_manifest_smoke.md
+    status: current
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_2562_adversarial_manifest_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/issue_2567_adversarial_manifest_quality.md
+    status: current
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_2567_adversarial_manifest_quality/summary.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/issue_2568_adversarial_expansion_gate.md
+    status: current
+    freshness: maintained
+    area: adversarial_search
   - path: docs/context/issue_2527_waiting_crossing_fixture.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_2564_signal_state_proxy_smoke.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2564_signal_state_proxy_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2526_cyclist_vru_smoke.md
     status: current
     freshness: maintained
     area: benchmark_evidence
@@ -659,6 +911,14 @@ entries:
   - path: docs/context/issue_2236_trace_mechanism_evidence_rubric.md
     status: current
     freshness: maintained
+    area: manual_control_trace
+  - path: docs/context/issue_2543_trace_failure_predicates.md
+    status: current
+    freshness: maintained
+    area: manual_control_trace
+  - path: docs/context/evidence/issue_2543_trace_failure_predicates/summary.json
+    status: evidence
+    freshness: evidence
     area: manual_control_trace
   - path: docs/context/evidence/issue_2263_mechanism_activation_fields_2026-06-05/summary.json
     status: evidence

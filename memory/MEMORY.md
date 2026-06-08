@@ -50,6 +50,13 @@ files that agents read on demand.
   Wave-5/6 attribution: eval-aligned training explains ~97% of the 0.586→0.929 PPO lift;
   curriculum/capacity/foresight add only a small foresight-gated residual.
 
+### Current Research Queue
+
+- [Issue #2571 Active Research Queue](../docs/context/issue_2571_active_research_queue.md)
+  Current next-cycle research handoff for adversarial manifest quality/learned-expansion gating,
+  oracle trace artifact access, and coupled signal-state/ScenarioBelief uncertainty semantics,
+  including the diagnostic ScenarioBelief-to-planner projection smoke from Issue #2538.
+
 ### `workflows/`
 
 - [Agent Workflow Lessons 2026-05-31](workflows/2026-05-31_agent_workflow_lessons.md)

@@ -1,0 +1,27 @@
+## Issue #2592 static-deadlock active-row h500 horizon sensitivity
+#
+# Purpose:
+#   Re-run the active static-recenter row from Issues #2588 and #2590 with a
+#   longer h500 stop rule. This is a one-row horizon-sensitivity probe, not
+#   planner ranking or benchmark-candidate evidence.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_bottleneck.yaml
+
+select_scenarios:
+  - classic_bottleneck_low
+
+scenario_overrides:
+  seeds: [113]
+  metadata:
+    mechanism_aware_suite_id: static_deadlock_recovery
+    issue: 2592
+    evidence_tier: controlled_trace_horizon_sensitivity
+    claim_boundary: >
+      One-row h500 horizon-sensitivity trace for the previously active
+      static-recenter row only; not planner ranking, mechanism transfer, or
+      benchmark-candidate evidence.
+
+map_search_paths:
+  - ../../../maps/svg_maps

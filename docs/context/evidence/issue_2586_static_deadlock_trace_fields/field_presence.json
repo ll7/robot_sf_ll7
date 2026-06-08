@@ -1,0 +1,104 @@
+{
+  "schema_version": "static-deadlock-field-presence.v1",
+  "required_trace_fields": [
+    "low_progress_window",
+    "recenter_activation_count",
+    "distance_to_goal_delta",
+    "local_minimum_indicator",
+    "execution_mode",
+    "row_status"
+  ],
+  "all_required_fields_present": true,
+  "rows": [
+    {
+      "planner": "social_force",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 111,
+      "present_fields": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "execution_mode",
+        "row_status"
+      ],
+      "missing_fields": [],
+      "row_status": "completed"
+    },
+    {
+      "planner": "social_force",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "present_fields": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "execution_mode",
+        "row_status"
+      ],
+      "missing_fields": [],
+      "row_status": "completed"
+    },
+    {
+      "planner": "social_force",
+      "scenario_id": "narrow_passage",
+      "seed": 111,
+      "present_fields": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "execution_mode",
+        "row_status"
+      ],
+      "missing_fields": [],
+      "row_status": "completed"
+    },
+    {
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 111,
+      "present_fields": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "execution_mode",
+        "row_status"
+      ],
+      "missing_fields": [],
+      "row_status": "completed"
+    },
+    {
+      "planner": "orca",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "present_fields": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "execution_mode",
+        "row_status"
+      ],
+      "missing_fields": [],
+      "row_status": "completed"
+    },
+    {
+      "planner": "orca",
+      "scenario_id": "narrow_passage",
+      "seed": 111,
+      "present_fields": [
+        "low_progress_window",
+        "recenter_activation_count",
+        "distance_to_goal_delta",
+        "local_minimum_indicator",
+        "execution_mode",
+        "row_status"
+      ],
+      "missing_fields": [],
+      "row_status": "completed"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "claim_boundary": "trace-predicate extraction semantics only; not benchmark rates, planner superiority, or real-world safety evidence",
+  "created_at": "2026-06-07T20:45:00Z",
+  "implemented_predicates": [
+    "late_evasive_reaction",
+    "clearance_critical_interaction",
+    "oscillatory_local_control",
+    "zero_motion_timeout_behavior",
+    "bottleneck_deadlock",
+    "occlusion_triggered_near_miss"
+  ],
+  "issue": 2543,
+  "result": {
+    "fail_closed_missing_occlusion_fields": true,
+    "smoke_fixture_valid_predicates": 5,
+    "summary_counts_by_family_and_planner": true,
+    "target_trace_schema": "simulation_trace_export.v1"
+  },
+  "schema_version": "trace-failure-predicate-proof.v1",
+  "validation": [
+    "rtk uv run pytest tests/validation/test_trace_failure_predicates.py -q",
+    "rtk uv run ruff check robot_sf/analysis_workbench/trace_failure_predicates.py robot_sf/analysis_workbench/__init__.py tests/validation/test_trace_failure_predicates.py"
+  ]
+}

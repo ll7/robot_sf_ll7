@@ -1,0 +1,21 @@
+{
+  "schema_version": "adversarial_scenario_manifest_generation_summary.v1",
+  "source": {
+    "scenario_template": "crossing_ttc.yaml",
+    "search_space": "crossing_ttc_space.yaml",
+    "map_id": "classic_cross_trap",
+    "scenario_name": "crossing_ttc_template",
+    "config_path": "configs/scenarios/templates/crossing_ttc.yaml",
+    "search_space_path": "configs/adversarial/crossing_ttc_space.yaml"
+  },
+  "generator": {
+    "family": "random",
+    "generator_id": "RandomCandidateSampler",
+    "seed": 42
+  },
+  "total_candidates": 16,
+  "valid": 16,
+  "invalid": 0,
+  "degenerate": 0,
+  "rejection_reasons": {}
+}

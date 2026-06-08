@@ -37,10 +37,39 @@ def test_create_supported_robot_route_offset_pair(tmp_path: Path) -> None:
     output_text = output_path.read_text(encoding="utf-8")
     payload = yaml.safe_load(output_text)
     assert payload["changed_feature"] == "robot_route_offset"
+    assert payload["changed_factor"] == "robot_route_offset"
     assert (
         payload["claim_boundary"] == "candidate mechanism-test inputs only; not benchmark evidence"
     )
     assert payload["validity_status"] == "valid"
+    assert payload["mechanism_taxonomy"] == {
+        "label": "clearance_pressure",
+        "label_source": "counterfactual_mechanism_taxonomy.v1",
+        "mechanism_hypothesis": (
+            "A bounded robot-route offset changes clearance pressure while holding the scenario, "
+            "planner, and seed fixed."
+        ),
+        "expected_metric_direction": {
+            "clearance_min_distance_m": "direction_depends_on_offset_sign",
+            "collision_or_near_miss_risk": "may_increase_when_offset_reduces_clearance",
+            "success": "no_directional_claim_from_pair_manifest",
+        },
+        "validity_constraints": [
+            "baseline and intervention must both pass perturbation preflight",
+            "seed and source scenario must remain unchanged",
+            "single pair is a mechanism hypothesis input, not causal evidence",
+        ],
+    }
+    assert payload["pair_report"] == {
+        "base_scenario_id": "planner_sanity_simple",
+        "counterfactual_scenario_id": "planner_sanity_simple",
+        "changed_factor": "robot_route_offset",
+        "artifact_manifest_ref": "perturbation_manifest",
+        "expected_vs_observed_metric_change": {
+            "status": "not_available",
+            "reason": "no smoke-run metrics were supplied to this pair manifest",
+        },
+    }
     assert payload["baseline"] == {
         "scenario_id": "planner_sanity_simple",
         "variant_id": "planner_sanity_simple_baseline_seed_111",

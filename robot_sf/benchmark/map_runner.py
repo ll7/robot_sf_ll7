@@ -2821,6 +2821,9 @@ def _trace_pedestrians(
     previous_positions: np.ndarray | None,
     dt_seconds: float,
     intent_metadata: list[dict[str, Any] | None] | None = None,
+    vru_metadata: list[dict[str, Any] | None] | None = None,
+    robot_position: np.ndarray | None = None,
+    robot_velocity: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     """Build trace-export pedestrian frames from simulator position buffers.
 
@@ -2831,10 +2834,9 @@ def _trace_pedestrians(
     if positions.size == 0:
         return []
     pedestrians: list[dict[str, Any]] = []
+    metadata_count = max(len(intent_metadata or []), len(vru_metadata or []))
     single_offset = (
-        max(0, int(np.asarray(positions).shape[0]) - len(intent_metadata))
-        if intent_metadata
-        else None
+        max(0, int(np.asarray(positions).shape[0]) - metadata_count) if metadata_count else None
     )
     for ped_idx, ped_pos in enumerate(np.asarray(positions, dtype=float)):
         if (
@@ -2856,6 +2858,18 @@ def _trace_pedestrians(
                 metadata = (intent_metadata or [])[single_idx]
                 if metadata is not None:
                     frame.update(_intent_trace_payload(metadata, velocity))
+            if 0 <= single_idx < len(vru_metadata or []):
+                metadata = (vru_metadata or [])[single_idx]
+                if metadata is not None:
+                    frame.update(
+                        _vru_trace_payload(
+                            metadata,
+                            ped_pos=ped_pos,
+                            velocity=velocity,
+                            robot_position=robot_position,
+                            robot_velocity=robot_velocity,
+                        )
+                    )
         pedestrians.append(frame)
     return pedestrians
 
@@ -2869,6 +2883,11 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
         scenario_metadata.get("intent_conditioned_behavior")
         if isinstance(scenario_metadata.get("intent_conditioned_behavior"), dict)
         else {}
+    )
+    scenario_signal_state = (
+        scenario_metadata.get("signal_state")
+        if isinstance(scenario_metadata.get("signal_state"), dict)
+        else None
     )
     single_peds = (
         scenario.get("single_pedestrians")
@@ -2927,9 +2946,85 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
                     "role": ped.get("role"),
                     "role_target_id": ped.get("role_target_id"),
                 },
+                **({"signal_state": scenario_signal_state} if scenario_signal_state else {}),
             }
         )
     return result if has_intent_metadata else []
+
+
+def _single_pedestrian_vru_metadata(scenario: dict[str, Any]) -> list[dict[str, Any] | None]:
+    """Return authored cyclist-like VRU metadata aligned with scenario single pedestrians."""
+    single_peds = (
+        scenario.get("single_pedestrians")
+        if isinstance(scenario.get("single_pedestrians"), list)
+        else []
+    )
+    result: list[dict[str, Any] | None] = []
+    has_vru_metadata = False
+    for idx, ped in enumerate(single_peds):
+        if not isinstance(ped, dict):
+            result.append(None)
+            continue
+        ped_metadata = ped.get("metadata") if isinstance(ped.get("metadata"), dict) else {}
+        vru = (
+            ped_metadata.get("cyclist_like_vru")
+            if isinstance(ped_metadata.get("cyclist_like_vru"), dict)
+            else {}
+        )
+        if not vru:
+            result.append(None)
+            continue
+        speed_m_s = _metadata_float(vru, "speed_m_s", default=ped.get("speed_m_s"))
+        acceleration_m_s2 = _metadata_float(vru, "acceleration_m_s2", default=0.0)
+        actor_radius_m = _metadata_float(vru, "actor_radius_m", default=0.35)
+        robot_radius_m = _metadata_float(vru, "robot_radius_m", default=0.3)
+        has_vru_metadata = True
+        result.append(
+            {
+                "single_index": idx,
+                "pedestrian_id": str(ped.get("id") or f"single_{idx}"),
+                "actor_type": str(vru.get("actor_type") or "cyclist_like_vru"),
+                "speed_m_s": speed_m_s,
+                "acceleration_m_s2": acceleration_m_s2,
+                "actor_radius_m": actor_radius_m,
+                "robot_radius_m": robot_radius_m,
+                "interaction_role": str(vru.get("interaction_role") or "fast_moving_vru"),
+                "diagnostic_metric_subset": [
+                    str(item)
+                    for item in (
+                        vru.get("diagnostic_metric_subset")
+                        if isinstance(vru.get("diagnostic_metric_subset"), list)
+                        else [
+                            "time_to_conflict_zone_s",
+                            "clearance_m",
+                            "pass_overtake_state",
+                        ]
+                    )
+                ],
+                "claim_boundary": str(
+                    vru.get("claim_boundary")
+                    or "Authored cyclist-like VRU proxy metadata only; not cyclist realism or "
+                    "planner-ranking evidence."
+                ),
+            }
+        )
+    return result if has_vru_metadata else []
+
+
+def _metadata_float(mapping: Mapping[str, Any], key: str, *, default: Any) -> float:
+    """Return a finite metadata float or a finite default."""
+    value = mapping.get(key, default)
+    try:
+        numeric = float(value)
+        if math.isfinite(numeric):
+            return numeric
+    except (TypeError, ValueError):
+        pass
+    try:
+        fallback = float(default) if default is not None else 0.0
+    except (TypeError, ValueError):
+        fallback = 0.0
+    return fallback if math.isfinite(fallback) else 0.0
 
 
 def _intent_trace_payload(metadata: dict[str, Any], velocity: np.ndarray) -> dict[str, Any]:
@@ -2950,7 +3045,7 @@ def _intent_trace_payload(metadata: dict[str, Any], velocity: np.ndarray) -> dic
         phase = str(phases[0])
     else:
         phase = "authored_motion"
-    return {
+    payload = {
         "pedestrian_id": metadata["pedestrian_id"],
         "intent_label": metadata["intent_label"],
         "intent_phase": phase,
@@ -2958,6 +3053,118 @@ def _intent_trace_payload(metadata: dict[str, Any], velocity: np.ndarray) -> dic
         "claim_boundary": metadata["claim_boundary"],
         "behavior_parameters": metadata["behavior_parameters"],
     }
+    signal_payload = _signal_state_trace_payload(metadata.get("signal_state"), phase)
+    if signal_payload is not None:
+        payload["signal_state"] = signal_payload
+    return payload
+
+
+def _signal_state_trace_payload(signal_state: Any, intent_phase: str) -> dict[str, Any] | None:
+    """Return proxy signal-state trace metadata for the current authored intent phase."""
+    if not isinstance(signal_state, dict):
+        return None
+    phase_timeline = (
+        signal_state.get("phase_timeline")
+        if isinstance(signal_state.get("phase_timeline"), list)
+        else []
+    )
+    matching_phase = next(
+        (
+            phase
+            for phase in phase_timeline
+            if isinstance(phase, dict) and phase.get("intent_phase") == intent_phase
+        ),
+        None,
+    )
+    if matching_phase is None:
+        matching_phase = next(
+            (phase for phase in phase_timeline if isinstance(phase, dict)),
+            {},
+        )
+    return {
+        "schema_version": str(signal_state.get("schema_version") or "signal-state-proxy.v1"),
+        "status": str(signal_state.get("status") or "proxy_diagnostic_only"),
+        "signal_id": str(signal_state.get("signal_id") or "unknown_signal"),
+        "conflict_zone_id": str(signal_state.get("conflict_zone_id") or "unknown_conflict_zone"),
+        "phase": str(matching_phase.get("phase") or "unknown"),
+        "intent_phase": intent_phase,
+        "robot_right_of_way": bool(matching_phase.get("robot_right_of_way", False)),
+        "pedestrian_right_of_way": bool(matching_phase.get("pedestrian_right_of_way", False)),
+        "legality_state": str(matching_phase.get("legality_state") or "unknown"),
+        "planner_observable": bool(signal_state.get("planner_observable", False)),
+        "observation_mode": str(signal_state.get("observation_mode") or "trace_metadata_only"),
+        "benchmark_evidence": bool(signal_state.get("benchmark_evidence", False)),
+        "claim_boundary": str(
+            signal_state.get("claim_boundary")
+            or "Proxy signal-state metadata only; not benchmark evidence."
+        ),
+    }
+
+
+def _vru_trace_payload(
+    metadata: dict[str, Any],
+    *,
+    ped_pos: np.ndarray,
+    velocity: np.ndarray,
+    robot_position: np.ndarray | None,
+    robot_velocity: np.ndarray | None,
+) -> dict[str, Any]:
+    """Build optional per-pedestrian cyclist-like VRU diagnostic trace fields.
+
+    Returns:
+        dict[str, Any]: JSON-serializable cyclist-like VRU diagnostic fields.
+    """
+    speed = float(np.linalg.norm(velocity))
+    diagnostics: dict[str, Any] = {
+        "speed_m_s": speed,
+        "configured_speed_m_s": float(metadata["speed_m_s"]),
+        "acceleration_m_s2": float(metadata["acceleration_m_s2"]),
+    }
+    if robot_position is not None:
+        robot_pos = np.asarray(robot_position, dtype=float)
+        robot_vel = (
+            np.asarray(robot_velocity, dtype=float)
+            if robot_velocity is not None
+            else np.zeros(2, dtype=float)
+        )
+        offset = np.asarray(ped_pos, dtype=float) - robot_pos
+        distance = float(np.linalg.norm(offset))
+        relative_velocity = np.asarray(velocity, dtype=float) - robot_vel
+        closing_speed = 0.0
+        if distance > 1e-9:
+            closing_speed = -float(np.dot(offset, relative_velocity) / distance)
+        clearance = distance - float(metadata["actor_radius_m"]) - float(metadata["robot_radius_m"])
+        diagnostics.update(
+            {
+                "distance_to_robot_m": distance,
+                "relative_closing_speed_m_s": closing_speed,
+                "time_to_conflict_zone_s": (
+                    float(distance / closing_speed) if closing_speed > 1e-9 else None
+                ),
+                "clearance_m": clearance,
+                "pass_overtake_state": _pass_overtake_state(closing_speed),
+            }
+        )
+    return {
+        "pedestrian_id": metadata["pedestrian_id"],
+        "actor_type": metadata["actor_type"],
+        "interaction_role": metadata["interaction_role"],
+        "claim_boundary": metadata["claim_boundary"],
+        "cyclist_like_vru": diagnostics,
+    }
+
+
+def _pass_overtake_state(closing_speed_m_s: float) -> str:
+    """Classify a one-step proxy pass/overtake state from relative closing speed.
+
+    Returns:
+        str: Diagnostic state for the proxy pass/overtake interaction.
+    """
+    if closing_speed_m_s > 0.1:
+        return "approaching_conflict_zone"
+    if closing_speed_m_s < -0.1:
+        return "separating_after_pass"
+    return "parallel_or_static_relative_motion"
 
 
 def _intent_conditioned_behavior_summary(
@@ -2970,7 +3177,7 @@ def _intent_conditioned_behavior_summary(
     summarized_pedestrians = [metadata for metadata in intent_metadata if metadata is not None]
     if not summarized_pedestrians:
         return None
-    return {
+    summary = {
         "schema_version": "intent-conditioned-behavior-summary.v1",
         "scenario_name": _scenario_id(scenario),
         "status": "diagnostic_metadata_only",
@@ -2981,6 +3188,60 @@ def _intent_conditioned_behavior_summary(
             "human behavior evidence and must not be used as a planner-ranking claim."
         ),
         "pedestrians": summarized_pedestrians,
+    }
+    signal_state = next(
+        (
+            metadata.get("signal_state")
+            for metadata in summarized_pedestrians
+            if isinstance(metadata.get("signal_state"), dict)
+        ),
+        None,
+    )
+    if isinstance(signal_state, dict):
+        summary["signal_state"] = {
+            "schema_version": str(signal_state.get("schema_version") or "signal-state-proxy.v1"),
+            "status": str(signal_state.get("status") or "proxy_diagnostic_only"),
+            "signal_id": str(signal_state.get("signal_id") or "unknown_signal"),
+            "conflict_zone_id": str(
+                signal_state.get("conflict_zone_id") or "unknown_conflict_zone"
+            ),
+            "planner_observable": bool(signal_state.get("planner_observable", False)),
+            "observation_mode": str(signal_state.get("observation_mode") or "trace_metadata_only"),
+            "benchmark_evidence": bool(signal_state.get("benchmark_evidence", False)),
+            "claim_boundary": str(
+                signal_state.get("claim_boundary")
+                or "Proxy signal-state metadata only; not benchmark evidence."
+            ),
+            "trace_fields": [
+                "pedestrians[].signal_state",
+                "pedestrians[].intent_phase",
+            ],
+        }
+    return summary
+
+
+def _cyclist_like_vru_summary(
+    scenario: dict[str, Any],
+    vru_metadata: list[dict[str, Any] | None],
+) -> dict[str, Any] | None:
+    """Return an analysis-only summary for authored cyclist-like VRU fixtures."""
+    if not vru_metadata:
+        return None
+    summarized = [metadata for metadata in vru_metadata if metadata is not None]
+    if not summarized:
+        return None
+    return {
+        "schema_version": "cyclist-like-vru-smoke-summary.v1",
+        "scenario_name": _scenario_id(scenario),
+        "status": "diagnostic_metadata_only",
+        "benchmark_evidence": False,
+        "trace_field_source": "algorithm_metadata.simulation_step_trace.steps[].pedestrians[]",
+        "claim_boundary": (
+            "Authored cyclist-like VRU proxy metadata records speed, acceleration, time-to-conflict, "
+            "clearance, and pass/overtake diagnostics only; it is not cyclist realism, cyclist "
+            "behavior, or planner-ranking evidence."
+        ),
+        "pedestrians": summarized,
     }
 
 
@@ -3093,6 +3354,122 @@ _POLICY_ENV_OBSERVATION_OVERRIDE_KEYS = frozenset(
         "predictive_foresight_front_corridor_half_width",
     }
 )
+
+_STATIC_DEADLOCK_SUITE_ID = "static_deadlock_recovery"
+_STATIC_DEADLOCK_LOW_PROGRESS_WINDOW_STEPS = 10
+_STATIC_DEADLOCK_LOW_PROGRESS_THRESHOLD_M = 0.05
+
+
+def _is_static_deadlock_suite(scenario: Mapping[str, Any]) -> bool:
+    """Return whether a scenario row belongs to the static-deadlock mechanism suite."""
+    metadata = scenario.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return False
+    return str(metadata.get("mechanism_aware_suite_id", "")) == _STATIC_DEADLOCK_SUITE_ID
+
+
+def _finite_or_none(value: float) -> float | None:
+    """Return a JSON-friendly float when finite."""
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
+def _mechanism_row_status(termination_reason: str) -> str:
+    """Classify an episode row for mechanism-suite reportability accounting.
+
+    Returns:
+        ``"completed"`` for valid terminal rows, or ``"failed"`` for error rows.
+    """
+    return "failed" if str(termination_reason).strip().lower() == "error" else "completed"
+
+
+def _recenter_activation_count(planner_decision_trace: list[dict[str, Any]]) -> int:
+    """Count planner-decision steps whose static-recenter term was active.
+
+    Returns:
+        Number of recorded decision steps with a positive static-recenter term.
+    """
+    count = 0
+    for step in planner_decision_trace:
+        value = step.get("static_recenter")
+        if isinstance(value, (int, float, np.integer, np.floating)) and float(value) > 0.0:
+            count += 1
+    return count
+
+
+def _static_deadlock_trace_fields(
+    scenario: Mapping[str, Any],
+    *,
+    robot_pos_arr: np.ndarray,
+    goal_vec: np.ndarray,
+    initial_goal_distance: float,
+    termination_reason: str,
+    outcome: Mapping[str, bool],
+    planner_decision_trace: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build static-deadlock mechanism trace fields for suite-tagged episode rows.
+
+    Returns:
+        Top-level episode row fields required by the static-deadlock suite, or an empty payload for
+        unrelated scenarios.
+    """
+    if not _is_static_deadlock_suite(scenario):
+        return {}
+
+    if robot_pos_arr.size:
+        distances = np.linalg.norm(robot_pos_arr - goal_vec, axis=1)
+        distance_series = [float(initial_goal_distance), *[float(value) for value in distances]]
+    else:
+        distance_series = [float(initial_goal_distance)]
+
+    sample_count = max(0, len(distance_series) - 1)
+    window_steps = min(_STATIC_DEADLOCK_LOW_PROGRESS_WINDOW_STEPS, sample_count)
+    window_start_idx = max(0, len(distance_series) - 1 - window_steps)
+    window_start_distance = distance_series[window_start_idx]
+    final_distance = distance_series[-1]
+    window_progress_delta = window_start_distance - final_distance
+    total_progress_delta = float(initial_goal_distance) - final_distance
+    route_complete = bool(outcome.get("route_complete", False))
+    collision_event = bool(outcome.get("collision_event", False))
+    timeout_event = bool(outcome.get("timeout_event", False))
+    low_progress_active = (
+        sample_count > 0
+        and not route_complete
+        and window_progress_delta <= _STATIC_DEADLOCK_LOW_PROGRESS_THRESHOLD_M
+    )
+    local_minimum = bool(low_progress_active and timeout_event and not collision_event)
+
+    return {
+        "low_progress_window": {
+            "schema_version": "static-deadlock-low-progress-window.v1",
+            "window_steps": int(window_steps),
+            "sample_count": int(sample_count),
+            "start_distance_to_goal_m": _finite_or_none(window_start_distance),
+            "end_distance_to_goal_m": _finite_or_none(final_distance),
+            "progress_delta_m": _finite_or_none(window_progress_delta),
+            "threshold_m": float(_STATIC_DEADLOCK_LOW_PROGRESS_THRESHOLD_M),
+            "active": bool(low_progress_active),
+        },
+        "recenter_activation_count": int(_recenter_activation_count(planner_decision_trace)),
+        "distance_to_goal_delta": {
+            "schema_version": "static-deadlock-distance-to-goal-delta.v1",
+            "initial_distance_to_goal_m": _finite_or_none(initial_goal_distance),
+            "final_distance_to_goal_m": _finite_or_none(final_distance),
+            "delta_m": _finite_or_none(total_progress_delta),
+            "interpretation": "positive values indicate progress toward the goal",
+        },
+        "local_minimum_indicator": {
+            "schema_version": "static-deadlock-local-minimum-indicator.v1",
+            "is_local_minimum": local_minimum,
+            "status": "detected" if local_minimum else "not_detected",
+            "reason": (
+                "timeout with low progress and no collision"
+                if local_minimum
+                else "route completed, collision occurred, or low-progress timeout was not observed"
+            ),
+        },
+        "row_status": _mechanism_row_status(termination_reason),
+    }
 
 
 def _apply_policy_env_observation_overrides(
@@ -3561,6 +3938,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_decision_trace: list[dict[str, Any]] = []
     simulation_step_trace: list[dict[str, Any]] = []
     single_pedestrian_intent_metadata = _single_pedestrian_intent_metadata(scenario)
+    single_pedestrian_vru_metadata = _single_pedestrian_vru_metadata(scenario)
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     obs, _ = env.reset(seed=int(seed))
@@ -3695,6 +4073,9 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             previous_trace_ped_pos,
                             dt_seconds,
                             single_pedestrian_intent_metadata,
+                            single_pedestrian_vru_metadata,
+                            robot_pos,
+                            robot_velocity,
                         ),
                         "planner": planner_payload,
                     }
@@ -3935,6 +4316,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     if intent_summary is not None:
         algo_meta["intent_conditioned_behavior"] = intent_summary
+    vru_summary = _cyclist_like_vru_summary(
+        scenario,
+        single_pedestrian_vru_metadata,
+    )
+    if vru_summary is not None:
+        algo_meta["cyclist_like_vru"] = vru_summary
     if actuation_controller is not None:
         actuation_summary = actuation_controller.summary()
         algo_meta["synthetic_actuation"] = {
@@ -4019,6 +4406,15 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             f"Episode integrity contradictions for scenario '{scenario_id}', seed={seed}: "
             + "; ".join(contradictions)
         )
+    static_deadlock_fields = _static_deadlock_trace_fields(
+        scenario,
+        robot_pos_arr=robot_pos_arr,
+        goal_vec=goal_vec,
+        initial_goal_distance=initial_goal_distance,
+        termination_reason=termination_reason,
+        outcome=outcome,
+        planner_decision_trace=planner_decision_trace,
+    )
     record = {
         "version": "v1",
         "episode_id": _compute_map_episode_id(scenario_params, seed),
@@ -4045,6 +4441,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "outcome": outcome,
         "integrity": {"contradictions": contradictions},
     }
+    record.update(static_deadlock_fields)
     if benchmark_track is not None:
         record["benchmark_track"] = benchmark_track
     if track_schema_version is not None:

@@ -1,0 +1,7 @@
+planner,scenario_id,seed,status,termination_reason,success,minimum_clearance_m
+social_force,classic_bottleneck_low,111,failure,max_steps,False,
+social_force,classic_head_on_corridor_low,111,failure,max_steps,False,
+social_force,narrow_passage,111,failure,max_steps,False,
+orca,classic_bottleneck_low,111,success,success,True,
+orca,classic_head_on_corridor_low,111,failure,max_steps,False,
+orca,narrow_passage,111,success,success,True,

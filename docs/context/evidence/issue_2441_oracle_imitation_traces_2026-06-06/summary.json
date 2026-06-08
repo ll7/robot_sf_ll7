@@ -3,6 +3,7 @@
   "issue": 2441,
   "parent_issue": 1470,
   "created_at": "2026-06-06T15:10:00Z",
+  "updated_at": "2026-06-07T10:20:00Z",
   "branch": "gse-2441-oracle-traces",
   "commit": "a9679e1a37495b25c1786917fcf2fa7e749d1475",
   "claim_boundary": "Trace collection and local checksum evidence only; not final imitation NPZ dataset evidence, not imitation-training evidence, not benchmark or paper-facing planner evidence, and not durable external artifact promotion.",
@@ -43,11 +44,17 @@
     ],
     "observed_splits": [
       "train",
-      "validation"
+      "validation",
+      "evaluation"
     ],
     "train_rows": 6,
     "validation_rows": 3,
-    "notes": "The collected train and validation rows match the launch-packet split counts and keep evaluation seeds uncollected."
+    "evaluation_rows": 3,
+    "evaluation_duplicate_jobs": [
+      "12764",
+      "12765"
+    ],
+    "notes": "The collected train, validation, and evaluation rows match the launch-packet split counts. Evaluation was collected twice, once per target partition, and both duplicate jobs have metric-consistent summaries."
   },
   "jobs": [
     {
@@ -147,11 +154,99 @@
           }
         }
       }
+    },
+    {
+      "job_id": "12764",
+      "job_name": "gse-2441-eva30",
+      "partition": "a30",
+      "qos": "a30-gpu",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "start": "2026-06-06T19:12:41",
+      "end": "2026-06-06T19:14:52",
+      "elapsed": "00:02:11",
+      "split": "evaluation",
+      "local_output_root": "output/slurm/issue1470-oracle-imitation-traces-job-12764/",
+      "manifest": "output/slurm/issue1470-oracle-imitation-traces-job-12764/oracle_imitation/issue1470_evaluation_candidate_traces/oracle_candidate_trace_manifest.json",
+      "combined_jsonl": "output/slurm/issue1470-oracle-imitation-traces-job-12764/oracle_imitation/issue1470_evaluation_candidate_traces/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
+      "summary": {
+        "episodes": 3,
+        "success_rate": 0.6666666666666666,
+        "collision_rate": 0.3333333333333333,
+        "near_miss_rate": 0.3333333333333333,
+        "mean_avg_speed": 1.4326757050458296,
+        "mean_min_distance": 2.7081339087515013,
+        "failure_mode_counts": {
+          "static_collision": 1
+        },
+        "termination_reason_counts": {
+          "collision": 1,
+          "success": 2
+        },
+        "scenario_family": {
+          "classic": {
+            "episodes": 2,
+            "success_rate": 0.5,
+            "collision_rate": 0.5,
+            "near_miss_rate": 0.5
+          },
+          "nominal": {
+            "episodes": 1,
+            "success_rate": 1.0,
+            "collision_rate": 0.0,
+            "near_miss_rate": 0.0
+          }
+        }
+      }
+    },
+    {
+      "job_id": "12765",
+      "job_name": "gse-2441-evl40",
+      "partition": "l40s",
+      "qos": "l40s-gpu",
+      "state": "COMPLETED",
+      "exit_code": "0:0",
+      "start": "2026-06-06T19:12:41",
+      "end": "2026-06-06T19:14:14",
+      "elapsed": "00:01:33",
+      "split": "evaluation",
+      "local_output_root": "output/slurm/issue1470-oracle-imitation-traces-job-12765/",
+      "manifest": "output/slurm/issue1470-oracle-imitation-traces-job-12765/oracle_imitation/issue1470_evaluation_candidate_traces/oracle_candidate_trace_manifest.json",
+      "combined_jsonl": "output/slurm/issue1470-oracle-imitation-traces-job-12765/oracle_imitation/issue1470_evaluation_candidate_traces/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
+      "summary": {
+        "episodes": 3,
+        "success_rate": 0.6666666666666666,
+        "collision_rate": 0.3333333333333333,
+        "near_miss_rate": 0.3333333333333333,
+        "mean_avg_speed": 1.4326757050458296,
+        "mean_min_distance": 2.7081339087515013,
+        "failure_mode_counts": {
+          "static_collision": 1
+        },
+        "termination_reason_counts": {
+          "collision": 1,
+          "success": 2
+        },
+        "scenario_family": {
+          "classic": {
+            "episodes": 2,
+            "success_rate": 0.5,
+            "collision_rate": 0.5,
+            "near_miss_rate": 0.5
+          },
+          "nominal": {
+            "episodes": 1,
+            "success_rate": 1.0,
+            "collision_rate": 0.0,
+            "near_miss_rate": 0.0
+          }
+        }
+      }
     }
   ],
   "analysis": {
     "result_classification": "completed_pending_artifact_promotion",
-    "interpretation": "The source candidate produced trace rows for the requested train and validation splits, but classic scenarios remain weak: train classic success is 0.5 with one collision and one low-progress timeout, while validation classic success is 0.0 with bottleneck-yield and low-progress failures.",
+    "interpretation": "The source candidate produced trace rows for the requested train, validation, and evaluation splits, but classic scenarios remain weak: train classic success is 0.5 with one collision and one low-progress timeout, validation classic success is 0.0 with bottleneck-yield and low-progress failures, and evaluation classic success is 0.5 with one collision across two classic episodes.",
     "useful_for": [
       "checking source-candidate trace schema and split routing",
       "debugging classic-slice oracle behavior",
@@ -159,14 +254,14 @@
     ],
     "not_useful_for_yet": [
       "training an imitation policy without durable artifact promotion",
-      "claiming oracle quality across all splits",
+      "claiming oracle quality across all splits despite classic-slice failures",
       "benchmark or paper-facing planner conclusions"
     ]
   },
   "validation": [
     {
-      "command": "sacct -j 12762,12763 --format=JobID,JobName%24,State,ExitCode,Partition,Elapsed,Start,End -P",
-      "result": "both jobs COMPLETED with ExitCode 0:0"
+      "command": "sacct -j 12762,12763,12764,12765 --format=JobID,JobName%24,State,ExitCode,Partition,Elapsed,Start,End -P",
+      "result": "all four jobs COMPLETED with ExitCode 0:0"
     },
     {
       "command": "jq '.summary' output/slurm/issue1470-oracle-imitation-traces-job-12762/oracle_imitation/issue1470_train_candidate_traces/oracle_candidate_trace_manifest.json",
@@ -177,12 +272,20 @@
       "result": "validation split summary extracted"
     },
     {
-      "command": "wc -l output/slurm/issue1470-oracle-imitation-traces-job-12762/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl output/slurm/issue1470-oracle-imitation-traces-job-12763/oracle_imitation/issue1470_validation_candidate_traces/validation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
-      "result": "6 train rows and 3 validation rows"
+      "command": "jq '.summary' output/slurm/issue1470-oracle-imitation-traces-job-12764/oracle_imitation/issue1470_evaluation_candidate_traces/oracle_candidate_trace_manifest.json",
+      "result": "first evaluation split summary extracted"
+    },
+    {
+      "command": "jq '.summary' output/slurm/issue1470-oracle-imitation-traces-job-12765/oracle_imitation/issue1470_evaluation_candidate_traces/oracle_candidate_trace_manifest.json",
+      "result": "second evaluation split summary extracted"
+    },
+    {
+      "command": "wc -l output/slurm/issue1470-oracle-imitation-traces-job-12762/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl output/slurm/issue1470-oracle-imitation-traces-job-12763/oracle_imitation/issue1470_validation_candidate_traces/validation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl output/slurm/issue1470-oracle-imitation-traces-job-12764/oracle_imitation/issue1470_evaluation_candidate_traces/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl output/slurm/issue1470-oracle-imitation-traces-job-12765/oracle_imitation/issue1470_evaluation_candidate_traces/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl",
+      "result": "6 train rows, 3 validation rows, and 3 rows in each evaluation duplicate"
     },
     {
       "command": "uv run python scripts/tools/slurm_job_finalize.py ...",
-      "result": "finalization_12762.json and finalization_12763.json classify all required local artifacts as present"
+      "result": "finalization_12762.json, finalization_12763.json, finalization_12764.json, and finalization_12765.json classify all required local artifacts as present"
     }
   ],
   "next_action": "Promote the raw trace JSONL and manifests to a durable artifact store or explicitly rerun/revise before downstream imitation training treats them as inputs."

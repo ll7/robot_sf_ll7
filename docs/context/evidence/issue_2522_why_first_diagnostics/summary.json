@@ -1,0 +1,47 @@
+{
+  "schema": "why_first_diagnostics_summary.v1",
+  "issue": 2522,
+  "status": "current_analysis_tool_application",
+  "generated_at": "2026-06-07",
+  "claim_boundary": "Why-first interpretation over existing compact evidence only; not a new benchmark run, trace export, metric proof, or paper-facing result.",
+  "diagnostics": [
+    {
+      "name": "topology_near_parity_corrective_diagnostics",
+      "input": "docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_input.json",
+      "report": "docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md",
+      "source_evidence": [
+        "docs/context/evidence/issue_2518_topology_near_parity_gate_2026-06-07/summary.json",
+        "docs/context/evidence/issue_2530_topology_near_parity_corrective_smoke_2026-06-07/summary.json"
+      ],
+      "decision": "revise",
+      "classification": "topology_signal_without_route_progress",
+      "next_step": "Test the Issue #2563 primary-route reuse penalty in a paired diagnostic before topology benchmark or transfer claims."
+    },
+    {
+      "name": "amv_actuation_timeout_diagnostics",
+      "input": "docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_input.json",
+      "report": "docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md",
+      "source_evidence": [
+        "docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json",
+        "docs/context/evidence/issue_2404_amv_timeout_decomposition_2026-06-06/summary.json",
+        "docs/context/evidence/issue_2443_amv_trace_review_2026-06-07/summary.json"
+      ],
+      "decision": "revise",
+      "classification": "route_task_progress_blocked_after_feasibility_improvement",
+      "next_step": "Investigate route-progress geometry or task-completion blockers before broadening actuation-aware scoring as a planner-improvement mechanism."
+    }
+  ],
+  "validation": [
+    "rtk uv run python scripts/tools/generate_why_first_report.py --input docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_input.json --output /tmp/topology_near_parity_why_first_report.gen.md",
+    "rtk diff -u /tmp/topology_near_parity_why_first_report.gen.md docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md",
+    "rtk uv run python scripts/tools/generate_why_first_report.py --input docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_input.json --output /tmp/amv_actuation_why_first_report.gen.md",
+    "rtk diff -u /tmp/amv_actuation_why_first_report.gen.md docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md",
+    "rtk uv run pytest tests/tools/test_generate_why_first_report.py -q",
+    "rtk uv run python -m json.tool docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_input.json",
+    "rtk uv run python -m json.tool docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_input.json",
+    "rtk uv run python -m json.tool docs/context/evidence/issue_2522_why_first_diagnostics/summary.json",
+    "rtk uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml",
+    "BASE_REF=origin/main rtk scripts/dev/check_docs_proof_consistency_diff.sh",
+    "rtk git diff --check"
+  ]
+}

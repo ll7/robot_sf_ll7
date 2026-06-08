@@ -9,6 +9,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "configs/benchmarks/issue_2452_mechanism_aware_local_nav_suites_v0.yaml"
+ISSUE_2544_SMOKE_MATRIX = ROOT / "configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml"
 SCENARIO_ROOT = ROOT / "configs/scenarios"
 
 REQUIRED_SUITES: set[str] = {
@@ -136,3 +137,22 @@ def test_fallback_policy_is_fail_closed() -> None:
     assert fallback_policy["not_available_is_success"] is False
     assert fallback_policy["failed_is_success"] is False
     assert "excluded from suite-strengthening evidence" in fallback_policy["rule"]
+
+
+def test_issue_2544_static_deadlock_smoke_matrix_binds_first_suite() -> None:
+    """Verify issue #2544 binds one proposal suite to an executable smoke matrix."""
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    scenarios = [dict(scenario) for scenario in load_scenarios(ISSUE_2544_SMOKE_MATRIX)]
+    assert [scenario["name"] for scenario in scenarios] == [
+        "classic_bottleneck_low",
+        "classic_head_on_corridor_low",
+        "narrow_passage",
+    ]
+    for scenario in scenarios:
+        assert scenario["seeds"] == [111]
+        metadata = scenario["metadata"]
+        assert metadata["mechanism_aware_suite_id"] == "static_deadlock_recovery"
+        assert metadata["issue"] == 2544
+        assert metadata["evidence_tier"] == "diagnostic_smoke"
+        assert "not planner ranking" in metadata["claim_boundary"]

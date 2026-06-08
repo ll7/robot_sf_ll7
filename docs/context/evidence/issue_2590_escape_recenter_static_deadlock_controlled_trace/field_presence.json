@@ -1,0 +1,133 @@
+{
+  "schema_version": "static-deadlock-controlled-trace-field-presence.v1",
+  "issue": 2590,
+  "required_trace_fields": [
+    "low_progress_window",
+    "recenter_activation_count",
+    "distance_to_goal_delta",
+    "local_minimum_indicator",
+    "execution_mode",
+    "row_status"
+  ],
+  "all_required_trace_fields_present": true,
+  "missing_required_trace_fields": {},
+  "rows": [
+    {
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 111,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    },
+    {
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 112,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    },
+    {
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 113,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    },
+    {
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    },
+    {
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 112,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    },
+    {
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 113,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    },
+    {
+      "scenario_id": "narrow_passage",
+      "seed": 111,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    },
+    {
+      "scenario_id": "narrow_passage",
+      "seed": 112,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    },
+    {
+      "scenario_id": "narrow_passage",
+      "seed": 113,
+      "paired_row_status": "completed",
+      "baseline_all_required_present": true,
+      "mechanism_all_required_present": true,
+      "baseline_missing": [],
+      "mechanism_missing": [],
+      "baseline_execution_mode": "adapter",
+      "mechanism_execution_mode": "adapter",
+      "baseline_row_status": "completed",
+      "mechanism_row_status": "completed"
+    }
+  ]
+}

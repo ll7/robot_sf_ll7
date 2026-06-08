@@ -1,0 +1,160 @@
+{
+  "schema_version": "adversarial_manifest_smoke_summary.v1",
+  "issue": 2562,
+  "result_classification": "smoke_passed",
+  "evidence_boundary": "smoke-only: generated cases are uncategorized development stress tests; this run does not establish adversarial coverage, planner weakness, leaderboard standing, or paper-facing claims.",
+  "worktree_artifact_policy": "Raw generated manifests, materialized matrices, route overrides, and episode JSONL rows were left in ignored worktree-local artifacts and are not durable dependencies.",
+  "source": {
+    "search_space_path": "configs/adversarial/crossing_ttc_space.yaml",
+    "scenario_template_path": "configs/scenarios/templates/crossing_ttc.yaml",
+    "map_id": "classic_cross_trap",
+    "scenario_name": "crossing_ttc_template"
+  },
+  "generation": {
+    "schema_version": "adversarial_scenario_manifest_generation_summary.v1",
+    "generator": {
+      "family": "random",
+      "generator_id": "RandomCandidateSampler",
+      "seed": 42
+    },
+    "total_candidates": 4,
+    "valid": 4,
+    "invalid": 0,
+    "degenerate": 0,
+    "rejection_reasons": {}
+  },
+  "selected_valid_candidates": [
+    {
+      "candidate_index": 0,
+      "normalized_control_hash": "89dabea8ec09870f",
+      "scenario_name": "crossing_ttc_template_manifest_0000",
+      "scenario_seed": 189
+    },
+    {
+      "candidate_index": 1,
+      "normalized_control_hash": "f7739ece2dae18cb",
+      "scenario_name": "crossing_ttc_template_manifest_0001",
+      "scenario_seed": 818
+    }
+  ],
+  "planner_runs": [
+    {
+      "planner": "goal",
+      "exit_code": 0,
+      "total_jobs": 2,
+      "written": 2,
+      "failed_jobs": 0,
+      "benchmark_availability": {
+        "availability_reason": null,
+        "availability_status": "available",
+        "benchmark_success": true,
+        "execution_mode": "native",
+        "readiness_status": "native"
+      },
+      "metrics": {
+        "episodes": 2,
+        "statuses": [
+          "success"
+        ],
+        "termination_reasons": [
+          "success"
+        ],
+        "success": {
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "sum": 2.0
+        },
+        "collisions": {
+          "max": 0.0,
+          "mean": 0.0,
+          "min": 0.0,
+          "sum": 0.0
+        },
+        "total_collision_count": {
+          "max": 0.0,
+          "mean": 0.0,
+          "min": 0.0,
+          "sum": 0.0
+        },
+        "wall_collisions": {
+          "max": 0.0,
+          "mean": 0.0,
+          "min": 0.0,
+          "sum": 0.0
+        },
+        "path_efficiency": {
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "sum": 2.0
+        },
+        "time_to_goal_norm": {
+          "max": 0.55,
+          "mean": 0.525,
+          "min": 0.5,
+          "sum": 1.05
+        }
+      }
+    },
+    {
+      "planner": "social_force",
+      "exit_code": 0,
+      "total_jobs": 2,
+      "written": 2,
+      "failed_jobs": 0,
+      "benchmark_availability": {
+        "availability_reason": null,
+        "availability_status": "available",
+        "benchmark_success": true,
+        "execution_mode": "adapter",
+        "readiness_status": "adapter"
+      },
+      "metrics": {
+        "episodes": 2,
+        "statuses": [
+          "collision"
+        ],
+        "termination_reasons": [
+          "collision"
+        ],
+        "success": {
+          "max": 0.0,
+          "mean": 0.0,
+          "min": 0.0,
+          "sum": 0.0
+        },
+        "collisions": {
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "sum": 2.0
+        },
+        "total_collision_count": {
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "sum": 2.0
+        },
+        "wall_collisions": {
+          "max": 0.0,
+          "mean": 0.0,
+          "min": 0.0,
+          "sum": 0.0
+        },
+        "path_efficiency": {
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "sum": 2.0
+        },
+        "time_to_goal_norm": {
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "sum": 2.0
+        }
+      }
+    }
+  ]
+}

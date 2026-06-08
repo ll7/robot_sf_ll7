@@ -1,0 +1,7 @@
+planner,scenario_id,seed,status,termination_reason,row_status,low_progress_active,local_minimum,distance_to_goal_delta_m,recenter_activation_count,execution_mode
+social_force,classic_bottleneck_low,111,failure,max_steps,completed,False,False,-10.414389353105594,0,adapter
+social_force,classic_head_on_corridor_low,111,failure,max_steps,completed,False,False,-10.120231318746256,0,adapter
+social_force,narrow_passage,111,failure,max_steps,completed,True,True,-4.62034770599916,0,adapter
+orca,classic_bottleneck_low,111,success,success,completed,False,False,0.03416437025161301,0,adapter
+orca,classic_head_on_corridor_low,111,failure,max_steps,completed,False,False,-0.2834373849306111,0,adapter
+orca,narrow_passage,111,success,success,completed,False,False,0.052986147852663645,0,adapter

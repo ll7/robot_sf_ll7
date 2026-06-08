@@ -1,0 +1,10 @@
+scenario_id,seed,paired_row_status,classification,activation_count,first_activation_step,trace_changed,terminal_outcome_changed,baseline_success,intervention_success,baseline_low_progress,intervention_low_progress,baseline_local_minimum,intervention_local_minimum,baseline_distance_delta_m,intervention_distance_delta_m,trajectory_delta_m,mechanism_minus_baseline_progress_after_activation_m
+classic_bottleneck_low,111,completed,mechanism_inactive,0,,False,False,False,False,False,False,False,False,-0.4405918424057842,-0.4405918424057842,0.0,
+classic_bottleneck_low,112,completed,comparator_already_solved_case,0,,False,False,True,True,False,False,False,False,0.0033894518431962783,0.0033894518431962783,0.0,
+classic_bottleneck_low,113,completed,mechanism_active_trace_changed,4,7,True,False,False,False,True,False,True,False,-5.362883858009397,-0.16697032140408608,19.43532710849805,-17.975442964418352
+classic_head_on_corridor_low,111,completed,mechanism_inactive,0,,False,False,False,False,False,False,False,False,-7.890023506725552,-7.890023506725552,0.0,
+classic_head_on_corridor_low,112,completed,mechanism_inactive,0,,False,False,False,False,False,False,False,False,-0.8801797904855109,-0.8801797904855109,0.0,
+classic_head_on_corridor_low,113,completed,mechanism_inactive,0,,False,False,False,False,False,False,False,False,-0.8931458597573538,-0.8931458597573538,0.0,
+narrow_passage,111,completed,comparator_already_solved_case,0,,False,False,True,True,False,False,False,False,0.05088580476534399,0.05088580476534399,0.0,
+narrow_passage,112,completed,comparator_already_solved_case,0,,False,False,True,True,False,False,False,False,0.026514973998337465,0.026514973998337465,0.0,
+narrow_passage,113,completed,comparator_already_solved_case,0,,False,False,True,True,False,False,False,False,0.03499601221552817,0.03499601221552817,0.0,

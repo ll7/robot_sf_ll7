@@ -136,6 +136,10 @@ knowledge, not every transient iteration detail.
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Active research-lane scientific states:
   [research_lane_states.md](research_lane_states.md)
+* Issue #2571 Active Research Queue:
+  [issue_2571_active_research_queue.md](issue_2571_active_research_queue.md)
+* Dissertation claim-export candidate report:
+  [dissertation_claim_export_candidate_report.md](dissertation_claim_export_candidate_report.md)
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
 * Issue #2282 topology selection instrumentation smoke:
@@ -150,6 +154,10 @@ knowledge, not every transient iteration detail.
   [issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md)
 * Issue #2530 topology near-parity corrective-behavior smoke:
   [issue_2530_topology_near_parity_corrective_smoke.md](issue_2530_topology_near_parity_corrective_smoke.md)
+* Issue #2563 Topology Corrective Revision Proposal 2026-06-07:
+  [issue_2563_topology_corrective_revision.md](issue_2563_topology_corrective_revision.md)
+* Issue #2570 Topology Revise Status Propagation:
+  [issue_2570_topology_revise_status_propagation.md](issue_2570_topology_revise_status_propagation.md)
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:
@@ -162,6 +170,8 @@ knowledge, not every transient iteration detail.
   [issue_2402_static_recenter_activation_decision.md](issue_2402_static_recenter_activation_decision.md)
 * Issue #2438 static-recenter activation closure:
   [issue_2438_static_recenter_activation_closure.md](issue_2438_static_recenter_activation_closure.md)
+* Issue #2566 static-recenter inactive propagation:
+  [issue_2566_static_recenter_inactive_propagation.md](issue_2566_static_recenter_inactive_propagation.md)
 * Issue #2261 Static-Recenter Slice-Local Explanation:
 [issue_2261_static_recenter_slice_local.md](issue_2261_static_recenter_slice_local.md)
 * Issue #1573 Root-Layout Inventory:
@@ -198,8 +208,20 @@ knowledge, not every transient iteration detail.
   [issue_2471_diffusion_scenario_generation_feasibility.md](issue_2471_diffusion_scenario_generation_feasibility.md)
 * Issue #2472 Intent-Conditioned Pedestrian Behavior Scope:
   [issue_2472_intent_conditioned_behavior.md](issue_2472_intent_conditioned_behavior.md)
+* Issue #2524 Adversarial Scenario Manifest Generation:
+  [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
+* Issue #2562 Adversarial Manifest Planner Smoke:
+  [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md)
+* Issue #2565 Uncertainty-Aware Stream-Gap Gating Smoke:
+  [issue_2565_uncertainty_gating_smoke.md](issue_2565_uncertainty_gating_smoke.md)
+* Issue #2538 ScenarioBelief Planner Projection Smoke:
+  [issue_2538_scenario_belief_planner_projection.md](issue_2538_scenario_belief_planner_projection.md)
+* Issue #2526 Cyclist-Like VRU Smoke:
+  [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md)
 * Issue #2527 Waiting-Then-Crossing Fixture:
   [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md)
+* Issue #2564 Signal-State Proxy Smoke:
+  [issue_2564_signal_state_proxy_smoke.md](issue_2564_signal_state_proxy_smoke.md)
 * Issue #2473 Cyclist Interaction Benchmark Scope:
   [issue_2473_cyclist_interaction_benchmark.md](issue_2473_cyclist_interaction_benchmark.md)
 * Issue #2459 SocNavBench / HuNavSim Mapping:
@@ -260,6 +282,38 @@ knowledge, not every transient iteration detail.
 * Issue #2463 Mechanism Signal Checker:
 
   [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md)
+
+* Issue #2543 trace failure predicates:
+
+  [issue_2543_trace_failure_predicates.md](issue_2543_trace_failure_predicates.md)
+
+* Issue #2544 mechanism-aware suite smoke:
+
+  [issue_2544_mechanism_aware_suite_smoke.md](issue_2544_mechanism_aware_suite_smoke.md)
+
+* Issue #2586 static-deadlock trace fields:
+
+  [issue_2586_static_deadlock_trace_fields.md](issue_2586_static_deadlock_trace_fields.md)
+
+* Issue #2588 static-deadlock controlled trace:
+
+  [issue_2588_static_deadlock_controlled_trace.md](issue_2588_static_deadlock_controlled_trace.md)
+
+* Issue #2590 escape-recenter static-deadlock controlled trace:
+
+  [issue_2590_escape_recenter_static_deadlock_controlled_trace.md](issue_2590_escape_recenter_static_deadlock_controlled_trace.md)
+
+* Issue #2592 static-deadlock active-row h500 horizon sensitivity:
+
+  [issue_2592_static_deadlock_active_row_h500.md](issue_2592_static_deadlock_active_row_h500.md)
+
+* Issue #2594 broader h500 static-deadlock recenter slice:
+
+  [issue_2594_static_deadlock_broader_h500.md](issue_2594_static_deadlock_broader_h500.md)
+
+* Issue #2547 counterfactual mechanism taxonomy:
+
+  [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)
 
 * Issue #2263 mechanism activation report fields:
 
@@ -352,6 +406,11 @@ knowledge, not every transient iteration detail.
 * Issue #2440 AMV timeout closure:
 
   [issue_2440_amv_timeout_closure.md](issue_2440_amv_timeout_closure.md)
+* Issue #2522 why-first diagnostics:
+
+  [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
+  ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),
+  [AMV report](evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md))
 * Issue #2259 AMV Clipping Versus Success Boundary:
 
   [issue_2259_amv_clipping_success_boundary.md](issue_2259_amv_clipping_success_boundary.md)
@@ -444,6 +503,14 @@ knowledge, not every transient iteration detail.
   [adaptive_test_claim_audit_2026-05.md](adaptive_test_claim_audit_2026-05.md)
 * Issue #2468 Adversarial Scenario Generation Roadmap (2026-06-07):
   [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md)
+* Issue #2524 Adversarial Scenario Manifest Generation (2026-06-07):
+  [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
+* Issue #2562 Adversarial Manifest Planner Smoke (2026-06-07):
+  [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md)
+* Issue #2567 Adversarial Manifest Quality Metrics (2026-06-07):
+  [issue_2567_adversarial_manifest_quality.md](issue_2567_adversarial_manifest_quality.md)
+* Issue #2568 Adversarial Expansion Gate (2026-06-07):
+  [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):
@@ -558,6 +625,10 @@ knowledge, not every transient iteration detail.
   [issue_2478_uncertainty_scenario_belief.md](issue_2478_uncertainty_scenario_belief.md)
 * Issue #2528 ScenarioBelief Consumer Smoke (2026-06-07):
   [issue_2528_scenario_belief_consumer_smoke.md](issue_2528_scenario_belief_consumer_smoke.md)
+* Issue #2565 Uncertainty-Aware Stream-Gap Gating Smoke (2026-06-07):
+  [issue_2565_uncertainty_gating_smoke.md](issue_2565_uncertainty_gating_smoke.md)
+* Issue #2538 ScenarioBelief Planner Projection Smoke (2026-06-07):
+  [issue_2538_scenario_belief_planner_projection.md](issue_2538_scenario_belief_planner_projection.md)
 * Issue #2479 Real-Trajectory Scenario Prior Scope (2026-06-06):
   [issue_2479_real_trajectory_scenario_prior.md](issue_2479_real_trajectory_scenario_prior.md)
 * Issue #2474 Signalized Pedestrian Crossing Benchmark Scope (2026-06-06):
@@ -652,6 +723,10 @@ knowledge, not every transient iteration detail.
   [issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md)
 * Issue #2530 topology near-parity corrective-behavior smoke:
   [issue_2530_topology_near_parity_corrective_smoke.md](issue_2530_topology_near_parity_corrective_smoke.md)
+* Issue #2522 topology and AMV why-first diagnostics:
+  [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
+  ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),
+  [AMV report](evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md))
 * Issue #1308 Act Local Workflow Evaluation 2026-05-18:
   [issue_1308_act_local_workflow_evaluation.md](issue_1308_act_local_workflow_evaluation.md)
 * Issue #1111 CARLA Setup-Only Smoke 2026-05-18:
@@ -835,6 +910,9 @@ knowledge, not every transient iteration detail.
 * [Issue #2440 AMV Timeout Closure](issue_2440_amv_timeout_closure.md)
   closes the timeout-driver classification as `feasibility_improved_but_route_blocked` and keeps
   actuation-aware scoring diagnostic-only for planner improvement.
+* [Issue #2522 Why-First Diagnostics](issue_2522_why_first_diagnostics.md)
+  publishes generated why-first reports for the topology near-parity and AMV actuation timeout
+  diagnostics while preserving both lanes at `revise`.
 * [Issue #1092 Multi-AMV First Slice](issue_1092_multi_amv_first_slice.md)
   records the minimal multi-robot scenario surface, smoke runner, inter-robot metrics, and deferred
   fleet-integration boundary.

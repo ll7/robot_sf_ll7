@@ -5,7 +5,7 @@
 #SBATCH --qos=a30-gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=24
+#SBATCH --cpus-per-task=20
 #SBATCH --mem=96G
 #SBATCH --time=1-12:00:00
 #SBATCH --gres=gpu:1

@@ -6,7 +6,7 @@ between sessions.
 
 For new long-running jobs, prefer `scripts/dev/sbatch_use_max_time.sh` over raw `sbatch`.
 The wrapper queries the current partition and QoS limits and submits with the effective
-max wall time by default. For an Auxme-specific example and cluster reference, see
+max wall time by default. For private cluster overlays such as Auxme, see
 [SLURM/Auxme/README.md](Auxme/README.md).
 
 For post-run sizing decisions, use the SLURM + W&B audit workflow in
@@ -21,6 +21,6 @@ Use the maintained audit workflow in `docs/dev/slurm_resource_audit.md` and the 
 `output/slurm/`, and classify generated summaries before promoting any evidence into tracked docs.
 
 Legacy helpers such as `SLURM/log_gpu_cpu_usage.py` and `SLURM/slurm_train.sl` are retained as
-compatibility examples only. Do not use them as the starting point for new submissions; choose the
-Auxme or LiCCA cluster-specific README plus `SLURM/AGENTS.md` instead.
-
+compatibility examples only. Do not use them as the starting point for new submissions; choose a
+public template, the optional private operations overlay, or the LiCCA cluster-specific README plus
+`SLURM/AGENTS.md` instead.

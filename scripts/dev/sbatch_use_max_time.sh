@@ -25,10 +25,12 @@ Discovery order:
   2. #SBATCH directives in the target script
 
 Examples:
-  scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
-  scripts/dev/sbatch_use_max_time.sh --dry-run SLURM/Auxme/auxme_gpu.sl
-  scripts/dev/sbatch_use_max_time.sh --partition a30 --qos a30-gpu SLURM/Auxme/auxme_gpu.sl
-  scripts/dev/sbatch_use_max_time.sh --sbatch-arg=--dependency=afterok:12345 SLURM/Auxme/auxme_gpu.sl
+  scripts/dev/sbatch_use_max_time.sh <cluster-script.sl>
+  scripts/dev/sbatch_use_max_time.sh --dry-run <cluster-script.sl>
+  scripts/dev/sbatch_use_max_time.sh --partition <partition> --qos <qos> \
+    --sbatch-arg --partition=<partition> --sbatch-arg --qos=<qos> \
+    SLURM/templates/gpu_training.sl
+  scripts/dev/sbatch_use_max_time.sh --sbatch-arg=--dependency=afterok:12345 <cluster-script.sl>
 EOF
 }
 

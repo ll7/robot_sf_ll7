@@ -9,7 +9,7 @@ lines.
 ## Default workflow
 
 ```bash
-scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
+scripts/dev/sbatch_use_max_time.sh <cluster-script.sl>
 ```
 
 The wrapper:
@@ -28,19 +28,23 @@ contains an older fallback value.
 Dry run before submitting:
 
 ```bash
-scripts/dev/sbatch_use_max_time.sh --dry-run SLURM/Auxme/auxme_gpu.sl
+scripts/dev/sbatch_use_max_time.sh --dry-run <cluster-script.sl>
 ```
 
-Override partition or QoS discovery when testing a variant:
+Override partition or QoS discovery when testing a variant on a configured cluster:
 
 ```bash
-scripts/dev/sbatch_use_max_time.sh --partition a30 --qos a30-gpu SLURM/Auxme/auxme_gpu.sl
+scripts/dev/sbatch_use_max_time.sh \
+  --partition <partition> --qos <qos> \
+  --sbatch-arg --partition=<partition> \
+  --sbatch-arg --qos=<qos> \
+  SLURM/templates/gpu_training.sl
 ```
 
 Force a shorter manual wall time when needed:
 
 ```bash
-scripts/dev/sbatch_use_max_time.sh --time 08:00:00 SLURM/Auxme/auxme_gpu.sl
+scripts/dev/sbatch_use_max_time.sh --time 08:00:00 SLURM/templates/gpu_training.sl
 ```
 
 ## Guidance
@@ -104,7 +108,37 @@ Keep `.venv` branch-local unless the branches are known to have identical depend
 scripts expect `.venv` under the submit worktree. See the durable workflow note:
 [SLURM Multi-Worktree Branch Workflow](../context/slurm_multi_worktree_branch_workflow.md).
 
-## Auxme issue-791 reliability helper
+## Private Cluster Overlays
+
+Cluster-specific hostnames, QoS policies, node-packing heuristics, local scratch paths, and
+machine-only runbooks should live outside this public repository. The public repo keeps the
+portable experiment contract: checked-in configs, generic wrapper behavior, artifact policy,
+validation helpers, and reviewable evidence manifests.
+
+Configure the optional private operations overlay with either an environment variable:
+
+```bash
+export ROBOT_SF_PRIVATE_OPS=/path/to/robot_sf_ll7-private-ops
+```
+
+or a gitignored local machine context entry:
+
+```markdown
+- private_ops_repo: /path/to/robot_sf_ll7-private-ops
+```
+
+When neither is set, `scripts/dev/private_ops.sh` falls back to a sibling checkout named
+`robot_sf_ll7-private-ops` next to the current worktree's parent directory.
+
+For worktrees, prefer one sibling private overlay shared by all checkouts:
+
+```text
+~/git/robot_sf_ll7/
+~/git/robot_sf_ll7.worktrees/<branch>/
+~/git/robot_sf_ll7-private-ops/
+```
+
+## Auxme issue-791 private helper
 
 For issue-791 wrappers on Auxme, use:
 
@@ -115,8 +149,9 @@ scripts/dev/sbatch_auxme_issue791.sh \
   SLURM/Auxme/issue_791_reward_curriculum.sl
 ```
 
-This helper adds pre-submit partition availability checks and recommendation logic based on
-current cluster pressure, then submits through `sbatch_use_max_time.sh`.
+This public helper delegates to the private operations overlay. The private implementation adds
+pre-submit partition availability checks and recommendation logic based on current cluster pressure,
+then submits through the public `sbatch_use_max_time.sh` in the active worktree.
 
 Raw status table only:
 
@@ -132,14 +167,14 @@ scripts/dev/auxme_partition_status.sh --recommend
 
 ## Camera-ready benchmark campaigns
 
-For new camera-ready benchmark campaigns, use the generic Auxme launcher rather than cloning an
-issue-specific script:
+For camera-ready benchmark campaigns on a private cluster, prefer a generic launcher in the private
+overlay rather than cloning an issue-specific public script:
 
 ```bash
 CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml \
 CAMERA_READY_BENCHMARK_LABEL=issue999-preflight \
 CAMERA_READY_BENCHMARK_MODE=preflight \
-scripts/dev/sbatch_use_max_time.sh --dry-run SLURM/Auxme/camera_ready_benchmark.sl
+scripts/dev/sbatch_use_max_time.sh --dry-run <private-camera-ready-benchmark.sl>
 ```
 
 Submit the full run by removing `--dry-run` and setting the intended artifact root:
@@ -148,7 +183,7 @@ Submit the full run by removing `--dry-run` and setting the intended artifact ro
 CAMERA_READY_BENCHMARK_CONFIG=configs/benchmarks/paper_experiment_matrix_v1_issue_791_eval_aligned_compare.yaml \
 CAMERA_READY_BENCHMARK_LABEL=issue999-camera-ready \
 CAMERA_READY_BENCHMARK_OUTPUT_ROOT=output/benchmarks/issue_999 \
-scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/camera_ready_benchmark.sl
+scripts/dev/sbatch_use_max_time.sh <private-camera-ready-benchmark.sl>
 ```
 
 `CAMERA_READY_BENCHMARK_MODE=preflight` and `run` are both supported. The launcher requires an

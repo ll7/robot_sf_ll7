@@ -31,6 +31,7 @@ How to use:
 - test_command: <repo command>
 - long_job_prefix: <e.g., tmux new -d -s run_name -->
 - slurm_submit_command: <optional command>
+- private_ops_repo: <optional absolute path to robot_sf_ll7-private-ops>
 - carla_preflight_command: <e.g., scripts/dev/check_carla_runtime.sh>
 - carla_smoke_command: <e.g., scripts/dev/check_carla_runtime.sh --smoke>
 

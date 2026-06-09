@@ -228,7 +228,7 @@ scripts/dev/run_tests_parallel.sh
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
 scripts/dev/run_ci_local.sh
 scripts/dev/check_docs_proof_consistency_diff.sh
-scripts/dev/sbatch_use_max_time.sh SLURM/Auxme/auxme_gpu.sl
+scripts/dev/sbatch_use_max_time.sh --partition <partition> --qos <qos> --sbatch-arg --partition=<partition> --sbatch-arg --qos=<qos> SLURM/templates/gpu_training.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests

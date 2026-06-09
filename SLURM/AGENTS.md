@@ -4,8 +4,9 @@ Use this file as the canonical SLURM execution playbook for reusable cluster wor
 repository. Pair it with [AGENTS.md](../AGENTS.md), [SLURM/readme.md](readme.md), and
 [docs/dev/slurm_resource_audit.md](../docs/dev/slurm_resource_audit.md).
 
-For Auxme-cluster-specific details (partitions, QoS profiles, per-user job limits, and
-`num_envs` guidance), see [SLURM/Auxme/README.md](Auxme/README.md).
+Auxme-cluster-specific details (node names, partitions, QoS profiles, per-user job limits, and
+host-packing policy) live in the optional private operations overlay. See
+[SLURM/Auxme/README.md](Auxme/README.md) for the public overlay contract.
 
 ## Scope
 
@@ -21,8 +22,9 @@ campaigns that run on cluster resources.
   explicitly. Do not rely on wrapper defaults for promotion or long-horizon submissions.
 - For long jobs, prefer `scripts/dev/sbatch_use_max_time.sh` over raw `sbatch` unless the task
   explicitly requires fixed wall time.
-- For Auxme issue-791 submissions, prefer `scripts/dev/sbatch_auxme_issue791.sh` so partition
-  availability and per-user QoS slots are checked before submit.
+- For Auxme issue-791 submissions, use `scripts/dev/sbatch_auxme_issue791.sh` only when the private
+  operations overlay is configured. The public wrapper delegates to the private cluster policy and
+  should fail with an actionable setup message when that overlay is absent.
 - Keep artifact output rooted in `output/slurm/` (or the configured mirrored destination) and
   confirm `ROBOT_SF_ARTIFACT_ROOT` is synced on exit.
 - Set `#SBATCH --output=output/slurm/%j-<description>.out` — job ID first so logs sort
@@ -43,8 +45,8 @@ campaigns that run on cluster resources.
 Before submission:
 
 1. Verify the selected YAML exists and is the intended horizon (`32k`, `128k`, `1m`, etc.).
-2. Verify `num_envs` matches host strategy (see [Auxme/README.md](Auxme/README.md) for
-   per-cluster guidance; choose intentionally).
+2. Verify `num_envs` matches the configured host strategy; keep cluster-specific host-packing
+   details in the private operations overlay and choose intentionally.
 3. Verify eval cadence (`evaluation.step_schedule`) is dense enough for decision quality but not so
    dense that wall-clock is dominated by evaluation.
 

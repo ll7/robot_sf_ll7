@@ -27,7 +27,7 @@ Use this when reliability, provenance, and correct config routing matter more th
 
 ## Workflow
 
-1. Read cluster-specific preflight:
+1. Read cluster-specific preflight and confirm the private operations overlay is configured:
    - `SLURM/AGENTS.md`
    - `SLURM/Auxme/README.md`
    - `docs/dev/slurm_submission.md`

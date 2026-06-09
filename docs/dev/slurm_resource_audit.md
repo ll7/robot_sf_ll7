@@ -18,7 +18,7 @@ Audit each run from three angles:
 For the current PPO training flow, the most relevant files are:
 
 - `scripts/training/train_ppo.py`
-- `SLURM/Auxme/auxme_gpu.sl`
+- the active public template or private overlay Slurm script
 - the active config under `configs/training/ppo/`
 
 ## 1. Confirm the Slurm allocation

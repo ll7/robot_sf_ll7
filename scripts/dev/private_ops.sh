@@ -23,21 +23,19 @@ private_ops_repo_root() {
         | tail -n 1
     )"
     if [[ -n "${configured}" ]]; then
-      configured="${configured/#\~/${HOME}}"
+      configured="${configured/#~/${HOME}}"
       printf '%s\n' "${configured}"
       return 0
     fi
   done
 
-  local project_parent
-  project_parent="$(cd "${project_root}/.." && pwd)"
-
   local sibling_root
-  if [[ "$(basename "${project_parent}")" == "robot_sf_ll7.worktrees" ]]; then
-    sibling_root="$(cd "${project_parent}/.." && pwd)/robot_sf_ll7-private-ops"
-  else
-    sibling_root="${project_parent}/robot_sf_ll7-private-ops"
+  local common_dir
+  common_dir="$(git -C "${project_root}" rev-parse --git-common-dir 2>/dev/null || echo ".git")"
+  if [[ "${common_dir}" != /* ]]; then
+    common_dir="${project_root}/${common_dir}"
   fi
+  sibling_root="$(cd "${common_dir}/../.." && pwd)/robot_sf_ll7-private-ops"
   printf '%s\n' "${sibling_root}"
 }
 

@@ -16,7 +16,10 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(git -C "${SLURM_SUBMIT_DIR:-$(pwd)}" rev-parse --show-toplevel)"
+PROJECT_ROOT="$(
+  git -C "${SLURM_SUBMIT_DIR:-$(pwd)}" rev-parse --show-toplevel 2>/dev/null \
+    || echo "${SLURM_SUBMIT_DIR:-$(pwd)}"
+)"
 TRAIN_CONFIG="${ROBOT_SF_TRAIN_CONFIG:-}"
 
 if [[ -z "${TRAIN_CONFIG}" ]]; then

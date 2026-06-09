@@ -17,7 +17,7 @@ pending, when this bundle was refreshed on 2026-06-08.
 ## Source Runs
 
 The source worktree was
-`/home/luttkule/git/robot_sf_ll7.worktrees/issue-2557-gse-night-seeds` at commit
+`../robot_sf_ll7.worktrees/issue-2557-gse-night-seeds` at commit
 `0e0f98a4fefe9faedc3eed31f2085af9618914e3`. Each job used
 `configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml`, `total_timesteps=10000000`,
 `dry_run=False`, deterministic evaluation seeds, and the default SNQI implementation.

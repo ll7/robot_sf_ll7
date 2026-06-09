@@ -29,8 +29,15 @@ private_ops_repo_root() {
     fi
   done
 
+  local project_parent
+  project_parent="$(cd "${project_root}/.." && pwd)"
+
   local sibling_root
-  sibling_root="$(cd "${project_root}/.." && pwd)/robot_sf_ll7-private-ops"
+  if [[ "$(basename "${project_parent}")" == "robot_sf_ll7.worktrees" ]]; then
+    sibling_root="$(cd "${project_parent}/.." && pwd)/robot_sf_ll7-private-ops"
+  else
+    sibling_root="${project_parent}/robot_sf_ll7-private-ops"
+  fi
   printf '%s\n' "${sibling_root}"
 }
 

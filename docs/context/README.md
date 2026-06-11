@@ -140,6 +140,11 @@ knowledge, not every transient iteration detail.
   [research_lane_states.md](research_lane_states.md)
 * Issue #2571 Active Research Queue:
   [issue_2571_active_research_queue.md](issue_2571_active_research_queue.md)
+* Issue #2542 Dissertation Figure/Table Export Bundle:
+  [issue_2542_dissertation_export_bundle.md](issue_2542_dissertation_export_bundle.md)
+  ([spec](evidence/issue_2542_dissertation_export_bundle/artifact_spec.json),
+  [manifest](evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json),
+  [checksums](evidence/issue_2542_dissertation_export_bundle/checksums.sha256))
 * Dissertation claim-export candidate report:
   [dissertation_claim_export_candidate_report.md](dissertation_claim_export_candidate_report.md)
 * Dissertation research bridge:

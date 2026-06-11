@@ -384,17 +384,34 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
                     }
                 ],
             }
+        ]
+        + [
+            {
+                "topology_status": "ok",
+                "selected_local_command_source": "dynamic_window",
+                "planner_route_corridor": {"topology_hypothesis": {"hypothesis_id": ""}},
+                "topology_hypotheses": [
+                    {
+                        "rank": 0,
+                        "corridor_name": "left_corridor_0",
+                        "route_remaining_distance_m": 6.0,
+                        "static_clearance_min_m": 0.25,
+                        "dynamic_clearance_min_m": 1.2,
+                    }
+                ],
+            }
         ],
         {"step": 2, "terminated": True, "success": True, "meta": {}},
     )
 
-    assert summary["topology_status_counts"] == {"ok": 3}
+    assert summary["topology_status_counts"] == {"ok": 4}
     assert summary["selected_source_counts"] == {
-        "dynamic_window": 1,
+        "dynamic_window": 2,
         "path_follow_0.5m": 1,
         "topology_hypothesis": 1,
     }
     assert summary["route_selector_selected_hypothesis_counts"] == {
+        "": 1,
         "masked_cell_5_12": 1,
         "masked_cell_7_14": 1,
         "primary_route": 1,
@@ -404,12 +421,12 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
         "selected_primary_route": 1,
     }
     assert summary["hypothesis_progress_by_rank"]["0"] == {
-        "samples": 3,
+        "samples": 4,
         "first_corridor_name": "left_corridor_0",
         "last_corridor_name": "left_corridor_0",
         "first_remaining_distance_m": 10.0,
-        "last_remaining_distance_m": 7.0,
-        "progress_delta_m": 3.0,
+        "last_remaining_distance_m": 6.0,
+        "progress_delta_m": 4.0,
         "min_static_clearance_m": 0.2,
         "min_dynamic_clearance_m": 1.0,
     }

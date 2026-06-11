@@ -478,7 +478,9 @@ def _selected_topology_hypothesis_summary(steps: list[dict[str, Any]]) -> dict[s
         selected = _selected_topology_hypothesis_row(row)
         if selected is None:
             continue
-        selected_counts[str(selected.get("hypothesis_id") or "unknown")] += 1
+        hypothesis_id = selected.get("hypothesis_id")
+        hypothesis_key = str(hypothesis_id) if hypothesis_id is not None else "unknown"
+        selected_counts[hypothesis_key] += 1
         near_parity_reason = selected.get("near_parity_gate_reason")
         if near_parity_reason is not None:
             near_parity_reason_counts[str(near_parity_reason)] += 1

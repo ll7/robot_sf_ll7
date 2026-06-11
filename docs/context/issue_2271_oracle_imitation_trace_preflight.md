@@ -105,6 +105,24 @@ Next smallest proof step: promote the generated train/validation trace manifests
 a durable artifact store with concrete retrieval aliases, or revise/rerun before any imitation
 training treats these local outputs as inputs.
 
+## Training Gate
+
+Issue #2569 adds a stricter downstream-consumption check to the launch-packet validator. The
+ordinary pre-Slurm preflight may still validate collection readiness, but imitation training must
+run:
+
+```bash
+uv run python scripts/validation/validate_oracle_imitation_launch_packet.py \
+  --config configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml \
+  --json \
+  --require-training-ready
+```
+
+That mode fails closed until concrete durable aliases exist for `train_trace_jsonl_uri`,
+`validation_trace_jsonl_uri`, `evaluation_trace_jsonl_uri`, and `trace_source_manifest_uri`. The
+current Issue #2620 audit records `artifact_retrieval_blocked`, so Issue #1496 remains blocked and
+must not start training from local-only trace files.
+
 Machine-readable summaries:
 `docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/summary.json`
 `docs/context/evidence/issue_2271_oracle_imitation_trace_preflight_2026-06-05/summary.json`

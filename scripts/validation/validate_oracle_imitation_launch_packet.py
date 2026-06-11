@@ -25,6 +25,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Repository root used to resolve relative paths.",
     )
     parser.add_argument("--json", action="store_true", help="Emit a JSON validation report.")
+    parser.add_argument(
+        "--require-training-ready",
+        action="store_true",
+        help=(
+            "Fail closed unless the packet has concrete durable train/validation/evaluation "
+            "trace artifact URIs for downstream imitation training."
+        ),
+    )
     return parser
 
 
@@ -32,7 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     """Validate a launch packet and return a shell-friendly exit code."""
     args = build_arg_parser().parse_args(argv)
     try:
-        report = validate_launch_packet(args.config, repo_root=args.repo_root)
+        report = validate_launch_packet(
+            args.config,
+            repo_root=args.repo_root,
+            require_training_ready=args.require_training_ready,
+        )
     except LaunchPacketError as exc:
         if args.json:
             print(json.dumps({"status": "invalid", "error": str(exc)}, indent=2, sort_keys=True))
@@ -45,7 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(
             "oracle-imitation launch packet valid: "
-            f"{report['dataset_id']} ({report['episode_count']} planned episodes)"
+            f"{report['dataset_id']} ({report['episode_count']} planned episodes, "
+            f"training_ready={report['training_ready']})"
         )
     return 0
 

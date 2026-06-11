@@ -65,6 +65,12 @@ checksums:
   docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/dry_run_dataset_stub.json: eb5ef938d15725ff29a013a196216d093dd549ae58ae805e642c98441777529f
 artifact_promotion_policy:
   raw_outputs_are_durable: false
+  downstream_training_ready: false
+  training_gate: >
+    Downstream imitation training must run the validator with --require-training-ready and must
+    fail closed until train_trace_jsonl_uri, validation_trace_jsonl_uri, evaluation_trace_jsonl_uri,
+    and trace_source_manifest_uri point at concrete durable aliases. Issue #2620 currently records
+    artifact_retrieval_blocked for the Issue #2441 raw traces.
   required_before_collection:
     - "Replace :pending W&B artifact aliases with concrete aliases or run ids."
     - "Record checksums for the generated dataset and manifest before imitation training starts."

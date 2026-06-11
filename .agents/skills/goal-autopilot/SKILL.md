@@ -151,7 +151,7 @@ directory so it survives linked worktrees, context compaction, and branch cleanu
 the PR diff:
 
 ```bash
-LEDGER_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/codex-agent-runs/active"
+LEDGER_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
 mkdir -p "$LEDGER_DIR"
 ```
 
@@ -178,6 +178,53 @@ Distinguish route success from task success. A delegate command exiting zero or 
 only proves `route_status: completed`; the parent phase is not complete until the main agent has
 reviewed the output, integrated any edits, run the required validation, updated GitHub state, and
 recorded cleanup.
+
+### Usage Pause Guard
+
+When a user-defined Codex usage threshold is active, run the configured usage-check command. For the
+external `codex-usage-status` skill, use the skill's `read_codex_usage.py` helper with
+`--stop-below-remaining <percent> --json`. That helper returns a `threshold_decision` object with
+`status: continue`, `status: stop`, or `status: unavailable`. Handle every status explicitly:
+
+- `continue`: proceed with the next autopilot phase without creating or refreshing a pause record.
+- `stop`: enter a hard paused state for the autopilot loop, not another recoverable phase outcome.
+- `unavailable`: treat missing, malformed, or incomplete `threshold_decision` output as uncertain;
+  log the raw helper output in the ledger, do not create a hard pause record, and continue only with
+  conservative cleanup or handoff work unless the user explicitly permits a normal phase to proceed.
+
+Persist the stop decision in the common Git directory before returning so repeated
+automatic continue prompts can short-circuit without rereading repo state, rerunning
+GitHub operations, or restarting delegation:
+
+```bash
+PAUSE_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
+mkdir -p "$PAUSE_DIR"
+# Write compact JSON/YAML/Markdown such as:
+# $PAUSE_DIR/usage-pause.md
+```
+
+The pause record should include the observed timestamp, threshold window, remaining percentage,
+threshold percentage, whether the user may explicitly override the guardrail, `lastUsageCheckAt`,
+and `usageCheckCooldownSeconds`. The default cooldown is 900 seconds. A caller may set a longer
+cooldown in the pause record, but automatic "continue" prompts must compare the current time against
+`lastUsageCheckAt + usageCheckCooldownSeconds` before invoking usage-check tooling again.
+
+While the usage pause is active:
+
+- do not run repo, worktree, GitHub, benchmark, validation, or delegation commands;
+- do not call usage-check tooling again on automatic "continue" prompts unless a
+  recorded cooldown has elapsed or the user explicitly asks for current usage;
+- do not load broad skill or repository context just to restate the pause;
+- respond to repeated automatic continue prompts with one compact sentence such as
+  `Paused: weekly remaining 13% < 28%. No actions.`;
+- keep the active goal incomplete unless a real completion audit already proved
+  all requirements before the pause fired.
+
+Resume only when the user explicitly overrides the stop guardrail, or when a fresh
+usage check requested by the user or allowed by the cooldown reports remaining
+budget at or above the threshold. If the first stop check happens while required
+cleanup is already in progress, finish only the minimal cleanup or follow-up issue
+creation named by the user's guardrail, then enter the persisted paused state.
 
 Update the ledger:
 

@@ -370,6 +370,23 @@ Canonical note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`
 
+## Autonomous Usage Stop Guard
+
+When a goal, background task, or autopilot loop has a Codex usage stop threshold, a usage check
+below that threshold is a hard pause state for the loop. Persist the pause in the common Git dir
+resolved with `git rev-parse --path-format=absolute --git-common-dir`, for example
+`$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/`. Do not write
+to a literal worktree-relative `.git/codex-agent-runs/active/` path, because linked worktrees may
+store `.git` as a file. After recording the pause, short-circuit repeated automatic continue
+prompts without repo, GitHub, validation, delegation, or broad context-loading work.
+
+- Do not re-run usage checks on automatic continue prompts unless a recorded cooldown has elapsed.
+- A direct user request for current usage may run one fresh usage check.
+- A direct user override may resume work, but record that the stop guard was overridden.
+- Use a compact repeated-pause response such as `Paused: weekly remaining 13% < 28%. No actions.`
+- Do not mark the active goal complete while paused unless a real completion audit already proved
+  every requirement before the pause fired.
+
 ## Key Codex Skills
 
 For issue management and delivery, use these local skills:

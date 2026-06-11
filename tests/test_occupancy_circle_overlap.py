@@ -18,8 +18,10 @@ import pytest
 from loguru import logger
 
 from robot_sf.common.types import Circle2D
+from robot_sf.nav import occupancy_grid_utils
 from robot_sf.nav.occupancy_grid import GridConfig, OccupancyGrid
 from robot_sf.nav.occupancy_grid_rasterization import rasterize_circle, rasterize_circle_fast
+from robot_sf.nav.occupancy_grid_utils import get_affected_cells
 
 
 class TestCircleCenterOutsideButOverlapping:
@@ -198,6 +200,31 @@ def test_circle_boundary_detection(
         assert occupied == 0, (
             f"{description}: Circle at ({center_x}, {center_y}) should not overlap grid (got {occupied} cells)"
         )
+
+
+def test_affected_cells_avoids_per_cell_world_conversion(monkeypatch):
+    """Affected-cell bounds should not recompute world centers once per candidate cell."""
+    config = GridConfig(resolution=0.05, width=20.0, height=20.0)
+
+    def fail_per_cell_conversion(*_args, **_kwargs):
+        raise AssertionError(
+            "get_affected_cells should precompute cell bounds without per-cell conversion"
+        )
+
+    monkeypatch.setattr(occupancy_grid_utils, "grid_indices_to_world", fail_per_cell_conversion)
+
+    inside_cells = get_affected_cells(10.0, 10.0, 1.25, config)
+    outside_cells = get_affected_cells(20.75, 10.0, 1.0, config)
+
+    assert inside_cells
+    assert outside_cells
+    assert all(
+        0 <= row < config.grid_height and 0 <= col < config.grid_width for row, col in inside_cells
+    )
+    assert all(
+        0 <= row < config.grid_height and 0 <= col < config.grid_width for row, col in outside_cells
+    )
+    assert any(col == config.grid_width - 1 for _, col in outside_cells)
 
 
 class TestCircleOverlapWithOccupancyGrid:

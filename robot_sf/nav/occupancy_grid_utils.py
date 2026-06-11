@@ -373,35 +373,33 @@ def get_affected_cells(
         clamped_x, clamped_y, config, grid_origin_x, grid_origin_y
     )
 
-    affected = []
+    row_min = max(0, center_row - cell_radius)
+    row_max = min(config.grid_height - 1, center_row + cell_radius)
+    col_min = max(0, center_col - cell_radius)
+    col_max = min(config.grid_width - 1, center_col + cell_radius)
+
+    if row_min > row_max or col_min > col_max:
+        return []
+
+    rows = np.arange(row_min, row_max + 1)
+    cols = np.arange(col_min, col_max + 1)
     half_res = config.resolution * 0.5
 
-    for dr in range(-cell_radius, cell_radius + 1):
-        for dc in range(-cell_radius, cell_radius + 1):
-            row = center_row + dr
-            col = center_col + dc
+    row_centers = grid_origin_y + (rows.astype(float) + 0.5) * config.resolution
+    col_centers = grid_origin_x + (cols.astype(float) + 0.5) * config.resolution
+    cell_min_y = row_centers[:, None] - half_res
+    cell_max_y = row_centers[:, None] + half_res
+    cell_min_x = col_centers[None, :] - half_res
+    cell_max_x = col_centers[None, :] + half_res
 
-            # Check bounds
-            if not (0 <= row < config.grid_height and 0 <= col < config.grid_width):
-                continue
+    # Circle-rectangle intersection for every candidate cell in one bounded slice.
+    closest_x = np.clip(world_x, cell_min_x, cell_max_x)
+    closest_y = np.clip(world_y, cell_min_y, cell_max_y)
+    dist_sq = (closest_x - world_x) ** 2 + (closest_y - world_y) ** 2
+    mask = dist_sq <= radius**2
 
-            # Get cell bounds (cell is a square)
-            cell_world_x, cell_world_y = grid_indices_to_world(
-                row, col, config, grid_origin_x, grid_origin_y
-            )
-            cell_min_x = cell_world_x - half_res
-            cell_max_x = cell_world_x + half_res
-            cell_min_y = cell_world_y - half_res
-            cell_max_y = cell_world_y + half_res
-
-            # Circle-rectangle intersection: find closest point on rectangle to circle center
-            closest_x = np.clip(world_x, cell_min_x, cell_max_x)
-            closest_y = np.clip(world_y, cell_min_y, cell_max_y)
-
-            # Check if closest point is within circle radius
-            dist = np.sqrt((closest_x - world_x) ** 2 + (closest_y - world_y) ** 2)
-
-            if dist <= radius:
-                affected.append((row, col))
-
-    return affected
+    row_indices, col_indices = np.nonzero(mask)
+    return [
+        (int(rows[row_idx]), int(cols[col_idx]))
+        for row_idx, col_idx in zip(row_indices, col_indices, strict=False)
+    ]

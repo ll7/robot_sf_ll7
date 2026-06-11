@@ -114,6 +114,8 @@ knowledge, not every transient iteration detail.
   [issue_2311_orca_residual_lane_decision.md](issue_2311_orca_residual_lane_decision.md)
 * Issue #2271 oracle-imitation trace preflight:
   [issue_2271_oracle_imitation_trace_preflight.md](issue_2271_oracle_imitation_trace_preflight.md)
+* Issue #2620 oracle-imitation artifact access audit:
+  [issue_2620_oracle_artifact_access.md](issue_2620_oracle_artifact_access.md)
 * Thursday development review 2026-05-21:
   [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Worktree training preservation audit 2026-05-25:
@@ -166,6 +168,9 @@ knowledge, not every transient iteration detail.
   [issue_2540_topology_reuse_penalty_diagnostic.md](issue_2540_topology_reuse_penalty_diagnostic.md)
 * Issue #2621 Topology Revision Hypothesis 2026-06-11:
   [issue_2621_topology_revision_hypothesis.md](issue_2621_topology_revision_hypothesis.md)
+* Issue #2624 Topology Reuse-Penalty Paired Diagnostic Gate 2026-06-11:
+  [issue_2624_topology_reuse_penalty_gate.md](issue_2624_topology_reuse_penalty_gate.md)
+  ([summary](evidence/issue_2624_topology_reuse_penalty_gate/summary.json))
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:
@@ -220,6 +225,8 @@ knowledge, not every transient iteration detail.
   [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
 * Issue #2562 Adversarial Manifest Planner Smoke:
   [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md)
+* Issue #2618 Generated Adversarial Manifest Planner Smoke:
+  [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md)
 * Issue #2565 Uncertainty-Aware Stream-Gap Gating Smoke:
   [issue_2565_uncertainty_gating_smoke.md](issue_2565_uncertainty_gating_smoke.md)
 * Issue #2538 ScenarioBelief Planner Projection Smoke:
@@ -427,6 +434,10 @@ knowledge, not every transient iteration detail.
   [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
   ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),
   [AMV report](evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md))
+* Issue #2602 Why-First Report Usefulness:
+
+  [issue_2602_why_first_report_usefulness.md](issue_2602_why_first_report_usefulness.md)
+  ([summary](evidence/issue_2602_why_first_report_usefulness/summary.json))
 * Issue #2259 AMV Clipping Versus Success Boundary:
 
   [issue_2259_amv_clipping_success_boundary.md](issue_2259_amv_clipping_success_boundary.md)
@@ -527,6 +538,8 @@ knowledge, not every transient iteration detail.
   [issue_2567_adversarial_manifest_quality.md](issue_2567_adversarial_manifest_quality.md)
 * Issue #2568 Adversarial Expansion Gate (2026-06-07):
   [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md)
+* Issue #2618 Generated Adversarial Manifest Planner Smoke (2026-06-11):
+  [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):
@@ -745,6 +758,9 @@ knowledge, not every transient iteration detail.
   [issue_2600_topology_revision_decision.md](issue_2600_topology_revision_decision.md)
 * Issue #2621 Topology Revision Hypothesis 2026-06-11:
   [issue_2621_topology_revision_hypothesis.md](issue_2621_topology_revision_hypothesis.md)
+* Issue #2624 Topology Reuse-Penalty Paired Diagnostic Gate 2026-06-11:
+  [issue_2624_topology_reuse_penalty_gate.md](issue_2624_topology_reuse_penalty_gate.md)
+  ([summary](evidence/issue_2624_topology_reuse_penalty_gate/summary.json))
 * Issue #2522 topology and AMV why-first diagnostics:
   [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
   ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),
@@ -1108,6 +1124,9 @@ knowledge, not every transient iteration detail.
   defines the train/validation/evaluation seed-split contract, hard-slice assignment rules,
   relabeling boundaries, and manifest schema required before any oracle-imitation dataset
   generation begins.
+* [Issue #2620 Oracle-Imitation Artifact Access Audit](issue_2620_oracle_artifact_access.md)
+  records that the #2441 split/checksum evidence remains useful, but raw trace retrieval is blocked
+  because durable pointers are missing and the recorded local `output/slurm` paths are absent.
 * [Issue #1357 Tentabot-Style Motion-Primitive Assessment](./policy_search/2026-05-20_tentabot_motion_primitive_assessment.md)
   records the source-backed verdict that Tentabot-style learned primitive-value scoring is a
   Robot SF-native spike candidate, not an upstream adapter or benchmark-ready planner.

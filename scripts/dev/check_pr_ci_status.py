@@ -89,6 +89,11 @@ def _rollup_status(check: dict[str, Any]) -> str:
     return state_str
 
 
+def _rollup_name(check: dict[str, Any]) -> str:
+    """Return a display name for check-run and legacy-status rollup entries."""
+    return str(check.get("name") or check.get("context") or "unknown")
+
+
 def _fetch_ci_status(
     pr_number: str,
     backoff: float = 0.0,
@@ -158,8 +163,17 @@ def _fetch_ci_status(
 
     name_counts: dict[str, int] = {}
     for check in rollup:
-        name = check.get("name", "unknown")
+        name = _rollup_name(check)
         name_counts[name] = name_counts.get(name, 0) + 1
+    check_details = [
+        {
+            "name": _rollup_name(check),
+            "status": _rollup_status(check),
+            "conclusion": _rollup_conclusion(check),
+            "details_url": check.get("detailsUrl", "") or check.get("targetUrl", ""),
+        }
+        for check in rollup
+    ]
 
     return {
         "status": "ok",
@@ -175,6 +189,7 @@ def _fetch_ci_status(
             "by_conclusion": conclusions,
             "by_status": states,
             "names": sorted(name_counts),
+            "details": check_details,
         },
         "reviews": review_states,
     }
@@ -203,6 +218,15 @@ def _format_human(data: dict[str, Any]) -> str:
     lines.append(
         f"  checks: {overall}  |  {total} total  |  {conclusion_str}  |  status: {status_str}"
     )
+    for check in checks.get("details", []):
+        if check.get("status") == "completed" and check.get("conclusion") == "success":
+            continue
+        url = check.get("details_url")
+        suffix = f"  |  {url}" if url else ""
+        lines.append(
+            f"    - {check.get('name', 'unknown')}: "
+            f"{check.get('status', 'unknown')}/{check.get('conclusion', 'unknown')}{suffix}"
+        )
 
     reviews = data.get("reviews", {})
     if reviews:
@@ -210,6 +234,33 @@ def _format_human(data: dict[str, Any]) -> str:
         lines.append(f"  reviews: {review_str}")
 
     return "\n".join(lines)
+
+
+def _poll_ci_status(
+    pr: str,
+    *,
+    attempts: int,
+    poll_interval: float,
+    backoff: float,
+    json_output: bool,
+) -> dict[str, Any]:
+    """Fetch CI status once or poll until checks settle or the budget expires."""
+    data: dict[str, Any] = {}
+    for attempt in range(1, attempts + 1):
+        data = _fetch_ci_status(pr, backoff=backoff if attempt == 1 else 0.0)
+        if data.get("status") == "error":
+            break
+        overall = data.get("checks", {}).get("overall")
+        if attempts > 1:
+            if json_output:
+                print(json.dumps(data), flush=True)
+            else:
+                print(f"poll attempt {attempt}/{attempts}", flush=True)
+                print(_format_human(data), flush=True)
+        if overall != "pending" or attempt == attempts:
+            break
+        time.sleep(max(0.0, poll_interval))
+    return data
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -232,11 +283,30 @@ def main(argv: list[str] | None = None) -> int:
         default=0.0,
         help="seconds to wait before fetching (for cache coherency)",
     )
+    parser.add_argument(
+        "--poll-attempts",
+        type=int,
+        default=1,
+        help="bounded polling attempts; values above 1 wait for pending checks to settle",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=30.0,
+        help="seconds between bounded polling attempts",
+    )
     args = parser.parse_args(argv)
 
     try:
         pr = _resolve_pr_number(args.pr_number)
-        data = _fetch_ci_status(pr, backoff=args.backoff)
+        attempts = max(1, args.poll_attempts)
+        data = _poll_ci_status(
+            pr,
+            attempts=attempts,
+            poll_interval=args.poll_interval,
+            backoff=args.backoff,
+            json_output=args.json,
+        )
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)
         return 1
@@ -251,15 +321,18 @@ def main(argv: list[str] | None = None) -> int:
         print(_format_human(data))
         return 1
 
-    if args.json:
-        print(json.dumps(data))
-    else:
-        print(_format_human(data))
+    if attempts == 1:
+        if args.json:
+            print(json.dumps(data))
+        else:
+            print(_format_human(data))
 
     # Non-zero exit when CI is failing; pending checks are cache/backoff-safe.
     overall = data.get("checks", {}).get("overall")
     if overall == "failure":
         return 1
+    if attempts > 1 and overall == "pending":
+        return 2
 
     return 0
 

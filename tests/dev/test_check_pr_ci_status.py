@@ -12,6 +12,7 @@ from scripts.dev.check_pr_ci_status import (
     _fetch_ci_status,
     _format_human,
     _rollup_conclusion,
+    _rollup_name,
     _rollup_status,
     main,
 )
@@ -232,6 +233,8 @@ def test_main_preserves_pending_legacy_status(
     assert payload["checks"]["overall"] == "pending"
     assert payload["checks"]["by_conclusion"] == {"success": 1, "pending": 1}
     assert payload["checks"]["by_status"] == {"completed": 1, "pending": 1}
+    assert payload["checks"]["details"][1]["name"] == "external-status"
+    assert payload["checks"]["details"][1]["status"] == "pending"
 
 
 def test_main_treats_error_legacy_status_as_failure(
@@ -296,6 +299,13 @@ def test_rollup_status_prefers_status_then_legacy_state(
 ) -> None:
     """Lifecycle status normalization should avoid double-counting legacy pending checks."""
     assert _rollup_status(check) == expected
+
+
+def test_rollup_name_prefers_check_name_then_legacy_context() -> None:
+    """Legacy status contexts should not render as unknown checks."""
+    assert _rollup_name({"name": "ci", "context": "legacy"}) == "ci"
+    assert _rollup_name({"context": "CodeRabbit"}) == "CodeRabbit"
+    assert _rollup_name({}) == "unknown"
 
 
 def test_main_json_output(capsys: pytest.CaptureFixture) -> None:
@@ -387,6 +397,138 @@ def test_main_with_backoff(capsys: pytest.CaptureFixture) -> None:
         rc = main(["3", "--backoff", "0.0"])
 
     assert rc == 0
+
+
+def test_format_human_lists_non_success_details() -> None:
+    """Human output should distinguish queued/in-progress/failing checks."""
+    data = {
+        "status": "ok",
+        "pr": 5,
+        "title": "details",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "branch": "details",
+        "head_sha": "abc123",
+        "checks": {
+            "total": 3,
+            "overall": "pending",
+            "by_conclusion": {"success": 1, "pending": 2},
+            "by_status": {"completed": 1, "queued": 1, "in_progress": 1},
+            "names": ["done", "queued", "running"],
+            "details": [
+                {
+                    "name": "done",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "details_url": "https://example.test/done",
+                },
+                {
+                    "name": "queued",
+                    "status": "queued",
+                    "conclusion": "pending",
+                    "details_url": "https://example.test/queued",
+                },
+                {
+                    "name": "running",
+                    "status": "in_progress",
+                    "conclusion": "pending",
+                    "details_url": "https://example.test/running",
+                },
+            ],
+        },
+        "reviews": {},
+    }
+
+    output = _format_human(data)
+
+    assert "done:" not in output
+    assert "queued: queued/pending" in output
+    assert "running: in_progress/pending" in output
+    assert "https://example.test/running" in output
+
+
+def test_main_bounded_polling_times_out_pending(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Bounded polling should return a distinct code when checks never settle."""
+    mock_data = json.dumps(
+        {
+            "number": 7,
+            "title": "pending poll",
+            "state": "OPEN",
+            "mergeable": "UNKNOWN",
+            "headRefName": "pending-poll",
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "queued",
+                    "conclusion": "",
+                    "detailsUrl": "https://example.test/ci",
+                }
+            ],
+            "reviews": [],
+        }
+    )
+
+    with (
+        patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run,
+        patch("scripts.dev.check_pr_ci_status.time.sleep") as mock_sleep,
+    ):
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["7", "--poll-attempts", "2", "--poll-interval", "0.1"])
+
+    assert rc == 2
+    assert mock_run.call_count == 2
+    mock_sleep.assert_called_once_with(0.1)
+    captured = capsys.readouterr()
+    assert "poll attempt 1/2" in captured.out
+    assert "poll attempt 2/2" in captured.out
+    assert "ci: queued/pending" in captured.out
+
+
+def test_main_bounded_polling_stops_on_success(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Bounded polling should stop once pending checks pass."""
+    pending_data = json.dumps(
+        {
+            "number": 8,
+            "title": "eventual pass",
+            "state": "OPEN",
+            "mergeable": "UNKNOWN",
+            "headRefName": "eventual-pass",
+            "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
+            "reviews": [],
+        }
+    )
+    success_data = json.dumps(
+        {
+            "number": 8,
+            "title": "eventual pass",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "eventual-pass",
+            "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            "reviews": [],
+        }
+    )
+
+    with (
+        patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run,
+        patch("scripts.dev.check_pr_ci_status.time.sleep") as mock_sleep,
+    ):
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=pending_data, stderr=""),
+            MagicMock(returncode=0, stdout=success_data, stderr=""),
+        ]
+        rc = main(["8", "--poll-attempts", "5", "--poll-interval", "0.1"])
+
+    assert rc == 0
+    assert mock_run.call_count == 2
+    mock_sleep.assert_called_once_with(0.1)
+    captured = capsys.readouterr()
+    assert "poll attempt 2/5" in captured.out
+    assert "checks: success" in captured.out
 
 
 def test_main_gh_not_installed() -> None:

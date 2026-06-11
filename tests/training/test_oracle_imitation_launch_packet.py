@@ -84,6 +84,16 @@ def test_issue_1397_launch_packet_validates() -> None:
     assert report["dataset_id"] == "issue_1397_oracle_imitation_v1"
     assert report["source_candidate"] == "hybrid_rule_v3_static_margin0_waypoint2"
     assert report["scenario_count"] == 6
+    assert report["training_ready"] is False
+
+
+def test_issue_1397_launch_packet_fails_training_ready_gate() -> None:
+    """The checked-in #1397 packet must not pass as downstream training input yet."""
+    with pytest.raises(LaunchPacketError, match="training-ready oracle-imitation"):
+        validate_launch_packet(
+            Path("configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml"),
+            require_training_ready=True,
+        )
 
 
 def test_validate_launch_packet_rejects_seed_overlap(tmp_path: Path) -> None:
@@ -121,6 +131,47 @@ def test_validate_launch_packet_rejects_output_artifact_paths(tmp_path: Path) ->
         validate_launch_packet(_write_packet(tmp_path, broken))
 
 
+def test_validate_launch_packet_accepts_training_ready_trace_artifacts(tmp_path: Path) -> None:
+    """Concrete durable trace pointers satisfy the downstream training gate."""
+    packet = _valid_packet(tmp_path)
+    packet["artifact_paths"].update(
+        {
+            "train_trace_jsonl_uri": "wandb-artifact://robot-sf/oracle-imitation/train:v1",
+            "validation_trace_jsonl_uri": "wandb-artifact://robot-sf/oracle-imitation/val:v1",
+            "evaluation_trace_jsonl_uri": "wandb-artifact://robot-sf/oracle-imitation/eval:v1",
+            "trace_source_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/manifest:v1",
+        }
+    )
+    packet["artifact_paths"]["future_dataset_npz_uri"] = "wandb-artifact://robot-sf/demo-dataset:v1"
+
+    report = validate_launch_packet(
+        _write_packet(tmp_path, packet),
+        require_training_ready=True,
+    )
+
+    assert report["training_ready"] is True
+
+
+def test_validate_launch_packet_rejects_pending_training_artifacts(tmp_path: Path) -> None:
+    """Pending aliases are placeholders, not durable training inputs."""
+    packet = _valid_packet(tmp_path)
+    packet["artifact_paths"].update(
+        {
+            "train_trace_jsonl_uri": "wandb-artifact://robot-sf/oracle-imitation/train:pending",
+            "validation_trace_jsonl_uri": "wandb-artifact://robot-sf/oracle-imitation/val:v1",
+            "evaluation_trace_jsonl_uri": "wandb-artifact://robot-sf/oracle-imitation/eval:v1",
+            "trace_source_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/manifest:v1",
+        }
+    )
+
+    with pytest.raises(LaunchPacketError, match="must not use pending durable aliases") as exc_info:
+        validate_launch_packet(
+            _write_packet(tmp_path, packet),
+            require_training_ready=True,
+        )
+    assert "must use concrete durable URIs" not in str(exc_info.value)
+
+
 def test_validate_launch_packet_cli_reports_json() -> None:
     """The CLI should expose the same validation report for automation."""
     exit_code = validate_cli_main(
@@ -132,6 +183,20 @@ def test_validate_launch_packet_cli_reports_json() -> None:
     )
 
     assert exit_code == 0
+
+
+def test_validate_launch_packet_cli_training_ready_gate_fails_closed() -> None:
+    """Automation can request the stricter downstream training gate."""
+    exit_code = validate_cli_main(
+        [
+            "--config",
+            "configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml",
+            "--json",
+            "--require-training-ready",
+        ]
+    )
+
+    assert exit_code == 2
 
 
 def test_seed_manifest_missing_file_fails_closed(tmp_path: Path) -> None:

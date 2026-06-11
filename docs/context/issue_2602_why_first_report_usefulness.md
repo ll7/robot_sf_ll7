@@ -1,4 +1,4 @@
-# Issue #2602 Why-First Report Usefulness
+# Issue #2602 Why-First Report Usefulness 2026-06-11
 
 Issue: [#2602](https://github.com/ll7/robot_sf_ll7/issues/2602)
 Status: reporting-evaluation synthesis; not new benchmark evidence.

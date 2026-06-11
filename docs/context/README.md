@@ -427,7 +427,7 @@ knowledge, not every transient iteration detail.
   [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
   ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),
   [AMV report](evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md))
-* Issue #2602 why-first report usefulness:
+* Issue #2602 Why-First Report Usefulness:
 
   [issue_2602_why_first_report_usefulness.md](issue_2602_why_first_report_usefulness.md)
   ([summary](evidence/issue_2602_why_first_report_usefulness/summary.json))

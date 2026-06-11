@@ -421,6 +421,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2621_topology_revision_hypothesis.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2566_static_recenter_inactive_propagation.md
     status: current
     freshness: maintained

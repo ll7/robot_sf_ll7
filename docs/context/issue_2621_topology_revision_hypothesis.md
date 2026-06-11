@@ -1,4 +1,4 @@
-# Issue #2621 Topology Revision Hypothesis
+# Issue #2621 Topology Revision Hypothesis 2026-06-11
 
 Issue: [#2621](https://github.com/ll7/robot_sf_ll7/issues/2621)
 Status: current, diagnostic-only decision.

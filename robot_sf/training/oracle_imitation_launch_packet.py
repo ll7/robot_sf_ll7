@@ -46,12 +46,15 @@ def validate_launch_packet(
     config_path: Path,
     *,
     repo_root: Path | None = None,
+    require_training_ready: bool = False,
 ) -> dict[str, Any]:
     """Validate an oracle-imitation launch packet and return a compact report.
 
     Args:
         config_path: YAML launch-packet path.
         repo_root: Repository root. Defaults to the current working directory.
+        require_training_ready: Also require concrete durable trace artifact inputs for
+            downstream imitation training.
 
     Returns:
         Validation report with status, checked fields, and artifact paths.
@@ -80,6 +83,11 @@ def validate_launch_packet(
     _validate_relabeling(packet, errors)
     _validate_generating_commit(packet, errors)
     artifact_paths = _validate_artifacts(packet, root, errors)
+    training_ready = _validate_training_artifact_gate(
+        artifact_paths,
+        require_training_ready=require_training_ready,
+        errors=errors,
+    )
 
     if errors:
         joined = "\n- ".join(errors)
@@ -94,6 +102,7 @@ def validate_launch_packet(
         "episode_count": sum(len(packet["episode_ids_by_split"][split]) for split in _SPLITS),
         "seeds_by_split": {split: list(packet["seeds_by_split"][split]) for split in _SPLITS},
         "artifact_paths": artifact_paths,
+        "training_ready": training_ready,
     }
 
 
@@ -361,6 +370,51 @@ def _validate_artifacts(
     return normalized_paths
 
 
+def _validate_training_artifact_gate(
+    artifact_paths: dict[str, str],
+    *,
+    require_training_ready: bool,
+    errors: list[str],
+) -> bool:
+    required_trace_artifacts = {
+        "train_trace_jsonl_uri",
+        "validation_trace_jsonl_uri",
+        "evaluation_trace_jsonl_uri",
+        "trace_source_manifest_uri",
+    }
+    missing = sorted(required_trace_artifacts - artifact_paths.keys())
+    pending = sorted(
+        name for name, path_text in artifact_paths.items() if _is_pending_durable_uri(path_text)
+    )
+    non_durable_required = sorted(
+        name
+        for name in required_trace_artifacts & artifact_paths.keys()
+        if not _is_concrete_durable_uri(artifact_paths[name])
+        and not _is_pending_durable_uri(artifact_paths[name])
+    )
+
+    training_ready = not missing and not pending and not non_durable_required
+    if not require_training_ready:
+        return training_ready
+
+    if missing:
+        errors.append(
+            "training-ready oracle-imitation launch packets must include durable trace artifact "
+            f"URIs for: {', '.join(missing)}"
+        )
+    if pending:
+        errors.append(
+            "training-ready oracle-imitation launch packets must not use pending durable aliases: "
+            f"{', '.join(pending)}"
+        )
+    if non_durable_required:
+        errors.append(
+            "training-ready oracle-imitation launch packets must use concrete durable URIs for: "
+            f"{', '.join(non_durable_required)}"
+        )
+    return training_ready
+
+
 def _artifact_path_text(name: str, raw_path: Any, errors: list[str]) -> str | None:
     if not isinstance(raw_path, str) or not raw_path.strip():
         errors.append(f"artifact_paths.{name} must be a non-empty string")
@@ -376,6 +430,14 @@ def _artifact_path_text(name: str, raw_path: Any, errors: list[str]) -> str | No
 
 def _is_durable_uri(path_text: str) -> bool:
     return path_text.startswith(_DURABLE_URI_PREFIXES)
+
+
+def _is_pending_durable_uri(path_text: str) -> bool:
+    return _is_durable_uri(path_text) and path_text.rstrip().endswith(":pending")
+
+
+def _is_concrete_durable_uri(path_text: str) -> bool:
+    return _is_durable_uri(path_text) and not _is_pending_durable_uri(path_text)
 
 
 def _validate_local_artifact(

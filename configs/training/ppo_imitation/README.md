@@ -17,11 +17,15 @@ This directory hosts configuration files used by the expert-policy, trajectory c
 * `oracle_dataset_issue_1397_launch_packet.yaml` – pre-Slurm oracle-imitation dataset launch
   packet. Validate with
   `uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml --json`.
+  Downstream imitation training must use the stricter gate:
+  `uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml --json --require-training-ready`.
+  That gate intentionally fails while Issue #2620 remains `artifact_retrieval_blocked`.
 * Additional files describe scenario coverage manifests referenced by trajectory collection commands.
 
 ## Usage Notes
 
-1. Always version-control changes alongside the corresponding manifests under `output/`.
+1. Do not treat worktree-local `output/` files as durable training inputs; promote required
+   manifests or datasets before downstream launch packets consume them.
 2. Keep seed lists consistent across configs when running comparative studies.
 3. Document any temporary overrides in the run manifest to preserve reproducibility.
 4. For Optuna launcher configs, prefer `log_level: WARNING` by default and override only when debugging.

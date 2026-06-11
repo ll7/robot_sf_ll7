@@ -158,6 +158,8 @@ knowledge, not every transient iteration detail.
   [issue_2563_topology_corrective_revision.md](issue_2563_topology_corrective_revision.md)
 * Issue #2570 Topology Revise Status Propagation:
   [issue_2570_topology_revise_status_propagation.md](issue_2570_topology_revise_status_propagation.md)
+* Issue #2600 Topology Revision Decision 2026-06-11:
+  [issue_2600_topology_revision_decision.md](issue_2600_topology_revision_decision.md)
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:
@@ -723,6 +725,10 @@ knowledge, not every transient iteration detail.
   [issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md)
 * Issue #2530 topology near-parity corrective-behavior smoke:
   [issue_2530_topology_near_parity_corrective_smoke.md](issue_2530_topology_near_parity_corrective_smoke.md)
+* Issue #2563 Topology Corrective Revision Proposal 2026-06-07:
+  [issue_2563_topology_corrective_revision.md](issue_2563_topology_corrective_revision.md)
+* Issue #2600 Topology Revision Decision 2026-06-11:
+  [issue_2600_topology_revision_decision.md](issue_2600_topology_revision_decision.md)
 * Issue #2522 topology and AMV why-first diagnostics:
   [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
   ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),

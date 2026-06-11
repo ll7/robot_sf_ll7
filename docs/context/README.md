@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_2571_active_research_queue.md](issue_2571_active_research_queue.md)
 * Dissertation claim-export candidate report:
   [dissertation_claim_export_candidate_report.md](dissertation_claim_export_candidate_report.md)
+* Dissertation research bridge:
+  [dissertation_research_bridge.md](dissertation_research_bridge.md)
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
 * Issue #2282 topology selection instrumentation smoke:

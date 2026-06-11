@@ -114,6 +114,8 @@ knowledge, not every transient iteration detail.
   [issue_2311_orca_residual_lane_decision.md](issue_2311_orca_residual_lane_decision.md)
 * Issue #2271 oracle-imitation trace preflight:
   [issue_2271_oracle_imitation_trace_preflight.md](issue_2271_oracle_imitation_trace_preflight.md)
+* Issue #2620 oracle-imitation artifact access audit:
+  [issue_2620_oracle_artifact_access.md](issue_2620_oracle_artifact_access.md)
 * Thursday development review 2026-05-21:
   [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Worktree training preservation audit 2026-05-25:
@@ -1122,6 +1124,9 @@ knowledge, not every transient iteration detail.
   defines the train/validation/evaluation seed-split contract, hard-slice assignment rules,
   relabeling boundaries, and manifest schema required before any oracle-imitation dataset
   generation begins.
+* [Issue #2620 Oracle-Imitation Artifact Access Audit](issue_2620_oracle_artifact_access.md)
+  records that the #2441 split/checksum evidence remains useful, but raw trace retrieval is blocked
+  because durable pointers are missing and the recorded local `output/slurm` paths are absent.
 * [Issue #1357 Tentabot-Style Motion-Primitive Assessment](./policy_search/2026-05-20_tentabot_motion_primitive_assessment.md)
   records the source-backed verdict that Tentabot-style learned primitive-value scoring is a
   Robot SF-native spike candidate, not an upstream adapter or benchmark-ready planner.

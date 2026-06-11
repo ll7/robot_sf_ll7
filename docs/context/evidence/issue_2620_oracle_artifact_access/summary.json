@@ -1,0 +1,99 @@
+{
+  "schema_version": "oracle_imitation_artifact_access.v1",
+  "issue": 2620,
+  "source_issue": 2441,
+  "parent_issue": 1470,
+  "downstream_training_issue": 1496,
+  "created_at": "2026-06-11",
+  "decision_outcome": "artifact_retrieval_blocked",
+  "claim_boundary": "Artifact-access audit only; not durable dataset evidence, not imitation-training evidence, not benchmark evidence, and not a planner-quality claim.",
+  "source_evidence": {
+    "tracked_bundle": "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/README.md",
+    "summary": "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/summary.json",
+    "checksum_manifest": "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/SHA256SUMS",
+    "finalizers": [
+      "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/finalization_12762.json",
+      "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/finalization_12763.json",
+      "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/finalization_12764.json",
+      "docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/finalization_12765.json"
+    ]
+  },
+  "train_pointer": {
+    "status": "missing_durable_pointer",
+    "finalizer": "finalization_12762.json",
+    "artifact_role": "required_combined_train_jsonl",
+    "recorded_sha256": "2f761d09e3944ed0489509ce498499f6fff159afd9bd2eba12b6010170fa8c43",
+    "local_retrieval_status": "missing_on_current_machine",
+    "durable_uri": null
+  },
+  "validation_pointer": {
+    "status": "missing_durable_pointer",
+    "finalizer": "finalization_12763.json",
+    "artifact_role": "required_combined_validation_jsonl",
+    "recorded_sha256": "acf378ed60b7753805123c80077dcb0a5e04e2a6696907b52fb4eaae6d0d1b72",
+    "local_retrieval_status": "missing_on_current_machine",
+    "durable_uri": null
+  },
+  "evaluation_pointer": {
+    "status": "missing_durable_pointer",
+    "selected_source": "job_12764_a30",
+    "finalizer": "finalization_12764.json",
+    "artifact_role": "required_combined_evaluation_jsonl",
+    "recorded_sha256": "8d508b22bf8e82783cc8a01d335a6dfacd4c1b47e7a1b80ca0679f157dd83909",
+    "duplicate_job_12765_recorded_sha256": "2a3c1397d4c23962497386ab92c23db243dce7097a2eaa2df9594164a26fdc3c",
+    "local_retrieval_status": "missing_on_current_machine",
+    "durable_uri": null
+  },
+  "manifest_pointers": {
+    "train_manifest_sha256": "6d045e96b202debe9d4d0c2b08e230ad2e1538f6dd6a859f06b636ec6658d05e",
+    "validation_manifest_sha256": "3b83a75f1df3563a8b7e3dbd1a7d107f1ccd88758975cc7dabc9082595b3300b",
+    "evaluation_manifest_sha256": "be1a5fc178b29df77c7a33d82135430dba69327ee6fd92f6b7e5ba8ce467de22",
+    "evaluation_duplicate_manifest_sha256": "31d1a67b3fa425d092f9fa8ba687aa77323c775afae163df910a20e47959a7e4"
+  },
+  "split_leakage_status": {
+    "status": "passed_manifest_check",
+    "train_seeds": [
+      201,
+      202,
+      203,
+      204,
+      205,
+      206
+    ],
+    "validation_seeds": [
+      101,
+      102,
+      103
+    ],
+    "evaluation_seeds": [
+      111,
+      112,
+      113
+    ],
+    "observed_rows": {
+      "train": 6,
+      "validation": 3,
+      "evaluation": 3
+    },
+    "basis": "tracked Issue #2441 summary.json split_leakage_check"
+  },
+  "raw_trace_retrieval_status": {
+    "status": "blocked",
+    "local_path_check": "all required manifest and combined JSONL paths recorded by finalization_12762 through finalization_12765 were missing from the current machine on 2026-06-11",
+    "durable_pointer_check": "no W&B, release, S3/GCS, Hugging Face, or equivalent durable URI was found in the tracked Issue #2441 evidence or Issue #1470/Issue #2441/Issue #1496 issue trail",
+    "host_limits": "current local.machine.md disallows Slurm submission, and root disk had only 14 GB free during the audit"
+  },
+  "downstream_training_ready": false,
+  "blocker_if_not_ready": "The train, validation, and evaluation raw trace JSONL files and their source manifests need concrete durable retrieval pointers, or a deliberate rerun on a Slurm-capable host that publishes those pointers and verifies the recorded checksums before Issue #1496 starts training.",
+  "validation": {
+    "commands": [
+      "jq '{artifact_classification, split_leakage_check, analysis, jobs: [.jobs[] | {job_id, split, manifest, combined_jsonl}]}' docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/summary.json",
+      "for each required finalizer-recorded raw artifact: test existence and sha256sum when present",
+      "rg -n 'issue_1397_oracle_imitation_v1|issue1470|oracle-imitation|wandb-artifact://|artifact://|s3://|gs://|hf://|huggingface|W&B|wandb' docs configs robot_sf scripts tests with ignored artifact roots excluded",
+      "gh issue view 2441 --comments --json body,comments,url,state,title",
+      "gh issue view 1470 --comments --json body,comments,url,state,title",
+      "gh issue view 1496 --comments --json body,comments,url,state,title"
+    ],
+    "result": "Tracked compact checksums and split routing are preserved, but durable raw trace retrieval is blocked."
+  }
+}

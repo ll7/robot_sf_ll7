@@ -306,6 +306,7 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
                     "topology_hypotheses": [
                         {
                             "hypothesis_id": "primary_route",
+                            "near_parity_gate_reason": "selected_primary_route",
                             "score": -8.0,
                             "score_rank": 0,
                             "score_margin_to_selected": 0.0,
@@ -318,6 +319,7 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
                         },
                         {
                             "hypothesis_id": "masked_cell_5_12",
+                            "near_parity_gate_reason": "eligible_near_parity_alternative",
                             "score": -9.5,
                             "score_rank": 1,
                             "score_margin_to_selected": 1.5,
@@ -344,6 +346,12 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
                 "topology_status": "ok",
                 "selected_local_command_source": "path_follow_0.5m",
                 "topology_command_influence": {"selected_hypothesis_id": "masked_cell_5_12"},
+                "planner_route_corridor": {
+                    "topology_hypothesis": {
+                        "hypothesis_id": "masked_cell_5_12",
+                        "near_parity_gate_reason": "eligible_near_parity_alternative",
+                    }
+                },
                 "topology_hypotheses": [
                     {
                         "rank": 0,
@@ -360,6 +368,12 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
                 "topology_status": "ok",
                 "selected_local_command_source": "topology_hypothesis",
                 "topology_command_influence": {"selected_hypothesis_id": "masked_cell_5_12"},
+                "planner_route_corridor": {
+                    "topology_hypothesis": {
+                        "hypothesis_id": "masked_cell_7_14",
+                        "near_parity_gate_reason": None,
+                    }
+                },
                 "topology_hypotheses": [
                     {
                         "rank": 0,
@@ -379,6 +393,15 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
         "dynamic_window": 1,
         "path_follow_0.5m": 1,
         "topology_hypothesis": 1,
+    }
+    assert summary["route_selector_selected_hypothesis_counts"] == {
+        "masked_cell_5_12": 1,
+        "masked_cell_7_14": 1,
+        "primary_route": 1,
+    }
+    assert summary["selected_row_near_parity_gate_reasons"] == {
+        "eligible_near_parity_alternative": 1,
+        "selected_primary_route": 1,
     }
     assert summary["hypothesis_progress_by_rank"]["0"] == {
         "samples": 3,

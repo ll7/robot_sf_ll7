@@ -450,6 +450,45 @@ def _selection_score_example(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _selected_topology_hypothesis_row(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the selected topology hypothesis diagnostic row for one step."""
+    route_corridor = row.get("planner_route_corridor")
+    if not isinstance(route_corridor, dict):
+        return None
+
+    selected = route_corridor.get("topology_hypothesis")
+    if isinstance(selected, dict):
+        return selected
+
+    scored_hypotheses = route_corridor.get("topology_hypotheses")
+    if not isinstance(scored_hypotheses, list):
+        return None
+    for item in scored_hypotheses:
+        if isinstance(item, dict) and item.get("selection_outcome") == "selected":
+            return item
+    return None
+
+
+def _selected_topology_hypothesis_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate selected-hypothesis and near-parity reason counts."""
+    selected_counts: Counter[str] = Counter()
+    near_parity_reason_counts: Counter[str] = Counter()
+
+    for row in steps:
+        selected = _selected_topology_hypothesis_row(row)
+        if selected is None:
+            continue
+        selected_counts[str(selected.get("hypothesis_id") or "unknown")] += 1
+        near_parity_reason = selected.get("near_parity_gate_reason")
+        if near_parity_reason is not None:
+            near_parity_reason_counts[str(near_parity_reason)] += 1
+
+    return {
+        "route_selector_selected_hypothesis_counts": dict(sorted(selected_counts.items())),
+        "selected_row_near_parity_gate_reasons": dict(sorted(near_parity_reason_counts.items())),
+    }
+
+
 def _reuse_penalty_diagnostic(row: dict[str, Any]) -> dict[str, Any] | None:
     """Return the topology reuse-penalty diagnostic payload for one step."""
     route_corridor = row.get("planner_route_corridor")
@@ -693,9 +732,11 @@ def _summarize_hypotheses(
             selection_score_examples.append(example)
 
     terminal = _terminal_outcome(done_info or {}, steps)
+    selected_hypothesis_summary = _selected_topology_hypothesis_summary(steps)
     return {
         "topology_status_counts": dict(sorted(availability_counts.items())),
         "selected_source_counts": dict(sorted(selected_source_counts.items())),
+        **selected_hypothesis_summary,
         "hypothesis_progress_by_rank": progress_by_rank,
         "topology_command_influence_counts": dict(sorted(influence_counts.items())),
         "hypothesis_switch_count": hypothesis_switch_count,
@@ -727,6 +768,10 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
         f"- Trace JSON: `{trace_path}`",
         f"- Topology status counts: `{summary['topology_status_counts']}`",
         f"- Selected local command sources: `{summary['selected_source_counts']}`",
+        "- Route-selector selected hypotheses: "
+        f"`{summary['route_selector_selected_hypothesis_counts']}`",
+        "- Selected-row near-parity gate reasons: "
+        f"`{summary['selected_row_near_parity_gate_reasons']}`",
         f"- Topology command influence counts: `{summary['topology_command_influence_counts']}`",
         f"- Hypothesis switch count: `{summary['hypothesis_switch_count']}`",
         f"- Corrective-behavior decision: `{summary['corrective_behavior']['decision']}`",

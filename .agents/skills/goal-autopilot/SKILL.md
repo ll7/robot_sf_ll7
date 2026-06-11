@@ -184,8 +184,13 @@ recorded cleanup.
 When a user-defined Codex usage threshold is active, run the configured usage-check command. For the
 external `codex-usage-status` skill, use the skill's `read_codex_usage.py` helper with
 `--stop-below-remaining <percent> --json`. That helper returns a `threshold_decision` object with
-`status: continue`, `status: stop`, or `status: unavailable`; treat `status: stop` as a hard paused
-state for the autopilot loop, not as another recoverable phase outcome.
+`status: continue`, `status: stop`, or `status: unavailable`. Handle every status explicitly:
+
+- `continue`: proceed with the next autopilot phase without creating or refreshing a pause record.
+- `stop`: enter a hard paused state for the autopilot loop, not another recoverable phase outcome.
+- `unavailable`: treat missing, malformed, or incomplete `threshold_decision` output as uncertain;
+  log the raw helper output in the ledger, do not create a hard pause record, and continue only with
+  conservative cleanup or handoff work unless the user explicitly permits a normal phase to proceed.
 
 Persist the stop decision in the common Git directory before returning so repeated
 automatic continue prompts can short-circuit without rereading repo state, rerunning
@@ -198,9 +203,11 @@ mkdir -p "$PAUSE_DIR"
 # $PAUSE_DIR/usage-pause.md
 ```
 
-The pause record should include the observed timestamp, threshold window,
-remaining percentage, threshold percentage, and whether the user may explicitly
-override the guardrail.
+The pause record should include the observed timestamp, threshold window, remaining percentage,
+threshold percentage, whether the user may explicitly override the guardrail, `lastUsageCheckAt`,
+and `usageCheckCooldownSeconds`. The default cooldown is 900 seconds. A caller may set a longer
+cooldown in the pause record, but automatic "continue" prompts must compare the current time against
+`lastUsageCheckAt + usageCheckCooldownSeconds` before invoking usage-check tooling again.
 
 While the usage pause is active:
 

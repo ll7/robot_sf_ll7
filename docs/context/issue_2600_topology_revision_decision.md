@@ -1,4 +1,4 @@
-# Issue #2600 Topology Revision Decision
+# Issue #2600 Topology Revision Decision 2026-06-11
 
 Issue: [#2600](https://github.com/ll7/robot_sf_ll7/issues/2600)
 Status: current, diagnostic-only decision.

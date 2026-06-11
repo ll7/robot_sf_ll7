@@ -55,6 +55,10 @@ Before each merge operation, verify:
 2. PR is not a draft. If draft, skip and report.
 3. PR targets `main` (or the explicitly allowed base branch).
 4. CI checks are passing (use `uv run python scripts/dev/check_pr_ci_status.py <number>`).
+   In non-TTY agent sessions, prefer bounded polling over `gh pr checks --watch`:
+   `uv run python scripts/dev/check_pr_ci_status.py <number> --poll-attempts 20 --poll-interval 30`.
+   Exit code `2` means checks were still queued or in progress after the polling budget; inspect the
+   listed check URLs or run `gh run view <run-id> --json status,conclusion,jobs` for job state.
 5. No merge conflicts exist (`gh pr view <number> --json mergeable`).
 6. The PR has no unresolved review threads or pending/requested reviewers.
 7. Branch protection rules on `main` allow merges from the current actor.
@@ -99,6 +103,10 @@ Do not merge multiple PRs in parallel. Process sequentially.
   - Do not merge. Report the failing check name and URL.
   - Do not override CI failure unless the user explicitly requests override, and
     only after recording the override rationale.
+  - If checks are queued or in progress, do not use unbounded watch mode in non-TTY sessions.
+    Poll with `scripts/dev/check_pr_ci_status.py --poll-attempts ... --poll-interval ...`; logs
+    may be unavailable until a job completes, so use `gh run view <run-id> --json status,conclusion,jobs`
+    to distinguish queued, in-progress, and completed states before fetching logs.
 
 - Auth/permission failure:
   - Stop immediately. Report the failing command, exit code, and stderr.

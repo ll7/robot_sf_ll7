@@ -89,7 +89,11 @@ class QueueEntry:
         if not isinstance(auto_submit, bool):
             raise QueueValidationError(f"{queue_id}: auto_submit must be boolean")
 
-        wrapper = payload.get("wrapper", "scripts/dev/sbatch_use_max_time.sh")
+        wrapper_default = "scripts/dev/sbatch_use_max_time.sh"
+        wrapper_raw = payload.get("wrapper")
+        if wrapper_raw is not None and not isinstance(wrapper_raw, str):
+            raise QueueValidationError(f"{queue_id}: wrapper must be a string")
+        wrapper = wrapper_raw or wrapper_default
         wrapper_path = repo_root / wrapper
         if not wrapper_path.is_file():
             raise QueueValidationError(f"{queue_id}: wrapper not found: {wrapper}")
@@ -113,7 +117,7 @@ class QueueEntry:
             priority_reason=str(payload["priority_reason"]),
             auto_submit=auto_submit,
             job_name=str(payload.get("job_name") or f"gse-{payload['issue']}-{queue_id}"),
-            wrapper=str(wrapper),
+            wrapper=wrapper,
             wrapper_args=wrapper_args,
             sbatch_args=sbatch_args,
         )
@@ -170,6 +174,10 @@ def _validate_entry_paths(
     """Validate that an entry names at least one existing execution surface."""
     if _is_missing(config) and _is_missing(launcher):
         raise QueueValidationError(f"{queue_id}: either config or launcher is required")
+    if config is not None and not isinstance(config, str):
+        raise QueueValidationError(f"{queue_id}: config must be a string")
+    if launcher is not None and not isinstance(launcher, str):
+        raise QueueValidationError(f"{queue_id}: launcher must be a string")
     if config and not (repo_root / config).is_file():
         raise QueueValidationError(f"{queue_id}: config not found: {config}")
     if launcher and not (repo_root / launcher).is_file():
@@ -194,7 +202,9 @@ def _require_list(payload: dict[str, Any], field: str, queue_id: str) -> list[An
 
 def _optional_string_list(payload: dict[str, Any], field: str, queue_id: str) -> list[str]:
     """Return an optional list of strings."""
-    value = payload.get(field, [])
+    value = payload.get(field)
+    if value is None:
+        return []
     if not isinstance(value, list) or not all(isinstance(arg, str) for arg in value):
         raise QueueValidationError(f"{queue_id}: {field} must be a list of strings")
     return value
@@ -382,6 +392,26 @@ def _manifest_duplicate_evidence(entry: QueueEntry, *, repo_root: Path) -> list[
     return evidence
 
 
+def _parse_squeue_job_names(output: str) -> list[str]:
+    """Extract job names from squeue whitespace-separated output (column 2)."""
+    names: list[str] = []
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] not in ("JOBID",):
+            names.append(parts[1])
+    return names
+
+
+def _parse_sacct_job_names(output: str) -> list[str]:
+    """Extract job names from sacct -P pipe-separated output (field 2)."""
+    names: list[str] = []
+    for line in output.splitlines():
+        fields = line.split("|")
+        if len(fields) >= 2 and fields[0] not in ("JobID",):
+            names.append(fields[1])
+    return names
+
+
 def _scheduler_duplicate_evidence(
     entry: QueueEntry,
     *,
@@ -390,14 +420,16 @@ def _scheduler_duplicate_evidence(
 ) -> list[str]:
     """Return scheduler reasons this entry appears to duplicate an existing run."""
     evidence: list[str] = []
-    if entry.job_name and entry.job_name in active_jobs:
+    active_names = _parse_squeue_job_names(active_jobs)
+    recent_names = _parse_sacct_job_names(recent_jobs)
+    if entry.job_name and entry.job_name in active_names:
         evidence.append(f"active job with name {entry.job_name}")
-    if entry.job_name and entry.job_name in recent_jobs:
+    if entry.job_name and entry.job_name in recent_names:
         evidence.append(f"recent job with name {entry.job_name}")
     if entry.job_name.startswith("gse-"):
-        for line in active_jobs.splitlines():
-            if "gse-" in line and entry.job_name not in line:
-                evidence.append(f"another active gse job: {line.strip()}")
+        for name in active_names:
+            if name.startswith("gse-") and name != entry.job_name:
+                evidence.append(f"another active gse job: {name}")
                 break
     return evidence
 
@@ -476,13 +508,16 @@ def _git_state(repo_root: Path) -> dict[str, Any]:
 
 def _run_git(repo_root: Path, command: list[str]) -> str:
     """Run a git command and return stripped stdout, tolerating unavailable Git in tests."""
-    completed = subprocess.run(
-        command,
-        cwd=repo_root,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return ""
     if completed.returncode != 0:
         return ""
     return completed.stdout.strip()

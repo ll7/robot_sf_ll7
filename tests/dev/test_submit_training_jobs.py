@@ -333,3 +333,123 @@ def test_experiment_id_is_deterministic(tmp_path: Path) -> None:
         submit_training_jobs.deterministic_experiment_id(entry, commit="abcdef123456")
         == "issue-999-example_seed0-1_abcdef1_auxme"
     )
+
+
+def test_parse_squeue_job_names_extracts_exact_names() -> None:
+    """squeue whitespace output should yield exact job names from column 2."""
+    output = (
+        "JOBID NAME STATE PARTITION TIME LIMIT REASON\n"
+        "1234 gse-999-example RUNNING auxme 01:00:00 02:00:00 None\n"
+        "1235 other-job PENDING auxme 00:00:00 02:00:00 Priority\n"
+    )
+    names = submit_training_jobs._parse_squeue_job_names(output)
+    assert names == ["gse-999-example", "other-job"]
+
+
+def test_parse_sacct_job_names_extracts_exact_names() -> None:
+    """sacct -P pipe output should yield exact job names from field 2."""
+    output = (
+        "JobID|JobName|State|ExitCode|Start|End\n"
+        "1234|gse-999-example|COMPLETED|0:0|2026-06-10T10:00:00|2026-06-10T11:00:00\n"
+        "1234.batch|batch|COMPLETED|0:0|2026-06-10T10:00:00|2026-06-10T11:00:00\n"
+    )
+    names = submit_training_jobs._parse_sacct_job_names(output)
+    assert names == ["gse-999-example", "batch"]
+
+
+def test_scheduler_duplicate_uses_exact_name_match_not_substring(tmp_path: Path) -> None:
+    """Substring matches in squeue/sacct output should not trigger false positives."""
+    repo = _write_minimal_repo(tmp_path)
+    entry = submit_training_jobs.QueueEntry.from_mapping(
+        _queue_payload(job_name="my-train")["entries"][0], repo
+    )
+    active = (
+        "JOBID NAME STATE PARTITION TIME LIMIT REASON\n"
+        "1234 my-train-v2 RUNNING auxme 01:00:00 02:00:00 None\n"
+    )
+    recent = (
+        "JobID|JobName|State|ExitCode|Start|End\n"
+        "1234|my-train-v2|COMPLETED|0:0|"
+        "2026-06-10T10:00:00|2026-06-10T11:00:00\n"
+    )
+    evidence = submit_training_jobs._scheduler_duplicate_evidence(
+        entry, active_jobs=active, recent_jobs=recent
+    )
+    assert not evidence
+
+
+def test_run_git_returns_empty_on_file_not_found(tmp_path: Path) -> None:
+    """_run_git should return empty string when git binary is not found."""
+    result = submit_training_jobs._run_git(tmp_path, ["nonexistent-git-binary", "branch"])
+    assert result == ""
+
+
+def test_validate_entry_paths_rejects_non_string_config(tmp_path: Path) -> None:
+    """config values that are not strings should fail validation."""
+    with pytest.raises(submit_training_jobs.QueueValidationError, match="config must be a string"):
+        submit_training_jobs._validate_entry_paths(
+            "test-id", config=42, launcher=None, repo_root=tmp_path
+        )
+
+
+def test_validate_entry_paths_rejects_non_string_launcher(tmp_path: Path) -> None:
+    """launcher values that are not strings should fail validation."""
+    with pytest.raises(
+        submit_training_jobs.QueueValidationError, match="launcher must be a string"
+    ):
+        submit_training_jobs._validate_entry_paths(
+            "test-id", config=None, launcher=True, repo_root=tmp_path
+        )
+
+
+def test_wrapper_null_falls_back_to_default(tmp_path: Path) -> None:
+    """Explicit null wrapper should silently fall back to the default wrapper."""
+    repo = _write_minimal_repo(tmp_path)
+    payload = _queue_payload(wrapper=None)
+    entry = submit_training_jobs.QueueEntry.from_mapping(payload["entries"][0], repo)
+    assert entry.wrapper == "scripts/dev/sbatch_use_max_time.sh"
+
+
+def test_wrapper_empty_string_falls_back_to_default(tmp_path: Path) -> None:
+    """Explicit empty string wrapper should silently fall back to the default wrapper."""
+    repo = _write_minimal_repo(tmp_path)
+    payload = _queue_payload(wrapper="")
+    entry = submit_training_jobs.QueueEntry.from_mapping(payload["entries"][0], repo)
+    assert entry.wrapper == "scripts/dev/sbatch_use_max_time.sh"
+
+
+def test_wrapper_non_string_rejected(tmp_path: Path) -> None:
+    """Non-string wrapper values should fail validation."""
+    repo = _write_minimal_repo(tmp_path)
+    payload = _queue_payload(wrapper=123)
+    with pytest.raises(submit_training_jobs.QueueValidationError, match="wrapper must be a string"):
+        submit_training_jobs.QueueEntry.from_mapping(payload["entries"][0], repo)
+
+
+def test_optional_list_null_normalizes_to_empty(tmp_path: Path) -> None:
+    """Explicit null sbatch_args/wrapper_args should normalize to empty list."""
+    repo = _write_minimal_repo(tmp_path)
+    payload = _queue_payload(sbatch_args=None, wrapper_args=None)
+    entry = submit_training_jobs.QueueEntry.from_mapping(payload["entries"][0], repo)
+    assert entry.sbatch_args == []
+    assert entry.wrapper_args == []
+
+
+def test_optional_list_non_list_rejected(tmp_path: Path) -> None:
+    """Non-list sbatch_args values should fail validation."""
+    repo = _write_minimal_repo(tmp_path)
+    payload = _queue_payload(sbatch_args="not-a-list")
+    with pytest.raises(
+        submit_training_jobs.QueueValidationError, match="sbatch_args must be a list"
+    ):
+        submit_training_jobs.QueueEntry.from_mapping(payload["entries"][0], repo)
+
+
+def test_optional_list_non_string_entries_rejected(tmp_path: Path) -> None:
+    """Lists with non-string entries should fail validation."""
+    repo = _write_minimal_repo(tmp_path)
+    payload = _queue_payload(wrapper_args=[1, 2, 3])
+    with pytest.raises(
+        submit_training_jobs.QueueValidationError, match="wrapper_args must be a list"
+    ):
+        submit_training_jobs.QueueEntry.from_mapping(payload["entries"][0], repo)

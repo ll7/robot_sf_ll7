@@ -140,6 +140,8 @@ knowledge, not every transient iteration detail.
   [issue_2571_active_research_queue.md](issue_2571_active_research_queue.md)
 * Dissertation claim-export candidate report:
   [dissertation_claim_export_candidate_report.md](dissertation_claim_export_candidate_report.md)
+* Dissertation research bridge:
+  [dissertation_research_bridge.md](dissertation_research_bridge.md)
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
 * Issue #2282 topology selection instrumentation smoke:
@@ -158,6 +160,10 @@ knowledge, not every transient iteration detail.
   [issue_2563_topology_corrective_revision.md](issue_2563_topology_corrective_revision.md)
 * Issue #2570 Topology Revise Status Propagation:
   [issue_2570_topology_revise_status_propagation.md](issue_2570_topology_revise_status_propagation.md)
+* Issue #2600 Topology Revision Decision 2026-06-11:
+  [issue_2600_topology_revision_decision.md](issue_2600_topology_revision_decision.md)
+* Issue #2540 Topology Primary-Route Reuse-Penalty Diagnostic:
+  [issue_2540_topology_reuse_penalty_diagnostic.md](issue_2540_topology_reuse_penalty_diagnostic.md)
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:
@@ -216,6 +222,8 @@ knowledge, not every transient iteration detail.
   [issue_2565_uncertainty_gating_smoke.md](issue_2565_uncertainty_gating_smoke.md)
 * Issue #2538 ScenarioBelief Planner Projection Smoke:
   [issue_2538_scenario_belief_planner_projection.md](issue_2538_scenario_belief_planner_projection.md)
+* Issue #2606 Uncertainty Gate Evaluation:
+  [issue_2606_uncertainty_gate_evaluation.md](issue_2606_uncertainty_gate_evaluation.md)
 * Issue #2526 Cyclist-Like VRU Smoke:
   [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md)
 * Issue #2527 Waiting-Then-Crossing Fixture:
@@ -228,6 +236,8 @@ knowledge, not every transient iteration detail.
   [issue_2459_socnavbench_hunavsim_mapping.md](issue_2459_socnavbench_hunavsim_mapping.md)
 * Issue #2442 Navground planner-zoo assessment:
   [issue_2442_navground_assessment.md](issue_2442_navground_assessment.md)
+* Issue #2550 (2026-06-11): Navground Adapter Spike Report:
+  [issue_2550_navground_adapter_spike.md](issue_2550_navground_adapter_spike.md)
 * Issue #2476 Multimodal Prediction Benchmark Contract:
   [issue_2476_multimodal_prediction_benchmark.md](issue_2476_multimodal_prediction_benchmark.md)
 * Issue #2496 Multimodal Prediction Contract Smoke:
@@ -310,6 +320,10 @@ knowledge, not every transient iteration detail.
 * Issue #2594 broader h500 static-deadlock recenter slice:
 
   [issue_2594_static_deadlock_broader_h500.md](issue_2594_static_deadlock_broader_h500.md)
+
+* Issue #2596 Static-Deadlock Recenter Claim Boundary 2026-06-11:
+
+  [issue_2596_static_deadlock_recenter_claim_boundary.md](issue_2596_static_deadlock_recenter_claim_boundary.md)
 
 * Issue #2547 counterfactual mechanism taxonomy:
 
@@ -723,6 +737,10 @@ knowledge, not every transient iteration detail.
   [issue_2518_topology_near_parity_gate.md](issue_2518_topology_near_parity_gate.md)
 * Issue #2530 topology near-parity corrective-behavior smoke:
   [issue_2530_topology_near_parity_corrective_smoke.md](issue_2530_topology_near_parity_corrective_smoke.md)
+* Issue #2563 Topology Corrective Revision Proposal 2026-06-07:
+  [issue_2563_topology_corrective_revision.md](issue_2563_topology_corrective_revision.md)
+* Issue #2600 Topology Revision Decision 2026-06-11:
+  [issue_2600_topology_revision_decision.md](issue_2600_topology_revision_decision.md)
 * Issue #2522 topology and AMV why-first diagnostics:
   [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
   ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),

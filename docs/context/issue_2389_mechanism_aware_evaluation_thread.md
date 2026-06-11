@@ -22,7 +22,7 @@ work one place to connect mechanism closure state to a possible paper/dissertati
 
 | Mechanism lane | Current result | Missing evidence | Dependency / next action | Thread decision |
 | --- | --- | --- | --- | --- |
-| Static recentering on held-out transfer rows | The held-out trace recorded zero recenter activations and unchanged terminal outcomes. | No missing evidence for this slice; the mechanism was inactive on the inspected row. | Reopen only if a future slice predeclares states where recentering should activate. | `stop` for this slice. |
+| Static recentering on held-out transfer and static-deadlock rows | Held-out transfer remains `inactive` on the unsolved row: zero activations, unchanged command source, and `0.0 m` trajectory delta. The #2588/#2590 h120 static-deadlock controlled traces each found one active trace-change row (`classic_bottleneck_low`, seed `113`) without terminal rescue; #2592 reran that active row at h500 and both recenter pairings rescued it at step `122`; #2594 repeated across a broader 3x3 h500 slice with the same single active rescue. #2596 classifies this as useful controlled-trace evidence whose promotion is blocked by scope. | No missing evidence for the held-out slice; the mechanism was inactive on the inspected row. For static-deadlock: a harder unsolved-row expansion is needed before promotion. | Reopen held-out only if a future slice predeclares activation-targeted states. For static-deadlock, the next empirical issue should predeclare a harder unsolved-row expansion with the same trace-field contract and a stop rule treating no new unsolved active rescue rows as `synthesize_stop`. | `stop` for held-out transfer; `controlled_trace_negative_mixed` for #2588/#2590; `delayed_rescue_candidate` for #2592; `broader_delayed_rescue_supported` for #2594; `promotion_blocked_by_scope` for #2596 synthesis. |
 | Topology guidance / primary-route scoring | Alternatives were generated, but the score surface overselected `primary_route`; the only non-primary selector choice was a numerical tie and did not influence the local command. | A falsification case where a valid non-primary route should clearly win. | Use the near-parity selection preflight before downstream command retuning. | `revise`. |
 | AMV actuation-aware scoring | Clipping improved on the tiny AMV timeout trace, yaw saturation did not explain the timeout, and route progress stayed similar. | Route-progress geometry or horizon/task-completion blocker analysis. | Investigate route-progress blockers separately before adding another AMV actuation scorer. | `revise`. |
 | AMMV Social Force renderable trace review | The benchmark path regenerates aggregate episode rows, not step-event frames with AMMV force or intrusion metadata. | Durable `simulation_trace_export.v1` step frames for the AMV case. | Implement a recorder/export path or a narrow direct-probe exporter with explicit limitations. | `blocked`. |
@@ -77,7 +77,9 @@ alone.
 - Research-v1 claim gate:
   [issue_2153_research_v1_evidence_map.md](issue_2153_research_v1_evidence_map.md)
 - Static recentering:
-  [issue_2306_static_recenter_activation_trace.md](issue_2306_static_recenter_activation_trace.md)
+  [issue_2306_static_recenter_activation_trace.md](issue_2306_static_recenter_activation_trace.md),
+  [issue_2566_static_recenter_inactive_propagation.md](issue_2566_static_recenter_inactive_propagation.md),
+  [issue_2596_static_deadlock_recenter_claim_boundary.md](issue_2596_static_deadlock_recenter_claim_boundary.md)
 - Topology scoring:
   [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md),
   [issue_2393_topology_selection_preflight.md](issue_2393_topology_selection_preflight.md)

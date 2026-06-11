@@ -21,7 +21,8 @@ Use this skill only for issue-791-specific Auxme training submissions that rely 
 
 ## Workflow
 
-1. Read `SLURM/AGENTS.md`, `SLURM/Auxme/README.md`, and `docs/dev/slurm_submission.md`.
+1. Read `SLURM/AGENTS.md`, `SLURM/Auxme/README.md`, and `docs/dev/slurm_submission.md`; confirm
+   the private operations overlay is configured before checking live Auxme capacity.
 2. Confirm the explicit config path and reject wrapper-default config use.
 3. Check live partition pressure with `scripts/dev/auxme_partition_status.sh --recommend`.
 4. Submit with `scripts/dev/sbatch_auxme_issue791.sh --config <path> --job-name <name> SLURM/Auxme/<script>.sl`.

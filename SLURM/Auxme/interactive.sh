@@ -1,1 +1,6 @@
-srun -v --job-name=robot-sf --account=mitarbeiter --partition=a30 --nodes=1 --ntasks-per-node=1 --cpus-per-task=24 --hint=multithread --mem=32G --time=01:00:00 --qos=a30-gpu --pty bash -i
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "This Auxme helper moved to the private operations overlay." >&2
+echo "Configure ROBOT_SF_PRIVATE_OPS and use the matching private script there." >&2
+exit 2

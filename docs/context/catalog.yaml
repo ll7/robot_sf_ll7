@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-07
+updated_at: 2026-06-11
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -225,6 +225,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2596_static_deadlock_recenter_claim_boundary.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2547_counterfactual_mechanism_taxonomy.md
     status: current
     freshness: maintained
@@ -409,6 +413,14 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2600_topology_revision_decision.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_2540_topology_reuse_penalty_diagnostic.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2566_static_recenter_inactive_propagation.md
     status: current
     freshness: maintained
@@ -418,6 +430,10 @@ entries:
     freshness: maintained
     area: benchmark_evidence
   - path: docs/context/dissertation_claim_export_candidate_report.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/dissertation_research_bridge.md
     status: current
     freshness: maintained
     area: benchmark_evidence
@@ -593,6 +609,10 @@ entries:
     status: current
     freshness: dated
     area: planner_integration
+  - path: docs/context/issue_2550_navground_adapter_spike.md
+    status: current
+    freshness: dated
+    area: planner_integration
   - path: docs/context/policy_search/learned_policy_registry.md
     status: current
     freshness: maintained
@@ -634,6 +654,14 @@ entries:
     freshness: evidence
     area: learned_policy
   - path: docs/context/evidence/issue_2538_scenario_belief_planner_projection/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/issue_2606_uncertainty_gate_evaluation.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2606_uncertainty_gate/summary.json
     status: evidence
     freshness: evidence
     area: learned_policy

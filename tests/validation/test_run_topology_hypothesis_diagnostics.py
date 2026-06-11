@@ -297,6 +297,12 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
                 "selected_local_command_source": "dynamic_window",
                 "topology_command_influence": {"selected_hypothesis_id": "primary_route"},
                 "planner_route_corridor": {
+                    "topology_reuse_penalty": {
+                        "reuse_penalty_applied": True,
+                        "reuse_penalty_reason": "primary_route_selected_2_times_in_last_3_steps",
+                        "recent_primary_selection_count": 2,
+                        "eligible_near_parity_alternative_exists": True,
+                    },
                     "topology_hypotheses": [
                         {
                             "hypothesis_id": "primary_route",
@@ -322,7 +328,7 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
                             "selection_outcome": "rejected",
                             "rejection_reason": "lower_topology_selection_score",
                         },
-                    ]
+                    ],
                 },
                 "topology_hypotheses": [
                     {
@@ -422,3 +428,9 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
             ],
         }
     ]
+    assert summary["topology_reuse_penalty"] == {
+        "applied_steps": 1,
+        "eligible_near_parity_alternative_steps": 1,
+        "max_recent_primary_selection_count": 2,
+        "reason_counts": {"primary_route_selected_2_times_in_last_3_steps": 1},
+    }

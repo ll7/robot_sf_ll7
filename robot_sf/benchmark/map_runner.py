@@ -3053,9 +3053,14 @@ def _intent_trace_payload(metadata: dict[str, Any], velocity: np.ndarray) -> dic
         "claim_boundary": metadata["claim_boundary"],
         "behavior_parameters": metadata["behavior_parameters"],
     }
-    signal_payload = _signal_state_trace_payload(metadata.get("signal_state"), phase)
-    if signal_payload is not None:
-        payload["signal_state"] = signal_payload
+    proxy_payload = _signal_state_proxy_wrapper(
+        metadata.get("signal_state"),
+        phase,
+        metadata["intent_label"],
+        metadata["intent_source"],
+    )
+    if proxy_payload is not None:
+        payload["signal_state"] = proxy_payload
     return payload
 
 
@@ -3098,6 +3103,76 @@ def _signal_state_trace_payload(signal_state: Any, intent_phase: str) -> dict[st
             signal_state.get("claim_boundary")
             or "Proxy signal-state metadata only; not benchmark evidence."
         ),
+    }
+
+
+_PROXY_TRACE_FIELDS_PRESENT = [
+    "signal_phase",
+    "pedestrian_intent",
+    "robot_stop_or_yield_expectation",
+    "claim_boundary",
+    "trace_fields_present",
+    "signal_state",
+]
+
+
+def _synth_robot_stop_or_yield_expectation(
+    robot_right_of_way: bool,
+    pedestrian_right_of_way: bool,
+    legality_state: str,
+) -> str:
+    """Synthesize a robot stop-or-yield expectation from proxy right-of-way fields.
+
+    Returns:
+        str: Diagnostic expectation label for trace/summary metadata.
+    """
+    if legality_state == "pedestrian_wait_required" and robot_right_of_way:
+        return "proceed_clear"
+    if legality_state == "pedestrian_crossing_allowed" and pedestrian_right_of_way:
+        return "yield_to_pedestrian"
+    if pedestrian_right_of_way:
+        return "yield_to_pedestrian"
+    return "proceed_clear"
+
+
+def _signal_state_proxy_wrapper(
+    signal_state: Any,
+    intent_phase: str,
+    intent_label: str,
+    intent_source: str,
+) -> dict[str, Any] | None:
+    """Wrap signal-state proxy with bounded diagnostic fields for trace/summary export.
+
+    This wrapper adds pedestrian_intent, robot_stop_or_yield_expectation,
+    trace_fields_present, and claim_boundary=proxy_diagnostic on top of the
+    existing signal-state trace payload. It does not add runtime simulation
+    behavior or planner-observable signal-phase semantics.
+
+    Returns:
+        dict[str, Any] | None: Proxy diagnostic payload, or None when the
+        input signal_state is absent.
+    """
+    base = _signal_state_trace_payload(signal_state, intent_phase)
+    if base is None:
+        return None
+
+    pedestrian_intent = {
+        "intent_label": intent_label,
+        "intent_phase": intent_phase,
+        "intent_source": intent_source,
+    }
+    robot_stop_or_yield_expectation = _synth_robot_stop_or_yield_expectation(
+        base["robot_right_of_way"],
+        base["pedestrian_right_of_way"],
+        base["legality_state"],
+    )
+    return {
+        **base,
+        "signal_phase": base["phase"],
+        "pedestrian_intent": pedestrian_intent,
+        "robot_stop_or_yield_expectation": robot_stop_or_yield_expectation,
+        "trace_fields_present": list(_PROXY_TRACE_FIELDS_PRESENT),
+        "claim_boundary": "proxy_diagnostic",
     }
 
 
@@ -3198,25 +3273,42 @@ def _intent_conditioned_behavior_summary(
         None,
     )
     if isinstance(signal_state, dict):
-        summary["signal_state"] = {
-            "schema_version": str(signal_state.get("schema_version") or "signal-state-proxy.v1"),
-            "status": str(signal_state.get("status") or "proxy_diagnostic_only"),
-            "signal_id": str(signal_state.get("signal_id") or "unknown_signal"),
-            "conflict_zone_id": str(
-                signal_state.get("conflict_zone_id") or "unknown_conflict_zone"
+        first_intent = next(
+            (
+                metadata
+                for metadata in summarized_pedestrians
+                if isinstance(metadata, dict) and metadata.get("intent_label")
             ),
-            "planner_observable": bool(signal_state.get("planner_observable", False)),
-            "observation_mode": str(signal_state.get("observation_mode") or "trace_metadata_only"),
-            "benchmark_evidence": bool(signal_state.get("benchmark_evidence", False)),
-            "claim_boundary": str(
-                signal_state.get("claim_boundary")
-                or "Proxy signal-state metadata only; not benchmark evidence."
-            ),
-            "trace_fields": [
-                "pedestrians[].signal_state",
-                "pedestrians[].intent_phase",
-            ],
-        }
+            {},
+        )
+        phases = first_intent.get("intent_phases")
+        first_phase = str(phases[0]) if isinstance(phases, list) and phases else "unknown"
+        proxy_payload = _signal_state_proxy_wrapper(
+            signal_state,
+            first_phase,
+            str(first_intent.get("intent_label", "unknown")),
+            str(first_intent.get("intent_source", "unknown")),
+        )
+        summary["signal_state"] = (
+            proxy_payload
+            if proxy_payload is not None
+            else {
+                "schema_version": str(
+                    signal_state.get("schema_version") or "signal-state-proxy.v1"
+                ),
+                "status": str(signal_state.get("status") or "proxy_diagnostic_only"),
+                "signal_id": str(signal_state.get("signal_id") or "unknown_signal"),
+                "conflict_zone_id": str(
+                    signal_state.get("conflict_zone_id") or "unknown_conflict_zone"
+                ),
+                "planner_observable": bool(signal_state.get("planner_observable", False)),
+                "observation_mode": str(
+                    signal_state.get("observation_mode") or "trace_metadata_only"
+                ),
+                "benchmark_evidence": bool(signal_state.get("benchmark_evidence", False)),
+                "claim_boundary": "proxy_diagnostic",
+            }
+        )
     return summary
 
 

@@ -669,6 +669,10 @@ knowledge, not every transient iteration detail.
   [issue_2538_scenario_belief_planner_projection.md](issue_2538_scenario_belief_planner_projection.md)
 * Issue #2479 Real-Trajectory Scenario Prior Scope (2026-06-06):
   [issue_2479_real_trajectory_scenario_prior.md](issue_2479_real_trajectory_scenario_prior.md)
+* Issue #2523 Scenario-Prior Smoke:
+  [issue_2523_scenario_prior_smoke.md](issue_2523_scenario_prior_smoke.md)
+  ([summary](evidence/issue_2523_scenario_prior_smoke/summary.json),
+  [artifact](evidence/issue_2523_scenario_prior_smoke/scenario_prior.v1.json))
 * Issue #2474 Signalized Pedestrian Crossing Benchmark Scope (2026-06-06):
   [issue_2474_signalized_crossing_benchmark.md](issue_2474_signalized_crossing_benchmark.md)
 * Issue #2475 Probabilistic Prediction Interface (2026-06-06):

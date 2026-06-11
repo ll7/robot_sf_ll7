@@ -1,0 +1,26 @@
+{
+  "issue": 2523,
+  "artifact": "scenario_prior.v1.json",
+  "artifact_schema": "scenario_prior.v1",
+  "input_type": "proxy_synthetic",
+  "real_data_status": "missing",
+  "external_data_check": {
+    "command": "python scripts/tools/manage_external_data.py list",
+    "sdd_status": "missing"
+  },
+  "classification": "proxy_schema_adequate_for_smoke",
+  "benchmark_evidence": false,
+  "realism_claim": false,
+  "training_input": false,
+  "related_surfaces": [
+    "https://github.com/ll7/robot_sf_ll7/pull/2501",
+    "configs/research/scenario_distribution_prior_issue_2479.yaml",
+    "docs/context/issue_2479_real_trajectory_scenario_prior.md"
+  ],
+  "validation": [
+    "uv run pytest tests/research/test_scenario_distribution_prior_manifest.py tests/research/test_issue_2523_scenario_prior_smoke.py -q",
+    "uv run ruff check tests/research/test_issue_2523_scenario_prior_smoke.py",
+    "bash scripts/dev/check_docs_proof_consistency_diff.sh",
+    "git diff --check"
+  ]
+}

@@ -705,6 +705,14 @@ entries:
     status: proposal
     freshness: maintained
     area: learned_policy
+  - path: docs/context/issue_2523_scenario_prior_smoke.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2523_scenario_prior_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_2474_signalized_crossing_benchmark.md
     status: proposal
     freshness: maintained

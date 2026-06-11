@@ -3,6 +3,10 @@
 Issue: [#2443](https://github.com/ll7/robot_sf_ll7/issues/2443)
 Status: analysis-only trace review from compact tracked summaries.
 
+Update 2026-06-11 (#2531): this AMV actuation-aware hybrid-rule row is locked to
+summary-timeline-only evidence. The later #2405/#2428 loader-valid AMMV Social Force trace exports
+are a different diagnostic lane and do not provide raw frame/event IDs for this #2443 row.
+
 ## Question
 
 For the matched AMV actuation baseline/intervention pair, did reduced command clipping fail to

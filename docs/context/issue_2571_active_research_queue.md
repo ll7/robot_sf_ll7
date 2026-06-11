@@ -27,7 +27,7 @@ below, implement the named gate issue before scheduling the downstream training 
 | Static recentering | Inactive on the current held-out transfer route after #2438/#2520; still useful as slice-local diagnostic evidence. | Keep out of primary transfer scheduling. Use [#2566](https://github.com/ll7/robot_sf_ll7/issues/2566) for any remaining mechanism-card/status propagation. |
 | Topology mitigation | `revise` after #2530; #2563 selects primary-route reuse penalty as the next diagnostic hypothesis, and #2570 propagates the no-overclaim status. | Keep topology benchmark, leaderboard, and transfer claims frozen until #2540 or a narrower #2563-derived diagnostic shows corrective behavior. |
 | Adversarial RL/diffusion | Proposal only until manifest quality is proven for the candidate batch. | Follow [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md) before any learned adversarial expansion. |
-| Oracle imitation training | Issue #1496 remains blocked on durable artifact access, not model code. | Use the Issue #2620 `artifact_retrieval_blocked` audit before Issue #2569, Issue #1496, or any new training run that depends on the traces. |
+| Oracle imitation training | Issue #1496 remains blocked on durable artifact access, not model code. | Use the [Issue #2620](issue_2620_oracle_artifact_access.md) `artifact_retrieval_blocked` audit before Issue #2569, Issue #1496, or any new training run that depends on the traces. |
 
 ## Source Map
 

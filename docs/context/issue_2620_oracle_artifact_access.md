@@ -49,7 +49,7 @@ oracle_imitation_artifact_access:
   split_leakage_status: passed_manifest_check
   raw_trace_retrieval_status: blocked
   downstream_training_ready: false
-  blocker_if_not_ready: durable raw trace and manifest pointers are missing; rerun or promote from a Slurm-capable/artifact-capable host before Issue #1496 starts
+  blocker_if_not_ready: The train, validation, and evaluation raw trace JSONL files and their source manifests need concrete durable retrieval pointers, or a deliberate rerun on a Slurm-capable host that publishes those pointers and verifies the recorded checksums before Issue #1496 starts training.
 ```
 
 Decision outcome: `artifact_retrieval_blocked`.

@@ -62,8 +62,8 @@ claim boundary rather than adding another local diagnostic with the same limitat
 5. Keep adversarial RL/diffusion expansion gated on
    [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md): #2562
    smoke and #2567 quality metrics are prerequisite diagnostics, not benchmark evidence. Keep
-   oracle-imitation training, including Issue #1496 and Issue #2569, gated on Issue #2620 until
-   durable trace artifact access exists; the Issue #2620 audit preserves
+   oracle-imitation training, including Issue #1496 and Issue #2569, gated on
+   [Issue #2620](issue_2620_oracle_artifact_access.md) until durable trace artifact access exists; the Issue #2620 audit preserves
    `artifact_retrieval_blocked` because the Issue #2441 raw traces have no durable pointer and are
    absent from the current machine.
 6. Use learned-policy work only when it changes the interface or proof gate, not when it repeats the

@@ -388,6 +388,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 ### Performance & CI
 
 * **[Performance Notes](./performance_notes.md)** - Performance targets, benchmarking, and optimization notes
+* **[Issue 2536 Speed Discovery](./context/issue_2536_speed_discovery.md)** - Bounded simulator-speed candidate discovery and next occupancy-grid rasterization proof path
 * **[Issue 483 Execution Notes](./context/issue_483_execution.md)** - Cold/warm regression guard implementation details and workflow wiring
 * **[Issue 495 Execution Notes](./context/issue_495_execution.md)** - Overall trend benchmark matrix, history comparison, and nightly cache-backed tracking
 * **[Warning Hygiene Sweep](./context/warning_hygiene_2026-02-13.md)** - Warning-noise root-cause fixes and dependency mitigation notes

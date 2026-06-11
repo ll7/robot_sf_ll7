@@ -147,6 +147,8 @@ knowledge, not every transient iteration detail.
   [checksums](evidence/issue_2542_dissertation_export_bundle/checksums.sha256))
 * Issue #2536 simulator-speed candidate discovery:
   [issue_2536_speed_discovery.md](issue_2536_speed_discovery.md)
+* Issue #2531 AMV trace-boundary decision:
+  [issue_2531_amv_trace_boundary.md](issue_2531_amv_trace_boundary.md)
 * Dissertation claim-export candidate report:
   [dissertation_claim_export_candidate_report.md](dissertation_claim_export_candidate_report.md)
 * Dissertation research bridge:

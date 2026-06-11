@@ -433,6 +433,14 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2624_topology_reuse_penalty_gate.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2624_topology_reuse_penalty_gate/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2566_static_recenter_inactive_propagation.md
     status: current
     freshness: maintained

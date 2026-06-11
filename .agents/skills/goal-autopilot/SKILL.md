@@ -184,6 +184,11 @@ only proves `route_status: completed`; the parent phase is not complete until th
 reviewed the output, integrated any edits, run the required validation, updated GitHub state, and
 recorded cleanup.
 
+For delegated queue scouts, keep the scout output in the ledger as route evidence only until the
+main agent verifies issue state in `ll7/robot_sf_ll7` with local `gh issue view` or REST evidence.
+Do not claim or branch from scout text alone; stale state, wrong repo-owner URLs, missing recent
+comments, and duplicate PR coverage are known failure modes.
+
 ### Usage Pause Guard
 
 When a user-defined Codex usage threshold is active, run the configured usage-check command. For the

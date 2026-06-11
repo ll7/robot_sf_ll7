@@ -54,10 +54,23 @@ instead of reimplementing. If the issue depends on an unmerged source PR, mark i
 unavailable for clean-main work with the unblock condition "source PR merged to origin/main",
 unless the user explicitly chooses a stacked-PR route.
 
+Delegated queue-scout output is only route evidence until verified by the main agent in the target
+repository. Before using a scout recommendation to select, claim, or branch for an issue, run:
+
+```bash
+gh issue view <number> --repo ll7/robot_sf_ll7 --json number,title,state,labels,body,comments,url
+```
+
+or an equivalent REST read. Confirm the URL belongs to
+`ll7/robot_sf_ll7`, the issue is still open, ready labels/state are current, recent comments do not
+block or supersede the work, and no linked/open PR already covers it. Treat stale state, wrong
+repo-owner URLs, omitted recent comments, and duplicate PR coverage as expected scout failure modes.
+
 ## Workflow
 
 1. Refresh credentials and branch baseline (`gh auth status`, `git fetch origin`).
-2. Resolve queue candidate and re-check issue state.
+2. Resolve queue candidate and re-check issue state with local `gh issue view` or REST evidence
+   before claim or branch, especially when a delegated scout proposed the issue.
 3. Check open PRs for duplicate coverage using the linked issue, head branch/scope, and title.
    Stop or update routing when an existing PR covers the work.
 4. If issue statement is ambiguous:

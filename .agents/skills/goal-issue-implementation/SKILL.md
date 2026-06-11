@@ -167,8 +167,19 @@ Then run one final read-only implementability audit over:
 
 If these local filters appear exhausted or dominated by blocked/SLURM-only work, run one bundled
 broad queue scout before declaring the queue empty. Prefer a cheap local or Qwen scan plus one
-substantial Copilot pass when available; treat scout output as a lead only, and confirm any proposed
-candidate with local `gh issue view` evidence before selecting, claiming, or reporting it as ready.
+substantial Copilot pass when available; treat scout output as route evidence only until the main
+agent verifies it locally. Before selecting, claiming, branching for, or reporting a scout-proposed
+issue as ready, run:
+
+```bash
+gh issue view <number> --repo ll7/robot_sf_ll7 --json number,title,state,labels,body,comments,url
+```
+
+or an equivalent REST read. Confirm the repository
+owner/name, open state, labels, body, recent comments, linked/covering PRs, and ready eligibility
+against current GitHub state. Known scout failure modes include stale open/closed/blocked state,
+wrong repo-owner URLs, missing recent comments, and duplicate PR coverage; do not acquire
+`agent-claims/issue-<number>` or create a branch from scout text alone.
 When live labels conflict with recently merged dependency PRs, closeout comments, or issue links,
 perform a stale-blocker recheck before skipping the issue. Route one scout specifically to answer
 whether the blocker is still true, then confirm the answer with REST `gh api` or local `git`

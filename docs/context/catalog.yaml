@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-07
+updated_at: 2026-06-11
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -602,6 +602,10 @@ entries:
     freshness: dated
     area: planner_integration
   - path: docs/context/issue_2442_navground_assessment.md
+    status: current
+    freshness: dated
+    area: planner_integration
+  - path: docs/context/issue_2550_navground_adapter_spike.md
     status: current
     freshness: dated
     area: planner_integration

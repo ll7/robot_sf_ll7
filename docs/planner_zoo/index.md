@@ -106,7 +106,7 @@ discoverable before anyone opens a wrapper or benchmark issue.
 
 | Framework | Status | Boundary |
 | --- | --- | --- |
-| Navground | Prototype-only assessment | [`docs/context/issue_2442_navground_assessment.md`](../context/issue_2442_navground_assessment.md) records a local `navground==0.7.0` import and behavior-command smoke for ORCA, HRVO, HL, and SocialForce through `2WDiff`; no dependency, adapter, registry row, or benchmark claim was added. |
+| Navground | Prototype-only assessment | [`docs/context/issue_2442_navground_assessment.md`](../context/issue_2442_navground_assessment.md) records a local `navground==0.7.0` import and behavior-command smoke for ORCA, HRVO, HL, and SocialForce through `2WDiff`; no dependency, adapter, registry row, or benchmark claim was added. [`docs/context/issue_2550_navground_adapter_spike.md`](../context/issue_2550_navground_adapter_spike.md) extends the assessment with an API mapping, action/observation compatibility analysis, licensing/runtime constraints, failure modes, claim boundary, and verdict (viable prototype, not benchmark-ready now). |
 
 ## Learned-Policy Intake
 

@@ -234,6 +234,8 @@ knowledge, not every transient iteration detail.
   [issue_2459_socnavbench_hunavsim_mapping.md](issue_2459_socnavbench_hunavsim_mapping.md)
 * Issue #2442 Navground planner-zoo assessment:
   [issue_2442_navground_assessment.md](issue_2442_navground_assessment.md)
+* Issue #2550 Navground adapter spike report:
+  [issue_2550_navground_adapter_spike.md](issue_2550_navground_adapter_spike.md)
 * Issue #2476 Multimodal Prediction Benchmark Contract:
   [issue_2476_multimodal_prediction_benchmark.md](issue_2476_multimodal_prediction_benchmark.md)
 * Issue #2496 Multimodal Prediction Contract Smoke:

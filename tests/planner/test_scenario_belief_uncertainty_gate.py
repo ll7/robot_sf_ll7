@@ -64,6 +64,13 @@ def _belief_with_known_uncertainty():
             confidence=0.92,
             variance=0.1,
         ),
+        velocity=Estimate2D.point(
+            agent.velocity.mean_xy,
+            confidence=0.88,
+            variance=0.05,
+            units="m/s",
+            covariance_units="(m/s)^2",
+        ),
         existence_probability=0.95,
         class_probabilities=(("pedestrian", 0.98),),
     )
@@ -71,7 +78,7 @@ def _belief_with_known_uncertainty():
 
 
 def _belief_with_low_uncertainty():
-    """Return a ScenarioBelief with low uncertainty that should be gate-dropped.
+    """Return a ScenarioBelief with high uncertainty that should be gate-dropped.
 
     The agent has:
     - existence_probability = 0.2 (below gate threshold 0.5)
@@ -147,7 +154,7 @@ class TestUncertaintyReportFieldPreservation:
         agent_row = report["agents"][0]
 
         assert agent_row["position_confidence"] == pytest.approx(0.92)
-        assert isinstance(agent_row["velocity_confidence"], float)
+        assert agent_row["velocity_confidence"] == pytest.approx(0.88)
 
     def test_report_preserves_existence_probability(self) -> None:
         """Existence probability must match the belief source."""
@@ -164,7 +171,7 @@ class TestUncertaintyReportFieldPreservation:
         agent_row = report["agents"][0]
 
         vel_cov = np.asarray(agent_row["velocity_covariance_xy"])
-        assert np.all(np.isfinite(vel_cov))
+        assert np.allclose(vel_cov, np.diag([0.05, 0.05]), atol=1e-4)
 
 
 class TestAdapterFieldPreservation:

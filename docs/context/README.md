@@ -218,6 +218,8 @@ knowledge, not every transient iteration detail.
   [issue_2565_uncertainty_gating_smoke.md](issue_2565_uncertainty_gating_smoke.md)
 * Issue #2538 ScenarioBelief Planner Projection Smoke:
   [issue_2538_scenario_belief_planner_projection.md](issue_2538_scenario_belief_planner_projection.md)
+* Issue #2606 Uncertainty Gate Evaluation:
+  [issue_2606_uncertainty_gate_evaluation.md](issue_2606_uncertainty_gate_evaluation.md)
 * Issue #2526 Cyclist-Like VRU Smoke:
   [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md)
 * Issue #2527 Waiting-Then-Crossing Fixture:

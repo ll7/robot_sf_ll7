@@ -1,0 +1,126 @@
+{
+  "schema_version": "diagnostic_smoke_summary.v1",
+  "issue": 2606,
+  "date": "2026-06-11",
+  "status": "diagnostic_only",
+  "benchmark_evidence": false,
+  "claim_boundary": "ScenarioBelief.to_uncertainty_report() can feed one planner input/projection without silently dropping covariance, confidence, class_probabilities, or existence metadata. This is interface-usable evidence, not benchmark-proven.",
+  "decision": "usable",
+  "decision_rationale": "Evidence shows all four target fields (covariance, confidence, class_probabilities, existence) reach the stream_gap planner input and affect the opt-in uncertainty gate decision. 'usable' means interface-usable, not benchmark-proven.",
+  "uncertainty_gate": {
+    "input_belief": "ScenarioBelief.to_uncertainty_report()",
+    "preserved_covariance": true,
+    "class_probabilities": true,
+    "planner_projection": "project_scenario_belief_for_planner(belief, planner_key='stream_gap')",
+    "unsupported_fields": [
+      "velocity_covariance_xy",
+      "velocity_confidence",
+      "visibility_state"
+    ],
+    "fields_consumed_by_planner": [
+      "existence_probability",
+      "position_confidence",
+      "class_probabilities.pedestrian",
+      "position_covariance_xy"
+    ],
+    "fields_preserved_but_not_consumed": [
+      "velocity_covariance_xy",
+      "velocity_confidence",
+      "visibility_state"
+    ]
+  },
+  "implementation": {
+    "report_source": "robot_sf/representation/scenario_belief.py",
+    "adapter": "robot_sf/planner/scenario_belief_adapter.py",
+    "planner": "robot_sf/planner/stream_gap.py",
+    "gate_schema": "stream-gap-uncertainty-gate.v1",
+    "adapter_schema": "scenario-belief-planner-projection.v1",
+    "default_behavior_changed": false,
+    "fail_closed_conditions": [
+      "missing_uncertainty_metadata",
+      "malformed_uncertainty_metadata",
+      "sidecar_length_less_than_pedestrian_count"
+    ]
+  },
+  "field_trace": {
+    "to_uncertainty_report_agents": [
+      "entity_id",
+      "class_probabilities",
+      "position_covariance_xy",
+      "velocity_covariance_xy",
+      "position_confidence",
+      "velocity_confidence",
+      "existence_probability",
+      "visibility_state"
+    ],
+    "adapter_sidecar_agents": [
+      "entity_id",
+      "class_probabilities",
+      "position_covariance_xy",
+      "velocity_covariance_xy",
+      "position_confidence",
+      "velocity_confidence",
+      "existence_probability",
+      "visibility_state"
+    ],
+    "planner_consumed_fields": [
+      "existence_probability",
+      "position_confidence",
+      "class_probabilities.pedestrian",
+      "position_covariance_xy"
+    ],
+    "preserved_not_consumed_fields": [
+      "velocity_covariance_xy",
+      "velocity_confidence",
+      "visibility_state"
+    ]
+  },
+  "test_results": {
+    "total_tests": 17,
+    "passed": 17,
+    "failed": 0,
+    "test_classes": [
+      {
+        "name": "TestUncertaintyReportFieldPreservation",
+        "tests": 6,
+        "description": "Verifies to_uncertainty_report() preserves all required metadata fields"
+      },
+      {
+        "name": "TestAdapterFieldPreservation",
+        "tests": 5,
+        "description": "Verifies project_scenario_belief_for_planner preserves uncertainty fields in sidecar"
+      },
+      {
+        "name": "TestPlannerConsumesUncertaintyFields",
+        "tests": 4,
+        "description": "Verifies stream_gap planner reads and acts on uncertainty fields"
+      },
+      {
+        "name": "TestEndToEndGateDecision",
+        "tests": 2,
+        "description": "Verifies uncertainty fields can change the planner commit/wait decision"
+      }
+    ]
+  },
+  "validation": [
+    {
+      "command": "uv run pytest tests/planner/test_scenario_belief_uncertainty_gate.py -v",
+      "result": "17 passed"
+    },
+    {
+      "command": "uv run ruff check tests/planner/test_scenario_belief_uncertainty_gate.py",
+      "result": "passed"
+    },
+    {
+      "command": "uv run ruff format --check tests/planner/test_scenario_belief_uncertainty_gate.py",
+      "result": "passed"
+    }
+  ],
+  "limitations": [
+    "Single-fixture diagnostic cannot support planner-performance or safety claims.",
+    "velocity_covariance_xy, velocity_confidence, and visibility_state are preserved in the sidecar but not consumed by the stream_gap planner gate.",
+    "No runtime observation-builder bridge is included.",
+    "Thresholds are diagnostic defaults and are not calibrated."
+  ],
+  "next_step": "Extend to runtime ScenarioBelief producer path, or add velocity uncertainty consumption to the planner gate if velocity covariance affects planning decisions."
+}

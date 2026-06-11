@@ -113,6 +113,60 @@ Compiler evidence map:
 | `tab_campaign_table` | `tables/campaign_table.{csv,md,tex}` | `captions.md`, `checksums.sha256`, and `artifact_catalog.yaml` | Formatted campaign rows; preserves fallback, degraded, failed, and `not_available` caveats. |
 | `tab_not_available_inputs` | `tables/not_available_inputs.md`, `not_available_inputs.json` | `captions.md`, `checksums.sha256`, and `artifact_catalog.yaml` | Missing optional compiler inputs; documents limitations instead of filling gaps. |
 
+## Dissertation Figure/Table Export
+
+Use `scripts/tools/benchmark_publication_bundle.py dissertation-bundle` when a
+small set of figure/table candidates needs a dissertation-facing handoff without
+turning local `output/` files into durable evidence. The command copies selected
+artifacts into a disposable bundle and writes:
+
+- `artifact_manifest.yaml`: JSON-compatible YAML with `schema_version:
+  dissertation_artifact_bundle.v1`;
+- `checksums.sha256`: checksums for files under `payload/artifacts/`;
+- per-artifact rows with `artifact_id`, `source_path`, `source_artifact`,
+  `output_path`, `sha256`, `source_commit`, `generation_command`,
+  `caption_draft`, `claim_boundary`, `recommended_manuscript_use`, and
+  `fallback_degraded_summary`.
+
+The artifact spec is a compact JSON file so reviewers can see exactly which
+figure/table candidates are being handed off:
+
+```json
+{
+  "artifacts": [
+    {
+      "artifact_id": "tab_campaign_table",
+      "source_path": "tables/campaign_table.md",
+      "source_artifact": "release-backed campaign table candidate",
+      "caption_draft": "Campaign table preserving fallback and degraded rows.",
+      "claim_boundary": "Formatted table only; not new benchmark evidence.",
+      "recommended_manuscript_use": "discussion",
+      "fallback_degraded_summary": "Fallback and degraded rows remain visible."
+    }
+  ]
+}
+```
+
+Allowed `recommended_manuscript_use` values are `results`, `methodology`,
+`discussion`, `outlook`, and `do-not-use`; unsupported values fail closed.
+
+Example command:
+
+```bash
+uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle \
+  --source-root output/benchmarks/publication_candidates/<campaign_id> \
+  --out-dir output/dissertation_export \
+  --bundle-name <campaign_id>_figure_table_bundle \
+  --artifact-spec output/benchmarks/publication_candidates/<campaign_id>/dissertation_artifacts.json \
+  --command "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root output/benchmarks/camera_ready/<campaign_id> --output output/benchmarks/publication_candidates/<campaign_id>" \
+  --commit "$(git rev-parse HEAD)"
+```
+
+This bundle is a provenance and review workflow only. It does not create new
+benchmark evidence, dissertation prose, or paper-grade claims; durable use still
+requires a release asset, DOI, tracked compact evidence copy, or another
+explicit artifact pointer.
+
 ## Command Path (Reproducible)
 
 1. Measure current benchmark artifact sizes (optional but recommended):

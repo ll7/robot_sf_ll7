@@ -25,6 +25,7 @@ from robot_sf.common.artifact_paths import get_repository_root
 
 PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v2"
 EVIDENCE_BUNDLE_SCHEMA_VERSION = "evidence_bundle.v1"
+MANUSCRIPT_ARTIFACT_BUNDLE_SCHEMA_VERSION = "dissertation_artifact_bundle.v1"
 SIZE_REPORT_SCHEMA_VERSION = "benchmark-artifact-size-report.v1"
 _VIDEO_SUFFIXES = {".mp4", ".gif", ".webm", ".mov"}
 _MARKER_FILES = ("manifest.json", "run_meta.json", "episodes.jsonl", "summary.json", "report.json")
@@ -36,6 +37,13 @@ _CAMPAIGN_PREFLIGHT_REQUIRED = (
     "preflight/validate_config.json",
     "preflight/preview_scenarios.json",
 )
+_RECOMMENDED_MANUSCRIPT_USES = {
+    "results",
+    "methodology",
+    "discussion",
+    "outlook",
+    "do-not-use",
+}
 
 
 @dataclass(frozen=True)
@@ -63,6 +71,30 @@ class PublicationBundleResult:
 @dataclass(frozen=True)
 class EvidenceBundleResult:
     """Paths and summary values produced by :func:`export_evidence_bundle`."""
+
+    bundle_dir: Path
+    manifest_path: Path
+    checksums_path: Path
+    file_count: int
+    total_bytes: int
+
+
+@dataclass(frozen=True)
+class DissertationArtifactSpec:
+    """User-selected figure or table artifact for dissertation handoff."""
+
+    artifact_id: str
+    source_path: Path
+    source_artifact: str
+    caption_draft: str
+    claim_boundary: str
+    recommended_manuscript_use: str
+    fallback_degraded_summary: str
+
+
+@dataclass(frozen=True)
+class DissertationArtifactBundleResult:
+    """Paths and summary values produced by dissertation artifact bundle export."""
 
     bundle_dir: Path
     manifest_path: Path
@@ -428,6 +460,185 @@ def _resolve_evidence_files(source_root: Path, files: list[Path]) -> list[Path]:
             raise ValueError(f"Evidence bundle refuses symlink payloads: {candidate}")
         resolved.append(candidate.relative_to(root))
     return sorted(set(resolved), key=lambda value: value.as_posix())
+
+
+def _validate_non_empty(value: str, field: str, artifact_id: str) -> str:
+    """Validate a required string field from an artifact spec.
+
+    Returns:
+        The stripped string value.
+    """
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"Artifact {artifact_id!r} requires non-empty {field}")
+    return stripped
+
+
+def _artifact_payload_path(artifact_id: str, source_path: Path) -> Path:
+    """Return a deterministic payload path for a dissertation artifact."""
+    suffix = source_path.suffix
+    return Path("artifacts") / f"{artifact_id}{suffix}"
+
+
+def _validate_dissertation_artifacts(
+    source_root: Path,
+    artifacts: list[DissertationArtifactSpec],
+) -> list[tuple[DissertationArtifactSpec, Path, Path]]:
+    """Validate dissertation artifact specs and resolve source/output paths.
+
+    Returns:
+        Tuples of the artifact spec, source-root-relative path, and payload path.
+    """
+    root = source_root.resolve()
+    if not root.exists() or not root.is_dir():
+        raise FileNotFoundError(f"Dissertation source root does not exist: {root}")
+    if not artifacts:
+        raise ValueError("At least one dissertation artifact is required")
+
+    seen_ids: set[str] = set()
+    resolved: list[tuple[DissertationArtifactSpec, Path, Path]] = []
+    for artifact in artifacts:
+        artifact_id = _validate_non_empty(artifact.artifact_id, "artifact_id", "<unknown>")
+        if "/" in artifact_id or "\\" in artifact_id or artifact_id in {".", ".."}:
+            raise ValueError(f"Invalid artifact_id: {artifact_id!r}")
+        if artifact_id in seen_ids:
+            raise ValueError(f"Duplicate artifact_id: {artifact_id!r}")
+        seen_ids.add(artifact_id)
+
+        if artifact.recommended_manuscript_use not in _RECOMMENDED_MANUSCRIPT_USES:
+            allowed = ", ".join(sorted(_RECOMMENDED_MANUSCRIPT_USES))
+            raise ValueError(
+                f"Artifact {artifact_id!r} has invalid recommended_manuscript_use "
+                f"{artifact.recommended_manuscript_use!r}; expected one of: {allowed}"
+            )
+        _validate_non_empty(artifact.source_artifact, "source_artifact", artifact_id)
+        _validate_non_empty(artifact.caption_draft, "caption_draft", artifact_id)
+        _validate_non_empty(artifact.claim_boundary, "claim_boundary", artifact_id)
+        _validate_non_empty(
+            artifact.fallback_degraded_summary,
+            "fallback_degraded_summary",
+            artifact_id,
+        )
+
+        candidate = (
+            artifact.source_path
+            if artifact.source_path.is_absolute()
+            else root / artifact.source_path
+        ).resolve()
+        if not candidate.is_relative_to(root):
+            raise ValueError(f"Artifact source escapes source root: {artifact.source_path}")
+        if not candidate.exists() or not candidate.is_file():
+            raise FileNotFoundError(f"Artifact source file does not exist: {candidate}")
+        if candidate.is_symlink():
+            raise ValueError(f"Dissertation artifact bundle refuses symlink payloads: {candidate}")
+        payload_path = _artifact_payload_path(artifact_id, candidate)
+        resolved.append((artifact, candidate.relative_to(root), payload_path))
+    return resolved
+
+
+def export_dissertation_artifact_bundle(
+    source_root: Path,
+    out_dir: Path,
+    *,
+    bundle_name: str,
+    artifacts: list[DissertationArtifactSpec],
+    command: str,
+    commit: str,
+    overwrite: bool = False,
+) -> DissertationArtifactBundleResult:
+    """Export selected figure/table artifacts with dissertation-facing provenance.
+
+    The bundle layout contains:
+    - ``payload/artifacts/``: selected figure/table source files.
+    - ``artifact_manifest.yaml``: JSON-compatible YAML manifest with caption,
+      checksum, manuscript-use, caveat, source, and claim-boundary metadata.
+    - ``checksums.sha256``: SHA-256 checksums for all payload artifacts.
+
+    Returns:
+        Paths and totals describing the exported dissertation artifact bundle.
+    """
+    if not command.strip():
+        raise ValueError("Dissertation artifact generation command is required")
+    if not commit.strip():
+        raise ValueError("Dissertation artifact source commit is required")
+
+    target_name = bundle_name.strip()
+    _validate_bundle_name(target_name)
+    target_root = out_dir.resolve()
+    target_root.mkdir(parents=True, exist_ok=True)
+    bundle_dir = (target_root / target_name).resolve()
+    if not bundle_dir.is_relative_to(target_root):
+        raise ValueError("Dissertation artifact bundle output must remain within out_dir")
+
+    if overwrite:
+        if bundle_dir.exists():
+            if bundle_dir == target_root:
+                raise ValueError("Refusing to delete out_dir via overwrite")
+            shutil.rmtree(bundle_dir)
+    elif bundle_dir.exists():
+        raise FileExistsError(f"Dissertation artifact bundle output already exists: {bundle_dir}")
+
+    source = source_root.resolve()
+    selected = _validate_dissertation_artifacts(source, artifacts)
+    payload_root = bundle_dir / "payload"
+    payload_root.mkdir(parents=True, exist_ok=True)
+
+    manifest_entries: list[dict[str, Any]] = []
+    checksums: list[str] = []
+    total_bytes = 0
+    for artifact, rel_source, payload_path in selected:
+        dst = payload_root / payload_path
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source / rel_source, dst)
+        size_bytes = int(dst.stat().st_size)
+        digest = _sha256_file(dst)
+        total_bytes += size_bytes
+        checksums.append(f"{digest}  {payload_path.as_posix()}\n")
+        manifest_entries.append(
+            {
+                "artifact_id": artifact.artifact_id,
+                "source_path": rel_source.as_posix(),
+                "source_artifact": artifact.source_artifact,
+                "output_path": payload_path.as_posix(),
+                "size_bytes": size_bytes,
+                "sha256": digest,
+                "source_commit": commit.strip(),
+                "generation_command": command.strip(),
+                "caption_draft": artifact.caption_draft.strip(),
+                "claim_boundary": artifact.claim_boundary.strip(),
+                "recommended_manuscript_use": artifact.recommended_manuscript_use,
+                "fallback_degraded_summary": artifact.fallback_degraded_summary.strip(),
+            }
+        )
+
+    manifest_entries = sorted(manifest_entries, key=lambda entry: str(entry["artifact_id"]))
+    checksums_path = bundle_dir / "checksums.sha256"
+    checksums_path.write_text("".join(sorted(checksums)), encoding="utf-8")
+    manifest_payload = {
+        "schema_version": MANUSCRIPT_ARTIFACT_BUNDLE_SCHEMA_VERSION,
+        "created_at_utc": _utc_now_iso(),
+        "bundle_name": target_name,
+        "source_root": _to_repo_relative(source),
+        "source_commit": commit.strip(),
+        "generation_command": command.strip(),
+        "policy": {
+            "local_output_disposable": True,
+            "paper_or_benchmark_claim": "not_established_by_bundle_alone",
+            "fallback_or_degraded_rows": "must_remain_visible_in_caption_or_table_notes",
+        },
+        "totals": {"artifact_count": len(manifest_entries), "total_bytes": total_bytes},
+        "artifacts": manifest_entries,
+    }
+    manifest_path = bundle_dir / "artifact_manifest.yaml"
+    manifest_path.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
+
+    return DissertationArtifactBundleResult(
+        bundle_dir=bundle_dir,
+        manifest_path=manifest_path,
+        checksums_path=checksums_path,
+        file_count=len(manifest_entries),
+        total_bytes=total_bytes,
+    )
 
 
 def export_evidence_bundle(

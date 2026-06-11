@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from robot_sf.benchmark.artifact_publication import (
+    DissertationArtifactSpec,
+    export_dissertation_artifact_bundle,
     export_evidence_bundle,
     export_publication_bundle,
     measure_artifact_size_ranges,
@@ -154,6 +156,57 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow replacing an existing evidence bundle directory with the same name.",
     )
+
+    dissertation = subparsers.add_parser(
+        "dissertation-bundle",
+        help="Export selected figure/table artifacts with dissertation-facing provenance.",
+    )
+    dissertation.add_argument(
+        "--source-root",
+        type=Path,
+        required=True,
+        help="Directory containing the selected figure/table source artifacts.",
+    )
+    dissertation.add_argument(
+        "--out-dir",
+        type=Path,
+        required=True,
+        help="Destination directory for the dissertation artifact bundle.",
+    )
+    dissertation.add_argument(
+        "--bundle-name",
+        type=str,
+        required=True,
+        help="Output bundle directory name.",
+    )
+    dissertation.add_argument(
+        "--artifact-spec",
+        type=Path,
+        required=True,
+        help=(
+            "JSON file containing an artifacts array with artifact_id, source_path, "
+            "source_artifact, caption_draft, claim_boundary, recommended_manuscript_use, "
+            "and fallback_degraded_summary fields."
+        ),
+    )
+    dissertation.add_argument(
+        "--command",
+        type=str,
+        dest="generation_command",
+        required=True,
+        help="Canonical command that generated or validates the selected artifacts.",
+    )
+    dissertation.add_argument(
+        "--commit",
+        type=str,
+        required=True,
+        help="Repository commit associated with the selected artifacts.",
+    )
+    dissertation.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow replacing an existing dissertation artifact bundle directory.",
+    )
     return parser
 
 
@@ -219,6 +272,56 @@ def _run_evidence_bundle(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_dissertation_artifacts(spec_path: Path) -> list[DissertationArtifactSpec]:
+    """Load dissertation artifact rows from a JSON spec file."""
+    payload = json.loads(spec_path.read_text(encoding="utf-8"))
+    rows = payload.get("artifacts") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        raise ValueError("Dissertation artifact spec must be a list or contain an artifacts list")
+
+    artifacts: list[DissertationArtifactSpec] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise ValueError(f"Artifact spec row {index} must be an object")
+        try:
+            artifacts.append(
+                DissertationArtifactSpec(
+                    artifact_id=str(row["artifact_id"]),
+                    source_path=Path(str(row["source_path"])),
+                    source_artifact=str(row["source_artifact"]),
+                    caption_draft=str(row["caption_draft"]),
+                    claim_boundary=str(row["claim_boundary"]),
+                    recommended_manuscript_use=str(row["recommended_manuscript_use"]),
+                    fallback_degraded_summary=str(row["fallback_degraded_summary"]),
+                )
+            )
+        except KeyError as exc:
+            raise ValueError(f"Artifact spec row {index} missing required field: {exc}") from exc
+    return artifacts
+
+
+def _run_dissertation_bundle(args: argparse.Namespace) -> int:
+    """Execute the ``dissertation-bundle`` subcommand."""
+    result = export_dissertation_artifact_bundle(
+        args.source_root,
+        args.out_dir,
+        bundle_name=args.bundle_name,
+        artifacts=_load_dissertation_artifacts(args.artifact_spec),
+        command=str(args.generation_command),
+        commit=str(args.commit),
+        overwrite=bool(args.overwrite),
+    )
+    payload = {
+        "bundle_dir": str(result.bundle_dir),
+        "manifest_path": str(result.manifest_path),
+        "checksums_path": str(result.checksums_path),
+        "file_count": result.file_count,
+        "total_bytes": result.total_bytes,
+    }
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run benchmark publication helper CLI and return a POSIX exit code."""
     parser = _build_parser()
@@ -229,6 +332,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_export(args)
     if args.command == "evidence-bundle":
         return _run_evidence_bundle(args)
+    if args.command == "dissertation-bundle":
+        return _run_dissertation_bundle(args)
     parser.error(f"Unsupported command: {args.command}")
     return 2  # pragma: no cover
 

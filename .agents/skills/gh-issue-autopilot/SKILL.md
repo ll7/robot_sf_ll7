@@ -94,6 +94,16 @@ repo-owner URLs, omitted recent comments, and duplicate PR coverage as expected 
    `In progress`, add or preserve `state:running` when using state labels, assign the local actor
    when practical, and add a short issue comment naming the claim ref, machine/thread, intended
    implementation branch, and stale-claim cleanup condition.
+
+   Publication rule: use `scripts/dev/gh_comment.sh`, `gh issue/pr comment --body-file`, or REST
+   JSON input for Markdown-heavy comments. Do not put bodies containing backticks, YAML, commands,
+   or multiline Markdown into inline shell strings. Use REST endpoints for simple label writes when
+   `gh` would route through GraphQL, for example:
+
+   ```bash
+   gh api repos/ll7/robot_sf_ll7/issues/<number>/labels -f labels[]=state:running
+   gh api -X DELETE repos/ll7/robot_sf_ll7/issues/<number>/labels/state:ready
+   ```
 7. Create the issue branch in a linked worktree for non-trivial implementation. Prefer the
    `AGENTS.md` "Fresh Worktree Bootstrap" location, naming, machine-context symlink, and branch
    freshness rules; use an in-place branch only for tiny or explicitly requested main-checkout work.

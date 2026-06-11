@@ -210,6 +210,11 @@ For shared local + VS Code + Codex workflows, prefer:
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 - `scripts/dev/gh_comment.sh` for multiline `gh` PR/issue comments (stdin or `--body-file`, avoids literal `\n` formatting issues)
 
+For GitHub comments with Markdown-heavy bodies, do not pass the body as an inline shell string.
+Use `scripts/dev/gh_comment.sh`, `gh issue/pr comment --body-file`, or REST JSON input. This is
+mandatory when the body contains backticks, YAML, shell commands, multiline Markdown, or anything
+the shell could expand before `gh` receives it.
+
 ## Config-First Strategy
 Prefer a config-first workflow for reproducibility and reviewability. Add or update YAML files under `configs/` for stable experiments and document the canonical command using `--config <path>`. Use CLI flags only for short-lived overrides while iterating locally.
 
@@ -356,6 +361,14 @@ When working issue batches or Project #5 updates:
   current maintainer direction or fresh evidence,
 - use REST (`gh api repos/...`) for ordinary issue/PR/label/comment operations when GraphQL quota
   is low or when the operation does not need Projects v2,
+- prefer REST endpoints for simple label/comment publication writes even before quota is low when
+  `gh` routes through brittle GraphQL surfaces; PR #2520 hit a classic Projects deprecation error
+  via `gh pr edit --add-label merge-ready` while the REST issue-label endpoint worked immediately,
+- for labels, use `gh api repos/:owner/:repo/issues/<number>/labels -f labels[]=<label>` to add
+  and `gh api -X DELETE repos/:owner/:repo/issues/<number>/labels/<label>` to remove,
+- for comment creation or patching, use body files or JSON payloads such as
+  `gh api repos/:owner/:repo/issues/<number>/comments -F body=@body.md` and
+  `gh api -X PATCH repos/:owner/:repo/issues/comments/<comment-id> -F body=@body.md`,
 - use local `git` for branch, diff, merge-base, and commit state instead of asking GitHub,
 - clean up issue text and labels first,
 - route Project #5 metadata in a separate pass,

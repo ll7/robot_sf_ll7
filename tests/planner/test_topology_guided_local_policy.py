@@ -6,6 +6,7 @@ import numpy as np
 
 from robot_sf.planner.topology_guided_local_policy import (
     TopologyGuidedHybridRulePlannerAdapter,
+    _apply_primary_route_reuse_penalty,
     _finalize_near_parity_gate_diagnostic,
     build_topology_guided_local_policy_config,
 )
@@ -337,3 +338,181 @@ def test_topology_guided_policy_handles_zero_min_without_hypotheses() -> None:
     assert decision["status"] == "insufficient_hypotheses"
     assert decision["reason"] in {"no_hypotheses_available", "fewer_than_min_distinct_routes"}
     assert decision["hypothesis_count"] == 0
+
+
+def test_default_no_reuse_penalty_fields_in_decision() -> None:
+    """Default config should expose reuse-penalty fields but not apply the penalty."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(_config())
+    decision = planner._hypotheses_for_observation(_obs(occupied_cells=_two_gap_wall()))
+
+    assert decision["status"] == "ok"
+    assert decision["reuse_penalty_applied"] is False
+    assert decision["reuse_penalty_reason"] is None
+    assert decision["recent_primary_selection_count"] == 0
+    assert decision["eligible_near_parity_alternative_exists"] is False
+
+
+def test_reuse_penalty_applied_after_repeated_primary_selections() -> None:
+    """When enabled, repeated primary selections with eligible alternatives should trigger penalty."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            primary_route_reuse_penalty_enabled=True,
+            primary_route_reuse_penalty_weight=0.1,
+            primary_route_reuse_penalty_cooldown_steps=5,
+            primary_route_reuse_penalty_min_prior_primary_selections=1,
+            near_parity_diversity_gate_enabled=True,
+            near_parity_route_distance_slack_m=100.0,
+            near_parity_route_distance_slack_ratio=100.0,
+            near_parity_static_clearance_floor_m=100.0,
+            near_parity_diversity_bonus=0.0,
+        )
+    )
+    obs = _obs(occupied_cells=_two_gap_wall())
+
+    planner._hypotheses_for_observation(obs)
+    decision = planner._hypotheses_for_observation(obs)
+
+    assert decision["status"] == "ok"
+    assert decision["recent_primary_selection_count"] == 1
+    assert decision["reuse_penalty_applied"] is True
+    assert decision["reuse_penalty_reason"]
+
+
+def test_reuse_penalty_not_applied_when_disabled() -> None:
+    """Penalty should not apply when primary_route_reuse_penalty_enabled is False."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            primary_route_reuse_penalty_enabled=False,
+            primary_route_reuse_penalty_weight=10.0,
+        )
+    )
+    obs = _obs(occupied_cells=_two_gap_wall())
+
+    for _ in range(5):
+        decision = planner._hypotheses_for_observation(obs)
+
+    assert decision["reuse_penalty_applied"] is False
+
+
+def test_reuse_penalty_allows_alternative_to_win() -> None:
+    """When penalty is large enough, a near-parity alternative should win over primary_route."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            primary_route_reuse_penalty_enabled=True,
+            primary_route_reuse_penalty_weight=200.0,
+            primary_route_reuse_penalty_cooldown_steps=10,
+            primary_route_reuse_penalty_min_prior_primary_selections=3,
+            near_parity_diversity_gate_enabled=True,
+            near_parity_route_distance_slack_m=100.0,
+            near_parity_route_distance_slack_ratio=100.0,
+            near_parity_static_clearance_floor_m=100.0,
+            near_parity_diversity_bonus=0.0,
+        )
+    )
+    obs = _obs(occupied_cells=_two_gap_wall())
+
+    for _ in range(6):
+        decision = planner._hypotheses_for_observation(obs)
+
+    assert decision["status"] == "ok"
+    assert decision["recent_primary_selection_count"] >= 3
+    assert decision["selected_hypothesis_id"] != "primary_route"
+
+
+def test_reuse_penalty_diagnostics_fields_present() -> None:
+    """Reuse-penalty diagnostics should be present in decision and route output."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            primary_route_reuse_penalty_enabled=True,
+            primary_route_reuse_penalty_weight=0.1,
+            primary_route_reuse_penalty_cooldown_steps=2,
+            primary_route_reuse_penalty_min_prior_primary_selections=1,
+            near_parity_diversity_gate_enabled=True,
+            near_parity_route_distance_slack_m=100.0,
+            near_parity_route_distance_slack_ratio=100.0,
+            near_parity_static_clearance_floor_m=100.0,
+            near_parity_diversity_bonus=0.0,
+        )
+    )
+    obs = _obs(occupied_cells=_two_gap_wall())
+    planner._hypotheses_for_observation(obs)
+
+    decision = planner._hypotheses_for_observation(obs)
+
+    assert "reuse_penalty_applied" in decision
+    assert "reuse_penalty_reason" in decision
+    assert "recent_primary_selection_count" in decision
+    assert "eligible_near_parity_alternative_exists" in decision
+
+    route_corridor = planner._route_corridor_diagnostics(obs, current_time=1.0)
+    assert route_corridor is not None
+    reuse_penalty = route_corridor["topology_reuse_penalty"]
+    assert reuse_penalty["reuse_penalty_applied"] is True
+    assert reuse_penalty["reuse_penalty_reason"]
+    assert reuse_penalty["recent_primary_selection_count"] >= 1
+    assert reuse_penalty["eligible_near_parity_alternative_exists"] is True
+
+
+def test_reuse_penalty_resets_after_reset() -> None:
+    """The reuse-penalty state should be cleared when reset is called."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            primary_route_reuse_penalty_enabled=True,
+            primary_route_reuse_penalty_cooldown_steps=5,
+            primary_route_reuse_penalty_min_prior_primary_selections=1,
+        )
+    )
+    obs = _obs(occupied_cells=_two_gap_wall())
+    for _ in range(3):
+        planner._hypotheses_for_observation(obs)
+    assert planner._total_primary_selections > 0
+
+    planner.reset(seed=0)
+
+    assert planner._total_primary_selections == 0
+    assert len(planner._recent_primary_selections) == 0
+
+
+def test_apply_primary_route_reuse_penalty_no_primary_hypothesis() -> None:
+    """Penalty function should not crash when primary_route hypothesis is absent."""
+    from collections import deque
+
+    config = _config(primary_route_reuse_penalty_enabled=True)
+    hypotheses = [{"hypothesis_id": "masked_cell_1_1", "score": -5.0, "selection_score": -5.0}]
+    recent = deque([("masked_cell_1_1", 10.0)], maxlen=3)
+
+    result = _apply_primary_route_reuse_penalty(config, hypotheses, recent)
+
+    assert result["reuse_penalty_applied"] is False
+    assert result["recent_primary_selection_count"] == 0
+
+
+def test_apply_primary_route_reuse_penalty_not_eligible_when_no_near_parity_alternative() -> None:
+    """Penalty should not apply when no alternative has eligible near-parity gate reason."""
+    from collections import deque
+
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+    )
+    primary = {
+        "hypothesis_id": "primary_route",
+        "score": -5.0,
+        "selection_score": -5.0,
+    }
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "route_distance_exceeds_slack",
+    }
+    recent = deque([("primary_route", 10.0), ("primary_route", 9.0)], maxlen=3)
+
+    result = _apply_primary_route_reuse_penalty(
+        config,
+        [primary, alt],
+        recent,
+    )
+
+    assert result["reuse_penalty_applied"] is False
+    assert result["eligible_near_parity_alternative_exists"] is False

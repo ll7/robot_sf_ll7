@@ -162,6 +162,8 @@ knowledge, not every transient iteration detail.
   [issue_2570_topology_revise_status_propagation.md](issue_2570_topology_revise_status_propagation.md)
 * Issue #2600 Topology Revision Decision 2026-06-11:
   [issue_2600_topology_revision_decision.md](issue_2600_topology_revision_decision.md)
+* Issue #2540 Topology Primary-Route Reuse-Penalty Diagnostic:
+  [issue_2540_topology_reuse_penalty_diagnostic.md](issue_2540_topology_reuse_penalty_diagnostic.md)
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:

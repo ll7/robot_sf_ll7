@@ -450,6 +450,47 @@ def _selection_score_example(row: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _reuse_penalty_diagnostic(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the topology reuse-penalty diagnostic payload for one step."""
+    route_corridor = row.get("planner_route_corridor")
+    if not isinstance(route_corridor, dict):
+        return None
+    payload = route_corridor.get("topology_reuse_penalty")
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _reuse_penalty_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate topology reuse-penalty evidence from route-corridor diagnostics."""
+    reason_counts: Counter[str] = Counter()
+    applied_steps = 0
+    eligible_steps = 0
+    max_recent_primary_selection_count = 0
+    for row in steps:
+        reuse_penalty = _reuse_penalty_diagnostic(row)
+        if reuse_penalty is None:
+            continue
+        if bool(reuse_penalty.get("reuse_penalty_applied", False)):
+            applied_steps += 1
+            reason = str(reuse_penalty.get("reuse_penalty_reason") or "unknown")
+            reason_counts[reason] += 1
+        if bool(reuse_penalty.get("eligible_near_parity_alternative_exists", False)):
+            eligible_steps += 1
+        recent_count = reuse_penalty.get("recent_primary_selection_count", 0)
+        if isinstance(recent_count, int | float):
+            max_recent_primary_selection_count = max(
+                max_recent_primary_selection_count,
+                int(recent_count),
+            )
+    return {
+        "applied_steps": applied_steps,
+        "eligible_near_parity_alternative_steps": eligible_steps,
+        "max_recent_primary_selection_count": max_recent_primary_selection_count,
+        "reason_counts": dict(sorted(reason_counts.items())),
+    }
+
+
 def _terminal_outcome(done_info: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
     """Return compact terminal-outcome evidence for the diagnostic trace."""
     last_step = steps[-1] if steps else {}
@@ -660,6 +701,7 @@ def _summarize_hypotheses(
         "hypothesis_switch_count": hypothesis_switch_count,
         "topology_command_influence_examples": influence_examples,
         "topology_selection_score_examples": selection_score_examples,
+        "topology_reuse_penalty": _reuse_penalty_summary(steps),
         "corrective_behavior": _corrective_behavior_summary(
             steps,
             selected_source_counts=selected_source_counts,

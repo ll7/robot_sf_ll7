@@ -119,11 +119,14 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
 1. Record the PR number, expected head SHA, current CI state, and static wait budget in the active
    ledger. The default budget is `ceil(920s * 1.3) = 1196s`, unless a newer committed skill/doc
    baseline has replaced it.
-2. Start one read-only `ci_wait_monitor` route or Codex app/Spark sidecar for that PR:
+2. Start one read-only `ci_wait_monitor` route or Codex app/Spark sidecar for that PR. In non-TTY
+   agent sessions, use bounded one-shot polling rather than `gh pr checks --watch`:
 
    ```bash
-   uv run python scripts/dev/watch_pr_ci_status.py <pr-number> \
-     --expected-head-sha <head-sha> --json
+   uv run python scripts/dev/check_pr_ci_status.py <pr-number> \
+     --poll-attempts 40 \
+     --poll-interval 30 \
+     --json
    ```
 
 3. Continue with non-conflicting work on the main thread: review other PRs, merge already-green
@@ -132,16 +135,18 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
 4. When the monitor returns, the main agent must review the result against the current PR head SHA
    before applying `merge-ready`, merging, or reporting completion.
 
-The wait helper uses the stable default budget on normal runs. It samples recent successful CI
-runtime only when CI is still pending after the budget expires, and then reports drift evidence plus
-a recommended baseline. Do not change the committed default wait baseline after one ordinary slow
-run; update it only after repeated over-budget evidence or an obvious CI workflow change.
+The polling helper prints queued, in-progress, failed, and passed check summaries. Use
+`gh run view <run-id> --json status,conclusion,jobs` when a job URL needs deeper state, and fetch
+logs only after the relevant job has completed. Do not change committed polling budgets after one
+ordinary slow run; update them only after repeated over-budget evidence or an obvious CI workflow
+change.
 
 Treat monitor exit states as follows:
 
 - `success`: CI is green for the expected head SHA; reassess readiness locally.
 - `failure`: leave the PR open, record the failing checks, and continue the cycle.
-- `timeout`: keep the PR in `awaiting_ci`, record the drift sample, and continue other work.
+- `pending timeout` / exit code `2`: keep the PR in `awaiting_ci`, record the pending checks, and
+  continue other work.
 - `error`: record stale head, auth, API, or parsing failure; do not trust the waiter for readiness.
 
 ### Active Delegation Ledger

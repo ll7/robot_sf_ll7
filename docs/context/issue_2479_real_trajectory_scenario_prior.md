@@ -2,6 +2,10 @@
 
 Status: scoped manifest contract, not benchmark evidence.
 
+Update 2026-06-11 (#2523): SDD was not staged locally for the first smoke pass, so #2523 produced
+a proxy `scenario_prior.v1` artifact instead of real-data prior evidence. See
+[issue_2523_scenario_prior_smoke.md](issue_2523_scenario_prior_smoke.md).
+
 Related surfaces:
 
 - GitHub issue: https://github.com/ll7/robot_sf_ll7/issues/2479
@@ -11,6 +15,7 @@ Related surfaces:
 - External-data assistant: `scripts/tools/manage_external_data.py`
 - SDD importer note: `docs/context/issue_1091_sdd_importer.md`
 - Real-world trajectory import docs: `docs/real_world_trajectory_import.md`
+- First proxy smoke: `docs/context/issue_2523_scenario_prior_smoke.md`
 
 ## Result
 

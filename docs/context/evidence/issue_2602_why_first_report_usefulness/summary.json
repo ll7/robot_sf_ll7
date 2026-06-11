@@ -1,0 +1,43 @@
+{
+  "schema": "why_first_report_usefulness.v1",
+  "issue": 2602,
+  "status": "reporting_evaluation_only",
+  "generated_at": "2026-06-11",
+  "claim_boundary": "Reporting-usefulness evaluation only; not a new benchmark run, metric proof, trace export, paper-facing claim, or new source evidence.",
+  "diagnostics": [
+    {
+      "class": "topology_near_parity_corrective_diagnostics",
+      "source_report": "docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md",
+      "source_input": "docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_input.json",
+      "source_decision": "revise",
+      "decision_clarity_delta": "improved",
+      "claim_boundary_clarity_delta": "improved",
+      "missing_proof_clarity_delta": "improved",
+      "next_action_clarity_delta": "improved",
+      "remaining_claim_boundary": "topology signal is diagnostic-only until a paired reuse-penalty diagnostic moves route progress or terminal behavior"
+    },
+    {
+      "class": "amv_actuation_timeout_diagnostics",
+      "source_report": "docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md",
+      "source_input": "docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_input.json",
+      "source_decision": "revise",
+      "decision_clarity_delta": "improved",
+      "claim_boundary_clarity_delta": "improved",
+      "missing_proof_clarity_delta": "improved",
+      "next_action_clarity_delta": "improved",
+      "remaining_claim_boundary": "actuation feasibility is not planner-improvement evidence while route progress and success remain blocked"
+    }
+  ],
+  "recommendation": "continue",
+  "recommendation_rationale": "Both reports make decision, claim-boundary, missing-proof, and next-action state easier to recover without strengthening the source diagnostics.",
+  "linked_issue_2545": "optional readability/reuse improvement only; no blocking structure gap found for diagnostic usefulness",
+  "validation": [
+    "uv run python scripts/tools/generate_why_first_report.py --input docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_input.json --output /tmp/topology_near_parity_why_first_report.gen.md",
+    "diff -u /tmp/topology_near_parity_why_first_report.gen.md docs/context/evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md",
+    "uv run python scripts/tools/generate_why_first_report.py --input docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_input.json --output /tmp/amv_actuation_why_first_report.gen.md",
+    "diff -u /tmp/amv_actuation_why_first_report.gen.md docs/context/evidence/issue_2522_why_first_diagnostics/amv_actuation_why_first_report.md",
+    "uv run pytest tests/tools/test_generate_why_first_report.py -q",
+    "uv run python -m json.tool docs/context/evidence/issue_2602_why_first_report_usefulness/summary.json",
+    "BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh"
+  ]
+}

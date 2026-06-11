@@ -1,0 +1,47 @@
+{
+  "schema_version": "dissertation_artifact_bundle.v1",
+  "created_at_utc": "2026-06-11T17:01:51.146584Z",
+  "bundle_name": "issue_2542_scenario_tables",
+  "source_root": "docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports",
+  "source_commit": "64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
+  "generation_command": "uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2542_scenario_tables --artifact-spec docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_spec.json --commit 64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
+  "policy": {
+    "local_output_disposable": true,
+    "paper_or_benchmark_claim": "not_established_by_bundle_alone",
+    "fallback_or_degraded_rows": "must_remain_visible_in_caption_or_table_notes"
+  },
+  "totals": {
+    "artifact_count": 2,
+    "total_bytes": 37742
+  },
+  "artifacts": [
+    {
+      "artifact_id": "tab_issue_1023_campaign_table",
+      "source_path": "campaign_table.md",
+      "source_artifact": "tracked compact evidence table from docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports",
+      "output_path": "artifacts/tab_issue_1023_campaign_table.md",
+      "size_bytes": 2727,
+      "sha256": "350c10d84c9cbd3314051a2310c87bf6207aae3fbf4655688c39e31bb10a335e",
+      "source_commit": "64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
+      "generation_command": "uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2542_scenario_tables --artifact-spec docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_spec.json --commit 64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
+      "caption_draft": "Scenario-horizon campaign table preserved from the tracked Issue #1023 evidence pack.",
+      "claim_boundary": "Dissertation export smoke only; the table remains historical tracked evidence and does not establish a new benchmark claim.",
+      "recommended_manuscript_use": "discussion",
+      "fallback_degraded_summary": "Use only with the original Issue #1023 caveats; fallback, skipped, or unavailable rows must stay visible when present."
+    },
+    {
+      "artifact_id": "tab_issue_1023_scenario_family_breakdown",
+      "source_path": "scenario_family_breakdown.md",
+      "source_artifact": "tracked compact evidence table from docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports",
+      "output_path": "artifacts/tab_issue_1023_scenario_family_breakdown.md",
+      "size_bytes": 35015,
+      "sha256": "74de328f3f62c287654b462952a7ad6e485732a3624eef00222ce2d8e0a74efd",
+      "source_commit": "64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
+      "generation_command": "uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2542_scenario_tables --artifact-spec docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_spec.json --commit 64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
+      "caption_draft": "Scenario-family breakdown table preserved from the tracked Issue #1023 evidence pack.",
+      "claim_boundary": "Dissertation export smoke only; the table remains historical tracked evidence and does not establish a new benchmark claim.",
+      "recommended_manuscript_use": "discussion",
+      "fallback_degraded_summary": "Use only with the original Issue #1023 caveats; fallback, skipped, or unavailable rows must stay visible when present."
+    }
+  ]
+}

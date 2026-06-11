@@ -1,0 +1,35 @@
+schema_version: slurm-submission-queue.v1
+description: >
+  Reviewable queue for planned SLURM training submissions. GitHub issues remain the central
+  backlog, and submitted/running/completed state belongs in issue trails and the SLURM experiment
+  state ledger. Entries become runnable only after they are marked ready_to_submit and pass
+  scripts/dev/submit_training_jobs.py gates.
+entries:
+  - id: issue-1977-bc-warm-start-ppo
+    status: planned
+    issue: 1977
+    objective: >
+      Rerun the clean BC warm-start PPO follow-up from the preserved issue #1108 artifact.
+    config: configs/training/ppo_imitation/ppo_finetune_issue_1977_bc_warm_start_rerun.yaml
+    launcher: SLURM/Auxme/issue_1977_bc_warm_start_ppo.sl
+    target:
+      cluster: auxme
+      host: licca
+    resources:
+      gpus: 1
+      cpus: 8
+      memory: 32G
+      walltime: 1-12:00:00
+    seeds:
+      - 0
+    output_root: output/slurm/issue1977-bc-warm-start-ppo
+    log_path: output/slurm/%j-issue1977-bc-warm-start-ppo.out
+    priority_reason: >
+      Issue #1977 is a concrete rerun lane with tracked config and launcher surfaces.
+    auto_submit: false
+    job_name: gse-1977-bcppo
+    wrapper: scripts/dev/sbatch_issue1977_bc_warm_start_ppo.sh
+    wrapper_args:
+      - --config
+      - configs/training/ppo_imitation/ppo_finetune_issue_1977_bc_warm_start_rerun.yaml
+      - --no-status

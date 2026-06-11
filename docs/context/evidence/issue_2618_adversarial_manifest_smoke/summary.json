@@ -1,0 +1,93 @@
+{
+  "schema_version": "adversarial_manifest_smoke_issue_2618.v1",
+  "issue": 2618,
+  "generated_at": "2026-06-11",
+  "claim_boundary": "diagnostic_only",
+  "generator_version": "RandomCandidateSampler",
+  "seed_family": "crossing_ttc_space.yaml:random_seed_43",
+  "search_space": "configs/adversarial/crossing_ttc_space.yaml",
+  "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+  "generated_count": 4,
+  "valid_count": 4,
+  "invalid_count": 0,
+  "degenerate_count": 0,
+  "planner_pair": [
+    "goal",
+    "social_force"
+  ],
+  "executed_count": 2,
+  "result_classification": "generator_produces_useful_valid_cases",
+  "follow_up_recommendation": "continue",
+  "collision_signal": {
+    "available": true,
+    "goal_collision_episodes": 1,
+    "social_force_collision_episodes": 2
+  },
+  "near_miss_signal": {
+    "available": false,
+    "reason": "near_misses metric was not present in aggregate smoke summary"
+  },
+  "low_progress_signal": {
+    "available": true,
+    "goal_time_to_goal_norm_mean": 0.8333333333333333,
+    "social_force_time_to_goal_norm_mean": 1.0,
+    "interpretation": "social_force had zero success and exhausted normalized time on both executed cases"
+  },
+  "novelty_or_perturbation_distance": {
+    "unique_hash_count": 4,
+    "duplicate_hash_count": 0,
+    "novelty_rate": 1.0,
+    "perturbation_reference": null,
+    "perturbation_distance": null
+  },
+  "manifest_quality": {
+    "parse_failures": 0,
+    "validity_rate": 1.0,
+    "invalid_rate": 0.0,
+    "degenerate_rate": 0.0
+  },
+  "executed_candidates": [
+    {
+      "candidate_index": 0,
+      "normalized_control_hash": "871ad83b81348aaf",
+      "scenario_name": "crossing_ttc_template_manifest_0000",
+      "scenario_seed": 610
+    },
+    {
+      "candidate_index": 1,
+      "normalized_control_hash": "c7f92aa448cfb054",
+      "scenario_name": "crossing_ttc_template_manifest_0001",
+      "scenario_seed": 503
+    }
+  ],
+  "planner_runs": [
+    {
+      "planner": "goal",
+      "execution_mode": "native",
+      "availability_status": "available",
+      "episodes": 2,
+      "success_sum": 1.0,
+      "success_mean": 0.5,
+      "total_collision_count_sum": 1.0,
+      "time_to_goal_norm_mean": 0.8333333333333333,
+      "statuses": [
+        "collision",
+        "success"
+      ]
+    },
+    {
+      "planner": "social_force",
+      "execution_mode": "adapter",
+      "availability_status": "available",
+      "episodes": 2,
+      "success_sum": 0.0,
+      "success_mean": 0.0,
+      "total_collision_count_sum": 2.0,
+      "time_to_goal_norm_mean": 1.0,
+      "statuses": [
+        "collision"
+      ]
+    }
+  ],
+  "raw_output_policy": "raw manifests, route overrides, matrix, episode JSONL rows, smoke summary, and quality summary were kept under ignored local output; this file is the tracked compact evidence"
+}

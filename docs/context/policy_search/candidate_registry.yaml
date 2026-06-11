@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-05-31
+updated_at: 2026-06-11
 freshness:
   policy: manual_registry_edit
   max_age_days: 90

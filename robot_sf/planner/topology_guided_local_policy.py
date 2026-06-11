@@ -390,7 +390,8 @@ def _apply_primary_route_reuse_penalty(
         item for item in hypotheses if str(item.get("hypothesis_id")) != "primary_route"
     ]
     eligible_alternative = any(
-        str(item.get("near_parity_gate_reason")) == "eligible_near_parity_alternative"
+        str(item.get("near_parity_gate_reason"))
+        in {"eligible_near_parity_alternative", "selected_non_primary_near_parity"}
         for item in alternatives
     )
     diagnostic: dict[str, Any] = {

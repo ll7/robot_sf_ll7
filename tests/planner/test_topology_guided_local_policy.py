@@ -349,7 +349,7 @@ def test_default_no_reuse_penalty_fields_in_decision() -> None:
     assert decision["reuse_penalty_applied"] is False
     assert decision["reuse_penalty_reason"] is None
     assert decision["recent_primary_selection_count"] == 0
-    assert decision["eligible_near_parity_alternative_exists"] in {True, False}
+    assert decision["eligible_near_parity_alternative_exists"] is False
 
 
 def test_reuse_penalty_applied_after_repeated_primary_selections() -> None:
@@ -373,7 +373,7 @@ def test_reuse_penalty_applied_after_repeated_primary_selections() -> None:
     decision = planner._hypotheses_for_observation(obs)
 
     assert decision["status"] == "ok"
-    assert decision["recent_primary_selection_count"] >= 1
+    assert decision["recent_primary_selection_count"] == 1
     assert decision["reuse_penalty_applied"] is True
     assert decision["reuse_penalty_reason"]
 

@@ -311,7 +311,7 @@ knowledge, not every transient iteration detail.
 
   [issue_2594_static_deadlock_broader_h500.md](issue_2594_static_deadlock_broader_h500.md)
 
-* Issue #2596 static-deadlock recenter claim boundary:
+* Issue #2596 Static-Deadlock Recenter Claim Boundary 2026-06-11:
 
   [issue_2596_static_deadlock_recenter_claim_boundary.md](issue_2596_static_deadlock_recenter_claim_boundary.md)
 

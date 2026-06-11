@@ -119,6 +119,12 @@ Do not use it for:
      is exploratory.
 
 7. Submit exactly one training job.
+   - When the selected candidate has or should have a queue entry, update
+     `experiments/submission_queue.yaml` and run
+     `uv run python scripts/dev/submit_training_jobs.py --dry-run` before submission.
+   - Use `uv run python scripts/dev/submit_training_jobs.py --submit` for auto-submit only after
+     the entry is `ready_to_submit`, `auto_submit: true`, local machine policy allows SLURM, and
+     duplicate checks pass.
    - Submit through existing wrappers such as `scripts/dev/sbatch_use_max_time.sh` or a
      candidate-specific helper under `scripts/dev/`.
    - Use a short skill-owned job name: `gse-<issue>-<slug>`.
@@ -164,6 +170,9 @@ fresh rerun is the stated next action.
 ## Guardrails
 
 - Never submit more than one `gse-` training job at a time.
+- Never bypass `scripts/dev/submit_training_jobs.py` for a queue-backed training candidate unless
+  the queue entry is blocked or the helper cannot represent the existing launcher; document that
+  exception in the handoff.
 - Never count `slurm_pr_gate` validation jobs as the active training job.
 - Do not run full PR readiness or all-tests gates locally; submit them to SLURM.
 - Do not submit from an unintended branch, dirty worktree, or stale `origin/main` base without

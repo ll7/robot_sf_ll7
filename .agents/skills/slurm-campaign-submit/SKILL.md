@@ -46,11 +46,15 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
    condition, and diagnostic-preservation action. If these are missing, classify the candidate as
    `blocked-needs-scope` until the card is updated.
 6. Run any campaign-specific launch-packet validator before `sbatch` when one exists under `scripts/validation/`.
-7. Submit with explicit config and job name; capture job ID plus stdout/stderr paths.
-8. Record output root and expected artifacts: manifest, checkpoint, report, metrics, videos, or release bundle.
-9. Classify status as `submitted`, `blocked`, or `failed_preflight`; classify failures as config, cluster capacity, wrapper, dependency, or unknown.
-10. Hand artifact classification to `artifact-provenance` before downstream reports depend on local `output/`.
-11. After completion or predeclared cancellation, route results before rerunning:
+7. For queue-backed training jobs, run
+   `uv run python scripts/dev/submit_training_jobs.py --dry-run` and submit through
+   `uv run python scripts/dev/submit_training_jobs.py --submit` only when the generated manifest
+   shows the intended config, launcher, job name, output root, and duplicate-check evidence.
+8. Submit non-queue campaigns with explicit config and job name; capture job ID plus stdout/stderr paths.
+9. Record output root and expected artifacts: manifest, checkpoint, report, metrics, videos, or release bundle.
+10. Classify status as `submitted`, `blocked`, or `failed_preflight`; classify failures as config, cluster capacity, wrapper, dependency, or unknown.
+11. Hand artifact classification to `artifact-provenance` before downstream reports depend on local `output/`.
+12. After completion or predeclared cancellation, route results before rerunning:
     - cancelled runs may be diagnostic evidence only when the early-stop criteria were declared and
       the configured preservation action captured logs, manifest, config, commit, and artifact
       status;
@@ -62,6 +66,8 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
 ## Guardrails
 
 - Do not infer live cluster capacity from stale logs.
+- Do not bypass `scripts/dev/submit_training_jobs.py` for queue-backed training jobs unless the
+  helper cannot represent the launcher; record the exception and the equivalent duplicate checks.
 - Do not submit from an unintended branch or dirty tree without calling that out.
 - Do not treat a queued job as completed evidence.
 - Do not cancel a low-signal training job as diagnostic evidence unless the early-stop rule was

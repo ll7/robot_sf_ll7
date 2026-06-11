@@ -23,6 +23,48 @@ The wrapper:
 This keeps new submissions aligned with the live cluster policy even if the script still
 contains an older fallback value.
 
+## Training submission queue
+
+Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be
+safe for agents to dry-run and, on SLURM-capable hosts, auto-submit after all gates pass. The queue
+is planned intent only: GitHub issues remain the backlog, and submitted/running/completed state
+belongs in issue comments or `docs/context/issue_1544_slurm_experiment_state_ledger.md`.
+
+Run a dry-run manifest before any submission:
+
+```bash
+uv run python scripts/dev/submit_training_jobs.py --dry-run
+```
+
+This validates queue entries, records branch/commit/dirty-tree state, builds the wrapper command,
+checks local duplicate evidence such as existing output roots, and writes a timestamped manifest
+under `output/slurm/submissions/`.
+
+Submit eligible entries only from a SLURM-capable host:
+
+```bash
+uv run python scripts/dev/submit_training_jobs.py --submit
+```
+
+Submit mode additionally requires:
+
+- `local.machine.md` must explicitly set `allow_slurm_submission: true`;
+- the entry status is `ready_to_submit`;
+- `auto_submit: true`;
+- the config or launcher path exists;
+- the output root is absent;
+- live `squeue` and recent `sacct` checks do not show an equivalent job;
+- no other active `gse-` training job is present;
+- the existing wrapper exits successfully and returns a job id.
+
+Equivalent submissions are duplicates when they match the same issue/objective lane, config or
+launcher, seed set, commit or declared code version, target cluster, job name, or output root. A
+duplicate blocks `--submit`; reruns should use a new queue id, changed output root, and documented
+reason.
+
+Final reports should include the generated manifest path, job id, cluster/host, command, branch,
+commit SHA, config, launcher, seed set, output/log paths, skipped entries, and monitoring command.
+
 ## Examples
 
 Dry run before submitting:

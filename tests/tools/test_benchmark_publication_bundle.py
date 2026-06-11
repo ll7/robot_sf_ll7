@@ -248,7 +248,7 @@ def test_dissertation_bundle_command_creates_artifact_manifest(tmp_path: Path, c
     bundle_dir = Path(payload["bundle_dir"])
     manifest_path = Path(payload["manifest_path"])
     checksums_path = Path(payload["checksums_path"])
-    assert manifest_path.name == "artifact_manifest.yaml"
+    assert manifest_path.name == "artifact_manifest.json"
     assert (bundle_dir / "payload" / "artifacts" / "tab_campaign_table.md").exists()
     assert (bundle_dir / "payload" / "artifacts" / "fig_planner_status.png").exists()
 
@@ -294,6 +294,62 @@ def test_dissertation_bundle_command_rejects_invalid_manuscript_use(tmp_path: Pa
         )
 
 
+def test_dissertation_bundle_command_rejects_null_spec_fields(tmp_path: Path) -> None:
+    """JSON null values should not be coerced into string manifest fields."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    spec["artifacts"][0]["caption_draft"] = None
+    spec_path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="cannot be null"):
+        benchmark_publication_bundle.main(
+            [
+                "dissertation-bundle",
+                "--source-root",
+                str(source_root),
+                "--out-dir",
+                str(tmp_path / "dissertation_export"),
+                "--bundle-name",
+                "null_field",
+                "--artifact-spec",
+                str(spec_path),
+                "--command",
+                "uv run python scripts/tools/compile_benchmark_artifacts.py",
+                "--commit",
+                "abc123",
+            ]
+        )
+
+
+def test_dissertation_bundle_command_rejects_unsafe_artifact_id(tmp_path: Path) -> None:
+    """Artifact IDs become filenames and should allow only portable safe characters."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    spec["artifacts"][0]["artifact_id"] = "tab:campaign"
+    spec_path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid artifact_id"):
+        benchmark_publication_bundle.main(
+            [
+                "dissertation-bundle",
+                "--source-root",
+                str(source_root),
+                "--out-dir",
+                str(tmp_path / "dissertation_export"),
+                "--bundle-name",
+                "unsafe_id",
+                "--artifact-spec",
+                str(spec_path),
+                "--command",
+                "uv run python scripts/tools/compile_benchmark_artifacts.py",
+                "--commit",
+                "abc123",
+            ]
+        )
+
+
 def test_dissertation_bundle_command_fails_closed_for_missing_source(tmp_path: Path) -> None:
     """Dissertation bundle export should not write manifests for missing artifact sources."""
     source_root = tmp_path / "publication_candidates"
@@ -320,3 +376,71 @@ def test_dissertation_bundle_command_fails_closed_for_missing_source(tmp_path: P
                 "abc123",
             ]
         )
+
+
+def test_dissertation_bundle_command_rejects_symlink_source(tmp_path: Path) -> None:
+    """Dissertation bundle export should reject symlink payload sources before resolving paths."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    target = source_root / "tables" / "campaign_table.md"
+    link = source_root / "tables" / "campaign_table_link.md"
+    link.symlink_to(target)
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    spec["artifacts"][0]["source_path"] = "tables/campaign_table_link.md"
+    spec_path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="refuses symlink"):
+        benchmark_publication_bundle.main(
+            [
+                "dissertation-bundle",
+                "--source-root",
+                str(source_root),
+                "--out-dir",
+                str(tmp_path / "dissertation_export"),
+                "--bundle-name",
+                "symlink_source",
+                "--artifact-spec",
+                str(spec_path),
+                "--command",
+                "uv run python scripts/tools/compile_benchmark_artifacts.py",
+                "--commit",
+                "abc123",
+            ]
+        )
+
+
+def test_dissertation_bundle_overwrite_replaces_existing_file_path(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """Overwrite should replace a colliding file path instead of calling rmtree on it."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    out_dir.mkdir()
+    (out_dir / "file_collision").write_text("old payload\n", encoding="utf-8")
+
+    exit_code = benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            "file_collision",
+            "--artifact-spec",
+            str(spec_path),
+            "--command",
+            "uv run python scripts/tools/compile_benchmark_artifacts.py",
+            "--commit",
+            "abc123",
+            "--overwrite",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    assert Path(payload["bundle_dir"]).is_dir()
+    assert Path(payload["manifest_path"]).name == "artifact_manifest.json"

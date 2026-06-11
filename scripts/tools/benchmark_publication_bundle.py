@@ -284,15 +284,23 @@ def _load_dissertation_artifacts(spec_path: Path) -> list[DissertationArtifactSp
         if not isinstance(row, dict):
             raise ValueError(f"Artifact spec row {index} must be an object")
         try:
+
+            def get_str(key: str) -> str:
+                """Return a required artifact spec value without accepting JSON null."""
+                value = row[key]
+                if value is None:
+                    raise ValueError(f"Artifact spec row {index} field {key!r} cannot be null")
+                return str(value)
+
             artifacts.append(
                 DissertationArtifactSpec(
-                    artifact_id=str(row["artifact_id"]),
-                    source_path=Path(str(row["source_path"])),
-                    source_artifact=str(row["source_artifact"]),
-                    caption_draft=str(row["caption_draft"]),
-                    claim_boundary=str(row["claim_boundary"]),
-                    recommended_manuscript_use=str(row["recommended_manuscript_use"]),
-                    fallback_degraded_summary=str(row["fallback_degraded_summary"]),
+                    artifact_id=get_str("artifact_id"),
+                    source_path=Path(get_str("source_path")),
+                    source_artifact=get_str("source_artifact"),
+                    caption_draft=get_str("caption_draft"),
+                    claim_boundary=get_str("claim_boundary"),
+                    recommended_manuscript_use=get_str("recommended_manuscript_use"),
+                    fallback_degraded_summary=get_str("fallback_degraded_summary"),
                 )
             )
         except KeyError as exc:

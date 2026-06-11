@@ -120,7 +120,7 @@ small set of figure/table candidates needs a dissertation-facing handoff without
 turning local `output/` files into durable evidence. The command copies selected
 artifacts into a disposable bundle and writes:
 
-- `artifact_manifest.yaml`: JSON-compatible YAML with `schema_version:
+- `artifact_manifest.json`: JSON manifest with `schema_version:
   dissertation_artifact_bundle.v1`;
 - `checksums.sha256`: checksums for files under `payload/artifacts/`;
 - per-artifact rows with `artifact_id`, `source_path`, `source_artifact`,

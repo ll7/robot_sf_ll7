@@ -499,8 +499,11 @@ def _validate_dissertation_artifacts(
     resolved: list[tuple[DissertationArtifactSpec, Path, Path]] = []
     for artifact in artifacts:
         artifact_id = _validate_non_empty(artifact.artifact_id, "artifact_id", "<unknown>")
-        if "/" in artifact_id or "\\" in artifact_id or artifact_id in {".", ".."}:
-            raise ValueError(f"Invalid artifact_id: {artifact_id!r}")
+        if not all(char.isalnum() or char in "_-" for char in artifact_id):
+            raise ValueError(
+                f"Invalid artifact_id: {artifact_id!r}. "
+                "Only alphanumeric characters, underscores, and hyphens are allowed."
+            )
         if artifact_id in seen_ids:
             raise ValueError(f"Duplicate artifact_id: {artifact_id!r}")
         seen_ids.add(artifact_id)
@@ -520,17 +523,20 @@ def _validate_dissertation_artifacts(
             artifact_id,
         )
 
-        candidate = (
+        unresolved = (
             artifact.source_path
             if artifact.source_path.is_absolute()
             else root / artifact.source_path
-        ).resolve()
+        )
+        if unresolved.is_symlink():
+            raise ValueError(
+                f"Dissertation artifact bundle refuses symlink payloads: {artifact.source_path}"
+            )
+        candidate = unresolved.resolve()
         if not candidate.is_relative_to(root):
             raise ValueError(f"Artifact source escapes source root: {artifact.source_path}")
-        if not candidate.exists() or not candidate.is_file():
+        if not candidate.is_file():
             raise FileNotFoundError(f"Artifact source file does not exist: {candidate}")
-        if candidate.is_symlink():
-            raise ValueError(f"Dissertation artifact bundle refuses symlink payloads: {candidate}")
         payload_path = _artifact_payload_path(artifact_id, candidate)
         resolved.append((artifact, candidate.relative_to(root), payload_path))
     return resolved
@@ -550,7 +556,7 @@ def export_dissertation_artifact_bundle(
 
     The bundle layout contains:
     - ``payload/artifacts/``: selected figure/table source files.
-    - ``artifact_manifest.yaml``: JSON-compatible YAML manifest with caption,
+    - ``artifact_manifest.json``: JSON manifest with caption,
       checksum, manuscript-use, caveat, source, and claim-boundary metadata.
     - ``checksums.sha256``: SHA-256 checksums for all payload artifacts.
 
@@ -574,7 +580,10 @@ def export_dissertation_artifact_bundle(
         if bundle_dir.exists():
             if bundle_dir == target_root:
                 raise ValueError("Refusing to delete out_dir via overwrite")
-            shutil.rmtree(bundle_dir)
+            if bundle_dir.is_dir() and not bundle_dir.is_symlink():
+                shutil.rmtree(bundle_dir)
+            else:
+                bundle_dir.unlink()
     elif bundle_dir.exists():
         raise FileExistsError(f"Dissertation artifact bundle output already exists: {bundle_dir}")
 
@@ -629,7 +638,7 @@ def export_dissertation_artifact_bundle(
         "totals": {"artifact_count": len(manifest_entries), "total_bytes": total_bytes},
         "artifacts": manifest_entries,
     }
-    manifest_path = bundle_dir / "artifact_manifest.yaml"
+    manifest_path = bundle_dir / "artifact_manifest.json"
     manifest_path.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
 
     return DissertationArtifactBundleResult(

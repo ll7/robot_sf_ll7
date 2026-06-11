@@ -181,9 +181,10 @@ recorded cleanup.
 
 ### Usage Pause Guard
 
-When a user-defined Codex usage threshold is active, treat a `codex-usage-status`
-`threshold_decision.status: stop` result as a hard paused state for the autopilot
-loop, not as another recoverable phase outcome.
+When a user-defined Codex usage threshold is active, run the configured usage-check command. For the
+external `codex-usage-status` skill, that means its `read_codex_usage.py` helper with
+`--stop-below-remaining <percent> --json`. Treat a `threshold_decision.status: stop` result as a
+hard paused state for the autopilot loop, not as another recoverable phase outcome.
 
 Persist the stop decision in the common Git directory before returning so repeated
 automatic continue prompts can short-circuit without rereading repo state, rerunning

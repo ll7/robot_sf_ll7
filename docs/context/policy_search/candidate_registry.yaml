@@ -313,6 +313,21 @@ candidates:
     required_stages:
       - smoke
 
+  topology_guided_hybrid_rule_v0_reuse_penalty:
+    status: experimental_spike
+    family: topology_hypothesis_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/topology_guided_hybrid_rule_v0_reuse_penalty.yaml
+    hypothesis: >
+      A diagnostic primary-route reuse penalty can demote repeated primary_route
+      reselection when eligible near-parity alternatives remain available, preserving
+      the baseline topology-guided candidate for paired comparison. This is a
+      diagnostic-only #2540/#2563 mechanism test and not benchmark evidence.
+    required_stages:
+      - smoke
+
   tentabot_value_scorer_v0:
     status: experimental_spike
     family: learned_style_value_scorer

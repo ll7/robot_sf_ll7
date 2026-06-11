@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -39,6 +39,10 @@ _TOPOLOGY_KEYS = {
     "near_parity_route_distance_slack_ratio",
     "near_parity_static_clearance_floor_m",
     "near_parity_diversity_bonus",
+    "primary_route_reuse_penalty_enabled",
+    "primary_route_reuse_penalty_weight",
+    "primary_route_reuse_penalty_cooldown_steps",
+    "primary_route_reuse_penalty_min_prior_primary_selections",
     "route_hypothesis",
 }
 
@@ -69,6 +73,10 @@ class TopologyGuidedLocalPolicyConfig:
     near_parity_route_distance_slack_ratio: float = 0.05
     near_parity_static_clearance_floor_m: float = 0.05
     near_parity_diversity_bonus: float = 0.0
+    primary_route_reuse_penalty_enabled: bool = False
+    primary_route_reuse_penalty_weight: float = 1.0
+    primary_route_reuse_penalty_cooldown_steps: int = 3
+    primary_route_reuse_penalty_min_prior_primary_selections: int = 2
 
 
 @dataclass(frozen=True)
@@ -364,6 +372,56 @@ def _finalize_near_parity_gate_diagnostic(
     return diagnostic
 
 
+def _apply_primary_route_reuse_penalty(
+    config: TopologyGuidedLocalPolicyConfig,
+    hypotheses: list[dict[str, Any]],
+    recent_primary_selections: deque[tuple[str, float | None]],
+) -> dict[str, Any]:
+    """Apply a reuse penalty to primary_route when eligible near-parity alternatives exist.
+
+    Returns:
+        dict[str, Any]: Diagnostic fields for the reuse-penalty mechanism.
+    """
+    primary = next(
+        (item for item in hypotheses if str(item.get("hypothesis_id")) == "primary_route"),
+        None,
+    )
+    alternatives = [
+        item for item in hypotheses if str(item.get("hypothesis_id")) != "primary_route"
+    ]
+    eligible_alternative = any(
+        str(item.get("near_parity_gate_reason")) == "eligible_near_parity_alternative"
+        for item in alternatives
+    )
+    diagnostic: dict[str, Any] = {
+        "reuse_penalty_applied": False,
+        "reuse_penalty_reason": None,
+        "recent_primary_selection_count": 0,
+        "eligible_near_parity_alternative_exists": bool(eligible_alternative),
+    }
+    if not bool(config.primary_route_reuse_penalty_enabled):
+        return diagnostic
+    recent_count = sum(1 for hid, _ in recent_primary_selections if hid == "primary_route")
+    diagnostic["recent_primary_selection_count"] = recent_count
+    min_prior = int(config.primary_route_reuse_penalty_min_prior_primary_selections)
+    if (
+        primary is not None
+        and recent_count >= min_prior
+        and eligible_alternative
+        and len(recent_primary_selections) > 0
+    ):
+        penalty = float(config.primary_route_reuse_penalty_weight) * float(recent_count)
+        primary["selection_score"] = (
+            float(primary.get("selection_score", primary["score"])) - penalty
+        )
+        diagnostic["reuse_penalty_applied"] = True
+        diagnostic["reuse_penalty_reason"] = (
+            f"primary_route_selected_{recent_count}_times_in_last_"
+            f"{len(recent_primary_selections)}_steps_with_eligible_near_parity_alternative"
+        )
+    return diagnostic
+
+
 def build_topology_guided_local_policy_config(
     cfg: dict[str, Any] | None,
 ) -> TopologyGuidedLocalPolicyConfig:
@@ -424,6 +482,18 @@ def build_topology_guided_local_policy_config(
             raw.get("near_parity_static_clearance_floor_m", 0.05)
         ),
         near_parity_diversity_bonus=float(raw.get("near_parity_diversity_bonus", 0.0)),
+        primary_route_reuse_penalty_enabled=bool(
+            raw.get("primary_route_reuse_penalty_enabled", False)
+        ),
+        primary_route_reuse_penalty_weight=float(
+            raw.get("primary_route_reuse_penalty_weight", 1.0)
+        ),
+        primary_route_reuse_penalty_cooldown_steps=int(
+            raw.get("primary_route_reuse_penalty_cooldown_steps", 3)
+        ),
+        primary_route_reuse_penalty_min_prior_primary_selections=int(
+            raw.get("primary_route_reuse_penalty_min_prior_primary_selections", 2)
+        ),
     )
 
 
@@ -438,6 +508,10 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         self._topology_status_counts: Counter[str] = Counter()
         self._selected_hypothesis_counts: Counter[str] = Counter()
         self._last_topology_decision: dict[str, Any] | None = None
+        self._recent_primary_selections: deque[tuple[str, float | None]] = deque(
+            maxlen=max(int(self.topology_config.primary_route_reuse_penalty_cooldown_steps), 1)
+        )
+        self._total_primary_selections: int = 0
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset base planner state and topology-hypothesis diagnostics."""
@@ -445,6 +519,10 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
         self._topology_status_counts = Counter()
         self._selected_hypothesis_counts = Counter()
         self._last_topology_decision = None
+        self._recent_primary_selections = deque(
+            maxlen=max(int(self.topology_config.primary_route_reuse_penalty_cooldown_steps), 1)
+        )
+        self._total_primary_selections = 0
 
     def _alternative_paths(
         self,
@@ -596,16 +674,31 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             selected,
             near_parity,
         )
+        reuse_penalty_diagnostic = _apply_primary_route_reuse_penalty(
+            self.topology_config,
+            hypotheses,
+            self._recent_primary_selections,
+        )
+        selected = max(
+            hypotheses,
+            key=lambda item: float(item.get("selection_score", item["score"])),
+        )
         _annotate_topology_selection(hypotheses, selected=selected)
+        selected_id = str(selected["hypothesis_id"])
+        if selected_id == "primary_route":
+            self._total_primary_selections += 1
+        route_remaining = _finite_optional_float(selected.get("route_remaining_distance_m"))
+        self._recent_primary_selections.append((selected_id, route_remaining))
         return {
             "status": "ok",
             "reason": "selected_scored_route_hypothesis",
             "hypothesis_count": len(hypotheses),
-            "selected_hypothesis_id": selected["hypothesis_id"],
+            "selected_hypothesis_id": selected_id,
             "selected_rank": int(selected["rank"]),
             "selected_score": float(selected["score"]),
             "selection_score": float(selected.get("selection_score", selected["score"])),
             **near_parity,
+            **reuse_penalty_diagnostic,
             "hypotheses": hypotheses,
         }
 
@@ -651,6 +744,14 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             {key: value for key, value in item.items() if key != "route_corridor"}
             for item in topology["hypotheses"]
         ]
+        route_corridor["topology_reuse_penalty"] = {
+            "reuse_penalty_applied": topology.get("reuse_penalty_applied", False),
+            "reuse_penalty_reason": topology.get("reuse_penalty_reason"),
+            "recent_primary_selection_count": topology.get("recent_primary_selection_count", 0),
+            "eligible_near_parity_alternative_exists": topology.get(
+                "eligible_near_parity_alternative_exists", False
+            ),
+        }
         route_corridor["topology_status"] = "ok"
         return route_corridor
 

@@ -9,6 +9,7 @@ import yaml
 
 from robot_sf.benchmark.map_runner import (
     _intent_conditioned_behavior_summary,
+    _signal_state_proxy_wrapper,
     _single_pedestrian_intent_metadata,
     _trace_pedestrians,
 )
@@ -77,19 +78,41 @@ def test_issue_2527_intent_metadata_reaches_trace_and_summary_fields() -> None:
     assert waiting_frame["intent_source"] == "authored_scenario_metadata"
     assert "not data-grounded" in waiting_frame["claim_boundary"]
     assert waiting_frame["signal_state"]["phase"] == "robot_green_pedestrian_dont_walk"
+    assert waiting_frame["signal_state"]["claim_boundary"] == "proxy_diagnostic"
+    assert waiting_frame["signal_state"]["pedestrian_intent"] == {
+        "intent_label": "waiting_then_crossing",
+        "intent_phase": "waiting",
+        "intent_source": "authored_scenario_metadata",
+    }
+    assert waiting_frame["signal_state"]["robot_stop_or_yield_expectation"] == "proceed_clear"
+    assert {
+        "signal_phase",
+        "pedestrian_intent",
+        "robot_stop_or_yield_expectation",
+        "claim_boundary",
+        "trace_fields_present",
+    }.issubset(waiting_frame["signal_state"]["trace_fields_present"])
     assert waiting_frame["signal_state"]["pedestrian_right_of_way"] is False
     assert crossing_frame["intent_phase"] == "crossing"
     assert crossing_frame["signal_state"]["phase"] == "pedestrian_walk_robot_red"
+    assert crossing_frame["signal_state"]["pedestrian_intent"]["intent_phase"] == "crossing"
+    assert (
+        crossing_frame["signal_state"]["robot_stop_or_yield_expectation"] == "yield_to_pedestrian"
+    )
     assert crossing_frame["signal_state"]["pedestrian_right_of_way"] is True
     assert summary is not None
     assert summary["status"] == "diagnostic_metadata_only"
     assert summary["benchmark_evidence"] is False
     assert summary["trace_field_source"].endswith("pedestrians[]")
     assert summary["signal_state"]["status"] == "proxy_diagnostic_only"
-    assert summary["signal_state"]["trace_fields"] == [
-        "pedestrians[].signal_state",
-        "pedestrians[].intent_phase",
-    ]
+    assert summary["signal_state"]["claim_boundary"] == "proxy_diagnostic"
+    assert summary["signal_state"]["pedestrian_intent"] == {
+        "intent_label": "waiting_then_crossing",
+        "intent_phase": "waiting",
+        "intent_source": "authored_scenario_metadata",
+    }
+    assert summary["signal_state"]["robot_stop_or_yield_expectation"] == "proceed_clear"
+    assert "trace_fields_present" in summary["signal_state"]
 
 
 def test_issue_2527_mixed_single_pedestrian_intent_metadata_stays_aligned() -> None:
@@ -120,3 +143,66 @@ def test_issue_2527_mixed_single_pedestrian_intent_metadata_stays_aligned() -> N
     assert "pedestrian_id" not in frames[1]
     assert summary is not None
     assert [ped["pedestrian_id"] for ped in summary["pedestrians"]] == ["h1"]
+
+
+def test_signal_state_proxy_wrapper_exposes_bounded_diagnostic_fields() -> None:
+    """The proxy wrapper must expose all five required fields with claim_boundary=proxy_diagnostic."""
+    scenario = _scenario_payload()
+    signal_state = scenario["metadata"]["signal_state"]
+
+    waiting_proxy = _signal_state_proxy_wrapper(
+        signal_state, "waiting", "waiting_then_crossing", "authored_scenario_metadata"
+    )
+    crossing_proxy = _signal_state_proxy_wrapper(
+        signal_state, "crossing", "waiting_then_crossing", "authored_scenario_metadata"
+    )
+
+    assert waiting_proxy is not None
+    assert crossing_proxy is not None
+
+    for proxy in (waiting_proxy, crossing_proxy):
+        assert "signal_phase" in proxy
+        assert "pedestrian_intent" in proxy
+        assert "robot_stop_or_yield_expectation" in proxy
+        assert "trace_fields_present" in proxy
+        assert proxy["claim_boundary"] == "proxy_diagnostic"
+        assert "intent_label" in proxy["pedestrian_intent"]
+        assert "intent_phase" in proxy["pedestrian_intent"]
+        assert "intent_source" in proxy["pedestrian_intent"]
+
+    assert waiting_proxy["signal_phase"] == "robot_green_pedestrian_dont_walk"
+    assert waiting_proxy["robot_stop_or_yield_expectation"] == "proceed_clear"
+    assert waiting_proxy["pedestrian_intent"]["intent_phase"] == "waiting"
+
+    assert crossing_proxy["signal_phase"] == "pedestrian_walk_robot_red"
+    assert crossing_proxy["robot_stop_or_yield_expectation"] == "yield_to_pedestrian"
+    assert crossing_proxy["pedestrian_intent"]["intent_phase"] == "crossing"
+
+    assert "signal_state" in waiting_proxy["trace_fields_present"]
+    assert "pedestrian_intent" in waiting_proxy["trace_fields_present"]
+
+
+def test_intent_summary_handles_missing_or_empty_intent_phases() -> None:
+    """Malformed phase metadata should fall back to unknown instead of crashing summaries."""
+    scenario = _scenario_payload()
+    signal_state = scenario["metadata"]["signal_state"]
+
+    for malformed_phases in (None, []):
+        summary = _intent_conditioned_behavior_summary(
+            scenario,
+            [
+                {
+                    "pedestrian_id": "h1",
+                    "intent_label": "waiting_then_crossing",
+                    "intent_phases": malformed_phases,
+                    "intent_source": "authored_scenario_metadata",
+                    "claim_boundary": "diagnostic_metadata_only",
+                    "behavior_parameters": {},
+                    "signal_state": signal_state,
+                }
+            ],
+        )
+
+        assert summary is not None
+        assert summary["signal_state"]["pedestrian_intent"]["intent_phase"] == "unknown"
+        assert summary["signal_state"]["signal_phase"] == "robot_green_pedestrian_dont_walk"

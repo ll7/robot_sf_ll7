@@ -130,5 +130,10 @@ This is a decision note only. Validate with cheap docs checks:
 ```bash
 uv run python scripts/validation/check_research_lane_states.py
 uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml
+uv run python scripts/validation/check_docs_proof_consistency.py \
+  --path docs/context/issue_2621_topology_revision_hypothesis.md \
+  --path docs/context/catalog.yaml \
+  --path docs/context/INDEX.md \
+  --path docs/context/README.md
 git diff --check
 ```

@@ -1,0 +1,105 @@
+{
+  "schema": "topology_reuse_penalty_paired_diagnostic.v1",
+  "issue": 2624,
+  "generated_at": "2026-06-11",
+  "claim_boundary": "diagnostic_only",
+  "revision_name": "primary_route_reuse_penalty_under_near_parity_alternatives",
+  "scenario": "classic_realworld_double_bottleneck_high",
+  "stage": "full_matrix",
+  "seed": 111,
+  "horizon": 160,
+  "max_hypotheses": 3,
+  "min_hypotheses": 2,
+  "candidate": "topology_guided_hybrid_rule_v0_reuse_penalty",
+  "comparator": "topology_guided_hybrid_rule_v0",
+  "diagnostic_status": "diagnostic_complete",
+  "required_fields_present": true,
+  "classification": "revise",
+  "classification_reason": "The reuse penalty activated, but non-primary topology-command influence did not increase, max route-progress delta regressed, and both runs ended horizon_exhausted.",
+  "raw_outputs_policy": "raw diagnostic outputs were kept local and ignored; this tracked summary is the durable compact evidence",
+  "candidate_summary": {
+    "diagnostic_status": "diagnostic_complete",
+    "topology_status_counts": {
+      "insufficient_hypotheses": 71,
+      "ok": 89
+    },
+    "selected_source_counts": {
+      "dynamic_window": 123,
+      "path_follow_0.5m": 2,
+      "route_guide": 4,
+      "topology_hypothesis": 31
+    },
+    "topology_command_influence_counts": {
+      "masked_cell_84_103": 6,
+      "masked_cell_85_103": 1,
+      "primary_route": 24
+    },
+    "non_primary_topology_command_steps": 7,
+    "topology_command_steps": 31,
+    "hypothesis_switch_count": 3,
+    "max_route_progress_delta_m": -0.7833477875357442,
+    "positive_route_progress": false,
+    "terminal_outcome": "horizon_exhausted",
+    "success": false,
+    "topology_reuse_penalty": {
+      "applied_steps": 9,
+      "eligible_near_parity_alternative_steps": 55,
+      "max_recent_primary_selection_count": 3,
+      "reason_counts": {
+        "primary_route_selected_2_times_in_last_3_steps_with_eligible_near_parity_alternative": 6,
+        "primary_route_selected_3_times_in_last_3_steps_with_eligible_near_parity_alternative": 3
+      }
+    },
+    "selected_hypothesis_counts": {
+      "primary_route": 49,
+      "non_primary_total": 47
+    }
+  },
+  "comparator_summary": {
+    "diagnostic_status": "diagnostic_complete",
+    "topology_status_counts": {
+      "insufficient_hypotheses": 70,
+      "ok": 90
+    },
+    "selected_source_counts": {
+      "dynamic_window": 121,
+      "path_follow_0.5m": 2,
+      "route_guide": 4,
+      "topology_hypothesis": 33
+    },
+    "topology_command_influence_counts": {
+      "masked_cell_84_103": 6,
+      "masked_cell_85_103": 1,
+      "primary_route": 26
+    },
+    "non_primary_topology_command_steps": 7,
+    "topology_command_steps": 33,
+    "hypothesis_switch_count": 3,
+    "max_route_progress_delta_m": 0.16812408921843236,
+    "positive_route_progress": true,
+    "terminal_outcome": "horizon_exhausted",
+    "success": false,
+    "topology_reuse_penalty": {
+      "applied_steps": 0,
+      "eligible_near_parity_alternative_steps": 56,
+      "max_recent_primary_selection_count": 0,
+      "reason_counts": {}
+    },
+    "selected_hypothesis_counts": {
+      "primary_route": 56,
+      "non_primary_total": 40
+    }
+  },
+  "deltas": {
+    "non_primary_topology_command_influence_delta": 0,
+    "topology_command_steps_delta": -2,
+    "primary_topology_command_influence_delta": -2,
+    "route_progress_delta_m": -0.9514718767541766,
+    "terminal_outcome_delta": "unchanged_horizon_exhausted",
+    "hypothesis_switch_count_delta": 0,
+    "reuse_penalty_applied_steps_delta": 9,
+    "eligible_near_parity_alternative_steps_delta": -1,
+    "selected_hypothesis_primary_count_delta": -7,
+    "selected_hypothesis_non_primary_count_delta": 7
+  }
+}

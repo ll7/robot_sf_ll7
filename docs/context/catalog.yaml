@@ -717,6 +717,14 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2620_oracle_artifact_access.md
+    status: current
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2620_oracle_artifact_access/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/issue_2277_local_artifact_classification.md
     status: current
     freshness: evidence

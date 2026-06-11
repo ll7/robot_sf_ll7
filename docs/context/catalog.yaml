@@ -309,6 +309,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2602_why_first_report_usefulness.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2602_why_first_report_usefulness/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2259_amv_clipping_success_boundary.md
     status: current
     freshness: evidence

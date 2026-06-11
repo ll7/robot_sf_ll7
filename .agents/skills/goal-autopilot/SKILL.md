@@ -151,7 +151,7 @@ directory so it survives linked worktrees, context compaction, and branch cleanu
 the PR diff:
 
 ```bash
-LEDGER_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/codex-agent-runs/active"
+LEDGER_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
 mkdir -p "$LEDGER_DIR"
 ```
 
@@ -182,16 +182,17 @@ recorded cleanup.
 ### Usage Pause Guard
 
 When a user-defined Codex usage threshold is active, run the configured usage-check command. For the
-external `codex-usage-status` skill, that means its `read_codex_usage.py` helper with
-`--stop-below-remaining <percent> --json`. Treat a `threshold_decision.status: stop` result as a
-hard paused state for the autopilot loop, not as another recoverable phase outcome.
+external `codex-usage-status` skill, use the skill's `read_codex_usage.py` helper with
+`--stop-below-remaining <percent> --json`. That helper returns a `threshold_decision` object with
+`status: continue`, `status: stop`, or `status: unavailable`; treat `status: stop` as a hard paused
+state for the autopilot loop, not as another recoverable phase outcome.
 
 Persist the stop decision in the common Git directory before returning so repeated
 automatic continue prompts can short-circuit without rereading repo state, rerunning
 GitHub operations, or restarting delegation:
 
 ```bash
-PAUSE_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/codex-agent-runs/active"
+PAUSE_DIR="$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
 mkdir -p "$PAUSE_DIR"
 # Write compact JSON/YAML/Markdown such as:
 # $PAUSE_DIR/usage-pause.md

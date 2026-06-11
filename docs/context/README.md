@@ -311,6 +311,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2594_static_deadlock_broader_h500.md](issue_2594_static_deadlock_broader_h500.md)
 
+* Issue #2596 static-deadlock recenter claim boundary:
+
+  [issue_2596_static_deadlock_recenter_claim_boundary.md](issue_2596_static_deadlock_recenter_claim_boundary.md)
+
 * Issue #2547 counterfactual mechanism taxonomy:
 
   [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)

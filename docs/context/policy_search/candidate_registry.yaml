@@ -328,6 +328,23 @@ candidates:
     required_stages:
       - smoke
 
+  topology_guided_hybrid_rule_v0_progress_gated_reselection:
+    status: experimental_spike
+    family: topology_hypothesis_diagnostic
+    training_required: false
+    claim_scope: diagnostic_only
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/topology_guided_hybrid_rule_v0_progress_gated_reselection.yaml
+    issue: 2704
+    hypothesis: >
+      A progress-gated reuse penalty can suppress the primary-route demotion
+      when recent primary-route progress satisfies a predeclared threshold,
+      preserving route commitment during meaningful forward progress while
+      still demoting primary-route reselection when progress stalls. This is
+      a diagnostic-only #2660 successor mechanism test and not benchmark evidence.
+    required_stages:
+      - smoke
+
   tentabot_value_scorer_v0:
     status: experimental_spike
     family: learned_style_value_scorer

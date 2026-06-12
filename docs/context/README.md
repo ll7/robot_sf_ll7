@@ -182,6 +182,9 @@ knowledge, not every transient iteration detail.
   ([summary](evidence/issue_2624_topology_reuse_penalty_gate/summary.json))
 * Issue #2660 Topology Successor Gate After Reuse-Penalty Regression:
   [issue_2660_topology_successor_gate.md](issue_2660_topology_successor_gate.md)
+* Issue #2704 Progress-Gated Topology Successor Diagnostic:
+  [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
+  ([summary](evidence/issue_2704_progress_gated_topology_successor/summary.json))
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:
@@ -794,6 +797,9 @@ knowledge, not every transient iteration detail.
   ([summary](evidence/issue_2624_topology_reuse_penalty_gate/summary.json))
 * Issue #2660 Topology Successor Gate After Reuse-Penalty Regression:
   [issue_2660_topology_successor_gate.md](issue_2660_topology_successor_gate.md)
+* Issue #2704 Progress-Gated Topology Successor Diagnostic:
+  [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
+  ([summary](evidence/issue_2704_progress_gated_topology_successor/summary.json))
 * Issue #2522 topology and AMV why-first diagnostics:
   [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
   ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),

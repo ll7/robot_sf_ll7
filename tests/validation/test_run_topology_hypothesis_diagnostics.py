@@ -302,6 +302,10 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
                         "reuse_penalty_reason": "primary_route_selected_2_times_in_last_3_steps",
                         "recent_primary_selection_count": 2,
                         "eligible_near_parity_alternative_exists": True,
+                        "primary_route_recent_progress_m": 0.2,
+                        "primary_route_recent_progress_sample_count": 2,
+                        "primary_route_progress_gate_satisfied": True,
+                        "reuse_penalty_suppressed_by_progress": False,
                     },
                     "topology_hypotheses": [
                         {
@@ -472,5 +476,9 @@ def test_summarize_hypotheses_counts_sources_progress_and_corrective_behavior() 
         "applied_steps": 1,
         "eligible_near_parity_alternative_steps": 1,
         "max_recent_primary_selection_count": 2,
+        "progress_gate_satisfied_steps": 1,
+        "progress_suppressed_steps": 0,
+        "max_primary_route_recent_progress_m": 0.2,
+        "max_primary_route_recent_progress_sample_count": 2,
         "reason_counts": {"primary_route_selected_2_times_in_last_3_steps": 1},
     }

@@ -1,7 +1,9 @@
 # Issue #2660 Topology Successor Gate After Reuse-Penalty Regression
 
 Issue: [#2660](https://github.com/ll7/robot_sf_ll7/issues/2660)
-Status: current, diagnostic synthesis only.
+Status: historical successor-selection decision. The selected child implementation and paired
+diagnostic result are now recorded in
+[issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md).
 
 ## Claim Boundary
 
@@ -73,6 +75,12 @@ Minimum implementation behavior for a future child issue:
 
 Follow-up implementation issue:
 [#2704](https://github.com/ll7/robot_sf_ll7/issues/2704).
+
+Outcome: Issue #2704 implemented the selected progress-gated successor and classified the paired
+smoke as `revise`: the mechanism ran and suppressed six reuse penalties when progress was
+sufficient, but it did not improve route progress, non-primary topology-command influence, or the
+`horizon_exhausted` terminal outcome on the canonical h160 slice. Do not rerun the progress-gated
+candidate unchanged on that slice as promotion evidence.
 
 Suggested diagnostic gate after implementation:
 

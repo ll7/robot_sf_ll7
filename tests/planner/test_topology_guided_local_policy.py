@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.topology_guided_local_policy import (
     TopologyGuidedHybridRulePlannerAdapter,
@@ -516,3 +517,242 @@ def test_apply_primary_route_reuse_penalty_not_eligible_when_no_near_parity_alte
 
     assert result["reuse_penalty_applied"] is False
     assert result["eligible_near_parity_alternative_exists"] is False
+
+
+def test_progress_gate_suppresses_penalty_when_threshold_met() -> None:
+    """Progress gate should suppress reuse penalty when recent progress meets threshold."""
+    from collections import deque
+
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_weight=10.0,
+        primary_route_reuse_penalty_cooldown_steps=5,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+        near_parity_diversity_gate_enabled=True,
+        near_parity_route_distance_slack_m=100.0,
+        near_parity_route_distance_slack_ratio=100.0,
+        near_parity_static_clearance_floor_m=100.0,
+        near_parity_diversity_bonus=0.0,
+        primary_route_progress_gate_enabled=True,
+        primary_route_progress_gate_threshold_m=0.1,
+    )
+    primary = {
+        "hypothesis_id": "primary_route",
+        "score": -5.0,
+        "selection_score": -5.0,
+    }
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+    }
+    recent = deque([("primary_route", 1.5), ("primary_route", 1.3)], maxlen=5)
+
+    result = _apply_primary_route_reuse_penalty(config, [primary, alt], recent)
+
+    assert result["reuse_penalty_applied"] is False
+    assert result["primary_route_progress_gate_satisfied"] is True
+    assert result["reuse_penalty_suppressed_by_progress"] is True
+    assert result["primary_route_recent_progress_m"] == pytest.approx(0.2)
+    assert result["primary_route_recent_progress_sample_count"] == 2
+    assert "progress_gate_suppressed" in result["reuse_penalty_reason"]
+    assert float(primary["selection_score"]) == -5.0
+
+
+def test_progress_gate_does_not_suppress_when_threshold_not_met() -> None:
+    """Progress gate should not suppress penalty when recent progress is below threshold."""
+    from collections import deque
+
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_weight=10.0,
+        primary_route_reuse_penalty_cooldown_steps=5,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+        near_parity_diversity_gate_enabled=True,
+        near_parity_route_distance_slack_m=100.0,
+        near_parity_route_distance_slack_ratio=100.0,
+        near_parity_static_clearance_floor_m=100.0,
+        near_parity_diversity_bonus=0.0,
+        primary_route_progress_gate_enabled=True,
+        primary_route_progress_gate_threshold_m=0.5,
+    )
+    primary = {
+        "hypothesis_id": "primary_route",
+        "score": -5.0,
+        "selection_score": -5.0,
+    }
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+    }
+    recent = deque([("primary_route", 1.1), ("primary_route", 1.0)], maxlen=5)
+
+    result = _apply_primary_route_reuse_penalty(config, [primary, alt], recent)
+
+    assert result["reuse_penalty_applied"] is True
+    assert result["primary_route_progress_gate_satisfied"] is False
+    assert result["reuse_penalty_suppressed_by_progress"] is False
+    assert result["primary_route_recent_progress_m"] == pytest.approx(0.1)
+    assert float(primary["selection_score"]) < -5.0
+
+
+def test_progress_gate_disabled_does_not_suppress() -> None:
+    """When progress gate is disabled, penalty should apply normally regardless of progress."""
+    from collections import deque
+
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_weight=10.0,
+        primary_route_reuse_penalty_cooldown_steps=5,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+        near_parity_diversity_gate_enabled=True,
+        near_parity_route_distance_slack_m=100.0,
+        near_parity_route_distance_slack_ratio=100.0,
+        near_parity_static_clearance_floor_m=100.0,
+        near_parity_diversity_bonus=0.0,
+        primary_route_progress_gate_enabled=False,
+        primary_route_progress_gate_threshold_m=0.0,
+    )
+    primary = {
+        "hypothesis_id": "primary_route",
+        "score": -5.0,
+        "selection_score": -5.0,
+    }
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+    }
+    recent = deque([("primary_route", 1.0), ("primary_route", 1.0)], maxlen=5)
+
+    result = _apply_primary_route_reuse_penalty(config, [primary, alt], recent)
+
+    assert result["reuse_penalty_applied"] is True
+    assert result["reuse_penalty_suppressed_by_progress"] is False
+
+
+def test_progress_gate_diagnostic_fields_present_in_decision() -> None:
+    """Progress gate diagnostic fields should be present in topology decision output."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            primary_route_reuse_penalty_enabled=True,
+            primary_route_reuse_penalty_weight=0.1,
+            primary_route_reuse_penalty_cooldown_steps=5,
+            primary_route_reuse_penalty_min_prior_primary_selections=1,
+            near_parity_diversity_gate_enabled=True,
+            near_parity_route_distance_slack_m=100.0,
+            near_parity_route_distance_slack_ratio=100.0,
+            near_parity_static_clearance_floor_m=100.0,
+            near_parity_diversity_bonus=0.0,
+            primary_route_progress_gate_enabled=True,
+            primary_route_progress_gate_threshold_m=0.1,
+        )
+    )
+    obs = _obs(occupied_cells=_two_gap_wall())
+    planner._hypotheses_for_observation(obs)
+
+    decision = planner._hypotheses_for_observation(obs)
+
+    assert "primary_route_recent_progress_m" in decision
+    assert "primary_route_recent_progress_sample_count" in decision
+    assert "primary_route_progress_gate_satisfied" in decision
+    assert "reuse_penalty_suppressed_by_progress" in decision
+
+
+def test_progress_gate_diagnostic_fields_in_route_corridor() -> None:
+    """Progress gate diagnostic fields should be exposed in route corridor output."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            primary_route_reuse_penalty_enabled=True,
+            primary_route_reuse_penalty_weight=0.1,
+            primary_route_reuse_penalty_cooldown_steps=5,
+            primary_route_reuse_penalty_min_prior_primary_selections=1,
+            near_parity_diversity_gate_enabled=True,
+            near_parity_route_distance_slack_m=100.0,
+            near_parity_route_distance_slack_ratio=100.0,
+            near_parity_static_clearance_floor_m=100.0,
+            near_parity_diversity_bonus=0.0,
+            primary_route_progress_gate_enabled=True,
+            primary_route_progress_gate_threshold_m=0.1,
+        )
+    )
+    obs = _obs(occupied_cells=_two_gap_wall())
+    planner._hypotheses_for_observation(obs)
+    planner._hypotheses_for_observation(obs)
+
+    route_corridor = planner._route_corridor_diagnostics(obs, current_time=1.0)
+    assert route_corridor is not None
+    reuse_penalty = route_corridor["topology_reuse_penalty"]
+    assert "primary_route_recent_progress_m" in reuse_penalty
+    assert "primary_route_recent_progress_sample_count" in reuse_penalty
+    assert "primary_route_progress_gate_satisfied" in reuse_penalty
+    assert "reuse_penalty_suppressed_by_progress" in reuse_penalty
+
+
+def test_progress_gate_no_primary_selections_yields_zero_progress() -> None:
+    """When no primary selections exist, recent progress should be zero and gate unsatisfied."""
+    from collections import deque
+
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_cooldown_steps=5,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+        primary_route_progress_gate_enabled=True,
+        primary_route_progress_gate_threshold_m=0.1,
+    )
+    primary = {
+        "hypothesis_id": "primary_route",
+        "score": -5.0,
+        "selection_score": -5.0,
+    }
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+    }
+    recent = deque([("masked_cell_1_1", 10.0)], maxlen=3)
+
+    result = _apply_primary_route_reuse_penalty(config, [primary, alt], recent)
+
+    assert result["primary_route_recent_progress_m"] == 0.0
+    assert result["primary_route_recent_progress_sample_count"] == 0
+    assert result["primary_route_progress_gate_satisfied"] is False
+    assert result["reuse_penalty_suppressed_by_progress"] is False
+
+
+def test_progress_gate_single_primary_selection_does_not_suppress() -> None:
+    """One primary-route sample is not enough to prove recent route progress."""
+    from collections import deque
+
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_weight=10.0,
+        primary_route_reuse_penalty_cooldown_steps=5,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+        primary_route_progress_gate_enabled=True,
+        primary_route_progress_gate_threshold_m=0.1,
+    )
+    primary = {
+        "hypothesis_id": "primary_route",
+        "score": -5.0,
+        "selection_score": -5.0,
+    }
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+    }
+    recent = deque([("primary_route", 1.0)], maxlen=3)
+
+    result = _apply_primary_route_reuse_penalty(config, [primary, alt], recent)
+
+    assert result["reuse_penalty_applied"] is True
+    assert result["primary_route_recent_progress_m"] == 0.0
+    assert result["primary_route_recent_progress_sample_count"] == 1
+    assert result["primary_route_progress_gate_satisfied"] is False

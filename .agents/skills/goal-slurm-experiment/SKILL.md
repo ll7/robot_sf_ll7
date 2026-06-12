@@ -118,6 +118,17 @@ Do not use it for:
      passes and any necessary `slurm_pr_gate` has passed or is explicitly deferred because the issue
      is exploratory.
 
+Before submission, keep hypothesis tracking close to the experiment by default. The queue entry,
+launch packet, issue comment, private ops ledger, or issue-specific context note should capture the
+lightweight hypothesis fields: hypothesis, variant/config, expected signal, result classification,
+artifact pointer or snapshot, and next decision. Do not require a central hypothesis ledger for an
+ordinary exploratory training run.
+
+Create or update a central hypothesis ledger only when the research family needs cross-run belief
+management: many related runs, confusing or contradictory outcomes, repeated negative results,
+duplicate variant risk, claim-boundary movement, dissertation or paper synthesis, or a decision
+about what the repository believes now rather than what to submit next.
+
 7. Submit exactly one training job.
    - When the selected candidate has or should have a queue entry, update
      `experiments/submission_queue.yaml` and run
@@ -181,6 +192,9 @@ fresh rerun is the stated next action.
   submission suitability gate.
 - Do not create PR churn for routine in-progress eval gates; wait for completion/failure or a real
   decision-changing signal before opening durable follow-up PRs.
+- Do not let central hypothesis ledgers become a required gate for every exploratory training run;
+  use per-experiment notes until public decisions, claims, or cross-run synthesis need a shared
+  belief surface.
 - Do not treat queued, running, fallback, degraded, or local-only `output/` artifacts as completed
   evidence.
 - Do not treat a cancelled low-signal run as useful diagnostic evidence unless the early-stop

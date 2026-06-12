@@ -63,6 +63,19 @@ complete:
 - result classification, such as positive, negative, diagnostic-only, blocked, or inconclusive;
 - parent issue, dashboard, registry, claim map, context note, or synthesis surface to update.
 
+Track hypotheses near the experiment by default. A config, launch packet, issue comment, private
+ops ledger note, or issue-specific context note is enough while the work is still exploratory or
+the next decision is simply what to run next. Record the lightweight fields that make the run
+auditable: hypothesis, variant or config, expected signal, result classification, artifact pointer
+or snapshot, and next decision.
+
+Create a central hypothesis ledger only when a research family needs cross-run belief management:
+many related runs, confusing or contradictory outcomes, repeated negative results, duplicate
+variant risk, claim-boundary movement, dissertation or paper synthesis, or the question has shifted
+from "what should we run next?" to "what do we believe now?". Do not make a central ledger a
+required gate for every exploratory run. Local or private hypotheses are acceptable until they
+affect public decisions, claims, or follow-up work.
+
 Use this compact template when drafting the issue body, PR body, or synthesis note:
 
 ```md
@@ -73,6 +86,17 @@ Use this compact template when drafting the issue body, PR body, or synthesis no
 - Evidence And Provenance Plan: <compact durable evidence and provenance plan>
 - Result Classification: <positive, negative, diagnostic-only, blocked, or inconclusive>
 - Update Surface: <parent issue, dashboard, registry, claim map, context note, or synthesis surface>
+```
+
+Use this compact per-experiment note shape when a full issue or synthesis note would be overhead:
+
+```md
+- Hypothesis:
+- Variant/Config:
+- Expected Signal:
+- Result Classification:
+- Artifact Pointer Or Snapshot:
+- Next Decision:
 ```
 
 After several diagnostic children accumulate under one research parent, prefer a synthesis pass

@@ -26,6 +26,12 @@ unproven result as complete just to preserve momentum.
 Exploration is encouraged, including new planner families, research directions, and workflow ideas.
 Agents may open exploratory branches, issues, or PRs with incomplete proof when the status is clear.
 
+Hypotheses should be tracked close to experiments by default: configs, launch packets, issue
+comments, private ops ledgers, or issue-specific context notes are acceptable while the question is
+what to run next. Central hypothesis ledgers are opt-in for research families that need cross-run
+belief management, such as many related runs, conflicting or repeated negative results, duplicate
+variant risk, claim-boundary movement, or dissertation/paper synthesis.
+
 Use explicit status language:
 
 - `exploratory`: promising direction, not yet validated as benchmark evidence.

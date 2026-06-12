@@ -29,6 +29,12 @@ Use this skill when multiple issues, campaigns, configs, seeds, metrics, and art
 4. Build the required synthesis table.
 5. Separate observed evidence from hypothesis and state caveats before conclusions.
 
+For ordinary exploratory runs, prefer per-experiment hypothesis notes over a central ledger. The
+minimum reusable fields are hypothesis, variant/config, expected signal, result classification,
+artifact pointer or snapshot, and next decision. Create a central hypothesis ledger only when a
+research family has enough related runs that the synthesis question becomes "what do we believe
+now?" instead of "what should we run next?".
+
 ## Required table
 
 | Mechanism | Source issue | Evidence tier | Config | Seeds | Artifacts | Metrics | Verdict | Caveats |
@@ -38,6 +44,9 @@ Use this skill when multiple issues, campaigns, configs, seeds, metrics, and art
 
 - Do not upgrade exploratory evidence into paper-facing claims.
 - Do not average away blocked, fallback, or degraded rows.
+- Do not require central hypothesis ledgers for every exploratory result; use them only for
+  cross-run belief management, repeated/conflicting results, claim-boundary movement, or paper
+  synthesis.
 - Use `paper-facing-docs` before manuscript-support language is published.
 
 ## Output

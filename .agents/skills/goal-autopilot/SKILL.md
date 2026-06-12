@@ -165,10 +165,11 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
    ledger. The default budget is `ceil(920s * 1.3) = 1196s`, unless a newer committed skill/doc
    baseline has replaced it.
 2. Start one read-only `ci_wait_monitor` route or Codex app/Spark sidecar for that PR. In non-TTY
-   agent sessions, use bounded one-shot polling rather than `gh pr checks --watch`:
+   agent sessions, use bounded polling rather than `gh pr checks --watch`:
 
    ```bash
    uv run python scripts/dev/check_pr_ci_status.py <pr-number> \
+     --expected-head-sha <head-sha> \
      --poll-attempts 40 \
      --poll-interval 30 \
      --json
@@ -180,7 +181,10 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
 4. When the monitor returns, the main agent must review the result against the current PR head SHA
    before applying `merge-ready`, merging, or reporting completion.
 
-The polling helper prints queued, in-progress, failed, and passed check summaries. Use
+The polling helper prints queued, in-progress, failed, and passed check summaries. With `--json`,
+each poll payload includes compact `monitor` metadata: expected head SHA, SHA-match result, attempt
+count, poll interval, wait budget, deadline, and `route_evidence_only: true`. Review that compact
+payload before considering raw CI logs or full command output. Use
 `gh run view <run-id> --json status,conclusion,jobs` when a job URL needs deeper state, and fetch
 logs only after the relevant job has completed. Do not change committed polling budgets after one
 ordinary slow run; update them only after repeated over-budget evidence or an obvious CI workflow

@@ -531,6 +531,108 @@ def test_main_bounded_polling_stops_on_success(
     assert "checks: success" in captured.out
 
 
+def test_main_bounded_polling_json_includes_monitor_metadata(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """JSON polling should emit compact monitor metadata suitable for a delegation ledger."""
+    pending_data = json.dumps(
+        {
+            "number": 9,
+            "title": "metadata poll",
+            "state": "OPEN",
+            "mergeable": "UNKNOWN",
+            "headRefName": "metadata-poll",
+            "headRefOid": "abc123",
+            "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
+            "reviews": [],
+        }
+    )
+    success_data = json.dumps(
+        {
+            "number": 9,
+            "title": "metadata poll",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "metadata-poll",
+            "headRefOid": "abc123",
+            "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            "reviews": [],
+        }
+    )
+
+    with (
+        patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run,
+        patch("scripts.dev.check_pr_ci_status.time.sleep") as mock_sleep,
+        patch("scripts.dev.check_pr_ci_status.time.time", return_value=1000.0),
+    ):
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=pending_data, stderr=""),
+            MagicMock(returncode=0, stdout=success_data, stderr=""),
+        ]
+        rc = main(
+            [
+                "9",
+                "--json",
+                "--expected-head-sha",
+                "abc123",
+                "--poll-attempts",
+                "5",
+                "--poll-interval",
+                "2.0",
+            ]
+        )
+
+    assert rc == 0
+    assert mock_run.call_count == 2
+    mock_sleep.assert_called_once_with(2.0)
+    payloads = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    assert len(payloads) == 2
+    assert payloads[0]["monitor"] == {
+        "route": "ci_wait_monitor",
+        "expected_head_sha": "abc123",
+        "head_sha_matches_expected": True,
+        "poll_attempt": 1,
+        "poll_attempts": 5,
+        "poll_interval_seconds": 2.0,
+        "wait_budget_seconds": 8.0,
+        "deadline_epoch_seconds": 1008,
+        "route_evidence_only": True,
+    }
+    assert payloads[1]["monitor"]["poll_attempt"] == 2
+    assert payloads[1]["checks"]["overall"] == "success"
+
+
+def test_main_expected_head_sha_mismatch_returns_json_error(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A stale PR head should fail closed before monitor output is trusted."""
+    mock_data = json.dumps(
+        {
+            "number": 10,
+            "title": "stale monitor",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "stale-monitor",
+            "headRefOid": "actual",
+            "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["10", "--json", "--expected-head-sha", "expected"])
+
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert payload["error"] == "PR head SHA changed while monitoring CI"
+    assert payload["head_sha"] == "actual"
+    assert payload["monitor"]["expected_head_sha"] == "expected"
+    assert payload["monitor"]["head_sha_matches_expected"] is False
+    assert payload["monitor"]["route_evidence_only"] is True
+
+
 def test_main_gh_not_installed() -> None:
     """main() should exit non-zero when gh is not on PATH."""
     with patch(

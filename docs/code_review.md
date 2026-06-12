@@ -28,6 +28,8 @@ For benchmark-facing changes, explicitly verify:
 - Are fallback, skip, and fail-fast paths still explicit and testable?
 - Are benchmark categories (`diagnostic`, `classical`, `learning`) still accurate?
 - Does any report wording overstate what the benchmark actually measures?
+- For mixed or limited evidence, does the report start with claim boundary, evidence status,
+  fallback/degraded exclusions, major caveats, and uncertainty before ranking or success language?
 
 ### Observation normalization
 - Are observation keys, bounds, clipping, and dtype contracts preserved or versioned?
@@ -103,6 +105,8 @@ or path-filtered in a way that may skip small durable evidence files such as CSV
   classification: benchmark evidence, smoke evidence, diagnostic-only, blocked, or proposal.
 - Check claim-boundary language explicitly separates observed evidence from hypotheses, future
   work, fallback/degraded execution, and paper-facing claims.
+- Check fallback/degraded rows are introduced as caveats or exclusions before any comparative
+  ranking, aggregate success language, or recommendation.
 - Check generated evidence points back to a reproducible command, commit, config or scenario
   matrix, seed policy, and durable artifact/provenance decision.
 - If an evidence CSV or other small table is path-filtered out of automated review, state in the PR
@@ -116,6 +120,7 @@ Docs changes should be rejected if they:
 - blur the line between observed evidence and future intent,
 - describe experimental planners as baseline-ready,
 - omit caveats around optional dependencies or upstream source limits.
+- bury mixed-evidence claim boundaries or sub-95% confidence caveats after result interpretation.
 
 Prefer docs that point to canonical config files, scripts, and issue execution notes instead of freehand operational prose.
 

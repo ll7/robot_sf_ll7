@@ -1,0 +1,33 @@
+{
+  "issue": 2667,
+  "schema_version": "issue_2667_trace_failure_predicate_tables.summary.v1",
+  "date": "2026-06-12",
+  "claim_boundary": "diagnostic-only; not benchmark rates, planner comparisons, paper-facing mechanism frequencies, or safety evidence",
+  "input_provenance": [
+    {
+      "path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
+      "kind": "tracked synthetic simulation_trace_export.v1 contract fixture",
+      "purpose": "exercise valid predicate rows and fail-closed missing-occlusion not_available behavior"
+    },
+    {
+      "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json",
+      "kind": "tracked durable diagnostic trace",
+      "purpose": "real default Social Force #2428 trace, included as a negative predicate-row input"
+    },
+    {
+      "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
+      "kind": "tracked durable diagnostic trace",
+      "purpose": "real AMMV-aware Social Force #2428 trace, included as a negative predicate-row input"
+    }
+  ],
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/build_trace_failure_predicate_tables.py --trace docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json --trace docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json --trace docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json --json-output docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/trace_failure_predicate_tables.json --markdown-output docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/trace_failure_predicate_tables.md",
+  "result": {
+    "input_trace_count": 3,
+    "row_count": 7,
+    "not_available_rows": 1,
+    "valid_rows": 6,
+    "negative_real_trace_inputs": 2
+  },
+  "denominator_definition": "Each aggregate row reports trace_denominator for the scenario_family/planner_id/seed group. In this bundle, observed predicate rows come from crossing_proxy/orca/111 with denominator 1; the two #2428 traces are included in input_trace_count but produced no predicate rows.",
+  "interpretation": "The table validates the denominator-aware aggregation and fail-closed not_available row on versioned inputs. It does not move a benchmark claim because the bundle is not a predeclared benchmark matrix."
+}

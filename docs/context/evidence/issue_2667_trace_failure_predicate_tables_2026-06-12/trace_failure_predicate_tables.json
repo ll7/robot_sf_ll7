@@ -1,0 +1,93 @@
+{
+  "caveats": [
+    "Aggregate predicate rows are diagnostic summaries, not benchmark rates or claims.",
+    "Rows include `not_available` and other valid status values when evidence is partial.",
+    "Do not treat these as benchmark outcomes unless tied to a predeclared benchmark matrix."
+  ],
+  "rows": [
+    {
+      "planner_id": "orca",
+      "predicate_count": 1,
+      "predicate_id": "bottleneck_deadlock",
+      "predicate_rate_per_trace": 1.0,
+      "scenario_family": "crossing_proxy",
+      "seed": 111,
+      "severity": "high",
+      "trace_denominator": 1,
+      "validity_status": "valid"
+    },
+    {
+      "planner_id": "orca",
+      "predicate_count": 2,
+      "predicate_id": "clearance_critical_interaction",
+      "predicate_rate_per_trace": 2.0,
+      "scenario_family": "crossing_proxy",
+      "seed": 111,
+      "severity": "high",
+      "trace_denominator": 1,
+      "validity_status": "valid"
+    },
+    {
+      "planner_id": "orca",
+      "predicate_count": 3,
+      "predicate_id": "clearance_critical_interaction",
+      "predicate_rate_per_trace": 3.0,
+      "scenario_family": "crossing_proxy",
+      "seed": 111,
+      "severity": "medium",
+      "trace_denominator": 1,
+      "validity_status": "valid"
+    },
+    {
+      "planner_id": "orca",
+      "predicate_count": 1,
+      "predicate_id": "late_evasive_reaction",
+      "predicate_rate_per_trace": 1.0,
+      "scenario_family": "crossing_proxy",
+      "seed": 111,
+      "severity": "high",
+      "trace_denominator": 1,
+      "validity_status": "valid"
+    },
+    {
+      "planner_id": "orca",
+      "predicate_count": 1,
+      "predicate_id": "occlusion_triggered_near_miss",
+      "predicate_rate_per_trace": 1.0,
+      "scenario_family": "crossing_proxy",
+      "seed": 111,
+      "severity": "not_available",
+      "trace_denominator": 1,
+      "validity_status": "not_available"
+    },
+    {
+      "planner_id": "orca",
+      "predicate_count": 1,
+      "predicate_id": "oscillatory_local_control",
+      "predicate_rate_per_trace": 1.0,
+      "scenario_family": "crossing_proxy",
+      "seed": 111,
+      "severity": "medium",
+      "trace_denominator": 1,
+      "validity_status": "valid"
+    },
+    {
+      "planner_id": "orca",
+      "predicate_count": 1,
+      "predicate_id": "zero_motion_timeout_behavior",
+      "predicate_rate_per_trace": 1.0,
+      "scenario_family": "crossing_proxy",
+      "seed": 111,
+      "severity": "high",
+      "trace_denominator": 1,
+      "validity_status": "valid"
+    }
+  ],
+  "schema_version": "trace_failure_predicates.v1",
+  "summary": {
+    "input_trace_count": 3,
+    "row_count": 7,
+    "scenario_family_filter": null
+  },
+  "table_kind": "aggregate_by_predicate_group"
+}

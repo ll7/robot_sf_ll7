@@ -138,6 +138,27 @@ def test_activation_gate_fails_closed_when_active_denominator_is_too_small() -> 
     assert "active_row_denominator_below_threshold:0<1" in gate["failures"]
 
 
+def test_activation_gate_treats_none_baseline_as_not_successful() -> None:
+    """Malformed baseline payloads should not crash active-denominator accounting."""
+    gate = _activation_gate_summary(
+        [
+            {
+                "paired_row_status": "completed",
+                "activation_count": 1,
+                "baseline": None,
+                "classification": "mechanism_active_trace_only",
+            }
+        ],
+        gate_config={
+            "min_active_row_denominator": 1,
+            "min_terminal_outcome_delta_count": 0,
+        },
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["active_row_denominator"] == 1
+
+
 def test_activation_gate_passes_with_active_terminal_change() -> None:
     """Gate summaries expose the denominator and terminal-change stop rule."""
     rows = [

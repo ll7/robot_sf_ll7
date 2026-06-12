@@ -291,7 +291,7 @@ def _active_row_denominator(rows: list[dict[str, Any]]) -> int:
         for row in rows
         if row.get("paired_row_status") == "completed"
         and int(row.get("activation_count", 0) or 0) > 0
-        and not bool(row.get("baseline", {}).get("success", False))
+        and not bool((row.get("baseline") or {}).get("success", False))
     )
 
 

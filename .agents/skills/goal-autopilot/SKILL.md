@@ -145,6 +145,11 @@ Before each phase, run a delegation checkpoint:
 - Choose the routed helper role for the phase when `ai-delegation-routing` is active:
   queue scout, PR blocker reviewer, bounded editor, validation verifier, CI wait monitor, or
   discovery scout.
+- Before broad issue or PR queue review, prefer compact parent-thread snapshots:
+  `uv run python scripts/dev/snapshot_issue_batch.py <first> <last> --json` for issue batches and
+  `uv run python scripts/dev/snapshot_pr_queue.py --prs <pr> [<pr> ...] --json` for PR headline
+  state. Use `--capsule-dir <private-artifact-dir>` when an implementation worker should receive a
+  bounded issue context capsule instead of rediscovering files with broad search.
 - For optional discovery scouts, default to a short hard timeout (120-180s) and require periodic
   evidence in the ledger. If a bounded scout emits no heartbeat within one timeout slice, treat it as
   incomplete and retry with an explicit local timeout + heartbeat plan.
@@ -177,6 +182,18 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
      --poll-interval 30 \
      --json
    ```
+
+   For a non-blocking current-state snapshot, prefer:
+
+   ```bash
+   uv run python scripts/dev/watch_pr_ci_status.py <pr-number> \
+     --expected-head-sha <head-sha> \
+     --json \
+     --once
+   ```
+
+   For longer delegated monitor waits, add `--emit-progress-json-every <seconds>` so the worker
+   returns compact progress evidence instead of silent polling.
 
 3. Continue with non-conflicting work on the main thread: review other PRs, merge already-green
    `merge-ready` PRs, or run bounded discovery. Do not mutate the waiting PR branch or resolve its

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from robot_sf.benchmark.manifest_lineage import validate_lineage_contract
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_DIR = REPO_ROOT / "docs/context/evidence/issue_2523_scenario_prior_smoke"
 ARTIFACT_PATH = EVIDENCE_DIR / "scenario_prior.v1.json"
@@ -29,6 +31,12 @@ def test_scenario_prior_proxy_artifact_preserves_claim_boundary() -> None:
     assert isinstance(adequacy, dict)
 
     assert artifact["schema_version"] == "scenario_prior.v1"
+    assert artifact["generator_id"] == "issue_2523_proxy_scenario_prior_fixture"
+    assert artifact["validator_version"] == "scenario_prior_proxy_fixture_validator.v1"
+    assert artifact["evidence_tier"] == "smoke evidence"
+    assert artifact["denominator_policy"] == "proxy_fixture_not_benchmark_denominator"
+    assert artifact["execution_gate"] == "not_executable_until_real_data_staged"
+    assert validate_lineage_contract(artifact) == []
     assert source["input_type"] == "proxy_synthetic"
     assert source["real_data_status"] == "missing"
     assert claim_boundary["benchmark_evidence"] is False

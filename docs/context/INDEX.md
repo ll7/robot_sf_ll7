@@ -77,6 +77,11 @@ records the predeclared broader 3x3 slice after the selected active-row Issue #2
 supports `broader_delayed_rescue_supported` for the only unsolved active row, not benchmark-candidate
 or paper-facing proof.
 
+Recent manifest lineage schema: [issue_2659_lineage_schema_unification.md](issue_2659_lineage_schema_unification.md)
+records the shared additive lineage/evidence-boundary fields for `scenario_prior.v1`,
+`adversarial_scenario_manifest.v1`, and `counterfactual_scenario_pair.v1`; it is schema
+reviewability work only, not benchmark or paper-facing evidence.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

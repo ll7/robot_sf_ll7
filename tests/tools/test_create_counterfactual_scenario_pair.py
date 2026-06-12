@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from robot_sf.benchmark.manifest_lineage import validate_lineage_contract
 from scripts.tools import create_counterfactual_scenario_pair
 
 if TYPE_CHECKING:
@@ -37,6 +38,16 @@ def test_create_supported_robot_route_offset_pair(tmp_path: Path) -> None:
     output_text = output_path.read_text(encoding="utf-8")
     payload = yaml.safe_load(output_text)
     assert payload["changed_feature"] == "robot_route_offset"
+    assert payload["source"] == {
+        "scenario_config": "configs/scenarios/single/planner_sanity_simple.yaml",
+        "source_scenario_id": "planner_sanity_simple",
+    }
+    assert payload["generator_id"] == "create_counterfactual_scenario_pair"
+    assert payload["validator_version"] == "counterfactual_scenario_pair_validator.v1"
+    assert payload["evidence_tier"] == "diagnostic-only"
+    assert payload["denominator_policy"] == "counterfactual_pairs_not_benchmark_denominator"
+    assert payload["execution_gate"] == "preflight_success_required_before_execution"
+    assert validate_lineage_contract(payload) == []
     assert payload["changed_factor"] == "robot_route_offset"
     assert (
         payload["claim_boundary"] == "candidate mechanism-test inputs only; not benchmark evidence"

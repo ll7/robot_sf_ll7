@@ -14,8 +14,12 @@ import yaml
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D, SearchSpaceConfig
 from robot_sf.adversarial.samplers import RandomCandidateSampler
+from robot_sf.benchmark.manifest_lineage import validate_lineage_contract
 
 MANIFEST_SCHEMA_VERSION = "adversarial_scenario_manifest.v1"
+VALIDATOR_VERSION = "adversarial_scenario_manifest_validator.v1"
+EVIDENCE_TIER = "diagnostic-only"
+DENOMINATOR_POLICY = "generated_candidates_not_benchmark_denominator"
 
 
 class ManifestCategory(Enum):
@@ -92,6 +96,9 @@ class AdversarialScenarioManifest:
     candidate_controls: dict[str, Any] | None = None
     validation: ValidationRecord | None = None
     execution_status: str = "generated_only"
+    validator_version: str = VALIDATOR_VERSION
+    evidence_tier: str = EVIDENCE_TIER
+    denominator_policy: str = DENOMINATOR_POLICY
     evidence_boundary: str = (
         "diagnostic-only: no planner weakness, adversarial coverage, "
         "or benchmark-strength claim is made from this manifest."
@@ -101,7 +108,17 @@ class AdversarialScenarioManifest:
         """Serialize the manifest to a JSON/YAML-safe dict."""
         result: dict[str, Any] = {
             "schema_version": self.schema_version,
+            "generator_id": (
+                self.generator.generator_id
+                if self.generator is not None
+                else GeneratorInfo().generator_id
+            ),
+            "validator_version": self.validator_version,
             "execution_status": self.execution_status,
+            "execution_gate": self.execution_status,
+            "evidence_tier": self.evidence_tier,
+            "denominator_policy": self.denominator_policy,
+            "claim_boundary": self.evidence_boundary,
             "evidence_boundary": self.evidence_boundary,
         }
         if self.source is not None:
@@ -128,6 +145,9 @@ class AdversarialScenarioManifest:
             candidate_controls=payload.get("candidate_controls"),
             validation=_validation_from_dict(payload.get("validation")),
             execution_status=str(payload.get("execution_status", "generated_only")),
+            validator_version=str(payload.get("validator_version", VALIDATOR_VERSION)),
+            evidence_tier=str(payload.get("evidence_tier", EVIDENCE_TIER)),
+            denominator_policy=str(payload.get("denominator_policy", DENOMINATOR_POLICY)),
             evidence_boundary=str(
                 payload.get(
                     "evidence_boundary",
@@ -304,6 +324,8 @@ def validate_manifest_payload(
         errors.append(f"schema_version must be {MANIFEST_SCHEMA_VERSION}")
     if not isinstance(payload.get("execution_status"), str):
         errors.append("execution_status must be a string")
+    lineage_errors = validate_lineage_contract(payload)
+    errors.extend(lineage_errors)
     if not isinstance(payload.get("evidence_boundary"), str):
         errors.append("evidence_boundary must be a string")
     errors.extend(

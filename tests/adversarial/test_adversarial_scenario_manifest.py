@@ -22,6 +22,7 @@ from robot_sf.adversarial.scenario_manifest import (
     validate_manifest_payload,
     write_manifest_yaml,
 )
+from robot_sf.benchmark.manifest_lineage import validate_lineage_contract
 from scripts.tools.generate_adversarial_scenario_manifests import (
     _load_template_info,
 )
@@ -295,9 +296,16 @@ def test_manifest_serializes_to_yaml(tmp_path: Path) -> None:
     assert isinstance(loaded, dict)
     assert loaded["schema_version"] == MANIFEST_SCHEMA_VERSION
     assert loaded["candidate_controls"]["spawn_time_s"] == 0.0
+    assert loaded["generator_id"] == "RandomCandidateSampler"
+    assert loaded["validator_version"] == "adversarial_scenario_manifest_validator.v1"
+    assert loaded["evidence_tier"] == "diagnostic-only"
+    assert loaded["denominator_policy"] == "generated_candidates_not_benchmark_denominator"
+    assert loaded["execution_gate"] == "generated_only"
+    assert loaded["claim_boundary"] == loaded["evidence_boundary"]
     assert loaded["execution_status"] == "generated_only"
     assert "diagnostic-only" in loaded["evidence_boundary"]
     assert loaded["source"]["map_id"] == "classic_cross_trap"
+    assert validate_lineage_contract(loaded) == []
 
 
 def test_manifest_round_trips_through_yaml(tmp_path: Path) -> None:
@@ -328,6 +336,16 @@ def test_validate_manifest_payload_accepts_valid_payload() -> None:
     assert record.status == ManifestCategory.VALID
     assert record.errors == ()
     assert record.normalized_control_hash == manifest.validation.normalized_control_hash
+
+
+def test_adversarial_manifest_payload_satisfies_shared_lineage_contract() -> None:
+    """Adversarial manifests expose the shared lineage/evidence-boundary fields."""
+    payload = _valid_manifest_payload()
+
+    assert validate_lineage_contract(payload) == []
+    assert payload["generator_id"] == "TestSampler"
+    assert payload["validator_version"] == "adversarial_scenario_manifest_validator.v1"
+    assert payload["claim_boundary"] == payload["evidence_boundary"]
 
 
 def test_validate_manifest_payload_rejects_bad_schema() -> None:

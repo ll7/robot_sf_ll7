@@ -51,7 +51,8 @@ consistency, reproducibility, and fallback-mode visibility before claiming bench
      caveats before planner rankings or success interpretation when evidence is mixed or limited.
    - Highlight slowest planners by `runtime_sec`.
    - Highlight weakest planners by success/collision/SNQI from derived episode means.
-   - Note experimental planners running with fallback mode.
+   - Note experimental planners running with fallback mode and make uncertainty visible before any
+     ranking language.
 
 5. Recommend actions
    - If inconsistencies are found, propose concrete follow-ups in issue-facing wording.
@@ -79,6 +80,8 @@ uv run python scripts/tools/analyze_camera_ready_campaign.py \
 - Fail-closed rule: do not treat fallback/degraded as successful benchmark evidence.
 - Fallback/degraded rows must appear as caveats or exclusions before comparative rankings,
   aggregate success language, or recommendations.
+- Mixed/limited evidence outputs must lead with claim boundary, evidence status, and caveats; only
+  then provide comparative interpretation.
 - Require the produced JSON + markdown reports as proof artifacts before summarizing results.
 - Only report planner ranking where metrics and episode counts are internally consistent.
 

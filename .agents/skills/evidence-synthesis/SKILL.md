@@ -28,6 +28,8 @@ Use this skill when multiple issues, campaigns, configs, seeds, metrics, and art
 3. Classify artifacts with `artifact-provenance`.
 4. Build the required synthesis table.
 5. Separate observed evidence from hypothesis and state caveats before conclusions.
+6. For mixed or limited benchmark evidence, open the synthesis with the claim boundary: evidence
+   tier, fallback/degraded exclusions, major caveats, and uncertainty before result interpretation.
 
 ## Required table
 
@@ -38,6 +40,8 @@ Use this skill when multiple issues, campaigns, configs, seeds, metrics, and art
 
 - Do not upgrade exploratory evidence into paper-facing claims.
 - Do not average away blocked, fallback, or degraded rows.
+- Do not put rankings, success language, or mechanism conclusions before the claim boundary when
+  evidence is diagnostic-only, smoke-level, mixed, fallback-tainted, or below high confidence.
 - Use `paper-facing-docs` before manuscript-support language is published.
 
 ## Output

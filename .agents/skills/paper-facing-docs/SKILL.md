@@ -34,12 +34,19 @@ public-facing provenance statements.
 3. Mark caveats with plain-language risk language.
 4. Review wording for unsupported causality or overclaim.
 5. Add explicit provenance pointers before handoff.
+6. For mixed or limited evidence, make the opening order: claim boundary, evidence status, major
+   caveats and exclusions, uncertainty, then result interpretation.
 
 ## Proof and Guardrails
 
 - Preserve fail-closed semantics: do not present fallback/degraded runs as success.
 - Any claim must point to concrete reproducible artifacts.
 - Prefer tracked canonical documents and execution notes for evidence.
+- Use consistent evidence-tier wording: `diagnostic-only`, `smoke evidence`,
+  `nominal benchmark evidence`, and `paper-grade`.
+- Put fallback/degraded rows in caveats or exclusions before any ranking or success language.
+- Place sub-95% confidence estimates, caveats, or conditions near the claim boundary, not after the
+  conclusion.
 
 ## Output
 
@@ -47,7 +54,8 @@ Paper-facing docs should:
 
 - cite canonical benchmark/config surfaces,
 - avoid overstating planner support,
-- name remaining caveats in plain language.
+- name remaining caveats in plain language,
+- put claim boundaries before interpretation when evidence is mixed or limited.
 ## Guardrails
 
 - Stay within the skill scope declared in `.agents/skills/skills.yaml`.

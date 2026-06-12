@@ -81,6 +81,23 @@ GOAL_PR_REVIEW_REQUIRED_PHRASES = (
     "full logs",
     "private artifacts",
 )
+GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES = (
+    "loaded context",
+    "skill/doc summaries",
+    "snapshot paths",
+    "freshness keys",
+    "expected pr head sha",
+    "worker artifact paths",
+    "stale-state triggers",
+    "ledger snapshot paths",
+    "repeating broad state polling",
+    "fresh live checks",
+    "issue claim",
+    "push",
+    "pr publication",
+    "label/project mutation",
+    "merge-ready",
+)
 
 
 def _read_yaml(path: Path) -> Any:
@@ -290,6 +307,11 @@ def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text
     for phrase in WORKER_OUTPUT_REQUIRED_PHRASES:
         if phrase not in lower:
             errors.append(f"{rel}: missing worker-output limit requirement {phrase!r}")
+
+    if metadata.get("name") == "goal-autopilot":
+        for phrase in GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES:
+            if phrase not in lower:
+                errors.append(f"{rel}: missing active-ledger requirement {phrase!r}")
 
     if metadata.get("name") == "goal-pr-review":
         for phrase in GOAL_PR_REVIEW_REQUIRED_PHRASES:

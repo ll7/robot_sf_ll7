@@ -271,12 +271,20 @@ mkdir -p "$LEDGER_DIR"
 
 Use a short Markdown or YAML file such as
 `$LEDGER_DIR/issue-<number>-delegation-ledger.md` or `$LEDGER_DIR/pr-<number>-delegation-ledger.md`.
-This ledger is a handoff checklist, not a replacement for GitHub issues, PR bodies, issue-claim
-refs, worker artifacts, validation logs, or final summaries.
+When a phase produces compact snapshots, also record their paths in the ledger and pass the fresh
+ledger snapshot paths or context capsules to the next worker prompt instead of asking the worker to
+rediscover the same queue, PR, CI, or worktree state. This ledger is a handoff checklist, not a
+replacement for GitHub issues, PR bodies, issue-claim refs, worker artifacts, validation logs, or
+final summaries.
 
 Track only the fields needed to resume safely in under one minute:
 
 - route: provider/tool, model or agent role, run ID or artifact path, and route status;
+- loaded context: skill/doc summaries already read for the active phase, plus the freshness keys
+  that make them reusable or stale;
+- snapshots: issue, PR, worktree, claim, and CI snapshot paths with freshness keys such as issue
+  number, PR number, branch, origin/main SHA, head SHA, expected PR head SHA, captured-at time, and
+  source helper command;
 - delegation budget: for long delegated runs, record Gemini attempts, model variant,
   capacity/quota outcome, accepted evidence tier, and any user-defined stop threshold such as
   weekly usage remaining;
@@ -286,7 +294,20 @@ Track only the fields needed to resume safely in under one minute:
 - PR/CI: PR URL or number, head SHA, review state, CI state, and merge-ready state;
 - CI wait: baseline seconds, multiplier, budget seconds, poll interval, deadline, monitor
   route/run ID, expected head SHA, final status, and drift sample when collected;
-- cleanup: app-agent or worker close status, claim release status, worktree/artifact decision.
+- workers: current worker run IDs, worker artifact paths, artifact status, and accepted/rejected
+  evidence tier;
+- cleanup: app-agent or worker close status, claim release status, worktree/artifact decision;
+- stale-state triggers: missing or mismatched claim refs, issue/PR state changes, branch/head SHA
+  drift, expected PR head SHA drift, stale origin/main, CI rerun/retry, failed validation,
+  interrupted worker, missing compact artifacts, or elapsed freshness window.
+
+Consult the ledger before repeating broad state polling, full skill/doc reads, or worker
+rediscovery. Repeated broad `gh issue list`, `gh pr view`, `git worktree list --porcelain`, CI log
+fetches, full skill reads, or repository-wide search after a fresh ledger snapshot exists is an
+anti-pattern unless a stale-state trigger fired or the compact snapshot lacks the field needed for
+the next decision. Fresh live checks are still required before issue claim, push, PR publication,
+label/project mutation, merge-ready application, merge, claim release, or any benchmark/paper-facing
+publication decision.
 
 Distinguish route success from task success. A delegate command exiting zero or producing a report
 only proves `route_status: completed`; the parent phase is not complete until the main agent has

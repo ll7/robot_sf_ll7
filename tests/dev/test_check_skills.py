@@ -85,6 +85,11 @@ or inconsistent.
 The parent must inspect route evidence and run targeted local checks.
 Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private artifacts,
 no broad rg -n ., and no full file reads.
+The active ledger records loaded context with skill/doc summaries, snapshot paths,
+freshness keys, expected PR head SHA, worker artifact paths, and stale-state triggers.
+Pass ledger snapshot paths to workers, avoid repeating broad state polling, and run
+fresh live checks before issue claim, push, PR publication, label/project mutation,
+or merge-ready decisions.
 """
     errors = check_skills._validate_artifact_first_contract(
         skill_path,
@@ -109,6 +114,7 @@ def test_artifact_first_contract_fails_when_missing_required_artifacts(tmp_path:
     assert any("result.json" in e for e in errors)
     assert any("artifact-first phrase requirement" in e for e in errors)
     assert any("worker-output limit requirement" in e for e in errors)
+    assert any("active-ledger requirement" in e for e in errors)
 
 
 def test_artifact_first_contract_requires_canonical_result_markdown_case(
@@ -134,6 +140,30 @@ no broad rg -n ., and no full file reads.
     )
 
     assert any("RESULT.md" in e for e in errors)
+
+
+def test_goal_autopilot_contract_requires_active_ledger_reuse_terms(tmp_path: Path) -> None:
+    """Goal autopilot should keep explicit ledger reuse and freshness-key guidance."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "goal-autopilot" / "SKILL.md"
+    skill_path.parent.mkdir()
+    body = """
+Artifact-first delegated review requires result.json, RESULT.md, diffstat.txt, and validation.json.
+Treat worker exit success as route evidence only. Read raw logs only if artifacts are missing
+or inconsistent.
+The parent must inspect route evidence and run targeted local checks.
+Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private artifacts,
+no broad rg -n ., and no full file reads.
+The active ledger records only issue number, next action, and cleanup.
+"""
+    errors = check_skills._validate_artifact_first_contract(
+        skill_path,
+        {"name": "goal-autopilot"},
+        body,
+    )
+
+    assert any("active-ledger requirement" in e for e in errors)
 
 
 def test_goal_pr_review_contract_requires_compact_ci_snapshot_terms(tmp_path: Path) -> None:

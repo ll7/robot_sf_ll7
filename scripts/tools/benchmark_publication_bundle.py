@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -12,6 +13,7 @@ from loguru import logger
 
 from robot_sf.benchmark.artifact_publication import (
     DissertationArtifactSpec,
+    _sha256_file,
     export_dissertation_artifact_bundle,
     export_evidence_bundle,
     export_publication_bundle,
@@ -21,6 +23,40 @@ from robot_sf.common.artifact_paths import get_artifact_category_path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+_MANUSCRIPT_USE_LABELS = {
+    "results",
+    "methodology",
+    "discussion",
+    "outlook",
+    "do-not-use",
+}
+_ARTIFACT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+_WEAK_CLAIM_HINTS = {
+    "diagnostic",
+    "blocked",
+    "smoke",
+    "disallowed",
+    "not established",
+    "not_established",
+    "not benchmark evidence",
+    "not new benchmark evidence",
+    "blocked by",
+}
+_WEAK_CAVEAT_HINTS = {
+    "skip",
+    "ignore",
+    "removed",
+    "unavailable",
+}
+_STRONG_BOUNDARY_HINTS = {
+    "results",
+    "benchmark",
+    "established",
+    "verified",
+    "reproducible",
+}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -207,6 +243,60 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow replacing an existing dissertation artifact bundle directory.",
     )
+
+    validate_dissertation = subparsers.add_parser(
+        "validate-dissertation-bundle",
+        help="Validate a dissertation artifact bundle against checksums and contracts.",
+    )
+    validate_dissertation.add_argument(
+        "--bundle-dir",
+        type=Path,
+        required=True,
+        help="Dissertation bundle directory containing artifact_manifest.json.",
+    )
+    validate_dissertation.add_argument(
+        "--source-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional source root used to verify source_path existence and reject symlinked sources."
+        ),
+    )
+    validate_dissertation.add_argument(
+        "--expected-source-command",
+        type=str,
+        default=None,
+        help="Expected generation command to compare against artifact_manifest['generation_command'].",
+    )
+    validate_dissertation.add_argument(
+        "--expected-source-commit",
+        type=str,
+        default=None,
+        help="Expected source commit to compare against artifact_manifest['source_commit'].",
+    )
+    validate_dissertation.add_argument(
+        "--reference-manifest",
+        type=Path,
+        default=None,
+        help="Reference artifact manifest for claim-boundary/caveat drift checks.",
+    )
+
+    diff_dissertation = subparsers.add_parser(
+        "diff-dissertation-bundle",
+        help="Render dissertation bundle review diff between current and baseline.",
+    )
+    diff_dissertation.add_argument(
+        "--bundle-dir",
+        type=Path,
+        required=True,
+        help="New bundle directory to compare.",
+    )
+    diff_dissertation.add_argument(
+        "--reference-bundle-dir",
+        type=Path,
+        required=True,
+        help="Baseline bundle directory for comparison.",
+    )
     return parser
 
 
@@ -308,6 +398,424 @@ def _load_dissertation_artifacts(spec_path: Path) -> list[DissertationArtifactSp
     return artifacts
 
 
+def _read_json(path: Path) -> dict[str, object]:
+    """Load a JSON file and return an object, with explicit error on decode failure."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"Unable to read JSON file: {path}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected JSON object in {path}")
+    return payload
+
+
+def _parse_checksums_file(checksums_path: Path) -> dict[str, str]:
+    """Read checksum mappings from ``<sha256>  <path>`` lines."""
+    if not checksums_path.exists():
+        raise FileNotFoundError(f"Missing checksums file: {checksums_path}")
+    checksums: dict[str, str] = {}
+    for line in checksums_path.read_text(encoding="utf-8").splitlines():
+        if not line:
+            continue
+        if "  " not in line:
+            raise ValueError(f"Malformed checksum line: {line!r}")
+        digest, path = line.split("  ", 1)
+        checksums[path] = digest
+    return checksums
+
+
+def _is_allowed_manuscript_use(label: str, artifact_id: str) -> None:
+    """Validate dissertation manuscript-use label contract."""
+    if label not in _MANUSCRIPT_USE_LABELS:
+        allowed = ", ".join(sorted(_MANUSCRIPT_USE_LABELS))
+        raise ValueError(
+            f"Artifact {artifact_id!r} has invalid manuscript-use label {label!r}; "
+            f"allowed: {allowed}"
+        )
+
+
+def _is_weak_claim_boundary(claim_boundary: str) -> bool:
+    """Return whether a claim boundary contains weak or diagnostic wording."""
+    normalized = claim_boundary.lower()
+    return any(hint in normalized for hint in _WEAK_CLAIM_HINTS)
+
+
+def _is_weak_caveat(caveat: str) -> bool:
+    """Return whether caveat text appears to degrade evidence confidence."""
+    normalized = caveat.lower()
+    return any(hint in normalized for hint in _WEAK_CAVEAT_HINTS)
+
+
+def _claim_strength(claim_boundary: str) -> int:
+    """Assign a low/medium/high strength score to a claim boundary."""
+    normalized = claim_boundary.lower()
+    if any(hint in normalized for hint in _WEAK_CLAIM_HINTS):
+        return 0
+    if any(hint in normalized for hint in _STRONG_BOUNDARY_HINTS):
+        return 2
+    return 1
+
+
+def _claim_is_weakened(previous: str, current: str) -> bool:
+    """Detect a claim-boundary weakening in the text-level contract."""
+    return _claim_strength(current) < _claim_strength(previous)
+
+
+def _caveat_is_weakened(previous: str, current: str) -> bool:
+    """Detect caveat weakening based on explicit weak-caveat text."""
+    if _is_weak_caveat(current) and not _is_weak_caveat(previous):
+        return True
+    return _claim_is_weakened(previous, current)
+
+
+def _validate_dissertation_manifest_row(  # noqa: C901
+    artifact: dict[str, object],
+    *,
+    manifest_checksums: dict[str, str],
+    bundle_root: Path,
+) -> tuple[str, str, list[str]]:
+    """Validate one dissertation artifact row and return (artifact_id, output_path, errors)."""
+    errors: list[str] = []
+    artifact_id = str(artifact.get("artifact_id", "")).strip()
+    if not artifact_id:
+        errors.append("Missing artifact_id")
+        return "", "", errors
+    if not _ARTIFACT_ID_PATTERN.fullmatch(artifact_id):
+        errors.append(f"Invalid artifact_id for dissertation artifact: {artifact_id!r}")
+        return artifact_id, "", errors
+    output_path_raw = str(artifact.get("output_path", "")).strip()
+    source_path_raw = str(artifact.get("source_path", "")).strip()
+    source_artifact = str(artifact.get("source_artifact", "")).strip()
+    caption_draft = str(artifact.get("caption_draft", "")).strip()
+    claim_boundary = str(artifact.get("claim_boundary", "")).strip()
+    fallback = str(artifact.get("fallback_degraded_summary", "")).strip()
+    manuscript_use = str(artifact.get("recommended_manuscript_use", "")).strip()
+    digest = str(artifact.get("sha256", "")).strip()
+    output_path = Path(output_path_raw)
+
+    if output_path.is_absolute() or ".." in output_path.parts:
+        errors.append(f"Invalid output_path for {artifact_id!r}: {output_path_raw!r}")
+    if output_path.parts[:1] != ("artifacts",):
+        errors.append(f"Unsafe output_path for {artifact_id!r}: must be under payload/artifacts/")
+
+    if not source_path_raw or Path(source_path_raw).is_absolute():
+        errors.append(f"Invalid source_path for {artifact_id!r}: {source_path_raw!r}")
+
+    if not source_artifact:
+        errors.append(f"Missing source_artifact for {artifact_id!r}")
+    if not caption_draft:
+        errors.append(f"Missing caption_draft for {artifact_id!r}")
+    if not claim_boundary:
+        errors.append(f"Missing claim_boundary for {artifact_id!r}")
+    if not fallback:
+        errors.append(f"Missing fallback_degraded_summary for {artifact_id!r}")
+    if not digest:
+        errors.append(f"Missing sha256 for {artifact_id!r}")
+    if _is_weak_claim_boundary(claim_boundary) and manuscript_use == "results":
+        errors.append(f"Artifact {artifact_id!r} promotes diagnostic/blocked evidence to results")
+
+    _is_allowed_manuscript_use(manuscript_use, artifact_id)
+
+    output_file = bundle_root / "payload" / output_path
+    if not output_file.exists() or not output_file.is_file():
+        errors.append(f"Missing payload artifact file for {artifact_id!r}: {output_path}")
+    elif output_file.is_symlink():
+        errors.append(f"Payload artifact file cannot be symlink: {artifact_id!r}")
+    elif manifest_checksums.get(output_path.as_posix()) != digest:
+        errors.append(f"Checksum table mismatch for {artifact_id!r}: {output_path}")
+    elif _sha256_file(output_file) != digest:
+        errors.append(f"Payload checksum mismatch for {artifact_id!r}: {output_path}")
+
+    return artifact_id, output_path.as_posix(), errors
+
+
+def _collect_dissertation_bundle(  # noqa: C901, PLR0912, PLR0915
+    bundle_dir: Path,
+    *,
+    source_root: Path | None = None,
+    expected_source_command: str | None = None,
+    expected_source_commit: str | None = None,
+    reference_manifest: Path | None = None,
+) -> dict[str, object]:
+    """Validate a dissertation bundle and return a review summary payload."""
+    bundle_root = bundle_dir.resolve()
+    manifest_path = bundle_root / "artifact_manifest.json"
+    manifest = _read_json(manifest_path)
+    if not manifest.get("schema_version"):
+        raise ValueError("Dissertation manifest missing schema_version")
+    source_commit = str(manifest.get("source_commit", "")).strip()
+    generation_command = str(manifest.get("generation_command", "")).strip()
+    if not source_commit:
+        raise ValueError("Dissertation manifest missing source_commit")
+    if not generation_command:
+        raise ValueError("Dissertation manifest missing generation_command")
+    if expected_source_commit is not None and source_commit != expected_source_commit.strip():
+        raise ValueError(
+            f"source_commit mismatch: expected {expected_source_commit.strip()!r}, "
+            f"got {source_commit!r}",
+        )
+    if (
+        expected_source_command is not None
+        and generation_command != expected_source_command.strip()
+    ):
+        raise ValueError(
+            f"source_command mismatch: expected {expected_source_command.strip()!r}, "
+            f"got {generation_command!r}",
+        )
+
+    checksums = _parse_checksums_file(bundle_root / "checksums.sha256")
+    rows_raw = manifest.get("artifacts")
+    if not isinstance(rows_raw, list):
+        raise ValueError("Dissertation manifest requires artifacts list")
+
+    row_errors: list[str] = []
+    artifact_rows: dict[str, dict[str, object]] = {}
+    checksums_paths: set[str] = set(checksums)
+    seen_output_paths: set[str] = set()
+    source_root_resolved = source_root.resolve() if source_root is not None else None
+    for row in rows_raw:
+        if not isinstance(row, dict):
+            row_errors.append("Encountered non-object artifact row")
+            continue
+        artifact_id, output_path, errors = _validate_dissertation_manifest_row(
+            row,
+            manifest_checksums=checksums,
+            bundle_root=bundle_root,
+        )
+        row_errors.extend(errors)
+        if not artifact_id:
+            continue
+        if artifact_id in artifact_rows:
+            row_errors.append(f"Duplicate artifact_id: {artifact_id!r}")
+            continue
+        if output_path in checksums_paths:
+            checksums_paths.remove(output_path)
+        if output_path in seen_output_paths:
+            row_errors.append(f"Duplicate output_path: {output_path}")
+            continue
+        seen_output_paths.add(output_path)
+        if source_root_resolved is not None:
+            source_path_raw = str(row.get("source_path", "")).strip()
+            if source_path_raw:
+                unresolved_candidate = source_root_resolved / source_path_raw
+                if unresolved_candidate.is_symlink():
+                    row_errors.append(
+                        f"Source path is symlink for {artifact_id!r}: {unresolved_candidate}"
+                    )
+                source_candidate = unresolved_candidate.resolve(strict=False)
+                if not source_candidate.is_relative_to(source_root_resolved):
+                    row_errors.append(f"Source path escapes source root: {source_candidate!r}")
+                elif not source_candidate.is_file():
+                    row_errors.append(
+                        f"Source artifact missing for {artifact_id!r}: {source_candidate}"
+                    )
+
+        artifact_rows[artifact_id] = row
+
+    for missing in sorted(checksums_paths):
+        row_errors.append(f"Extra checksum entry present: {missing}")
+
+    if row_errors:
+        raise ValueError("\n".join(row_errors))
+
+    if reference_manifest is not None:
+        reference = _read_json(reference_manifest)
+        reference_rows_raw = reference.get("artifacts")
+        if not isinstance(reference_rows_raw, list):
+            raise ValueError("Reference manifest requires artifacts list")
+        reference_rows = {
+            str(item.get("artifact_id", "")).strip(): item
+            for item in reference_rows_raw
+            if isinstance(item, dict) and str(item.get("artifact_id", "")).strip()
+        }
+        for artifact_id, row in artifact_rows.items():
+            old = reference_rows.get(artifact_id)
+            if not isinstance(old, dict):
+                continue
+            old_claim = str(old.get("claim_boundary", "")).strip()
+            old_caveat = str(old.get("fallback_degraded_summary", "")).strip()
+            new_claim = str(row.get("claim_boundary", "")).strip()
+            new_caveat = str(row.get("fallback_degraded_summary", "")).strip()
+            if _claim_is_weakened(old_claim, new_claim):
+                raise ValueError(f"Claim boundary weakened for artifact_id={artifact_id!r}")
+            if _caveat_is_weakened(old_caveat, new_caveat):
+                raise ValueError(f"Caveat weakened for artifact_id={artifact_id!r}")
+
+    return {
+        "bundle_dir": str(bundle_root),
+        "schema_version": str(manifest.get("schema_version", "")),
+        "source_root": str(manifest.get("source_root", "")),
+        "source_commit": source_commit,
+        "generation_command": generation_command,
+        "artifact_count": len(artifact_rows),
+        "artifact_ids": sorted(artifact_rows),
+    }
+
+
+def _dissertation_artifact_state(bundle_dir: Path) -> tuple[dict[str, object], dict[str, str]]:
+    """Return bundle artifact rows by id and checksum status."""
+    manifest = _read_json(bundle_dir / "artifact_manifest.json")
+    checksums = _parse_checksums_file(bundle_dir / "checksums.sha256")
+    rows = manifest.get("artifacts")
+    if not isinstance(rows, list):
+        raise ValueError("Dissertation bundle manifest must contain artifact list")
+
+    by_id: dict[str, dict[str, object]] = {}
+    status: dict[str, str] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        artifact_id = str(row.get("artifact_id", "")).strip()
+        output_raw = str(row.get("output_path", "")).strip()
+        output_path = Path(output_raw)
+        expected = str(row.get("sha256", "")).strip()
+        if not artifact_id:
+            continue
+        if (
+            not output_raw
+            or output_path.is_absolute()
+            or ".." in output_path.parts
+            or output_path.parts[:1] != ("artifacts",)
+        ):
+            status[artifact_id] = "invalid_output_path"
+            by_id[artifact_id] = row
+            continue
+        payload = bundle_dir / "payload" / output_path
+        if not payload.exists() or payload.is_symlink():
+            status[artifact_id] = "missing"
+            by_id[artifact_id] = row
+            continue
+        digest = _sha256_file(payload)
+        if not expected or expected != digest:
+            status[artifact_id] = "checksum_manifest_mismatch"
+            by_id[artifact_id] = row
+            continue
+        manifest_checksum = checksums.get(output_raw)
+        if manifest_checksum != digest:
+            status[artifact_id] = "checksum_inventory_mismatch"
+            by_id[artifact_id] = row
+            continue
+        by_id[artifact_id] = row
+    return by_id, status
+
+
+def _build_diff_markdown(  # noqa: C901
+    *,
+    bundle_dir: Path,
+    reference_bundle_dir: Path,
+    current_rows: dict[str, dict[str, object]],
+    reference_rows: dict[str, dict[str, object]],
+    current_status: dict[str, str],
+    reference_status: dict[str, str],
+) -> str:
+    """Build a compact dissertation review diff in Markdown."""
+    current_ids = set(current_rows)
+    reference_ids = set(reference_rows)
+    changed_captions: list[str] = []
+    missing_artifacts: list[str] = []
+    weakened_claims: list[str] = []
+    weakened_caveats: list[str] = []
+    corrupted_artifacts: list[str] = []
+
+    for artifact_id in sorted(current_ids & reference_ids):
+        current = current_rows[artifact_id]
+        reference = reference_rows[artifact_id]
+        if (
+            str(current.get("caption_draft", "")).strip()
+            != str(reference.get("caption_draft", "")).strip()
+        ):
+            changed_captions.append(
+                f"- `{artifact_id}`: caption changed\n  - Before: {reference.get('caption_draft', '')}\n  - After: {current.get('caption_draft', '')}"
+            )
+        current_claim = str(current.get("claim_boundary", "")).strip()
+        reference_claim = str(reference.get("claim_boundary", "")).strip()
+        if _claim_is_weakened(reference_claim, current_claim):
+            weakened_claims.append(
+                f"- `{artifact_id}` claim boundary weakened\n  - Before: {reference_claim}\n  - After: {current_claim}"
+            )
+        current_caveat = str(current.get("fallback_degraded_summary", "")).strip()
+        reference_caveat = str(reference.get("fallback_degraded_summary", "")).strip()
+        if _caveat_is_weakened(reference_caveat, current_caveat):
+            weakened_caveats.append(
+                f"- `{artifact_id}` caveat weakened\n  - Before: {reference_caveat}\n  - After: {current_caveat}"
+            )
+
+    for artifact_id in sorted(reference_ids - current_ids):
+        missing_artifacts.append(f"- Removed artifact: `{artifact_id}`")
+    for artifact_id in sorted(current_ids - reference_ids):
+        missing_artifacts.append(f"- New artifact: `{artifact_id}`")
+
+    for artifact_id, reason in sorted(current_status.items()):
+        corrupted_artifacts.append(f"- `{artifact_id}` in current bundle: {reason}")
+    for artifact_id, reason in sorted(reference_status.items()):
+        corrupted_artifacts.append(f"- `{artifact_id}` in reference bundle: {reason}")
+
+    lines = [
+        "# Dissertation bundle review diff",
+        f"- Current bundle: `{bundle_dir}`",
+        f"- Reference bundle: `{reference_bundle_dir}`",
+    ]
+    if changed_captions:
+        lines.append("")
+        lines.append("## Changed captions")
+        lines.extend(changed_captions)
+    if missing_artifacts:
+        lines.append("")
+        lines.append("## Missing/added artifacts")
+        lines.extend(missing_artifacts)
+    if corrupted_artifacts:
+        lines.append("")
+        lines.append("## Corrupted artifacts")
+        lines.extend(corrupted_artifacts)
+    if weakened_claims:
+        lines.append("")
+        lines.append("## Weakened claim boundaries")
+        lines.extend(weakened_claims)
+    if weakened_caveats:
+        lines.append("")
+        lines.append("## Weakened caveats")
+        lines.extend(weakened_caveats)
+    if (
+        not changed_captions
+        and not missing_artifacts
+        and not corrupted_artifacts
+        and not weakened_claims
+        and not weakened_caveats
+    ):
+        lines.append("")
+        lines.append("No substantive diffs detected.")
+    return "\n".join(lines)
+
+
+def _run_validate_dissertation_bundle(args: argparse.Namespace) -> int:
+    """Execute ``validate-dissertation-bundle`` and print a compact report."""
+    report = _collect_dissertation_bundle(
+        args.bundle_dir,
+        source_root=args.source_root,
+        expected_source_command=args.expected_source_command,
+        expected_source_commit=args.expected_source_commit,
+        reference_manifest=args.reference_manifest,
+    )
+    print(json.dumps(report, indent=2))
+    return 0
+
+
+def _run_diff_dissertation_bundle(args: argparse.Namespace) -> int:
+    """Execute ``diff-dissertation-bundle`` and print Markdown review output."""
+    current_rows, current_status = _dissertation_artifact_state(args.bundle_dir)
+    reference_rows, reference_status = _dissertation_artifact_state(args.reference_bundle_dir)
+    markdown = _build_diff_markdown(
+        bundle_dir=args.bundle_dir,
+        reference_bundle_dir=args.reference_bundle_dir,
+        current_rows=current_rows,
+        reference_rows=reference_rows,
+        current_status=current_status,
+        reference_status=reference_status,
+    )
+    print(markdown)
+    return 0
+
+
 def _run_dissertation_bundle(args: argparse.Namespace) -> int:
     """Execute the ``dissertation-bundle`` subcommand."""
     result = export_dissertation_artifact_bundle(
@@ -342,6 +850,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_evidence_bundle(args)
     if args.command == "dissertation-bundle":
         return _run_dissertation_bundle(args)
+    if args.command == "validate-dissertation-bundle":
+        return _run_validate_dissertation_bundle(args)
+    if args.command == "diff-dissertation-bundle":
+        return _run_diff_dissertation_bundle(args)
     parser.error(f"Unsupported command: {args.command}")
     return 2  # pragma: no cover
 

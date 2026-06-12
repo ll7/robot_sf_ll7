@@ -444,3 +444,435 @@ def test_dissertation_bundle_overwrite_replaces_existing_file_path(
     payload = json.loads(captured.out)
     assert Path(payload["bundle_dir"]).is_dir()
     assert Path(payload["manifest_path"]).name == "artifact_manifest.json"
+
+
+def test_validate_dissertation_bundle_command_checks_checksums_and_metadata(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Validation should pass with expected source commit and command checks."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    command = "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root tracked"
+    bundle_name = "campaign_table_bundle"
+    benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            bundle_name,
+            "--artifact-spec",
+            str(spec_path),
+            "--command",
+            command,
+            "--commit",
+            "abc123",
+        ]
+    )
+    # keep only the validation output.
+    capsys.readouterr()
+
+    validate_exit = benchmark_publication_bundle.main(
+        [
+            "validate-dissertation-bundle",
+            "--bundle-dir",
+            str(out_dir / bundle_name),
+            "--source-root",
+            str(source_root),
+            "--expected-source-command",
+            command,
+            "--expected-source-commit",
+            "abc123",
+        ]
+    )
+    captured = capsys.readouterr().out
+
+    assert validate_exit == 0
+    payload = json.loads(captured)
+    assert payload["artifact_count"] == 2
+    assert payload["source_commit"] == "abc123"
+
+
+def test_validate_dissertation_bundle_command_fails_for_checksum_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Checksum drift in copied payload files should fail validation."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    command = "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root tracked"
+    bundle_name = "campaign_table_bundle"
+    benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            bundle_name,
+            "--artifact-spec",
+            str(spec_path),
+            "--command",
+            command,
+            "--commit",
+            "abc123",
+        ]
+    )
+    payload_path = out_dir / bundle_name / "payload" / "artifacts" / "tab_campaign_table.md"
+    payload_path.write_text(payload_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Payload checksum mismatch"):
+        benchmark_publication_bundle.main(
+            [
+                "validate-dissertation-bundle",
+                "--bundle-dir",
+                str(out_dir / bundle_name),
+                "--source-root",
+                str(source_root),
+                "--expected-source-command",
+                command,
+                "--expected-source-commit",
+                "abc123",
+            ]
+        )
+
+
+def test_validate_dissertation_bundle_command_rejects_escaped_source_path(
+    tmp_path: Path,
+) -> None:
+    """Source paths containing traversal segments should fail closed after resolution."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    command = "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root tracked"
+    bundle_name = "campaign_table_bundle"
+    benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            bundle_name,
+            "--artifact-spec",
+            str(spec_path),
+            "--command",
+            command,
+            "--commit",
+            "abc123",
+        ]
+    )
+    manifest_path = out_dir / bundle_name / "artifact_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for row in manifest["artifacts"]:
+        if row["artifact_id"] == "tab_campaign_table":
+            row["source_path"] = "../outside.md"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Source path escapes source root"):
+        benchmark_publication_bundle.main(
+            [
+                "validate-dissertation-bundle",
+                "--bundle-dir",
+                str(out_dir / bundle_name),
+                "--source-root",
+                str(source_root),
+                "--expected-source-command",
+                command,
+                "--expected-source-commit",
+                "abc123",
+            ]
+        )
+
+
+def test_validate_dissertation_bundle_command_rejects_invalid_manuscript_use_results_on_weak_boundary(
+    tmp_path: Path,
+) -> None:
+    """Weak claim boundaries must not be promoted to 'results' manuscript usage."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    command = "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root tracked"
+    bundle_name = "campaign_table_bundle"
+    benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            bundle_name,
+            "--artifact-spec",
+            str(spec_path),
+            "--command",
+            command,
+            "--commit",
+            "abc123",
+        ]
+    )
+    manifest_path = out_dir / bundle_name / "artifact_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"][0]["recommended_manuscript_use"] = "results"
+    manifest["artifacts"][0]["claim_boundary"] = (
+        "Diagnostic-only results only; historical evidence."
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="promotes diagnostic"):
+        benchmark_publication_bundle.main(
+            [
+                "validate-dissertation-bundle",
+                "--bundle-dir",
+                str(out_dir / bundle_name),
+                "--source-root",
+                str(source_root),
+                "--expected-source-command",
+                command,
+                "--expected-source-commit",
+                "abc123",
+            ]
+        )
+
+
+def test_validate_dissertation_bundle_command_rejects_reference_claim_boundary_weakening(
+    tmp_path: Path,
+) -> None:
+    """Reference manifests should catch weakened claim boundaries during validation."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    command = "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root tracked"
+    bundle_name = "campaign_table_bundle"
+    benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            bundle_name,
+            "--artifact-spec",
+            str(spec_path),
+            "--command",
+            command,
+            "--commit",
+            "abc123",
+        ]
+    )
+    manifest_path = out_dir / bundle_name / "artifact_manifest.json"
+    reference_manifest_path = out_dir / "reference_artifact_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    reference_manifest = dict(manifest)
+    reference_manifest["artifacts"] = [dict(row) for row in manifest["artifacts"]]
+    for row in reference_manifest["artifacts"]:
+        if row["artifact_id"] == "tab_campaign_table":
+            row["claim_boundary"] = "Benchmark result verified."
+    reference_manifest_path.write_text(
+        json.dumps(reference_manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    for row in manifest["artifacts"]:
+        if row["artifact_id"] == "tab_campaign_table":
+            row["claim_boundary"] = "Diagnostic-only exploratory result."
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Claim boundary weakened"):
+        benchmark_publication_bundle.main(
+            [
+                "validate-dissertation-bundle",
+                "--bundle-dir",
+                str(out_dir / bundle_name),
+                "--source-root",
+                str(source_root),
+                "--expected-source-command",
+                command,
+                "--expected-source-commit",
+                "abc123",
+                "--reference-manifest",
+                str(reference_manifest_path),
+            ]
+        )
+
+
+def test_validate_dissertation_bundle_command_rejects_malformed_reference_manifest(
+    tmp_path: Path,
+) -> None:
+    """Reference manifests must have the same artifact-list shape as bundle manifests."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    command = "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root tracked"
+    bundle_name = "campaign_table_bundle"
+    benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            bundle_name,
+            "--artifact-spec",
+            str(spec_path),
+            "--command",
+            command,
+            "--commit",
+            "abc123",
+        ]
+    )
+    reference_manifest_path = out_dir / "reference_artifact_manifest.json"
+    reference_manifest_path.write_text('{"not_artifacts": []}\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Reference manifest requires artifacts list"):
+        benchmark_publication_bundle.main(
+            [
+                "validate-dissertation-bundle",
+                "--bundle-dir",
+                str(out_dir / bundle_name),
+                "--source-root",
+                str(source_root),
+                "--expected-source-command",
+                command,
+                "--expected-source-commit",
+                "abc123",
+                "--reference-manifest",
+                str(reference_manifest_path),
+            ]
+        )
+
+
+def test_diff_dissertation_bundle_command_reports_changes_in_markdown(tmp_path, capsys) -> None:
+    """Diff output should render captions, missing artifacts, corruption, and claim drift."""
+    source_root = tmp_path / "publication_candidates"
+    base_spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    command = "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root tracked"
+
+    benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            "baseline",
+            "--artifact-spec",
+            str(base_spec_path),
+            "--command",
+            command,
+            "--commit",
+            "abc123",
+        ]
+    )
+    baseline_manifest = out_dir / "baseline" / "artifact_manifest.json"
+    assert baseline_manifest.exists()
+    baseline_payload = json.loads(baseline_manifest.read_text(encoding="utf-8"))
+    for row in baseline_payload["artifacts"]:
+        if row["artifact_id"] == "tab_campaign_table":
+            row["claim_boundary"] = "Benchmark result verified."
+    baseline_manifest.write_text(json.dumps(baseline_payload, indent=2) + "\n", encoding="utf-8")
+
+    next_spec = json.loads(base_spec_path.read_text(encoding="utf-8"))
+    next_spec["artifacts"][0]["caption_draft"] = "Updated dissertation-safe caption."
+    next_spec["artifacts"][0]["claim_boundary"] = "Diagnostic-only exploratory result."
+    next_spec["artifacts"] = next_spec["artifacts"][:1]
+    next_spec_path = out_dir / "next_artifact_spec.json"
+    next_spec_path.write_text(json.dumps(next_spec, indent=2) + "\n", encoding="utf-8")
+
+    benchmark_publication_bundle.main(
+        [
+            "dissertation-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            "next",
+            "--artifact-spec",
+            str(next_spec_path),
+            "--command",
+            command,
+            "--commit",
+            "abc123",
+        ]
+    )
+    # create a deliberate corruption in the next bundle payload.
+    next_payload = out_dir / "next" / "payload" / "artifacts" / "tab_campaign_table.md"
+    next_payload.write_text(next_payload.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    diff_exit = benchmark_publication_bundle.main(
+        [
+            "diff-dissertation-bundle",
+            "--bundle-dir",
+            str(out_dir / "next"),
+            "--reference-bundle-dir",
+            str(out_dir / "baseline"),
+        ]
+    )
+    captured = capsys.readouterr().out
+
+    assert diff_exit == 0
+    assert "## Changed captions" in captured
+    assert "## Missing/added artifacts" in captured
+    assert "## Corrupted artifacts" in captured
+    assert "## Weakened claim boundaries" in captured
+
+
+def test_diff_dissertation_bundle_command_rejects_escaped_output_path(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Diff mode should not hash payload paths that escape the bundle payload directory."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    out_dir = tmp_path / "dissertation_export"
+    command = "uv run python scripts/tools/compile_benchmark_artifacts.py --campaign-root tracked"
+
+    for bundle_name in ("baseline", "next"):
+        benchmark_publication_bundle.main(
+            [
+                "dissertation-bundle",
+                "--source-root",
+                str(source_root),
+                "--out-dir",
+                str(out_dir),
+                "--bundle-name",
+                bundle_name,
+                "--artifact-spec",
+                str(spec_path),
+                "--command",
+                command,
+                "--commit",
+                "abc123",
+            ]
+        )
+    capsys.readouterr()
+    manifest_path = out_dir / "next" / "artifact_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for row in manifest["artifacts"]:
+        if row["artifact_id"] == "tab_campaign_table":
+            row["output_path"] = "../outside.md"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    diff_exit = benchmark_publication_bundle.main(
+        [
+            "diff-dissertation-bundle",
+            "--bundle-dir",
+            str(out_dir / "next"),
+            "--reference-bundle-dir",
+            str(out_dir / "baseline"),
+        ]
+    )
+    captured = capsys.readouterr().out
+
+    assert diff_exit == 0
+    assert "invalid_output_path" in captured

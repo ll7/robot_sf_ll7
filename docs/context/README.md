@@ -185,6 +185,8 @@ knowledge, not every transient iteration detail.
 * Issue #2704 Progress-Gated Topology Successor Diagnostic:
   [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
   ([summary](evidence/issue_2704_progress_gated_topology_successor/summary.json))
+* Issue #2706 topology lane synthesis after progress-gated successor:
+  [issue_2706_topology_lane_synthesis.md](issue_2706_topology_lane_synthesis.md)
 * Mechanism closure status:
   [mechanism_closure_status.md](mechanism_closure_status.md)
 * Issue #2389 mechanism-aware evaluation thread:
@@ -800,6 +802,8 @@ knowledge, not every transient iteration detail.
 * Issue #2704 Progress-Gated Topology Successor Diagnostic:
   [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
   ([summary](evidence/issue_2704_progress_gated_topology_successor/summary.json))
+* Issue #2706 topology lane synthesis after progress-gated successor:
+  [issue_2706_topology_lane_synthesis.md](issue_2706_topology_lane_synthesis.md)
 * Issue #2522 topology and AMV why-first diagnostics:
   [issue_2522_why_first_diagnostics.md](issue_2522_why_first_diagnostics.md)
   ([topology report](evidence/issue_2522_why_first_diagnostics/topology_near_parity_why_first_report.md),

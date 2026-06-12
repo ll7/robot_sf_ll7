@@ -115,6 +115,119 @@ def _reuse_penalty_payload(row: dict[str, Any]) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _first_text(*values: Any) -> str | None:
+    """Return the first non-empty text value."""
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+def _first_number(*values: Any) -> int | float | None:
+    """Return the first numeric value."""
+    for value in values:
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            return value
+    return None
+
+
+def _step_index(step_row: dict[str, Any], fallback: int) -> int:
+    """Return the trace step index with deterministic fallback."""
+    value = step_row.get("step_idx")
+    if value is None:
+        value = step_row.get("step", fallback)
+    return int(value) if isinstance(value, int | float) else fallback
+
+
+def _terminal_outcome(trace: dict[str, Any]) -> str | None:
+    """Return the downstream movement outcome from a trace summary."""
+    summary = trace.get("summary") if isinstance(trace.get("summary"), dict) else {}
+    corrective = summary.get("corrective_behavior")
+    if not isinstance(corrective, dict):
+        return None
+    outcome = corrective.get("terminal_outcome")
+    if not isinstance(outcome, dict):
+        return None
+    return _first_text(outcome.get("outcome"))
+
+
+def _switch_timeline_row(
+    *,
+    trace: dict[str, Any],
+    step_row: dict[str, Any],
+    step_idx: int,
+    previous_hypothesis: str | None,
+    current_hypothesis: str | None,
+    topo: dict[str, Any],
+    reuse_payload: dict[str, Any] | None,
+    suppressed: bool,
+) -> dict[str, Any]:
+    """Build one fail-closed switch-cause timeline row.
+
+    Returns:
+        Timeline row dictionary with explicit missing-field metadata.
+    """
+    reason_code = _first_text(
+        topo.get("switch_reason_code"),
+        topo.get("switch_reason"),
+        topo.get("near_parity_gate_reason"),
+        reuse_payload.get("reuse_penalty_reason") if reuse_payload else None,
+    )
+    progress_gate_state = _first_text(
+        topo.get("progress_gate_state"),
+        topo.get("progress_gate"),
+        topo.get("near_parity_gate_state"),
+        "suppressed_by_reuse_penalty" if suppressed else None,
+    )
+    progress_estimate = _first_number(
+        topo.get("local_route_progress_estimate"),
+        topo.get("local_route_progress_estimate_m"),
+        topo.get("progress_estimate_m"),
+        step_row.get("local_route_progress_estimate"),
+    )
+    remaining_delta = _first_number(
+        topo.get("route_remaining_distance_delta_m"),
+        topo.get("remaining_distance_delta_m"),
+        topo.get("route_remaining_delta_m"),
+        step_row.get("route_remaining_distance_delta_m"),
+    )
+    switch_type = _first_text(topo.get("switch_outcome"), topo.get("switch_type"))
+    if suppressed:
+        switch_type = "suppressed"
+    missing_fields = [
+        name
+        for name, value in (
+            ("reason_code", reason_code),
+            ("progress_gate_state", progress_gate_state),
+            ("local_route_progress_estimate", progress_estimate),
+            ("route_remaining_distance_delta_m", remaining_delta),
+        )
+        if value is None
+    ]
+    timeline_status = (
+        switch_type
+        if switch_type in {"useful", "suppressed"} and not missing_fields
+        else "inconclusive"
+    )
+    return {
+        "trace_id": trace.get("scenario_id", "unknown"),
+        "episode_seed": trace.get("seed"),
+        "step_idx": step_idx,
+        "previous_candidate": previous_hypothesis,
+        "selected_candidate": current_hypothesis,
+        "reason_code": reason_code or "missing_reason_code",
+        "local_route_progress_estimate": progress_estimate,
+        "progress_gate_state": progress_gate_state or "missing_progress_gate_state",
+        "route_remaining_distance_delta_m": remaining_delta,
+        "downstream_movement_outcome": _terminal_outcome(trace) or "unknown",
+        "timeline_status": timeline_status,
+        "missing_fields": missing_fields,
+    }
+
+
 def _accumulate_summary_reuse_penalty(
     summary: dict[str, Any],
     applied: int,
@@ -210,6 +323,7 @@ def _accumulate_trace(  # noqa: C901, PLR0913
     unchanged: list[dict[str, Any]],
     terminal_outcomes: Counter[str],
     diagnostic_status_counts: Counter[str],
+    switch_timeline: list[dict[str, Any]],
 ) -> tuple[int, int, int]:
     """Accumulate diagnostic counters from one trace into shared accumulators.
 
@@ -258,14 +372,51 @@ def _accumulate_trace(  # noqa: C901, PLR0913
 
     _accumulate_progress_deltas(summary, trace, progress_deltas, regressions, unchanged)
 
-    for step_row in steps:
+    previous_hypothesis: str | None = None
+
+    for fallback_step_idx, step_row in enumerate(steps):
         topo = _topology_payload(step_row)
-        selected_hyp = topo.get("selected_hypothesis")
-        if selected_hyp is not None and not has_summary_hypothesis_counts:
-            selected_hypothesis_counts[str(selected_hyp)] += 1
+        current_hypothesis = topo.get("selected_hypothesis")
+        if current_hypothesis is not None and not has_summary_hypothesis_counts:
+            selected_hypothesis_counts[str(current_hypothesis)] += 1
         gate_reason = topo.get("near_parity_gate_reason")
         if gate_reason is not None and not has_summary_gate_reasons:
             near_parity_reason_counts[str(gate_reason)] += 1
+
+        reuse_payload = _reuse_penalty_payload(step_row)
+        step_idx = _step_index(step_row, fallback_step_idx)
+        is_actual_switch = (
+            previous_hypothesis is not None
+            and current_hypothesis is not None
+            and current_hypothesis != previous_hypothesis
+        )
+        is_suppressed_event = (
+            reuse_payload
+            and previous_hypothesis is not None
+            and current_hypothesis is not None
+            and bool(reuse_payload.get("eligible_near_parity_alternative_exists", False))
+            and bool(reuse_payload.get("reuse_penalty_applied", False))
+            and current_hypothesis == previous_hypothesis
+        )
+
+        if is_actual_switch or is_suppressed_event:
+            switch_timeline.append(
+                _switch_timeline_row(
+                    trace=trace,
+                    step_row=step_row,
+                    step_idx=step_idx,
+                    previous_hypothesis=str(previous_hypothesis)
+                    if previous_hypothesis is not None
+                    else None,
+                    current_hypothesis=str(current_hypothesis)
+                    if current_hypothesis is not None
+                    else None,
+                    topo=topo,
+                    reuse_payload=reuse_payload,
+                    suppressed=bool(is_suppressed_event),
+                )
+            )
+        previous_hypothesis = current_hypothesis
 
     return total_steps, reuse_penalty_applied, reuse_penalty_eligible
 
@@ -287,6 +438,7 @@ def aggregate_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
     unchanged: list[dict[str, Any]] = []
     terminal_outcomes: Counter[str] = Counter()
     diagnostic_status_counts: Counter[str] = Counter()
+    switch_timeline: list[dict[str, Any]] = []
 
     for trace in traces:
         steps_count, reuse_penalty_applied, reuse_penalty_eligible = _accumulate_trace(
@@ -301,6 +453,7 @@ def aggregate_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
             unchanged,
             terminal_outcomes,
             diagnostic_status_counts,
+            switch_timeline,
         )
         total_steps += steps_count
 
@@ -323,6 +476,7 @@ def aggregate_traces(traces: list[dict[str, Any]]) -> dict[str, Any]:
         "top_regressions": regressions[:10],
         "top_unchanged": unchanged[:10],
         "terminal_outcome_counts": dict(sorted(terminal_outcomes.items())),
+        "switch_timeline": switch_timeline,
     }
 
 
@@ -381,8 +535,61 @@ def render_markdown(payload: dict[str, Any]) -> str:
     lines.extend(_render_regression_table(payload.get("top_regressions", [])))
     lines.extend(["", "## Top Unchanged Cases", ""])
     lines.extend(_render_unchanged_table(payload.get("top_unchanged", [])))
+    lines.extend(["", "## Switch-Cause Timeline", ""])
+    lines.extend(_render_switch_timeline_table(payload.get("switch_timeline", [])))
     lines.append("")
     return "\n".join(lines)
+
+
+def _render_switch_timeline_table(timeline: list[dict[str, Any]]) -> list[str]:
+    """Render the switch-cause timeline as a Markdown table.
+
+    Returns:
+        List of Markdown table row strings.
+    """
+    if not timeline:
+        return ["- (none)"]
+    lines = [
+        "| Trace ID | Episode Seed | Step | Previous | Selected | Status | Reason | "
+        "Progress estimate | Gate state | Remaining delta (m) | Outcome | Missing fields |",
+        "|---|---:|---:|---|---|---|---|---:|---|---:|---|---|",
+    ]
+    for entry in timeline:
+        lines.append(
+            f"| {_markdown_cell(entry.get('trace_id'))} "
+            f"| {_markdown_cell(entry.get('episode_seed'))} "
+            f"| {_markdown_cell(entry.get('step_idx'))} "
+            f"| {_markdown_cell(entry.get('previous_candidate'))} "
+            f"| {_markdown_cell(entry.get('selected_candidate'))} "
+            f"| {_markdown_cell(entry.get('timeline_status'))} "
+            f"| {_markdown_cell(entry.get('reason_code'))} "
+            f"| {_markdown_cell(entry.get('local_route_progress_estimate'))} "
+            f"| {_markdown_cell(entry.get('progress_gate_state'))} "
+            f"| {_markdown_cell(entry.get('route_remaining_distance_delta_m'))} "
+            f"| {_markdown_cell(entry.get('downstream_movement_outcome'))} "
+            f"| {_markdown_missing_fields(entry.get('missing_fields'))} |"
+        )
+    return lines
+
+
+def _markdown_cell(value: Any) -> str:
+    """Render missing Markdown table values as blanks.
+
+    Returns:
+        Markdown-safe cell text.
+    """
+    return "" if value is None else str(value).replace("|", "\\|")
+
+
+def _markdown_missing_fields(value: Any) -> str:
+    """Render missing-field metadata as Markdown-safe text.
+
+    Returns:
+        Comma-separated missing-field names, or blank text for invalid metadata.
+    """
+    if not isinstance(value, list):
+        return ""
+    return ", ".join(_markdown_cell(item) for item in value if item is not None)
 
 
 def _render_count_dict(counts: dict[str, Any]) -> list[str]:

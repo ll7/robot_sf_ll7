@@ -1,0 +1,90 @@
+{
+  "schema_version": "adversarial_manifest_smoke_issue_2658.v1",
+  "issue": 2658,
+  "generated_at": "2026-06-12",
+  "claim_boundary": "diagnostic_only",
+  "evidence_classification": "adversarial_smoke",
+  "result_classification": "smoke_passed",
+  "evidence_boundary": "smoke-only: generated cases are uncategorized development stress tests; this run does not establish adversarial coverage, planner weakness, leaderboard standing, or paper-facing claims.",
+  "validator_metadata": {
+    "manifest_schema_version": "adversarial_scenario_manifest.v1",
+    "validator_ref": "robot_sf.adversarial.scenario_manifest.validate_manifest_payload"
+  },
+  "execution_contract": {
+    "search_space": "configs/adversarial/crossing_ttc_space.yaml",
+    "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+    "generator_family": "random",
+    "generator_id": "RandomCandidateSampler",
+    "seed": 44,
+    "generated_candidates": 4,
+    "valid_candidates": 4,
+    "invalid_candidates": 0,
+    "degenerate_candidates": 0,
+    "planner_pair": [
+      "goal",
+      "social_force"
+    ],
+    "planner_count": 2,
+    "seeds": [
+      109,
+      786
+    ],
+    "horizon": 60,
+    "dt": 0.1,
+    "max_valid": 2,
+    "outcome": "smoke_passed"
+  },
+  "selected_valid_candidates": [
+    {
+      "candidate_index": 0,
+      "scenario_name": "crossing_ttc_template_manifest_0000",
+      "scenario_seed": 109,
+      "normalized_control_hash": "788517e168b2e9b6",
+      "manifest_yaml_sha256": "cbf76fa2c1987edc5b09eb89192bb9f014339846acf0010c1e7e6a7880a9d175"
+    },
+    {
+      "candidate_index": 1,
+      "scenario_name": "crossing_ttc_template_manifest_0001",
+      "scenario_seed": 786,
+      "normalized_control_hash": "972243fbba42dbe4",
+      "manifest_yaml_sha256": "ae03617227dd03a5a5464fc118a683b824fd8dbd63adb5f362597db98bf86588"
+    }
+  ],
+  "planner_runs": [
+    {
+      "planner": "goal",
+      "execution_mode": "native",
+      "availability_status": "available",
+      "episodes": 2,
+      "success_sum": 0.0,
+      "collision_sum": 2.0,
+      "time_to_goal_norm_mean": 1.0,
+      "statuses": [
+        "collision"
+      ]
+    },
+    {
+      "planner": "social_force",
+      "execution_mode": "adapter",
+      "availability_status": "available",
+      "episodes": 2,
+      "success_sum": 0.0,
+      "collision_sum": 2.0,
+      "time_to_goal_norm_mean": 1.0,
+      "statuses": [
+        "collision"
+      ]
+    }
+  ],
+  "warnings_observed": [
+    "Existing SVG invalid-polygon warning for uni_campus_big.svg",
+    "Force-based metrics warned about missing pedestrian force data and remained non-blocking"
+  ],
+  "validation": [
+    "uv run pytest tests/tools/test_run_adversarial_manifest_smoke.py tests/adversarial/test_adversarial_scenario_manifest.py -q",
+    "uv run ruff check scripts/tools/run_adversarial_manifest_smoke.py tests/tools/test_run_adversarial_manifest_smoke.py",
+    "uv run ruff format --check scripts/tools/run_adversarial_manifest_smoke.py tests/tools/test_run_adversarial_manifest_smoke.py",
+    "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/tools/run_adversarial_manifest_smoke.py --search-space configs/adversarial/crossing_ttc_space.yaml --scenario-template configs/scenarios/templates/crossing_ttc.yaml --count 4 --seed 44 --max-valid 2 --output-dir output/adversarial/issue2658_manifest_smoke --summary-json output/adversarial/issue2658_manifest_smoke/summary.json --planner goal --planner social_force --horizon 60 --dt 0.1 --workers 1"
+  ],
+  "raw_output_policy": "Raw generated manifests, route overrides, materialized matrix files, planner episode JSONL rows, and local smoke summary remain ignored under output/adversarial/issue2658_manifest_smoke. This tracked file is the compact evidence record."
+}

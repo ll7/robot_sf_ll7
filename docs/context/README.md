@@ -549,6 +549,8 @@ knowledge, not every transient iteration detail.
   [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md)
 * Issue #2618 Generated Adversarial Manifest Planner Smoke (2026-06-11):
   [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md)
+* Issue #2658 Validator-Runner Adversarial Manifest Smoke (2026-06-12):
+  [issue_2658_adversarial_manifest_smoke.md](issue_2658_adversarial_manifest_smoke.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):

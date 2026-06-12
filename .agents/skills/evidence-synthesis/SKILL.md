@@ -31,6 +31,12 @@ Use this skill when multiple issues, campaigns, configs, seeds, metrics, and art
 6. For mixed or limited benchmark evidence, open the synthesis with the claim boundary: evidence
    tier, fallback/degraded exclusions, major caveats, and uncertainty before result interpretation.
 
+For ordinary exploratory runs, prefer per-experiment hypothesis notes over a central ledger. The
+minimum reusable fields are hypothesis, variant/config, expected signal, result classification,
+artifact pointer or snapshot, and next decision. Create a central hypothesis ledger only when a
+research family has enough related runs that the synthesis question becomes "what do we believe
+now?" instead of "what should we run next?".
+
 ## Required table
 
 | Mechanism | Source issue | Evidence tier | Config | Seeds | Artifacts | Metrics | Verdict | Caveats |
@@ -40,6 +46,9 @@ Use this skill when multiple issues, campaigns, configs, seeds, metrics, and art
 
 - Do not upgrade exploratory evidence into paper-facing claims.
 - Do not average away blocked, fallback, or degraded rows.
+- Do not require central hypothesis ledgers for every exploratory result; use them only for
+  cross-run belief management, repeated/conflicting results, claim-boundary movement, or paper
+  synthesis.
 - Do not put rankings, success language, or mechanism conclusions before the claim boundary when
   evidence is diagnostic-only, smoke-level, mixed, fallback-tainted, or below high confidence.
 - Use `paper-facing-docs` before manuscript-support language is published.

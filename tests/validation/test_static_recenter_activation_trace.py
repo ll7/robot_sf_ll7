@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from scripts.validation.run_static_recenter_activation_trace import (
+    _activation_gate_summary,
     _activation_summary,
     _episode_summary,
     _trace_run_summary,
@@ -82,7 +83,7 @@ def test_activation_summary_separates_trace_change_from_terminal_change() -> Non
         mechanism_record=_record(success=False, activation_values=[0.0, 1.0, 1.0]),
     )
 
-    assert row["classification"] == "mechanism_active_trace_changed"
+    assert row["classification"] == "mechanism_active_trace_only"
     assert row["trace_changed"] is True
     assert row["terminal_outcome_changed"] is False
 
@@ -104,7 +105,81 @@ def test_trace_run_summary_counts_missing_fields_and_pair_status() -> None:
 
     assert summary["rows"] == 2
     assert summary["paired_row_status_counts"] == {"completed": 1, "excluded": 1}
+    assert summary["active_row_denominator"] == 1
+    assert summary["terminal_outcome_delta_count"] == 0
     assert summary["all_required_trace_fields_present"] is False
     assert summary["missing_required_trace_fields"] == {
         "narrow_passage:111": {"baseline": ["row_status"], "mechanism": []}
     }
+
+
+def test_activation_gate_fails_closed_when_active_denominator_is_too_small() -> None:
+    """Predeclared gates should fail when active comparator-unsolved rows are insufficient."""
+    rows = [
+        _activation_summary(
+            baseline_record=_record(success=True, activation_values=[0.0, 0.0]),
+            mechanism_record=_record(success=True, activation_values=[0.0, 1.0]),
+        )
+    ]
+
+    gate = _activation_gate_summary(
+        rows,
+        gate_config={
+            "min_active_row_denominator": 1,
+            "min_terminal_outcome_delta_count": 1,
+            "claim_boundary": "diagnostic only",
+        },
+    )
+
+    assert gate["status"] == "fail"
+    assert gate["active_row_denominator"] == 0
+    assert gate["terminal_outcome_delta_count"] == 0
+    assert gate["planner_promotion_claim_allowed"] is False
+    assert "active_row_denominator_below_threshold:0<1" in gate["failures"]
+
+
+def test_activation_gate_treats_none_baseline_as_not_successful() -> None:
+    """Malformed baseline payloads should not crash active-denominator accounting."""
+    gate = _activation_gate_summary(
+        [
+            {
+                "paired_row_status": "completed",
+                "activation_count": 1,
+                "baseline": None,
+                "classification": "mechanism_active_trace_only",
+            }
+        ],
+        gate_config={
+            "min_active_row_denominator": 1,
+            "min_terminal_outcome_delta_count": 0,
+        },
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["active_row_denominator"] == 1
+
+
+def test_activation_gate_passes_with_active_terminal_change() -> None:
+    """Gate summaries expose the denominator and terminal-change stop rule."""
+    rows = [
+        _activation_summary(
+            baseline_record=_record(success=False, activation_values=[0.0, 0.0, 0.0]),
+            mechanism_record=_record(success=True, activation_values=[0.0, 1.0, 1.0]),
+        )
+    ]
+
+    gate = _activation_gate_summary(
+        rows,
+        gate_config={
+            "min_active_row_denominator": 1,
+            "min_terminal_outcome_delta_count": 1,
+            "active_row_denominator_definition": "test denominator",
+            "stop_rule": "test stop rule",
+        },
+    )
+
+    assert gate["status"] == "pass"
+    assert gate["active_row_denominator"] == 1
+    assert gate["terminal_outcome_delta_count"] == 1
+    assert gate["active_row_denominator_definition"] == "test denominator"
+    assert gate["stop_rule"] == "test stop rule"

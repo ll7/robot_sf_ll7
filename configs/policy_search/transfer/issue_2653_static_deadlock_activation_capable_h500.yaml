@@ -1,0 +1,37 @@
+stage_order:
+  - full_matrix
+
+stages:
+  full_matrix:
+    scenario_matrix: configs/scenarios/sets/issue_2653_static_deadlock_activation_capable_h500.yaml
+    seed_list: [111, 112, 113]
+    benchmark_profile: experimental
+    horizon: 500
+    dt: 0.1
+    workers: 1
+    requires_slurm: false
+    paper_facing: false
+    mechanism_transfer:
+      issue: 2653
+      mechanism: static_deadlock_recovery
+      transfer_axis: activation_capable_h500_static_recenter_slice
+      candidate_pairs:
+        - baseline_candidate: hybrid_rule_v3_fast_progress
+          intervention_candidate: issue_2170_static_recenter_only
+        - baseline_candidate: issue_2170_static_escape_only
+          intervention_candidate: issue_2170_static_escape_recenter_no_transit
+      activation_capable_gate:
+        active_row_denominator_definition: >
+          completed comparator-unsolved matched rows where the intervention row
+          has recenter_activation_count > 0.
+        min_active_row_denominator: 2
+        min_terminal_outcome_delta_count: 1
+        claim_boundary: >
+          Diagnostic static-deadlock activation accounting only unless this gate
+          passes with native or declared adapter rows and no fallback, degraded,
+          failed, missing, or unavailable rows counted as success evidence.
+        stop_rule: >
+          No planner-promotion, benchmark-candidate, mechanism-transfer, or
+          paper-facing claim unless active_row_denominator >= 2 and
+          terminal_outcome_delta_count >= 1.
+      claim_boundary: predeclared_activation_capable_h500_diagnostic_only

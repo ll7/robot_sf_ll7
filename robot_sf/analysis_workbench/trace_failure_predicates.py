@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
@@ -70,6 +71,208 @@ def extract_trace_failure_predicates(
     Returns:
         ``trace_failure_predicates.v1`` payload with predicate rows and summary counts.
     """
+    predicates = _extract_trace_failure_predicate_records(
+        trace,
+        scenario_family=scenario_family,
+        clearance_threshold_m=clearance_threshold_m,
+        near_miss_threshold_m=near_miss_threshold_m,
+        stationary_displacement_threshold_m=stationary_displacement_threshold_m,
+        oscillation_min_sign_changes=oscillation_min_sign_changes,
+        evasive_angular_velocity_threshold=evasive_angular_velocity_threshold,
+        evasive_linear_drop_threshold_mps=evasive_linear_drop_threshold_mps,
+    )
+    return _predicates_payload(trace=trace, predicates=predicates)
+
+
+def aggregate_trace_failure_predicate_tables(
+    traces: Iterable[SimulationTraceExport],
+    *,
+    scenario_family: str | None = None,
+) -> dict[str, Any]:
+    """Build denominator-aware aggregate rows across one or more trace predicates.
+
+    Returns:
+        Aggregate rows grouped by scenario family, planner, seed, predicate ID,
+        validity status, and severity.
+    """
+    grouped_predicates: Counter[tuple[str, str, int, str, str, str]] = Counter()
+    trace_denominators: Counter[tuple[str, str, int]] = Counter()
+    included_trace_count = 0
+
+    for trace in traces:
+        group_family = scenario_family or trace.source.scenario_id
+        group_key = (group_family, trace.source.planner_id, int(trace.source.seed))
+        trace_denominators[group_key] += 1
+        included_trace_count += 1
+        for predicate in _extract_trace_failure_predicate_records(
+            trace,
+            scenario_family=group_family,
+            clearance_threshold_m=0.4,
+            near_miss_threshold_m=0.5,
+            stationary_displacement_threshold_m=0.05,
+            oscillation_min_sign_changes=3,
+            evasive_angular_velocity_threshold=1.0,
+            evasive_linear_drop_threshold_mps=0.3,
+        ):
+            grouped_predicates[
+                (
+                    group_family,
+                    predicate.planner_id,
+                    int(trace.source.seed),
+                    predicate.predicate_id,
+                    predicate.validity_status,
+                    predicate.severity,
+                )
+            ] += 1
+
+    rows = [
+        {
+            "scenario_family": family,
+            "planner_id": planner_id,
+            "seed": seed,
+            "predicate_id": predicate_id,
+            "validity_status": validity_status,
+            "severity": severity,
+            "predicate_count": count,
+            "trace_denominator": trace_denominators[(family, planner_id, seed)],
+            "predicate_rate_per_trace": (count / trace_denominators[(family, planner_id, seed)]),
+        }
+        for (
+            family,
+            planner_id,
+            seed,
+            predicate_id,
+            validity_status,
+            severity,
+        ), count in sorted(grouped_predicates.items())
+    ]
+
+    return {
+        "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
+        "table_kind": "aggregate_by_predicate_group",
+        "summary": {
+            "input_trace_count": included_trace_count,
+            "scenario_family_filter": scenario_family,
+            "row_count": len(rows),
+        },
+        "rows": rows,
+        "caveats": [
+            "Aggregate predicate rows are diagnostic summaries, not benchmark rates or claims.",
+            "Rows include `not_available` and other valid status values when evidence is partial.",
+            "Do not treat these as benchmark outcomes unless tied to a predeclared benchmark matrix.",
+        ],
+    }
+
+
+def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) -> str:
+    """Render aggregate failure predicate rows as a compact Markdown diagnostic table.
+
+    Returns:
+        Rendered markdown text.
+    """
+    summary = _read_mapping(table_payload.get("summary"), {})
+    rows = table_payload.get("rows")
+    if not isinstance(rows, list):
+        rows = []
+    table_rows = [row for row in rows if isinstance(row, Mapping)]
+
+    lines = [
+        "# Trace Failure Predicate Table",
+        "",
+        (
+            "Aggregate predicate rows are diagnostic-only unless tied to a predeclared benchmark "
+            "matrix."
+        ),
+        "",
+        f"- input traces: {summary.get('input_trace_count', 0)}",
+        f"- table kind: {table_payload.get('table_kind', 'aggregate_by_predicate_group')}",
+        f"- schema version: {table_payload.get('schema_version', TRACE_FAILURE_PREDICATE_SCHEMA_VERSION)}",
+        "",
+    ]
+
+    if not table_rows:
+        lines.append("No predicate rows were observed in the provided traces.")
+        return "\n".join(lines).rstrip() + "\n"
+
+    lines.append("## Aggregate Rows")
+    lines.append("")
+    lines.append(
+        _markdown_table(
+            (
+                "scenario_family",
+                "planner_id",
+                "seed",
+                "predicate_id",
+                "validity_status",
+                "severity",
+                "predicate_count",
+                "trace_denominator",
+                "predicate_rate_per_trace",
+            ),
+            [
+                (
+                    _markdown_value(row.get("scenario_family")),
+                    _markdown_value(row.get("planner_id")),
+                    _markdown_value(row.get("seed")),
+                    _markdown_value(row.get("predicate_id")),
+                    _markdown_value(row.get("validity_status")),
+                    _markdown_value(row.get("severity")),
+                    _markdown_int(row.get("predicate_count")),
+                    _markdown_int(row.get("trace_denominator")),
+                    f"{_markdown_float(row.get('predicate_rate_per_trace')):.4f}",
+                )
+                for row in table_rows
+            ],
+        )
+    )
+    lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _predicates_payload(
+    trace: SimulationTraceExport,
+    predicates: list[TraceFailurePredicate],
+) -> dict[str, Any]:
+    """Build the trace predicate payload schema.
+
+    Returns:
+        Normalized single-trace payload.
+    """
+    return {
+        "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
+        "predicate_source": TRACE_FAILURE_PREDICATE_SOURCE,
+        "trace_id": trace.trace_id,
+        "source": {
+            "scenario_id": trace.source.scenario_id,
+            "seed": trace.source.seed,
+            "planner_id": trace.source.planner_id,
+            "episode_id": trace.source.episode_id,
+        },
+        "predicates": [predicate.to_dict() for predicate in predicates],
+        "summary": _summary(predicates),
+        "caveats": [
+            "Predicates are rule-based trace diagnostics, not benchmark rates or safety claims.",
+            "not_available rows mark partial evidence with missing required fields.",
+        ],
+    }
+
+
+def _extract_trace_failure_predicate_records(
+    trace: SimulationTraceExport,
+    *,
+    scenario_family: str | None,
+    clearance_threshold_m: float,
+    near_miss_threshold_m: float,
+    stationary_displacement_threshold_m: float,
+    oscillation_min_sign_changes: int,
+    evasive_angular_velocity_threshold: float,
+    evasive_linear_drop_threshold_mps: float,
+) -> list[TraceFailurePredicate]:
+    """Extract a typed list of predicates for one trace.
+
+    Returns:
+        Predicate records from one trace.
+    """
     family = scenario_family or trace.source.scenario_id
     predicates: list[TraceFailurePredicate] = []
     predicates.extend(
@@ -110,23 +313,7 @@ def extract_trace_failure_predicates(
     )
     if occlusion is not None:
         predicates.append(occlusion)
-    return {
-        "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
-        "predicate_source": TRACE_FAILURE_PREDICATE_SOURCE,
-        "trace_id": trace.trace_id,
-        "source": {
-            "scenario_id": trace.source.scenario_id,
-            "seed": trace.source.seed,
-            "planner_id": trace.source.planner_id,
-            "episode_id": trace.source.episode_id,
-        },
-        "predicates": [predicate.to_dict() for predicate in predicates],
-        "summary": _summary(predicates),
-        "caveats": [
-            "Predicates are rule-based trace diagnostics, not benchmark rates or safety claims.",
-            "not_available rows mark partial evidence with missing required fields.",
-        ],
-    }
+    return predicates
 
 
 def _clearance_critical_interactions(
@@ -507,10 +694,60 @@ def _sign(value: float) -> int:
     return 1 if value > 0.0 else -1
 
 
+def _read_mapping(value: Any, default: dict[str, Any]) -> dict[str, Any]:
+    """Read a mapping value from the payload or return a default.
+
+    Returns:
+        Mapping payload.
+    """
+    return dict(value) if isinstance(value, Mapping) else default
+
+
+def _markdown_table(headers: tuple[str, ...], rows: Iterable[tuple[Any, ...]]) -> str:
+    """Render simple Markdown table rows.
+
+    Returns:
+        Rendered table body.
+    """
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for row in rows:
+        lines.append("| " + " | ".join(_format_markdown_cell(str(cell)) for cell in row) + " |")
+    return "\n".join(lines)
+
+
+def _format_markdown_cell(value: str) -> str:
+    """Escape markdown table cell values.
+
+    Returns:
+        Escaped cell text.
+    """
+    return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _markdown_value(value: Any) -> str:
+    """Return a display value while preserving falsy non-None identifiers."""
+    return "" if value is None else str(value)
+
+
+def _markdown_int(value: Any) -> int:
+    """Return an integer cell value with None-only fallback."""
+    return 0 if value is None else int(value)
+
+
+def _markdown_float(value: Any) -> float:
+    """Return a float cell value with None-only fallback."""
+    return 0.0 if value is None else float(value)
+
+
 __all__ = [
     "TRACE_FAILURE_PREDICATE_IDS",
     "TRACE_FAILURE_PREDICATE_SCHEMA_VERSION",
     "TRACE_FAILURE_PREDICATE_SOURCE",
     "TraceFailurePredicate",
+    "aggregate_trace_failure_predicate_tables",
     "extract_trace_failure_predicates",
+    "render_trace_failure_predicate_markdown",
 ]

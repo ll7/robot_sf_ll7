@@ -222,13 +222,11 @@ def _activation_summary(
     if baseline_terminal["success"] and mechanism_terminal["success"]:
         classification = "comparator_already_solved_case"
     elif not activated:
-        classification = "mechanism_inactive"
+        classification = "no_mechanism_activation"
     elif terminal_changed:
         classification = "mechanism_active_terminal_changed"
-    elif trace_changed:
-        classification = "mechanism_active_trace_changed"
     else:
-        classification = "mechanism_active_but_irrelevant"
+        classification = "mechanism_active_trace_only"
 
     return {
         "scenario_id": baseline_record.get("scenario_id"),
@@ -281,6 +279,73 @@ def _trace_run_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "activation_count_total": int(
             sum(int(row.get("activation_count", 0) or 0) for row in rows)
         ),
+        "active_row_denominator": _active_row_denominator(rows),
+        "terminal_outcome_delta_count": _terminal_outcome_delta_count(rows),
+    }
+
+
+def _active_row_denominator(rows: list[dict[str, Any]]) -> int:
+    """Count completed comparator-unsolved rows where the intervention mechanism activates."""
+    return sum(
+        1
+        for row in rows
+        if row.get("paired_row_status") == "completed"
+        and int(row.get("activation_count", 0) or 0) > 0
+        and not bool((row.get("baseline") or {}).get("success", False))
+    )
+
+
+def _terminal_outcome_delta_count(rows: list[dict[str, Any]]) -> int:
+    """Count mechanism-active rows whose terminal outcome changed."""
+    return sum(
+        1 for row in rows if row.get("classification") == "mechanism_active_terminal_changed"
+    )
+
+
+def _activation_gate_summary(
+    rows: list[dict[str, Any]],
+    *,
+    gate_config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Evaluate the predeclared static-deadlock activation gate.
+
+    Returns:
+        Gate summary that is safe to embed in compact evidence bundles.
+    """
+    gate_config = gate_config if isinstance(gate_config, dict) else {}
+    min_active_denominator = int(gate_config.get("min_active_row_denominator", 0) or 0)
+    min_terminal_changes = int(gate_config.get("min_terminal_outcome_delta_count", 0) or 0)
+    active_denominator = _active_row_denominator(rows)
+    terminal_changes = _terminal_outcome_delta_count(rows)
+    failures: list[str] = []
+    if active_denominator < min_active_denominator:
+        failures.append(
+            f"active_row_denominator_below_threshold:{active_denominator}<{min_active_denominator}"
+        )
+    if terminal_changes < min_terminal_changes:
+        failures.append(
+            f"terminal_outcome_delta_below_threshold:{terminal_changes}<{min_terminal_changes}"
+        )
+    return {
+        "status": "pass" if not failures else "fail",
+        "active_row_denominator_definition": gate_config.get(
+            "active_row_denominator_definition",
+            "completed comparator-unsolved matched rows with intervention activation_count > 0",
+        ),
+        "active_row_denominator": active_denominator,
+        "min_active_row_denominator": min_active_denominator,
+        "terminal_outcome_delta_count": terminal_changes,
+        "min_terminal_outcome_delta_count": min_terminal_changes,
+        "planner_promotion_claim_allowed": not failures,
+        "claim_boundary": gate_config.get(
+            "claim_boundary",
+            "diagnostic static-deadlock activation accounting only",
+        ),
+        "stop_rule": gate_config.get(
+            "stop_rule",
+            "No planner-promotion claim unless active denominator and terminal-change criteria pass.",
+        ),
+        "failures": failures,
     }
 
 
@@ -367,6 +432,12 @@ def main() -> None:
         )
         for key in sorted(baseline_records)
     ]
+    mechanism_transfer = stage.get("mechanism_transfer")
+    mechanism_transfer = mechanism_transfer if isinstance(mechanism_transfer, dict) else {}
+    gate = _activation_gate_summary(
+        rows,
+        gate_config=mechanism_transfer.get("activation_capable_gate"),
+    )
     payload = {
         "schema_version": "static-recenter-activation-trace.v1",
         "stage": args.stage,
@@ -378,6 +449,7 @@ def main() -> None:
         "mechanism_candidate": args.mechanism_candidate,
         "required_trace_fields": STATIC_DEADLOCK_REQUIRED_TRACE_FIELDS,
         "summary": _trace_run_summary(rows),
+        "activation_capable_gate": gate,
         "rows": rows,
     }
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
@@ -387,6 +459,8 @@ def main() -> None:
     print(
         json.dumps({"output_json": args.output_json.as_posix(), "rows": len(rows)}, sort_keys=True)
     )
+    if gate["status"] != "pass":
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

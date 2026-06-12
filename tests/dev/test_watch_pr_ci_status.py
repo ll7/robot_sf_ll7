@@ -103,6 +103,48 @@ def test_pending_after_budget_collects_drift_sample() -> None:
     fetch_durations.assert_called_once()
 
 
+def test_once_returns_pending_without_sleep_or_drift_sampling() -> None:
+    """One-shot mode should snapshot current status without waiting silently."""
+    fetch_durations = MagicMock(return_value=[1000])
+    sleep = MagicMock()
+
+    result = watch_pr_ci_status(
+        pr_number="42",
+        fetch_status=MagicMock(return_value=_status("pending")),
+        fetch_durations=fetch_durations,
+        sleep=sleep,
+        once=True,
+    )
+
+    assert result.final_status == "pending"
+    assert result.drift_sample is None
+    fetch_durations.assert_not_called()
+    sleep.assert_not_called()
+
+
+def test_progress_json_is_emitted_to_stream() -> None:
+    """Long waits can emit compact progress evidence without poll-only silence."""
+    now = iter([0.0, 0.0, 1.0, 1.0])
+    stream = MagicMock()
+
+    result = watch_pr_ci_status(
+        pr_number="42",
+        baseline_seconds=0,
+        fetch_status=MagicMock(return_value=_status("pending")),
+        fetch_durations=MagicMock(return_value=[]),
+        monotonic=lambda: next(now),
+        sleep=MagicMock(),
+        emit_progress_json_every=1,
+        progress_stream=stream,
+    )
+
+    assert result.final_status == "timeout"
+    assert stream.write.call_count > 0
+    written = "".join(str(call.args[0]) for call in stream.write.call_args_list)
+    assert "pr_ci_watch_progress.v1" in written
+    assert '"status": "pending"' in written
+
+
 def test_fetch_recent_successful_ci_durations_parses_gh_run_list() -> None:
     """The drift sampler should use run-list timestamps without inspecting every run."""
     payload = json.dumps(
@@ -146,6 +188,17 @@ def test_main_returns_timeout_exit_code(capsys: pytest.CaptureFixture[str]) -> N
     assert rc == 2
     payload = json.loads(capsys.readouterr().out)
     assert payload["final_status"] == "timeout"
+
+
+def test_main_once_pending_returns_timeout_exit_code(capsys: pytest.CaptureFixture[str]) -> None:
+    """CLI one-shot pending status should return exit 2 with parseable JSON."""
+    with patch("scripts.dev.watch_pr_ci_status._fetch_ci_status") as fetch_status:
+        fetch_status.return_value = _status("pending")
+        rc = main(["42", "--once", "--json"])
+
+    assert rc == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["final_status"] == "pending"
 
 
 def test_parse_timestamp_accepts_any_and_returns_none_for_invalid() -> None:

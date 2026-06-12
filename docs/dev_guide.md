@@ -305,6 +305,22 @@ For GitHub issue batches and Project #5 updates, follow the batch-first workflow
 
 ### REST-first publication snippets for low-GraphQL autopilot
 
+For token-efficient autopilot runs, collect compact local snapshots before broad
+GitHub or repository reads:
+
+```bash
+uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json
+uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json \
+  --capsule-dir "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
+uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 2678 2679 --json
+uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" --json --once
+```
+
+Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
+search output or raw GitHub bodies to private agent-run artifacts; return only
+the compact snapshot, context capsule path, validation command, exit status, and
+short evidence excerpt to the parent Codex thread.
+
 Assume `OWNER`, `REPO`, `ISSUE`, `BRANCH`, and `BASE` are set:
 
 ```bash

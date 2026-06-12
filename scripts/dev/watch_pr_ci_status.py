@@ -193,14 +193,20 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
     fetch_durations: Callable[..., list[int]] = fetch_recent_successful_ci_durations,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    once: bool = False,
+    emit_progress_json_every: int = 0,
+    progress_stream: Any = sys.stderr,
 ) -> WatchResult:
     """Poll PR CI status until success, failure, stale head, or budget timeout."""
     budget_seconds = wait_budget_seconds(baseline_seconds, multiplier)
     deadline = monotonic() + budget_seconds
     last_status: dict[str, Any] = {}
+    last_progress_at = 0.0
+    poll_count = 0
 
     while True:
         last_status = fetch_status(pr_number)
+        poll_count += 1
         head_sha = str(last_status.get("head_sha") or "")
         if last_status.get("status") == "error":
             return WatchResult(
@@ -262,8 +268,43 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
                 error="",
                 drift_sample=None,
             )
+        if once:
+            return WatchResult(
+                pr=last_status.get("pr", pr_number),
+                head_sha=head_sha,
+                expected_head_sha=expected_head_sha,
+                baseline_seconds=baseline_seconds,
+                multiplier=multiplier,
+                budget_seconds=budget_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+                final_status=str(overall or "pending"),
+                checks=checks,
+                error="",
+                drift_sample=None,
+            )
 
         remaining = deadline - monotonic()
+        if emit_progress_json_every > 0:
+            now = monotonic()
+            if last_progress_at <= 0 or now - last_progress_at >= emit_progress_json_every:
+                print(
+                    json.dumps(
+                        {
+                            "schema": "pr_ci_watch_progress.v1",
+                            "pr": last_status.get("pr", pr_number),
+                            "head_sha": head_sha,
+                            "expected_head_sha": expected_head_sha,
+                            "poll_count": poll_count,
+                            "status": str(overall or "pending"),
+                            "remaining_seconds": max(int(remaining), 0),
+                            "checks": checks,
+                        },
+                        sort_keys=True,
+                    ),
+                    file=progress_stream,
+                    flush=True,
+                )
+                last_progress_at = now
         if remaining <= 0:
             drift_sample = _build_drift_sample(
                 workflow=workflow,
@@ -332,6 +373,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--sample-limit", type=int, default=DEFAULT_SAMPLE_LIMIT)
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Fetch one current CI status snapshot without waiting for checks to finish.",
+    )
+    parser.add_argument(
+        "--emit-progress-json-every",
+        type=int,
+        default=0,
+        help="Emit compact progress JSON to stderr at this interval while waiting.",
+    )
     return parser.parse_args(argv)
 
 
@@ -349,6 +401,8 @@ def main(argv: list[str] | None = None) -> int:
             sample_limit=args.sample_limit,
             fetch_status=_fetch_ci_status,
             fetch_durations=fetch_recent_successful_ci_durations,
+            once=args.once,
+            emit_progress_json_every=args.emit_progress_json_every,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         print(f"ERROR watching PR CI: {exc}", file=sys.stderr)
@@ -359,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
     print(result.to_json() if args.json else format_human(result))
     if result.final_status == "success":
         return 0
-    if result.final_status == "timeout":
+    if result.final_status in {"timeout", "pending"}:
         return 2
     return 1
 

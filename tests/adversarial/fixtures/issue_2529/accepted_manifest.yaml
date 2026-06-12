@@ -1,5 +1,11 @@
 schema_version: adversarial_scenario_manifest.v1
+generator_id: structured_prompt_adapter_v1
+validator_version: adversarial_scenario_manifest_validator.v1
 execution_status: generated_only
+execution_gate: generated_only
+evidence_tier: diagnostic-only
+denominator_policy: generated_candidates_not_benchmark_denominator
+claim_boundary: diagnostic-only
 evidence_boundary: diagnostic-only
 source:
   scenario_template: crossing_ttc.yaml

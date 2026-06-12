@@ -195,6 +195,35 @@ def _fetch_ci_status(
     }
 
 
+def _add_monitor_metadata(
+    data: dict[str, Any],
+    *,
+    expected_head_sha: str,
+    attempt: int,
+    attempts: int,
+    poll_interval: float,
+    wait_budget_seconds: float,
+    deadline_epoch_seconds: int | None,
+) -> None:
+    """Attach compact CI monitor resume metadata to a status payload."""
+    head_sha = str(data.get("head_sha") or "")
+    if expected_head_sha:
+        head_sha_matches_expected: bool | None = bool(head_sha) and head_sha == expected_head_sha
+    else:
+        head_sha_matches_expected = None
+    data["monitor"] = {
+        "route": "ci_wait_monitor",
+        "expected_head_sha": expected_head_sha,
+        "head_sha_matches_expected": head_sha_matches_expected,
+        "poll_attempt": attempt,
+        "poll_attempts": attempts,
+        "poll_interval_seconds": poll_interval,
+        "wait_budget_seconds": wait_budget_seconds,
+        "deadline_epoch_seconds": deadline_epoch_seconds,
+        "route_evidence_only": True,
+    }
+
+
 def _format_human(data: dict[str, Any]) -> str:
     """Format CI status data for human-readable compact output."""
     if data.get("status") == "error":
@@ -243,12 +272,33 @@ def _poll_ci_status(
     poll_interval: float,
     backoff: float,
     json_output: bool,
+    expected_head_sha: str = "",
 ) -> dict[str, Any]:
     """Fetch CI status once or poll until checks settle or the budget expires."""
     data: dict[str, Any] = {}
+    wait_budget_seconds = max(0.0, float(attempts - 1) * max(0.0, poll_interval))
+    deadline_epoch_seconds = int(time.time() + wait_budget_seconds) if attempts > 1 else None
     for attempt in range(1, attempts + 1):
         data = _fetch_ci_status(pr, backoff=backoff if attempt == 1 else 0.0)
+        _add_monitor_metadata(
+            data,
+            expected_head_sha=expected_head_sha,
+            attempt=attempt,
+            attempts=attempts,
+            poll_interval=poll_interval,
+            wait_budget_seconds=wait_budget_seconds,
+            deadline_epoch_seconds=deadline_epoch_seconds,
+        )
         if data.get("status") == "error":
+            break
+        head_sha = str(data.get("head_sha") or "")
+        if expected_head_sha and not head_sha:
+            data["status"] = "error"
+            data["error"] = "PR head SHA missing while monitoring CI"
+            break
+        if expected_head_sha and head_sha != expected_head_sha:
+            data["status"] = "error"
+            data["error"] = "PR head SHA changed while monitoring CI"
             break
         overall = data.get("checks", {}).get("overall")
         if attempts > 1:
@@ -295,6 +345,11 @@ def main(argv: list[str] | None = None) -> int:
         default=30.0,
         help="seconds between bounded polling attempts",
     )
+    parser.add_argument(
+        "--expected-head-sha",
+        default="",
+        help="optional PR head SHA guard; stale heads return error without claiming readiness",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -306,6 +361,7 @@ def main(argv: list[str] | None = None) -> int:
             poll_interval=args.poll_interval,
             backoff=args.backoff,
             json_output=args.json,
+            expected_head_sha=args.expected_head_sha,
         )
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)
@@ -318,7 +374,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if data.get("status") == "error":
-        print(_format_human(data))
+        if args.json:
+            print(json.dumps(data))
+        else:
+            print(_format_human(data))
         return 1
 
     if attempts == 1:

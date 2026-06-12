@@ -269,6 +269,22 @@ Use `uv run python scripts/dev/ci_timing_summary.py --run-id <github-actions-run
 when GitHub CI wall time drifts from local readiness and you need queue, job, and slowest-step
 timings from `gh run view` data.
 
+For routine autopilot CI waits, prefer the compact monitor helper instead of leaving the parent
+thread idle on raw GitHub output:
+
+```bash
+uv run python scripts/dev/check_pr_ci_status.py <pr-number> \
+  --expected-head-sha <head-sha> \
+  --poll-attempts 40 \
+  --poll-interval 30 \
+  --json
+```
+
+Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
+SHA-match result, poll attempt, wait budget, deadline, and `route_evidence_only: true`. Monitor
+success is route evidence only; reassess the current PR head SHA and normal readiness proof before
+labeling or merging.
+
 Use `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR handoff when a
 branch adds or edits context notes, evidence bundles, or other proof-heavy docs surfaces. The
 checker is intentionally conservative: it only flags high-confidence issues such as missing

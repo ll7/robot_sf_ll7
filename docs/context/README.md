@@ -315,6 +315,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2543_trace_failure_predicates.md](issue_2543_trace_failure_predicates.md)
 
+* Issue #2667 trace failure predicate tables:
+
+  [issue_2667_trace_failure_predicate_tables.md](issue_2667_trace_failure_predicate_tables.md)
+
 * Issue #2544 mechanism-aware suite smoke:
 
   [issue_2544_mechanism_aware_suite_smoke.md](issue_2544_mechanism_aware_suite_smoke.md)
@@ -723,6 +727,8 @@ knowledge, not every transient iteration detail.
   [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md)
 * Issue #2428 AMMV Mechanism Trace Panels (2026-06-06):
   [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md)
+* Issue #2667 Trace Failure Predicate Tables (2026-06-12):
+  [issue_2667_trace_failure_predicate_tables.md](issue_2667_trace_failure_predicate_tables.md)
 * Issue #2270 Mechanism Panel Candidate Manifest (2026-06-05):
   [issue_2270_panel_candidate_manifest.md](issue_2270_panel_candidate_manifest.md)
 * Issue #1676 Proxemic Profile Comfort Slice (2026-05-30):

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -20,11 +21,11 @@ from robot_sf.adversarial.materialize import (
     materialize_manifest_scenario_payload,
 )
 from robot_sf.adversarial.scenario_manifest import (
+    MANIFEST_SCHEMA_VERSION,
     AdversarialScenarioManifest,
     ManifestCategory,
     SourceLineage,
     generate_manifests,
-    write_manifest_yaml,
 )
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
 from robot_sf.benchmark.runner import run_batch
@@ -33,6 +34,8 @@ DEFAULT_SCHEMA = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 DEFAULT_PLANNERS = ("goal", "social_force")
 SUMMARY_SCHEMA_VERSION = "adversarial_manifest_smoke_summary.v1"
 GENERATION_SUMMARY_SCHEMA_VERSION = "adversarial_scenario_manifest_generation_summary.v1"
+EVIDENCE_CLASSIFICATION = "adversarial_smoke"
+VALIDATOR_FUNCTION_REF = "robot_sf.adversarial.scenario_manifest.validate_manifest_payload"
 EVIDENCE_BOUNDARY = (
     "smoke-only: generated cases are uncategorized development stress tests; this run does not "
     "establish adversarial coverage, planner weakness, leaderboard standing, or paper-facing claims."
@@ -98,14 +101,20 @@ def _write_manifest_batch(
     manifest_rows: list[dict[str, Any]] = []
     manifests_dir = output_dir / "manifests"
     manifests_dir.mkdir(parents=True, exist_ok=True)
-    for manifest in manifests:
-        index = manifest.generator.candidate_index if manifest.generator is not None else 0
+    for fallback_index, manifest in enumerate(manifests):
+        index = (
+            manifest.generator.candidate_index if manifest.generator is not None else fallback_index
+        )
         path = manifests_dir / f"candidate_{index:04d}.yaml"
-        write_manifest_yaml(manifest, path)
+        manifest_yaml = manifest.to_yaml()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(manifest_yaml, encoding="utf-8")
         validation = manifest.validation
+        checksum = hashlib.sha256(manifest_yaml.encode("utf-8")).hexdigest()
         manifest_rows.append(
             {
                 "candidate_index": int(index),
+                "manifest_yaml_sha256": checksum,
                 "path": path.as_posix(),
                 "validation_status": validation.status.value
                 if validation is not None
@@ -180,6 +189,41 @@ def _materialize_matrix(
         yaml.safe_dump({"scenarios": scenarios}, sort_keys=False), encoding="utf-8"
     )
     return matrix_path, rows
+
+
+def _execution_contract(
+    *,
+    planner_pair: list[str],
+    manifests_generated: int,
+    generation: dict[str, Any],
+    materialized_rows: list[dict[str, Any]],
+    horizon: int,
+    dt: float,
+    max_valid: int,
+    result_classification: str,
+) -> dict[str, Any]:
+    """Collect compact execution-contract metadata for compact summaries."""
+
+    return {
+        "planner_pair": planner_pair,
+        "planner_count": len(planner_pair),
+        "seeds": sorted(
+            {
+                int(row.get("scenario_seed"))
+                for row in materialized_rows
+                if row.get("scenario_seed") is not None
+            }
+        ),
+        "horizon": horizon,
+        "dt": dt,
+        "max_valid": max_valid,
+        "generated_candidates": int(manifests_generated or 0),
+        "valid_candidates": int(generation.get("valid", 0) or 0),
+        "invalid_candidates": int(generation.get("invalid", 0) or 0),
+        "degenerate_candidates": int(generation.get("degenerate", 0) or 0),
+        "result_classification": result_classification,
+        "outcome": result_classification,
+    }
 
 
 def _read_episode_rows(path: Path) -> list[dict[str, Any]]:
@@ -413,8 +457,13 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
     result_classification = _classify_smoke_result(generation, selected, planner_runs)
     payload = {
         "schema_version": SUMMARY_SCHEMA_VERSION,
+        "evidence_classification": EVIDENCE_CLASSIFICATION,
         "result_classification": result_classification,
         "evidence_boundary": EVIDENCE_BOUNDARY,
+        "validator_metadata": {
+            "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
+            "validator_ref": VALIDATOR_FUNCTION_REF,
+        },
         "source": source.to_dict(),
         "generation": generation,
         "manifests": manifest_rows,
@@ -422,6 +471,16 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             "matrix_path": matrix_path.as_posix() if matrix_path is not None else None,
             "selected_valid_candidates": materialized_rows,
         },
+        "execution_contract": _execution_contract(
+            planner_pair=list(args.planner),
+            manifests_generated=int(generation.get("total_candidates", 0) or 0),
+            generation=generation,
+            materialized_rows=materialized_rows,
+            horizon=args.horizon,
+            dt=args.dt,
+            max_valid=args.max_valid,
+            result_classification=result_classification,
+        ),
         "planner_runs": planner_runs,
     }
     args.summary_json.parent.mkdir(parents=True, exist_ok=True)

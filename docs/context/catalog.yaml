@@ -869,6 +869,14 @@ entries:
     status: current
     freshness: maintained
     area: adversarial_search
+  - path: docs/context/issue_2658_adversarial_manifest_smoke.md
+    status: current
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_2658_adversarial_manifest_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
   - path: docs/context/issue_2618_adversarial_manifest_smoke.md
     status: current
     freshness: evidence

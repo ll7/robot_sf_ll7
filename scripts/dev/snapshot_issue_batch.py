@@ -151,7 +151,7 @@ def _write_capsules(issues: list[dict[str, Any]], capsule_dir: pathlib.Path) -> 
         if issue.get("status") != "ok":
             continue
         path = capsule_dir / f"issue_{issue['number']}_context_capsule.json"
-        path.write_text(json.dumps(_context_capsule(issue), indent=2, sort_keys=True) + "\n")
+        path.write_text(json.dumps(_context_capsule(issue), indent=2, sort_keys=True) + "\n", encoding="utf-8")
         issue["context_capsule_path"] = str(path)
 
 

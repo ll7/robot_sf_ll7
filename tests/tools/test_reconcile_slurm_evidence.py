@@ -1,0 +1,328 @@
+"""Tests for the SLURM/evidence reconciliation CLI helpers."""
+
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING
+
+import yaml
+
+from scripts.tools import reconcile_slurm_evidence
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _write_yaml(path: Path, payload: dict) -> None:
+    """Write YAML fixture data."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _write_csv(path: Path, header: list[str], rows: list[dict[str, str]]) -> None:
+    """Write CSV fixture data."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(",".join(header) + "\n")
+        for row in rows:
+            handle.write(",".join(row.get(key, "") for key in header) + "\n")
+
+
+def _queue_payload() -> dict:
+    """Return a minimal queue payload used by most tests."""
+    return {
+        "schema_version": "slurm-submission-queue.v1",
+        "entries": [
+            {
+                "id": "issue-2656-example",
+                "status": "planned",
+                "issue": 2656,
+                "objective": "compact integration check",
+                "target": {"cluster": "auxme"},
+                "resources": {},
+                "seeds": [101, 102],
+                "output_root": "output/slurm/issue2656-example",
+                "log_path": "output/slurm/%j-issue2656-example.out",
+                "priority_reason": "test",
+                "auto_submit": True,
+            }
+        ],
+    }
+
+
+def _manifest_payload(
+    *, queue_id: str, status: str, seeds: list[int], slurm_job_id: int | str, exp_id: str
+) -> dict:
+    """Build a minimal manifest payload."""
+    return {
+        "schema_version": "slurm-submission-manifest.v1",
+        "jobs": [
+            {
+                "queue_id": queue_id,
+                "status": status,
+                "slurm_job_id": str(slurm_job_id),
+                "experiment_id": exp_id,
+                "seeds": seeds,
+            }
+        ],
+    }
+
+
+def test_duplicate_manifest_experiment_ids_are_reported(tmp_path: Path) -> None:
+    """Duplicate manifest experiment IDs should be surfaced in report errors."""
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, _queue_payload())
+
+    manifest_a = tmp_path / "manifests" / "one.yaml"
+    manifest_b = tmp_path / "manifests" / "two.yaml"
+    _write_yaml(
+        manifest_a,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="submitted",
+            seeds=[101],
+            slurm_job_id=111,
+            exp_id="dup-exp-001",
+        ),
+    )
+    _write_yaml(
+        manifest_b,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="submitted",
+            seeds=[102],
+            slurm_job_id=112,
+            exp_id="dup-exp-001",
+        ),
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_a, manifest_b],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    assert any(
+        "duplicate experiment_id across manifests: dup-exp-001" in item for item in report["errors"]
+    )
+
+
+def test_missing_wandb_link_for_completed_seed_is_reported(tmp_path: Path) -> None:
+    """Completed seeds should fail preservation checks when no durable link exists."""
+    queue_payload = _queue_payload()
+    queue_payload["entries"][0]["seeds"] = [101]
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, queue_payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="completed",
+            seeds=[101],
+            slurm_job_id=120,
+            exp_id="exp-001",
+        ),
+    )
+
+    evidence = tmp_path / "evidence" / "seed_summary.csv"
+    _write_csv(
+        evidence,
+        ["queue_id", "seed", "job_id", "run_summary_sha256", "claim_boundary"],
+        [
+            {
+                "queue_id": "issue-2656-example",
+                "seed": "101",
+                "job_id": "120",
+                "run_summary_sha256": "abc",
+                "claim_boundary": "diagnostic_only",
+            }
+        ],
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    row = report["observations"][0]
+    assert row["queue_id"] == "issue-2656-example"
+    assert row["seed"] == 101
+    assert row["status"] == "completed"
+    assert any("missing wandb link or durable pointer" in note for note in row["notes"])
+
+
+def test_completed_seed_without_compact_evidence_is_flagged(tmp_path: Path) -> None:
+    """Completed seeds without matching compact evidence should be flagged."""
+    queue_payload = _queue_payload()
+    queue_payload["entries"][0]["seeds"] = [101]
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, queue_payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="COMPLETED",
+            seeds=[101],
+            slurm_job_id=121,
+            exp_id="exp-002",
+        ),
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    row = report["observations"][0]
+    assert row["status"] == "completed"
+    assert any("completed but not preserved" in note for note in row["notes"])
+
+
+def test_explicitly_excluded_seed_is_excluded(tmp_path: Path) -> None:
+    """Excluded queue seeds should resolve to excluded status regardless of submission rows."""
+    payload = _queue_payload()
+    payload["entries"][0]["seeds"] = [101, 102]
+    payload["entries"][0]["excluded_seeds"] = [102]
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="submitted",
+            seeds=[101, 102],
+            slurm_job_id=122,
+            exp_id="exp-003",
+        ),
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    rows_by_seed = {row["seed"]: row for row in report["observations"]}
+    assert rows_by_seed[102]["status"] == "excluded"
+
+
+def test_evidence_row_can_explicitly_exclude_seed(tmp_path: Path) -> None:
+    """Compact evidence can explicitly mark a seed as excluded."""
+    payload = _queue_payload()
+    payload["entries"][0]["seeds"] = [101]
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    evidence = tmp_path / "evidence" / "seed_summary.json"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(
+        json.dumps(
+            {
+                "rows": [
+                    {
+                        "queue_id": "issue-2656-example",
+                        "seed": 101,
+                        "status": "excluded",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    assert report["observations"][0]["status"] == "excluded"
+
+
+def test_scheduler_completion_overrides_submitted_manifest_status(tmp_path: Path) -> None:
+    """SLURM scheduler state should advance a submitted manifest to completed."""
+    payload = _queue_payload()
+    payload["entries"][0]["seeds"] = [101]
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    manifest = _manifest_payload(
+        queue_id="issue-2656-example",
+        status="submitted",
+        seeds=[101],
+        slurm_job_id=124,
+        exp_id="exp-005",
+    )
+    manifest["jobs"][0]["scheduler_state"] = "COMPLETED"
+    _write_yaml(manifest_path, manifest)
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    assert report["observations"][0]["status"] == "completed"
+
+
+def test_happy_path_json_shape_is_stable(tmp_path: Path) -> None:
+    """JSON report should provide stable keys and preserve compact status mappings."""
+    payload = _queue_payload()
+    payload["entries"][0]["seeds"] = [101]
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="completed",
+            seeds=[101],
+            slurm_job_id=123,
+            exp_id="exp-004",
+        ),
+    )
+
+    evidence = tmp_path / "evidence" / "seed_summary.json"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(
+        json.dumps(
+            {
+                "rows": [
+                    {
+                        "queue_id": "issue-2656-example",
+                        "seed": 101,
+                        "job_id": "123",
+                        "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/demo",
+                        "claim_boundary": "compact",
+                        "run_summary_sha256": "0123456789abcdef0123456789abcdef",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    assert {"schema_version", "generated_at", "observations", "errors", "warnings"}.issubset(
+        report.keys()
+    )
+    row = report["observations"][0]
+    assert row["status"] == "evidence_preserved"
+    assert row["seed"] == 101
+    assert row["queue_id"] == "issue-2656-example"

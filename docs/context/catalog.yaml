@@ -457,6 +457,10 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2706_topology_lane_synthesis.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2566_static_recenter_inactive_propagation.md
     status: current
     freshness: maintained

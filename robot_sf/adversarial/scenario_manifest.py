@@ -162,6 +162,22 @@ def _validation_from_dict(payload: Any) -> ValidationRecord | None:
     )
 
 
+def _require_mapping_fields(
+    payload: Any,
+    *,
+    namespace: str,
+    requirements: tuple[tuple[str, type, str], ...],
+) -> list[str]:
+    """Collect type errors for required mapping fields."""
+    if not isinstance(payload, dict):
+        return [f"{namespace} must be a mapping"]
+    errors: list[str] = []
+    for field, expected_type, descriptor in requirements:
+        if not isinstance(payload.get(field), expected_type):
+            errors.append(f"{namespace}.{field} must be {descriptor}")
+    return errors
+
+
 def compute_control_hash(candidate: CandidateSpec, precision: int = 6) -> str:
     """Deterministic hash of normalized candidate controls."""
     values = (
@@ -228,21 +244,42 @@ def _classify_errors(errors: list[str]) -> ManifestCategory:
     Out-of-bounds errors -> INVALID (schema/range issue).
     Non-finite, non-positive speed, negative timing, too-short route -> DEGENERATE.
     """
+    invalid_prefixes = (
+        "schema_version must be",
+        "candidate_controls.",
+        "execution_status must be",
+        "evidence_boundary must be",
+        "source.",
+        "generator.",
+        "start.x outside",
+        "start.y outside",
+        "goal.x outside",
+        "goal.y outside",
+    )
+    invalid_exact = (
+        "candidate_controls must be a mapping",
+        "source must be a mapping",
+        "generator must be a mapping",
+    )
+    degenerate_markers = (
+        "non-finite",
+        "must be positive",
+        "must be non-negative",
+        "min_start_goal_distance_m",
+        "outside search space",
+        "scenario_seed must be non-negative",
+    )
+
     for err in errors:
-        if err.startswith("schema_version must be"):
+        if err in invalid_exact or err.startswith(invalid_prefixes):
             return ManifestCategory.INVALID
-        if err.startswith("candidate_controls."):
+        if "outside search space" in err or "scenario_seed must be non-negative" in err:
             return ManifestCategory.INVALID
-        if err == "candidate_controls must be a mapping":
-            return ManifestCategory.INVALID
-        if err.startswith("start.x outside") or err.startswith("start.y outside"):
-            return ManifestCategory.INVALID
-        if err.startswith("goal.x outside") or err.startswith("goal.y outside"):
-            return ManifestCategory.INVALID
-        if "outside search space" in err:
-            return ManifestCategory.INVALID
-        if "scenario_seed must be non-negative" in err:
-            return ManifestCategory.INVALID
+
+    for err in errors:
+        if any(marker in err for marker in degenerate_markers):
+            return ManifestCategory.DEGENERATE
+
     if errors:
         return ManifestCategory.DEGENERATE
     return ManifestCategory.VALID
@@ -265,6 +302,36 @@ def validate_manifest_payload(
         )
     if payload.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         errors.append(f"schema_version must be {MANIFEST_SCHEMA_VERSION}")
+    if not isinstance(payload.get("execution_status"), str):
+        errors.append("execution_status must be a string")
+    if not isinstance(payload.get("evidence_boundary"), str):
+        errors.append("evidence_boundary must be a string")
+    errors.extend(
+        _require_mapping_fields(
+            payload.get("source"),
+            namespace="source",
+            requirements=(
+                ("scenario_template", str, "a string"),
+                ("search_space", str, "a string"),
+                ("map_id", str, "a string"),
+                ("scenario_name", str, "a string"),
+                ("config_path", str, "a string"),
+                ("search_space_path", str, "a string"),
+            ),
+        )
+    )
+    errors.extend(
+        _require_mapping_fields(
+            payload.get("generator"),
+            namespace="generator",
+            requirements=(
+                ("family", str, "a string"),
+                ("generator_id", str, "a string"),
+                ("seed", int, "an integer"),
+                ("candidate_index", int, "an integer"),
+            ),
+        )
+    )
     controls = payload.get("candidate_controls")
     if not isinstance(controls, dict):
         errors.append("candidate_controls must be a mapping")

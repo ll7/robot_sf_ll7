@@ -22,8 +22,14 @@ from robot_sf.adversarial.scenario_manifest import (
     validate_manifest_payload,
     write_manifest_yaml,
 )
-from scripts.tools.generate_adversarial_scenario_manifests import _load_template_info
-from scripts.tools.generate_adversarial_scenario_manifests import main as cli_main
+from scripts.tools.generate_adversarial_scenario_manifests import (
+    _load_template_info,
+)
+from scripts.tools.generate_adversarial_scenario_manifests import (
+    main as cli_main,
+)
+
+_LLM_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "issue_2529"
 
 
 def _search_space(*, min_distance: float = 0.5) -> SearchSpaceConfig:
@@ -83,6 +89,19 @@ def _source() -> SourceLineage:
         config_path="configs/scenarios/templates/crossing_ttc.yaml",
         search_space_path="configs/adversarial/crossing_ttc_space.yaml",
     )
+
+
+def _generator() -> GeneratorInfo:
+    return GeneratorInfo(
+        family="test_family",
+        generator_id="TestSampler",
+        seed=77,
+        candidate_index=3,
+    )
+
+
+def _valid_manifest_payload() -> dict[str, object]:
+    return build_manifest(_valid_candidate(), source=_source(), generator=_generator()).to_dict()
 
 
 def test_compute_control_hash_is_deterministic() -> None:
@@ -297,7 +316,12 @@ def test_manifest_round_trips_through_yaml(tmp_path: Path) -> None:
 
 
 def test_validate_manifest_payload_accepts_valid_payload() -> None:
-    manifest = build_manifest(_valid_candidate(), source=_source(), search_space=_search_space())
+    manifest = build_manifest(
+        _valid_candidate(),
+        source=_source(),
+        generator=_generator(),
+        search_space=_search_space(),
+    )
 
     record = validate_manifest_payload(manifest.to_dict(), search_space=_search_space())
 
@@ -307,7 +331,7 @@ def test_validate_manifest_payload_accepts_valid_payload() -> None:
 
 
 def test_validate_manifest_payload_rejects_bad_schema() -> None:
-    payload = build_manifest(_valid_candidate()).to_dict()
+    payload = _valid_manifest_payload()
     payload["schema_version"] = "wrong.v1"
 
     record = validate_manifest_payload(payload)
@@ -317,7 +341,8 @@ def test_validate_manifest_payload_rejects_bad_schema() -> None:
 
 
 def test_validate_manifest_payload_rejects_missing_controls() -> None:
-    payload = {"schema_version": MANIFEST_SCHEMA_VERSION}
+    payload = _valid_manifest_payload()
+    payload.pop("candidate_controls")
 
     record = validate_manifest_payload(payload)
 
@@ -326,7 +351,7 @@ def test_validate_manifest_payload_rejects_missing_controls() -> None:
 
 
 def test_validate_manifest_payload_classifies_degenerate_controls() -> None:
-    payload = build_manifest(_valid_candidate()).to_dict()
+    payload = _valid_manifest_payload()
     payload["candidate_controls"]["pedestrian_speed_mps"] = 0.0
 
     record = validate_manifest_payload(payload)
@@ -336,7 +361,7 @@ def test_validate_manifest_payload_classifies_degenerate_controls() -> None:
 
 
 def test_validate_manifest_payload_rejects_fractional_seed() -> None:
-    payload = build_manifest(_valid_candidate()).to_dict()
+    payload = _valid_manifest_payload()
     payload["candidate_controls"]["scenario_seed"] = 7.5
 
     record = validate_manifest_payload(payload)
@@ -346,7 +371,7 @@ def test_validate_manifest_payload_rejects_fractional_seed() -> None:
 
 
 def test_validate_manifest_payload_classifies_duplicates() -> None:
-    manifest = build_manifest(_valid_candidate()).to_dict()
+    manifest = _valid_manifest_payload()
     existing = {compute_control_hash(_valid_candidate())}
 
     record = validate_manifest_payload(manifest, existing_hashes=existing)
@@ -635,3 +660,97 @@ def test_manifest_from_yaml_round_trips(tmp_path: Path) -> None:
     assert restored.source is not None
     assert original.source is not None
     assert restored.source.map_id == original.source.map_id
+
+
+def _read_llm_fixture(name: str) -> dict[str, object]:
+    """Load an LLM manifest fixture payload."""
+    path = _LLM_FIXTURE_DIR / name
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_llm_manifest_fixture_is_validated_ok() -> None:
+    search_space = _search_space()
+    accepted = _read_llm_fixture("accepted_manifest.yaml")
+
+    record = validate_manifest_payload(accepted, search_space=search_space)
+
+    assert record.status == ManifestCategory.VALID
+    assert record.errors == ()
+
+
+def test_llm_manifest_fixture_is_rejected_fail_closed() -> None:
+    search_space = _search_space()
+    rejected = _read_llm_fixture("rejected_manifest.yaml")
+
+    record = validate_manifest_payload(rejected, search_space=search_space)
+
+    assert record.status == ManifestCategory.INVALID
+    assert "candidate_controls.goal must define x and y" in record.errors
+
+
+def test_validate_manifest_payload_rejects_missing_required_fields() -> None:
+    payload = _valid_manifest_payload()
+    payload.pop("execution_status")
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "execution_status must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload.pop("evidence_boundary")
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "evidence_boundary must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload.pop("source")
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "source must be a mapping" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload.pop("generator")
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "generator must be a mapping" in record.errors
+
+
+def test_validate_manifest_payload_rejects_wrong_required_field_types() -> None:
+    payload = _valid_manifest_payload()
+    payload["execution_status"] = 12
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "execution_status must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload["evidence_boundary"] = 12
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "evidence_boundary must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload["source"] = 12
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "source must be a mapping" in record.errors
+
+    payload = _valid_manifest_payload()
+    source = _source().to_dict()
+    source["search_space"] = 12
+    payload["source"] = source
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "source.search_space must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload["generator"] = 12
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "generator must be a mapping" in record.errors
+
+    payload = _valid_manifest_payload()
+    generator = _generator().to_dict()
+    generator["candidate_index"] = "3"
+    payload["generator"] = generator
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "generator.candidate_index must be an integer" in record.errors

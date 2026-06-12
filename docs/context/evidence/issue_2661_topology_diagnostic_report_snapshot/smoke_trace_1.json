@@ -1,0 +1,87 @@
+{
+  "claim_boundary": "diagnostic_only_not_benchmark_success",
+  "diagnostic_kind": "topology_hypothesis_trace",
+  "diagnostic_status": "diagnostic_complete",
+  "scenario_id": "double_bottleneck_high",
+  "seed": 42,
+  "steps": [
+    {
+      "planner_route_corridor": {
+        "topology_reuse_penalty": {
+          "eligible_near_parity_alternative_exists": true,
+          "reuse_penalty_applied": true,
+          "reuse_penalty_reason": "cooldown_eligible"
+        }
+      },
+      "step": 0,
+      "topology_instrumentation": {
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+        "selected_hypothesis": "primary_route"
+      }
+    },
+    {
+      "planner_route_corridor": {
+        "topology_reuse_penalty": {
+          "eligible_near_parity_alternative_exists": true,
+          "reuse_penalty_applied": true,
+          "reuse_penalty_reason": "cooldown_eligible"
+        }
+      },
+      "step": 1,
+      "topology_instrumentation": {
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+        "selected_hypothesis": "primary_route"
+      }
+    },
+    {
+      "planner_route_corridor": {
+        "topology_reuse_penalty": {
+          "eligible_near_parity_alternative_exists": false,
+          "reuse_penalty_applied": false,
+          "reuse_penalty_reason": null
+        }
+      },
+      "step": 2,
+      "topology_instrumentation": {
+        "near_parity_gate_reason": "static_clearance_below_floor",
+        "selected_hypothesis": "primary_route"
+      }
+    }
+  ],
+  "summary": {
+    "corrective_behavior": {
+      "terminal_outcome": {
+        "outcome": "success"
+      }
+    },
+    "hypothesis_progress_by_rank": {
+      "0": {
+        "first_corridor_name": "north_lane",
+        "first_remaining_distance_m": 8.5,
+        "last_corridor_name": "north_lane",
+        "last_remaining_distance_m": 3.2,
+        "min_dynamic_clearance_m": 0.3,
+        "min_static_clearance_m": 0.4,
+        "progress_delta_m": 5.3,
+        "samples": 3
+      },
+      "1": {
+        "first_corridor_name": "south_lane",
+        "first_remaining_distance_m": 9.1,
+        "last_corridor_name": "south_lane",
+        "last_remaining_distance_m": 7.8,
+        "min_dynamic_clearance_m": 0.28,
+        "min_static_clearance_m": 0.35,
+        "progress_delta_m": 1.3,
+        "samples": 3
+      }
+    },
+    "route_selector_selected_hypothesis_counts": {
+      "primary_route": 3
+    },
+    "selected_row_near_parity_gate_reasons": {
+      "eligible_near_parity_alternative": 2,
+      "static_clearance_below_floor": 1
+    }
+  }
+}

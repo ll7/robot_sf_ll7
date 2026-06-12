@@ -1,0 +1,133 @@
+{
+  "schema_version": "simulation_trace_export.v1",
+  "trace_id": "issue-2667-synthetic-crossing-proxy-orca-111",
+  "source": {
+    "scenario_id": "crossing_proxy",
+    "seed": 111,
+    "planner_id": "orca",
+    "episode_id": "issue-2667-synthetic-episode-001",
+    "generated_by": "issue_2667_diagnostic_contract_fixture"
+  },
+  "evidence_boundary": "analysis_workbench_only",
+  "coordinate_frame": "world",
+  "units": {
+    "position": "m",
+    "heading": "rad",
+    "time": "s",
+    "velocity": "m/s"
+  },
+  "frames": [
+    {
+      "step": 0,
+      "time_s": 0.0,
+      "robot": {
+        "position": [0.0, 0.0],
+        "heading": 0.0,
+        "velocity": [0.0, 0.0]
+      },
+      "pedestrians": [
+        {
+          "id": "ped-1",
+          "position": [0.25, 0.0],
+          "velocity": [0.0, 0.0]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.8,
+          "angular_velocity": 0.0
+        }
+      }
+    },
+    {
+      "step": 1,
+      "time_s": 1.0,
+      "robot": {
+        "position": [0.01, 0.0],
+        "heading": 0.0,
+        "velocity": [0.0, 0.0]
+      },
+      "pedestrians": [
+        {
+          "id": "ped-1",
+          "position": [0.30, 0.0],
+          "velocity": [0.0, 0.0]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.8,
+          "angular_velocity": 1.2
+        }
+      }
+    },
+    {
+      "step": 2,
+      "time_s": 2.0,
+      "robot": {
+        "position": [0.02, 0.0],
+        "heading": 0.0,
+        "velocity": [0.0, 0.0]
+      },
+      "pedestrians": [
+        {
+          "id": "ped-1",
+          "position": [0.35, 0.0],
+          "velocity": [0.0, 0.0]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": -1.2
+        }
+      }
+    },
+    {
+      "step": 3,
+      "time_s": 3.0,
+      "robot": {
+        "position": [0.02, 0.0],
+        "heading": 0.0,
+        "velocity": [0.0, 0.0]
+      },
+      "pedestrians": [
+        {
+          "id": "ped-1",
+          "position": [0.35, 0.0],
+          "velocity": [0.0, 0.0]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.0,
+          "angular_velocity": 1.1
+        },
+        "event": "bottleneck_deadlock"
+      }
+    },
+    {
+      "step": 4,
+      "time_s": 4.0,
+      "robot": {
+        "position": [0.02, 0.0],
+        "heading": 0.0,
+        "velocity": [0.0, 0.0]
+      },
+      "pedestrians": [
+        {
+          "id": "ped-1",
+          "position": [0.35, 0.0],
+          "velocity": [0.0, 0.0]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.0,
+          "angular_velocity": -1.1
+        },
+        "event": "timeout"
+      }
+    }
+  ]
+}

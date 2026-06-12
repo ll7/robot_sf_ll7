@@ -84,7 +84,7 @@
     "uv run pytest tests/tools/test_run_adversarial_manifest_smoke.py tests/adversarial/test_adversarial_scenario_manifest.py -q",
     "uv run ruff check scripts/tools/run_adversarial_manifest_smoke.py tests/tools/test_run_adversarial_manifest_smoke.py",
     "uv run ruff format --check scripts/tools/run_adversarial_manifest_smoke.py tests/tools/test_run_adversarial_manifest_smoke.py",
-    "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/tools/run_adversarial_manifest_smoke.py --search-space configs/adversarial/crossing_ttc_space.yaml --scenario-template configs/scenarios/templates/crossing_ttc.yaml --count 4 --seed 44 --max-valid 2 --output-dir output/adversarial/issue2658_manifest_smoke --summary-json output/adversarial/issue2658_manifest_smoke/summary.json --planner goal --planner social_force --horizon 60 --dt 0.1 --workers 1"
-  ],
-  "raw_output_policy": "Raw generated manifests, route overrides, materialized matrix files, planner episode JSONL rows, and local smoke summary remain ignored under output/adversarial/issue2658_manifest_smoke. This tracked file is the compact evidence record."
+        "TF_CPP_MIN_LOG_LEVEL=2 LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/tools/run_adversarial_manifest_smoke.py --search-space configs/adversarial/crossing_ttc_space.yaml --scenario-template configs/scenarios/templates/crossing_ttc.yaml --count 4 --seed 44 --max-valid 2 --planner goal --planner social_force --horizon 60 --dt 0.1 --workers 1"
+    ],
+    "raw_output_policy": "Raw generated manifests, route overrides, materialized matrix files, planner episode JSONL rows, and the local smoke summary remain ignored in the worktree artifact root. This tracked file is the compact evidence record."
 }

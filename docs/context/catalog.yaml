@@ -1020,6 +1020,14 @@ entries:
     status: evidence
     freshness: evidence
     area: manual_control_trace
+  - path: docs/context/issue_2667_trace_failure_predicate_tables.md
+    status: current
+    freshness: evidence
+    area: manual_control_trace
+  - path: docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/summary.json
+    status: evidence
+    freshness: evidence
+    area: manual_control_trace
   - path: docs/context/evidence/issue_2263_mechanism_activation_fields_2026-06-05/summary.json
     status: evidence
     freshness: evidence

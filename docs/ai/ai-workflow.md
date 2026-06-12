@@ -197,7 +197,10 @@ Treat it as a reviewer-lens pass, not another full test suite:
 - delegated worker outputs: record useful sidecar answers as `route_evidence`, not benchmark or
   claim proof by themselves. Classify missing or sparse compact artifacts as route failure or T0
   evidence. If the worker produced no useful `result`, `status`, or `diffstat` summary, rely on
-  local validation or reroute instead of treating the silence as a negative finding.
+  local validation or reroute instead of treating the silence as a negative finding. Routed-worker
+  manifests should include per-attempt artifact presence for `result.json`, `RESULT.md`,
+  `diffstat.txt`, `status.txt`, and `validation.txt`; wrapper success, zero exit, and manifest
+  presence are still route evidence only, not task acceptance.
 
 ### 7. Open the PR
 

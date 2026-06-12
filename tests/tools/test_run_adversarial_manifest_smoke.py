@@ -179,13 +179,10 @@ def test_run_smoke_reports_no_valid_manifests_without_planner_run(
     payload["constraints"]["min_start_goal_distance_m"] = 99.0
     space.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
-    materialized_calls: list[tuple[Any, ...]] = []
-
     def fail_run_batch(**_kwargs: Any) -> dict[str, Any]:
         raise AssertionError("planner should not run without valid manifests")
 
-    def fail_materialize_matrix(*args: Any, **_kwargs: Any) -> None:
-        materialized_calls.append(args)
+    def fail_materialize_matrix(*_args: Any, **_kwargs: Any) -> None:
         raise AssertionError("materialization should not run without valid manifests")
 
     monkeypatch.setattr(smoke, "run_batch", fail_run_batch)

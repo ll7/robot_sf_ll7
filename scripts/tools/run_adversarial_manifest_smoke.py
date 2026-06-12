@@ -26,7 +26,6 @@ from robot_sf.adversarial.scenario_manifest import (
     ManifestCategory,
     SourceLineage,
     generate_manifests,
-    write_manifest_yaml,
 )
 from robot_sf.benchmark.fallback_policy import availability_payload, benchmark_run_exit_code
 from robot_sf.benchmark.runner import run_batch
@@ -107,9 +106,11 @@ def _write_manifest_batch(
             manifest.generator.candidate_index if manifest.generator is not None else fallback_index
         )
         path = manifests_dir / f"candidate_{index:04d}.yaml"
-        write_manifest_yaml(manifest, path)
+        manifest_yaml = manifest.to_yaml()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(manifest_yaml, encoding="utf-8")
         validation = manifest.validation
-        checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+        checksum = hashlib.sha256(manifest_yaml.encode("utf-8")).hexdigest()
         manifest_rows.append(
             {
                 "candidate_index": int(index),

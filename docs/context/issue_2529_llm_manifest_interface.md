@@ -78,7 +78,8 @@ Execution path:
 
 `validate_manifest_payload` uses pure, deterministic checks:
 
-- schema-level check (`schema_version`, `candidate_controls` typing),
+- schema-level check (`schema_version`, `execution_status`, `evidence_boundary`,
+  `source`, `generator`, and `candidate_controls` typing),
 - typed control conversion,
 - bounded-space checks when search-space is supplied,
 - duplicate-control hashing via `compute_control_hash`,
@@ -125,6 +126,13 @@ candidate_controls:
 schema_version: adversarial_scenario_manifest.v1
 execution_status: generated_only
 evidence_boundary: diagnostic-only
+source:
+  scenario_template: crossing_ttc.yaml
+  search_space: crossing_ttc_space.yaml
+  map_id: classic_cross_trap
+  scenario_name: crossing_ttc_template
+  config_path: configs/scenarios/templates/crossing_ttc.yaml
+  search_space_path: configs/adversarial/crossing_ttc_space.yaml
 candidate_controls:
   start:
     x: 1.0

@@ -91,6 +91,19 @@ def _source() -> SourceLineage:
     )
 
 
+def _generator() -> GeneratorInfo:
+    return GeneratorInfo(
+        family="test_family",
+        generator_id="TestSampler",
+        seed=77,
+        candidate_index=3,
+    )
+
+
+def _valid_manifest_payload() -> dict[str, object]:
+    return build_manifest(_valid_candidate(), source=_source(), generator=_generator()).to_dict()
+
+
 def test_compute_control_hash_is_deterministic() -> None:
     c = _valid_candidate()
     h1 = compute_control_hash(c)
@@ -303,7 +316,12 @@ def test_manifest_round_trips_through_yaml(tmp_path: Path) -> None:
 
 
 def test_validate_manifest_payload_accepts_valid_payload() -> None:
-    manifest = build_manifest(_valid_candidate(), source=_source(), search_space=_search_space())
+    manifest = build_manifest(
+        _valid_candidate(),
+        source=_source(),
+        generator=_generator(),
+        search_space=_search_space(),
+    )
 
     record = validate_manifest_payload(manifest.to_dict(), search_space=_search_space())
 
@@ -313,7 +331,7 @@ def test_validate_manifest_payload_accepts_valid_payload() -> None:
 
 
 def test_validate_manifest_payload_rejects_bad_schema() -> None:
-    payload = build_manifest(_valid_candidate()).to_dict()
+    payload = _valid_manifest_payload()
     payload["schema_version"] = "wrong.v1"
 
     record = validate_manifest_payload(payload)
@@ -323,7 +341,8 @@ def test_validate_manifest_payload_rejects_bad_schema() -> None:
 
 
 def test_validate_manifest_payload_rejects_missing_controls() -> None:
-    payload = {"schema_version": MANIFEST_SCHEMA_VERSION}
+    payload = _valid_manifest_payload()
+    payload.pop("candidate_controls")
 
     record = validate_manifest_payload(payload)
 
@@ -332,7 +351,7 @@ def test_validate_manifest_payload_rejects_missing_controls() -> None:
 
 
 def test_validate_manifest_payload_classifies_degenerate_controls() -> None:
-    payload = build_manifest(_valid_candidate()).to_dict()
+    payload = _valid_manifest_payload()
     payload["candidate_controls"]["pedestrian_speed_mps"] = 0.0
 
     record = validate_manifest_payload(payload)
@@ -342,7 +361,7 @@ def test_validate_manifest_payload_classifies_degenerate_controls() -> None:
 
 
 def test_validate_manifest_payload_rejects_fractional_seed() -> None:
-    payload = build_manifest(_valid_candidate()).to_dict()
+    payload = _valid_manifest_payload()
     payload["candidate_controls"]["scenario_seed"] = 7.5
 
     record = validate_manifest_payload(payload)
@@ -352,7 +371,7 @@ def test_validate_manifest_payload_rejects_fractional_seed() -> None:
 
 
 def test_validate_manifest_payload_classifies_duplicates() -> None:
-    manifest = build_manifest(_valid_candidate()).to_dict()
+    manifest = _valid_manifest_payload()
     existing = {compute_control_hash(_valid_candidate())}
 
     record = validate_manifest_payload(manifest, existing_hashes=existing)
@@ -667,3 +686,71 @@ def test_llm_manifest_fixture_is_rejected_fail_closed() -> None:
 
     assert record.status == ManifestCategory.INVALID
     assert "candidate_controls.goal must define x and y" in record.errors
+
+
+def test_validate_manifest_payload_rejects_missing_required_fields() -> None:
+    payload = _valid_manifest_payload()
+    payload.pop("execution_status")
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "execution_status must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload.pop("evidence_boundary")
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "evidence_boundary must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload.pop("source")
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "source must be a mapping" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload.pop("generator")
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "generator must be a mapping" in record.errors
+
+
+def test_validate_manifest_payload_rejects_wrong_required_field_types() -> None:
+    payload = _valid_manifest_payload()
+    payload["execution_status"] = 12
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "execution_status must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload["evidence_boundary"] = 12
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "evidence_boundary must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload["source"] = 12
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "source must be a mapping" in record.errors
+
+    payload = _valid_manifest_payload()
+    source = _source().to_dict()
+    source["search_space"] = 12
+    payload["source"] = source
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "source.search_space must be a string" in record.errors
+
+    payload = _valid_manifest_payload()
+    payload["generator"] = 12
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "generator must be a mapping" in record.errors
+
+    payload = _valid_manifest_payload()
+    generator = _generator().to_dict()
+    generator["candidate_index"] = "3"
+    payload["generator"] = generator
+    record = validate_manifest_payload(payload)
+    assert record.status == ManifestCategory.INVALID
+    assert "generator.candidate_index must be an integer" in record.errors

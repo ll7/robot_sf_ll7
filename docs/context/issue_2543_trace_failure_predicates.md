@@ -54,6 +54,8 @@ fields emits `validity_status: not_available` instead of inferring an occlusion-
 Tracked compact evidence:
 
 - [evidence/issue_2543_trace_failure_predicates/summary.json](evidence/issue_2543_trace_failure_predicates/summary.json)
+- Follow-up denominator-aware table application:
+  [issue_2667_trace_failure_predicate_tables.md](issue_2667_trace_failure_predicate_tables.md)
 
 The smoke fixture in `tests/validation/test_trace_failure_predicates.py` emits three valid
 predicate types from a synthetic `simulation_trace_export.v1` trace and a separate

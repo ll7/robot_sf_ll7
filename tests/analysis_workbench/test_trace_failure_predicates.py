@@ -253,6 +253,7 @@ def test_denominator_and_markdown_render_include_rate_fields() -> None:
     )
 
     assert row is not None
+    assert row["trace_source_ids"] == ["trace-denom-0", "trace-denom-1"]
     assert row["trace_denominator"] == 2
     assert row["predicate_count"] == 2
     assert row["predicate_rate_per_trace"] == 1.0
@@ -356,5 +357,5 @@ def test_markdown_renderer_skips_invalid_rows_and_preserves_falsy_values() -> No
         }
     )
 
-    assert "| 0 |  | 0 | zero_like | valid | low | 0 | 1 | 0.0000 |" in markdown
+    assert "| 0 |  | 0 |  | zero_like | valid | low | 0 | 1 | 0.0000 |" in markdown
     assert "bad-row" not in markdown

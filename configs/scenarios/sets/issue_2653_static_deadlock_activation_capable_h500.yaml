@@ -1,0 +1,38 @@
+## Issue #2653 activation-capable h500 static-deadlock expansion
+#
+# Purpose:
+#   Predeclare a static-deadlock h500 expansion that can only support a stronger
+#   mechanism-transfer interpretation when enough comparator-unsolved rows activate
+#   and at least one active row changes terminal outcome. This is not planner
+#   ranking, promotion, or paper-facing evidence by itself.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_bottleneck.yaml
+  - ../archetypes/classic_head_on_corridor.yaml
+  - ../archetypes/issue_596_static_obstacles.yaml
+
+select_scenarios:
+  - classic_bottleneck_low
+  - classic_head_on_corridor_low
+  - narrow_passage
+
+scenario_overrides:
+  seeds: [111, 112, 113]
+  metadata:
+    mechanism_aware_suite_id: static_deadlock_recovery
+    issue: 2653
+    evidence_tier: predeclared_activation_capable_h500
+    active_row_denominator_definition: >
+      completed comparator-unsolved matched rows where the intervention row has
+      recenter_activation_count > 0.
+    claim_boundary: >
+      Predeclared h500 static-deadlock activation-capable slice for mechanism
+      accounting only. It does not establish planner ranking, planner promotion,
+      mechanism transfer, benchmark-candidate evidence, or paper-facing proof
+      unless the transfer-funnel gate passes on native or declared adapter rows
+      without fallback, degraded, failed, missing, or unavailable rows counted as
+      success evidence.
+
+map_search_paths:
+  - ../../../maps/svg_maps

@@ -56,6 +56,14 @@ CRITICAL_DUPLICATE_PATTERNS = (
     "fallback/degraded should be treated as a caveat",
 )
 BACKTICK_TOKEN_PATTERN = re.compile(r"`([a-z][a-z0-9-]+)`")
+ARTIFACT_FIRST_SKILLS = {"goal-autopilot", "goal-issue-implementation", "goal-pr-review"}
+ARTIFACT_FIRST_REQUIRED_FILES = ("result.json", "RESULT.md", "diffstat.txt", "validation.json")
+ARTIFACT_FIRST_REQUIRED_PHRASES = (
+    "artifact-first",
+    "route evidence",
+    "raw logs",
+    "targeted local",
+)
 
 
 def _read_yaml(path: Path) -> Any:
@@ -209,6 +217,7 @@ def _validate_skill_file(
     for section in REQUIRED_SECTIONS:
         if section not in body:
             errors.append(f"{rel}: missing required section {section!r}")
+    errors.extend(_validate_artifact_first_contract(path, metadata, body))
     if registry_metadata[name].get("requires_benchmark_artifacts"):
         policy_refs = (
             "fail-closed" in body.lower()
@@ -242,6 +251,26 @@ def _validate_generated_readme(registry: dict[str, Any], readme_text: str) -> li
             "`uv run python scripts/dev/generate_skills_readme.py`"
         ]
     return []
+
+
+def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text: str) -> list[str]:
+    """Validate artifact-first delegated route contract text for selected skills."""
+    if metadata.get("name") not in ARTIFACT_FIRST_SKILLS:
+        return []
+
+    rel = path.relative_to(REPO_ROOT)
+    errors: list[str] = []
+
+    for filename in ARTIFACT_FIRST_REQUIRED_FILES:
+        if filename not in text:
+            errors.append(f"{rel}: missing artifact-first requirement {filename!r}")
+
+    lower = text.lower()
+    for phrase in ARTIFACT_FIRST_REQUIRED_PHRASES:
+        if phrase not in lower:
+            errors.append(f"{rel}: missing artifact-first phrase requirement {phrase!r}")
+
+    return errors
 
 
 def _validate_backticked_skill_tokens(

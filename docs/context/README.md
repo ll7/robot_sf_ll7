@@ -248,6 +248,8 @@ knowledge, not every transient iteration detail.
   [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md)
 * Issue #2564 Signal-State Proxy Smoke:
   [issue_2564_signal_state_proxy_smoke.md](issue_2564_signal_state_proxy_smoke.md)
+* Issue #2662 Signal-State Promotion Contract:
+  [issue_2662_signal_state_promotion_contract.md](issue_2662_signal_state_promotion_contract.md)
 * Issue #2473 Cyclist Interaction Benchmark Scope:
   [issue_2473_cyclist_interaction_benchmark.md](issue_2473_cyclist_interaction_benchmark.md)
 * Issue #2459 SocNavBench / HuNavSim Mapping:
@@ -685,6 +687,8 @@ knowledge, not every transient iteration detail.
   [artifact](evidence/issue_2523_scenario_prior_smoke/scenario_prior.v1.json))
 * Issue #2474 Signalized Pedestrian Crossing Benchmark Scope (2026-06-06):
   [issue_2474_signalized_crossing_benchmark.md](issue_2474_signalized_crossing_benchmark.md)
+* Issue #2662 Signal-State Promotion Contract (2026-06-12):
+  [issue_2662_signal_state_promotion_contract.md](issue_2662_signal_state_promotion_contract.md)
 * Issue #2475 Probabilistic Prediction Interface (2026-06-06):
   [issue_2475_probabilistic_prediction_interface.md](issue_2475_probabilistic_prediction_interface.md)
 * Issue #1638 local model path preflight:

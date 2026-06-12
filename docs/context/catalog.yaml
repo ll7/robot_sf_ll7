@@ -717,6 +717,10 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2662_signal_state_promotion_contract.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_2475_probabilistic_prediction_interface.md
     status: current
     freshness: dated

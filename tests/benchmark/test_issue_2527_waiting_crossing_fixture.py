@@ -9,6 +9,7 @@ import yaml
 
 from robot_sf.benchmark.map_runner import (
     _intent_conditioned_behavior_summary,
+    _signal_state_promotion_contract,
     _signal_state_proxy_wrapper,
     _single_pedestrian_intent_metadata,
     _trace_pedestrians,
@@ -166,6 +167,12 @@ def test_signal_state_proxy_wrapper_exposes_bounded_diagnostic_fields() -> None:
         assert "robot_stop_or_yield_expectation" in proxy
         assert "trace_fields_present" in proxy
         assert proxy["claim_boundary"] == "proxy_diagnostic"
+        assert proxy["contract_state"] == "proxy_diagnostic"
+        assert proxy["planner_consumed_fields"] == []
+        assert "phase" in proxy["recorded_only_fields"]
+        assert "phase_remaining_s" in proxy["promotion_required_fields"]
+        assert proxy["benchmark_evidence"] is False
+        assert "do_not_count_as_signalized_benchmark_evidence" in proxy["fail_closed_reason"]
         assert "intent_label" in proxy["pedestrian_intent"]
         assert "intent_phase" in proxy["pedestrian_intent"]
         assert "intent_source" in proxy["pedestrian_intent"]
@@ -180,6 +187,55 @@ def test_signal_state_proxy_wrapper_exposes_bounded_diagnostic_fields() -> None:
 
     assert "signal_state" in waiting_proxy["trace_fields_present"]
     assert "pedestrian_intent" in waiting_proxy["trace_fields_present"]
+
+
+def test_signal_state_contract_fails_closed_when_unavailable() -> None:
+    """Absent signal semantics are unavailable and cannot enter benchmark denominators."""
+    contract = _signal_state_promotion_contract(None)
+
+    assert contract["contract_state"] == "unavailable"
+    assert contract["planner_consumed_fields"] == []
+    assert contract["recorded_only_fields"] == []
+    assert "phase_remaining_s" in contract["promotion_required_fields"]
+    assert contract["fail_closed_reason"] == "signal_state_metadata_absent"
+    assert contract["benchmark_evidence"] is False
+
+
+def test_proxy_signal_state_cannot_be_interpreted_as_planner_observable() -> None:
+    """Proxy fields remain recorded-only even if a fixture accidentally sets visibility flags."""
+    scenario = _scenario_payload()
+    spoofed_proxy = dict(scenario["metadata"]["signal_state"])
+    spoofed_proxy["planner_observable"] = True
+    spoofed_proxy["benchmark_evidence"] = True
+    spoofed_proxy["observation_mode"] = "planner_observable"
+
+    contract = _signal_state_promotion_contract(spoofed_proxy)
+
+    assert contract["contract_state"] == "proxy_diagnostic"
+    assert contract["planner_consumed_fields"] == []
+    assert "phase" in contract["recorded_only_fields"]
+    assert "phase_remaining_s" in contract["promotion_required_fields"]
+    assert contract["benchmark_evidence"] is False
+
+
+def test_explicit_observable_signal_state_names_planner_consumed_fields() -> None:
+    """Only the explicit observable schema/status can promote signal fields to planner inputs."""
+    contract = _signal_state_promotion_contract(
+        {
+            "schema_version": "signal-state-observable.v1",
+            "status": "planner_observable_signal_state",
+            "observation_mode": "planner_observable",
+            "planner_observable": True,
+            "benchmark_evidence": True,
+        }
+    )
+
+    assert contract["contract_state"] == "planner_observable"
+    assert "phase_remaining_s" in contract["planner_consumed_fields"]
+    assert contract["recorded_only_fields"] == []
+    assert contract["promotion_required_fields"] == []
+    assert contract["fail_closed_reason"] == ""
+    assert contract["benchmark_evidence"] is True
 
 
 def test_intent_summary_handles_missing_or_empty_intent_phases() -> None:

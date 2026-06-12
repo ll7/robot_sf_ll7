@@ -82,6 +82,11 @@ records the shared additive lineage/evidence-boundary fields for `scenario_prior
 `adversarial_scenario_manifest.v1`, and `counterfactual_scenario_pair.v1`; it is schema
 reviewability work only, not benchmark or paper-facing evidence.
 
+Recent signal-state promotion contract: [issue_2662_signal_state_promotion_contract.md](issue_2662_signal_state_promotion_contract.md)
+records the fail-closed distinction between `proxy_diagnostic`, `planner_observable`, and
+`unavailable` signal-state rows for future signalized-crossing benchmarks; it is schema/trace
+contract work only, not benchmark evidence.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

@@ -23,6 +23,7 @@ REQUIRED_SECTIONS = (
 )
 CLAIM_BOUNDARY = "Report strength is limited to the compact input evidence."
 _NON_SUCCESS_STATUSES = {"fallback", "degraded", "failed", "not_available", "skipped"}
+_REPORT_MODES = ("why-first", "dissertation")
 
 
 class WhyFirstReportError(ValueError):
@@ -34,6 +35,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="Compact JSON evidence input.")
     parser.add_argument("--output", type=Path, required=True, help="Markdown report output path.")
+    parser.add_argument(
+        "--mode",
+        choices=_REPORT_MODES,
+        default="why-first",
+        help="Report mode to render. The default preserves the original why-first report.",
+    )
     return parser
 
 
@@ -49,12 +56,14 @@ def load_evidence(path: Path) -> dict[str, Any]:
     return payload
 
 
-def generate_report(evidence: Mapping[str, Any]) -> str:
+def generate_report(evidence: Mapping[str, Any], *, mode: str = "why-first") -> str:
     """Generate the why-first report Markdown.
 
     Returns:
         str: Markdown report with the required why-first sections.
     """
+    if mode not in _REPORT_MODES:
+        raise WhyFirstReportError(f"unsupported report mode: {mode}")
     title = _text(evidence.get("title"), default="Why-First Benchmark Report")
     lines = [f"# {title}", ""]
     lines.extend(_section("Outcome Summary", _outcome_summary(evidence)))
@@ -69,6 +78,8 @@ def generate_report(evidence: Mapping[str, Any]) -> str:
     lines.extend(_section("Trace Evidence", _trace_evidence(evidence)))
     lines.extend(_section("Alternative Explanations", _alternative_explanations(evidence)))
     lines.extend(_section("Continue / Revise / Stop Decision", _decision(evidence)))
+    if mode == "dissertation":
+        lines.extend(_section("Dissertation-Facing Handoff", _dissertation_handoff(evidence)))
     lines.extend(["## Claim Boundary", "", CLAIM_BOUNDARY, ""])
     return "\n".join(lines)
 
@@ -178,6 +189,38 @@ def _decision(evidence: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def _dissertation_handoff(evidence: Mapping[str, Any]) -> list[str]:
+    """Render conservative dissertation-facing handoff fields."""
+    dissertation = evidence.get("dissertation")
+    values = dissertation if isinstance(dissertation, Mapping) else evidence
+    status = _status(evidence)
+    caveat = (
+        "fallback/degraded/failed/not-available evidence must not be counted as benchmark success"
+        if _fallback_caveat(status)
+        else "no fallback/degraded status was declared in the compact evidence"
+    )
+    return [
+        "- `reader_takeaway`: "
+        + _text(values.get("reader_takeaway"), default="not specified")
+        + ".",
+        "- `allowed_wording`: "
+        + _list_or_text(values.get("allowed_wording"), default="not specified")
+        + ".",
+        "- `not_claimed`: "
+        + _list_or_text(values.get("not_claimed"), default="not specified")
+        + ".",
+        "- `figure_table_candidates`: "
+        + _list_or_text(
+            values.get("figure_table_candidates")
+            or values.get("artifact_ids")
+            or values.get("artifact_id"),
+            default="not specified",
+        )
+        + ".",
+        f"- `fallback_degraded_caveat`: {caveat}.",
+    ]
+
+
 def _status(evidence: Mapping[str, Any]) -> str:
     """Return the normalized execution status."""
     return _text(
@@ -213,11 +256,20 @@ def _text(value: Any, *, default: str) -> str:
     return text or default
 
 
+def _list_or_text(value: Any, *, default: str) -> str:
+    """Render a scalar or list value as compact report text."""
+    if isinstance(value, list):
+        rendered = [_text(item, default="").strip() for item in value]
+        rendered = [item for item in rendered if item]
+        return "; ".join(rendered) if rendered else default
+    return _text(value, default=default)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the report generator."""
     args = _build_parser().parse_args(argv)
     evidence = load_evidence(args.input)
-    report = generate_report(evidence)
+    report = generate_report(evidence, mode=args.mode)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(report, encoding="utf-8")
     return 0

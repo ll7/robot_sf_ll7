@@ -25,6 +25,7 @@ SUMMARY_KEYS = [
     "top_regressions",
     "top_unchanged",
     "terminal_outcome_counts",
+    "switch_timeline",
 ]
 
 REUSE_PENALTY_KEYS = [
@@ -48,6 +49,7 @@ MARKDOWN_SECTIONS = [
     "## Route-Progress Deltas",
     "## Top Regressions",
     "## Top Unchanged Cases",
+    "## Switch-Cause Timeline",
 ]
 
 
@@ -206,6 +208,74 @@ def test_build_report_payload_keys():
     assert payload["source_trace_count"] == 1
 
 
+def test_aggregate_useful_switch_timeline():
+    """A useful switch should be correctly identified in the timeline."""
+    trace_path = FIXTURES / "useful_switch.jsonl"
+    payload = build_report_payload([trace_path])
+    timeline = payload["switch_timeline"]
+    assert len(timeline) == 1
+    switch_event = timeline[0]
+    assert switch_event["trace_id"] == "useful_scenario"
+    assert switch_event["episode_seed"] == 100
+    assert switch_event["step_idx"] == 1
+    assert switch_event["previous_candidate"] == "primary_route"
+    assert switch_event["selected_candidate"] == "alternative_route"
+    assert switch_event["timeline_status"] == "useful"
+    assert switch_event["reason_code"] == "progress_gate_reselected"
+    assert switch_event["local_route_progress_estimate"] == 0.7
+    assert switch_event["progress_gate_state"] == "open"
+    assert switch_event["route_remaining_distance_delta_m"] == -1.2
+    assert switch_event["downstream_movement_outcome"] == "recovered_motion"
+    assert switch_event["missing_fields"] == []
+
+
+def test_aggregate_suppressed_switch_timeline():
+    """A suppressed switch should be correctly identified in the timeline."""
+    trace_path = FIXTURES / "suppressed_switch.jsonl"
+    payload = build_report_payload([trace_path])
+    timeline = payload["switch_timeline"]
+    assert len(timeline) == 1
+    switch_event = timeline[0]
+    assert switch_event["trace_id"] == "suppressed_scenario"
+    assert switch_event["episode_seed"] == 200
+    assert switch_event["step_idx"] == 1
+    assert switch_event["previous_candidate"] == "primary_route"
+    assert switch_event["selected_candidate"] == "primary_route"
+    assert switch_event["timeline_status"] == "suppressed"
+    assert switch_event["reason_code"] == "candidate_within_slack"
+    assert switch_event["local_route_progress_estimate"] == 0.3
+    assert switch_event["progress_gate_state"] == "reuse_penalty_active"
+    assert switch_event["route_remaining_distance_delta_m"] == 0.1
+    assert switch_event["downstream_movement_outcome"] == "held_route"
+    assert switch_event["missing_fields"] == []
+
+
+def test_aggregate_inconclusive_switch_timeline():
+    """An inconclusive switch should be correctly identified in the timeline."""
+    trace_path = FIXTURES / "inconclusive_switch.jsonl"
+    payload = build_report_payload([trace_path])
+    timeline = payload["switch_timeline"]
+    assert len(timeline) == 1
+    switch_event = timeline[0]
+    assert switch_event["trace_id"] == "inconclusive_scenario"
+    assert switch_event["episode_seed"] == 300
+    assert switch_event["step_idx"] == 1
+    assert switch_event["previous_candidate"] == "primary_route"
+    assert switch_event["selected_candidate"] == "alternative_route"
+    assert switch_event["timeline_status"] == "inconclusive"
+    assert switch_event["reason_code"] == "missing_reason_code"
+    assert switch_event["progress_gate_state"] == "missing_progress_gate_state"
+    assert switch_event["local_route_progress_estimate"] is None
+    assert switch_event["route_remaining_distance_delta_m"] is None
+    assert switch_event["downstream_movement_outcome"] == "unknown"
+    assert switch_event["missing_fields"] == [
+        "reason_code",
+        "progress_gate_state",
+        "local_route_progress_estimate",
+        "route_remaining_distance_delta_m",
+    ]
+
+
 def test_render_markdown_contains_all_sections():
     """Markdown output must contain all expected section headers."""
     trace = _minimal_trace()
@@ -215,6 +285,78 @@ def test_render_markdown_contains_all_sections():
     for section in MARKDOWN_SECTIONS:
         assert section in md, f"Missing Markdown section: {section}"
     assert "diagnostic_only_not_benchmark_success" in md
+
+
+def test_render_markdown_switch_timeline_blanks_missing_values():
+    """Markdown timeline should not expose Python None values to readers."""
+    payload = build_report_payload([FIXTURES / "inconclusive_switch.jsonl"])
+
+    md = render_markdown(payload)
+
+    assert "## Switch-Cause Timeline" in md
+    assert "inconclusive_scenario" in md
+    assert "None" not in md
+
+
+def test_switch_timeline_ignores_bool_progress_values():
+    """Boolean progress fields should be treated as missing, not numeric."""
+    trace = _minimal_trace()
+    trace["steps"] = [
+        {
+            "step_idx": None,
+            "topology_instrumentation": {"selected_hypothesis": "primary_route"},
+        },
+        {
+            "step": 7,
+            "topology_instrumentation": {
+                "selected_hypothesis": "alternative_route",
+                "switch_outcome": "useful",
+                "switch_reason_code": "progress_gate_reselected",
+                "progress_gate_state": "open",
+                "local_route_progress_estimate": True,
+                "route_remaining_distance_delta_m": False,
+            },
+        },
+    ]
+
+    timeline = aggregate_traces([trace])["switch_timeline"]
+
+    assert timeline[0]["step_idx"] == 7
+    assert timeline[0]["timeline_status"] == "inconclusive"
+    assert timeline[0]["missing_fields"] == [
+        "local_route_progress_estimate",
+        "route_remaining_distance_delta_m",
+    ]
+
+
+def test_render_markdown_switch_timeline_escapes_pipes_and_bad_missing_fields():
+    """Markdown timeline cells should preserve table structure."""
+    payload = {
+        "label": "pipes",
+        **aggregate_traces([]),
+        "switch_timeline": [
+            {
+                "trace_id": "trace|pipe",
+                "episode_seed": 1,
+                "step_idx": 2,
+                "previous_candidate": "a|b",
+                "selected_candidate": "c",
+                "timeline_status": "inconclusive",
+                "reason_code": "reason|pipe",
+                "local_route_progress_estimate": None,
+                "progress_gate_state": "gate",
+                "route_remaining_distance_delta_m": None,
+                "downstream_movement_outcome": "outcome|pipe",
+                "missing_fields": None,
+            }
+        ],
+    }
+
+    md = render_markdown(payload)
+
+    assert "trace\\|pipe" in md
+    assert "reason\\|pipe" in md
+    assert "outcome\\|pipe" in md
 
 
 def test_render_markdown_handles_empty_data():

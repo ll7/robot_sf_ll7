@@ -258,6 +258,48 @@ def test_preflight_json_failure_sets_status(tmp_path: Path, capsys: pytest.Captu
     assert payload["summary"]["unrecognized"] == 1
 
 
+def test_preflight_publication_scout_linter_requirement_missing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A declared publication linter requirement should fail if its script is missing."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  scout-skill:\n    requires:\n      - publication-scout-linter\n",
+        encoding="utf-8",
+    )
+    check_skills.REPO_ROOT = tmp_path
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("scout-skill")
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "publication_scout_linter.py" in captured.out
+
+
+def test_preflight_publication_scout_linter_requirement_present(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A declared publication-linter requirement should pass when the script exists."""
+    check_skills = _load_check_skills_module()
+    registry_yaml = tmp_path / "skills.yaml"
+    registry_yaml.write_text(
+        "version: 1\nskills:\n  scout-skill:\n    requires:\n      - publication-scout-linter\n",
+        encoding="utf-8",
+    )
+    script_path = tmp_path / "scripts" / "dev" / "publication_scout_linter.py"
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    script_path.write_text("#!/usr/bin/env python3\nprint('ok')\n", encoding="utf-8")
+    check_skills.REPO_ROOT = tmp_path
+    check_skills.REGISTRY = registry_yaml
+    rc = check_skills._preflight("scout-skill")
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "publication-scout-linter" in captured.out
+    assert "PASS" in captured.out
+
+
 def test_parse_args_preflight() -> None:
     """--preflight flag should be parsed correctly."""
     check_skills = _load_check_skills_module()

@@ -454,6 +454,7 @@ skills:
       filesystem: true
     requires:
     - gh
+    - publication-scout-linter
     - git
     - project5
     delegates_to:

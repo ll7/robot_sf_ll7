@@ -68,7 +68,9 @@ repo-owner URLs, omitted recent comments, and duplicate PR coverage as expected 
 
 ## Workflow
 
-1. Refresh credentials and branch baseline (`gh auth status`, `git fetch origin`).
+1. Run preflight for required local tooling and the Scout publication linter:
+   `uv run python scripts/dev/check_skills.py --preflight gh-issue-autopilot`.
+   Then refresh credentials and branch baseline (`gh auth status`, `git fetch origin`).
 2. Resolve queue candidate and re-check issue state with local `gh issue view` or REST evidence
    before claim or branch, especially when a delegated scout proposed the issue.
 3. Check open PRs for duplicate coverage using the linked issue, head branch/scope, and title.

@@ -319,6 +319,7 @@ _REQUIREMENT_CHECKS: dict[str, tuple[str, str, str]] = {
     ),
 }
 
+PUBLICATION_SCOUT_LINTER_REQUIREMENT = "publication-scout-linter"
 _PROJECT5_EXTRA = "jq"
 
 
@@ -354,6 +355,23 @@ def _run_preflight_check(
     Returns one of (ok, version_string), (missing, error_string),
     or (unrecognized, message).
     """
+    if req == PUBLICATION_SCOUT_LINTER_REQUIREMENT:
+        script_path = REPO_ROOT / "scripts" / "dev" / "publication_scout_linter.py"
+        if script_path.is_file():
+            detail = f"{script_path.relative_to(REPO_ROOT)} present"
+            if json_output and results is not None:
+                results["checks"][req] = {"status": "ok", "detail": detail, "remedy": None}
+            return "ok", detail
+
+        detail = f"{script_path.relative_to(REPO_ROOT)} is required for publication-scout conformance checks"
+        if json_output and results is not None:
+            results["checks"][req] = {
+                "status": "missing",
+                "detail": detail,
+                "remedy": "Restore scripts/dev/publication_scout_linter.py or remove the requirement.",
+            }
+        return "missing", detail
+
     check = _REQUIREMENT_CHECKS.get(req)
     if check is None:
         detail = (

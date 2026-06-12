@@ -1,0 +1,14 @@
+{
+  "errors": [
+    {
+      "message": "Resource not accessible by integration",
+      "type": "FORBIDDEN",
+      "path": [
+        "addComment"
+      ]
+    }
+  ],
+  "data": {
+    "addComment": null
+  }
+}

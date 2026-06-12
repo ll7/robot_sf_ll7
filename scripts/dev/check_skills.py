@@ -73,6 +73,14 @@ WORKER_OUTPUT_REQUIRED_PHRASES = (
     "rg -n .",
     "full file reads",
 )
+GOAL_PR_REVIEW_REQUIRED_PHRASES = (
+    "snapshot_pr_queue.py",
+    "watch_pr_ci_status.py",
+    "status,conclusion,jobs",
+    "bounded excerpts",
+    "full logs",
+    "private artifacts",
+)
 
 
 def _read_yaml(path: Path) -> Any:
@@ -282,6 +290,11 @@ def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text
     for phrase in WORKER_OUTPUT_REQUIRED_PHRASES:
         if phrase not in lower:
             errors.append(f"{rel}: missing worker-output limit requirement {phrase!r}")
+
+    if metadata.get("name") == "goal-pr-review":
+        for phrase in GOAL_PR_REVIEW_REQUIRED_PHRASES:
+            if phrase not in lower:
+                errors.append(f"{rel}: missing PR-review compact CI requirement {phrase!r}")
 
     return errors
 

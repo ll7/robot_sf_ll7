@@ -94,6 +94,9 @@ Avoid loops:
      `.agents/skills/goal-autopilot/SKILL.md` with the PR, head SHA, route/run IDs, validation
      plan/status, review/CI state, cleanup status, and next action,
    - run `implementation-verification` for contract alignment,
+   - require artifact-first delegated review and validate in order: `result.json`, `RESULT.md`,
+     `diffstat.txt`, and `validation.json`, inspect route evidence first, then run targeted local checks
+     before raw logs,
    - classify findings as fixable now, deferred, or blocker.
 4. Fix actionable items on writable branches; commit and push.
 5. Validate per required tier.

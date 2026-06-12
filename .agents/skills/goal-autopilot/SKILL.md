@@ -58,7 +58,20 @@ In token-efficient mode:
 - For routine orientation, start with `scripts/dev/autopilot_state_snapshot.py`
   instead of repeated broad `gh issue list`, `gh pr view`, `git worktree list`,
   or claim-state calls.
-- Require compact worker artifacts before reading raw logs.
+- Require artifact-first compact worker artifacts before reading raw logs.
+- For every delegated implementation/review/queue task, the worker **must** write compact artifacts in
+  `<run_artifact_dir>` as: `result.json`, `RESULT.md`, `diffstat.txt`, and `validation.json`.
+  Parent review order is mandatory:
+  1. Read `result.json`.
+  2. Read `RESULT.md` for narrative and risk summary.
+  3. Read `diffstat.txt`.
+  4. Run only targeted local read/validation (e.g., `git diff <file>`, `git show <commit>`, quick
+     rechecks) against the committed candidate state.
+- Only then, and only if needed, read raw logs, CI text, or verbose worker transcripts when artifacts are
+  missing, inconsistent, failed, or suspicious.
+- A successful worker command exit code, positive wrapper message, or candidate commit is route evidence
+  only. The parent phase is not complete until this evidence is reviewed, diff status is verified locally,
+  and required commands are rerun from the parent with parent-owned proof.
 - Offload routine CI waits to read-only monitors when safe work remains.
 - Keep final GitHub mutation, publication, merge-readiness, benchmark, paper,
   and safety decisions local.

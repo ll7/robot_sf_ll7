@@ -71,6 +71,66 @@ def test_frontmatter_fails_closed_for_non_mapping_yaml(tmp_path: Path) -> None:
         check_skills._frontmatter(skill_path)
 
 
+def test_artifact_first_contract_passes_for_goal_autopilot(tmp_path: Path) -> None:
+    """Artifact-first phrase and file requirements should pass for goal-autopilot style skills."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "goal-autopilot" / "SKILL.md"
+    skill_path.parent.mkdir()
+    skill_path.write_text("---\nname: goal-autopilot\n---\n", encoding="utf-8")
+    body = """
+Artifact-first delegated review requires result.json, RESULT.md, diffstat.txt, and validation.json.
+Treat worker exit success as route evidence only. Read raw logs only if artifacts are missing
+or inconsistent.
+The parent must inspect route evidence and run targeted local checks.
+"""
+    errors = check_skills._validate_artifact_first_contract(
+        skill_path,
+        {"name": "goal-autopilot"},
+        body,
+    )
+    assert errors == []
+
+
+def test_artifact_first_contract_fails_when_missing_required_artifacts(tmp_path: Path) -> None:
+    """Contracts should fail when required artifact filenames or evidence phrases are missing."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "goal-autopilot" / "SKILL.md"
+    skill_path.parent.mkdir()
+    body = "Delegated workers should run and report summary."
+    errors = check_skills._validate_artifact_first_contract(
+        skill_path,
+        {"name": "goal-autopilot"},
+        body,
+    )
+    assert any("result.json" in e for e in errors)
+    assert any("artifact-first phrase requirement" in e for e in errors)
+
+
+def test_artifact_first_contract_requires_canonical_result_markdown_case(
+    tmp_path: Path,
+) -> None:
+    """The compact artifact contract should preserve RESULT.md casing exactly."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "goal-autopilot" / "SKILL.md"
+    skill_path.parent.mkdir()
+    body = """
+Artifact-first delegated review requires result.json, result.md, diffstat.txt, and validation.json.
+Treat worker exit success as route evidence only. Read raw logs only if artifacts are missing
+or inconsistent.
+The parent must inspect route evidence and run targeted local checks.
+"""
+    errors = check_skills._validate_artifact_first_contract(
+        skill_path,
+        {"name": "goal-autopilot"},
+        body,
+    )
+
+    assert any("RESULT.md" in e for e in errors)
+
+
 # -- preflight tests ------------------------------------------------------------
 
 

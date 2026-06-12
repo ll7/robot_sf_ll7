@@ -135,6 +135,23 @@ headline state, but do not treat it as authority for final branch, claim, public
 decisions. If `ok: false`, a claim is stale against `origin/main`, or the needed field is missing,
 run the specific raw `gh`/`git` command named by the snapshot source metadata.
 
+### Delegated Implementation Artifacts
+
+For delegated implementation review and execution workers, enforce artifact-first evidence:
+
+- Workers must write, at minimum, `result.json`, `RESULT.md`, `diffstat.txt`, and `validation.json`
+  under a compact artifact directory.
+- The parent must read these artifacts first, in that order.
+- Parent review flow after delegation:
+  1. Inspect `result.json` (status, failures, command list, suspicious signals).
+  2. Inspect `RESULT.md` (decision and rationale summary).
+  3. Inspect `diffstat.txt`.
+  4. Run targeted local verification and diff reads for the reported files/commits before opening logs.
+- Raw logs are read only when artifacts are missing, inconsistent, failed, or suspicious.
+- Treat worker wrapper completion, worker `route_status: complete`, or any candidate commit as route
+  evidence only. Issue implementation is complete only after local revalidation passes and cleanup checks
+  are updated.
+
 ## Queue Policy
 
 Default order:

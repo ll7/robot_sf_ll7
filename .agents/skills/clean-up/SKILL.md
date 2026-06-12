@@ -39,9 +39,10 @@ parallel tests, and diff-based quality gates.
    - `BASE_REF=origin/main scripts/dev/check_docstring_todos_diff.sh`
 6. Report:
    - Summarize passed/failed commands and any residual risk blocks (flaky or deferred tests).
-7. Optional worktree hygiene:
-   - If asked to tidy stale worktrees, follow `AGENTS.md` "Worktree Teardown And Preservation"
-     before removing or pruning anything.
+7. Worktree hygiene:
+   - Treat removal of no-longer-needed worktrees as part of normal closeout after PR review, issue
+     implementation, publishing, or abandoned exploration.
+   - Follow `AGENTS.md` "Worktree Teardown And Preservation" before removing or pruning anything.
    - Inspect `output/` and other ignored local artifacts before cleanup; classify them as
      disposable, ignored-cache, tracked-manifest, durable-required, or handoff-needed.
 

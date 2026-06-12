@@ -129,6 +129,10 @@ When working in a linked Git worktree, detect bootstrap state before running exp
 
 ## Worktree Teardown And Preservation
 
+Treat worktree cleanup as a normal closeout step after PR review, issue implementation, publishing,
+or abandoned exploration. Once a worktree is no longer needed for active validation, CI follow-up,
+artifact recovery, or handoff, either remove it safely or record why it must be preserved.
+
 Before removing or pruning worktrees, enumerate them with `git worktree list --porcelain` from the
 main checkout. For each candidate, inspect `git -C <path> status --short --branch`; when generated
 outputs may matter, also inspect ignored output paths such as
@@ -139,6 +143,9 @@ outputs may matter, also inspect ignored output paths such as
   explicit handoff.
 - Do not remove a dirty worktree or a worktree with unpushed commits unless the preservation record
   says exactly what was kept or why nothing needed preservation.
+- Inspect large ignored directories such as `output/` before removal. Classify them as disposable,
+  ignored cache, tracked manifest/evidence, durable-required, or handoff-needed; never treat
+  worktree-local `output/` contents as durable artifact storage.
 - Prefer `git worktree remove <path>` for clean worktrees and `git worktree prune` only after
   verifying stale administrative entries no longer point at useful local state.
 

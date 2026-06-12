@@ -32,6 +32,48 @@ It orchestrates:
 It does not define child-skill mechanics; it standardizes cycle policy, preflight
 validation, and delegation failure recovery across the loop.
 
+## Default Token-Efficient Mode
+
+When the user asks for goal autopilot, a continuous goal loop, or best-quality
+repo progress with low native Codex token use, compose this skill with
+`save-codex-tokens` by default unless the user explicitly disables token
+conservation.
+
+Use this division of responsibility:
+
+- `goal-autopilot` owns the implement -> review -> merge -> discover loop,
+  issue claiming, phase transitions, active ledgers, CI wait handoff, cleanup,
+  and final readiness/publication decisions.
+- `save-codex-tokens` owns budget checks, route selection, delegation
+  economics, compact parent-thread snapshots, compact worker evidence, artifact
+  review order, and token-budget stop behavior.
+
+In token-efficient mode:
+
+- Codex is the loop controller, reviewer, and final acceptance authority.
+- Delegate workers only when compact review cost is lower than direct Codex
+  execution.
+- Prefer compact parent-thread snapshots before broad repository, GitHub,
+  worktree, CI, or validation output.
+- Require compact worker artifacts before reading raw logs.
+- Offload routine CI waits to read-only monitors when safe work remains.
+- Keep final GitHub mutation, publication, merge-readiness, benchmark, paper,
+  and safety decisions local.
+
+The default user prompt can be short:
+
+```text
+Run goal autopilot for this repo.
+
+Optimize for the best-quality, highest-value eligible work with the least
+practical native Codex token usage. Use goal-autopilot as the loop controller
+and compose it with save-codex-tokens for routing, budget checks, compact
+evidence, and delegation economics.
+
+Continue implement -> review -> merge -> discover until no eligible work
+remains, a hard blocker appears, or the Codex budget guard fires.
+```
+
 ## Trigger Boundary
 
 Use this skill when the user asks for a continuous autopilot across the full

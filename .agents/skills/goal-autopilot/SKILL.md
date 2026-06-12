@@ -239,15 +239,45 @@ Treat monitor exit states as follows:
 ### Snapshot-First Parent Orientation
 
 Before broad queue, worktree, claim, PR, or CI reads in the parent thread, prefer the compact
-snapshot helper:
+snapshot helpers. Use the full-state `autopilot_state_snapshot.py` for initial orientation, then
+use targeted compact snapshots for specific needs:
 
 ```bash
+# Full orientation snapshot (worktrees, claims, issues, PRs)
 uv run python scripts/dev/autopilot_state_snapshot.py \
   --include-worktrees \
   --claim-issue <issue-number> \
   --issue-search "is:issue is:open <queue-filter>" \
   --pr <pr-number>
+
+# Compact worktree bootstrap-state snapshot (fresh worktrees, local.machine.md, .venv)
+uv run python scripts/dev/compact_worktree_snapshot.py --filter <issue-or-branch-slug> --json
+
+# Compact CI snapshot for PR queue (check rollup, optional drift sample)
+uv run python scripts/dev/compact_ci_snapshot.py <pr> [<pr> ...] \
+  --expected-head-sha <sha> --json [--include-drift]
+
+# Compact issue batch snapshot with context capsules
+uv run python scripts/dev/snapshot_issue_batch.py <first> <last> \
+  --json --capsule-dir <artifact-dir>
+
+# Compact PR queue snapshot (headline state, next action)
+uv run python scripts/dev/snapshot_pr_queue.py --prs <pr> [<pr> ...] --json
 ```
+
+Use `compact_worktree_snapshot.py` before expensive commands to detect fresh worktrees that need
+bootstrap. Prefer `--filter <issue-or-branch-slug>` so large worktree fleets do not re-enter the
+parent thread. The `is_fresh` and `bootstrap_required` fields indicate whether `local.machine.md`
+symlink and `uv sync` steps are needed.
+
+Use `compact_ci_snapshot.py` for token-efficient PR CI monitoring. The optional `--include-drift`
+flag adds recent successful run timings to recommend an updated wait budget after timeout. Pass
+`--expected-head-sha` whenever the parent has a known PR head so stale snapshots fail closed before
+CI or merge-readiness decisions.
+
+Treat all snapshot output as **route evidence only**. Run fresh local checks before issue claim,
+push, PR publication, label/project mutation, merge-ready application, merge, or benchmark/paper-facing
+publication decisions.
 
 The helper emits `autopilot_state_snapshot.v1` JSON with source commands, branch/head SHA,
 `origin/main` SHA, worktree rows, issue queue rows, claim refs, explicit PR headline state, and

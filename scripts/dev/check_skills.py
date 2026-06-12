@@ -97,6 +97,8 @@ GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES = (
     "pr publication",
     "label/project mutation",
     "merge-ready",
+    "compact_worktree_snapshot.py",
+    "compact_ci_snapshot.py",
 )
 
 

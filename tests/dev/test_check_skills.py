@@ -87,6 +87,7 @@ Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private a
 no broad rg -n ., and no full file reads.
 The active ledger records loaded context with skill/doc summaries, snapshot paths,
 freshness keys, expected PR head SHA, worker artifact paths, and stale-state triggers.
+Use compact_worktree_snapshot.py and compact_ci_snapshot.py before broad worktree or CI polling.
 Pass ledger snapshot paths to workers, avoid repeating broad state polling, and run
 fresh live checks before issue claim, push, PR publication, label/project mutation,
 or merge-ready decisions.

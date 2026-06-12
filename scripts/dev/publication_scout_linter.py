@@ -197,9 +197,9 @@ def classify_comment_publication_result(raw_payload: object) -> dict[str, Any]:
         }
 
     first_error = errors[0]
-    error_type = str(
-        first_error.get("type", "") or first_error.get("extensions", {}).get("type", "")
-    )
+    extensions = first_error.get("extensions")
+    extension_type = extensions.get("type", "") if isinstance(extensions, dict) else ""
+    error_type = str(first_error.get("type", "") or extension_type)
     message = str(first_error.get("message", "")).strip()
     if not error_type:
         error_type = "UNKNOWN"

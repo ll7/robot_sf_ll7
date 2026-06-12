@@ -80,6 +80,16 @@ def test_classify_graphql_publish_payload_flags_forbidden() -> None:
     assert classified["status"] == "forbidden"
 
 
+def test_classify_graphql_publish_payload_handles_null_extensions() -> None:
+    """GraphQL error payloads may include null extensions and should not crash."""
+    payload = _fixture("comment_graphql_null_extensions.json")
+    classified = linter.classify_comment_publication_result(payload)
+
+    assert classified["ok"] is False
+    assert classified["status"] == "graphql_error"
+    assert classified["error_type"] == "UNKNOWN"
+
+
 def test_main_reports_failures_for_stale_issue(
     capsys,
 ) -> None:

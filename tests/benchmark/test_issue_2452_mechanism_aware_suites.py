@@ -10,6 +10,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "configs/benchmarks/issue_2452_mechanism_aware_local_nav_suites_v0.yaml"
 ISSUE_2544_SMOKE_MATRIX = ROOT / "configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml"
+ISSUE_2653_MATRIX = (
+    ROOT / "configs/scenarios/sets/issue_2653_static_deadlock_activation_capable_h500.yaml"
+)
+ISSUE_2653_FUNNEL = (
+    ROOT / "configs/policy_search/transfer/issue_2653_static_deadlock_activation_capable_h500.yaml"
+)
 SCENARIO_ROOT = ROOT / "configs/scenarios"
 
 REQUIRED_SUITES: set[str] = {
@@ -156,3 +162,40 @@ def test_issue_2544_static_deadlock_smoke_matrix_binds_first_suite() -> None:
         assert metadata["issue"] == 2544
         assert metadata["evidence_tier"] == "diagnostic_smoke"
         assert "not planner ranking" in metadata["claim_boundary"]
+
+
+def test_issue_2653_static_deadlock_activation_capable_contract() -> None:
+    """Verify #2653 predeclares the denominator, stop rule, and fail-closed boundary."""
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    scenarios = [dict(scenario) for scenario in load_scenarios(ISSUE_2653_MATRIX)]
+    assert [scenario["name"] for scenario in scenarios] == [
+        "classic_bottleneck_low",
+        "classic_head_on_corridor_low",
+        "narrow_passage",
+    ]
+    for scenario in scenarios:
+        assert scenario["seeds"] == [111, 112, 113]
+        metadata = scenario["metadata"]
+        assert metadata["mechanism_aware_suite_id"] == "static_deadlock_recovery"
+        assert metadata["issue"] == 2653
+        assert metadata["evidence_tier"] == "predeclared_activation_capable_h500"
+        claim_boundary = metadata["claim_boundary"].lower()
+        assert "recenter_activation_count > 0" in metadata["active_row_denominator_definition"]
+        assert "does not establish planner ranking" in claim_boundary
+        assert "fallback" in claim_boundary
+        assert "degraded" in claim_boundary
+
+    funnel = _load_yaml(ISSUE_2653_FUNNEL)
+    stage = funnel["stages"]["full_matrix"]
+    assert stage["scenario_matrix"] == (
+        "configs/scenarios/sets/issue_2653_static_deadlock_activation_capable_h500.yaml"
+    )
+    assert stage["horizon"] == 500
+    transfer = stage["mechanism_transfer"]
+    assert transfer["issue"] == 2653
+    gate = transfer["activation_capable_gate"]
+    assert gate["min_active_row_denominator"] == 2
+    assert gate["min_terminal_outcome_delta_count"] == 1
+    assert "no planner-promotion" in gate["stop_rule"].lower()
+    assert "fallback" in gate["claim_boundary"].lower()

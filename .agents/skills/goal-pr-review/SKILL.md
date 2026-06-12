@@ -86,7 +86,8 @@ Avoid loops:
 
 ## Review Workflow
 
-1. Build queue snapshot (labels, draft status, checks, last update time).
+1. Build queue snapshot with `scripts/dev/snapshot_pr_queue.py` (labels, draft status, checks,
+   head SHA, last update time) before broad `gh pr view` fields.
 2. Sort/prioritize queue (or follow explicit user order).
 3. For each PR:
    - capture issue link and head SHA,
@@ -107,14 +108,15 @@ Avoid loops:
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
 8. Update `merge-ready` only after full proof bar closes.
-9. When CI is the only remaining external gate, put the PR in `awaiting_ci` and use bounded
-   one-shot polling in non-TTY agent sessions instead of `gh pr checks --watch`:
-   `uv run python scripts/dev/check_pr_ci_status.py <number> --poll-attempts 20 --poll-interval 30`.
-   The helper prints queued, in-progress, failed, and passed check summaries; exit code `2` means
-   the polling budget expired with checks still pending. Use
-   `gh run view <run-id> --json status,conclusion,jobs` for job state and fetch logs only after the
-   relevant job has completed. Use `.agents/skills/goal-autopilot/SKILL.md` "Async CI Wait Policy"
-   instead of idling the review loop when other safe PR or cycle work remains.
+9. When CI is the only remaining external gate, put the PR in `awaiting_ci` and use compact,
+   bounded one-shot polling in non-TTY agent sessions instead of `gh pr checks --watch`:
+   `uv run python scripts/dev/watch_pr_ci_status.py <number> --once --json --expected-head-sha <sha>`.
+   Inspect JSON/job state first with `gh run view <run-id> --json status,conclusion,jobs` or the
+   repo CI helpers. Fetch raw logs only for the relevant failed or completed job, return bounded
+   excerpts second with grep/tail, and explicitly label those snippets as bounded excerpts. Keep full logs in private artifacts. Avoid fetching
+   `body,comments,reviews,files,statusCheckRollup` together unless the review task explicitly needs
+   that full surface. Use `.agents/skills/goal-autopilot/SKILL.md` "Async CI Wait Policy" instead of
+   idling the review loop when other safe PR or cycle work remains.
 10. Update the active ledger before any CI wait or final handoff. Route completion is not task
    completion until the main agent has verified proof, GitHub state, and cleanup.
 

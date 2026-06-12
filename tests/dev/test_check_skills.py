@@ -136,6 +136,54 @@ no broad rg -n ., and no full file reads.
     assert any("RESULT.md" in e for e in errors)
 
 
+def test_goal_pr_review_contract_requires_compact_ci_snapshot_terms(tmp_path: Path) -> None:
+    """Goal PR review should preserve compact PR/CI entry-point guidance."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "goal-pr-review" / "SKILL.md"
+    skill_path.parent.mkdir()
+    body = """
+Artifact-first delegated review requires result.json, RESULT.md, diffstat.txt, and validation.json.
+Treat worker exit success as route evidence only. Read raw logs only if artifacts are missing.
+The parent must inspect route evidence and run targeted local checks.
+Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private artifacts,
+no broad rg -n ., and no full file reads.
+Start with snapshot_pr_queue.py, poll with watch_pr_ci_status.py, inspect status,conclusion,jobs,
+return bounded excerpts, and keep full logs in private artifacts.
+"""
+    errors = check_skills._validate_artifact_first_contract(
+        skill_path,
+        {"name": "goal-pr-review"},
+        body,
+    )
+
+    assert errors == []
+
+
+def test_goal_pr_review_compact_ci_terms_are_case_insensitive(tmp_path: Path) -> None:
+    """PR-review prose checks should tolerate sentence capitalization."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "goal-pr-review" / "SKILL.md"
+    skill_path.parent.mkdir()
+    body = """
+Artifact-first delegated review requires result.json, RESULT.md, diffstat.txt, and validation.json.
+Treat worker exit success as route evidence only. Read raw logs only if artifacts are missing.
+The parent must inspect route evidence and run targeted local checks.
+Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private artifacts,
+no broad rg -n ., and no full file reads.
+Start with snapshot_pr_queue.py, poll with watch_pr_ci_status.py, inspect status,conclusion,jobs.
+Return bounded excerpts, and keep full logs in private artifacts.
+"""
+    errors = check_skills._validate_artifact_first_contract(
+        skill_path,
+        {"name": "goal-pr-review"},
+        body,
+    )
+
+    assert errors == []
+
+
 # -- preflight tests ------------------------------------------------------------
 
 

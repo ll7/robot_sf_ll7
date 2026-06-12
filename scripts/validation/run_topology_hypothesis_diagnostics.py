@@ -507,7 +507,11 @@ def _reuse_penalty_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
     reason_counts: Counter[str] = Counter()
     applied_steps = 0
     eligible_steps = 0
+    progress_gate_satisfied_steps = 0
+    progress_suppressed_steps = 0
     max_recent_primary_selection_count = 0
+    max_recent_progress_m = 0.0
+    max_recent_progress_sample_count = 0
     for row in steps:
         reuse_penalty = _reuse_penalty_diagnostic(row)
         if reuse_penalty is None:
@@ -518,16 +522,33 @@ def _reuse_penalty_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
             reason_counts[reason] += 1
         if bool(reuse_penalty.get("eligible_near_parity_alternative_exists", False)):
             eligible_steps += 1
+        if bool(reuse_penalty.get("primary_route_progress_gate_satisfied", False)):
+            progress_gate_satisfied_steps += 1
+        if bool(reuse_penalty.get("reuse_penalty_suppressed_by_progress", False)):
+            progress_suppressed_steps += 1
         recent_count = reuse_penalty.get("recent_primary_selection_count", 0)
         if isinstance(recent_count, int | float):
             max_recent_primary_selection_count = max(
                 max_recent_primary_selection_count,
                 int(recent_count),
             )
+        recent_progress = reuse_penalty.get("primary_route_recent_progress_m", 0.0)
+        if isinstance(recent_progress, int | float):
+            max_recent_progress_m = max(max_recent_progress_m, float(recent_progress))
+        sample_count = reuse_penalty.get("primary_route_recent_progress_sample_count", 0)
+        if isinstance(sample_count, int | float):
+            max_recent_progress_sample_count = max(
+                max_recent_progress_sample_count,
+                int(sample_count),
+            )
     return {
         "applied_steps": applied_steps,
         "eligible_near_parity_alternative_steps": eligible_steps,
         "max_recent_primary_selection_count": max_recent_primary_selection_count,
+        "progress_gate_satisfied_steps": progress_gate_satisfied_steps,
+        "progress_suppressed_steps": progress_suppressed_steps,
+        "max_primary_route_recent_progress_m": max_recent_progress_m,
+        "max_primary_route_recent_progress_sample_count": max_recent_progress_sample_count,
         "reason_counts": dict(sorted(reason_counts.items())),
     }
 

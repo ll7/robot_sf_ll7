@@ -43,6 +43,8 @@ _TOPOLOGY_KEYS = {
     "primary_route_reuse_penalty_weight",
     "primary_route_reuse_penalty_cooldown_steps",
     "primary_route_reuse_penalty_min_prior_primary_selections",
+    "primary_route_progress_gate_enabled",
+    "primary_route_progress_gate_threshold_m",
     "route_hypothesis",
 }
 
@@ -77,6 +79,8 @@ class TopologyGuidedLocalPolicyConfig:
     primary_route_reuse_penalty_weight: float = 1.0
     primary_route_reuse_penalty_cooldown_steps: int = 3
     primary_route_reuse_penalty_min_prior_primary_selections: int = 2
+    primary_route_progress_gate_enabled: bool = False
+    primary_route_progress_gate_threshold_m: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -379,6 +383,10 @@ def _apply_primary_route_reuse_penalty(
 ) -> dict[str, Any]:
     """Apply a reuse penalty to primary_route when eligible near-parity alternatives exist.
 
+    When ``primary_route_progress_gate_enabled`` is true and recent primary-route
+    progress satisfies the threshold, the penalty is suppressed to preserve the
+    current primary route while it is still making meaningful progress.
+
     Returns:
         dict[str, Any]: Diagnostic fields for the reuse-penalty mechanism.
     """
@@ -394,11 +402,30 @@ def _apply_primary_route_reuse_penalty(
         in {"eligible_near_parity_alternative", "selected_non_primary_near_parity"}
         for item in alternatives
     )
+    recent_primary_distances = [
+        dist
+        for hid, dist in recent_primary_selections
+        if hid == "primary_route" and dist is not None
+    ]
+    recent_progress_m = (
+        max(0.0, float(recent_primary_distances[0]) - float(recent_primary_distances[-1]))
+        if len(recent_primary_distances) >= 2
+        else 0.0
+    )
+    progress_gate_satisfied = False
+    if bool(config.primary_route_progress_gate_enabled) and len(recent_primary_distances) >= 2:
+        progress_gate_satisfied = recent_progress_m >= float(
+            config.primary_route_progress_gate_threshold_m
+        )
     diagnostic: dict[str, Any] = {
         "reuse_penalty_applied": False,
         "reuse_penalty_reason": None,
         "recent_primary_selection_count": 0,
         "eligible_near_parity_alternative_exists": bool(eligible_alternative),
+        "primary_route_recent_progress_m": recent_progress_m,
+        "primary_route_recent_progress_sample_count": len(recent_primary_distances),
+        "primary_route_progress_gate_satisfied": bool(progress_gate_satisfied),
+        "reuse_penalty_suppressed_by_progress": False,
     }
     if not bool(config.primary_route_reuse_penalty_enabled):
         return diagnostic
@@ -411,15 +438,22 @@ def _apply_primary_route_reuse_penalty(
         and eligible_alternative
         and len(recent_primary_selections) > 0
     ):
-        penalty = float(config.primary_route_reuse_penalty_weight) * float(recent_count)
-        primary["selection_score"] = (
-            float(primary.get("selection_score", primary["score"])) - penalty
-        )
-        diagnostic["reuse_penalty_applied"] = True
-        diagnostic["reuse_penalty_reason"] = (
-            f"primary_route_selected_{recent_count}_times_in_last_"
-            f"{len(recent_primary_selections)}_steps_with_eligible_near_parity_alternative"
-        )
+        if progress_gate_satisfied:
+            diagnostic["reuse_penalty_suppressed_by_progress"] = True
+            diagnostic["reuse_penalty_reason"] = (
+                f"progress_gate_suppressed_recent_progress_{recent_progress_m:.3f}m_"
+                f">=threshold_{float(config.primary_route_progress_gate_threshold_m):.3f}m"
+            )
+        else:
+            penalty = float(config.primary_route_reuse_penalty_weight) * float(recent_count)
+            primary["selection_score"] = (
+                float(primary.get("selection_score", primary["score"])) - penalty
+            )
+            diagnostic["reuse_penalty_applied"] = True
+            diagnostic["reuse_penalty_reason"] = (
+                f"primary_route_selected_{recent_count}_times_in_last_"
+                f"{len(recent_primary_selections)}_steps_with_eligible_near_parity_alternative"
+            )
     return diagnostic
 
 
@@ -494,6 +528,12 @@ def build_topology_guided_local_policy_config(
         ),
         primary_route_reuse_penalty_min_prior_primary_selections=int(
             raw.get("primary_route_reuse_penalty_min_prior_primary_selections", 2)
+        ),
+        primary_route_progress_gate_enabled=bool(
+            raw.get("primary_route_progress_gate_enabled", False)
+        ),
+        primary_route_progress_gate_threshold_m=float(
+            raw.get("primary_route_progress_gate_threshold_m", 0.0)
         ),
     )
 
@@ -751,6 +791,16 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             "recent_primary_selection_count": topology.get("recent_primary_selection_count", 0),
             "eligible_near_parity_alternative_exists": topology.get(
                 "eligible_near_parity_alternative_exists", False
+            ),
+            "primary_route_recent_progress_m": topology.get("primary_route_recent_progress_m", 0.0),
+            "primary_route_recent_progress_sample_count": topology.get(
+                "primary_route_recent_progress_sample_count", 0
+            ),
+            "primary_route_progress_gate_satisfied": topology.get(
+                "primary_route_progress_gate_satisfied", False
+            ),
+            "reuse_penalty_suppressed_by_progress": topology.get(
+                "reuse_penalty_suppressed_by_progress", False
             ),
         }
         route_corridor["topology_status"] = "ok"

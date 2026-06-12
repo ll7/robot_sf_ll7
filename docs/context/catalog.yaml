@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-11
+updated_at: 2026-06-12
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -442,8 +442,20 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_2660_topology_successor_gate.md
+    status: historical
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2704_progress_gated_topology_successor.md
     status: current
-    freshness: maintained
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2704_progress_gated_topology_successor/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2704_progress_gated_topology_successor/summary.json
+    status: evidence
+    freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_2566_static_recenter_inactive_propagation.md
     status: current

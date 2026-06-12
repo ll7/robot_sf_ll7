@@ -1,0 +1,143 @@
+{
+  "candidate": "topology_guided_hybrid_rule_v0_progress_gated_reselection",
+  "candidate_summary": {
+    "candidate": "topology_guided_hybrid_rule_v0_progress_gated_reselection",
+    "classification": "revise",
+    "diagnostic_status": "diagnostic_complete",
+    "horizon": 160,
+    "hypothesis_switch_count": 3,
+    "max_route_progress_delta_m": 0.16812408921843236,
+    "route_selector_selected_hypothesis_counts": {
+      "masked_cell_71_79": 17,
+      "masked_cell_71_80": 2,
+      "masked_cell_71_81": 2,
+      "masked_cell_71_82": 2,
+      "masked_cell_71_83": 1,
+      "masked_cell_71_84": 2,
+      "masked_cell_71_87": 1,
+      "masked_cell_75_95": 2,
+      "masked_cell_83_103": 1,
+      "masked_cell_84_103": 7,
+      "masked_cell_85_103": 2,
+      "masked_cell_87_79": 8,
+      "primary_route": 51
+    },
+    "scenario": "classic_realworld_double_bottleneck_high",
+    "seed": 111,
+    "selected_row_near_parity_gate_reasons": {
+      "eligible_near_parity_alternative": 14,
+      "route_distance_exceeds_slack": 25,
+      "selected_non_primary_near_parity": 42,
+      "static_clearance_floor_failed": 17
+    },
+    "selected_source_counts": {
+      "dynamic_window": 122,
+      "path_follow_0.5m": 2,
+      "route_guide": 4,
+      "topology_hypothesis": 32
+    },
+    "success": false,
+    "terminal_outcome": "horizon_exhausted",
+    "topology_command_influence_counts": {
+      "masked_cell_84_103": 6,
+      "masked_cell_85_103": 1,
+      "primary_route": 25
+    },
+    "topology_reuse_penalty": {
+      "applied_steps": 7,
+      "eligible_near_parity_alternative_steps": 56,
+      "max_primary_route_recent_progress_m": 6.0627417901388405,
+      "max_primary_route_recent_progress_sample_count": 3,
+      "max_recent_primary_selection_count": 3,
+      "progress_gate_satisfied_steps": 28,
+      "progress_suppressed_steps": 6,
+      "reason_counts": {
+        "primary_route_selected_2_times_in_last_3_steps_with_eligible_near_parity_alternative": 4,
+        "primary_route_selected_3_times_in_last_3_steps_with_eligible_near_parity_alternative": 3
+      }
+    },
+    "topology_status_counts": {
+      "insufficient_hypotheses": 70,
+      "ok": 90
+    }
+  },
+  "claim_boundary": "diagnostic_only",
+  "classification": "revise",
+  "classification_reason": "The progress-gated successor runs and preserves diagnostic fields, but on the canonical slice it remains horizon_exhausted, reduces topology-command steps by one, preserves non-primary command influence at seven steps, and does not improve max route-progress delta relative to the comparator.",
+  "comparator": "topology_guided_hybrid_rule_v0",
+  "comparator_summary": {
+    "candidate": "topology_guided_hybrid_rule_v0",
+    "classification": "revise",
+    "diagnostic_status": "diagnostic_complete",
+    "horizon": 160,
+    "hypothesis_switch_count": 3,
+    "max_route_progress_delta_m": 0.16812408921843236,
+    "route_selector_selected_hypothesis_counts": {
+      "masked_cell_71_79": 17,
+      "masked_cell_71_80": 2,
+      "masked_cell_71_81": 2,
+      "masked_cell_71_82": 2,
+      "masked_cell_71_83": 1,
+      "masked_cell_71_84": 2,
+      "masked_cell_71_87": 1,
+      "masked_cell_83_103": 1,
+      "masked_cell_84_103": 7,
+      "masked_cell_85_103": 2,
+      "masked_cell_87_79": 5,
+      "primary_route": 56
+    },
+    "scenario": "classic_realworld_double_bottleneck_high",
+    "seed": 111,
+    "selected_row_near_parity_gate_reasons": {
+      "eligible_near_parity_alternative": 14,
+      "route_distance_exceeds_slack": 25,
+      "selected_non_primary_near_parity": 42,
+      "static_clearance_floor_failed": 17
+    },
+    "selected_source_counts": {
+      "dynamic_window": 121,
+      "path_follow_0.5m": 2,
+      "route_guide": 4,
+      "topology_hypothesis": 33
+    },
+    "success": false,
+    "terminal_outcome": "horizon_exhausted",
+    "topology_command_influence_counts": {
+      "masked_cell_84_103": 6,
+      "masked_cell_85_103": 1,
+      "primary_route": 26
+    },
+    "topology_reuse_penalty": {
+      "applied_steps": 0,
+      "eligible_near_parity_alternative_steps": 56,
+      "max_primary_route_recent_progress_m": 6.0627417901388405,
+      "max_primary_route_recent_progress_sample_count": 3,
+      "max_recent_primary_selection_count": 0,
+      "progress_gate_satisfied_steps": 0,
+      "progress_suppressed_steps": 0,
+      "reason_counts": {}
+    },
+    "topology_status_counts": {
+      "insufficient_hypotheses": 70,
+      "ok": 90
+    }
+  },
+  "deltas": {
+    "non_primary_topology_command_influence_delta": 0,
+    "primary_topology_command_influence_delta": -1,
+    "route_progress_delta_m": 0.0,
+    "selected_hypothesis_non_primary_count_delta": 5,
+    "selected_hypothesis_primary_count_delta": -5,
+    "terminal_outcome_delta": "unchanged_horizon_exhausted",
+    "topology_command_steps_delta": -1
+  },
+  "generated_at": "2026-06-12",
+  "horizon": 160,
+  "issue": 2704,
+  "raw_outputs_policy": "Raw diagnostic traces and reports remain disposable local artifacts; this tracked summary is the durable review artifact.",
+  "revision_name": "primary_route_reselection_requires_route_progress",
+  "scenario": "classic_realworld_double_bottleneck_high",
+  "schema": "topology_progress_gated_successor_diagnostic.v1",
+  "seed": 111,
+  "stage": "full_matrix"
+}

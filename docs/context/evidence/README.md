@@ -148,6 +148,10 @@ Policy caveats:
 - `issue_2434_ammv_scenario_sweep_2026-06-06/`: compact five-family AMMV/default episode-metric
   screen showing the selected classic close-interaction adapter slice still has no non-identical
   pair.
+- `issue_2704_progress_gated_topology_successor/`: compact paired topology diagnostic summary
+  showing the progress-gated primary-route reselection successor runs but remains a `revise`
+  result, with unchanged route progress and `horizon_exhausted` outcome on the canonical h160
+  double-bottleneck slice.
 - `issue_2313_local_baseline_quarantine_2026-06-05/`: compact metadata-only planner summary
   showing the seven absent local-only baseline rows are explicitly unavailable.
 - `issue_2409_local_baseline_quarantine_2026-06-06/`: compact follow-on synthesis showing the

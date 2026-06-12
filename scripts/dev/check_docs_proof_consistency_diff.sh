@@ -31,6 +31,9 @@ if [ -z "$changed_files" ]; then
   docs_context_only=0
 else
   while IFS= read -r file; do
+    if [ -z "$file" ]; then
+      continue
+    fi
     if [[ "$file" != docs/context/* ]]; then
       docs_context_only=0
       break

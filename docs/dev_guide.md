@@ -315,10 +315,11 @@ handoff context in Markdown instead of leaving them trapped in chat or PR histor
 - Link notes to the related issue/PR, canonical docs, validation commands, and replacement notes.
 - Use `.agents/skills/context-note-maintainer/SKILL.md` when the task includes creating or
   refreshing context notes.
-- For docs/context-only changes, use the cheap consistency gate by default: inspect the diff,
-  verify changed README/INDEX/catalog links, and run the docs proof consistency check or its
-  targeted tests. State explicitly when benchmark, simulator, or full PR readiness gates were not
-  run because the branch only changes discoverability or workflow text.
+- For docs/context-only changes, use the documented default gate: inspect the diff, verify changed
+  README/INDEX/catalog links, and run `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh`.
+  The wrapper auto-detects context-only PRs and includes README/INDEX/catalog in that gate. State
+  explicitly when benchmark, simulator, or full PR readiness gates were not run because the branch only
+  changes discoverability or workflow text.
 
 ### Agent memory conventions
 

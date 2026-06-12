@@ -1,5 +1,10 @@
 {
   "schema_version": "scenario_prior.v1",
+  "generator_id": "issue_2523_proxy_scenario_prior_fixture",
+  "validator_version": "scenario_prior_proxy_fixture_validator.v1",
+  "evidence_tier": "smoke evidence",
+  "denominator_policy": "proxy_fixture_not_benchmark_denominator",
+  "execution_gate": "not_executable_until_real_data_staged",
   "issue": 2523,
   "parent_issue": 2521,
   "source": {

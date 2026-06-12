@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.manifest_lineage import require_lineage_contract
 from robot_sf.scenario_certification.perturbation_family_registry import (
     perturbation_family,
     validate_perturbation_family_parameters,
@@ -23,8 +24,12 @@ from robot_sf.scenario_certification.perturbation_preflight import (
 )
 
 COUNTERFACTUAL_PAIR_SCHEMA_VERSION = "counterfactual_scenario_pair.v1"
+COUNTERFACTUAL_PAIR_VALIDATOR_VERSION = "counterfactual_scenario_pair_validator.v1"
 MECHANISM_TAXONOMY_SCHEMA_VERSION = "counterfactual_mechanism_taxonomy.v1"
 CLAIM_BOUNDARY = "candidate mechanism-test inputs only; not benchmark evidence"
+EVIDENCE_TIER = "diagnostic-only"
+DENOMINATOR_POLICY = "counterfactual_pairs_not_benchmark_denominator"
+GENERATOR_ID = "create_counterfactual_scenario_pair"
 _SUCCESS_EVIDENCE_CANDIDATE = "eligible_success_evidence_candidate"
 _SUPPORTED_FEATURES = frozenset({"robot_route_offset"})
 MECHANISM_TAXONOMY_LABELS = (
@@ -153,8 +158,17 @@ def create_pair_manifest(
     preflight_payload = _preflight_embedded_manifest(perturbation_manifest)
     _require_pair_preflight_success(preflight_payload)
 
-    return {
+    payload = {
         "schema_version": COUNTERFACTUAL_PAIR_SCHEMA_VERSION,
+        "source": {
+            "scenario_config": scenario_config.as_posix(),
+            "source_scenario_id": source,
+        },
+        "generator_id": GENERATOR_ID,
+        "validator_version": COUNTERFACTUAL_PAIR_VALIDATOR_VERSION,
+        "evidence_tier": EVIDENCE_TIER,
+        "denominator_policy": DENOMINATOR_POLICY,
+        "execution_gate": "preflight_success_required_before_execution",
         "baseline": {
             "scenario_id": source,
             "variant_id": baseline_variant_id,
@@ -193,6 +207,8 @@ def create_pair_manifest(
         "perturbation_manifest": perturbation_manifest,
         "preflight": preflight_payload,
     }
+    require_lineage_contract(payload)
+    return payload
 
 
 def _supported_family(feature: str):

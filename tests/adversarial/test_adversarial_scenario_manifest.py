@@ -22,8 +22,14 @@ from robot_sf.adversarial.scenario_manifest import (
     validate_manifest_payload,
     write_manifest_yaml,
 )
-from scripts.tools.generate_adversarial_scenario_manifests import _load_template_info
-from scripts.tools.generate_adversarial_scenario_manifests import main as cli_main
+from scripts.tools.generate_adversarial_scenario_manifests import (
+    _load_template_info,
+)
+from scripts.tools.generate_adversarial_scenario_manifests import (
+    main as cli_main,
+)
+
+_LLM_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "issue_2529"
 
 
 def _search_space(*, min_distance: float = 0.5) -> SearchSpaceConfig:
@@ -635,3 +641,29 @@ def test_manifest_from_yaml_round_trips(tmp_path: Path) -> None:
     assert restored.source is not None
     assert original.source is not None
     assert restored.source.map_id == original.source.map_id
+
+
+def _read_llm_fixture(name: str) -> dict[str, object]:
+    """Load an LLM manifest fixture payload."""
+    path = _LLM_FIXTURE_DIR / name
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_llm_manifest_fixture_is_validated_ok() -> None:
+    search_space = _search_space()
+    accepted = _read_llm_fixture("accepted_manifest.yaml")
+
+    record = validate_manifest_payload(accepted, search_space=search_space)
+
+    assert record.status == ManifestCategory.VALID
+    assert record.errors == ()
+
+
+def test_llm_manifest_fixture_is_rejected_fail_closed() -> None:
+    search_space = _search_space()
+    rejected = _read_llm_fixture("rejected_manifest.yaml")
+
+    record = validate_manifest_payload(rejected, search_space=search_space)
+
+    assert record.status == ManifestCategory.INVALID
+    assert "candidate_controls.goal must define x and y" in record.errors

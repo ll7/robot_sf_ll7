@@ -1,0 +1,18 @@
+schema_version: adversarial_scenario_manifest.v1
+execution_status: generated_only
+evidence_boundary: diagnostic-only
+candidate_controls:
+  start:
+    x: 1.0
+    y: 2.0
+  goal:
+    x: 5.0
+  spawn_time_s: 0.0
+  pedestrian_speed_mps: 1.0
+  pedestrian_delay_s: 0.0
+  scenario_seed: 7
+generator:
+  family: llm_to_manifest
+  generator_id: structured_prompt_adapter_v1
+  seed: 2026
+  candidate_index: 1

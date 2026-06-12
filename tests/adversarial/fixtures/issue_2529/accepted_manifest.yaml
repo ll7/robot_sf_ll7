@@ -1,0 +1,26 @@
+schema_version: adversarial_scenario_manifest.v1
+execution_status: generated_only
+evidence_boundary: diagnostic-only
+source:
+  scenario_template: crossing_ttc.yaml
+  search_space: crossing_ttc_space.yaml
+  map_id: classic_cross_trap
+  scenario_name: llm_reviewed_crossing
+  config_path: configs/scenarios/templates/crossing_ttc.yaml
+  search_space_path: configs/adversarial/crossing_ttc_space.yaml
+generator:
+  family: llm_to_manifest
+  generator_id: structured_prompt_adapter_v1
+  seed: 2026
+  candidate_index: 0
+candidate_controls:
+  start:
+    x: 1.0
+    y: 2.0
+  goal:
+    x: 5.0
+    y: 2.0
+  spawn_time_s: 0.0
+  pedestrian_speed_mps: 1.0
+  pedestrian_delay_s: 0.0
+  scenario_seed: 7

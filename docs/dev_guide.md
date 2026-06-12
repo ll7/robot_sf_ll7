@@ -324,7 +324,7 @@ gh api repos/$OWNER/$REPO/pulls/$PR -X PATCH \
 
 ```bash
 RUN_ID=$(gh api repos/$OWNER/$REPO/actions/runs \
-  --method GET --paginate \
+  --method GET \
   -f branch=$BRANCH \
   -q '.workflow_runs | sort_by(.created_at) | reverse | .[0].id')
 while :; do

@@ -271,9 +271,12 @@ lifecycle cleanup checkpoint. Distinguish the two delegate types:
   discarded. Record `worker completed` with exit code and artifact path or discard
   rationale.
 
-For discovery scouts and other optional helper runs, record periodic heartbeat events in the same ledger
-line set (for example: `discovery scout heartbeat: tick-1`, `discovery scout heartbeat: tick-2`).
-A heartbeat must include UTC timestamp, phase, and bounded duration.
+For discovery scouts and other optional helper runs, record periodic heartbeat events in the same
+ledger line set using stable fields:
+
+- `timestamp`: UTC timestamp of the heartbeat.
+- `phase`: current execution phase.
+- `duration`: bounded duration covered by the heartbeat tick.
 
 Record cleanup status in the ledger, handoff notes, or self-review companion using
 one of:

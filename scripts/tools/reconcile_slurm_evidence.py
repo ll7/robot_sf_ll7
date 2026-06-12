@@ -12,7 +12,7 @@ import argparse
 import csv
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -251,17 +251,17 @@ class EvidenceRow:
 
 def _is_raw_artifact_like(path: Path) -> bool:
     """Detect raw artifact-like paths that should not alone satisfy evidence preservation."""
-    name = path.name
-    lower = name.lower()
-    if path.name in {"wandb", "model_cache"} or "output/model_cache" in path.as_posix():
+    lower = path.name.lower()
+    posix_path = path.as_posix().lower()
+    if lower in {"wandb", "model_cache"} or "output/model_cache" in posix_path:
         return True
-    if name in {"wandb", "output", "artifacts", "runs"} and path.is_dir():
+    if lower in {"wandb", "output", "artifacts", "runs"} and path.is_dir():
         return True
     if any(lower.endswith(suffix) for suffix in RAW_ARTIFACT_LIKE_SUFFIXES):
         return True
-    if "/wandb/" in path.as_posix():
+    if "/wandb/" in posix_path:
         return True
-    if "/output/model_cache/" in path.as_posix():
+    if "/output/model_cache/" in posix_path:
         return True
     return False
 
@@ -309,7 +309,7 @@ def _has_checksum(payload: dict[str, Any]) -> bool:
     return False
 
 
-def _iter_json_rows(data: Any, source: str) -> list[dict[str, Any]]:
+def _iter_json_rows(data: Any) -> list[dict[str, Any]]:
     """Yield normalized row-like mappings from a JSON payload."""
     rows: list[dict[str, Any]] = []
     if isinstance(data, dict):
@@ -402,8 +402,7 @@ def _find_matching_evidence_for_seed(
         exact = [row for row in candidates if row.job_id and row.job_id == slurm_job_id]
         if exact:
             return exact
-    if slurm_job_id and not candidates:
-        return []
+        return [row for row in candidates if not row.job_id]
     return candidates
 
 
@@ -457,16 +456,22 @@ def _load_evidence_from_json(path: Path) -> list[EvidenceRow]:
     """Load evidence rows from a single JSON file."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise RuntimeError(f"cannot read JSON {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"{path}: malformed JSON {exc}") from exc
-    rows = _iter_json_rows(payload, path.as_posix())
+    rows = _iter_json_rows(payload)
     return [_build_evidence_row(row, path) for row in rows]
 
 
 def _load_evidence_from_csv(path: Path) -> list[EvidenceRow]:
     """Load evidence rows from a single CSV file."""
     rows: list[EvidenceRow] = []
-    for raw_row in _iter_csv_rows(path):
+    try:
+        csv_rows = _iter_csv_rows(path)
+    except OSError as exc:
+        raise RuntimeError(f"cannot read CSV {path}: {exc}") from exc
+    for raw_row in csv_rows:
         if not raw_row:
             continue
         rows.append(_build_evidence_row(raw_row, path))
@@ -540,7 +545,7 @@ def _build_duplicate_observations(manifest_jobs: list[ManifestJob]) -> dict[str,
     duplicate_observations: dict[str, list[str]] = {}
     bucket: dict[str, list[ManifestJob]] = {}
     for job in manifest_jobs:
-        seeds = job.seeds or (0,)
+        seeds = job.seeds if job.seeds else (None,)
         for seed in seeds:
             key = f"{job.queue_id}::{seed}"
             bucket.setdefault(key, []).append(job)
@@ -636,7 +641,7 @@ def reconcile(
     )
     return {
         "schema_version": SCHEMA_VERSION,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),  # noqa: UP017
         "queue_path": str(queue_path),
         "submission_manifests": sorted({str(path) for path in submission_manifests}),
         "evidence_root": str(evidence_root),

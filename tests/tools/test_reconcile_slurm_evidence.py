@@ -184,6 +184,93 @@ def test_completed_seed_without_compact_evidence_is_flagged(tmp_path: Path) -> N
     assert any("completed but not preserved" in note for note in row["notes"])
 
 
+def test_conflicting_evidence_job_id_does_not_preserve_completed_seed(tmp_path: Path) -> None:
+    """Evidence from another job ID should not preserve the current completed job."""
+    queue_payload = _queue_payload()
+    queue_payload["entries"][0]["seeds"] = [101]
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, queue_payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="completed",
+            seeds=[101],
+            slurm_job_id=121,
+            exp_id="exp-002",
+        ),
+    )
+
+    evidence = tmp_path / "evidence" / "seed_summary.json"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_text(
+        json.dumps(
+            {
+                "rows": [
+                    {
+                        "queue_id": "issue-2656-example",
+                        "seed": 101,
+                        "job_id": "999",
+                        "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/stale",
+                        "claim_boundary": "compact",
+                        "run_summary_sha256": "0123456789abcdef0123456789abcdef",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    row = report["observations"][0]
+    assert row["status"] == "completed"
+    assert any("completed but not preserved" in note for note in row["notes"])
+
+
+def test_duplicate_observations_do_not_confuse_missing_seed_with_seed_zero(
+    tmp_path: Path,
+) -> None:
+    """A job with unspecified seeds should not collide with an actual seed 0 row."""
+    queue_payload = _queue_payload()
+    queue_payload["entries"][0]["seeds"] = [0]
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, queue_payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    manifest = _manifest_payload(
+        queue_id="issue-2656-example",
+        status="submitted",
+        seeds=[0],
+        slurm_job_id=121,
+        exp_id="exp-002",
+    )
+    manifest["jobs"].append(
+        {
+            "queue_id": "issue-2656-example",
+            "status": "submitted",
+            "slurm_job_id": "122",
+            "experiment_id": "exp-003",
+        }
+    )
+    _write_yaml(manifest_path, manifest)
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+    )
+
+    assert "issue-2656-example::0" not in report["duplicate_ids"]["queue_seed_observations"]
+    assert not any("issue-2656-example::0" in warning for warning in report["warnings"])
+
+
 def test_explicitly_excluded_seed_is_excluded(tmp_path: Path) -> None:
     """Excluded queue seeds should resolve to excluded status regardless of submission rows."""
     payload = _queue_payload()

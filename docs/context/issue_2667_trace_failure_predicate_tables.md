@@ -42,16 +42,27 @@ evasive reaction, oscillatory local control, and zero-motion timeout behavior.
 ## Denominators
 
 Each aggregate row reports `trace_denominator` for its
-`scenario_family` / `planner_id` / `seed` group. The predicate rows in this run are all from
-`crossing_proxy` / `orca` / seed `111`, so their row-level denominator is `1`. The two #2428 traces
-are included in `input_trace_count` as negative durable inputs, but they do not appear as row-level
-denominators because the current table only renders groups with observed predicates.
+`scenario_family` / `planner_id` / `seed` / trace-source group. The predicate rows in this run are
+all from `crossing_proxy` / `orca` / seed `111`, so their row-level denominator is `1`.
+
+Issue #2687 tightened future table generation so JSON and Markdown outputs also preserve
+`zero_predicate_groups` when a trace group has zero valid predicates. This separates:
+
+- a true zero valid-predicate group;
+- a `not_available` predicate row caused by missing evidence fields;
+- a trace absent from the input set;
+- excluded, fallback, or degraded runs that should not enter the denominator.
+
+The original #2667 evidence bundle remains diagnostic-only and was not regenerated as a new
+benchmark result.
 
 ## Interpretation
 
 This is diagnostic-only evidence. It proves the table-generation path can consume versioned
 `simulation_trace_export.v1` inputs, preserve denominator fields, and carry a fail-closed
-`not_available` predicate row into JSON/Markdown outputs.
+`not_available` predicate row into JSON/Markdown outputs. After #2687, future table outputs also
+make zero valid-predicate groups explicit, but rate claims still require a predeclared benchmark
+matrix.
 
 It does not establish predicate rates, planner rankings, AMMV benefit, benchmark outcomes,
 paper-facing mechanism frequencies, or safety claims. A future predeclared benchmark matrix should

@@ -97,12 +97,17 @@ def aggregate_trace_failure_predicate_tables(
     """
     grouped_predicates: Counter[tuple[str, str, int, str, str, str]] = Counter()
     trace_denominators: Counter[tuple[str, str, int]] = Counter()
+    trace_sources_by_group: dict[tuple[str, str, int], set[str]] = defaultdict(set)
+    trace_status_counts: dict[tuple[str, str, int, str], Counter[str]] = defaultdict(Counter)
     included_trace_count = 0
 
     for trace in traces:
         group_family = scenario_family or trace.source.scenario_id
+        trace_source_id = trace.trace_id
         group_key = (group_family, trace.source.planner_id, int(trace.source.seed))
+        trace_key = (*group_key, trace_source_id)
         trace_denominators[group_key] += 1
+        trace_sources_by_group[group_key].add(trace_source_id)
         included_trace_count += 1
         for predicate in _extract_trace_failure_predicate_records(
             trace,
@@ -124,12 +129,14 @@ def aggregate_trace_failure_predicate_tables(
                     predicate.severity,
                 )
             ] += 1
+            trace_status_counts[trace_key][predicate.validity_status] += 1
 
     rows = [
         {
             "scenario_family": family,
             "planner_id": planner_id,
             "seed": seed,
+            "trace_source_ids": sorted(trace_sources_by_group[(family, planner_id, seed)]),
             "predicate_id": predicate_id,
             "validity_status": validity_status,
             "severity": severity,
@@ -147,6 +154,60 @@ def aggregate_trace_failure_predicate_tables(
         ), count in sorted(grouped_predicates.items())
     ]
 
+    observed_group_keys = {
+        (family, planner_id, seed)
+        for (
+            family,
+            planner_id,
+            seed,
+            _predicate_id,
+            _validity_status,
+            _severity,
+        ) in grouped_predicates
+    }
+    for group_key in sorted(trace_denominators):
+        if group_key in observed_group_keys:
+            continue
+        family, planner_id, seed = group_key
+        rows.append(
+            {
+                "scenario_family": family,
+                "planner_id": planner_id,
+                "seed": seed,
+                "trace_source_ids": sorted(trace_sources_by_group[group_key]),
+                "predicate_id": "no_predicate_observed",
+                "validity_status": "no_predicate_observed",
+                "severity": "no_predicate_observed",
+                "predicate_count": 0,
+                "trace_denominator": trace_denominators[group_key],
+                "predicate_rate_per_trace": 0.0,
+            }
+        )
+
+    zero_predicate_groups = [
+        {
+            "scenario_family": family,
+            "planner_id": planner_id,
+            "seed": seed,
+            "trace_source_id": trace_source_id,
+            "trace_denominator": trace_denominators[group_key],
+            "valid_predicate_count": int(trace_status_counts[trace_key].get("valid", 0)),
+            "not_available_predicate_count": int(
+                trace_status_counts[trace_key].get("not_available", 0)
+            ),
+            "zero_group_reason": (
+                "no_predicate_observed"
+                if not trace_status_counts[trace_key]
+                else "valid_predicate_count_zero"
+            ),
+        }
+        for group_key, trace_sources in sorted(trace_sources_by_group.items())
+        for family, planner_id, seed in (group_key,)
+        for trace_source_id in sorted(trace_sources)
+        for trace_key in ((*group_key, trace_source_id),)
+        if trace_status_counts[trace_key].get("valid", 0) == 0
+    ]
+
     return {
         "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
         "table_kind": "aggregate_by_predicate_group",
@@ -156,10 +217,13 @@ def aggregate_trace_failure_predicate_tables(
             "row_count": len(rows),
         },
         "rows": rows,
+        "zero_predicate_groups": zero_predicate_groups,
         "caveats": [
             "Aggregate predicate rows are diagnostic summaries, not benchmark rates or claims.",
             "Rows include `not_available` and other valid status values when evidence is partial.",
-            "Do not treat these as benchmark outcomes unless tied to a predeclared benchmark matrix.",
+            "`zero_predicate_groups` preserves trace groups with valid predicate count equal to zero.",
+            "Rows with `no_predicate_observed` mark trace groups that had no predicate rows at all.",
+            "Rate claims require a predeclared benchmark matrix; do not infer rates from these diagnostic rows.",
         ],
     }
 
@@ -194,37 +258,79 @@ def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) ->
         lines.append("No predicate rows were observed in the provided traces.")
         return "\n".join(lines).rstrip() + "\n"
 
+    zero_groups = table_payload.get("zero_predicate_groups")
+    if not isinstance(zero_groups, list):
+        zero_groups = []
+    zero_group_rows = [row for row in zero_groups if isinstance(row, Mapping)]
+    observed_rows = [
+        row for row in table_rows if row.get("predicate_id") != "no_predicate_observed"
+    ]
+
     lines.append("## Aggregate Rows")
     lines.append("")
-    lines.append(
-        _markdown_table(
-            (
-                "scenario_family",
-                "planner_id",
-                "seed",
-                "predicate_id",
-                "validity_status",
-                "severity",
-                "predicate_count",
-                "trace_denominator",
-                "predicate_rate_per_trace",
-            ),
-            [
+    if observed_rows:
+        lines.append(
+            _markdown_table(
                 (
-                    _markdown_value(row.get("scenario_family")),
-                    _markdown_value(row.get("planner_id")),
-                    _markdown_value(row.get("seed")),
-                    _markdown_value(row.get("predicate_id")),
-                    _markdown_value(row.get("validity_status")),
-                    _markdown_value(row.get("severity")),
-                    _markdown_int(row.get("predicate_count")),
-                    _markdown_int(row.get("trace_denominator")),
-                    f"{_markdown_float(row.get('predicate_rate_per_trace')):.4f}",
-                )
-                for row in table_rows
-            ],
+                    "scenario_family",
+                    "planner_id",
+                    "seed",
+                    "trace_source_ids",
+                    "predicate_id",
+                    "validity_status",
+                    "severity",
+                    "predicate_count",
+                    "trace_denominator",
+                    "predicate_rate_per_trace",
+                ),
+                [
+                    (
+                        _markdown_value(row.get("scenario_family")),
+                        _markdown_value(row.get("planner_id")),
+                        _markdown_value(row.get("seed")),
+                        _markdown_value(row.get("trace_source_ids")),
+                        _markdown_value(row.get("predicate_id")),
+                        _markdown_value(row.get("validity_status")),
+                        _markdown_value(row.get("severity")),
+                        _markdown_int(row.get("predicate_count")),
+                        _markdown_int(row.get("trace_denominator")),
+                        f"{_markdown_float(row.get('predicate_rate_per_trace')):.4f}",
+                    )
+                    for row in observed_rows
+                ],
+            )
         )
-    )
+    if zero_group_rows:
+        lines.append("")
+        lines.append("### Trace Groups With Zero Valid Predicates")
+        lines.append("")
+        lines.append(
+            _markdown_table(
+                (
+                    "scenario_family",
+                    "planner_id",
+                    "seed",
+                    "trace_source_id",
+                    "trace_denominator",
+                    "valid_predicate_count",
+                    "not_available_predicate_count",
+                    "zero_group_reason",
+                ),
+                [
+                    (
+                        _markdown_value(row.get("scenario_family")),
+                        _markdown_value(row.get("planner_id")),
+                        _markdown_value(row.get("seed")),
+                        _markdown_value(row.get("trace_source_id")),
+                        _markdown_int(row.get("trace_denominator")),
+                        _markdown_int(row.get("valid_predicate_count")),
+                        _markdown_int(row.get("not_available_predicate_count")),
+                        _markdown_value(row.get("zero_group_reason")),
+                    )
+                    for row in zero_group_rows
+                ],
+            )
+        )
     lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

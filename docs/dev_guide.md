@@ -102,6 +102,10 @@ git merge origin/main
 
 ### Worktree teardown and preservation
 
+Make worktree cleanup part of normal closeout after PR review, issue implementation, publishing, or
+abandoned exploration. If a worktree is no longer needed for active validation, CI follow-up,
+artifact recovery, or handoff, remove it safely or record why it is intentionally preserved.
+
 Before deleting old worktrees, run `git worktree list --porcelain` from the main checkout and inspect
 each candidate with `git -C <path> status --short --branch`. If the worktree may contain generated
 evidence or local experiment outputs, also inspect relevant ignored paths, for example
@@ -110,8 +114,11 @@ evidence or local experiment outputs, also inspect relevant ignored paths, for e
 Only remove a worktree after preserving relevant tracked, untracked, and ignored-but-important
 changes through a commit, stash, patch, durable artifact promotion, or explicit handoff note. Do not
 delete dirty or unpushed worktrees unless the cleanup record states what was preserved or why nothing
-needed preservation. Use `git worktree remove <path>` for clean worktrees; reserve
-`git worktree prune` for stale administrative entries after local state is checked.
+needed preservation. Classify large ignored directories such as `output/` before removal as
+disposable, ignored cache, tracked manifest/evidence, durable-required, or handoff-needed; do not let
+worktree-local `output/` become durable artifact storage. Use `git worktree remove <path>` for clean
+worktrees; reserve `git worktree prune` for stale administrative entries after local state is
+checked.
 
 ### Targeted shared-venv worktree validation
 

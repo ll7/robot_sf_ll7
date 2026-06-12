@@ -64,6 +64,15 @@ ARTIFACT_FIRST_REQUIRED_PHRASES = (
     "raw logs",
     "targeted local",
 )
+WORKER_OUTPUT_REQUIRED_PHRASES = (
+    "rg -l",
+    "rg --files",
+    "sed -n",
+    "200 lines",
+    "private artifacts",
+    "rg -n .",
+    "full file reads",
+)
 
 
 def _read_yaml(path: Path) -> Any:
@@ -269,6 +278,10 @@ def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text
     for phrase in ARTIFACT_FIRST_REQUIRED_PHRASES:
         if phrase not in lower:
             errors.append(f"{rel}: missing artifact-first phrase requirement {phrase!r}")
+
+    for phrase in WORKER_OUTPUT_REQUIRED_PHRASES:
+        if phrase not in lower:
+            errors.append(f"{rel}: missing worker-output limit requirement {phrase!r}")
 
     return errors
 

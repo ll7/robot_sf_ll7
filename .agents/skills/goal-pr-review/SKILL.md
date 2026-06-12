@@ -97,6 +97,8 @@ Avoid loops:
    - require artifact-first delegated review and validate in order: `result.json`, `RESULT.md`,
      `diffstat.txt`, and `validation.json`, inspect route evidence first, then run targeted local checks
      before raw logs,
+   - cap parent-thread raw output at about 200 lines; use `rg -l`, `rg --files`, bounded `sed -n`,
+     and private artifacts instead of broad `rg -n .` or full file reads,
    - classify findings as fixable now, deferred, or blocker.
 4. Fix actionable items on writable branches; commit and push.
 5. Validate per required tier.

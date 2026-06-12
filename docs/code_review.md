@@ -26,10 +26,12 @@ For benchmark-facing changes, explicitly verify:
 ### Evaluation semantics
 - Does the change alter success, collision, timeout, or metric semantics?
 - Are fallback, skip, and fail-fast paths still explicit and testable?
-- Are benchmark categories (`diagnostic`, `classical`, `learning`) still accurate?
+- Are benchmark categories (`diagnostic-only`, `smoke evidence`, `nominal benchmark evidence`,
+  `paper-grade`) still accurate?
 - Does any report wording overstate what the benchmark actually measures?
-- For mixed or limited evidence, does the report start with claim boundary, evidence status,
-  fallback/degraded exclusions, major caveats, and uncertainty before ranking or success language?
+- For mixed, partial, or fallback-tainted evidence, does the report start with claim boundary,
+  evidence status, fallback/degraded exclusions, major caveats, and uncertainty before ranking or
+  success language?
 
 ### Observation normalization
 - Are observation keys, bounds, clipping, and dtype contracts preserved or versioned?

@@ -36,11 +36,16 @@ public-facing provenance statements.
 5. Add explicit provenance pointers before handoff.
 6. For mixed or limited evidence, make the opening order: claim boundary, evidence status, major
    caveats and exclusions, uncertainty, then result interpretation.
+7. State evidence status in one of: `diagnostic-only`, `smoke evidence`,
+   `nominal benchmark evidence`, or `paper-grade`.
 
 ## Proof and Guardrails
 
 - Preserve fail-closed semantics: do not present fallback/degraded runs as success.
+- For mixed, limited, or degraded evidence, require caveat-first ordering before any ranking/success language.
 - Any claim must point to concrete reproducible artifacts.
+- Use claim-boundary language early when confidence is below high confidence (approx 95%) and include numeric
+  uncertainty.
 - Prefer tracked canonical documents and execution notes for evidence.
 - Use consistent evidence-tier wording: `diagnostic-only`, `smoke evidence`,
   `nominal benchmark evidence`, and `paper-grade`.

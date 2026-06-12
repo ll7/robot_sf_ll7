@@ -59,6 +59,33 @@ def test_signal_phase_contract_lists_future_fields_and_current_proxy_fields() ->
     assert "planner-observable" in phase["planner_observable_policy"]
 
 
+def test_signal_state_promotion_contract_separates_proxy_observable_and_unavailable() -> None:
+    """Signal-state rows need explicit promotion before entering benchmark evidence."""
+    manifest = _manifest()
+    contract = manifest["signal_state_promotion_contract"]
+    assert isinstance(contract, dict)
+    states = contract["states"]
+    assert isinstance(states, dict)
+
+    proxy = states["proxy_diagnostic"]
+    observable = states["planner_observable"]
+    unavailable = states["unavailable"]
+
+    assert proxy["planner_consumed_fields"] == []
+    assert "phase" in proxy["recorded_only_fields"]
+    assert "traffic-light semantics" in proxy["fail_closed_reason"]
+
+    assert observable["required_schema_version"] == "signal-state-observable.v1"
+    assert observable["required_status"] == "planner_observable_signal_state"
+    assert observable["required_observation_mode"] == "planner_observable"
+    assert observable["required_benchmark_evidence"] is True
+    assert "phase_remaining_s" in observable["planner_consumed_fields"]
+
+    assert unavailable["planner_consumed_fields"] == []
+    assert unavailable["fail_closed_reason"] == "signal_state_metadata_absent"
+    assert "Proxy_diagnostic and unavailable rows are excluded" in contract["denominator_policy"]
+
+
 def test_required_metrics_and_trace_fields_cover_signal_specific_contract() -> None:
     """The benchmark direction should specify existing and signal-specific evidence fields."""
     manifest = _manifest()

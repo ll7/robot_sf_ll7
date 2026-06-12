@@ -69,6 +69,11 @@ In token-efficient mode:
      rechecks) against the committed candidate state.
 - Only then, and only if needed, read raw logs, CI text, or verbose worker transcripts when artifacts are
   missing, inconsistent, failed, or suspicious.
+- Worker prompts must cap parent-thread raw output at about 200 lines. Use `rg -l`, `rg --files`,
+  and bounded `sed -n` ranges for discovery. Do not use broad `rg -n .` or full file reads unless
+  a context pack, snapshot, or targeted artifact is missing and the broad read is explicitly
+  justified. Redirect larger command output to private artifacts and return only a compact summary
+  with inspected files, command exit codes, and short evidence excerpts.
 - A successful worker command exit code, positive wrapper message, or candidate commit is route evidence
   only. The parent phase is not complete until this evidence is reviewed, diff status is verified locally,
   and required commands are rerun from the parent with parent-owned proof.

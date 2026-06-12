@@ -148,6 +148,10 @@ For delegated implementation review and execution workers, enforce artifact-firs
   3. Inspect `diffstat.txt`.
   4. Run targeted local verification and diff reads for the reported files/commits before opening logs.
 - Raw logs are read only when artifacts are missing, inconsistent, failed, or suspicious.
+- Worker prompts must cap parent-thread raw output at about 200 lines. Require `rg -l`, `rg --files`,
+  and bounded `sed -n` for search/read tasks; forbid broad `rg -n .` and full file reads unless a
+  context pack or compact snapshot failed. Larger output must go to private artifacts with only a
+  compact summary returned to the parent.
 - Treat worker wrapper completion, worker `route_status: complete`, or any candidate commit as route
   evidence only. Issue implementation is complete only after local revalidation passes and cleanup checks
   are updated.

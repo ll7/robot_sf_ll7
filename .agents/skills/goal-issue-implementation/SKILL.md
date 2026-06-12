@@ -121,6 +121,20 @@ reimplement. If the issue is a follow-up that depends on an unmerged source PR, 
 blocked/unavailable for clean-main work with the unblock condition "source PR merged to
 `origin/main`", unless the user explicitly chooses a stacked-PR route.
 
+For token-efficient orientation, collect a compact snapshot before broad parent reads:
+
+```bash
+uv run python scripts/dev/autopilot_state_snapshot.py \
+  --include-worktrees \
+  --claim-issue <issue-number> \
+  --issue-search "is:issue is:open <issue-number>"
+```
+
+Use the snapshot to seed worker prompts with issue/claim/worktree freshness and candidate PR
+headline state, but do not treat it as authority for final branch, claim, publication, or merge
+decisions. If `ok: false`, a claim is stale against `origin/main`, or the needed field is missing,
+run the specific raw `gh`/`git` command named by the snapshot source metadata.
+
 ## Queue Policy
 
 Default order:

@@ -285,6 +285,25 @@ SHA-match result, poll attempt, wait budget, deadline, and `route_evidence_only:
 success is route evidence only; reassess the current PR head SHA and normal readiness proof before
 labeling or merging.
 
+For routine goal-autopilot orientation, prefer the compact state snapshot helper before broad parent
+thread reads:
+
+```bash
+uv run python scripts/dev/autopilot_state_snapshot.py \
+  --include-worktrees \
+  --claim-issue <issue-number> \
+  --issue-search "is:issue is:open <queue-filter>" \
+  --pr <pr-number>
+```
+
+The JSON output includes source commands, branch/head SHA, `origin/main` SHA, linked worktrees,
+claim refs, issue queue rows, explicit PR headline state, and freshness metadata. Use it to seed
+worker prompts and active ledgers; run fresh focused `gh`/`git` checks before claim, push, PR,
+label, merge, or publication decisions. Raw logs and broad CLI output are appropriate when the
+snapshot reports `ok: false`, stale claims, missing state, or insufficient fields.
+Worktree rows are capped by default; use `worktree_count` and `worktrees_truncated` to decide
+whether a larger `--worktree-limit` is worth the parent-thread context cost.
+
 Use `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR handoff when a
 branch adds or edits context notes, evidence bundles, or other proof-heavy docs surfaces. The
 checker is intentionally conservative: it only flags high-confidence issues such as missing

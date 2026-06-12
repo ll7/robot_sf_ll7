@@ -100,6 +100,9 @@ Before each phase, run a delegation checkpoint:
 - Choose the routed helper role for the phase when `ai-delegation-routing` is active:
   queue scout, PR blocker reviewer, bounded editor, validation verifier, CI wait monitor, or
   discovery scout.
+- For optional discovery scouts, default to a short hard timeout (120-180s) and require periodic
+  evidence in the ledger. If a bounded scout emits no heartbeat within one timeout slice, treat it as
+  incomplete and retry with an explicit local timeout + heartbeat plan.
 - Start at least one eligible routed worker or Spark sidecar for any phase likely to exceed about
   10 minutes, unless the next action is a local-only publication step or all routes are unavailable.
 - If no helper is used, record `delegation_skipped: <reason>` with one of: `tiny`,
@@ -268,13 +271,19 @@ lifecycle cleanup checkpoint. Distinguish the two delegate types:
   discarded. Record `worker completed` with exit code and artifact path or discard
   rationale.
 
+For discovery scouts and other optional helper runs, record periodic heartbeat events in the same ledger
+line set (for example: `discovery scout heartbeat: tick-1`, `discovery scout heartbeat: tick-2`).
+A heartbeat must include UTC timestamp, phase, and bounded duration.
+
 Record cleanup status in the ledger, handoff notes, or self-review companion using
 one of:
 
 - `worker completed` — external subprocess exited cleanly, artifacts confirmed.
 - `worker_sparse_artifacts` — subprocess exited or was stopped but compact result/status/diffstat
   artifacts are missing or empty; treat as route failure or T0 evidence until local validation
-  proves the finding independently.
+  proves the finding independently. For `worker_sparse_artifacts`, the parent route is not complete
+  until a local re-validation command is recorded and passes (for example: issue/PR state recheck,
+  command re-run, deterministic diff check, or scripted validator).
 - `app agent closed` — Codex subagent session closed after integration/rejection.
 - `no active process remains` — neither subagent nor worker process remains open.
 - `cleanup_failed` — close/confirm failed; record the error and escalate.
@@ -324,6 +333,12 @@ When a delegated phase produces a reusable workflow lesson (repeated failure pat
 tooling gap, routing improvement), capture it in an `agent_run_self_review.v1`
 companion note before the next phase begins. Do not promote lessons into durable
 skill text unless the evidence is repeated or explains a costly failure.
+
+If the phase used `worker_sparse_artifacts`, require the self-review companion to also log:
+- Missing artifact class (`result`, `status`, `diffstat`, or `summary`).
+- Scout timeout and heartbeat evidence (e.g., heartbeat cadence and stop reason).
+- The exact local replacement validation command and pass status.
+- Why the local command supersedes the sparse worker output for this route.
 
 ## Cycle Policy
 

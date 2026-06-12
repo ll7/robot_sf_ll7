@@ -55,6 +55,9 @@ In token-efficient mode:
   execution.
 - Prefer compact parent-thread snapshots before broad repository, GitHub,
   worktree, CI, or validation output.
+- For routine orientation, start with `scripts/dev/autopilot_state_snapshot.py`
+  instead of repeated broad `gh issue list`, `gh pr view`, `git worktree list`,
+  or claim-state calls.
 - Require compact worker artifacts before reading raw logs.
 - Offload routine CI waits to read-only monitors when safe work remains.
 - Keep final GitHub mutation, publication, merge-readiness, benchmark, paper,
@@ -197,6 +200,28 @@ Treat monitor exit states as follows:
 - `pending timeout` / exit code `2`: keep the PR in `awaiting_ci`, record the pending checks, and
   continue other work.
 - `error`: record stale head, auth, API, or parsing failure; do not trust the waiter for readiness.
+
+### Snapshot-First Parent Orientation
+
+Before broad queue, worktree, claim, PR, or CI reads in the parent thread, prefer the compact
+snapshot helper:
+
+```bash
+uv run python scripts/dev/autopilot_state_snapshot.py \
+  --include-worktrees \
+  --claim-issue <issue-number> \
+  --issue-search "is:issue is:open <queue-filter>" \
+  --pr <pr-number>
+```
+
+The helper emits `autopilot_state_snapshot.v1` JSON with source commands, branch/head SHA,
+`origin/main` SHA, worktree rows, issue queue rows, claim refs, explicit PR headline state, and
+freshness metadata. Treat it as route evidence only: use it to decide the next safe read or worker
+prompt, then run fresh local/GitHub checks before claiming an issue, pushing, labeling, merging, or
+publishing a benchmark-facing conclusion. Read raw command output only when the snapshot reports
+`ok: false`, stale claim refs, missing state, or a field that is insufficient for the next decision.
+The helper caps worktree rows by default and reports `worktree_count` plus `worktrees_truncated`;
+raise `--worktree-limit` only when the compact rows are insufficient.
 
 ### Active Delegation Ledger
 

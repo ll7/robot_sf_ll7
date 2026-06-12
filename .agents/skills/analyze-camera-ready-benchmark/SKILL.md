@@ -47,6 +47,8 @@ consistency, reproducibility, and fallback-mode visibility before claiming bench
      - fallback preflight planners
 
 4. Summarize runtime + quality
+   - Start the report with claim boundary, evidence status, fallback/degraded exclusions, and major
+     caveats before planner rankings or success interpretation when evidence is mixed or limited.
    - Highlight slowest planners by `runtime_sec`.
    - Highlight weakest planners by success/collision/SNQI from derived episode means.
    - Note experimental planners running with fallback mode.
@@ -75,6 +77,8 @@ uv run python scripts/tools/analyze_camera_ready_campaign.py \
 
 - Classify each run mode as `native`, `adapter`, `fallback`, or `degraded`.
 - Fail-closed rule: do not treat fallback/degraded as successful benchmark evidence.
+- Fallback/degraded rows must appear as caveats or exclusions before comparative rankings,
+  aggregate success language, or recommendations.
 - Require the produced JSON + markdown reports as proof artifacts before summarizing results.
 - Only report planner ranking where metrics and episode counts are internally consistent.
 

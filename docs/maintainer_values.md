@@ -17,6 +17,13 @@ and what remains uncertain.
 Fallback or degraded benchmark execution is never success evidence. It may be useful diagnostic
 information only when labeled that way.
 
+Reports with mixed or limited benchmark evidence should put the claim boundary first: evidence
+status, major caveats, fallback/degraded exclusions, and uncertainty belong before result
+interpretation, rankings, or success language. Use the lightweight ladder consistently:
+`diagnostic-only` for debugging or contract probes, `smoke evidence` for narrow execution proof,
+`nominal benchmark evidence` for predeclared benchmark-matrix results, and `paper-grade` only for
+fully reproducible claims suitable for manuscript-facing use.
+
 When the intended proof fails or cannot be gathered, close the work as `blocked`, `diagnostic`, or
 `not benchmark evidence` as appropriate, and record the next smallest proof step. Do not relabel an
 unproven result as complete just to preserve momentum.
@@ -37,8 +44,8 @@ Use explicit status language:
 
 For substantive claims, recommendations, benchmark conclusions, and prioritization judgments below
 roughly 95 percent confidence, include a short numeric uncertainty estimate, caveat, or condition
-that would change the conclusion. Do not spend reasoning effort quantifying ordinary status updates
-or low-impact implementation narration.
+that would change the conclusion near the claim boundary. Do not spend reasoning effort
+quantifying ordinary status updates or low-impact implementation narration.
 
 ## Validation
 

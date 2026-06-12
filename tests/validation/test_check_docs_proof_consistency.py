@@ -12,6 +12,7 @@ from scripts.validation.check_docs_proof_consistency import (
     ChangedFile,
     _collect_diagnostics,
     _context_catalog_diagnostics,
+    _context_index_link_diagnostics,
     _context_readme_link_diagnostics,
     _parse_name_status,
     _selected_files,
@@ -38,6 +39,34 @@ def test_context_note_anchor_link_counts_as_index_link() -> None:
     diagnostics = _context_readme_link_diagnostics(
         [ChangedFile(status="A", path=Path("docs/context/issue_999_example.md"))],
         context_readme_text="- [Issue 999 Example](issue_999_example.md#validation)\n",
+    )
+
+    assert diagnostics == []
+
+
+def test_context_note_requires_context_index_link() -> None:
+    """New top-level context notes should be linked from the context index."""
+    diagnostics = _context_index_link_diagnostics(
+        [ChangedFile(status="A", path=Path("docs/context/issue_999_example.md"))],
+        context_index_text="# Context Retrieval Index\n",
+    )
+
+    assert diagnostics == [
+        type(diagnostics[0])(
+            path=Path("docs/context/issue_999_example.md"),
+            message="added context note is not linked from docs/context/INDEX.md",
+        )
+    ]
+
+
+def test_context_index_link_check_skips_context_entrypoints() -> None:
+    """README and INDEX are the context entrypoints, not notes requiring index links."""
+    diagnostics = _context_index_link_diagnostics(
+        [
+            ChangedFile(status="A", path=Path("docs/context/README.md")),
+            ChangedFile(status="A", path=Path("docs/context/INDEX.md")),
+        ],
+        context_index_text="# Context Retrieval Index\n",
     )
 
     assert diagnostics == []

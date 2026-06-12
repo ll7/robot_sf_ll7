@@ -303,6 +303,63 @@ For GitHub issue batches and Project #5 updates, follow the batch-first workflow
   remote branch deletion reporting a missing ref after merge as a cleanup caveat to record, not as
   evidence that the merge failed; verify the merged PR or base branch SHA instead.
 
+### REST-first publication snippets for low-GraphQL autopilot
+
+Assume `OWNER`, `REPO`, `ISSUE`, `BRANCH`, and `BASE` are set:
+
+```bash
+gh api repos/$OWNER/$REPO/pulls -X POST \
+  -f title="Issue #$ISSUE: short summary" \
+  -f head=$BRANCH -f base=$BASE \
+  -f body="Automated publication update from Issue #$ISSUE"
+```
+
+```bash
+PR=$(gh api repos/$OWNER/$REPO/pulls --method GET \
+  -f state=open -f head="$OWNER:$BRANCH" \
+  --jq '.[0].number')
+gh api repos/$OWNER/$REPO/pulls/$PR -X PATCH \
+  -f body="Updated summary $(date -Iseconds)"
+```
+
+```bash
+RUN_ID=$(gh api repos/$OWNER/$REPO/actions/runs \
+  --method GET \
+  -f branch=$BRANCH \
+  -q '.workflow_runs | sort_by(.created_at) | reverse | .[0].id')
+while :; do
+  STATUS=$(gh api repos/$OWNER/$REPO/actions/runs/$RUN_ID --jq '.status')
+  echo "run=$RUN_ID status=$STATUS"
+  [ "$STATUS" = "completed" ] && break
+  sleep 20
+done
+CONCLUSION=$(gh api repos/$OWNER/$REPO/actions/runs/$RUN_ID --jq '.conclusion')
+PR_SHA=$(gh api repos/$OWNER/$REPO/pulls/$PR --jq '.head.sha')
+gh api repos/$OWNER/$REPO/commits/$PR_SHA/check-runs \
+  --jq '.check_runs[] | [.name, .status, .conclusion] | @tsv'
+```
+
+```bash
+gh api repos/$OWNER/$REPO/issues/$ISSUE/comments -f body="CI=$CONCLUSION (run=$RUN_ID)"
+gh api repos/$OWNER/$REPO/issues/$ISSUE/labels -X POST -f labels[]="autopilot-reviewed"
+gh api repos/$OWNER/$REPO/issues/$ISSUE/labels/needs-publication -X DELETE --silent
+```
+
+```bash
+gh api repos/$OWNER/$REPO/pulls/$PR/merge -X PUT \
+  -f merge_method="squash" -f commit_title="Merge PR #$PR" -f sha="$PR_SHA"
+```
+
+```bash
+gh api repos/$OWNER/$REPO/git/refs/heads/$BRANCH -X DELETE \
+  || gh api repos/$OWNER/$REPO/git/refs/heads/$BRANCH --silent >/dev/null \
+  || echo "branch ref already absent; confirm merge by checking issue/merge commit before closing out"
+```
+
+- GraphQL is still appropriate for: Projects v2 objects, review-thread resolution, and nested
+  permission-dependent reads where REST needs multiple expanded requests and GraphQL is materially
+  cheaper.
+
 ### Context note workflow
 
 For non-trivial work, persist reusable insights, decisions, reasoning, validation notes, and
@@ -315,10 +372,11 @@ handoff context in Markdown instead of leaving them trapped in chat or PR histor
 - Link notes to the related issue/PR, canonical docs, validation commands, and replacement notes.
 - Use `.agents/skills/context-note-maintainer/SKILL.md` when the task includes creating or
   refreshing context notes.
-- For docs/context-only changes, use the cheap consistency gate by default: inspect the diff,
-  verify changed README/INDEX/catalog links, and run the docs proof consistency check or its
-  targeted tests. State explicitly when benchmark, simulator, or full PR readiness gates were not
-  run because the branch only changes discoverability or workflow text.
+- For docs/context-only changes, use the documented default gate: inspect the diff, verify changed
+  README/INDEX/catalog links, and run `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh`.
+  The wrapper auto-detects context-only PRs and includes README/INDEX/catalog in that gate. State
+  explicitly when benchmark, simulator, or full PR readiness gates were not run because the branch only
+  changes discoverability or workflow text.
 
 ### Agent memory conventions
 

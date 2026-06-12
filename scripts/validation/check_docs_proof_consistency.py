@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
 _CONTEXT_README = Path("docs/context/README.md")
+_CONTEXT_INDEX = Path("docs/context/INDEX.md")
 _CONTEXT_CATALOG = Path("docs/context/catalog.yaml")
 _TOP_LEVEL_CONTEXT_DIR = Path("docs/context")
 _EVIDENCE_DIR = Path("docs/context/evidence")
@@ -199,6 +200,15 @@ def _contains_link_target(targets: Iterable[str], expected: str) -> bool:
     return False
 
 
+def _context_note_is_added(changed: ChangedFile) -> bool:
+    """Return whether a changed file is a new top-level context note."""
+    return (
+        _is_added_status(changed.status)
+        and changed.path.parent == _TOP_LEVEL_CONTEXT_DIR
+        and changed.path.suffix == ".md"
+    )
+
+
 def _context_readme_link_diagnostics(
     changed_files: Iterable[ChangedFile],
     *,
@@ -208,11 +218,9 @@ def _context_readme_link_diagnostics(
     diagnostics: list[Diagnostic] = []
     targets = _markdown_targets(context_readme_text)
     for changed in changed_files:
-        if not _is_added_status(changed.status):
+        if not _context_note_is_added(changed):
             continue
-        if changed.path.parent != _TOP_LEVEL_CONTEXT_DIR:
-            continue
-        if changed.path.suffix != ".md" or changed.path.name == "README.md":
+        if changed.path.name == _CONTEXT_README.name:
             continue
         if _contains_link_target(targets, changed.path.name):
             continue
@@ -220,6 +228,30 @@ def _context_readme_link_diagnostics(
             Diagnostic(
                 path=changed.path,
                 message="added context note is not linked from docs/context/README.md",
+            )
+        )
+    return diagnostics
+
+
+def _context_index_link_diagnostics(
+    changed_files: Iterable[ChangedFile],
+    *,
+    context_index_text: str,
+) -> list[Diagnostic]:
+    """Flag added top-level docs/context notes missing from the context index."""
+    diagnostics: list[Diagnostic] = []
+    targets = _markdown_targets(context_index_text)
+    for changed in changed_files:
+        if not _context_note_is_added(changed):
+            continue
+        if changed.path.name in {_CONTEXT_README.name, _CONTEXT_INDEX.name}:
+            continue
+        if _contains_link_target(targets, changed.path.name):
+            continue
+        diagnostics.append(
+            Diagnostic(
+                path=changed.path,
+                message="added context note is not linked from docs/context/INDEX.md",
             )
         )
     return diagnostics
@@ -565,6 +597,14 @@ def _collect_diagnostics(
             _context_readme_link_diagnostics(
                 changed_list,
                 context_readme_text=_read_text(context_readme),
+            )
+        )
+    context_index = repo_root / _CONTEXT_INDEX
+    if context_index.exists():
+        diagnostics.extend(
+            _context_index_link_diagnostics(
+                changed_list,
+                context_index_text=_read_text(context_index),
             )
         )
     diagnostics.extend(_context_catalog_diagnostics(_CONTEXT_CATALOG, repo_root=repo_root))

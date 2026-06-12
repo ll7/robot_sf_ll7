@@ -81,6 +81,49 @@ signal_phase_semantics:
     hidden, or only encoded through pedestrian motion. Mixed visibility modes must not be
     aggregated without an explicit observation-track caveat.
 
+signal_state_promotion_contract:
+  states:
+    proxy_diagnostic:
+      planner_consumed_fields: []
+      recorded_only_fields:
+        - schema_version
+        - status
+        - signal_id
+        - conflict_zone_id
+        - phase
+        - intent_phase
+        - robot_right_of_way
+        - pedestrian_right_of_way
+        - legality_state
+        - planner_observable
+        - observation_mode
+        - benchmark_evidence
+        - claim_boundary
+      fail_closed_reason: >
+        Proxy or synthetic signal-state metadata is trace/report metadata only and must not be
+        interpreted as planner-observable traffic-light semantics or benchmark evidence.
+    planner_observable:
+      required_schema_version: signal-state-observable.v1
+      required_status: planner_observable_signal_state
+      required_observation_mode: planner_observable
+      required_benchmark_evidence: true
+      planner_consumed_fields:
+        - signal_id
+        - conflict_zone_id
+        - phase
+        - phase_elapsed_s
+        - phase_remaining_s
+        - robot_right_of_way
+        - pedestrian_right_of_way
+        - legality_state
+    unavailable:
+      planner_consumed_fields: []
+      fail_closed_reason: signal_state_metadata_absent
+  denominator_policy: >
+    Only planner_observable rows with explicit schema/status/observation-mode fields may enter
+    signalized-crossing benchmark denominators. Proxy_diagnostic and unavailable rows are excluded
+    or reported as not_available under the fallback policy.
+
 required_metrics:
   existing_metrics:
     - success

@@ -77,6 +77,11 @@ records the predeclared broader 3x3 slice after the selected active-row Issue #2
 supports `broader_delayed_rescue_supported` for the only unsolved active row, not benchmark-candidate
 or paper-facing proof.
 
+Recent signal-state promotion contract: [issue_2662_signal_state_promotion_contract.md](issue_2662_signal_state_promotion_contract.md)
+records the fail-closed distinction between `proxy_diagnostic`, `planner_observable`, and
+`unavailable` signal-state rows for future signalized-crossing benchmarks; it is schema/trace
+contract work only, not benchmark evidence.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

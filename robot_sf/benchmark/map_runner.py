@@ -3115,6 +3115,86 @@ _PROXY_TRACE_FIELDS_PRESENT = [
     "signal_state",
 ]
 
+_SIGNAL_STATE_OBSERVABLE_SCHEMA = "signal-state-observable.v1"
+_SIGNAL_STATE_OBSERVABLE_STATUS = "planner_observable_signal_state"
+_SIGNAL_STATE_OBSERVABLE_MODE = "planner_observable"
+_SIGNAL_STATE_OBSERVABLE_FIELDS = [
+    "signal_id",
+    "conflict_zone_id",
+    "phase",
+    "phase_elapsed_s",
+    "phase_remaining_s",
+    "robot_right_of_way",
+    "pedestrian_right_of_way",
+    "legality_state",
+]
+_SIGNAL_STATE_RECORDED_ONLY_FIELDS = [
+    "schema_version",
+    "status",
+    "signal_id",
+    "conflict_zone_id",
+    "phase",
+    "intent_phase",
+    "robot_right_of_way",
+    "pedestrian_right_of_way",
+    "legality_state",
+    "planner_observable",
+    "observation_mode",
+    "benchmark_evidence",
+    "claim_boundary",
+]
+
+
+def _signal_state_promotion_contract(signal_state: Any) -> dict[str, Any]:
+    """Classify signal-state metadata for benchmark promotion decisions.
+
+    Returns:
+        dict[str, Any]: Contract state plus planner-consumed and recorded-only fields.
+    """
+    if not isinstance(signal_state, dict):
+        return {
+            "contract_state": "unavailable",
+            "planner_consumed_fields": [],
+            "recorded_only_fields": [],
+            "promotion_required_fields": list(_SIGNAL_STATE_OBSERVABLE_FIELDS),
+            "fail_closed_reason": "signal_state_metadata_absent",
+            "benchmark_evidence": False,
+        }
+
+    schema_version = str(signal_state.get("schema_version") or "")
+    status = str(signal_state.get("status") or "")
+    observation_mode = str(signal_state.get("observation_mode") or "")
+    planner_observable = bool(signal_state.get("planner_observable", False))
+    benchmark_evidence = bool(signal_state.get("benchmark_evidence", False))
+    is_observable = (
+        schema_version == _SIGNAL_STATE_OBSERVABLE_SCHEMA
+        and status == _SIGNAL_STATE_OBSERVABLE_STATUS
+        and observation_mode == _SIGNAL_STATE_OBSERVABLE_MODE
+        and planner_observable
+        and benchmark_evidence
+    )
+    if is_observable:
+        return {
+            "contract_state": "planner_observable",
+            "planner_consumed_fields": list(_SIGNAL_STATE_OBSERVABLE_FIELDS),
+            "recorded_only_fields": [],
+            "promotion_required_fields": [],
+            "fail_closed_reason": "",
+            "benchmark_evidence": True,
+        }
+
+    return {
+        "contract_state": "proxy_diagnostic",
+        "planner_consumed_fields": [],
+        "recorded_only_fields": list(_SIGNAL_STATE_RECORDED_ONLY_FIELDS),
+        "promotion_required_fields": list(_SIGNAL_STATE_OBSERVABLE_FIELDS),
+        "fail_closed_reason": (
+            "signal_state_proxy_or_synthetic_not_planner_observable; "
+            "do_not_count_as_signalized_benchmark_evidence"
+        ),
+        "benchmark_evidence": False,
+    }
+
 
 def _synth_robot_stop_or_yield_expectation(
     robot_right_of_way: bool,
@@ -3168,6 +3248,7 @@ def _signal_state_proxy_wrapper(
     )
     return {
         **base,
+        **_signal_state_promotion_contract(signal_state),
         "signal_phase": base["phase"],
         "pedestrian_intent": pedestrian_intent,
         "robot_stop_or_yield_expectation": robot_stop_or_yield_expectation,

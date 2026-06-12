@@ -69,6 +69,12 @@ Use validation proportional to risk.
 GitHub issues are the central collection system for deferred work. Prefer better filtering,
 priority discussion, and issue splitting over creating separate backlog stores.
 
+Interesting research paths that are no longer the best next step should usually stay open at lower
+priority instead of being closed as parked or superseded. When deprioritizing one, record a short
+reason and a revival condition, such as the artifact, synthesis result, benchmark gap, or maintainer
+priority change that would make it relevant again. Close issues when they are duplicate, invalid,
+fully superseded by a merged/current issue, or no longer useful as a research option.
+
 Autonomous issue-to-PR loops may pick work themselves. When the ranking depends on a real tradeoff,
 use a priority-discussion workflow to ask one focused question, then record the answer in the issue
 or Project metadata. Priority discussion follow-up is tracked in issue #1729.

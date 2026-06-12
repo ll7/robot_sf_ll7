@@ -145,6 +145,11 @@ knowledge, not every transient iteration detail.
   ([spec](evidence/issue_2542_dissertation_export_bundle/artifact_spec.json),
   [manifest](evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json),
   [checksums](evidence/issue_2542_dissertation_export_bundle/checksums.sha256))
+* Issue #2686 Release 0.0.2 Table Evidence Bundle:
+  [issue_2686_release_0_0_2_table_bundle.md](issue_2686_release_0_0_2_table_bundle.md)
+  ([spec](evidence/issue_2686_release_0_0_2_table_bundle/artifact_spec.json),
+  [manifest](evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json),
+  [checksums](evidence/issue_2686_release_0_0_2_table_bundle/checksums.sha256))
 * Issue #2536 simulator-speed candidate discovery:
   [issue_2536_speed_discovery.md](issue_2536_speed_discovery.md)
 * Issue #2531 AMV trace-boundary decision:

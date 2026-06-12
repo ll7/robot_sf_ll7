@@ -139,21 +139,21 @@ class AdversarialScenarioManifest:
     def from_dict(cls, payload: dict[str, Any]) -> AdversarialScenarioManifest:
         """Build a manifest from a JSON/YAML dict."""
         return cls(
-            schema_version=str(payload.get("schema_version", MANIFEST_SCHEMA_VERSION)),
+            schema_version=_optional_string(payload.get("schema_version"), MANIFEST_SCHEMA_VERSION),
             source=SourceLineage(**payload["source"]) if "source" in payload else None,
             generator=GeneratorInfo(**payload["generator"]) if "generator" in payload else None,
             candidate_controls=payload.get("candidate_controls"),
             validation=_validation_from_dict(payload.get("validation")),
-            execution_status=str(payload.get("execution_status", "generated_only")),
-            validator_version=str(payload.get("validator_version", VALIDATOR_VERSION)),
-            evidence_tier=str(payload.get("evidence_tier", EVIDENCE_TIER)),
-            denominator_policy=str(payload.get("denominator_policy", DENOMINATOR_POLICY)),
-            evidence_boundary=str(
-                payload.get(
-                    "evidence_boundary",
-                    "diagnostic-only: no planner weakness, adversarial coverage, "
-                    "or benchmark-strength claim is made from this manifest.",
-                )
+            execution_status=_optional_string(payload.get("execution_status"), "generated_only"),
+            validator_version=_optional_string(payload.get("validator_version"), VALIDATOR_VERSION),
+            evidence_tier=_optional_string(payload.get("evidence_tier"), EVIDENCE_TIER),
+            denominator_policy=_optional_string(
+                payload.get("denominator_policy"), DENOMINATOR_POLICY
+            ),
+            evidence_boundary=_optional_string(
+                payload.get("evidence_boundary"),
+                "diagnostic-only: no planner weakness, adversarial coverage, "
+                "or benchmark-strength claim is made from this manifest.",
             ),
         )
 
@@ -164,6 +164,13 @@ class AdversarialScenarioManifest:
         if not isinstance(payload, dict):
             raise ValueError("manifest YAML must be a mapping")
         return cls.from_dict(payload)
+
+
+def _optional_string(value: Any, default: str) -> str:
+    """Return default for absent YAML fields without coercing None to a string."""
+    if value is None:
+        return default
+    return str(value)
 
 
 def _validation_from_dict(payload: Any) -> ValidationRecord | None:

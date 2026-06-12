@@ -60,7 +60,7 @@ def validate_lineage_contract(payload: object) -> list[str]:
     ):
         if field in payload and not isinstance(payload.get(field), str):
             errors.append(f"{field} must be a string")
-    if "claim_boundary" in payload and not isinstance(payload.get("claim_boundary"), str | dict):
+    if "claim_boundary" in payload and not isinstance(payload.get("claim_boundary"), (str, dict)):
         errors.append("claim_boundary must be a string or mapping")
     return errors
 

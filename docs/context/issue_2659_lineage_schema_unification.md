@@ -1,4 +1,4 @@
-# Issue 2659 Lineage Schema Unification
+# Issue #2659 Manifest Lineage Schema Unification
 
 Issue: #2659
 

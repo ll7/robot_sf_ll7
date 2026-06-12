@@ -351,6 +351,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2547_counterfactual_mechanism_taxonomy.md](issue_2547_counterfactual_mechanism_taxonomy.md)
 
+* Issue #2659 Manifest Lineage Schema Unification (2026-06-12):
+
+  [issue_2659_lineage_schema_unification.md](issue_2659_lineage_schema_unification.md)
+
 * Issue #2263 mechanism activation report fields:
 
   [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md)
@@ -555,8 +559,6 @@ knowledge, not every transient iteration detail.
   [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md)
 * Issue #2658 Validator-Runner Adversarial Manifest Smoke (2026-06-12):
   [issue_2658_adversarial_manifest_smoke.md](issue_2658_adversarial_manifest_smoke.md)
-* Issue #2659 Manifest Lineage Schema Unification (2026-06-12):
-  [issue_2659_lineage_schema_unification.md](issue_2659_lineage_schema_unification.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):
@@ -681,8 +683,6 @@ knowledge, not every transient iteration detail.
   [issue_2523_scenario_prior_smoke.md](issue_2523_scenario_prior_smoke.md)
   ([summary](evidence/issue_2523_scenario_prior_smoke/summary.json),
   [artifact](evidence/issue_2523_scenario_prior_smoke/scenario_prior.v1.json))
-* Issue #2659 Manifest Lineage Schema Unification (2026-06-12):
-  [issue_2659_lineage_schema_unification.md](issue_2659_lineage_schema_unification.md)
 * Issue #2474 Signalized Pedestrian Crossing Benchmark Scope (2026-06-06):
   [issue_2474_signalized_crossing_benchmark.md](issue_2474_signalized_crossing_benchmark.md)
 * Issue #2475 Probabilistic Prediction Interface (2026-06-06):

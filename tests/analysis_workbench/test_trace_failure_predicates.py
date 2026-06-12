@@ -329,3 +329,32 @@ def test_writer_persists_json_and_markdown_outputs(tmp_path: Path) -> None:
     markdown = markdown_output.read_text(encoding="utf-8")
     assert "diagnostic-only" in markdown
     assert "trace_denominator" in markdown
+
+
+def test_markdown_renderer_skips_invalid_rows_and_preserves_falsy_values() -> None:
+    """Renderer should ignore malformed rows without replacing valid falsy identifiers."""
+    markdown = render_trace_failure_predicate_markdown(
+        {
+            "schema_version": "trace_failure_predicates.v1",
+            "table_kind": "aggregate_by_predicate_group",
+            "summary": {"input_trace_count": 1},
+            "rows": [
+                None,
+                "bad-row",
+                {
+                    "scenario_family": 0,
+                    "planner_id": "",
+                    "seed": 0,
+                    "predicate_id": "zero_like",
+                    "validity_status": "valid",
+                    "severity": "low",
+                    "predicate_count": 0,
+                    "trace_denominator": 1,
+                    "predicate_rate_per_trace": 0.0,
+                },
+            ],
+        }
+    )
+
+    assert "| 0 |  | 0 | zero_like | valid | low | 0 | 1 | 0.0000 |" in markdown
+    assert "bad-row" not in markdown

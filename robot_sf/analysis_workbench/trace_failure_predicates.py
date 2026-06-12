@@ -174,6 +174,7 @@ def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) ->
     rows = table_payload.get("rows")
     if not isinstance(rows, list):
         rows = []
+    table_rows = [row for row in rows if isinstance(row, Mapping)]
 
     lines = [
         "# Trace Failure Predicate Table",
@@ -189,7 +190,7 @@ def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) ->
         "",
     ]
 
-    if not rows:
+    if not table_rows:
         lines.append("No predicate rows were observed in the provided traces.")
         return "\n".join(lines).rstrip() + "\n"
 
@@ -210,17 +211,17 @@ def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) ->
             ),
             [
                 (
-                    str(row.get("scenario_family", "")),
-                    str(row.get("planner_id", "")),
-                    str(row.get("seed", "")),
-                    str(row.get("predicate_id", "")),
-                    str(row.get("validity_status", "")),
-                    str(row.get("severity", "")),
-                    int(row.get("predicate_count", 0)),
-                    int(row.get("trace_denominator", 0)),
-                    f"{float(row.get('predicate_rate_per_trace', 0.0)):.4f}",
+                    _markdown_value(row.get("scenario_family")),
+                    _markdown_value(row.get("planner_id")),
+                    _markdown_value(row.get("seed")),
+                    _markdown_value(row.get("predicate_id")),
+                    _markdown_value(row.get("validity_status")),
+                    _markdown_value(row.get("severity")),
+                    _markdown_int(row.get("predicate_count")),
+                    _markdown_int(row.get("trace_denominator")),
+                    f"{_markdown_float(row.get('predicate_rate_per_trace')):.4f}",
                 )
-                for row in rows
+                for row in table_rows
             ],
         )
     )
@@ -724,6 +725,21 @@ def _format_markdown_cell(value: str) -> str:
         Escaped cell text.
     """
     return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _markdown_value(value: Any) -> str:
+    """Return a display value while preserving falsy non-None identifiers."""
+    return "" if value is None else str(value)
+
+
+def _markdown_int(value: Any) -> int:
+    """Return an integer cell value with None-only fallback."""
+    return 0 if value is None else int(value)
+
+
+def _markdown_float(value: Any) -> float:
+    """Return a float cell value with None-only fallback."""
+    return 0.0 if value is None else float(value)
 
 
 __all__ = [

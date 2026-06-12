@@ -110,6 +110,10 @@ def _make_dissertation_source(source_root: Path) -> Path:
                 "claim_boundary": "Formatted table only; not new benchmark evidence.",
                 "recommended_manuscript_use": "discussion",
                 "fallback_degraded_summary": "Fallback and degraded rows remain visible.",
+                "metadata": {
+                    "table_label": "tab:campaign-table",
+                    "source_release_tag": "0.0.2",
+                },
             },
             {
                 "artifact_id": "fig_planner_status",
@@ -263,6 +267,10 @@ def test_dissertation_bundle_command_creates_artifact_manifest(tmp_path: Path, c
     assert table_row["recommended_manuscript_use"] == "discussion"
     assert table_row["fallback_degraded_summary"] == "Fallback and degraded rows remain visible."
     assert table_row["claim_boundary"] == "Formatted table only; not new benchmark evidence."
+    assert table_row["metadata"] == {
+        "table_label": "tab:campaign-table",
+        "source_release_tag": "0.0.2",
+    }
     assert table_row["sha256"] in checksums_path.read_text(encoding="utf-8")
 
 

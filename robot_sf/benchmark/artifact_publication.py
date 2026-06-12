@@ -90,6 +90,7 @@ class DissertationArtifactSpec:
     claim_boundary: str
     recommended_manuscript_use: str
     fallback_degraded_summary: str
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -617,6 +618,7 @@ def export_dissertation_artifact_bundle(
                 "claim_boundary": artifact.claim_boundary.strip(),
                 "recommended_manuscript_use": artifact.recommended_manuscript_use,
                 "fallback_degraded_summary": artifact.fallback_degraded_summary.strip(),
+                "metadata": artifact.metadata or {},
             }
         )
 

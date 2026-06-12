@@ -391,6 +391,7 @@ def _load_dissertation_artifacts(spec_path: Path) -> list[DissertationArtifactSp
                     claim_boundary=get_str("claim_boundary"),
                     recommended_manuscript_use=get_str("recommended_manuscript_use"),
                     fallback_degraded_summary=get_str("fallback_degraded_summary"),
+                    metadata=row.get("metadata") if isinstance(row.get("metadata"), dict) else None,
                 )
             )
         except KeyError as exc:

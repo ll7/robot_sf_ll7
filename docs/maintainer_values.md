@@ -18,7 +18,8 @@ When evidence is mixed, limited, or partly degraded, every report must open with
 1. claim boundary,
 2. evidence status (`diagnostic-only`, `smoke evidence`, `nominal benchmark evidence`,
    `paper-grade`),
-3. major caveats (including fallback/degraded rows and confidence below ~95%).
+3. major caveats (including fallback/degraded rows),
+4. uncertainty or confidence below ~95%.
 Only after this ordering can result interpretation and recommendation appear.
 
 Fallback or degraded benchmark execution is never success evidence. It may be useful diagnostic

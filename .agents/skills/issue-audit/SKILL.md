@@ -59,6 +59,8 @@ After the answer:
 
 - add a short issue comment or `Maintainer priority note` body entry on the issue whose ordering
   changed,
+- for research issues that remain interesting but are not the best next path, keep them open at
+  lower priority by default and record both the deprioritization reason and revival condition,
 - cite the answer source when editing an issue body,
 - update Project #5 priority/status fields only when the answer changes those fields,
 - leave Project #5 score inputs advisory and quota-aware,
@@ -73,6 +75,8 @@ After the answer:
 - Do not ask the user to approve every next issue; clear cases should keep moving through the
   normal autonomous implementation loop.
 - Do not preserve stale issue statements once a decision invalidates them.
+- Do not close optional research paths merely because they are not next. Close only duplicate,
+  invalid, or fully superseded issues, or issues that no longer preserve useful research optionality.
 
 ## Output
 

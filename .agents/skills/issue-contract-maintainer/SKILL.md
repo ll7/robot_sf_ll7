@@ -30,6 +30,10 @@ Use this skill when an issue needs contract maintenance before implementation: t
 - `audit-template-compliance`: compare issue bodies with `.github/ISSUE_TEMPLATE/` and repair clear gaps without changing intent.
 - `clarify-ambiguity`: identify problem, scope, solution, or validation ambiguity and post concise options with pros/cons.
 - `apply-user-decision`: update issue text, labels, and Project #5 state after the user resolves a readiness question.
+  For research backlog revision, keep interesting-but-not-next paths open at lower priority by
+  default. Record the reason for deprioritizing and the revival condition that would make the issue
+  relevant again. Close only duplicate, invalid, fully superseded, or no-longer-useful research
+  options.
 - `split-parent-to-child`: hand a parent, epic, decision, or research issue to `issue-splitter`
   when one smallest independently implementable child can be extracted without changing intent.
   Controlled multi-child batches are allowed only when the maintainer explicitly requested a
@@ -54,6 +58,8 @@ flag malformed YAML or invalid values instead of inventing replacements.
 
 - Do not expand the issue beyond the original intent.
 - Do not implement the issue from this skill; hand ready work to `gh-issue-autopilot`.
+- Do not close useful optional research paths merely to reduce queue size; lower priority, split, or
+  synthesize them unless they are duplicate, invalid, or fully superseded.
 - Do not split a parent into more than one child in a single pass unless the maintainer explicitly
   requested `issue-splitter` controlled multi-child mode for a bounded reviewed plan.
 - Ask one readiness-blocking question at a time when user input is needed.

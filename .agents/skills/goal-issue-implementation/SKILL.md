@@ -147,6 +147,12 @@ remove a concrete blocker. If the remaining queue is mostly docs cleanup or anot
 extension under an already-expanded research parent, propose a synthesis issue or synthesis pass
 before adding more exploratory children.
 
+When re-ranking research backlog issues, do not close an interesting optional path simply because it
+is not the best next issue. Leave it open at lower priority with a short reason and revival
+condition. Close only duplicate, invalid, or fully superseded issues, or issues that no longer
+preserve useful research optionality. Splitting or synthesis is preferred when a broad issue still
+contains one implementable child or a reusable research question.
+
 ## Queue Exhaustion Audit
 
 Before declaring the implementation queue exhausted, first run the closed-issue state-label hygiene
@@ -204,6 +210,8 @@ Allowed classifications:
 - `parent_or_epic`: parent, epic, decision, or umbrella issue that should produce a child issue,
 - `analysis_only`: synthesis, interpretation, or research-only work that is not an implementation
   PR unless the run explicitly targets synthesis,
+- `lower_priority_research`: interesting research path that should remain open with a recorded
+  deprioritization reason and revival condition,
 - `blocked_external`: requires unavailable datasets, private artifacts, external services, CARLA,
   or non-local credentials,
 - `blocked_slurm`: requires SLURM/Auxme or another unavailable execution environment,
@@ -278,6 +286,11 @@ queue_audit:
       implementable_now: false
       recommended_action: wait_for_pr
       rationale: open PR #1238 covers the scope
+    - issue: "#1238"
+      classification: lower_priority_research
+      implementable_now: false
+      recommended_action: keep_open_lower_priority
+      rationale: interesting optional path, but current evidence makes synthesis or another issue a better next step
     - issue: "#1239"
       classification: ready_local
       implementable_now: true

@@ -347,6 +347,40 @@ class TestInconclusiveFallback:
         m = classify_mechanism(result, _fixture_meta())
         assert m["label"] == "inconclusive"
 
+    def test_null_nested_fields_are_safe(self) -> None:
+        """Explicit JSON null values fall back to empty containers."""
+        result = {
+            "spec": None,
+            "first_observed_step": 5,
+            "response_delay_steps": 0,
+            "closest_distance_m": 0.5,
+            "missed_actor_observations_total": 0,
+            "occluded_actor_observations_total": 0,
+            "action_proxy_changes": None,
+            "stop_yield_feasibility": None,
+        }
+        noop = _noop_result()
+        noop["action_proxy_changes"] = None
+        noop["stop_yield_feasibility"] = None
+
+        m = classify_mechanism(result, _fixture_meta(), noop_result=noop)
+
+        assert m["label"] == "inconclusive"
+
+    def test_null_spec_in_all_conditions_scan(self) -> None:
+        """Noop discovery tolerates rows with explicit null spec values."""
+        conditions = [
+            {"spec": None, "first_observed_step": 5, "closest_distance_m": 0.5},
+            _noop_result(),
+        ]
+
+        classified = classify_all_conditions(conditions, _fixture_meta())
+
+        assert [row["mechanism"]["label"] for row in classified] == [
+            "inconclusive",
+            "diagnostic_only",
+        ]
+
     def test_never_observed_no_signal(self) -> None:
         """Never observed with no signal gets inconclusive."""
         result = {

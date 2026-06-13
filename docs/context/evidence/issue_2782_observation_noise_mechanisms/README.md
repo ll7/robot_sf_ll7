@@ -9,9 +9,9 @@ The label table is the valid vocabulary; the distribution section shows which la
 ## Reproducibility
 
 - **Issue:** #2782
-- **Generated at (UTC):** 2026-06-13T15:23:51.094473+00:00
+- **Generated at (UTC):** 2026-06-13T15:38:38.522073+00:00
 - **Command:** `uv run python scripts/tools/classify_observation_noise_mechanisms.py --evidence docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json --output-dir docs/context/evidence/issue_2782_observation_noise_mechanisms`
-- **Repo HEAD:** `165444d1`
+- **Repo HEAD:** `d6078ca2`
 - **Source evidence:** `docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json`
 - **Fixture:** `tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json`
 - **Scenario:** issue_2756_occluded_emergence

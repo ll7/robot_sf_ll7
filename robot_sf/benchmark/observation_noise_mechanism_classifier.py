@@ -52,14 +52,14 @@ def classify_mechanism(
     Returns:
         ``{"label": <mechanism_label>, "rationale": <str>}``
     """
-    spec: dict[str, Any] = condition_result.get("spec", {})
+    spec: dict[str, Any] = condition_result.get("spec") or {}
     first_observed: int | None = condition_result.get("first_observed_step")
     response_delay: int | None = condition_result.get("response_delay_steps")
     closest_dist: float | None = condition_result.get("closest_distance_m")
-    action_proxy: dict[str, Any] = condition_result.get("action_proxy_changes", {})
+    action_proxy: dict[str, Any] = condition_result.get("action_proxy_changes") or {}
     missed_total: int = condition_result.get("missed_actor_observations_total", 0)
     occluded_total: int = condition_result.get("occluded_actor_observations_total", 0)
-    stop_yield: dict[str, Any] = condition_result.get("stop_yield_feasibility", {})
+    stop_yield: dict[str, Any] = condition_result.get("stop_yield_feasibility") or {}
 
     if spec.get("is_noop", False):
         return {
@@ -120,11 +120,10 @@ def classify_mechanism(
             "rationale": " ".join(rationale_parts),
         }
 
-    has_noise = spec.get("position_noise_std_m", 0.0) > 0.0
-    if has_noise:
+    noise_std = spec.get("position_noise_std_m") or 0.0
+    if noise_std > 0.0:
         command_same = _command_unchanged(action_proxy, noop_result)
         if command_same:
-            noise_std = spec.get("position_noise_std_m", 0.0)
             if noise_std <= _SMALL_NOISE_STD_M:
                 return {
                     "label": "noise_stayed_below_decision_threshold",
@@ -170,7 +169,7 @@ def _command_unchanged(
     """Return True when the action proxy matches the noop baseline."""
     if noop_result is None:
         return False
-    noop_proxy = noop_result.get("action_proxy_changes", {})
+    noop_proxy = noop_result.get("action_proxy_changes") or {}
     return (
         action_proxy.get("linear_velocity_changed") == noop_proxy.get("linear_velocity_changed")
         and action_proxy.get("events") == noop_proxy.get("events")
@@ -185,7 +184,7 @@ def _stop_yield_changed(
     """Return True when stop/yield feasibility differs from noop."""
     if noop_result is None:
         return False
-    noop_sy = noop_result.get("stop_yield_feasibility", {})
+    noop_sy = noop_result.get("stop_yield_feasibility") or {}
     return stop_yield.get("stop_feasible_first_observed") != noop_sy.get(
         "stop_feasible_first_observed"
     ) or stop_yield.get("yield_feasible_first_observed") != noop_sy.get(
@@ -208,7 +207,7 @@ def classify_all_conditions(
     """
     noop_result: dict[str, Any] | None = None
     for r in condition_results:
-        if r.get("spec", {}).get("is_noop", False):
+        if (r.get("spec") or {}).get("is_noop", False):
             noop_result = r
             break
 

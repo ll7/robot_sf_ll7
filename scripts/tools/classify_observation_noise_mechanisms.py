@@ -242,15 +242,16 @@ def main() -> None:
 
     envelope = _load_evidence(evidence_path)
 
+    fixture_envelope = envelope.get("fixture") or {}
     fixture_meta = {
-        "trace_path": envelope.get("fixture", {}).get("trace_path", ""),
-        "scenario_id": envelope.get("fixture", {}).get("scenario_id", ""),
-        "first_visible_step": envelope.get("fixture", {}).get("first_visible_step"),
+        "trace_path": fixture_envelope.get("trace_path", ""),
+        "scenario_id": fixture_envelope.get("scenario_id", ""),
+        "first_visible_step": fixture_envelope.get("first_visible_step"),
         "source_path": _relative_to_repo(evidence_path),
     }
 
     classified = classify_all_conditions(
-        envelope["conditions"],
+        envelope.get("conditions") or [],
         fixture_meta,
     )
 

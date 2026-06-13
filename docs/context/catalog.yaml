@@ -1160,6 +1160,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2757_cv_forecast_eval_2026-06-13/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2757_cv_forecast_eval_2026-06-13/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/README.md
     status: evidence
     freshness: evidence

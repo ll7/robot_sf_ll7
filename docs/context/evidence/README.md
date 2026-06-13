@@ -98,6 +98,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2757_cv_forecast_eval_2026-06-13/`: diagnostic-only constant-velocity
+  pedestrian forecast baseline evaluation on bounded durable trace fixtures. The corridor traces
+  produce short-horizon metrics; crossing, bottleneck, signalized, occluded, and dense-interaction
+  coverage remains limited or unavailable.
 - `issue_2749_observation_noise_diagnostics/`: diagnostic-only paired no-op vs
   perception-limited observation-noise step diagnostics for `hybrid_rule_v0_minimal` on a
   pedestrian-present stress-slice scenario; perturbation plumbing activated, but the distant

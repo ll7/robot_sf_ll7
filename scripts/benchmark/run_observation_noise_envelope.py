@@ -70,7 +70,7 @@ CONDITIONS: dict[str, dict[str, Any]] = {
 
 def _load_fixture(path: pathlib.Path) -> dict[str, Any]:
     """Load the occluded-emergence trace fixture."""
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -374,7 +374,7 @@ def _action_proxy_summary(action_proxies: list[dict[str, Any]]) -> dict[str, Any
         return {"linear_velocity_changed": False, "events": [], "velocity_range": None}
     events = [ap.get("event") for ap in action_proxies]
     unique_events = list(dict.fromkeys(events))  # preserve order, dedupe
-    velocities = [ap.get("linear_velocity") for ap in action_proxies]
+    velocities = [v for ap in action_proxies if (v := ap.get("linear_velocity")) is not None]
     changed = len(set(velocities)) > 1
     return {
         "linear_velocity_changed": changed,
@@ -541,12 +541,12 @@ def main() -> None:
     report = _build_report(results, fixture_meta, repro)
 
     json_path = output_dir / "summary.json"
-    with open(json_path, "w") as fh:
+    with open(json_path, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2)
 
     md_content = _generate_markdown(results, fixture_meta, repro)
     md_path = output_dir / "README.md"
-    with open(md_path, "w") as fh:
+    with open(md_path, "w", encoding="utf-8") as fh:
         fh.write(md_content)
 
     print(f"Wrote {json_path}")

@@ -13,23 +13,22 @@ FIXTURE_PATH = (
     "occluded_emergence_episode_0000.json"
 )
 _SCRIPT_PATH = REPO_ROOT / "scripts/benchmark/run_observation_noise_envelope.py"
+_LOADED_MOD = None
 
 
 def _load_script():
     """Load the observation noise envelope script as a module."""
+    global _LOADED_MOD
+    if _LOADED_MOD is not None:
+        return _LOADED_MOD
     spec = importlib.util.spec_from_file_location(
         "run_observation_noise_envelope_issue_2755", _SCRIPT_PATH
     )
     mod = importlib.util.module_from_spec(spec)
     sys.modules["run_observation_noise_envelope_issue_2755"] = mod
     spec.loader.exec_module(mod)
-    return mod
-
-
-def _load_trace() -> dict:
-    """Load the occluded-emergence fixture."""
-    with open(FIXTURE_PATH) as fh:
-        return json.load(fh)
+    _LOADED_MOD = mod
+    return _LOADED_MOD
 
 
 VALID_CLASSIFICATIONS = {
@@ -231,6 +230,21 @@ def test_action_proxy_has_required_fields() -> None:
     assert "last_action" not in ap
 
 
+def test_action_proxy_summary_ignores_missing_velocity() -> None:
+    """Action proxy summary handles frames without linear velocity."""
+    mod = _load_script()
+    summary = mod._action_proxy_summary(
+        [
+            {"linear_velocity": None, "event": "missing"},
+            {"linear_velocity": 0.0, "event": "stopped"},
+            {"linear_velocity": 1.0, "event": "moving"},
+        ]
+    )
+
+    assert summary["linear_velocity_changed"] is True
+    assert summary["velocity_range"] == [0.0, 1.0]
+
+
 def test_report_is_compact_condition_summary() -> None:
     """Condition report omits full frame dumps from durable evidence."""
     mod = _load_script()
@@ -292,5 +306,5 @@ def test_script_is_importable() -> None:
 
 def _load_fixture_for_test() -> dict:
     """Load the occluded-emergence fixture for test use."""
-    with open(FIXTURE_PATH) as fh:
+    with open(FIXTURE_PATH, encoding="utf-8") as fh:
         return json.load(fh)

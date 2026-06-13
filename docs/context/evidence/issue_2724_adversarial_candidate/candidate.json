@@ -1,0 +1,66 @@
+{
+  "schema_version": "generated_scenario_candidate.v1",
+  "candidate_id": "issue-2724-nr001-bottleneck-route-offset-001",
+  "generator_family": "heuristic_perturbation",
+  "generator_run_id": "issue-2724-nr001-topology-trace-scout",
+  "generator_config_ref": {
+    "config_path": "configs/policy_search/topology_reselection_cross_slice_issue_2716.yaml",
+    "config_hash": "591f7642a370597084b439acdd39f402d1f3a301000c29a144ccf7ebd82e30f9"
+  },
+  "source_scenario_ref": {
+    "scenario_name": "bottleneck_transfer/classic_bottleneck_medium",
+    "config_path": "configs/policy_search/topology_reselection_cross_slice_issue_2716.yaml",
+    "config_hash": "591f7642a370597084b439acdd39f402d1f3a301000c29a144ccf7ebd82e30f9",
+    "map_id": "classic_bottleneck_medium"
+  },
+  "source_split": "train",
+  "perturbations": [
+    {
+      "family": "robot_route_offset",
+      "parameters": {
+        "dx_m": 0.25,
+        "dy_m": 0.0,
+        "max_magnitude_m": 0.5
+      },
+      "rationale": "Trace-seeded diagnostic from negative-result register NR-001: the bottleneck_transfer hard slice ended horizon_exhausted under progress-gated topology reselection, so a bounded route offset probes whether small topology-route pressure can create a follow-up candidate without re-running the failed threshold family."
+    }
+  ],
+  "validity": {
+    "preflight_passed": true,
+    "scenario_certified": false,
+    "map_exists": true,
+    "spawn_collision_free": true,
+    "goal_reachable": true,
+    "rejection_reasons": [
+      "scenario_certified is false; this candidate is derived from negative-result register NR-001 and has not run scenario certification, severity evaluation, diversity evaluation, replay determinism, or leakage audit"
+    ]
+  },
+  "metrics_summary": {
+    "severity": {
+      "ttc_min_s": null,
+      "min_clearance_m": null,
+      "comfort_force_max_N": null,
+      "near_miss_count": null,
+      "collision_count": null,
+      "timeout_risk": null,
+      "objective_value": null
+    },
+    "diversity": {
+      "param_distance_min_m": null,
+      "param_distance_mean_m": null,
+      "unique_scenario_families": null,
+      "coverage_fraction": null,
+      "dedup_rate": null
+    }
+  },
+  "trace_lineage": {
+    "seed": 42,
+    "generated_at_utc": "2026-06-13T23:35:00Z",
+    "git_hash": "e808947ae4a7e9184cff80373c2f2c01c4dc6b41",
+    "provenance": {
+      "source_issue": "#2724"
+    }
+  },
+  "promotion_status": "not_promoted",
+  "notes": "Scout diagnostic candidate for issue #2724 derived from negative-result register NR-001 (issue-2716-topology-reselection-cross-slice). Instantiates ONE bounded robot_route_offset on the bottleneck_transfer hard slice to encode a trace-seeded successor candidate. Does NOT claim adversarial diversity, benchmark-strength evidence, or paper-facing evidence. Severity and diversity metrics are null (unevaluated). scenario_certified is false. status is not_promoted."
+}

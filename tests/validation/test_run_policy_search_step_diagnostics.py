@@ -5,8 +5,12 @@ from __future__ import annotations
 import pytest
 
 from scripts.validation.run_policy_search_step_diagnostics import (
+    _apply_observed_pedestrians_to_policy_obs,
     _diagnostics_stdout_payload,
     _format_planner_summary_lines,
+    _occlusion_mask_by_distance,
+    _pedestrian_state_from_sim,
+    _trace_observation_payload,
     _trace_progress_summary,
 )
 
@@ -191,3 +195,97 @@ def test_stdout_payload_includes_planner_summary(tmp_path) -> None:
 
     assert payload["planner_summary"] == {"fallback_count": 1}
     assert payload["progress_summary"] == {"steps_observed": 1}
+
+
+class _DummySimulator:
+    def __init__(self) -> None:
+        self.robot_pos = [[0.0, 0.0]]
+        self.ped_pos = [[1.0, 0.0], [5.0, 0.0]]
+        self.ped_vel = [[0.1, 0.0], [0.0, 0.2]]
+
+
+class _DummyEnv:
+    def __init__(self) -> None:
+        self.simulator = _DummySimulator()
+
+
+def test_pedestrian_state_from_sim_uses_stable_synthetic_ids() -> None:
+    """Diagnostic traces should expose simulator pedestrian state with stable IDs."""
+    positions, velocities, actor_ids = _pedestrian_state_from_sim(_DummyEnv())
+
+    assert positions.tolist() == [[1.0, 0.0], [5.0, 0.0]]
+    assert velocities.tolist() == [[0.1, 0.0], [0.0, 0.2]]
+    assert actor_ids == ["ped_0", "ped_1"]
+
+
+def test_occlusion_mask_by_distance_marks_out_of_range_pedestrians() -> None:
+    """Range-limited occlusion should hide pedestrians beyond the diagnostic threshold."""
+    env = _DummyEnv()
+    positions, _velocities, _actor_ids = _pedestrian_state_from_sim(env)
+
+    mask = _occlusion_mask_by_distance(env, positions, occlusion_distance_m=2.0)
+
+    assert mask.tolist() == [False, True]
+
+
+def test_policy_obs_uses_observed_pedestrian_payload() -> None:
+    """Perturbed observations should be passed to policy input without mutating the source obs."""
+    original = {
+        "robot": {"position": [0.0, 0.0]},
+        "pedestrians": {
+            "positions": [[1.0, 0.0], [5.0, 0.0]],
+            "velocities": [[0.1, 0.0], [0.0, 0.2]],
+            "count": [2.0],
+        },
+        "pedestrians_positions": [[1.0, 0.0], [5.0, 0.0]],
+        "pedestrians_velocities": [[0.1, 0.0], [0.0, 0.2]],
+        "pedestrians_count": [2.0],
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[9.0, 9.0]],
+            "velocities": [[0.0, 0.0]],
+            "ids": ["ped_0"],
+        }
+    }
+
+    policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+    assert policy_obs["pedestrians"]["positions"].tolist() == [[9.0, 9.0]]
+    assert policy_obs["pedestrians"]["velocities"].tolist() == [[0.0, 0.0]]
+    assert policy_obs["pedestrians"]["count"].tolist() == [1.0]
+    assert policy_obs["pedestrians_positions"].tolist() == [[9.0, 9.0]]
+    assert policy_obs["pedestrians_velocities"].tolist() == [[0.0, 0.0]]
+    assert policy_obs["pedestrians_count"].tolist() == [1.0]
+    assert original["pedestrians"]["positions"] == [[1.0, 0.0], [5.0, 0.0]]
+
+
+def test_trace_observation_payload_separates_ground_truth_and_observed() -> None:
+    """Trace rows should keep ideal and perception-limited evidence separate."""
+    payload = _trace_observation_payload(
+        {
+            "ground_truth": {
+                "positions": [[1.0, 0.0], [5.0, 0.0]],
+                "velocities": [[0.1, 0.0], [0.0, 0.2]],
+                "ids": ["ped_0", "ped_1"],
+            },
+            "observed": {
+                "positions": [[1.0, 0.0]],
+                "velocities": [[0.1, 0.0]],
+                "ids": ["ped_0"],
+            },
+            "missing_ids": ["ped_1"],
+            "metadata": {
+                "evidence_class": "perception_limited",
+                "noise_profile": "missed_detection",
+                "actor_count": 2,
+                "observed_actor_count": 1,
+            },
+        }
+    )
+
+    assert payload["ground_truth_observation"]["ids"] == ["ped_0", "ped_1"]
+    assert payload["ground_truth_observation"]["evidence_class"] == "ideal_state"
+    assert payload["observed_observation"]["ids"] == ["ped_0"]
+    assert payload["observed_observation"]["missing_ids"] == ["ped_1"]
+    assert payload["observed_observation"]["evidence_class"] == "perception_limited"

@@ -17,6 +17,12 @@ from robot_sf.benchmark.map_runner import (
     _policy_command_to_env_action,
     _scenario_with_episode_seed_defaults,
 )
+from robot_sf.benchmark.observation_perturbation import (
+    EVIDENCE_IDEAL,
+    ObservationPerturbationSpec,
+    ObservationPerturbationState,
+    perturb_ground_truth,
+)
 from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import load_scenarios
@@ -305,6 +311,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed-index", type=int, default=0)
     parser.add_argument("--horizon", type=int, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument("--observation-noise-std-m", type=float, default=0.0)
+    parser.add_argument("--observation-noise-bound-m", type=float, default=0.0)
+    parser.add_argument("--missed-detection-probability", type=float, default=0.0)
+    parser.add_argument("--occlusion-distance-m", type=float, default=None)
+    parser.add_argument("--observation-delay-steps", type=int, default=0)
+    parser.add_argument("--observation-perturbation-seed", type=int, default=None)
     return parser.parse_args()
 
 
@@ -364,6 +376,110 @@ def _sim_min_robot_ped_distance(env: Any) -> float | None:
     if ped_pos.size == 0:
         return None
     return float(np.min(np.linalg.norm(ped_pos[:, :2] - robot_pos.reshape(1, 2), axis=1)))
+
+
+def _pedestrian_state_from_sim(env: Any) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """Return current simulator pedestrian positions, velocities, and stable synthetic IDs."""
+    ped_pos = np.asarray(getattr(env.simulator, "ped_pos", []), dtype=float)
+    if ped_pos.ndim == 1:
+        ped_pos = ped_pos.reshape(-1, 2) if ped_pos.size % 2 == 0 else np.zeros((0, 2), dtype=float)
+    ped_pos = ped_pos[:, :2].copy() if ped_pos.size else np.zeros((0, 2), dtype=float)
+
+    ped_vel = np.asarray(getattr(env.simulator, "ped_vel", []), dtype=float)
+    if ped_vel.ndim == 1:
+        ped_vel = ped_vel.reshape(-1, 2) if ped_vel.size % 2 == 0 else np.zeros((0, 2), dtype=float)
+    if ped_vel.shape[0] != ped_pos.shape[0]:
+        ped_vel = np.zeros_like(ped_pos)
+    else:
+        ped_vel = ped_vel[:, :2].copy()
+
+    actor_ids = [f"ped_{idx}" for idx in range(ped_pos.shape[0])]
+    return ped_pos, ped_vel, actor_ids
+
+
+def _occlusion_mask_by_distance(
+    env: Any,
+    ped_pos: np.ndarray,
+    *,
+    occlusion_distance_m: float | None,
+) -> np.ndarray | None:
+    """Return a simple range-limited occlusion mask for diagnostic stress tests."""
+    if occlusion_distance_m is None:
+        return None
+    robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float).reshape(-1)[:2]
+    if ped_pos.size == 0:
+        return np.zeros((0,), dtype=bool)
+    distances = np.linalg.norm(ped_pos - robot_pos.reshape(1, 2), axis=1)
+    return distances > float(occlusion_distance_m)
+
+
+def _observation_perturbation_spec(
+    args: argparse.Namespace, env: Any
+) -> ObservationPerturbationSpec:
+    """Build a per-step observation perturbation spec from CLI flags."""
+    ped_pos, _ped_vel, _actor_ids = _pedestrian_state_from_sim(env)
+    return ObservationPerturbationSpec(
+        position_noise_std_m=float(args.observation_noise_std_m),
+        position_noise_bound_m=float(args.observation_noise_bound_m),
+        missed_detection_probability=float(args.missed_detection_probability),
+        occlusion_mask=_occlusion_mask_by_distance(
+            env,
+            ped_pos,
+            occlusion_distance_m=args.occlusion_distance_m,
+        ),
+        delay_steps=int(args.observation_delay_steps),
+        seed=args.observation_perturbation_seed,
+    )
+
+
+def _apply_observed_pedestrians_to_policy_obs(
+    obs: Any,
+    perturbation: dict[str, Any],
+) -> Any:
+    """Return an observation copy whose pedestrian payload uses perturbed state."""
+    if not isinstance(obs, dict):
+        return obs
+    policy_obs = dict(obs)
+    pedestrians = dict(policy_obs.get("pedestrians", {}))
+    observed = perturbation["observed"]
+    observed_positions = np.asarray(observed["positions"], dtype=np.float32)
+    observed_velocities = np.asarray(observed["velocities"], dtype=np.float32)
+    observed_count = np.asarray([observed_positions.shape[0]], dtype=np.float32)
+    pedestrians["positions"] = observed_positions
+    pedestrians["velocities"] = observed_velocities
+    pedestrians["count"] = observed_count
+    policy_obs["pedestrians"] = pedestrians
+    if "pedestrians_positions" in policy_obs:
+        policy_obs["pedestrians_positions"] = observed_positions
+    if "pedestrians_velocities" in policy_obs:
+        policy_obs["pedestrians_velocities"] = observed_velocities
+    if "pedestrians_count" in policy_obs:
+        policy_obs["pedestrians_count"] = observed_count
+    return policy_obs
+
+
+def _trace_observation_payload(perturbation: dict[str, Any]) -> dict[str, Any]:
+    """Return the compact trace payload for ground-truth and observed pedestrians."""
+    metadata = perturbation["metadata"]
+    ground_truth = perturbation["ground_truth"]
+    observed = perturbation["observed"]
+    return {
+        "ground_truth_observation": {
+            "positions": _json_ready(ground_truth["positions"]),
+            "velocities": _json_ready(ground_truth["velocities"]),
+            "ids": _json_ready(ground_truth["ids"]),
+            "evidence_class": EVIDENCE_IDEAL,
+        },
+        "observed_observation": {
+            "positions": _json_ready(observed["positions"]),
+            "velocities": _json_ready(observed["velocities"]),
+            "ids": _json_ready(observed["ids"]),
+            "missing_ids": _json_ready(perturbation["missing_ids"]),
+            "evidence_class": metadata["evidence_class"],
+            "noise_profile": metadata["noise_profile"],
+        },
+        "observation_perturbation": _json_ready(metadata),
+    }
 
 
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
@@ -436,6 +552,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     env = make_robot_env(config=env_config, seed=seed, debug=False)
     trace_rows: list[dict[str, Any]] = []
     done_info: dict[str, Any] = {}
+    observation_state = (
+        ObservationPerturbationState(delay_steps=int(args.observation_delay_steps))
+        if int(args.observation_delay_steps) > 0
+        else None
+    )
     try:
         obs, _ = env.reset(seed=seed)
         if callable(planner_bind_env):
@@ -451,7 +572,18 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             if min_robot_ped_dist is None:
                 min_robot_ped_dist = _obs_min_robot_ped_distance(obs)
 
-            policy_command = policy_fn(obs)
+            ped_pos, ped_vel, actor_ids = _pedestrian_state_from_sim(env)
+            perturbation_spec = _observation_perturbation_spec(args, env)
+            perturbation = perturb_ground_truth(
+                ped_pos,
+                ped_vel,
+                actor_ids,
+                spec=perturbation_spec,
+                step=step_idx,
+                state=observation_state,
+            )
+            policy_obs = _apply_observed_pedestrians_to_policy_obs(obs, perturbation)
+            policy_command = policy_fn(policy_obs)
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
             if step_is_native:
                 env_action = np.asarray(policy_command, dtype=np.float32)
@@ -496,6 +628,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "is_pedestrian_collision": bool(meta.get("is_pedestrian_collision", False)),
                     "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
                     "is_robot_collision": bool(meta.get("is_robot_collision", False)),
+                    **_trace_observation_payload(perturbation),
                 }
             )
             if terminated or truncated or is_success:
@@ -527,6 +660,14 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "algo": algo,
         "algo_config": _json_ready(effective_cfg),
         "algorithm_metadata": _json_ready(algo_meta),
+        "observation_perturbation_config": {
+            "position_noise_std_m": float(args.observation_noise_std_m),
+            "position_noise_bound_m": float(args.observation_noise_bound_m),
+            "missed_detection_probability": float(args.missed_detection_probability),
+            "occlusion_distance_m": args.occlusion_distance_m,
+            "delay_steps": int(args.observation_delay_steps),
+            "seed": args.observation_perturbation_seed,
+        },
         "planner_summary": _json_ready(planner_summary),
         "progress_summary": _json_ready(progress_summary),
         "done_info": _json_ready(done_info),
@@ -555,6 +696,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         f"- Trace JSON: `{trace_path}`",
         f"- Decision counts: `{dict(decision_counter)}`",
         f"- Selected heads: `{dict(selected_head_counter)}`",
+        f"- Observation perturbation: `{trace_payload['observation_perturbation_config']}`",
         "",
         "## Outcome",
         "",

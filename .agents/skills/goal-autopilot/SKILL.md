@@ -166,7 +166,8 @@ Before each phase, run a delegation checkpoint:
 - Before broad issue or PR queue review, prefer compact parent-thread snapshots:
   `uv run python scripts/dev/snapshot_issue_batch.py <first> <last> --json` for issue batches and
   `uv run python scripts/dev/snapshot_pr_queue.py --prs <pr> [<pr> ...] --json` for PR headline
-  state. Use `--capsule-dir <private-artifact-dir>` when an implementation worker should receive a
+  state. Apply `uv run python scripts/dev/pr_loop_policy.py --snapshot <queue.json> --json` for
+  machine-checkable state classification and next-action decisions under a loop budget. Use `--capsule-dir <private-artifact-dir>` when an implementation worker should receive a
   bounded issue context capsule instead of rediscovering files with broad search.
 - For optional discovery scouts, default to a short hard timeout (120-180s) and require periodic
   evidence in the ledger. If a bounded scout emits no heartbeat within one timeout slice, treat it as
@@ -263,6 +264,9 @@ uv run python scripts/dev/snapshot_issue_batch.py <first> <last> \
 
 # Compact PR queue snapshot (headline state, next action)
 uv run python scripts/dev/snapshot_pr_queue.py --prs <pr> [<pr> ...] --json
+
+# Machine-checkable PR loop policy (state + next action under budget)
+uv run python scripts/dev/pr_loop_policy.py --snapshot <queue-snapshot.json> --json
 ```
 
 Use `compact_worktree_snapshot.py` before expensive commands to detect fresh worktrees that need

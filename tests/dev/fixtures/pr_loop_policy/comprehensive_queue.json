@@ -1,0 +1,78 @@
+{
+  "schema": "pr_queue_snapshot.v1",
+  "prs": [
+    {
+      "number": 2001,
+      "status": "ok",
+      "draft": false,
+      "head_sha": "sha-pending",
+      "labels": ["needs-review"],
+      "reviews": {"CHANGES_REQUESTED": 1, "COMMENTED": 2},
+      "checks": {
+        "overall": "pending",
+        "total": 1,
+        "by_conclusion": {},
+        "by_status": {"in_progress": 1},
+        "names": ["ci"]
+      }
+    },
+    {
+      "number": 2002,
+      "status": "ok",
+      "draft": false,
+      "head_sha": "sha-failed",
+      "labels": [],
+      "reviews": {"CHANGES_REQUESTED": 1, "APPROVED": 1},
+      "checks": {
+        "overall": "failure",
+        "total": 2,
+        "by_conclusion": {"failure": 2},
+        "by_status": {"completed": 2},
+        "names": ["ci", "lint"]
+      }
+    },
+    {
+      "number": 2003,
+      "status": "ok",
+      "draft": false,
+      "head_sha": "sha-stale",
+      "labels": [],
+      "checks": {
+        "overall": "success",
+        "total": 1,
+        "by_conclusion": {"success": 1},
+        "by_status": {"completed": 1},
+        "names": ["ci"]
+      }
+    },
+    {
+      "number": 2004,
+      "status": "ok",
+      "draft": false,
+      "head_sha": "sha-green",
+      "labels": ["merge-ready"],
+      "reviews": {"APPROVED": 2},
+      "checks": {
+        "overall": "success",
+        "total": 1,
+        "by_conclusion": {"success": 1},
+        "by_status": {"completed": 1},
+        "names": ["ci"]
+      }
+    },
+    {
+      "number": 2005,
+      "status": "ok",
+      "draft": true,
+      "head_sha": "sha-draft",
+      "labels": [],
+      "checks": {
+        "overall": "pending",
+        "total": 0,
+        "by_conclusion": {},
+        "by_status": {},
+        "names": []
+      }
+    }
+  ]
+}

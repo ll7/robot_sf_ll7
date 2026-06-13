@@ -98,6 +98,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2749_observation_noise_diagnostics/`: diagnostic-only paired no-op vs
+  perception-limited observation-noise step diagnostics for `hybrid_rule_v0_minimal` on a
+  pedestrian-present stress-slice scenario; perturbation plumbing activated, but the distant
+  pedestrian produced no measurable planner degradation.
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that
   support the v1 raw-success leader and v2 strict-gate promotion decision.
 - `issue_1023_scenario_horizons_preflight_2026-05-06/`: compact preflight artifacts for the

@@ -1,0 +1,107 @@
+{
+  "schema_version": "observation_noise_diagnostics.v1",
+  "issue": 2749,
+  "result_classification": "diagnostic_only",
+  "result_summary": "Paired observation-noise step diagnostics for hybrid_rule_v0_minimal on classic_bottleneck_medium (stress_slice, scenario index 0, horizon 40, seed 111). The perception-limited variant applied bounded Gaussian noise (std=0.1m, bound=0.2m), missed detection (p=0.25), occlusion (distance=3.0m), and 1-step delay. The scenario contains 1 pedestrian (map single_ped marker). Evidence class correctly shifted from ideal_state to perception_limited with bounded_gaussian noise profile. Occlusion masking was active on most steps (observed=0 on steps 5 and 39); 1 missed detection occurred at step 15. Despite active perturbation, progress/risk outcomes were identical between baseline and perception-limited because the pedestrian is far from the robot (~14.9m closest) and planner decisions are dominated by static obstacle clearance, not pedestrian avoidance.",
+  "commands_run": [
+    {
+      "label": "baseline",
+      "command": "uv run python scripts/validation/run_policy_search_step_diagnostics.py --candidate hybrid_rule_v0_minimal --stage stress_slice --scenario-index 0 --horizon 40 --output-dir output/validation/issue-2749-observation-noise-diagnostics/baseline",
+      "exit_code": 0
+    },
+    {
+      "label": "perception_limited",
+      "command": "uv run python scripts/validation/run_policy_search_step_diagnostics.py --candidate hybrid_rule_v0_minimal --stage stress_slice --scenario-index 0 --horizon 40 --observation-noise-std-m 0.1 --observation-noise-bound-m 0.2 --missed-detection-probability 0.25 --occlusion-distance-m 3.0 --observation-delay-steps 1 --observation-perturbation-seed 2749 --output-dir output/validation/issue-2749-observation-noise-diagnostics/perception_limited",
+      "exit_code": 0
+    }
+  ],
+  "candidate": "hybrid_rule_v0_minimal",
+  "stage": "stress_slice",
+  "scenario_id": "classic_bottleneck_medium",
+  "family": "classic",
+  "seed": 111,
+  "horizon": 40,
+  "perturbation_config": {
+    "baseline": {
+      "position_noise_std_m": 0.0,
+      "position_noise_bound_m": 0.0,
+      "missed_detection_probability": 0.0,
+      "occlusion_distance_m": null,
+      "delay_steps": 0,
+      "seed": null
+    },
+    "perception_limited": {
+      "position_noise_std_m": 0.1,
+      "position_noise_bound_m": 0.2,
+      "missed_detection_probability": 0.25,
+      "occlusion_distance_m": 3.0,
+      "delay_steps": 1,
+      "seed": 2749
+    }
+  },
+  "comparison": {
+    "progress_summary": {
+      "net_goal_progress": {"baseline": -10.646, "perception_limited": -10.646, "delta": 0.0},
+      "best_goal_progress": {"baseline": 0.0, "perception_limited": 0.0, "delta": 0.0},
+      "progress_step_count": {"baseline": 38, "perception_limited": 38, "delta": 0},
+      "regression_step_count": {"baseline": 2, "perception_limited": 2, "delta": 0},
+      "stagnant_step_count": {"baseline": 0, "perception_limited": 0, "delta": 0},
+      "closest_robot_ped_distance": {"baseline": 14.913, "perception_limited": 14.913, "delta": 0.0},
+      "collision_flag_counts": {
+        "baseline": {"pedestrian": 0, "obstacle": 0, "robot": 0},
+        "perception_limited": {"pedestrian": 0, "obstacle": 0, "robot": 0},
+        "delta": "identical"
+      }
+    },
+    "planner_summary": {
+      "selected_source_counts": {
+        "baseline": {"dynamic_window": 36, "path_follow_0.5m": 4},
+        "perception_limited": {"dynamic_window": 36, "path_follow_0.5m": 4},
+        "delta": "identical"
+      },
+      "fallback_count": {"baseline": 0, "perception_limited": 0, "delta": 0},
+      "rejection_counts": {
+        "baseline": {"static_clearance": 778},
+        "perception_limited": {"static_clearance": 778},
+        "delta": "identical"
+      },
+      "unavailable_counts": {
+        "baseline": {"corridor_subgoal": 40},
+        "perception_limited": {"corridor_subgoal": 40},
+        "delta": "identical"
+      }
+    },
+    "evidence_classes": {
+      "baseline": "ideal_state",
+      "perception_limited": "perception_limited"
+    },
+    "noise_profiles": {
+      "baseline": "none",
+      "perception_limited": "bounded_gaussian"
+    },
+    "observation_perturbation_active": {
+      "baseline": {"actor_count": 1, "observed_actor_count": 1, "missed_actor_count": 0, "occluded_actor_count": 0},
+      "perception_limited": {
+        "actor_count": 1,
+        "observed_actor_count_range": [0, 1],
+        "missed_actor_count_range": [0, 1],
+        "occluded_actor_count_range": [0, 1],
+        "note": "Occlusion active on most steps; 1 missed detection at step 15; steps 5 and 39 show observed=0"
+      }
+    }
+  },
+  "trace_report_paths": {
+    "baseline_trace": "output/validation/issue-2749-observation-noise-diagnostics/baseline/trace.json",
+    "baseline_report": "output/validation/issue-2749-observation-noise-diagnostics/baseline/report.md",
+    "perception_limited_trace": "output/validation/issue-2749-observation-noise-diagnostics/perception_limited/trace.json",
+    "perception_limited_report": "output/validation/issue-2749-observation-noise-diagnostics/perception_limited/report.md"
+  },
+  "limitations": [
+    "Single scenario (classic_bottleneck_medium), single seed (111), short horizon (40 steps) - not benchmark-strength evidence",
+    "Pedestrian is far from robot (~14.9m closest) so planner decisions are dominated by static obstacle clearance, not pedestrian avoidance - noise perturbation has no measurable behavioral effect",
+    "Net goal progress is negative (-10.646) for both variants, indicating the robot moved away from goal - likely scenario geometry or initial heading issue, not noise-induced",
+    "Only 1 pedestrian in scenario - limited actor diversity for testing multi-agent perception degradation",
+    "diagnostic_only: confirms perturbation plumbing works with a pedestrian-present scenario but does not measure behavioral degradation under perception noise"
+  ],
+  "limitations_evidence_boundary": "This is diagnostic-only evidence confirming observation perturbation infrastructure works on a pedestrian-present scenario (stress_slice, classic_bottleneck_medium). It does not constitute benchmark-strength evidence of planner robustness or degradation under perception noise, because the single distant pedestrian does not influence planner decisions."
+}

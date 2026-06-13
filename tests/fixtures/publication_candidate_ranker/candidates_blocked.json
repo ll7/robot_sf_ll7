@@ -1,0 +1,40 @@
+[
+  {
+    "issue_number": 2720,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2720",
+    "title": "blocked candidate",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.8,
+      "evidence_readiness": 0.7,
+      "implementation_boundedness": 0.6,
+      "artifact_dependency": 0.3,
+      "expected_research_value": 0.75,
+      "duplication_risk": 0.1
+    },
+    "reasons": ["promising scope"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": [2700, 2701]
+  },
+  {
+    "issue_number": 2721,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2721",
+    "title": "unblocked candidate",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.8,
+      "evidence_readiness": 0.7,
+      "implementation_boundedness": 0.6,
+      "artifact_dependency": 0.3,
+      "expected_research_value": 0.75,
+      "duplication_risk": 0.1
+    },
+    "reasons": ["promising scope"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  }
+]

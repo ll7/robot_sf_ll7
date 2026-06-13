@@ -1,0 +1,41 @@
+[
+  {
+    "issue_number": 2710,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2710",
+    "title": "candidate with high duplication risk",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.7,
+      "evidence_readiness": 0.8,
+      "implementation_boundedness": 0.7,
+      "artifact_dependency": 0.2,
+      "expected_research_value": 0.6,
+      "duplication_risk": 0.85
+    },
+    "reasons": ["existing similar work"],
+    "evidence_caveats": [],
+    "duplication_notes": ["overlaps with issue #2650 planner comparison", "redundant with #2680 baseline"],
+    "blocked_by": []
+  },
+  {
+    "issue_number": 2711,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2711",
+    "title": "candidate with low duplication risk",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.7,
+      "evidence_readiness": 0.8,
+      "implementation_boundedness": 0.7,
+      "artifact_dependency": 0.2,
+      "expected_research_value": 0.6,
+      "duplication_risk": 0.1
+    },
+    "reasons": ["novel contribution", "high expected research value"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": [],
+    "_extra_research_value": 0.15
+  }
+]

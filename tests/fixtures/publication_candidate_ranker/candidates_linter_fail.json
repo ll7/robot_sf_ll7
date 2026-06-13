@@ -1,0 +1,43 @@
+[
+  {
+    "issue_number": 2800,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2800",
+    "title": "candidate with failing linter",
+    "linter_ok": false,
+    "linter_findings": [
+      {"code": "MISSING_DOCSTRING", "detail": "public function lacks docstring"},
+      {"code": "UNUSED_IMPORT", "detail": "unused import os"}
+    ],
+    "scores": {
+      "dissertation_relevance": 0.8,
+      "evidence_readiness": 0.7,
+      "implementation_boundedness": 0.6,
+      "artifact_dependency": 0.2,
+      "expected_research_value": 0.75,
+      "duplication_risk": 0.1
+    },
+    "reasons": ["relevant to publication scope"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  },
+  {
+    "issue_number": 2801,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2801",
+    "title": "candidate with passing linter",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.9,
+      "evidence_readiness": 0.85,
+      "implementation_boundedness": 0.7,
+      "artifact_dependency": 0.15,
+      "expected_research_value": 0.8,
+      "duplication_risk": 0.05
+    },
+    "reasons": ["linter passes"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  }
+]

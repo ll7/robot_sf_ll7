@@ -1,0 +1,21 @@
+[
+  {
+    "issue_number": 2700,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2700",
+    "title": "high evidence readiness candidate",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.9,
+      "evidence_readiness": 0.95,
+      "implementation_boundedness": 0.8,
+      "artifact_dependency": 0.1,
+      "expected_research_value": 0.85,
+      "duplication_risk": 0.05
+    },
+    "reasons": ["linter passes", "recent comments present", "strong benchmark evidence"],
+    "evidence_caveats": ["minor caveat on reproducibility"],
+    "duplication_notes": [],
+    "blocked_by": []
+  }
+]

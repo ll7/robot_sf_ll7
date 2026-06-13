@@ -82,3 +82,31 @@ runtime_rows: 0
 
 The dry-run output under `output/` is disposable. The summary JSON above is the durable tracked
 record for this launch packet.
+
+## Issue #2751 Runtime Decision
+
+Issue [#2751](https://github.com/ll7/robot_sf_ll7/issues/2751) executed the clearance-targeted
+successor manifest on commit `952eff7e2f35bfe29fd65d90c7c43fa458ab8bb9`.
+
+Durable evidence:
+
+- [runtime summary](evidence/issue_2751_topology_reselection_runtime/summary.json)
+- [runtime report](evidence/issue_2751_topology_reselection_runtime/report.md)
+
+Observed result:
+
+```yaml
+classification: revise
+runtime_rows: 20
+hard_slices:
+  bottleneck_transfer: horizon_exhausted
+  doorway_transfer: horizon_exhausted
+  t_intersection_transfer: horizon_exhausted
+negative_control:
+  simple_negative_control: success_zero_switching
+```
+
+The successor did not satisfy the promotion rule because no hard slice achieved terminal success.
+The negative-control rows succeeded without topology switching, so the result does not trigger the
+negative-control stop condition. The outcome remains diagnostic-only and not benchmark or
+paper-facing evidence.

@@ -363,6 +363,19 @@ search output or raw GitHub bodies to private agent-run artifacts; return only
 the compact snapshot, context capsule path, validation command, exit status, and
 short evidence excerpt to the parent Codex thread.
 
+After delegated worker runs, summarize route efficiency from one or more
+`scripts/dev/routed_worker_manifest.py` outputs without reading raw worker logs:
+
+```bash
+uv run python scripts/dev/route_efficiency_report.py output/issue-2764/worker/routing_manifest.json \
+  --format markdown
+```
+
+The report counts delegated attempts, complete artifact sets, reroutes,
+validation presence, and optional final acceptance metadata. It is route
+evidence only; local diff review and validation still decide whether the task is
+accepted.
+
 Assume `OWNER`, `REPO`, `ISSUE`, `BRANCH`, and `BASE` are set:
 
 ```bash

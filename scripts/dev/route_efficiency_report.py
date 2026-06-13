@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""Local route-efficiency report for routed-worker manifests.
+
+Reads one or more routed-worker manifest JSON files and optionally a simple
+PR-loop/snapshot JSON file.  Emits a compact efficiency summary that measures
+whether delegated agent work is saving review effort.
+
+Route success is **not** task success.  The report surfaces this boundary
+explicitly in the output.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+SCHEMA_VERSION = "route_efficiency_report.v1"
+ROUTE_EVIDENCE_WARNING = (
+    "Route success and complete artifact presence are route evidence only; "
+    "they are not task acceptance. The orchestrator must still inspect the "
+    "diff and run the required local validation."
+)
+_EXPECTED_ARTIFACT_KEYS = frozenset(
+    {"result_json", "result_md", "diffstat", "status", "validation"}
+)
+
+
+def _is_complete_artifact_set(compact: dict[str, Any]) -> bool:
+    """Return True when every expected artifact key is present."""
+    if not isinstance(compact, dict):
+        return False
+    return all(
+        isinstance(compact.get(k), dict) and compact[k].get("present") is True
+        for k in _EXPECTED_ARTIFACT_KEYS
+    )
+
+
+def _has_validation_success(compact: dict[str, Any]) -> bool | None:
+    """Return True/False when the validation artifact signals outcome, else None."""
+    val = compact.get("validation") if isinstance(compact, dict) else None
+    if not isinstance(val, dict) or not val.get("present"):
+        return None
+    result_text = val.get("result") or ""
+    if isinstance(result_text, str):
+        lowered = result_text.lower()
+        neutralized = re.sub(r"\b0\s+(?:failed|failures?|errors?)\b", "", lowered)
+        if (
+            "unsuccessful" in neutralized
+            or re.search(r"\b(?:failed|failure|errors?)\b", neutralized)
+            or re.search(r"\b[1-9]\d*\s+(?:failed|failures?|errors?)\b", neutralized)
+        ):
+            return False
+        if re.search(r"\b0\s+passed\b", neutralized):
+            return False
+        if re.search(r"\b(?:pass|passed|success|successful|succeeded|ok)\b", neutralized):
+            return True
+    return None
+
+
+def _provider_name(route: Any) -> str:
+    """Extract a provider label from a route dict, or 'unknown'."""
+    if isinstance(route, dict):
+        return route.get("provider") or route.get("name") or "unknown"
+    return "unknown"
+
+
+def _validate_present(compact: dict[str, Any]) -> bool:
+    """Return True if the validation artifact is present."""
+    if not isinstance(compact, dict):
+        return False
+    val = compact.get("validation")
+    return isinstance(val, dict) and val.get("present") is True
+
+
+class _Accumulator:
+    """Mutable counters for the manifest scan loop."""
+
+    def __init__(self) -> None:
+        self.total_attempts = 0
+        self.complete_count = 0
+        self.validation_present = 0
+        self.validation_success = 0
+        self.reroutes = 0
+        self.provider_incomplete: Counter[str] = Counter()
+        self.failure_class_incomplete: Counter[str] = Counter()
+
+    def process_attempt(self, idx: int, attempt: dict[str, Any]) -> None:
+        compact = attempt.get("compact_artifacts") or {}
+        if _is_complete_artifact_set(compact):
+            self.complete_count += 1
+        else:
+            provider = _provider_name(attempt.get("route"))
+            self.provider_incomplete[provider] += 1
+            fc = attempt.get("failure_class") or "unknown"
+            self.failure_class_incomplete[str(fc)] += 1
+
+        if _validate_present(compact):
+            self.validation_present += 1
+            if _has_validation_success(compact) is True:
+                self.validation_success += 1
+
+        if idx > 0:
+            self.reroutes += 1
+
+
+def _extract_snapshot_outcome(
+    snapshot: dict[str, Any] | None,
+) -> tuple[bool | None, str | None]:
+    """Pull accepted and outcome from optional snapshot metadata."""
+    if not isinstance(snapshot, dict):
+        return None, None
+    accepted = bool(snapshot["accepted"]) if "accepted" in snapshot else None
+    note = str(snapshot["outcome"]) if "outcome" in snapshot else None
+    return accepted, note
+
+
+def analyze_manifests(
+    manifests: list[dict[str, Any]],
+    *,
+    snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build an efficiency report from one or more routed-worker manifests."""
+    acc = _Accumulator()
+
+    for manifest in manifests:
+        attempts = manifest.get("attempted_routes") or []
+        acc.total_attempts += len(attempts)
+        for idx, attempt in enumerate(attempts):
+            acc.process_attempt(idx, attempt)
+
+    accepted, acceptance_note = _extract_snapshot_outcome(snapshot)
+
+    rate = round(acc.complete_count / acc.total_attempts, 4) if acc.total_attempts else 0.0
+    return {
+        "schema": SCHEMA_VERSION,
+        "manifests_analyzed": len(manifests),
+        "delegated_attempts": acc.total_attempts,
+        "complete_artifacts": {"count": acc.complete_count, "rate": rate},
+        "validation_presence": {
+            "present": acc.validation_present,
+            "success_inferable": acc.validation_success,
+        },
+        "reroutes": acc.reroutes,
+        "incomplete_by_provider": dict(acc.provider_incomplete),
+        "incomplete_by_failure_class": dict(acc.failure_class_incomplete),
+        "final_outcome": {
+            "accepted": accepted,
+            "note": acceptance_note or "route evidence only; not task acceptance",
+        },
+        "estimated_inspections_avoided": acc.complete_count,
+        "warning": ROUTE_EVIDENCE_WARNING,
+    }
+
+
+def _format_markdown(report: dict[str, Any]) -> str:
+    """Render the report as a compact Markdown summary."""
+    lines: list[str] = []
+    lines.append("# Route Efficiency Report\n")
+    lines.append(f"- **Manifests analyzed:** {report['manifests_analyzed']}")
+    lines.append(f"- **Delegated attempts:** {report['delegated_attempts']}")
+
+    ca = report["complete_artifacts"]
+    lines.append(
+        f"- **Complete artifacts:** {ca['count']}/{report['delegated_attempts']} ({ca['rate']:.0%})"
+    )
+
+    vp = report["validation_presence"]
+    lines.append(
+        f"- **Validation present:** {vp['present']}"
+        f" | **success inferable:** {vp['success_inferable']}"
+    )
+    lines.append(f"- **Reroutes:** {report['reroutes']}")
+
+    ibp = report["incomplete_by_provider"]
+    if ibp:
+        parts = [f"{k}: {v}" for k, v in sorted(ibp.items())]
+        lines.append(f"- **Incomplete by provider:** {', '.join(parts)}")
+
+    ibf = report["incomplete_by_failure_class"]
+    if ibf:
+        parts = [f"{k}: {v}" for k, v in sorted(ibf.items())]
+        lines.append(f"- **Incomplete by failure class:** {', '.join(parts)}")
+
+    fo = report["final_outcome"]
+    lines.append(f"- **Final accepted:** {fo['accepted']} - {fo['note']}")
+    lines.append(f"- **Estimated inspections avoided:** {report['estimated_inspections_avoided']}")
+    lines.append(f"\n> {report['warning']}\n")
+    return "\n".join(lines)
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "manifests",
+        nargs="+",
+        help="Routed-worker manifest JSON files.",
+    )
+    parser.add_argument(
+        "--snapshot",
+        help="Optional PR-loop or snapshot JSON with accepted/outcome metadata.",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["json", "markdown"],
+        default="json",
+        dest="output_format",
+        help="Output format (default: json).",
+    )
+    parser.add_argument(
+        "--output",
+        help="Write report to this file instead of stdout.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point."""
+    args = _parse_args(argv)
+    manifests: list[dict[str, Any]] = []
+    for path_str in args.manifests:
+        raw = json.loads(Path(path_str).read_text(encoding="utf-8"))
+        if isinstance(raw, list):
+            manifests.extend(raw)
+        else:
+            manifests.append(raw)
+
+    snapshot: dict[str, Any] | None = None
+    if args.snapshot:
+        snapshot = json.loads(Path(args.snapshot).read_text(encoding="utf-8"))
+
+    report = analyze_manifests(manifests, snapshot=snapshot)
+
+    if args.output_format == "markdown":
+        text = _format_markdown(report)
+    else:
+        text = json.dumps(report, indent=2, sort_keys=True) + "\n"
+
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+    else:
+        print(text, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

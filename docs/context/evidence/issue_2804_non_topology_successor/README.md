@@ -1,4 +1,4 @@
-# Issue #2804 Non-Topology Successor Evidence
+# Issue #2804 Non-Topology Successor Evidence (2026-06-13)
 
 Analysis-only launch packet for the **local_policy_scoring** investigation of the
 `t_intersection_transfer` hard slice. Follows the #2801 stop decision for topology-reselection

@@ -215,7 +215,7 @@ knowledge, not every transient iteration detail.
 * Issue #2801 topology successor recommendation:
   [issue_2801_topology_successor_recommendation.md](issue_2801_topology_successor_recommendation.md)
   ([summary](evidence/issue_2801_topology_successor_recommendation/summary.json))
-* Issue #2804 non-topology successor launch packet:
+* Issue #2804 Non-Topology Successor Launch Packet:
   [issue_2804_non_topology_successor.md](issue_2804_non_topology_successor.md)
   ([summary](evidence/issue_2804_non_topology_successor/summary.json))
 * Issue #2706 topology lane synthesis after progress-gated successor:

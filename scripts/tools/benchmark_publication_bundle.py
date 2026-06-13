@@ -7,7 +7,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from loguru import logger
 
@@ -57,6 +57,27 @@ _STRONG_BOUNDARY_HINTS = {
     "verified",
     "reproducible",
 }
+
+
+class ClaimMatrixRow(TypedDict):
+    """Normalized claim matrix row for a single dissertation artifact."""
+
+    artifact_id: str
+    source_artifact_path: str
+    checksum: str
+    evidence_tier: str
+    allowed_wording: str
+    not_claimed_boundary: str
+    figure_table_candidate: str
+    caveat: str
+    validation_status: str
+
+
+class ClaimMatrix(TypedDict):
+    """Normalized claim matrix, with a schema version and a list of claim rows."""
+
+    schema_version: str
+    claims: list[ClaimMatrixRow]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -297,6 +318,37 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Baseline bundle directory for comparison.",
     )
+
+    claim_matrix = subparsers.add_parser(
+        "claim-matrix",
+        help="Generate a dissertation claim matrix from bundle metadata.",
+    )
+    claim_matrix.add_argument(
+        "--bundle-dir",
+        type=Path,
+        action="append",
+        default=[],
+        help="Path to a dissertation artifact bundle directory. Repeat for multiple bundles.",
+    )
+    claim_matrix.add_argument(
+        "--evidence-bundle-dir",
+        type=Path,
+        action="append",
+        default=[],
+        help="Optional path to an evidence bundle directory. Repeat for multiple bundles.",
+    )
+    claim_matrix.add_argument(
+        "--json-output",
+        type=Path,
+        required=True,
+        help="Path to write the claims matrix JSON output.",
+    )
+    claim_matrix.add_argument(
+        "--markdown-output",
+        type=Path,
+        required=True,
+        help="Path to write the claims matrix Markdown output.",
+    )
     return parser
 
 
@@ -423,6 +475,27 @@ def _parse_checksums_file(checksums_path: Path) -> dict[str, str]:
         digest, path = line.split("  ", 1)
         checksums[path] = digest
     return checksums
+
+
+def _load_dissertation_bundle_data(
+    bundle_dir: Path,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Load dissertation bundle manifest and checksums."""
+    bundle_dir = bundle_dir.resolve()
+    manifest_path = bundle_dir / "artifact_manifest.json"
+    manifest = _read_json(manifest_path)
+    checksums = _parse_checksums_file(bundle_dir / "checksums.sha256")
+    return manifest, checksums
+
+
+def _load_evidence_bundle_data(bundle_dir: Path) -> dict[str, Any]:
+    """Load evidence bundle manifest."""
+    bundle_dir = bundle_dir.resolve()
+    manifest_path = bundle_dir / "evidence_bundle_manifest.json"
+    if not manifest_path.exists():
+        manifest_path = bundle_dir / "evidence_manifest.json"
+    manifest = _read_json(manifest_path)
+    return manifest
 
 
 def _is_allowed_manuscript_use(label: str, artifact_id: str) -> None:
@@ -839,6 +912,210 @@ def _run_dissertation_bundle(args: argparse.Namespace) -> int:
     return 0
 
 
+def _get_validation_status(
+    artifact_id: str,
+    source_path: str,
+    checksum: str,
+    claim_boundary: str,
+    manuscript_use: str,
+    bundle_dir: Path,
+    bundle_checksums: dict[str, str],
+    output_path_raw: str,
+) -> str:
+    """Determine the validation status for an artifact."""
+    if not checksum or checksum == "N/A":
+        return "non-claimable: missing checksum"
+    if not source_path or source_path == "N/A":
+        return "non-claimable: missing source path"
+    if _is_weak_claim_boundary(claim_boundary) and manuscript_use == "results":
+        return "invalid_claim: diagnostic promoted to results"
+
+    payload_file = bundle_dir / "payload" / Path(output_path_raw)
+    if not payload_file.exists() or not payload_file.is_file():
+        return "non-claimable: missing payload file"
+    if _sha256_file(payload_file) != checksum:
+        return "non-claimable: payload checksum mismatch"
+    if bundle_checksums.get(output_path_raw) != checksum:
+        return "non-claimable: manifest checksum mismatch"
+
+    return "valid"
+
+
+def _determine_artifact_status(
+    validation_status: str,
+    claim_boundary: str,
+    manuscript_use: str,
+    fallback_summary: str,
+    evidence_claim_boundaries: Sequence[str],
+) -> tuple[str, str, str]:
+    """Determine the evidence tier, allowed wording, and caveat for an artifact."""
+    evidence_tier = "paper-grade"
+    allowed_wording = manuscript_use
+    caveat = fallback_summary
+    weakest_evidence_boundary = next(
+        (boundary for boundary in evidence_claim_boundaries if _is_weak_claim_boundary(boundary)),
+        "",
+    )
+
+    if validation_status.startswith("non-claimable"):
+        evidence_tier = "non-claimable"
+        allowed_wording = "do-not-use"
+    elif validation_status.startswith("invalid"):
+        evidence_tier = "diagnostic-only"
+        allowed_wording = "discussion"
+    elif (
+        _is_weak_claim_boundary(claim_boundary)
+        or _is_weak_caveat(fallback_summary)
+        or weakest_evidence_boundary
+    ):
+        evidence_tier = "diagnostic-only"
+        if allowed_wording == "results":
+            allowed_wording = "discussion"
+        if weakest_evidence_boundary:
+            caveat = f"{caveat} Evidence bundle boundary: {weakest_evidence_boundary}".strip()
+
+    return evidence_tier, allowed_wording, caveat
+
+
+def _process_dissertation_artifact(
+    artifact: dict[str, Any],
+    *,
+    evidence_claim_boundaries: Sequence[str],
+) -> ClaimMatrixRow:
+    """Process a single dissertation artifact into a ClaimMatrixRow."""
+    artifact_id = str(artifact.get("artifact_id", "N/A"))
+    source_artifact = str(artifact.get("source_artifact", "N/A"))
+    source_path = str(artifact.get("source_path", "N/A"))
+    checksum = str(artifact.get("sha256", "N/A"))
+    claim_boundary = str(artifact.get("claim_boundary", "N/A"))
+    manuscript_use = str(artifact.get("recommended_manuscript_use", "N/A"))
+    fallback_summary = str(artifact.get("fallback_degraded_summary", "N/A"))
+    bundle_dir = artifact["_bundle_dir"]
+    bundle_checksums = artifact["_bundle_checksums"]
+    output_path_raw = str(artifact.get("output_path", "")).strip()
+
+    validation_status = _get_validation_status(
+        artifact_id,
+        source_path,
+        checksum,
+        claim_boundary,
+        manuscript_use,
+        bundle_dir,
+        bundle_checksums,
+        output_path_raw,
+    )
+
+    evidence_tier, allowed_wording, caveat = _determine_artifact_status(
+        validation_status=validation_status,
+        claim_boundary=claim_boundary,
+        manuscript_use=manuscript_use,
+        fallback_summary=fallback_summary,
+        evidence_claim_boundaries=evidence_claim_boundaries,
+    )
+
+    return ClaimMatrixRow(
+        artifact_id=artifact_id,
+        source_artifact_path=f"{source_artifact} ({source_path})",
+        checksum=checksum,
+        evidence_tier=evidence_tier,
+        allowed_wording=allowed_wording,
+        not_claimed_boundary=claim_boundary,
+        figure_table_candidate=str(artifact.get("caption_draft", "N/A")),
+        caveat=caveat,
+        validation_status=validation_status,
+    )
+
+
+def _collect_claim_matrix_inputs(
+    *,
+    bundle_dirs: Sequence[Path],
+    evidence_bundle_dirs: Sequence[Path],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Collect dissertation artifact rows and evidence boundaries for claim matrix generation."""
+    all_dissertation_artifacts: list[dict[str, Any]] = []
+    evidence_claim_boundaries: list[str] = []
+
+    for bundle_dir in bundle_dirs:
+        manifest, checksums = _load_dissertation_bundle_data(bundle_dir)
+        if not isinstance(manifest.get("artifacts"), list):
+            logger.warning(
+                "Dissertation bundle manifest {} has no 'artifacts' list; skipping.",
+                bundle_dir,
+            )
+            continue
+        for artifact in manifest["artifacts"]:
+            artifact["_bundle_dir"] = bundle_dir
+            artifact["_bundle_checksums"] = checksums
+            all_dissertation_artifacts.append(artifact)
+
+    for evidence_bundle_dir in evidence_bundle_dirs:
+        manifest = _load_evidence_bundle_data(evidence_bundle_dir)
+        boundary = str(manifest.get("claim_boundary", "")).strip()
+        if boundary:
+            evidence_claim_boundaries.append(boundary)
+
+    return all_dissertation_artifacts, evidence_claim_boundaries
+
+
+def _write_claim_matrix_outputs(
+    *,
+    claims_rows: list[ClaimMatrixRow],
+    json_output: Path,
+    markdown_output: Path,
+) -> None:
+    """Write deterministic claim matrix JSON and Markdown outputs."""
+    json_output_content: ClaimMatrix = {
+        "schema_version": "claim_matrix.v1",
+        "claims": claims_rows,
+    }
+    json_output.parent.mkdir(parents=True, exist_ok=True)
+    json_output.write_text(json.dumps(json_output_content, indent=2) + "\n", encoding="utf-8")
+    logger.info("Claim matrix JSON written to {}", json_output)
+
+    markdown_lines = ["# Dissertation Claim Matrix", ""]
+    if not claims_rows:
+        markdown_lines.append("No claims found to display.")
+    else:
+        headers = list(ClaimMatrixRow.__annotations__.keys())
+        readable_headers = [header.replace("_", " ").title() for header in headers]
+        markdown_lines.append("| " + " | ".join(readable_headers) + " |")
+        markdown_lines.append("|" + "---|".join(["-" * len(h) for h in readable_headers]) + "|")
+        for row in claims_rows:
+            markdown_lines.append("| " + " | ".join([str(row[key]) for key in headers]) + " |")
+
+    markdown_output.parent.mkdir(parents=True, exist_ok=True)
+    markdown_output.write_text("\n".join(markdown_lines) + "\n", encoding="utf-8")
+    logger.info("Claim matrix Markdown written to {}", markdown_output)
+
+
+def _run_claim_matrix(args: argparse.Namespace) -> int:
+    """Execute the ``claim-matrix`` subcommand."""
+    try:
+        all_dissertation_artifacts, evidence_claim_boundaries = _collect_claim_matrix_inputs(
+            bundle_dirs=args.bundle_dir,
+            evidence_bundle_dirs=args.evidence_bundle_dir,
+        )
+    except Exception as exc:
+        logger.error("Failed to load claim matrix inputs: {}", exc)
+        return 1
+
+    claims_rows = [
+        _process_dissertation_artifact(
+            artifact,
+            evidence_claim_boundaries=evidence_claim_boundaries,
+        )
+        for artifact in all_dissertation_artifacts
+    ]
+    claims_rows.sort(key=lambda x: x["artifact_id"])
+    _write_claim_matrix_outputs(
+        claims_rows=claims_rows,
+        json_output=args.json_output,
+        markdown_output=args.markdown_output,
+    )
+
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run benchmark publication helper CLI and return a POSIX exit code."""
     parser = _build_parser()
@@ -855,6 +1132,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_validate_dissertation_bundle(args)
     if args.command == "diff-dissertation-bundle":
         return _run_diff_dissertation_bundle(args)
+    if args.command == "claim-matrix":
+        return _run_claim_matrix(args)
     parser.error(f"Unsupported command: {args.command}")
     return 2  # pragma: no cover
 

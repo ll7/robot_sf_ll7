@@ -137,7 +137,7 @@ def analyze_manifests(
     for manifest in manifests:
         if not isinstance(manifest, dict):
             continue
-        attempts = manifest.get("attempted_routes") or []
+        attempts = manifest.get("attempted_routes")
         if not isinstance(attempts, list):
             continue
         acc.total_attempts += len(attempts)

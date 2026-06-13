@@ -571,6 +571,8 @@ knowledge, not every transient iteration detail.
   [issue_1740_actuation_aware_smoke_candidate.md](issue_1740_actuation_aware_smoke_candidate.md)
 * Issue #1720 learned-policy roadmap and issue routing:
   [issue_1720_learned_policy_roadmap.md](issue_1720_learned_policy_roadmap.md)
+* Issue #2768 Learned Prediction Readiness Contract:
+  [issue_2768_learned_prediction_readiness.md](issue_2768_learned_prediction_readiness.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:

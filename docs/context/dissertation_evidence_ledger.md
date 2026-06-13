@@ -23,6 +23,10 @@ explicitly blocked from manuscript promotion.
 - **Status**: `current` (usable with caveats), `stale` (needs refresh before reuse), or
   `blocked` (must not be used).
 - **Evidence tier**: `release-backed`, `diagnostic`, `proposal`, `non-claimable`.
+- **Evidence promotion path**: the concrete next step required to promote a diagnostic-only row
+  toward benchmark or paper evidence, or `None` when no credible promotion path exists.
+  A non-null promotion path does **not** upgrade the row's current classification; the path must
+  be completed and the evidence tier reclassified before any promotion.
 
 ## Ledger Rows
 
@@ -38,6 +42,7 @@ explicitly blocked from manuscript promotion.
 | **Source PR/issue** | [#2518](issue_2518_topology_near_parity_gate.md), [#2530](issue_2530_topology_near_parity_corrective_smoke.md), [#2624](issue_2624_topology_reuse_penalty_gate.md), [#2704](issue_2704_progress_gated_topology_successor.md), [#2706](issue_2706_topology_lane_synthesis.md) |
 | **Dissertation chapter** | Discussion, Outlook |
 | **Claim gap** | A new hypothesis with a different mechanism and metric is needed before further topology work. No current row supports Results wording. |
+| **Evidence promotion path** | **live replay**: a fresh topology-guided planner campaign with non-same-family selector variants and an independent seed set is required before any benchmark promotion. |
 
 ### 2. Signalized Behavior
 
@@ -51,6 +56,7 @@ explicitly blocked from manuscript promotion.
 | **Source PR/issue** | [#2527](issue_2527_waiting_crossing_fixture.md), [#2564](issue_2564_signal_state_proxy_smoke.md), [#2662](issue_2662_signal_state_promotion_contract.md), [#2474](issue_2474_signalized_crossing_benchmark.md) |
 | **Dissertation chapter** | Methods, Limitations |
 | **Claim gap** | Requires explicit runtime signal phase state, planner-observation policy, zone/legality trace fields, and `planner_observable` promotion before any benchmark row. |
+| **Evidence promotion path** | **live replay**: explicit runtime signal phase state, planner-observation policy, and `planner_observable` promotion are required before any benchmark row. |
 
 ### 3. Observation Robustness
 
@@ -64,6 +70,7 @@ explicitly blocked from manuscript promotion.
 | **Source PR/issue** | [#1246](issue_1246_observation_levels.md), [#1612](issue_1612_observation_track_architecture.md), [#1613](issue_1613_lidar_observation_track.md), [#1614](issue_1614_lidar_planner_compatibility.md) |
 | **Dissertation chapter** | Methods |
 | **Claim gap** | Requires actual perception pipeline, calibrated tracking, or simulator-level observation fidelity before any robustness claim. Cross-track comparison is not valid without matched observation contracts. |
+| **Evidence promotion path** | None — the observation-level vocabulary is a contract/label layer without a credible standalone promotion path to robustness evidence. |
 
 ### 4. Prediction
 
@@ -77,6 +84,7 @@ explicitly blocked from manuscript promotion.
 | **Source PR/issue** | [#2475](issue_2475_probabilistic_prediction_interface.md), [#2476](issue_2476_multimodal_prediction_benchmark.md), [#2496](issue_2496_multimodal_prediction_smoke.md) |
 | **Dissertation chapter** | Methods, Outlook |
 | **Claim gap** | Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim. |
+| **Evidence promotion path** | **denominator repair**: an executed planner campaign with matched metrics and fail-closed row handling is required before any benchmark claim. |
 
 ### 5. Pedestrian-Density Stress
 
@@ -90,6 +98,7 @@ explicitly blocked from manuscript promotion.
 | **Source PR/issue** | [#1240](issue_1240_scenario_coverage_entropy.md), [#1304](issue_1304_pedestrian_config_boundary.md) |
 | **Dissertation chapter** | Methods, Limitations |
 | **Claim gap** | Requires runtime execution evidence, failure-semantics classification, and planner-comparison rows before any pedestrian-density stress benchmark claim. |
+| **Evidence promotion path** | None — config-only entropy analysis lacks a credible standalone promotion path to runtime stress evidence; runtime execution and failure-semantics proof are required. |
 
 ### 6. Exported Tables (Dissertation Bundle)
 
@@ -103,6 +112,7 @@ explicitly blocked from manuscript promotion.
 | **Source PR/issue** | [#1023](https://github.com/ll7/robot_sf_ll7/issues/1023), [#2542](issue_2542_dissertation_export_bundle.md) |
 | **Dissertation chapter** | N/A (blocked) |
 | **Claim gap** | Requires payload file recovery or re-export before any reuse. |
+| **Evidence promotion path** | **stale artifact refresh**: payload file recovery or re-export from a fresh campaign is required before any reuse. |
 
 ## Stale-Artifact Summary
 
@@ -136,6 +146,8 @@ explicitly blocked from manuscript promotion.
   treated as claim-weakening/blocking caveats.
 - Fallback behavior is not acceptable as a successful benchmark outcome unless the task
   explicitly measures fallback mode.
+- A non-null `evidence_promotion_path` does not upgrade a diagnostic-only row to benchmark or paper
+  evidence. Promotion requires completing the path and reclassifying the evidence tier.
 
 ## Validation
 

@@ -18,6 +18,7 @@ REQUIRED_ROW_FIELDS = {
     "source_issues",
     "dissertation_chapter",
     "claim_gap",
+    "evidence_promotion_path",
 }
 VALID_ARTIFACT_STATUSES = {"current", "stale", "blocked"}
 VALID_EVIDENCE_TIERS = {"release-backed", "diagnostic", "proposal", "non-claimable"}
@@ -55,7 +56,7 @@ class TestDissertationEvidenceLedger:
 
     def test_schema_version_matches(self) -> None:
         ledger = _load_ledger()
-        assert ledger["schema_version"] == "dissertation_evidence_ledger.v1"
+        assert ledger["schema_version"] == "dissertation_evidence_ledger.v2"
 
     def test_purpose_declares_synthesis_not_evidence(self) -> None:
         ledger = _load_ledger()
@@ -153,3 +154,83 @@ class TestDissertationEvidenceLedger:
         # Must mention synthesis/planning aid
         text = " ".join(boundaries).lower()
         assert "synthesis" in text or "planning" in text
+
+    def test_all_rows_have_evidence_promotion_path(self) -> None:
+        ledger = _load_ledger()
+        for i, row in enumerate(ledger["rows"]):
+            assert "evidence_promotion_path" in row, (
+                f"Row {i} ({row.get('area', '?')}) missing evidence_promotion_path"
+            )
+
+    def test_evidence_promotion_path_types(self) -> None:
+        ledger = _load_ledger()
+        for i, row in enumerate(ledger["rows"]):
+            val = row["evidence_promotion_path"]
+            assert val is None or isinstance(val, str), (
+                f"Row {i} ({row.get('area', '?')}) evidence_promotion_path must be "
+                f"null or string, got {type(val).__name__}"
+            )
+
+    def test_live_replay_promotion_rows(self) -> None:
+        ledger = _load_ledger()
+        live_replay_areas = {"topology_guidance", "signalized_behavior"}
+        for i, row in enumerate(ledger["rows"]):
+            if row["area"] in live_replay_areas:
+                assert row["evidence_promotion_path"] is not None, (
+                    f"Row {i} ({row['area']}) should have a live replay promotion path"
+                )
+                assert "live replay" in row["evidence_promotion_path"].lower(), (
+                    f"Row {i} ({row['area']}) promotion path must mention 'live replay'"
+                )
+
+    def test_stale_artifact_refresh_promotion_rows(self) -> None:
+        ledger = _load_ledger()
+        for i, row in enumerate(ledger["rows"]):
+            if row["area"] == "exported_tables":
+                assert row["evidence_promotion_path"] is not None, (
+                    f"Row {i} ({row['area']}) should have a stale artifact refresh path"
+                )
+                assert "stale artifact refresh" in row["evidence_promotion_path"].lower(), (
+                    f"Row {i} ({row['area']}) promotion path must mention 'stale artifact refresh'"
+                )
+
+    def test_denominator_repair_promotion_rows(self) -> None:
+        ledger = _load_ledger()
+        for i, row in enumerate(ledger["rows"]):
+            if row["area"] == "prediction":
+                assert row["evidence_promotion_path"] is not None, (
+                    f"Row {i} ({row['area']}) should have a denominator repair path"
+                )
+                assert "denominator repair" in row["evidence_promotion_path"].lower(), (
+                    f"Row {i} ({row['area']}) promotion path must mention 'denominator repair'"
+                )
+
+    def test_no_promotion_path_rows(self) -> None:
+        ledger = _load_ledger()
+        no_path_areas = {"observation_robustness", "pedestrian_density_stress"}
+        for i, row in enumerate(ledger["rows"]):
+            if row["area"] in no_path_areas:
+                assert row["evidence_promotion_path"] is None, (
+                    f"Row {i} ({row['area']}) should have null promotion path "
+                    f"(no credible path), got '{row['evidence_promotion_path']}'"
+                )
+
+    def test_promotion_path_does_not_mark_rows_release_backed(self) -> None:
+        ledger = _load_ledger()
+        for i, row in enumerate(ledger["rows"]):
+            if row["evidence_promotion_path"] is not None:
+                assert row["evidence_tier"] != "release-backed", (
+                    f"Row {i} ({row.get('area', '?')}) has a promotion path but is already "
+                    f"release-backed; promotion paths must remain pending work, not evidence "
+                    f"upgrades"
+                )
+
+    def test_claim_boundaries_include_promotion_path_rule(self) -> None:
+        ledger = _load_ledger()
+        boundaries = " ".join(ledger["claim_boundaries"]).lower()
+        assert "evidence_promotion_path" in boundaries, (
+            "claim_boundaries must mention the evidence_promotion_path fail-closed rule"
+        )
+        assert "does not upgrade" in boundaries
+        assert "benchmark or paper evidence" in boundaries
+        assert "reclassifying the evidence tier" in boundaries

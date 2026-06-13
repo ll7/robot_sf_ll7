@@ -1,5 +1,5 @@
 {
-  "schema_version": "dissertation_evidence_ledger.v1",
+  "schema_version": "dissertation_evidence_ledger.v2",
   "created_at_utc": "2026-06-13",
   "issue": 2760,
   "purpose": "synthesis/dissertation-planning aid; not new benchmark, paper, or safety evidence",
@@ -17,7 +17,8 @@
       "caveat": "Do not claim topology guidance improves success, transfer, or leaderboard performance. The lane is stop for same-family selector reruns on the canonical slice.",
       "source_issues": [2518, 2530, 2624, 2704, 2706],
       "dissertation_chapter": "Discussion, Outlook",
-      "claim_gap": "A new hypothesis with a different mechanism and metric is needed before further topology work. No current row supports Results wording."
+      "claim_gap": "A new hypothesis with a different mechanism and metric is needed before further topology work. No current row supports Results wording.",
+      "evidence_promotion_path": "live replay: a fresh topology-guided planner campaign with non-same-family selector variants and an independent seed set is required before any benchmark promotion."
     },
     {
       "area": "signalized_behavior",
@@ -28,7 +29,8 @@
       "caveat": "Signal state is proxy_diagnostic only. Do not claim planner observability, forced-waiting reasoning, legality compliance, or benchmark ranking improvement.",
       "source_issues": [2527, 2564, 2662, 2474],
       "dissertation_chapter": "Methods, Limitations",
-      "claim_gap": "Requires explicit runtime signal phase state, planner-observation policy, zone/legality trace fields, and planner_observable promotion before any benchmark row."
+      "claim_gap": "Requires explicit runtime signal phase state, planner-observation policy, zone/legality trace fields, and planner_observable promotion before any benchmark row.",
+      "evidence_promotion_path": "live replay: explicit runtime signal phase state, planner-observation policy, and planner_observable promotion are required before any benchmark row."
     },
     {
       "area": "observation_robustness",
@@ -39,7 +41,8 @@
       "caveat": "The levels are benchmark evidence labels and compatibility gates, not sim-to-real validity claims. No real camera perception, detector training, calibrated tracking, or new environment observation implementation exists yet.",
       "source_issues": [1246, 1612, 1613, 1614],
       "dissertation_chapter": "Methods",
-      "claim_gap": "Requires actual perception pipeline, calibrated tracking, or simulator-level observation fidelity before any robustness claim. Cross-track comparison is not valid without matched observation contracts."
+      "claim_gap": "Requires actual perception pipeline, calibrated tracking, or simulator-level observation fidelity before any robustness claim. Cross-track comparison is not valid without matched observation contracts.",
+      "evidence_promotion_path": null
     },
     {
       "area": "prediction",
@@ -50,7 +53,8 @@
       "caveat": "This is contract evidence only. The runner uses deterministic fixtures, does not execute a planner campaign, and does not measure prediction quality or compare planning performance.",
       "source_issues": [2475, 2476, 2496],
       "dissertation_chapter": "Methods, Outlook",
-      "claim_gap": "Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim."
+      "claim_gap": "Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim.",
+      "evidence_promotion_path": "denominator repair: an executed planner campaign with matched metrics and fail-closed row handling is required before any benchmark claim."
     },
     {
       "area": "pedestrian_density_stress",
@@ -61,7 +65,8 @@
       "caveat": "Coverage entropy is a diagnostic planning aid. It does not prove benchmark value, runtime stress effectiveness, or planner ranking. Dense stress rows should not be promoted without runtime and failure-semantics proof.",
       "source_issues": [1240, 1304],
       "dissertation_chapter": "Methods, Limitations",
-      "claim_gap": "Requires runtime execution evidence, failure-semantics classification, and planner-comparison rows before any pedestrian-density stress benchmark claim."
+      "claim_gap": "Requires runtime execution evidence, failure-semantics classification, and planner-comparison rows before any pedestrian-density stress benchmark claim.",
+      "evidence_promotion_path": null
     },
     {
       "area": "exported_tables",
@@ -72,7 +77,8 @@
       "caveat": "The claim matrix reports missing payload files for both artifacts, and the stale-artifact detector classifies the bundle manifest as stale. The tables remain historical tracked evidence and do not establish new benchmark claims.",
       "source_issues": [1023, 2542],
       "dissertation_chapter": "N/A (blocked)",
-      "claim_gap": "Requires payload file recovery or re-export before any reuse."
+      "claim_gap": "Requires payload file recovery or re-export before any reuse.",
+      "evidence_promotion_path": "stale artifact refresh: payload file recovery or re-export from a fresh campaign is required before any reuse."
     }
   ],
   "stale_artifact_summary": [
@@ -104,6 +110,7 @@
     "This ledger is a synthesis/dissertation-planning aid. It does not produce new benchmark evidence, paper-facing results, or safety claims.",
     "Every row includes allowed_wording and caveat. Rows with missing or stale evidence use do-not-use or similarly blocked wording.",
     "Diagnostic-only, stale, fallback, degraded, unavailable, or launch-packet rows are explicitly treated as claim-weakening/blocking caveats.",
-    "Fallback behavior is not acceptable as a successful benchmark outcome unless the task explicitly measures fallback mode."
+    "Fallback behavior is not acceptable as a successful benchmark outcome unless the task explicitly measures fallback mode.",
+    "A non-null evidence_promotion_path does not upgrade a diagnostic-only row to benchmark or paper evidence. Promotion requires completing the path and reclassifying the evidence tier."
   ]
 }

@@ -66,7 +66,7 @@ def test_calculate_signal_metrics_valid_observable():
     episode = MockSignalEpisode(robot_pos, peds_pos, dt, episode_metadata)
     metrics = calculate_signal_metrics(episode)
 
-    assert metrics["signal_red_phase_violations"] == 4
+    assert metrics["signal_red_phase_violations"] == 1
     assert metrics["signal_stop_line_crossings_under_red"] == 1
     assert np.isclose(metrics["signal_min_distance_to_stop_line_before_crossing_m"], 10.0)
     assert np.isclose(metrics["signal_delay_after_green_onset_s"], 0.0)
@@ -100,7 +100,7 @@ def test_calculate_signal_metrics_uses_crosswalk_side_for_stop_line():
     metrics = calculate_signal_metrics(episode)
 
     assert metrics["signal_stop_line_crossings_under_red"] == 1
-    assert metrics["signal_red_phase_violations"] == 2
+    assert metrics["signal_red_phase_violations"] == 1
 
 
 def test_calculate_signal_metrics_green_crossing_not_red_violation():
@@ -247,6 +247,31 @@ def test_calculate_signal_metrics_incomplete_observable_fields():
         "state": "planner_observable",
         "exclusion_reason": "observable_signal_fields_incomplete",
     }
+
+
+def test_calculate_signal_metrics_missing_crosswalk_is_incomplete():
+    """Pedestrian-conflict metrics need a conflict-zone polygon."""
+    episode_metadata = {
+        "signal_state": {
+            "contract_state": "planner_observable",
+            "benchmark_evidence": True,
+            "timeline": [{"state": "green", "duration": 1.0}],
+            "stop_line": [[0.0, 1.0], [0.0, -1.0]],
+        }
+    }
+    episode = MockSignalEpisode(
+        np.zeros((2, 2)),
+        np.zeros((2, 0, 2)),
+        1.0,
+        episode_metadata,
+    )
+
+    metrics = calculate_signal_metrics(episode)
+
+    assert metrics["signal_metrics_denominator"] == 0
+    assert metrics["signal_metrics_evidence"]["exclusion_reason"] == (
+        "observable_signal_fields_incomplete"
+    )
 
 
 def test_calculate_signal_metrics_with_pedestrian_conflict():

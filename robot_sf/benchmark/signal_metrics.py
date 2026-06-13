@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Protocol
 
 import numpy as np
@@ -45,7 +46,7 @@ def _expand_timeline(timeline: list[dict[str, Any]], dt: float) -> list[dict[str
     expanded: list[dict[str, Any]] = []
     for phase_info in timeline:
         duration = float(phase_info.get("duration", 0.0))
-        steps = max(0, round(duration / dt))
+        steps = max(1, math.ceil(duration / dt)) if duration > 0.0 else 0
         expanded.extend([phase_info] * steps)
     return expanded
 
@@ -64,25 +65,19 @@ def _distance_to_segment(point: np.ndarray, segment: np.ndarray) -> float:
     return float(np.linalg.norm(point - closest_point))
 
 
-def _stop_line_side(
-    point: np.ndarray,
-    stop_line: np.ndarray,
-    crosswalk_polygon: list[list[float]] | None,
-) -> bool:
-    """Return whether a point is on the crosswalk side of the stop line."""
+def _signed_stop_line_side(point: np.ndarray, stop_line: np.ndarray) -> int:
+    """Return the signed side of a point relative to the stop line."""
     p1 = stop_line[0]
     p2 = stop_line[1]
     line_vec = p2 - p1
-    if crosswalk_polygon:
-        normal = np.array([-line_vec[1], line_vec[0]], dtype=float)
-        crosswalk_centroid = np.mean(np.asarray(crosswalk_polygon, dtype=float), axis=0)
-        side_crosswalk = float(np.dot(crosswalk_centroid - p1, normal))
-        if not np.isclose(side_crosswalk, 0.0):
-            return float(np.dot(point - p1, normal)) * side_crosswalk > 0.0
-    return bool(point[0] > stop_line[0][0])
+    normal = np.array([-line_vec[1], line_vec[0]], dtype=float)
+    signed = float(np.dot(point - p1, normal))
+    if np.isclose(signed, 0.0):
+        return 0
+    return 1 if signed > 0.0 else -1
 
 
-def calculate_signal_metrics(data: SignalEpisode) -> dict[str, Any]:  # noqa: C901, PLR0912
+def calculate_signal_metrics(data: SignalEpisode) -> dict[str, Any]:  # noqa: C901, PLR0912, PLR0915
     """Calculates all signal compliance and violation metrics for a given episode.
 
     Args:
@@ -118,7 +113,7 @@ def calculate_signal_metrics(data: SignalEpisode) -> dict[str, Any]:  # noqa: C9
     stop_line = signal_state.get("stop_line")
     crosswalk_polygon = signal_state.get("crosswalk_polygon")
 
-    if not timeline or not stop_line:
+    if not timeline or not stop_line or not crosswalk_polygon:
         return _unavailable_metrics("planner_observable", "observable_signal_fields_incomplete")
 
     expanded_timeline = _expand_timeline(timeline, data.dt)
@@ -141,25 +136,30 @@ def calculate_signal_metrics(data: SignalEpisode) -> dict[str, Any]:  # noqa: C9
             break
 
     crossed_stop_line = False
-    crossed_under_red = False
+    initial_side = _signed_stop_line_side(data.robot_pos[0], stop_line) if T > 0 else 0
+    previous_side = initial_side
 
     for t in range(T):
         pos = data.robot_pos[t]
         phase = expanded_timeline[min(t, len(expanded_timeline) - 1)]
 
         dist_to_line = _distance_to_segment(pos, stop_line)
-        is_past_line = _stop_line_side(pos, stop_line, crosswalk_polygon)
+        current_side = _signed_stop_line_side(pos, stop_line)
+        if previous_side == 0 and current_side != 0:
+            previous_side = current_side
+            if initial_side == 0:
+                initial_side = current_side
+        crossed_this_step = previous_side != 0 and current_side not in (0, previous_side)
+        is_past_line = current_side != 0 and initial_side not in (0, current_side)
 
-        if is_past_line and not crossed_stop_line:
+        if crossed_this_step and not crossed_stop_line:
             crossed_stop_line = True
             if phase.get("state") == "red":
-                crossed_under_red = True
+                red_phase_violations += 1
                 stop_line_crossings_under_red += 1
 
         if phase.get("state") == "red":
-            if is_past_line and crossed_under_red:
-                red_phase_violations += 1
-            elif not crossed_stop_line:
+            if not crossed_stop_line:
                 min_dist_to_stop_line = (
                     min(min_dist_to_stop_line, dist_to_line)
                     if not np.isnan(min_dist_to_stop_line)
@@ -169,6 +169,8 @@ def calculate_signal_metrics(data: SignalEpisode) -> dict[str, Any]:  # noqa: C9
         if green_onset_step != -1 and t >= green_onset_step and np.isnan(delay_after_green):
             if is_past_line:
                 delay_after_green = (t - green_onset_step) * data.dt
+        if current_side != 0:
+            previous_side = current_side
 
     # Simplified pedestrian conflict
     if crosswalk_polygon and data.peds_pos.shape[1] > 0:

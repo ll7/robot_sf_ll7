@@ -3196,6 +3196,45 @@ def _signal_state_promotion_contract(signal_state: Any) -> dict[str, Any]:
     }
 
 
+def _signal_state_for_metric_metadata(signal_state: Any) -> dict[str, Any] | None:
+    """Return fail-closed signal-state metadata for runtime metric computation.
+
+    Proxy signal metadata may be useful for trace diagnostics, but signal metrics may only enter
+    denominators when the explicit planner-observable benchmark contract is met. Observable rows
+    still need metric geometry fields; missing fields stay fail-closed in ``signal_metrics.py``.
+    """
+    if not isinstance(signal_state, dict):
+        return None
+    contract = _signal_state_promotion_contract(signal_state)
+    if contract["contract_state"] != "planner_observable":
+        return {
+            "contract_state": contract["contract_state"],
+            "benchmark_evidence": False,
+        }
+    metric_state: dict[str, Any] = {
+        "contract_state": "planner_observable",
+        "benchmark_evidence": True,
+    }
+    for key in ("timeline", "stop_line", "crosswalk_polygon"):
+        if key in signal_state:
+            metric_state[key] = signal_state[key]
+    return metric_state
+
+
+def _episode_metadata_for_signal_metrics(scenario: dict[str, Any]) -> dict[str, Any] | None:
+    """Build optional episode metadata consumed by signal metrics.
+
+    Returns:
+        Optional episode metadata when the scenario carries usable signal-state evidence.
+    """
+    metadata = scenario.get("metadata") if isinstance(scenario.get("metadata"), dict) else {}
+    signal_state = metadata.get("signal_state") if isinstance(metadata, dict) else None
+    metric_signal_state = _signal_state_for_metric_metadata(signal_state)
+    if metric_signal_state is None:
+        return None
+    return {"signal_state": metric_signal_state}
+
+
 def _synth_robot_stop_or_yield_expectation(
     robot_right_of_way: bool,
     pedestrian_right_of_way: bool,
@@ -4421,6 +4460,7 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             reached_goal_step=reached_goal_step,
             robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
+            episode_metadata=_episode_metadata_for_signal_metrics(scenario),
         )
         metrics_raw = compute_all_metrics(
             ep,

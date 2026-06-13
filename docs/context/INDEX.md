@@ -88,6 +88,11 @@ records the fail-closed distinction between `proxy_diagnostic`, `planner_observa
 `unavailable` signal-state rows for future signalized-crossing benchmarks; it is schema/trace
 contract work only, not benchmark evidence.
 
+Recent signalized-crossing runtime smoke: [evidence/issue_2799_signalized_runtime/README.md](evidence/issue_2799_signalized_runtime/README.md)
+records simulator-backed denominator/exclusion evidence for `red_required_stop`, `green_proceed`,
+`unavailable_no_claim`, and `proxy_only_denominator_excluded` rows; it proves runtime denominator
+plumbing, not traffic-light realism or planner-ranking performance.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

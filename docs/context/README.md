@@ -730,6 +730,9 @@ knowledge, not every transient iteration detail.
   [issue_2474_signalized_crossing_benchmark.md](issue_2474_signalized_crossing_benchmark.md)
 * Issue #2662 Signal-State Promotion Contract (2026-06-12):
   [issue_2662_signal_state_promotion_contract.md](issue_2662_signal_state_promotion_contract.md)
+* Issue #2799 Signalized Crossing Runtime Evidence (2026-06-13):
+  [evidence/issue_2799_signalized_runtime/README.md](evidence/issue_2799_signalized_runtime/README.md)
+  ([summary](evidence/issue_2799_signalized_runtime/summary.json))
 * Issue #2475 Probabilistic Prediction Interface (2026-06-06):
   [issue_2475_probabilistic_prediction_interface.md](issue_2475_probabilistic_prediction_interface.md)
 * Issue #1638 local model path preflight:

@@ -1,0 +1,184 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: issue_2799_red_required_stop_observable
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 80
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    trajectory:
+    - - 14.0
+      - 17.5
+    - - 14.0
+      - 15.0
+    - - 14.0
+      - 4.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 2.0
+      note: authored wait before crossing
+  robot_config: {}
+  metadata:
+    archetype: signalized_crossing
+    density: single_pedestrian
+    behavior: wait
+    issue: 2799
+    claim_boundary: >
+      Runtime smoke evidence for signal metric denominator plumbing only. This does not establish
+      a traffic-light compliance claim unless report rows show planner_observable=true,
+      benchmark_evidence=true, and signal_metrics_denominator > 0.
+    signal_state:
+      schema_version: signal-state-observable.v1
+      status: planner_observable_signal_state
+      signal_id: issue_2799_red_required_stop_observable
+      conflict_zone_id: francis2023_intersection_crosswalk_proxy
+      planner_observable: true
+      observation_mode: planner_observable
+      benchmark_evidence: true
+      timeline:
+      - state: red
+        duration: 80.0
+      stop_line:
+      - - 5.0
+        - 20.0
+      - - 5.0
+        - 0.0
+      crosswalk_polygon:
+      - - 5.0
+        - 18.0
+      - - 8.0
+        - 18.0
+      - - 8.0
+        - 4.0
+      - - 5.0
+        - 4.0
+  seeds: [2799]
+- name: issue_2799_green_proceed_observable
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 80
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    trajectory:
+    - - 14.0
+      - 17.5
+    - - 14.0
+      - 15.0
+    - - 14.0
+      - 4.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 2.0
+      note: authored wait before crossing
+  robot_config: {}
+  metadata:
+    archetype: signalized_crossing
+    density: single_pedestrian
+    behavior: wait
+    issue: 2799
+    claim_boundary: >
+      Runtime smoke evidence for signal metric denominator plumbing only. This does not establish
+      a traffic-light compliance claim unless report rows show planner_observable=true,
+      benchmark_evidence=true, and signal_metrics_denominator > 0.
+    signal_state:
+      schema_version: signal-state-observable.v1
+      status: planner_observable_signal_state
+      signal_id: issue_2799_green_proceed_observable
+      conflict_zone_id: francis2023_intersection_crosswalk_proxy
+      planner_observable: true
+      observation_mode: planner_observable
+      benchmark_evidence: true
+      timeline:
+      - state: red
+        duration: 0.1
+      - state: green
+        duration: 80.0
+      stop_line:
+      - - 13.0
+        - 20.0
+      - - 13.0
+        - 0.0
+      crosswalk_polygon:
+      - - 13.0
+        - 18.0
+      - - 16.0
+        - 18.0
+      - - 16.0
+        - 4.0
+      - - 13.0
+        - 4.0
+  seeds: [2800]
+- name: issue_2799_unavailable_no_claim
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 40
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    trajectory:
+    - - 14.0
+      - 17.5
+    - - 14.0
+      - 15.0
+    - - 14.0
+      - 4.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 2.0
+      note: authored wait before crossing
+  robot_config: {}
+  metadata:
+    archetype: signalized_crossing
+    density: single_pedestrian
+    behavior: wait
+    issue: 2799
+    claim_boundary: Signal-state unavailable row for fail-closed denominator proof.
+  seeds: [2801]
+- name: issue_2799_proxy_only_denominator_excluded
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 40
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    trajectory:
+    - - 14.0
+      - 17.5
+    - - 14.0
+      - 15.0
+    - - 14.0
+      - 4.0
+    wait_at:
+    - waypoint_index: 1
+      wait_s: 2.0
+      note: authored wait before crossing
+  robot_config: {}
+  metadata:
+    archetype: signalized_crossing
+    density: single_pedestrian
+    behavior: wait
+    issue: 2799
+    claim_boundary: Proxy signal-state row for fail-closed denominator proof.
+    signal_state:
+      schema_version: signal-state-proxy.v1
+      status: proxy_diagnostic_only
+      signal_id: issue_2799_proxy_only
+      conflict_zone_id: francis2023_intersection_crosswalk_proxy
+      planner_observable: false
+      observation_mode: trace_metadata_only
+      benchmark_evidence: false
+      phase_timeline:
+      - phase: robot_green_pedestrian_dont_walk
+        intent_phase: waiting
+        start_s: 0.0
+        end_s: 2.0
+        robot_right_of_way: true
+        pedestrian_right_of_way: false
+        legality_state: pedestrian_wait_required
+  seeds: [2802]

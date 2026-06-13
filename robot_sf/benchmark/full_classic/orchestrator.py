@@ -27,6 +27,7 @@ from loguru import logger
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_int
+from robot_sf.benchmark.map_runner import _signal_state_for_metric_metadata
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -712,6 +713,7 @@ def _compute_episode_metrics(  # noqa: PLR0913
         reached_goal_step=reached_goal_step,
         robot_radius=float(robot_radius),
         ped_radius=float(ped_radius),
+        episode_metadata=_episode_metadata_for_metrics(scenario),
     )
     metrics_raw = compute_all_metrics(ep, horizon=horizon, shortest_path_len=shortest_path)
     time_to_goal = (
@@ -735,6 +737,30 @@ def _compute_episode_metrics(  # noqa: PLR0913
         else:
             serializable[key] = value
     return serializable
+
+
+def _signal_contract_state_for_metrics(signal_state: Any) -> dict[str, Any] | None:
+    """Return fail-closed signal-state metadata for metric computation.
+
+    The trace-export path can record proxy signal metadata, but metric denominators may only
+    include explicit planner-observable benchmark evidence.
+    """
+    return _signal_state_for_metric_metadata(signal_state)
+
+
+def _episode_metadata_for_metrics(scenario) -> dict[str, Any] | None:
+    """Build optional episode metadata consumed by metric helpers.
+
+    Returns:
+        ``{"signal_state": ...}`` for signalized scenarios, otherwise ``None``.
+    """
+    raw = getattr(scenario, "raw", {})
+    metadata = raw.get("metadata", {}) if isinstance(raw, dict) else {}
+    signal_state = metadata.get("signal_state") if isinstance(metadata, dict) else None
+    metric_signal_state = _signal_contract_state_for_metrics(signal_state)
+    if metric_signal_state is None:
+        return None
+    return {"signal_state": metric_signal_state}
 
 
 def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):

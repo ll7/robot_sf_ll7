@@ -8,7 +8,9 @@ import numpy as np
 import yaml
 
 from robot_sf.benchmark.map_runner import (
+    _episode_metadata_for_signal_metrics,
     _intent_conditioned_behavior_summary,
+    _signal_state_for_metric_metadata,
     _signal_state_promotion_contract,
     _signal_state_proxy_wrapper,
     _single_pedestrian_intent_metadata,
@@ -236,6 +238,44 @@ def test_explicit_observable_signal_state_names_planner_consumed_fields() -> Non
     assert contract["promotion_required_fields"] == []
     assert contract["fail_closed_reason"] == ""
     assert contract["benchmark_evidence"] is True
+
+
+def test_proxy_signal_state_metric_metadata_stays_denominator_excluded() -> None:
+    """Metric metadata should preserve proxy exclusion even when trace metadata exists."""
+    scenario = _scenario_payload()
+
+    metric_metadata = _episode_metadata_for_signal_metrics(scenario)
+
+    assert metric_metadata == {
+        "signal_state": {
+            "contract_state": "proxy_diagnostic",
+            "benchmark_evidence": False,
+        }
+    }
+
+
+def test_observable_signal_state_metric_metadata_carries_required_fields() -> None:
+    """Metric metadata should include only explicit observable benchmark signal fields."""
+    signal_state = {
+        "schema_version": "signal-state-observable.v1",
+        "status": "planner_observable_signal_state",
+        "observation_mode": "planner_observable",
+        "planner_observable": True,
+        "benchmark_evidence": True,
+        "timeline": [{"state": "green", "duration": 1.0}],
+        "stop_line": [[0.0, -1.0], [0.0, 1.0]],
+        "crosswalk_polygon": [[0.0, -1.0], [2.0, -1.0], [2.0, 1.0], [0.0, 1.0]],
+    }
+
+    metric_state = _signal_state_for_metric_metadata(signal_state)
+
+    assert metric_state == {
+        "contract_state": "planner_observable",
+        "benchmark_evidence": True,
+        "timeline": signal_state["timeline"],
+        "stop_line": signal_state["stop_line"],
+        "crosswalk_polygon": signal_state["crosswalk_polygon"],
+    }
 
 
 def test_intent_summary_handles_missing_or_empty_intent_phases() -> None:

@@ -2606,7 +2606,22 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     try:
         values.update(calculate_signal_metrics(data))
     except Exception:
-        logger.exception("Failed to compute signal metrics; continuing without signal metrics.")
+        logger.exception("Failed to compute signal metrics; falling back to unavailable defaults.")
+        values.update(
+            {
+                "signal_red_phase_violations": 0,
+                "signal_stop_line_crossings_under_red": 0,
+                "signal_min_distance_to_stop_line_before_crossing_m": float("nan"),
+                "signal_delay_after_green_onset_s": float("nan"),
+                "signal_pedestrian_conflict_during_legal_crossing_count": 0,
+                "signal_unavailable_exclusion_count": 1,
+                "signal_metrics_denominator": 0,
+                "signal_metrics_evidence": {
+                    "state": "unavailable",
+                    "exclusion_reason": "signal_metrics_computation_failed",
+                },
+            }
+        )
     # Use collision-count-based success semantics for benchmark-facing outputs.
     values["success"] = 1.0 if episode_success else 0.0
     values["time_to_goal_norm"] = (

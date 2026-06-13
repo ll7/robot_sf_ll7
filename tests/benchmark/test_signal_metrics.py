@@ -79,6 +79,58 @@ def test_calculate_signal_metrics_valid_observable():
     }
 
 
+def test_calculate_signal_metrics_uses_crosswalk_side_for_stop_line():
+    """Stop-line crossing should work for non-x-axis approaches."""
+    episode_metadata = {
+        "signal_state": {
+            "contract_state": "planner_observable",
+            "benchmark_evidence": True,
+            "timeline": [{"state": "red", "duration": 0.3}],
+            "stop_line": [[-1.0, 0.0], [1.0, 0.0]],
+            "crosswalk_polygon": [[-1.0, 1.0], [1.0, 1.0], [1.0, 3.0], [-1.0, 3.0]],
+        }
+    }
+    episode = MockSignalEpisode(
+        np.array([[0.0, -1.0], [0.0, 0.5], [0.0, 1.5]]),
+        np.zeros((3, 0, 2)),
+        0.1,
+        episode_metadata,
+    )
+
+    metrics = calculate_signal_metrics(episode)
+
+    assert metrics["signal_stop_line_crossings_under_red"] == 1
+    assert metrics["signal_red_phase_violations"] == 2
+
+
+def test_calculate_signal_metrics_green_crossing_not_red_violation():
+    """A robot already past the stop line after green onset should not be a red violation."""
+    episode_metadata = {
+        "signal_state": {
+            "contract_state": "planner_observable",
+            "benchmark_evidence": True,
+            "timeline": [
+                {"state": "red", "duration": 0.2},
+                {"state": "green", "duration": 0.2},
+            ],
+            "stop_line": [[0.0, 1.0], [0.0, -1.0]],
+            "crosswalk_polygon": [[1.0, 1.0], [2.0, 1.0], [2.0, -1.0], [1.0, -1.0]],
+        }
+    }
+    episode = MockSignalEpisode(
+        np.array([[-1.0, 0.0], [-0.5, 0.0], [0.5, 0.0], [1.5, 0.0]]),
+        np.zeros((4, 0, 2)),
+        0.1,
+        episode_metadata,
+    )
+
+    metrics = calculate_signal_metrics(episode)
+
+    assert metrics["signal_stop_line_crossings_under_red"] == 0
+    assert metrics["signal_red_phase_violations"] == 0
+    assert np.isclose(metrics["signal_delay_after_green_onset_s"], 0.0)
+
+
 def test_calculate_signal_metrics_no_signal_data():
     """
     Tests that when no signal data is available in the metadata, the metrics reflect

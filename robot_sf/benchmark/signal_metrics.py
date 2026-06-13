@@ -201,3 +201,176 @@ def calculate_signal_metrics(data: SignalEpisode) -> dict[str, Any]:  # noqa: C9
             "exclusion_reason": "",
         },
     }
+
+
+def _classify_row_type(evidence: dict[str, Any]) -> str:
+    """Classify a metrics row into raw row types.
+
+    Returns:
+        One of ``observable``, ``unavailable_no_claim``, or
+        ``proxy_only_denominator_excluded``.
+    """
+    state = evidence.get("state", "unavailable")
+    exclusion = evidence.get("exclusion_reason", "")
+
+    if state == "planner_observable" and not exclusion:
+        return "observable"
+    if state == "planner_observable" and exclusion:
+        return "unavailable_no_claim"
+    if state == "unavailable":
+        return "unavailable_no_claim"
+    return "proxy_only_denominator_excluded"
+
+
+def _stop_line_behavior(metrics: dict[str, Any], row_type: str) -> dict[str, Any]:
+    """Summarize stop-line behaviour from raw metric values.
+
+    Returns:
+        Dict with ``crossed_under_red``, ``min_distance_m``, ``red_violation_count``.
+    """
+    if row_type != "observable":
+        return {
+            "crossed_under_red": False,
+            "min_distance_m": float("nan"),
+            "red_violation_count": 0,
+        }
+    return {
+        "crossed_under_red": metrics["signal_stop_line_crossings_under_red"] > 0,
+        "min_distance_m": metrics["signal_min_distance_to_stop_line_before_crossing_m"],
+        "red_violation_count": metrics["signal_red_phase_violations"],
+    }
+
+
+def _pedestrian_conflict_label(metrics: dict[str, Any], row_type: str) -> dict[str, Any]:
+    """Summarize pedestrian conflict information from raw metric values.
+
+    Returns:
+        Dict with ``count``, ``label``, and ``eligible`` keys.
+    """
+    count = metrics.get("signal_pedestrian_conflict_during_legal_crossing_count", 0)
+    if row_type != "observable":
+        return {"count": 0, "label": "not_applicable", "eligible": False}
+    return {
+        "count": count,
+        "label": "conflict_detected" if count > 0 else "no_conflict",
+        "eligible": True,
+    }
+
+
+def _compliance_eligible(planner_observable: bool, benchmark_evidence: bool) -> bool:
+    """Return True only when the row qualifies for traffic-light compliance claims.
+
+    A row may claim traffic-light compliance if and only if
+    ``planner_observable=true`` and ``benchmark_evidence=true``.
+    """
+    return planner_observable and benchmark_evidence
+
+
+def signal_metrics_report_rows(
+    episodes: list[tuple[str, SignalEpisode]],
+) -> list[dict[str, Any]]:
+    """Build structured report rows from a list of labelled signal episodes.
+
+    Each row includes:
+    - signal-compliance metrics
+    - denominator and exclusion reason
+    - stop-line behaviour summary
+    - pedestrian conflict label
+    - compliance eligibility flag
+
+    Rows are classified as one of four types:
+    ``red_required_stop``, ``green_proceed``, ``unavailable_no_claim``,
+    ``proxy_only_denominator_excluded``.
+
+    Args:
+        episodes: List of ``(episode_id, episode)`` pairs.
+
+    Returns:
+        List of structured row dicts suitable for report table rendering.
+    """
+    rows: list[dict[str, Any]] = []
+    for episode_id, episode in episodes:
+        metrics = calculate_signal_metrics(episode)
+        evidence = metrics.get("signal_metrics_evidence", {})
+        state = evidence.get("state", "unavailable")
+        exclusion = evidence.get("exclusion_reason", "")
+        denominator = metrics.get("signal_metrics_denominator", 0)
+
+        planner_observable = state == "planner_observable" and not exclusion
+        benchmark_evidence = planner_observable and denominator > 0
+
+        raw_row_type = _classify_row_type(evidence)
+
+        # Determine the sub-type for observable rows (red vs green)
+        if raw_row_type == "observable":
+            has_red_violation = metrics["signal_red_phase_violations"] > 0
+            has_stop_line_crossing = metrics["signal_stop_line_crossings_under_red"] > 0
+            if has_red_violation or has_stop_line_crossing:
+                row_type = "red_required_stop"
+            else:
+                row_type = "green_proceed"
+        else:
+            row_type = raw_row_type
+
+        stop_behaviour = _stop_line_behavior(metrics, raw_row_type)
+        ped_conflict = _pedestrian_conflict_label(metrics, raw_row_type)
+        eligible = _compliance_eligible(planner_observable, benchmark_evidence)
+
+        rows.append(
+            {
+                "episode_id": episode_id,
+                "row_type": row_type,
+                "planner_observable": planner_observable,
+                "benchmark_evidence": benchmark_evidence,
+                "signal_compliance_eligible": eligible,
+                "signal_unavailable_exclusion_count": metrics["signal_unavailable_exclusion_count"],
+                "signal_metrics_denominator": denominator,
+                "exclusion_reason": exclusion,
+                "stop_line_behaviour": stop_behaviour,
+                "pedestrian_conflict": ped_conflict,
+                "delay_after_green_onset_s": metrics["signal_delay_after_green_onset_s"],
+                "signal_metrics_evidence": evidence,
+            }
+        )
+    return rows
+
+
+def render_report_rows_markdown(rows: list[dict[str, Any]]) -> str:
+    """Render structured report rows as a Markdown table.
+
+    The table includes row type, compliance eligibility, denominator,
+    exclusion reason, stop-line crossing, min distance, pedestrian
+    conflicts, and delay after green onset.
+
+    Args:
+        rows: Output of ``signal_metrics_report_rows``.
+
+    Returns:
+        Markdown-formatted table string.
+    """
+    header = (
+        "| episode_id | row_type | eligible | denominator "
+        "| exclusion_reason | crossed_red | min_dist_m "
+        "| ped_conflicts | delay_green_s |"
+    )
+    separator = "|---|---|---|---|---|---|---|---|---|"
+    lines = [header, separator]
+    for r in rows:
+        stop = r["stop_line_behaviour"]
+        ped = r["pedestrian_conflict"]
+        delay = r["delay_after_green_onset_s"]
+        delay_str = f"{delay:.2f}" if np.isfinite(delay) else "N/A"
+        min_dist = stop["min_distance_m"]
+        min_dist_str = f"{min_dist:.2f}" if np.isfinite(min_dist) else "N/A"
+        lines.append(
+            f"| {r['episode_id']} "
+            f"| {r['row_type']} "
+            f"| {str(r['signal_compliance_eligible']).lower()} "
+            f"| {r['signal_metrics_denominator']} "
+            f"| {r['exclusion_reason'] or '-'} "
+            f"| {str(stop['crossed_under_red']).lower()} "
+            f"| {min_dist_str} "
+            f"| {ped['count']} "
+            f"| {delay_str} |"
+        )
+    return "\n".join(lines)

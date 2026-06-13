@@ -1,0 +1,50 @@
+{
+  "issue": 2753,
+  "title": "Signalized crossing metrics report-row fixture evidence",
+  "claim_boundary": "Fixture/report-table evidence only. No simulator or runtime traces were executed. No compliance claim is established beyond the report-row contract.",
+  "total_rows": 4,
+  "row_types_present": [
+    "green_proceed",
+    "proxy_only_denominator_excluded",
+    "red_required_stop",
+    "unavailable_no_claim"
+  ],
+  "observable_count": 2,
+  "excluded_count": 2,
+  "eligible_rows": [
+    {
+      "episode_id": "fixture_red_required_stop",
+      "row_type": "red_required_stop",
+      "planner_observable": true,
+      "benchmark_evidence": true,
+      "signal_metrics_denominator": 1
+    },
+    {
+      "episode_id": "fixture_green_proceed",
+      "row_type": "green_proceed",
+      "planner_observable": true,
+      "benchmark_evidence": true,
+      "signal_metrics_denominator": 1
+    }
+  ],
+  "excluded_rows": [
+    {
+      "episode_id": "fixture_unavailable_no_claim",
+      "row_type": "unavailable_no_claim",
+      "planner_observable": false,
+      "benchmark_evidence": false,
+      "signal_metrics_denominator": 0,
+      "exclusion_reason": "signal_state_metadata_absent"
+    },
+    {
+      "episode_id": "fixture_proxy_only_denominator_excluded",
+      "row_type": "proxy_only_denominator_excluded",
+      "planner_observable": false,
+      "benchmark_evidence": false,
+      "signal_metrics_denominator": 0,
+      "exclusion_reason": "signal_state_not_benchmark_evidence"
+    }
+  ],
+  "excluded_denominator_zero": true,
+  "excluded_not_compliance_eligible": true
+}

@@ -203,17 +203,12 @@ def calculate_signal_metrics(data: SignalEpisode) -> dict[str, Any]:  # noqa: C9
     }
 
 
-def _classify_row_type(evidence: dict[str, Any], denominator: int) -> str:
-    """Classify a metrics row into one of the four canonical row types.
-
-    Row types:
-    - ``red_required_stop``: observable red-phase row (may include violations).
-    - ``green_proceed``: observable green-phase row.
-    - ``unavailable_no_claim``: signal state absent or fields incomplete.
-    - ``proxy_only_denominator_excluded``: proxy/diagnostic planner, excluded from denominator.
+def _classify_row_type(evidence: dict[str, Any]) -> str:
+    """Classify a metrics row into raw row types.
 
     Returns:
-        One of the four canonical row type strings.
+        One of ``observable``, ``unavailable_no_claim``, or
+        ``proxy_only_denominator_excluded``.
     """
     state = evidence.get("state", "unavailable")
     exclusion = evidence.get("exclusion_reason", "")
@@ -304,7 +299,7 @@ def signal_metrics_report_rows(
         planner_observable = state == "planner_observable" and not exclusion
         benchmark_evidence = planner_observable and denominator > 0
 
-        raw_row_type = _classify_row_type(evidence, denominator)
+        raw_row_type = _classify_row_type(evidence)
 
         # Determine the sub-type for observable rows (red vs green)
         if raw_row_type == "observable":

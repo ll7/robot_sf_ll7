@@ -10,13 +10,15 @@ Validates that the generator script produces correct evidence artifacts:
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from scripts.tools.generate_signalized_crossing_metrics_report import generate
 
-_EVIDENCE_DIR = Path("docs/context/evidence/issue_2753_signalized_crossing_metrics")
+if TYPE_CHECKING:
+    from pathlib import Path
+
 _EXPECTED_FILES = {"summary.json", "report.md", "README.md"}
 _EXPECTED_ROW_TYPES = {
     "red_required_stop",

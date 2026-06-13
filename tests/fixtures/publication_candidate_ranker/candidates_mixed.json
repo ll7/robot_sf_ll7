@@ -1,0 +1,59 @@
+[
+  {
+    "issue_number": 2730,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2730",
+    "title": "low score candidate",
+    "linter_ok": false,
+    "linter_findings": [{"code": "missing_recent_comments", "detail": "no recent comments"}],
+    "scores": {
+      "dissertation_relevance": 0.3,
+      "evidence_readiness": 0.2,
+      "implementation_boundedness": 0.4,
+      "artifact_dependency": 0.7,
+      "expected_research_value": 0.3,
+      "duplication_risk": 0.6
+    },
+    "reasons": [],
+    "evidence_caveats": ["stale evidence", "no recent activity"],
+    "duplication_notes": ["partially overlaps with #2700"],
+    "blocked_by": [2731]
+  },
+  {
+    "issue_number": 2731,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2731",
+    "title": "high score candidate",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.9,
+      "evidence_readiness": 0.95,
+      "implementation_boundedness": 0.85,
+      "artifact_dependency": 0.1,
+      "expected_research_value": 0.9,
+      "duplication_risk": 0.05
+    },
+    "reasons": ["strong evidence", "clear scope", "novel contribution"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  },
+  {
+    "issue_number": 2732,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2732",
+    "title": "medium score candidate",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.6,
+      "evidence_readiness": 0.5,
+      "implementation_boundedness": 0.7,
+      "artifact_dependency": 0.4,
+      "expected_research_value": 0.55,
+      "duplication_risk": 0.2
+    },
+    "reasons": ["moderate relevance"],
+    "evidence_caveats": ["needs more evidence"],
+    "duplication_notes": [],
+    "blocked_by": []
+  }
+]

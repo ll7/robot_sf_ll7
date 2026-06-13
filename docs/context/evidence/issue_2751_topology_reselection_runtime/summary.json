@@ -1,0 +1,173 @@
+{
+  "schema": "issue_2751_topology_reselection_runtime.v1",
+  "issue": 2751,
+  "source_launch_issue": 2742,
+  "commit": "952eff7e2f35bfe29fd65d90c7c43fa458ab8bb9",
+  "claim_boundary": "diagnostic_only_not_benchmark_or_paper_evidence",
+  "classification": "revise",
+  "classification_rationale": "Hard progress-gated rows retained diagnostic influence but all remained horizon_exhausted; the negative control succeeded with zero topology switching.",
+  "manifest": "configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml",
+  "runner": "scripts/validation/run_topology_reselection_cross_slice.py",
+  "command": "uv run python scripts/validation/run_topology_reselection_cross_slice.py --manifest configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml --output-dir <ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime",
+  "raw_trace_policy": "Raw per-row traces are reproducible from the tracked command but are not mirrored in git; compact row metrics below are the durable trace summary.",
+  "trace_links": [
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/bottleneck_transfer/baseline/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/bottleneck_transfer/reuse_penalty/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/bottleneck_transfer/progress_gated_threshold_0.05/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/bottleneck_transfer/progress_gated_threshold_0.1/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/bottleneck_transfer/progress_gated_threshold_0.2/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/doorway_transfer/baseline/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/doorway_transfer/reuse_penalty/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/doorway_transfer/progress_gated_threshold_0.05/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/doorway_transfer/progress_gated_threshold_0.1/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/doorway_transfer/progress_gated_threshold_0.2/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/t_intersection_transfer/baseline/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/t_intersection_transfer/reuse_penalty/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/t_intersection_transfer/progress_gated_threshold_0.05/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/t_intersection_transfer/progress_gated_threshold_0.1/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/t_intersection_transfer/progress_gated_threshold_0.2/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/simple_negative_control/baseline/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/simple_negative_control/reuse_penalty/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/simple_negative_control/progress_gated_threshold_0.05/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/simple_negative_control/progress_gated_threshold_0.1/topology_hypotheses.json",
+    "<ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime/runs/simple_negative_control/progress_gated_threshold_0.2/topology_hypotheses.json"
+  ],
+  "candidate_configs": {
+    "baseline": "configs/policy_search/candidates/topology_guided_hybrid_rule_v0.yaml",
+    "reuse_penalty": "configs/policy_search/candidates/topology_guided_hybrid_rule_v0_reuse_penalty.yaml",
+    "progress_gated": "configs/policy_search/candidates/topology_guided_hybrid_rule_v0_progress_gated_reselection.yaml"
+  },
+  "row_count": 20,
+  "hard_slices": [
+    "bottleneck_transfer",
+    "doorway_transfer",
+    "t_intersection_transfer"
+  ],
+  "negative_control": "simple_negative_control",
+  "decision_rule": {
+    "promote_if": "Every hard slice has at least one progress-gated row that clears and the negative-control slice shows no topology switching.",
+    "stop_if": "Progress-gated reselection loses topology-command influence on any hard slice, worsens negative-control switching, or only changes route labels without route-progress or terminal-outcome signal.",
+    "otherwise": "revise"
+  },
+  "slice_summary": [
+    {
+      "slice_id": "bottleneck_transfer",
+      "role": "hard",
+      "scenario": "classic_bottleneck_medium",
+      "progress_gated_outcomes": [
+        {
+          "threshold_m": 0.05,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 5.200000077486036,
+          "topology_switch_count": 0
+        },
+        {
+          "threshold_m": 0.1,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 5.400000080466269,
+          "topology_switch_count": 0
+        },
+        {
+          "threshold_m": 0.2,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 5.600000083446501,
+          "topology_switch_count": 0
+        }
+      ]
+    },
+    {
+      "slice_id": "doorway_transfer",
+      "role": "hard",
+      "scenario": "classic_doorway_medium",
+      "progress_gated_outcomes": [
+        {
+          "threshold_m": 0.05,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 1.4485281590086068,
+          "topology_switch_count": 0
+        },
+        {
+          "threshold_m": 0.1,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 1.4485281590086068,
+          "topology_switch_count": 0
+        },
+        {
+          "threshold_m": 0.2,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 1.4485281590086068,
+          "topology_switch_count": 0
+        }
+      ]
+    },
+    {
+      "slice_id": "t_intersection_transfer",
+      "role": "hard",
+      "scenario": "classic_t_intersection_medium",
+      "progress_gated_outcomes": [
+        {
+          "threshold_m": 0.05,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 6.3857865327825385,
+          "topology_switch_count": 13
+        },
+        {
+          "threshold_m": 0.1,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 6.3857865327825385,
+          "topology_switch_count": 13
+        },
+        {
+          "threshold_m": 0.2,
+          "outcome": "horizon_exhausted",
+          "success": false,
+          "route_progress_m": 6.3857865327825385,
+          "topology_switch_count": 13
+        }
+      ]
+    },
+    {
+      "slice_id": "simple_negative_control",
+      "role": "negative_control",
+      "scenario": "empty_map_8_directions_east",
+      "progress_gated_outcomes": [
+        {
+          "threshold_m": 0.05,
+          "outcome": "success",
+          "success": true,
+          "route_progress_m": 1.7656854512600013,
+          "topology_switch_count": 0
+        },
+        {
+          "threshold_m": 0.1,
+          "outcome": "success",
+          "success": true,
+          "route_progress_m": 1.7656854512600013,
+          "topology_switch_count": 0
+        },
+        {
+          "threshold_m": 0.2,
+          "outcome": "success",
+          "success": true,
+          "route_progress_m": 1.7656854512600013,
+          "topology_switch_count": 0
+        }
+      ]
+    }
+  ],
+  "validation": [
+    "uv run ruff check scripts/validation/run_topology_reselection_cross_slice.py tests/validation/test_run_topology_reselection_cross_slice.py",
+    "uv run ruff format --check scripts/validation/run_topology_reselection_cross_slice.py tests/validation/test_run_topology_reselection_cross_slice.py",
+    "PYTEST_NUM_WORKERS=8 uv run pytest tests/validation/test_run_topology_reselection_cross_slice.py -q",
+    "uv run python scripts/validation/run_topology_reselection_cross_slice.py --manifest configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml --dry-run --max-runs 2 --output-dir <ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime_dryrun",
+    "tmux runtime command exited 0"
+  ]
+}

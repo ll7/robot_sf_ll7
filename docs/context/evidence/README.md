@@ -98,6 +98,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2751_topology_reselection_runtime/`: diagnostic-only runtime evidence for the
+  clearance-targeted topology-reselection successor. The result is `revise`: all hard slices
+  remained `horizon_exhausted`, while the negative-control rows succeeded with zero topology
+  switching. Not benchmark or paper-facing evidence.
 - `issue_2755_observation_noise_envelope_2026-06-13/`: diagnostic trace-derived
   near-field observation-noise robustness envelope. Evaluates seven perturbation conditions
   (noop, low/medium Gaussian noise, missed detection, occlusion, delay, combined) against

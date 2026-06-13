@@ -1,0 +1,33 @@
+{
+  "schema": "issue_2804_non_topology_successor.v1",
+  "issue": 2804,
+  "parent_issue": 2801,
+  "predecessor_chain": [2742, 2751, 2752, 2801],
+  "claim_boundary": "analysis_only_not_benchmark_or_paper_evidence",
+  "classification": "launch_packet",
+  "classification_rationale": "Analysis-only launch packet for local_policy_scoring investigation of t_intersection_transfer hard slice. Follows #2801 stop decision for topology reselection and implements the recommended non-topology successor target.",
+  "selected_intervention_target": "local_policy_scoring",
+  "target_slice": "t_intersection_transfer",
+  "target_scenario": "classic_t_intersection_medium",
+  "hypothesis": "Per-step local-policy scoring diagnostics will reveal whether 13 topology switches at 6.39m progress are caused by blocked_geometry (no viable alternative within scoring horizon) or switch_too_often (oscillation due to scoring noise or insufficient hysteresis).",
+  "comparator": "topology_guided_hybrid_rule_v0 with progress_gated reselection at 0.05m threshold from #2751, which produced 6.39m progress with 13 switches and horizon_exhausted.",
+  "negative_control": "simple_negative_control (empty_map_8_directions_east) reused from #2751; expect zero switches and stable best-candidate scoring.",
+  "stop_rule": "Stop if: (1) in at least 80% of scoring steps, best-vs-second-best score gap is below 5% of the per-episode absolute score range while route progress remains below 6.5m (blocked_geometry), (2) rapid oscillation shows >10 switches in <20% of episode steps with no candidate maintaining best-score for at least five consecutive scoring steps (switch_too_often), or (3) instrumentation cannot be produced without non-trivial code changes (blocked).",
+  "decision_rule": {
+    "blocked_geometry": "stop; requires scenario geometry redesign",
+    "switch_too_often": "revise; hysteresis or stability fix recommended",
+    "clear_scoring_signal_selection_fails": "revise; selection-mechanism fix recommended, could support future runtime packet",
+    "instrumentation_blocked": "blocked; name exact instrumentation gap"
+  },
+  "runtime_packet_proposed": false,
+  "artifact_plan": [
+    "docs/context/issue_2804_non_topology_successor.md",
+    "docs/context/evidence/issue_2804_non_topology_successor/summary.json",
+    "docs/context/evidence/issue_2804_non_topology_successor/README.md"
+  ],
+  "does_not_promote_2751": true,
+  "note_2751_claim_boundary": "diagnostic_only_not_benchmark_or_paper_evidence",
+  "validation": [
+    "uv run python -m json.tool docs/context/evidence/issue_2804_non_topology_successor/summary.json"
+  ]
+}

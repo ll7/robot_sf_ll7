@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-12
+updated_at: 2026-06-13
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -1157,6 +1157,14 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_2762_negative_result_register/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

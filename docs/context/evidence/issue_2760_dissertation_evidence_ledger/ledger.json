@@ -1,0 +1,109 @@
+{
+  "schema_version": "dissertation_evidence_ledger.v1",
+  "created_at_utc": "2026-06-13",
+  "issue": 2760,
+  "purpose": "synthesis/dissertation-planning aid; not new benchmark, paper, or safety evidence",
+  "source_artifacts": {
+    "claim_matrix": "claim_matrix.json (generated in worktree output/)",
+    "stale_artifact_report": "stale_artifact_report.json (generated in worktree output/)"
+  },
+  "rows": [
+    {
+      "area": "topology_guidance",
+      "claim": "Topology-guided hybrid rule selection can diversify route selection on the canonical h160 double-bottleneck slice, but repeated selector variants have not improved topology-command influence, route progress, or terminal outcome.",
+      "artifact_status": "current",
+      "evidence_tier": "diagnostic",
+      "allowed_wording": "Near-parity topology selection can diversify route labels, but current evidence still routes the mechanism to revise without improving non-primary command influence, route progress, or terminal outcome.",
+      "caveat": "Do not claim topology guidance improves success, transfer, or leaderboard performance. The lane is stop for same-family selector reruns on the canonical slice.",
+      "source_issues": [2518, 2530, 2624, 2704, 2706],
+      "dissertation_chapter": "Discussion, Outlook",
+      "claim_gap": "A new hypothesis with a different mechanism and metric is needed before further topology work. No current row supports Results wording."
+    },
+    {
+      "area": "signalized_behavior",
+      "claim": "The repository has trace-level proxy signal-state plumbing for the waiting-then-crossing fixture, but signal metadata remains trace_metadata_only and planner_observable: false.",
+      "artifact_status": "current",
+      "evidence_tier": "diagnostic",
+      "allowed_wording": "The repository has a proxy signal-state diagnostic surface that records phase labels in trace metadata, but the current evidence is not planner-consumed, not benchmark-evidence, and does not prove traffic-signal realism or crossing-legality compliance.",
+      "caveat": "Signal state is proxy_diagnostic only. Do not claim planner observability, forced-waiting reasoning, legality compliance, or benchmark ranking improvement.",
+      "source_issues": [2527, 2564, 2662, 2474],
+      "dissertation_chapter": "Methods, Limitations",
+      "claim_gap": "Requires explicit runtime signal phase state, planner-observation policy, zone/legality trace fields, and planner_observable promotion before any benchmark row."
+    },
+    {
+      "area": "observation_robustness",
+      "claim": "The repository defines a five-level observation vocabulary (oracle full state through occluded partial state) with planner/level compatibility validation and episode propagation, but this is a contract and provenance layer, not calibrated perception.",
+      "artifact_status": "current",
+      "evidence_tier": "release-backed",
+      "allowed_wording": "The benchmark observation-level vocabulary defines observation-contract boundaries and compatibility gates so results can state which observation assumption a planner used.",
+      "caveat": "The levels are benchmark evidence labels and compatibility gates, not sim-to-real validity claims. No real camera perception, detector training, calibrated tracking, or new environment observation implementation exists yet.",
+      "source_issues": [1246, 1612, 1613, 1614],
+      "dissertation_chapter": "Methods",
+      "claim_gap": "Requires actual perception pipeline, calibrated tracking, or simulator-level observation fidelity before any robustness claim. Cross-track comparison is not valid without matched observation contracts."
+    },
+    {
+      "area": "prediction",
+      "claim": "The probabilistic prediction interface is merged and the contract smoke emits native/fail-closed rows for reactive, single-trajectory, multimodal-equal-weight, and multimodal-confidence-weighted rows, but no planner-campaign comparison has been executed.",
+      "artifact_status": "current",
+      "evidence_tier": "diagnostic",
+      "allowed_wording": "The repository has a merged probabilistic prediction interface and a contract-smoke runner that materializes native and fail-closed row shapes for multimodal prediction configurations.",
+      "caveat": "This is contract evidence only. The runner uses deterministic fixtures, does not execute a planner campaign, and does not measure prediction quality or compare planning performance.",
+      "source_issues": [2475, 2476, 2496],
+      "dissertation_chapter": "Methods, Outlook",
+      "claim_gap": "Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim."
+    },
+    {
+      "area": "pedestrian_density_stress",
+      "claim": "The scenario coverage entropy tool provides config-only diagnostic coverage analysis over authored scenario fields (archetype, density, flow, pedestrian count, etc.), but it does not prove benchmark value or runtime stress effectiveness.",
+      "artifact_status": "current",
+      "evidence_tier": "diagnostic",
+      "allowed_wording": "A config-only scenario coverage entropy report can identify redundant and novel scenario candidates based on authored metadata features for scenario-set curation.",
+      "caveat": "Coverage entropy is a diagnostic planning aid. It does not prove benchmark value, runtime stress effectiveness, or planner ranking. Dense stress rows should not be promoted without runtime and failure-semantics proof.",
+      "source_issues": [1240, 1304],
+      "dissertation_chapter": "Methods, Limitations",
+      "claim_gap": "Requires runtime execution evidence, failure-semantics classification, and planner-comparison rows before any pedestrian-density stress benchmark claim."
+    },
+    {
+      "area": "exported_tables",
+      "claim": "Two historical scenario-horizon tables were exported into a dissertation bundle, but the payload files are missing and the tables remain historical tracked evidence.",
+      "artifact_status": "stale",
+      "evidence_tier": "non-claimable",
+      "allowed_wording": "do-not-use",
+      "caveat": "The claim matrix reports missing payload files for both artifacts, and the stale-artifact detector classifies the bundle manifest as stale. The tables remain historical tracked evidence and do not establish new benchmark claims.",
+      "source_issues": [1023, 2542],
+      "dissertation_chapter": "N/A (blocked)",
+      "claim_gap": "Requires payload file recovery or re-export before any reuse."
+    }
+  ],
+  "stale_artifact_summary": [
+    {
+      "artifact_id": "tab_issue_1023_campaign_table",
+      "state": "non-claimable",
+      "reason": "Missing payload file"
+    },
+    {
+      "artifact_id": "tab_issue_1023_scenario_family_breakdown",
+      "state": "non-claimable",
+      "reason": "Missing payload file"
+    },
+    {
+      "artifact_id": "unnamed",
+      "state": "stale-needs-refresh",
+      "reason": "Output artifact missing output path"
+    }
+  ],
+  "reuse_recommendations": {
+    "topology_guidance": "Methods/Outlook only. Use the stop-lane synthesis from #2706 to explain why same-family selector reruns were exhausted. Do not cite as benchmark improvement.",
+    "signalized_behavior": "Methods/Limitations only. Use the proxy diagnostic surface to describe infrastructure readiness. Do not cite as traffic-signal compliance or planner ranking.",
+    "observation_robustness": "Methods only. Use the observation-level vocabulary to describe benchmark contract discipline. Do not cite as perception or sim-to-real validity.",
+    "prediction": "Methods/Outlook only. Use the merged interface and contract smoke to describe infrastructure readiness. Do not cite as prediction-quality or planner-improvement evidence.",
+    "pedestrian_density_stress": "Methods/Limitations only. Use coverage entropy to describe scenario curation discipline. Do not cite as runtime stress or planner-ranking evidence.",
+    "exported_tables": "Blocked. Do not use until payload files are recovered or re-exported."
+  },
+  "claim_boundaries": [
+    "This ledger is a synthesis/dissertation-planning aid. It does not produce new benchmark evidence, paper-facing results, or safety claims.",
+    "Every row includes allowed_wording and caveat. Rows with missing or stale evidence use do-not-use or similarly blocked wording.",
+    "Diagnostic-only, stale, fallback, degraded, unavailable, or launch-packet rows are explicitly treated as claim-weakening/blocking caveats.",
+    "Fallback behavior is not acceptable as a successful benchmark outcome unless the task explicitly measures fallback mode."
+  ]
+}

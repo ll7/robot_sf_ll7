@@ -158,6 +158,10 @@ knowledge, not every transient iteration detail.
   [dissertation_claim_export_candidate_report.md](dissertation_claim_export_candidate_report.md)
 * Dissertation research bridge:
   [dissertation_research_bridge.md](dissertation_research_bridge.md)
+* Dissertation evidence ledger (Issue #2760):
+  [dissertation_evidence_ledger.md](dissertation_evidence_ledger.md)
+  ([JSON ledger](evidence/issue_2760_dissertation_evidence_ledger/ledger.json),
+  [validation test](../../tests/docs/test_dissertation_evidence_ledger.py))
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
 * Issue #2282 topology selection instrumentation smoke:

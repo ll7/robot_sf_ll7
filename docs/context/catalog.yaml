@@ -1148,6 +1148,18 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/negative_result_register.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2762_negative_result_register/register.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2762_negative_result_register/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/README.md
     status: evidence
     freshness: evidence

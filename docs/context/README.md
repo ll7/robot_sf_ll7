@@ -162,6 +162,10 @@ knowledge, not every transient iteration detail.
   [dissertation_evidence_ledger.md](dissertation_evidence_ledger.md)
   ([JSON ledger](evidence/issue_2760_dissertation_evidence_ledger/ledger.json),
   [validation test](../../tests/docs/test_dissertation_evidence_ledger.py))
+* Negative result register (Issue #2762):
+  [negative_result_register.md](negative_result_register.md)
+  ([JSON register](evidence/issue_2762_negative_result_register/register.json),
+  [validation test](../../tests/docs/test_negative_result_register.py))
 * Issue #2221 static-recentering transfer smoke:
   [issue_2221_static_recenter_transfer.md](issue_2221_static_recenter_transfer.md)
 * Issue #2282 topology selection instrumentation smoke:

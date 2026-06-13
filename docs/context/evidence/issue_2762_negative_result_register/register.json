@@ -1,0 +1,81 @@
+{
+  "schema_version": "negative_result_register.v1",
+  "created_at_utc": "2026-06-13",
+  "issue": 2762,
+  "purpose": "synthesis/planning aid for negative, diagnostic-only, failed, and revise-classified findings; not new benchmark or paper evidence",
+  "classification_definitions": {
+    "revise": "The mechanism or hypothesis produced a result requiring design revision, not promotion.",
+    "diagnostic_only": "The result is informative for infrastructure or scope clarification but not benchmark-strength evidence.",
+    "failed": "The mechanism did not activate, produced an error, or was blocked.",
+    "inconclusive": "The test ran but the scenario, seed count, or horizon was insufficient to draw a conclusion."
+  },
+  "failure_mode_definitions": {
+    "mechanism_failed": "The mechanism itself did not work as intended under the tested conditions.",
+    "scenario_too_weak": "The scenario lacked the adversarial conditions needed to stress the mechanism.",
+    "evidence_diagnostic_only": "The evidence is real but scoped to diagnostic validation, not behavioral claims.",
+    "infrastructure_only": "Only the infrastructure or tooling was validated, not the hypothesis.",
+    "stale": "The finding references artifacts or configs that are no longer current.",
+    "blocked": "The finding is blocked by an unresolved dependency."
+  },
+  "entries": [
+    {
+      "id": "issue-2716-topology-reselection-cross-slice",
+      "hypothesis": "Progress-gated topology reselection generalizes beyond the canonical h160 double-bottleneck slice and clears hard non-canonical slices.",
+      "tested_artifact": "topology_guided_hybrid_rule_v0_progress_gated_reselection",
+      "scenario": "Three non-canonical hard slices (bottleneck_transfer, doorway_transfer, t_intersection_transfer) and one negative-control slice (simple_negative_control), thresholds 0.05/0.1/0.2m.",
+      "comparator": "topology_guided_hybrid_rule_v0 (baseline), topology_guided_hybrid_rule_v0_reuse_penalty",
+      "result_classification": "revise",
+      "failure_mode": "mechanism_failed",
+      "why_failed_or_inconclusive": "All 9 hard progress-gated rows ended horizon_exhausted (159 deadlock steps, 0 collision). The mechanism activates and generalizes diagnostically but does not clear any hard slice at h160. Negative-control rows succeeded cleanly (3/3 success, 0 topology switches).",
+      "evidence_pointer": [
+        "docs/context/evidence/issue_2716_topology_reselection_cross_slice/summary.json",
+        "docs/context/evidence/issue_2716_topology_reselection_cross_slice/report.md"
+      ],
+      "recommended_next_action": "Design a successor targeting actual clearance or terminal-outcome movement. Stop same-family selector reruns on the canonical slice.",
+      "linked_issues": [2716, 2743, 2742, 2704],
+      "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Classification is revise, not promote.",
+      "created_at": "2026-06-13"
+    },
+    {
+      "id": "issue-2749-observation-noise-distant-pedestrian",
+      "hypothesis": "Observation noise (Gaussian position noise, missed detection, occlusion, delay) degrades planner behavior on a pedestrian-present scenario.",
+      "tested_artifact": "hybrid_rule_v0_minimal with perception_limited observation config",
+      "scenario": "classic_bottleneck_medium (stress_slice), seed 111, horizon 40, 1 pedestrian at ~14.9m closest approach.",
+      "comparator": "Baseline (no observation noise, ideal_state evidence class)",
+      "result_classification": "diagnostic_only",
+      "failure_mode": "scenario_too_weak",
+      "why_failed_or_inconclusive": "All progress, risk, and planner metrics are identical between baseline and perception-limited. The single pedestrian is too far from the robot to influence planner decisions; the planner is dominated by static obstacle clearance. Perturbation plumbing is confirmed working (occlusion masking active, 1 missed detection at step 15) but no behavioral degradation is measurable.",
+      "evidence_pointer": [
+        "docs/context/evidence/issue_2749_observation_noise_diagnostics/summary.json",
+        "docs/context/evidence/issue_2749_observation_noise_diagnostics/RESULT.md"
+      ],
+      "recommended_next_action": "Retest with a closer pedestrian, higher pedestrian count, or a scenario where the planner must actively avoid pedestrians.",
+      "linked_issues": [2749, 2750],
+      "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Confirms perturbation infrastructure works; does not measure behavioral degradation.",
+      "created_at": "2026-06-13"
+    },
+    {
+      "id": "issue-2760-dissertation-evidence-ledger-diagnostic-rows",
+      "hypothesis": "The dissertation evidence ledger synthesizes all current thesis-area evidence into a claim-ready format.",
+      "tested_artifact": "Ledger rows for topology_guidance, signalized_behavior, observation_robustness, prediction, pedestrian_density_stress, and exported_tables.",
+      "scenario": "Full-repository evidence sweep across six thesis areas.",
+      "comparator": "N/A (synthesis, not a paired experiment)",
+      "result_classification": "diagnostic_only",
+      "failure_mode": "evidence_diagnostic_only",
+      "why_failed_or_inconclusive": "Four of six areas are classified as diagnostic-tier evidence (topology, signalized behavior, prediction, pedestrian density). One area (observation robustness) is release-backed but is a contract/provenance layer only. One area (exported tables) is stale/non-claimable. No row supports Results-chapter wording without qualification.",
+      "evidence_pointer": [
+        "docs/context/dissertation_evidence_ledger.md",
+        "docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json"
+      ],
+      "recommended_next_action": "Use the ledger as a planning aid to identify which thesis areas need new experiments before Results wording is possible. Do not cite any current row as benchmark-strength evidence.",
+      "linked_issues": [2760],
+      "claim_boundary": "Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.",
+      "created_at": "2026-06-13"
+    }
+  ],
+  "claim_boundaries": [
+    "This register is a synthesis/planning aid. It does not produce new benchmark evidence, paper-facing results, or safety claims.",
+    "Every entry preserves the original diagnostic or negative classification. Entries are not promoted to stronger claims by inclusion in this register.",
+    "Fallback, degraded, diagnostic-only, proxy-only, unavailable, stale, or missing-denominator rows weaken or block claim wording."
+  ]
+}

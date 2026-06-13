@@ -1,0 +1,171 @@
+{
+  "issue": 2757,
+  "claim_boundary": "Diagnostic-only, not paper-facing evidence. Limited to bounded repository trace fixtures.",
+  "reproducibility": {
+    "issue": 2757,
+    "generated_at_utc": "2026-06-13T09:40:45.509121+00:00",
+    "command": "uv run python scripts/benchmark/run_cv_forecast_eval.py --output-dir docs/context/evidence/issue_2757_cv_forecast_eval_2026-06-13",
+    "repo_head": "2a87f526",
+    "horizons_s": [
+      0.5,
+      1.0,
+      2.0
+    ]
+  },
+  "trace_family_gaps": {
+    "evaluated": [
+      "corridor_interaction"
+    ],
+    "limited": [
+      "bottleneck",
+      "crossing_proxy"
+    ],
+    "missing": [
+      "signalized_crossing",
+      "occluded_emergence",
+      "dense_pedestrian_interaction",
+      "bottleneck_with_motion"
+    ]
+  },
+  "results_by_trace": [
+    {
+      "label": "default_social_force",
+      "family": "corridor_interaction",
+      "trace_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json",
+      "scenario_id": "classic_head_on_corridor_low",
+      "planner_id": "default_social_force",
+      "seed": 111,
+      "status": "evaluated",
+      "frame_count": 20,
+      "pedestrians_per_frame": 2,
+      "has_motion": true,
+      "dt_s": 0.1,
+      "horizons_s": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "metrics": {
+        "forecast_evaluable_samples": 30.0,
+        "mean_ade_0.5s": 0.024280292893659475,
+        "count_ade_0.5s": 30.0,
+        "mean_ade_1s": 0.07693663848497238,
+        "count_ade_1s": 20.0,
+        "mean_calibration_error_0.5s": 0.050000000000000044,
+        "count_calibration_error_0.5s": 30.0,
+        "mean_calibration_error_1s": 0.050000000000000044,
+        "count_calibration_error_1s": 20.0,
+        "mean_collision_relevance_error_0.5s": 0.0,
+        "count_collision_relevance_error_0.5s": 30.0,
+        "mean_collision_relevance_error_1s": 0.0,
+        "count_collision_relevance_error_1s": 20.0,
+        "mean_log_likelihood_0.5s": -1.2676793071505172,
+        "count_log_likelihood_0.5s": 30.0,
+        "mean_log_likelihood_1s": -1.952169154331188,
+        "count_log_likelihood_1s": 20.0,
+        "mean_mahalanobis_dist_0.5s": 0.032373723858212626,
+        "count_mahalanobis_dist_0.5s": 30.0,
+        "mean_mahalanobis_dist_1s": 0.07327298903330705,
+        "count_mahalanobis_dist_1s": 20.0,
+        "mean_miss_rate_0.5s": 0.0,
+        "count_miss_rate_0.5s": 30.0,
+        "mean_miss_rate_1s": 0.0,
+        "count_miss_rate_1s": 20.0,
+        "mean_negative_log_likelihood_0.5s": 1.2676793071505172,
+        "count_negative_log_likelihood_0.5s": 30.0,
+        "mean_negative_log_likelihood_1s": 1.952169154331188,
+        "count_negative_log_likelihood_1s": 20.0,
+        "mean_within_95ci_0.5s": 1.0,
+        "count_within_95ci_0.5s": 30.0,
+        "mean_within_95ci_1s": 1.0,
+        "count_within_95ci_1s": 20.0
+      }
+    },
+    {
+      "label": "ammv_social_force",
+      "family": "corridor_interaction",
+      "trace_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
+      "scenario_id": "classic_head_on_corridor_low",
+      "planner_id": "ammv_social_force",
+      "seed": 111,
+      "status": "evaluated",
+      "frame_count": 20,
+      "pedestrians_per_frame": 2,
+      "has_motion": true,
+      "dt_s": 0.1,
+      "horizons_s": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "metrics": {
+        "forecast_evaluable_samples": 30.0,
+        "mean_ade_0.5s": 0.024280292893659475,
+        "count_ade_0.5s": 30.0,
+        "mean_ade_1s": 0.07693663848497238,
+        "count_ade_1s": 20.0,
+        "mean_calibration_error_0.5s": 0.050000000000000044,
+        "count_calibration_error_0.5s": 30.0,
+        "mean_calibration_error_1s": 0.050000000000000044,
+        "count_calibration_error_1s": 20.0,
+        "mean_collision_relevance_error_0.5s": 0.0,
+        "count_collision_relevance_error_0.5s": 30.0,
+        "mean_collision_relevance_error_1s": 0.0,
+        "count_collision_relevance_error_1s": 20.0,
+        "mean_log_likelihood_0.5s": -1.2676793071505172,
+        "count_log_likelihood_0.5s": 30.0,
+        "mean_log_likelihood_1s": -1.952169154331188,
+        "count_log_likelihood_1s": 20.0,
+        "mean_mahalanobis_dist_0.5s": 0.032373723858212626,
+        "count_mahalanobis_dist_0.5s": 30.0,
+        "mean_mahalanobis_dist_1s": 0.07327298903330705,
+        "count_mahalanobis_dist_1s": 20.0,
+        "mean_miss_rate_0.5s": 0.0,
+        "count_miss_rate_0.5s": 30.0,
+        "mean_miss_rate_1s": 0.0,
+        "count_miss_rate_1s": 20.0,
+        "mean_negative_log_likelihood_0.5s": 1.2676793071505172,
+        "count_negative_log_likelihood_0.5s": 30.0,
+        "mean_negative_log_likelihood_1s": 1.952169154331188,
+        "count_negative_log_likelihood_1s": 20.0,
+        "mean_within_95ci_0.5s": 1.0,
+        "count_within_95ci_0.5s": 30.0,
+        "mean_within_95ci_1s": 1.0,
+        "count_within_95ci_1s": 20.0
+      }
+    },
+    {
+      "label": "synthetic_crossing_proxy_orca",
+      "family": "crossing_proxy",
+      "trace_path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
+      "scenario_id": "crossing_proxy",
+      "planner_id": "orca",
+      "seed": 111,
+      "status": "limited_no_pedestrian_motion",
+      "frame_count": 5,
+      "pedestrians_per_frame": 1,
+      "has_motion": false,
+      "metrics": {
+        "forecast_evaluable_samples": 0.0
+      },
+      "limitation": "All pedestrian velocities are zero; constant-velocity forecast produces degenerate predictions with no motion to evaluate against."
+    },
+    {
+      "label": "minimal_fixture",
+      "family": "bottleneck",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json",
+      "scenario_id": "classic_bottleneck_medium",
+      "planner_id": "hybrid_rule_v0_minimal",
+      "seed": 111,
+      "status": "limited_no_pedestrian_motion",
+      "frame_count": 2,
+      "pedestrians_per_frame": 1,
+      "has_motion": false,
+      "metrics": {
+        "forecast_evaluable_samples": 0.0
+      },
+      "limitation": "All pedestrian velocities are zero; constant-velocity forecast produces degenerate predictions with no motion to evaluate against."
+    }
+  ],
+  "failure_cases": []
+}

@@ -190,6 +190,9 @@ knowledge, not every transient iteration detail.
 * Issue #2704 Progress-Gated Topology Successor Diagnostic:
   [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
   ([summary](evidence/issue_2704_progress_gated_topology_successor/summary.json))
+* Issue #2716 topology reselection cross-slice diagnostic:
+  [issue_2716_topology_reselection_cross_slice.md](issue_2716_topology_reselection_cross_slice.md)
+  ([summary](evidence/issue_2716_topology_reselection_cross_slice/summary.json))
 * Issue #2706 topology lane synthesis after progress-gated successor:
   [issue_2706_topology_lane_synthesis.md](issue_2706_topology_lane_synthesis.md)
 * Mechanism closure status:
@@ -807,6 +810,9 @@ knowledge, not every transient iteration detail.
 * Issue #2704 Progress-Gated Topology Successor Diagnostic:
   [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
   ([summary](evidence/issue_2704_progress_gated_topology_successor/summary.json))
+* Issue #2716 topology reselection cross-slice diagnostic:
+  [issue_2716_topology_reselection_cross_slice.md](issue_2716_topology_reselection_cross_slice.md)
+  ([summary](evidence/issue_2716_topology_reselection_cross_slice/summary.json))
 * Issue #2706 topology lane synthesis after progress-gated successor:
   [issue_2706_topology_lane_synthesis.md](issue_2706_topology_lane_synthesis.md)
 * Issue #2522 topology and AMV why-first diagnostics:

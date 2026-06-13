@@ -50,7 +50,7 @@ explicitly blocked from manuscript promotion.
 |---|---|
 | **Claim** | The repository has trace-level proxy signal-state plumbing for the waiting-then-crossing fixture and a simulator-backed #2799 smoke proving signal metric denominator/exclusion semantics for explicit `planner_observable` rows. |
 | **Artifact status** | current |
-| **Evidence tier** | runtime denominator smoke |
+| **Evidence tier** | diagnostic |
 | **Allowed wording** | "The repository can now produce simulator-backed signalized-crossing rows that separate planner-observable denominator evidence from unavailable/proxy exclusions; this proves denominator plumbing, not traffic-light realism or crossing-legality compliance." |
 | **Caveat** | Do not claim forced-waiting reasoning, legality compliance, traffic-signal realism, or benchmark ranking improvement from #2799. The smoke has one baseline planner and synthetic authored signal metadata. |
 | **Source PR/issue** | [#2527](issue_2527_waiting_crossing_fixture.md), [#2564](issue_2564_signal_state_proxy_smoke.md), [#2662](issue_2662_signal_state_promotion_contract.md), [#2474](issue_2474_signalized_crossing_benchmark.md), [#2799 evidence](evidence/issue_2799_signalized_runtime/README.md) |

@@ -146,6 +146,8 @@ def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "episode_id": row["episode_id"],
                 "scenario_id": row["scenario_id"],
                 "row_type": row["row_type"],
+                "planner_observable": row["planner_observable"],
+                "benchmark_evidence": row["benchmark_evidence"],
                 "signal_metrics_denominator": row["signal_metrics_denominator"],
             }
             for row in observable
@@ -155,6 +157,8 @@ def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "episode_id": row["episode_id"],
                 "scenario_id": row["scenario_id"],
                 "row_type": row["row_type"],
+                "planner_observable": row["planner_observable"],
+                "benchmark_evidence": row["benchmark_evidence"],
                 "signal_metrics_denominator": row["signal_metrics_denominator"],
                 "exclusion_reason": row["exclusion_reason"],
             }
@@ -165,7 +169,8 @@ def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
             row["signal_metrics_denominator"] == 0 for row in excluded
         ),
         "all_required_runtime_row_classes_present": {
-            "observable": any(row["signal_compliance_eligible"] for row in rows),
+            "red_required_stop": "red_required_stop" in row_types,
+            "green_proceed": "green_proceed" in row_types,
             "unavailable_no_claim": "unavailable_no_claim" in row_types,
             "proxy_only_denominator_excluded": "proxy_only_denominator_excluded" in row_types,
         },

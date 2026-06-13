@@ -933,6 +933,10 @@ entries:
     status: current
     freshness: evidence
     area: adversarial_search
+  - path: docs/context/issue_2725_generator_readiness.md
+    status: current
+    freshness: maintained
+    area: adversarial_search
   - path: docs/context/evidence/issue_2658_adversarial_manifest_smoke/summary.json
     status: evidence
     freshness: evidence

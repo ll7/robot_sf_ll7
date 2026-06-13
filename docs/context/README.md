@@ -254,6 +254,8 @@ knowledge, not every transient iteration detail.
   [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md)
 * Issue #2618 Generated Adversarial Manifest Planner Smoke:
   [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md)
+* Issue #2725 Generator-Readiness Contract:
+  [issue_2725_generator_readiness.md](issue_2725_generator_readiness.md)
 * Issue #2565 Uncertainty-Aware Stream-Gap Gating Smoke:
   [issue_2565_uncertainty_gating_smoke.md](issue_2565_uncertainty_gating_smoke.md)
 * Issue #2538 ScenarioBelief Planner Projection Smoke:
@@ -579,6 +581,8 @@ knowledge, not every transient iteration detail.
   [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md)
 * Issue #2658 Validator-Runner Adversarial Manifest Smoke (2026-06-12):
   [issue_2658_adversarial_manifest_smoke.md](issue_2658_adversarial_manifest_smoke.md)
+* Issue #2725 Generator-Readiness Contract (2026-06-13):
+  [issue_2725_generator_readiness.md](issue_2725_generator_readiness.md)
 * Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23):
   [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md)
 * Issue #1500 Adversarial Campaign Manifest Freeze (2026-05-26):

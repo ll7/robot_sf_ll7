@@ -83,7 +83,7 @@ runtime_rows: 0
 The dry-run output under `output/` is disposable. The summary JSON above is the durable tracked
 record for this launch packet.
 
-## Issue #2751 Runtime Decision
+## Issue #2751 Runtime Decision (2026-06-13)
 
 Issue [#2751](https://github.com/ll7/robot_sf_ll7/issues/2751) executed the clearance-targeted
 successor manifest on commit `952eff7e2f35bfe29fd65d90c7c43fa458ab8bb9`.

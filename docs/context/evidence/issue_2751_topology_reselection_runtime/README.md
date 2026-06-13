@@ -1,4 +1,4 @@
-# Issue #2751 Topology Reselection Runtime Evidence
+# Issue #2751 Topology Reselection Runtime Evidence (2026-06-13)
 
 Issue: [#2751](https://github.com/ll7/robot_sf_ll7/issues/2751)
 

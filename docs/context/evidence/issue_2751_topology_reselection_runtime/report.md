@@ -1,4 +1,4 @@
-# Issue 2742 Topology Reselection Cross-Slice Diagnostic
+# Issue #2751 Topology Reselection Cross-Slice Diagnostic (2026-06-13)
 
 Claim boundary: `diagnostic_only_not_benchmark_or_paper_evidence`.
 Classification: `revise`.

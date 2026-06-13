@@ -1,0 +1,78 @@
+{
+  "schema": "issue_2752_topology_reselection_mechanism.v1",
+  "issue": 2752,
+  "source_issue": 2751,
+  "commit": "952eff7e2f35bfe29fd65d90c7c43fa458ab8bb9",
+  "claim_boundary": "analysis_only_not_benchmark_or_paper_evidence",
+  "classification": "analysis_only",
+  "classification_rationale": "Mechanism-level failure classification of three hard slices from Issue #2751 runtime evidence. All hard slices remained horizon_exhausted; no topology alternative produced clearance. Not benchmark or paper-facing evidence.",
+  "manifest": "configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml",
+  "runner": "scripts/validation/run_topology_reselection_cross_slice.py",
+  "command": "uv run python scripts/validation/run_topology_reselection_cross_slice.py --manifest configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml --output-dir <ignored-worktree-output>/diagnostics/issue_2751_topology_reselection_runtime",
+  "runtime_evidence_source": "docs/context/evidence/issue_2751_topology_reselection_runtime/summary.json",
+  "hard_slices": [
+    "bottleneck_transfer",
+    "doorway_transfer",
+    "t_intersection_transfer"
+  ],
+  "slice_diagnosis": [
+    {
+      "slice_id": "bottleneck_transfer",
+      "scenario": "classic_bottleneck_medium",
+      "primary_failure_label": "no_useful_topology_alternative",
+      "confidence": "medium",
+      "evidence_summary": "All candidates horizon_exhausted at ~5.2-6.1m progress. Progress-gated rows show 0 switches. Baseline also stuck at 5.2m. reuse_penalty reached 6.1m with 2 switches but still horizon_exhausted.",
+      "distinguishes_mechanism_from_scenario": false,
+      "mechanism_or_scenario": "scenario_insufficiency_likely",
+      "recommended_next_action": "scenario_design_or_geometry",
+      "caveats": [
+        "Progress-gated thresholds (0.05, 0.1, 0.2) all produced identical outcomes; gate is not the limiting factor.",
+        "reuse_penalty produced slightly more progress (6.1m vs 5.2m) but still horizon_exhausted, suggesting the geometry bottleneck is the dominant constraint."
+      ]
+    },
+    {
+      "slice_id": "doorway_transfer",
+      "scenario": "classic_doorway_medium",
+      "primary_failure_label": "no_useful_topology_alternative",
+      "confidence": "high",
+      "evidence_summary": "All candidates identical at 1.45m progress, 0 switches, 159 deadlock steps. No topology variant produced different behavior.",
+      "distinguishes_mechanism_from_scenario": true,
+      "mechanism_or_scenario": "scenario_insufficiency",
+      "recommended_next_action": "scenario_design_or_geometry",
+      "caveats": [
+        "All five candidates (baseline, reuse_penalty, three progress_gated thresholds) produced exactly the same progress and switch count, making this the cleanest no_useful_topology_alternative signal."
+      ]
+    },
+    {
+      "slice_id": "t_intersection_transfer",
+      "scenario": "classic_t_intersection_medium",
+      "primary_failure_label": "candidate_route_blocked",
+      "confidence": "medium",
+      "evidence_summary": "reuse_penalty and all progress_gated thresholds reached 6.39m with 13 switches but still horizon_exhausted. Baseline only 4.87m with 3 switches. Switching occurs but does not produce clearance.",
+      "distinguishes_mechanism_from_scenario": false,
+      "mechanism_or_scenario": "mechanism_or_scenario_ambiguous",
+      "recommended_next_action": "local_policy_scoring",
+      "caveats": [
+        "Cannot distinguish blocked_geometry from switch_too_often without per-step switch_timeline. 13 switches at same final progress could mean oscillation between equally-bad alternatives.",
+        "Per-step switch_timeline data exists only in worktree-local topology_hypotheses.json traces, not in durable git evidence.",
+        "baseline achieved 4.87m with 3 switches; reuse_penalty and progress_gated achieved 6.39m with 13 switches, suggesting switching helped reach further but still could not clear the intersection."
+      ]
+    }
+  ],
+  "negative_control": {
+    "slice_id": "simple_negative_control",
+    "scenario": "empty_map_8_directions_east",
+    "outcome": "success",
+    "topology_switch_count": 0,
+    "note": "Negative control succeeded with zero topology switching across all candidates, confirming the mechanism does not introduce spurious switching in trivial scenarios."
+  },
+  "diagnostic_gaps": [
+    "Per-step switch_timeline unavailable in durable evidence; prevents separating switch_too_often from candidate_route_blocked for t_intersection_transfer.",
+    "No mechanism-diagnosis script exists; classification was manual from summary.json and scout analysis.",
+    "Progress-gated thresholds produced identical outcomes per slice, so the gate parameter is not the limiting factor for these scenarios."
+  ],
+  "validation": [
+    "uv run python -m json.tool docs/context/evidence/issue_2752_topology_reselection_mechanism/summary.json",
+    "uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml --path docs/context/evidence/README.md --path docs/context/issue_2752_topology_reselection_mechanism.md --path docs/context/evidence/issue_2752_topology_reselection_mechanism/README.md --path docs/context/evidence/issue_2752_topology_reselection_mechanism/report.md --path docs/context/evidence/issue_2752_topology_reselection_mechanism/summary.json"
+  ]
+}

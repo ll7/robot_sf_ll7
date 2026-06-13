@@ -321,3 +321,9 @@ Policy caveats:
   signalized crossing metric row types (`red_required_stop`, `green_proceed`,
   `unavailable_no_claim`, `proxy_only_denominator_excluded`).  No simulator or runtime traces;
   fixture-only claim boundary.
+- `issue_2752_topology_reselection_mechanism/`: analysis-only mechanism diagnosis of three hard
+  slices from Issue #2751 runtime evidence. All hard slices remained `horizon_exhausted`;
+  `bottleneck_transfer` and `doorway_transfer` classified as `no_useful_topology_alternative`
+  (likely scenario/geometry insufficiency), `t_intersection_transfer` as `candidate_route_blocked`
+  (ambiguous between blocked geometry and excessive switching without per-step switch_timeline).
+  Not benchmark or paper-facing evidence.

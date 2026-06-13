@@ -11,6 +11,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
 )
 from robot_sf.analysis_workbench.trace_failure_predicates import (
     aggregate_trace_failure_predicate_tables,
+    build_trace_predicate_denominator_health_report,
     extract_trace_failure_predicates,
     render_trace_failure_predicate_markdown,
 )
@@ -359,3 +360,367 @@ def test_markdown_renderer_skips_invalid_rows_and_preserves_falsy_values() -> No
 
     assert "| 0 |  | 0 |  | zero_like | valid | low | 0 | 1 | 0.0000 |" in markdown
     assert "bad-row" not in markdown
+
+
+def _build_malformed_trace_file(tmp_path: Path, filename: str) -> Path:
+    """Build a malformed trace file for testing pipeline failures."""
+    malformed_trace_path = tmp_path / filename
+    malformed_trace_path.write_text("this is not valid json {", encoding="utf-8")
+    return malformed_trace_path
+
+
+def test_pipeline_failure_handling(tmp_path: Path) -> None:
+    """Pipeline failures should be captured in denominator health reports."""
+    from robot_sf.analysis_workbench.trace_failure_predicates import (
+        TRACE_FAILURE_PREDICATE_IDS,
+        VALIDITY_STATUS_PIPELINE_FAILURE,
+    )
+
+    valid_trace = _build_trace(
+        trace_id="trace-valid",
+        scenario_id="scenario-valid",
+        seed=1,
+        planner_id="planner-A",
+        frames=[_frame(0, 0.0)],
+    )
+    valid_trace_path = tmp_path / "valid_trace.json"
+    valid_trace_path.write_text(json.dumps(valid_trace.to_dict()), encoding="utf-8")
+
+    malformed_trace_path = _build_malformed_trace_file(tmp_path, "malformed_trace.json")
+
+    json_output = tmp_path / "tables.json"
+    markdown_output = tmp_path / "tables.md"
+    denominator_health_json_output = tmp_path / "denominator_health.json"
+
+    json_path, md_path, dh_json_path = write_trace_failure_predicate_tables(
+        traces=[valid_trace_path, malformed_trace_path],
+        output_json=json_output,
+        output_markdown=markdown_output,
+        output_denominator_health_json=denominator_health_json_output,
+    )
+
+    assert json_path == json_output
+    assert md_path == markdown_output
+    assert dh_json_path == denominator_health_json_output
+
+    dh_report = json.loads(dh_json_path.read_text(encoding="utf-8"))
+    assert dh_report["summary"]["total_traces_processed"] == 2
+    assert dh_report["summary"]["failed_trace_count"] == 1
+
+    for pred_id in TRACE_FAILURE_PREDICATE_IDS:
+        pred_summary = dh_report["predicates"][pred_id]
+        assert pred_summary["total_denominator_count"] == 2
+        assert pred_summary["pipeline_failure_count"] == 1
+        assert pred_summary["pipeline_failure_ratio"] == 0.5
+
+    markdown = md_path.read_text(encoding="utf-8")
+    assert "Traces with Pipeline Failures: 1" in markdown
+    assert f"`{VALIDITY_STATUS_PIPELINE_FAILURE}`" in markdown
+    assert "claim-ineligible" in markdown
+
+
+def test_predicate_denominator_health_in_payload() -> None:
+    """The aggregate payload should include correct predicate denominator health."""
+    from robot_sf.analysis_workbench.trace_failure_predicates import (
+        VALIDITY_STATUS_NO_PREDICATE_OBSERVED,
+        VALIDITY_STATUS_PIPELINE_FAILURE,
+        VALIDITY_STATUS_UNAVAILABLE_DATA,
+        VALIDITY_STATUS_VALID,
+    )
+
+    trace1 = _build_trace(
+        trace_id="t1",
+        scenario_id="s1",
+        seed=1,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                planner_extra={"visibility": {"line_of_sight": True}},
+                pedestrians=[{"id": "ped_1", "position": [0.1, 0.1], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+    trace2 = _build_trace(
+        trace_id="t2",
+        scenario_id="s1",
+        seed=2,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [0.45, 0.0], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+    trace3 = _build_trace(
+        trace_id="t3",
+        scenario_id="s1",
+        seed=3,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [5.0, 5.0], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables([trace1, trace2, trace3])
+
+    dh = payload["predicate_denominator_health"]
+
+    cci_counts = dh["clearance_critical_interaction"]
+    assert cci_counts[VALIDITY_STATUS_VALID] == 1
+    assert cci_counts[VALIDITY_STATUS_UNAVAILABLE_DATA] == 0
+    assert cci_counts[VALIDITY_STATUS_NO_PREDICATE_OBSERVED] == 2
+
+    otnm_counts = dh["occlusion_triggered_near_miss"]
+    assert otnm_counts[VALIDITY_STATUS_VALID] == 0
+    assert otnm_counts[VALIDITY_STATUS_UNAVAILABLE_DATA] == 1
+    assert otnm_counts[VALIDITY_STATUS_NO_PREDICATE_OBSERVED] == 2
+
+    zmtb_counts = dh["zero_motion_timeout_behavior"]
+    assert zmtb_counts[VALIDITY_STATUS_VALID] == 0
+    assert zmtb_counts[VALIDITY_STATUS_UNAVAILABLE_DATA] == 0
+    assert zmtb_counts[VALIDITY_STATUS_NO_PREDICATE_OBSERVED] == 3
+
+    for pred_id in dh:
+        assert VALIDITY_STATUS_PIPELINE_FAILURE in dh[pred_id]
+
+
+def test_denominator_health_counts_trace_groups_not_predicate_rows() -> None:
+    """Multiple rows for one predicate family should not inflate denominator health."""
+    from robot_sf.analysis_workbench.trace_failure_predicates import VALIDITY_STATUS_VALID
+
+    trace = _build_trace(
+        trace_id="trace-repeated-clearance",
+        scenario_id="scenario-repeated-clearance",
+        seed=20,
+        planner_id="planner-j",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                planner_extra={"visibility": {"line_of_sight": True}},
+                pedestrians=[{"id": "ped_1", "position": [0.1, 0.1], "velocity": [0.0, 0.0]}],
+            ),
+            _frame(
+                1,
+                0.1,
+                planner_extra={"visibility": {"line_of_sight": True}},
+                pedestrians=[{"id": "ped_1", "position": [0.2, 0.1], "velocity": [0.0, 0.0]}],
+            ),
+        ],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables([trace])
+    row = _find_row(
+        _aggregate_rows(payload),
+        predicate_id="clearance_critical_interaction",
+    )
+    assert row is not None
+    assert row["predicate_count"] == 2
+    assert (
+        payload["predicate_denominator_health"]["clearance_critical_interaction"][
+            VALIDITY_STATUS_VALID
+        ]
+        == 1
+    )
+
+
+def test_denominator_health_json_report() -> None:
+    """The denominator health JSON report should be correctly structured and populated."""
+    trace1 = _build_trace(
+        trace_id="t1",
+        scenario_id="s1",
+        seed=1,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                planner_extra={"visibility": {"line_of_sight": True}},
+                pedestrians=[{"id": "ped_1", "position": [0.1, 0.1], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+    trace2 = _build_trace(
+        trace_id="t2",
+        scenario_id="s1",
+        seed=2,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [0.45, 0.0], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+    trace3 = _build_trace(
+        trace_id="t3",
+        scenario_id="s1",
+        seed=3,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [5.0, 5.0], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables([trace1, trace2, trace3])
+    dh_report = build_trace_predicate_denominator_health_report(payload)
+
+    assert dh_report["schema_version"] == "trace_predicate_denominator_health.v1"
+    assert dh_report["summary"]["total_traces_processed"] == 3
+    assert dh_report["summary"]["failed_trace_count"] == 0
+
+    cci_summary = dh_report["predicates"]["clearance_critical_interaction"]
+    assert cci_summary["valid_count"] == 1
+    assert cci_summary["unavailable_data_count"] == 0
+    assert cci_summary["no_predicate_observed_count"] == 2
+    assert cci_summary["total_denominator_count"] == 3
+    assert cci_summary["unavailable_data_ratio"] == 0.0
+    assert cci_summary["pipeline_failure_count"] == 0
+
+    otnm_summary = dh_report["predicates"]["occlusion_triggered_near_miss"]
+    assert otnm_summary["valid_count"] == 0
+    assert otnm_summary["unavailable_data_count"] == 1
+    assert otnm_summary["no_predicate_observed_count"] == 2
+    assert otnm_summary["total_denominator_count"] == 3
+    assert otnm_summary["unavailable_data_ratio"] == 1 / 3
+    assert otnm_summary["pipeline_failure_count"] == 0
+    assert otnm_summary["claim_eligibility"] == "claim-ineligible"
+
+
+def test_writer_persists_denominator_health_json_when_requested(tmp_path: Path) -> None:
+    """The writer should persist compact denominator health JSON when requested."""
+    trace = _build_trace(
+        trace_id="trace-health-writer",
+        scenario_id="scenario-health-writer",
+        seed=19,
+        planner_id="planner-i",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [0.1, 0.1], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+    trace_path = tmp_path / "trace.json"
+    json_output = tmp_path / "tables.json"
+    markdown_output = tmp_path / "tables.md"
+    health_output = tmp_path / "denominator_health.json"
+    trace_path.write_text(json.dumps(trace.to_dict(), indent=2), encoding="utf-8")
+
+    paths = write_trace_failure_predicate_tables(
+        traces=[trace_path],
+        output_json=json_output,
+        output_markdown=markdown_output,
+        output_denominator_health_json=health_output,
+    )
+
+    assert paths == (json_output, markdown_output, health_output)
+    health = json.loads(health_output.read_text(encoding="utf-8"))
+    assert health["schema_version"] == "trace_predicate_denominator_health.v1"
+    assert health["summary"]["predicate_family_count"] == 6
+
+
+def test_markdown_report_with_denominator_health(tmp_path: Path) -> None:
+    """Markdown report should include denominator health section and caveats."""
+    from robot_sf.analysis_workbench.trace_failure_predicates import (
+        VALIDITY_STATUS_NO_PREDICATE_OBSERVED,
+        VALIDITY_STATUS_PIPELINE_FAILURE,
+        VALIDITY_STATUS_UNAVAILABLE_DATA,
+        VALIDITY_STATUS_VALID,
+    )
+
+    trace1 = _build_trace(
+        trace_id="t1",
+        scenario_id="s1",
+        seed=1,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [0.1, 0.1], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+    trace2 = _build_trace(
+        trace_id="t2",
+        scenario_id="s1",
+        seed=2,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [0.45, 0.0], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+    trace3 = _build_trace(
+        trace_id="t3",
+        scenario_id="s1",
+        seed=3,
+        planner_id="p1",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [5.0, 5.0], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+    malformed_trace_path = _build_malformed_trace_file(tmp_path, "malformed_trace_t4.json")
+
+    valid_trace_path1 = tmp_path / "valid_trace_t1.json"
+    valid_trace_path1.write_text(json.dumps(trace1.to_dict()), encoding="utf-8")
+    valid_trace_path2 = tmp_path / "valid_trace_t2.json"
+    valid_trace_path2.write_text(json.dumps(trace2.to_dict()), encoding="utf-8")
+    valid_trace_path3 = tmp_path / "valid_trace_t3.json"
+    valid_trace_path3.write_text(json.dumps(trace3.to_dict()), encoding="utf-8")
+    json_output = tmp_path / "tables.json"
+    markdown_output = tmp_path / "tables.md"
+    denominator_health_json_output = tmp_path / "denominator_health.json"
+
+    write_trace_failure_predicate_tables(
+        traces=[valid_trace_path1, valid_trace_path2, valid_trace_path3, malformed_trace_path],
+        output_json=json_output,
+        output_markdown=markdown_output,
+        output_denominator_health_json=denominator_health_json_output,
+    )
+
+    markdown_content = markdown_output.read_text(encoding="utf-8")
+
+    assert "## Predicate Denominator Health Report" in markdown_content
+    assert "### Missingness Categories" in markdown_content
+    assert f"- `{VALIDITY_STATUS_VALID}`: predicate evaluated" in markdown_content
+    assert (
+        f"- `{VALIDITY_STATUS_UNAVAILABLE_DATA}`: required trace fields were missing"
+        in markdown_content
+    )
+    assert (
+        f"- `{VALIDITY_STATUS_NO_PREDICATE_OBSERVED}`: predicate was not emitted"
+        in markdown_content
+    )
+    assert (
+        f"- `{VALIDITY_STATUS_PIPELINE_FAILURE}`: the trace could not be loaded" in markdown_content
+    )
+    assert "### Predicate-specific Denominator Health" in markdown_content
+
+    assert "clearance_critical_interaction" in markdown_content
+    assert "occlusion_triggered_near_miss" in markdown_content
+    assert "zero_motion_timeout_behavior" in markdown_content
+    assert "claim-ineligible" in markdown_content
+    assert "pipeline failed; do not make predicate-family claims" in markdown_content

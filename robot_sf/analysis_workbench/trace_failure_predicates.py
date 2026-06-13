@@ -17,6 +17,18 @@ if TYPE_CHECKING:
 
 TRACE_FAILURE_PREDICATE_SCHEMA_VERSION = "trace_failure_predicates.v1"
 TRACE_FAILURE_PREDICATE_SOURCE = "trace_failure_predicates.rule_based.v1"
+TRACE_PREDICATE_DENOMINATOR_HEALTH_SCHEMA_VERSION = "trace_predicate_denominator_health.v1"
+
+VALIDITY_STATUS_VALID = "valid"
+VALIDITY_STATUS_UNAVAILABLE_DATA = "not_available"
+VALIDITY_STATUS_NO_PREDICATE_OBSERVED = "no_predicate_observed"
+VALIDITY_STATUS_PIPELINE_FAILURE = "pipeline_failure"
+DENOMINATOR_HEALTH_STATUSES = (
+    VALIDITY_STATUS_VALID,
+    VALIDITY_STATUS_UNAVAILABLE_DATA,
+    VALIDITY_STATUS_NO_PREDICATE_OBSERVED,
+    VALIDITY_STATUS_PIPELINE_FAILURE,
+)
 
 TRACE_FAILURE_PREDICATE_IDS = (
     "late_evasive_reaction",
@@ -88,6 +100,7 @@ def aggregate_trace_failure_predicate_tables(
     traces: Iterable[SimulationTraceExport],
     *,
     scenario_family: str | None = None,
+    failed_trace_ids: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """Build denominator-aware aggregate rows across one or more trace predicates.
 
@@ -100,6 +113,13 @@ def aggregate_trace_failure_predicate_tables(
     trace_sources_by_group: dict[tuple[str, str, int], set[str]] = defaultdict(set)
     trace_status_counts: dict[tuple[str, str, int, str], Counter[str]] = defaultdict(Counter)
     included_trace_count = 0
+    predicate_status_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    failed_trace_id_list = list(failed_trace_ids or [])
+
+    if failed_trace_id_list:
+        for _failed_id in failed_trace_id_list:
+            for pred_id in TRACE_FAILURE_PREDICATE_IDS:
+                predicate_status_counts[pred_id][VALIDITY_STATUS_PIPELINE_FAILURE] += 1
 
     for trace in traces:
         group_family = scenario_family or trace.source.scenario_id
@@ -109,7 +129,7 @@ def aggregate_trace_failure_predicate_tables(
         trace_denominators[group_key] += 1
         trace_sources_by_group[group_key].add(trace_source_id)
         included_trace_count += 1
-        for predicate in _extract_trace_failure_predicate_records(
+        extracted_predicates = _extract_trace_failure_predicate_records(
             trace,
             scenario_family=group_family,
             clearance_threshold_m=0.4,
@@ -118,7 +138,9 @@ def aggregate_trace_failure_predicate_tables(
             oscillation_min_sign_changes=3,
             evasive_angular_velocity_threshold=1.0,
             evasive_linear_drop_threshold_mps=0.3,
-        ):
+        )
+        predicate_statuses_in_trace: dict[str, set[str]] = defaultdict(set)
+        for predicate in extracted_predicates:
             grouped_predicates[
                 (
                     group_family,
@@ -130,6 +152,12 @@ def aggregate_trace_failure_predicate_tables(
                 )
             ] += 1
             trace_status_counts[trace_key][predicate.validity_status] += 1
+            predicate_statuses_in_trace[predicate.predicate_id].add(predicate.validity_status)
+
+        _record_predicate_denominator_statuses(
+            predicate_status_counts,
+            predicate_statuses_in_trace,
+        )
 
     rows = [
         {
@@ -175,9 +203,9 @@ def aggregate_trace_failure_predicate_tables(
                 "planner_id": planner_id,
                 "seed": seed,
                 "trace_source_ids": sorted(trace_sources_by_group[group_key]),
-                "predicate_id": "no_predicate_observed",
-                "validity_status": "no_predicate_observed",
-                "severity": "no_predicate_observed",
+                "predicate_id": VALIDITY_STATUS_NO_PREDICATE_OBSERVED,
+                "validity_status": VALIDITY_STATUS_NO_PREDICATE_OBSERVED,
+                "severity": VALIDITY_STATUS_NO_PREDICATE_OBSERVED,
                 "predicate_count": 0,
                 "trace_denominator": trace_denominators[group_key],
                 "predicate_rate_per_trace": 0.0,
@@ -191,12 +219,14 @@ def aggregate_trace_failure_predicate_tables(
             "seed": seed,
             "trace_source_id": trace_source_id,
             "trace_denominator": trace_denominators[group_key],
-            "valid_predicate_count": int(trace_status_counts[trace_key].get("valid", 0)),
+            "valid_predicate_count": int(
+                trace_status_counts[trace_key].get(VALIDITY_STATUS_VALID, 0)
+            ),
             "not_available_predicate_count": int(
-                trace_status_counts[trace_key].get("not_available", 0)
+                trace_status_counts[trace_key].get(VALIDITY_STATUS_UNAVAILABLE_DATA, 0)
             ),
             "zero_group_reason": (
-                "no_predicate_observed"
+                VALIDITY_STATUS_NO_PREDICATE_OBSERVED
                 if not trace_status_counts[trace_key]
                 else "valid_predicate_count_zero"
             ),
@@ -205,30 +235,59 @@ def aggregate_trace_failure_predicate_tables(
         for family, planner_id, seed in (group_key,)
         for trace_source_id in sorted(trace_sources)
         for trace_key in ((*group_key, trace_source_id),)
-        if trace_status_counts[trace_key].get("valid", 0) == 0
+        if trace_status_counts[trace_key].get(VALIDITY_STATUS_VALID, 0) == 0
     ]
 
     return {
         "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
         "table_kind": "aggregate_by_predicate_group",
         "summary": {
-            "input_trace_count": included_trace_count,
+            "input_trace_count": included_trace_count + len(failed_trace_id_list),
+            "failed_trace_count": len(failed_trace_id_list),
             "scenario_family_filter": scenario_family,
             "row_count": len(rows),
         },
         "rows": rows,
         "zero_predicate_groups": zero_predicate_groups,
+        "predicate_denominator_health": {
+            pred_id: {
+                status: int(predicate_status_counts[pred_id].get(status, 0))
+                for status in DENOMINATOR_HEALTH_STATUSES
+            }
+            for pred_id in TRACE_FAILURE_PREDICATE_IDS
+        },
         "caveats": [
             "Aggregate predicate rows are diagnostic summaries, not benchmark rates or claims.",
-            "Rows include `not_available` and other valid status values when evidence is partial.",
+            f"Rows include `{VALIDITY_STATUS_UNAVAILABLE_DATA}` and other valid status values when evidence is partial.",
             "`zero_predicate_groups` preserves trace groups with valid predicate count equal to zero.",
-            "Rows with `no_predicate_observed` mark trace groups that had no predicate rows at all.",
+            f"Rows with `{VALIDITY_STATUS_NO_PREDICATE_OBSERVED}` mark trace groups that had no predicate rows at all.",
+            f"Rows with `{VALIDITY_STATUS_PIPELINE_FAILURE}` mark traces that failed to load.",
             "Rate claims require a predeclared benchmark matrix; do not infer rates from these diagnostic rows.",
         ],
     }
 
 
-def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) -> str:
+def _record_predicate_denominator_statuses(
+    predicate_status_counts: dict[str, Counter[str]],
+    predicate_statuses_in_trace: Mapping[str, set[str]],
+) -> None:
+    """Record one denominator status per predicate family for a trace."""
+    for pred_id in TRACE_FAILURE_PREDICATE_IDS:
+        statuses = predicate_statuses_in_trace.get(pred_id, set())
+        if VALIDITY_STATUS_VALID in statuses:
+            predicate_status_counts[pred_id][VALIDITY_STATUS_VALID] += 1
+        elif VALIDITY_STATUS_UNAVAILABLE_DATA in statuses:
+            predicate_status_counts[pred_id][VALIDITY_STATUS_UNAVAILABLE_DATA] += 1
+        elif statuses:
+            for status in sorted(statuses):
+                predicate_status_counts[pred_id][status] += 1
+        else:
+            predicate_status_counts[pred_id][VALIDITY_STATUS_NO_PREDICATE_OBSERVED] += 1
+
+
+def render_trace_failure_predicate_markdown(
+    table_payload: Mapping[str, Any], denominator_health_report: Mapping[str, Any] | None = None
+) -> str:
     """Render aggregate failure predicate rows as a compact Markdown diagnostic table.
 
     Returns:
@@ -239,6 +298,11 @@ def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) ->
     if not isinstance(rows, list):
         rows = []
     table_rows = [row for row in rows if isinstance(row, Mapping)]
+    health_report = (
+        denominator_health_report
+        if denominator_health_report is not None
+        else build_trace_predicate_denominator_health_report(table_payload)
+    )
 
     lines = [
         "# Trace Failure Predicate Table",
@@ -256,6 +320,9 @@ def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) ->
 
     if not table_rows:
         lines.append("No predicate rows were observed in the provided traces.")
+        # Add denominator health report even if no predicate rows
+        lines.append("")
+        lines.extend(_render_denominator_health_section(health_report))
         return "\n".join(lines).rstrip() + "\n"
 
     zero_groups = table_payload.get("zero_predicate_groups")
@@ -263,7 +330,9 @@ def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) ->
         zero_groups = []
     zero_group_rows = [row for row in zero_groups if isinstance(row, Mapping)]
     observed_rows = [
-        row for row in table_rows if row.get("predicate_id") != "no_predicate_observed"
+        row
+        for row in table_rows
+        if row.get("predicate_id") != VALIDITY_STATUS_NO_PREDICATE_OBSERVED
     ]
 
     lines.append("## Aggregate Rows")
@@ -332,7 +401,179 @@ def render_trace_failure_predicate_markdown(table_payload: Mapping[str, Any]) ->
             )
         )
     lines.append("")
+    lines.extend(_render_denominator_health_section(health_report))
     return "\n".join(lines).rstrip() + "\n"
+
+
+def build_trace_predicate_denominator_health_report(
+    table_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build compact denominator-health and claim-eligibility diagnostics.
+
+    Returns:
+        JSON-safe report grouped by predicate family.
+    """
+    summary = _read_mapping(table_payload.get("summary"), {})
+    input_trace_count = int(summary.get("input_trace_count", 0) or 0)
+    failed_trace_count = int(summary.get("failed_trace_count", 0) or 0)
+    raw_health = table_payload.get("predicate_denominator_health")
+    health_by_predicate = raw_health if isinstance(raw_health, Mapping) else {}
+    predicate_reports: dict[str, dict[str, Any]] = {}
+
+    for pred_id in TRACE_FAILURE_PREDICATE_IDS:
+        raw_counts = health_by_predicate.get(pred_id)
+        counts = raw_counts if isinstance(raw_counts, Mapping) else {}
+        valid_count = int(counts.get(VALIDITY_STATUS_VALID, 0) or 0)
+        unavailable_count = int(counts.get(VALIDITY_STATUS_UNAVAILABLE_DATA, 0) or 0)
+        no_predicate_count = int(counts.get(VALIDITY_STATUS_NO_PREDICATE_OBSERVED, 0) or 0)
+        pipeline_failure_count = int(counts.get(VALIDITY_STATUS_PIPELINE_FAILURE, 0) or 0)
+        total_count = valid_count + unavailable_count + no_predicate_count + pipeline_failure_count
+        if total_count == 0 and input_trace_count > 0:
+            no_predicate_count = max(input_trace_count - failed_trace_count, 0)
+            pipeline_failure_count = failed_trace_count
+            total_count = input_trace_count
+        claim_eligibility, allowed_wording = _predicate_claim_status(
+            valid_count=valid_count,
+            unavailable_count=unavailable_count,
+            no_predicate_count=no_predicate_count,
+            pipeline_failure_count=pipeline_failure_count,
+        )
+        predicate_reports[pred_id] = {
+            "total_denominator_count": total_count,
+            "valid_count": valid_count,
+            "unavailable_data_count": unavailable_count,
+            "no_predicate_observed_count": no_predicate_count,
+            "pipeline_failure_count": pipeline_failure_count,
+            "valid_ratio": _ratio(valid_count, total_count),
+            "unavailable_data_ratio": _ratio(unavailable_count, total_count),
+            "no_predicate_observed_ratio": _ratio(no_predicate_count, total_count),
+            "pipeline_failure_ratio": _ratio(pipeline_failure_count, total_count),
+            "claim_eligibility": claim_eligibility,
+            "allowed_wording": allowed_wording,
+        }
+
+    return {
+        "schema_version": TRACE_PREDICATE_DENOMINATOR_HEALTH_SCHEMA_VERSION,
+        "report_kind": "trace_predicate_denominator_health",
+        "summary": {
+            "total_traces_processed": input_trace_count,
+            "failed_trace_count": failed_trace_count,
+            "predicate_family_count": len(TRACE_FAILURE_PREDICATE_IDS),
+        },
+        "predicates": predicate_reports,
+        "caveats": [
+            "This report is diagnostic-only and does not convert missing predicate evidence into negative findings.",
+            "`no_predicate_observed` can be expected missingness; it is not evidence that a failure did not occur.",
+            "`not_available` and `pipeline_failure` weaken or block downstream figure/table claims.",
+        ],
+    }
+
+
+def _render_denominator_health_section(denominator_health_report: Mapping[str, Any]) -> list[str]:
+    """Render the predicate denominator health section for the Markdown report.
+
+    Returns:
+        Markdown lines for denominator health.
+    """
+    lines = ["## Predicate Denominator Health Report", ""]
+    overall_summary = denominator_health_report.get("summary", {})
+    lines.append(f"- Total Traces Processed: {overall_summary.get('total_traces_processed', 0)}")
+    lines.append(f"- Traces with Pipeline Failures: {overall_summary.get('failed_trace_count', 0)}")
+    lines.append("")
+    lines.append("### Missingness Categories")
+    lines.append(f"- `{VALIDITY_STATUS_VALID}`: predicate evaluated and emitted valid evidence.")
+    lines.append(
+        f"- `{VALIDITY_STATUS_UNAVAILABLE_DATA}`: required trace fields were missing; dependent "
+        "figures/tables are claim-ineligible or wording-weakened."
+    )
+    lines.append(
+        f"- `{VALIDITY_STATUS_NO_PREDICATE_OBSERVED}`: predicate was not emitted for the trace; "
+        "this can be expected missingness and is not a negative finding."
+    )
+    lines.append(
+        f"- `{VALIDITY_STATUS_PIPELINE_FAILURE}`: the trace could not be loaded or processed; "
+        "dependent outputs are claim-ineligible."
+    )
+    lines.append("")
+
+    predicate_data = denominator_health_report.get("predicates", {})
+    if not predicate_data:
+        lines.append("No predicate denominator health data available.")
+        return lines
+
+    health_rows = []
+    for pred_id in TRACE_FAILURE_PREDICATE_IDS:
+        data = predicate_data.get(pred_id, {})
+        if not data:
+            continue
+        health_rows.append(
+            (
+                pred_id,
+                _markdown_int(data.get("total_denominator_count")),
+                _markdown_int(data.get("valid_count")),
+                _markdown_int(data.get("unavailable_data_count")),
+                f"{_markdown_float(data.get('unavailable_data_ratio')):.2%}",
+                _markdown_int(data.get("no_predicate_observed_count")),
+                f"{_markdown_float(data.get('no_predicate_observed_ratio')):.2%}",
+                _markdown_int(data.get("pipeline_failure_count")),
+                f"{_markdown_float(data.get('pipeline_failure_ratio')):.2%}",
+                _markdown_value(data.get("claim_eligibility")),
+                _markdown_value(data.get("allowed_wording")),
+            )
+        )
+
+    if health_rows:
+        lines.append("### Predicate-specific Denominator Health")
+        lines.append("")
+        lines.append(
+            _markdown_table(
+                (
+                    "Predicate ID",
+                    "Total Traces",
+                    "Valid",
+                    "Unavailable Data",
+                    "% Unavailable",
+                    "Not Observed",
+                    "% Not Observed",
+                    "Pipeline Failure",
+                    "% Pipeline Fail",
+                    "Claim Eligibility",
+                    "Allowed Wording",
+                ),
+                health_rows,
+            )
+        )
+    return lines
+
+
+def _predicate_claim_status(
+    *,
+    valid_count: int,
+    unavailable_count: int,
+    no_predicate_count: int,
+    pipeline_failure_count: int,
+) -> tuple[str, str]:
+    """Classify predicate-family claim eligibility from denominator health.
+
+    Returns:
+        Claim eligibility status and allowed wording guidance.
+    """
+    if pipeline_failure_count > 0:
+        return "claim-ineligible", "pipeline failed; do not make predicate-family claims"
+    if valid_count == 0 and unavailable_count > 0:
+        return "claim-ineligible", "required predicate evidence is unavailable"
+    if valid_count == 0 and no_predicate_count > 0:
+        return "wording-weakened", "only report no observed predicate rows, not absence of failure"
+    if unavailable_count > 0:
+        return "wording-weakened", "qualify figure/table wording due to missing predicate evidence"
+    if no_predicate_count > 0:
+        return "wording-weakened", "state that some traces emitted no predicate rows"
+    return "claim-eligible", "diagnostic wording may cite observed predicate rows"
+
+
+def _ratio(numerator: int, denominator: int) -> float:
+    """Return a stable ratio for report payloads."""
+    return 0.0 if denominator <= 0 else numerator / denominator
 
 
 def _predicates_payload(
@@ -358,7 +599,7 @@ def _predicates_payload(
         "summary": _summary(predicates),
         "caveats": [
             "Predicates are rule-based trace diagnostics, not benchmark rates or safety claims.",
-            "not_available rows mark partial evidence with missing required fields.",
+            f"`{VALIDITY_STATUS_UNAVAILABLE_DATA}` rows mark partial evidence with missing required fields.",
         ],
     }
 
@@ -449,7 +690,7 @@ def _clearance_critical_interactions(
                         "clearance_threshold_m": clearance_threshold_m,
                     },
                     severity="high" if distance_m <= clearance_threshold_m * 0.75 else "medium",
-                    validity_status="valid",
+                    validity_status=VALIDITY_STATUS_VALID,
                 )
             )
     return predicates
@@ -514,7 +755,7 @@ def _late_evasive_reaction(
                 severity="high"
                 if pressure_distance_m <= near_miss_threshold_m * 0.75
                 else "medium",
-                validity_status="valid",
+                validity_status=VALIDITY_STATUS_VALID,
             )
     return None
 
@@ -546,7 +787,7 @@ def _oscillatory_local_control(
             "min_sign_changes": min_sign_changes,
         },
         severity="medium",
-        validity_status="valid",
+        validity_status=VALIDITY_STATUS_VALID,
     )
 
 
@@ -585,7 +826,7 @@ def _zero_motion_timeout_behavior(
             "timeout_events": [frame.planner.get("event") for frame in timeout_frames],
         },
         severity="high",
-        validity_status="valid",
+        validity_status=VALIDITY_STATUS_VALID,
     )
 
 
@@ -614,7 +855,7 @@ def _bottleneck_deadlocks(
                 involved_actors=["robot"],
                 evidence_fields={"event": event},
                 severity="high",
-                validity_status="valid",
+                validity_status=VALIDITY_STATUS_VALID,
             )
         )
     return predicates
@@ -648,8 +889,8 @@ def _occlusion_triggered_near_miss(
                     "near_miss_threshold_m": near_miss_threshold_m,
                     "missing_fields": ["planner.occlusion_or_visibility"],
                 },
-                severity="not_available",
-                validity_status="not_available",
+                severity=VALIDITY_STATUS_UNAVAILABLE_DATA,
+                validity_status=VALIDITY_STATUS_UNAVAILABLE_DATA,
             )
         if occlusion_value:
             return _predicate(
@@ -665,7 +906,7 @@ def _occlusion_triggered_near_miss(
                     "occlusion_or_visibility": occlusion_value,
                 },
                 severity="high",
-                validity_status="valid",
+                validity_status=VALIDITY_STATUS_VALID,
             )
     return None
 
@@ -852,8 +1093,13 @@ __all__ = [
     "TRACE_FAILURE_PREDICATE_IDS",
     "TRACE_FAILURE_PREDICATE_SCHEMA_VERSION",
     "TRACE_FAILURE_PREDICATE_SOURCE",
+    "VALIDITY_STATUS_NO_PREDICATE_OBSERVED",
+    "VALIDITY_STATUS_PIPELINE_FAILURE",
+    "VALIDITY_STATUS_UNAVAILABLE_DATA",
+    "VALIDITY_STATUS_VALID",
     "TraceFailurePredicate",
     "aggregate_trace_failure_predicate_tables",
+    "build_trace_predicate_denominator_health_report",
     "extract_trace_failure_predicates",
     "render_trace_failure_predicate_markdown",
 ]

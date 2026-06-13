@@ -461,6 +461,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2742_topology_reselection_successor.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2742_topology_reselection_successor/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2704_progress_gated_topology_successor/README.md
     status: evidence
     freshness: evidence

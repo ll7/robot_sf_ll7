@@ -18,6 +18,25 @@ _DEFAULT_MANIFEST = Path("configs/policy_search/topology_reselection_cross_slice
 _DEFAULT_REGISTRY = Path("docs/context/policy_search/candidate_registry.yaml")
 
 
+def _manifest_issue_number(manifest: dict[str, Any]) -> int:
+    """Extract the issue number from a manifest."""
+    issue = manifest.get("issue")
+    if not isinstance(issue, int):
+        raise ValueError("Manifest must declare an integer 'issue' field")
+    return issue
+
+
+def _manifest_stage_label(manifest: dict[str, Any]) -> str:
+    """Derive the funnel stage label from the manifest issue number."""
+    return f"issue_{_manifest_issue_number(manifest)}_slice"
+
+
+def _manifest_output_dir_name(manifest: dict[str, Any]) -> str:
+    """Derive the default output directory name from the manifest."""
+    issue = _manifest_issue_number(manifest)
+    return f"output/diagnostics/issue_{issue}_topology_reselection_cross_slice"
+
+
 @dataclass(frozen=True)
 class SweepRow:
     """One candidate/slice/threshold diagnostic row."""
@@ -45,7 +64,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("output/diagnostics/issue_2716_topology_reselection_cross_slice"),
+        default=None,
+        help="Output directory. Defaults to output/diagnostics/issue_{N}_topology_reselection_cross_slice.",
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
@@ -129,6 +149,7 @@ def materialize_threshold_candidate_registry(
     base_candidate: str,
     threshold_m: float,
     work_dir: Path,
+    issue_number: int,
 ) -> tuple[Path, str]:
     """Create a temporary candidate registry with a threshold-specific candidate.
 
@@ -163,7 +184,7 @@ def materialize_threshold_candidate_registry(
     )
     generated_entry = copy.deepcopy(base_entry)
     generated_entry["candidate_config_path"] = str(generated_config_path)
-    generated_entry["issue"] = 2716
+    generated_entry["issue"] = issue_number
     candidates[generated_name] = generated_entry
     generated_registry_path.write_text(yaml.safe_dump(registry, sort_keys=False), encoding="utf-8")
     return generated_registry_path, generated_name
@@ -178,10 +199,11 @@ def materialize_slice_funnel(*, manifest: dict[str, Any], row: SweepRow, work_di
 
     work_dir.mkdir(parents=True, exist_ok=True)
     funnel_path = work_dir / "funnel.yaml"
+    stage_label = _manifest_stage_label(manifest)
     funnel = {
-        "stage_order": ["issue_2716_slice"],
+        "stage_order": [stage_label],
         "stages": {
-            "issue_2716_slice": {
+            stage_label: {
                 "scenario_matrix": row.source_surface,
                 "seed_list": [int(manifest.get("seed", 111))],
                 "benchmark_profile": "experimental",
@@ -221,6 +243,7 @@ def command_for_row(
             base_candidate=row.candidate,
             threshold_m=row.threshold_m,
             work_dir=row_temp_root,
+            issue_number=_manifest_issue_number(manifest),
         )
     return [
         sys.executable,
@@ -232,7 +255,7 @@ def command_for_row(
         "--funnel-config",
         str(funnel_config),
         "--stage",
-        "issue_2716_slice",
+        _manifest_stage_label(manifest),
         "--scenario-name",
         row.scenario_name,
         "--seed",
@@ -400,7 +423,7 @@ def report_markdown(report: dict[str, Any]) -> str:
     """
 
     lines = [
-        "# Issue 2716 Topology Reselection Cross-Slice Diagnostic",
+        f"# Issue {report['issue']} Topology Reselection Cross-Slice Diagnostic",
         "",
         f"Claim boundary: `{report['claim_boundary']}`.",
         f"Classification: `{report['classification']}`.",
@@ -440,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parse_args(argv)
     manifest = load_manifest(args.manifest)
-    output_dir = args.output_dir
+    output_dir = args.output_dir or Path(_manifest_output_dir_name(manifest))
     output_dir.mkdir(parents=True, exist_ok=True)
     rows = build_rows(manifest, output_dir / "runs")
     if args.max_runs is not None:
@@ -473,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     report = {
         "schema": "topology_reselection_cross_slice_report.v1",
-        "issue": 2716,
+        "issue": _manifest_issue_number(manifest),
         "manifest": str(args.manifest),
         "claim_boundary": manifest["claim_boundary"],
         "classification": classification,

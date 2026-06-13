@@ -54,6 +54,7 @@ def test_materialize_threshold_candidate_registry_overrides_threshold(tmp_path: 
         base_candidate="topology_guided_hybrid_rule_v0_progress_gated_reselection",
         threshold_m=0.2,
         work_dir=tmp_path,
+        issue_number=2716,
     )
 
     registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
@@ -249,3 +250,306 @@ def test_run_row_handles_child_command_without_json_stdout(monkeypatch) -> None:
     assert result["diagnostic_status"] == "command_failed"
     assert result["trace"] is None
     assert "boom" in result["stderr_excerpt"]
+
+
+# --- Issue #2742 successor manifest tests ---
+
+_ISSUE_2742_MANIFEST = Path(
+    "configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml"
+)
+
+
+def test_issue_2742_manifest_loads_with_decision_rule() -> None:
+    """The issue-2742 manifest should load and declare promote/stop/revise decision rules."""
+
+    manifest = runner.load_manifest(_ISSUE_2742_MANIFEST)
+
+    assert manifest["issue"] == 2742
+    assert manifest["stage"] == "clearance_targeted"
+    assert "promote_if" in manifest["decision_rule"]
+    assert "stop_if" in manifest["decision_rule"]
+    assert manifest["decision_rule"]["otherwise"] == "revise"
+    roles = [row["role"] for row in manifest["slices"]]
+    assert roles.count("hard") >= 3
+    assert roles.count("negative_control") >= 1
+
+
+def test_issue_2742_dry_run_uses_correct_issue_and_stage(tmp_path: Path) -> None:
+    """Dry-run against the issue-2742 manifest should report issue 2742 and use its stage label."""
+
+    exit_code = runner.main(
+        [
+            "--manifest",
+            str(_ISSUE_2742_MANIFEST),
+            "--dry-run",
+            "--max-runs",
+            "2",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    report = json.loads((tmp_path / "topology_reselection_cross_slice_report.json").read_text())
+    assert exit_code == 0
+    assert report["issue"] == 2742
+    assert report["classification"] == "dry_run"
+    for cmd_entry in report["commands"]:
+        assert "--stage" in cmd_entry["command"]
+        stage_idx = cmd_entry["command"].index("--stage") + 1
+        assert cmd_entry["command"][stage_idx] == "issue_2742_slice"
+
+
+def test_issue_2742_manifest_derives_default_output_dir() -> None:
+    """The manifest issue number should be reflected in the default output dir name."""
+
+    manifest = runner.load_manifest(_ISSUE_2742_MANIFEST)
+    dir_name = runner._manifest_output_dir_name(manifest)
+    assert "issue_2742" in dir_name
+
+
+def test_issue_2742_classifier_revises_when_hard_not_all_clear() -> None:
+    """Classifier should revise when some hard slices clear but not all."""
+
+    rows = [
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "bottleneck_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 2.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "doorway_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 4,
+            "topology_switch_count": 0,
+            "success": False,
+            "route_progress_m": 3.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "t_intersection_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 2.5,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "simple_negative_control",
+            "slice_role": "negative_control",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 0,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 1.0,
+        },
+        {
+            "candidate_role": "reuse_penalty",
+            "slice_id": "bottleneck_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 2,
+            "success": False,
+            "route_progress_m": 2.0,
+        },
+    ]
+
+    classification, rationale = runner.classify_report(rows)
+
+    assert classification == "revise"
+    assert "did not clear" in rationale
+
+
+def test_issue_2742_classifier_promotes_only_when_all_hard_clear() -> None:
+    """Promotion should require every hard slice to clear with no control switching."""
+
+    rows = [
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "bottleneck_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 2.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "doorway_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 4,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 3.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "t_intersection_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 2.5,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "simple_negative_control",
+            "slice_role": "negative_control",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 0,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 1.0,
+        },
+        {
+            "candidate_role": "reuse_penalty",
+            "slice_id": "bottleneck_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 2,
+            "success": False,
+            "route_progress_m": 2.0,
+        },
+    ]
+
+    classification, rationale = runner.classify_report(rows)
+
+    assert classification == "promote"
+    assert "Every hard slice" in rationale
+
+
+def test_issue_2742_negative_control_switching_blocks_promote() -> None:
+    """Negative-control switching should prevent promotion even when all hard slices clear."""
+
+    rows = [
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "bottleneck_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 2.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "doorway_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 4,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 3.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "t_intersection_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 2.5,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "simple_negative_control",
+            "slice_role": "negative_control",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 1,
+            "topology_switch_count": 1,
+            "success": True,
+            "route_progress_m": 1.0,
+        },
+        {
+            "candidate_role": "reuse_penalty",
+            "slice_id": "bottleneck_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 2,
+            "success": False,
+            "route_progress_m": 2.0,
+        },
+    ]
+
+    classification, rationale = runner.classify_report(rows)
+
+    assert classification == "revise"
+    assert "switching" in rationale
+
+
+def test_issue_2742_classifier_revises_when_hard_all_exhaust() -> None:
+    """Hard-slice route progress without terminal improvement should not promote."""
+
+    rows = [
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "bottleneck_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 0,
+            "success": False,
+            "route_progress_m": 2.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "doorway_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 4,
+            "topology_switch_count": 0,
+            "success": False,
+            "route_progress_m": 3.0,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "t_intersection_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 0,
+            "success": False,
+            "route_progress_m": 2.5,
+        },
+        {
+            "candidate_role": "progress_gated",
+            "slice_id": "simple_negative_control",
+            "slice_role": "negative_control",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 0,
+            "topology_switch_count": 0,
+            "success": True,
+            "route_progress_m": 1.0,
+        },
+        {
+            "candidate_role": "reuse_penalty",
+            "slice_id": "bottleneck_transfer",
+            "slice_role": "hard",
+            "diagnostic_status": "diagnostic_complete",
+            "topology_command_steps": 3,
+            "topology_switch_count": 2,
+            "success": False,
+            "route_progress_m": 2.0,
+        },
+    ]
+
+    classification, rationale = runner.classify_report(rows)
+
+    assert classification == "revise"
+    assert "horizon_exhausted" in rationale

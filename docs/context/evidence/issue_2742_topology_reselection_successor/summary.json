@@ -1,0 +1,31 @@
+{
+  "schema": "topology_reselection_successor_launch_packet.v1",
+  "issue": 2742,
+  "source_issue": 2716,
+  "manifest": "configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml",
+  "runner": "scripts/validation/run_topology_reselection_cross_slice.py",
+  "claim_boundary": "diagnostic_only_not_benchmark_or_paper_evidence",
+  "classification": "launch_packet",
+  "classification_rationale": "The issue-2742 manifest and dry-run command expansion define the next clearance-targeted successor, but no runtime hard-slice clearance evidence was produced in this PR.",
+  "hypothesis": "Progress-gated topology reselection can clear the non-canonical hard slices that remained horizon_exhausted in issue #2716.",
+  "comparator": [
+    "topology_guided_hybrid_rule_v0",
+    "topology_guided_hybrid_rule_v0_reuse_penalty"
+  ],
+  "candidate_under_test": "topology_guided_hybrid_rule_v0_progress_gated_reselection",
+  "stop_rule": "Classify stop or revise if progress-gated reselection loses topology-command influence on any hard slice, worsens negative-control switching, or only changes route labels without route-progress or terminal-outcome signal.",
+  "promote_rule": "Promotion requires every hard slice to have at least one progress-gated terminal success and the negative-control slice to show zero topology switching.",
+  "dry_run": {
+    "classification": "dry_run",
+    "command_count": 20,
+    "row_count": 0,
+    "durability": "the local dry-run report is disposable; this summary is the tracked durable launch-packet record"
+  },
+  "predecessor_evidence": "docs/context/evidence/issue_2716_topology_reselection_cross_slice/summary.json",
+  "validation": [
+    "uv run ruff check scripts/validation/run_topology_reselection_cross_slice.py tests/validation/test_run_topology_reselection_cross_slice.py",
+    "uv run ruff format --check scripts/validation/run_topology_reselection_cross_slice.py tests/validation/test_run_topology_reselection_cross_slice.py",
+    "uv run pytest tests/validation/test_run_topology_reselection_cross_slice.py -v",
+    "uv run python scripts/validation/run_topology_reselection_cross_slice.py --manifest configs/policy_search/topology_reselection_cross_slice_issue_2742.yaml --dry-run --output-dir <local-diagnostic-output-dir>"
+  ]
+}

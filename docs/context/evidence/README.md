@@ -321,6 +321,10 @@ Policy caveats:
   signalized crossing metric row types (`red_required_stop`, `green_proceed`,
   `unavailable_no_claim`, `proxy_only_denominator_excluded`).  No simulator or runtime traces;
   fixture-only claim boundary.
+- `issue_2799_signalized_runtime/`: simulator-backed runtime smoke for signalized-crossing
+  denominator and exclusion semantics. Includes `red_required_stop`, `green_proceed`,
+  `unavailable_no_claim`, and `proxy_only_denominator_excluded` rows; proves runtime denominator
+  plumbing, not traffic-light realism, forced-waiting reasoning, or planner-ranking performance.
 - `issue_2752_topology_reselection_mechanism/`: analysis-only mechanism diagnosis of three hard
   slices from Issue #2751 runtime evidence. All hard slices remained `horizon_exhausted`;
   `bottleneck_transfer` and `doorway_transfer` classified as `no_useful_topology_alternative`

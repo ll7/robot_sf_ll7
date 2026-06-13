@@ -48,15 +48,15 @@ explicitly blocked from manuscript promotion.
 
 | Field | Value |
 |---|---|
-| **Claim** | The repository has trace-level proxy signal-state plumbing for the waiting-then-crossing fixture, but signal metadata remains `trace_metadata_only` and `planner_observable: false`. |
+| **Claim** | The repository has trace-level proxy signal-state plumbing for the waiting-then-crossing fixture and a simulator-backed #2799 smoke proving signal metric denominator/exclusion semantics for explicit `planner_observable` rows. |
 | **Artifact status** | current |
-| **Evidence tier** | diagnostic |
-| **Allowed wording** | "The repository has a proxy signal-state diagnostic surface that records phase labels in trace metadata, but the current evidence is not planner-consumed, not benchmark-evidence, and does not prove traffic-signal realism or crossing-legality compliance." |
-| **Caveat** | Signal state is `proxy_diagnostic` only. Do not claim planner observability, forced-waiting reasoning, legality compliance, or benchmark ranking improvement. |
-| **Source PR/issue** | [#2527](issue_2527_waiting_crossing_fixture.md), [#2564](issue_2564_signal_state_proxy_smoke.md), [#2662](issue_2662_signal_state_promotion_contract.md), [#2474](issue_2474_signalized_crossing_benchmark.md) |
+| **Evidence tier** | runtime denominator smoke |
+| **Allowed wording** | "The repository can now produce simulator-backed signalized-crossing rows that separate planner-observable denominator evidence from unavailable/proxy exclusions; this proves denominator plumbing, not traffic-light realism or crossing-legality compliance." |
+| **Caveat** | Do not claim forced-waiting reasoning, legality compliance, traffic-signal realism, or benchmark ranking improvement from #2799. The smoke has one baseline planner and synthetic authored signal metadata. |
+| **Source PR/issue** | [#2527](issue_2527_waiting_crossing_fixture.md), [#2564](issue_2564_signal_state_proxy_smoke.md), [#2662](issue_2662_signal_state_promotion_contract.md), [#2474](issue_2474_signalized_crossing_benchmark.md), [#2799 evidence](evidence/issue_2799_signalized_runtime/README.md) |
 | **Dissertation chapter** | Methods, Limitations |
-| **Claim gap** | Requires explicit runtime signal phase state, planner-observation policy, zone/legality trace fields, and `planner_observable` promotion before any benchmark row. |
-| **Evidence promotion path** | **live replay**: explicit runtime signal phase state, planner-observation policy, and `planner_observable` promotion are required before any benchmark row. |
+| **Claim gap** | Requires planner-comparison baselines plus validated zone/legality trace fields before forced-waiting, crossing-legality, traffic-signal-realism, or ranking claims. |
+| **Evidence promotion path** | **live replay / benchmark smoke**: expand from the #2799 denominator smoke to comparison-ready signalized scenarios with legality trace fields and predeclared baselines. |
 
 ### 3. Observation Robustness
 

@@ -1,0 +1,38 @@
+{
+  "schema_version": "occluded_emergence_fixture_summary.v1",
+  "issue": 2756,
+  "claim_boundary": "smoke_diagnostic_only_not_benchmark_evidence",
+  "fixture": {
+    "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json",
+    "metadata_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/sources/issue_2756_occluded_emergence_fixture_111_ep0000.meta.json",
+    "scenario_id": "issue_2756_occluded_emergence",
+    "seed": 111,
+    "episode_id": "issue_2756_occluded_emergence_ep0000",
+    "frame_count": 16,
+    "dt_s": 0.1,
+    "pedestrian_ids": [2756]
+  },
+  "occlusion": {
+    "first_visible_step": 5,
+    "first_visible_time_s": 0.5,
+    "hidden_steps": [0, 1, 2, 3, 4],
+    "visible_steps": [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    "conflict_time_s": 1.0,
+    "stop_feasible_before_step": 7,
+    "yield_feasible_before_step": 9
+  },
+  "diagnostic_support": {
+    "ground_truth_observed_separated": true,
+    "observation_perturbation_profiles_tested": [
+      "occlusion_mask",
+      "delayed_observation"
+    ],
+    "forecast_evaluable_samples": 11,
+    "forecast_horizons_with_samples_s": [0.5, 1.0]
+  },
+  "validation": {
+    "targeted_tests": "uv run pytest tests/benchmark/test_occluded_emergence_fixture.py -q",
+    "related_tests": "uv run pytest tests/benchmark/test_observation_perturbation.py tests/benchmark/test_pedestrian_forecast.py tests/benchmark/test_pedestrian_forecast_cv_eval.py tests/benchmark/test_occluded_emergence_fixture.py -q",
+    "docs_check": "uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml --path docs/context/evidence/README.md --path docs/context/evidence/issue_2756_occluded_emergence_2026-06-13/README.md"
+  }
+}

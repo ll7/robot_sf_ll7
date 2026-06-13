@@ -98,6 +98,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2756_occluded_emergence_2026-06-13/`: smoke/diagnostic note for the
+  deterministic occluded-emergence trace fixture. The fixture separates ground-truth and observed
+  pedestrian state, records first visibility and conflict timing, and feeds observation-noise plus
+  constant-velocity forecast diagnostics.
 - `issue_2757_cv_forecast_eval_2026-06-13/`: diagnostic-only constant-velocity
   pedestrian forecast baseline evaluation on bounded durable trace fixtures. The corridor traces
   produce short-horizon metrics; crossing, bottleneck, signalized, occluded, and dense-interaction

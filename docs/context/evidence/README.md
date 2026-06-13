@@ -111,6 +111,10 @@ Policy caveats:
   deterministic occluded-emergence trace fixture. The fixture separates ground-truth and observed
   pedestrian state, records first visibility and conflict timing, and feeds observation-noise plus
   constant-velocity forecast diagnostics.
+- `issue_2780_occluded_emergence_variants/`: smoke/diagnostic/stress evidence for five simulated
+  occluded-emergence variant fixtures varying emergence side, pedestrian speed, first-visible
+  distance, conflict timing, and robot approach speed. Four variants are safety-relevant under
+  live replay; none replace #2777 live replay evidence.
 - `issue_2757_cv_forecast_eval_2026-06-13/`: diagnostic-only constant-velocity
   pedestrian forecast baseline evaluation on bounded durable trace fixtures. The corridor traces
   produce short-horizon metrics; crossing, bottleneck, signalized, occluded, and dense-interaction

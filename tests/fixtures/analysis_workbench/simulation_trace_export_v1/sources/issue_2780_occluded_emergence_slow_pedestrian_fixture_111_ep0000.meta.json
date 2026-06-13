@@ -1,0 +1,25 @@
+{
+  "algorithm": "hand_authored_deterministic_fixture",
+  "boundary": "smoke_diagnostic_only_not_benchmark_evidence",
+  "episode_id": "issue_2780_occluded_emergence_slow_pedestrian_ep0000",
+  "issue": 2780,
+  "parent_issue": 2756,
+  "scenario": "issue_2780_occluded_emergence_slow_pedestrian",
+  "seed": 111,
+  "source_kind": "simulation_trace_export.v1 fixture",
+  "variant_name": "occluded_emergence_slow_pedestrian",
+  "expected_failure_mode": "unnecessary_stop",
+  "variation_dimensions": [
+    "ped_speed:0.4",
+    "robot_v0:0.8",
+    "first_visible_step:5"
+  ],
+  "safety_relevant_under_live_replay": false,
+  "evidence_boundary": "diagnostic_stress_only_not_benchmark_evidence",
+  "notes": [
+    "Variant of the issue #2756 occluded-emergence fixture for issue #2780.",
+    "Expected failure mode: unnecessary_stop.",
+    "Variation dimensions: ped_speed:0.4, robot_v0:0.8, first_visible_step:5.",
+    "This fixture is not paper-facing benchmark evidence."
+  ]
+}

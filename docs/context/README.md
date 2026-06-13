@@ -162,6 +162,11 @@ knowledge, not every transient iteration detail.
   [dissertation_evidence_ledger.md](dissertation_evidence_ledger.md)
   ([JSON ledger](evidence/issue_2760_dissertation_evidence_ledger/ledger.json),
   [validation test](../../tests/docs/test_dissertation_evidence_ledger.py))
+* Dissertation gap report (Issue #2784):
+  [dissertation_gap_report.md](dissertation_gap_report.md)
+  ([JSON report](evidence/issue_2784_dissertation_gap_report/gap_report.json),
+  [Markdown report](evidence/issue_2784_dissertation_gap_report/gap_report.md),
+  [validation test](../../tests/docs/test_dissertation_gap_report.py))
 * Negative result register (Issue #2762):
   [negative_result_register.md](negative_result_register.md)
   ([JSON register](evidence/issue_2762_negative_result_register/register.json),

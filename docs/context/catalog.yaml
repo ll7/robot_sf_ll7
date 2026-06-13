@@ -501,7 +501,19 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/dissertation_gap_report.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2784_dissertation_gap_report/gap_report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2784_dissertation_gap_report/gap_report.md
     status: evidence
     freshness: evidence
     area: benchmark_evidence

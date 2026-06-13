@@ -68,8 +68,13 @@ def _build_variant(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
             occlusion_status = "visible"
             first_visible = step == first_visible_step
 
-        dist_to_conflict = abs(ped_y - conflict_y)
-        time_to_conflict = dist_to_conflict / ped_speed if ped_speed > 0 else 999.0
+        signed_dist_to_conflict = conflict_y - ped_y
+        time_to_conflict = signed_dist_to_conflict / ped_speed if ped_speed > 0 else 999.0
+        previous_time_to_conflict = 999.0
+        if ped_speed > 0 and step > 0:
+            previous_ped_y = ped_initial_y + ped_speed * ((step - 1) * DT_S)
+            previous_time_to_conflict = (conflict_y - previous_ped_y) / ped_speed
+        crosses_conflict = previous_time_to_conflict > 0.0 >= time_to_conflict
         # Simplified feasibility thresholds
         stop_feasible = time_to_conflict > cfg.get("stop_horizon_s", 0.2)
         yield_feasible = time_to_conflict > cfg.get("yield_horizon_s", 0.1)
@@ -77,15 +82,15 @@ def _build_variant(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
         if step < first_visible_step:
             event = "approach_occluder"
             v_lin = round(robot_v0 * 0.8, 2)
+        elif crosses_conflict:
+            event = "conflict_time"
+            v_lin = 0.0
         elif step == first_visible_step:
             event = "first_visible"
             v_lin = round(robot_v0 * 0.5, 2)
         elif stop_feasible:
             event = "yield_start"
             v_lin = round(robot_v0 * 0.3, 2)
-        elif time_to_conflict <= 0.0:
-            event = "conflict_time"
-            v_lin = 0.0
         elif step > cfg.get("yield_feasible_before_step", 12):
             event = "resume"
             v_lin = round(robot_v0 * 0.4, 2)
@@ -105,7 +110,7 @@ def _build_variant(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
                 "occlusion_status": {"emerging_ped": occlusion_status},
                 "first_visible": first_visible,
                 "conflict_timing": {
-                    "time_to_conflict_s": round(time_to_conflict, 4),
+                    "time_to_conflict_s": round(max(0.0, time_to_conflict), 4),
                     "stop_feasible": stop_feasible,
                     "yield_feasible": yield_feasible,
                 },

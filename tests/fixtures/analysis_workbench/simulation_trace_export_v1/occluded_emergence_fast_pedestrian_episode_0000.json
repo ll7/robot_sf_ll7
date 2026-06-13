@@ -455,7 +455,7 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.1,
+        "time_to_conflict_s": 0.0,
         "stop_feasible": false,
         "yield_feasible": false
       },
@@ -512,16 +512,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.2,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.36,
+          "linear_velocity": 0.48,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -569,16 +569,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.3,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.36,
+          "linear_velocity": 0.48,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -626,16 +626,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.4,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.36,
+          "linear_velocity": 0.48,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -683,16 +683,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.5,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.36,
+          "linear_velocity": 0.48,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -740,16 +740,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.6,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.36,
+          "linear_velocity": 0.48,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -797,16 +797,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.7,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.36,
+          "linear_velocity": 0.48,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -854,16 +854,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.8,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.36,
+          "linear_velocity": 0.48,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -911,16 +911,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.9,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.36,
+          "linear_velocity": 0.48,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     }
   ]

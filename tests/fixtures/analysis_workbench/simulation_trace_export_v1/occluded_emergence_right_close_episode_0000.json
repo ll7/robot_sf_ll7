@@ -557,16 +557,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.0667,
+        "time_to_conflict_s": 0.0,
         "stop_feasible": false,
         "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.15,
+          "linear_velocity": 0.0,
           "angular_velocity": 0.0
         },
-        "event": "yield"
+        "event": "conflict_time"
       }
     },
     {
@@ -614,9 +614,9 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.1667,
+        "time_to_conflict_s": 0.0,
         "stop_feasible": false,
-        "yield_feasible": true
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
@@ -671,16 +671,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.2667,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.3,
+          "linear_velocity": 0.4,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -728,16 +728,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.3667,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.3,
+          "linear_velocity": 0.4,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -785,16 +785,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.4667,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.3,
+          "linear_velocity": 0.4,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -842,16 +842,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.5667,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.3,
+          "linear_velocity": 0.4,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     },
     {
@@ -899,16 +899,16 @@
       },
       "first_visible": false,
       "conflict_timing": {
-        "time_to_conflict_s": 0.6667,
-        "stop_feasible": true,
-        "yield_feasible": true
+        "time_to_conflict_s": 0.0,
+        "stop_feasible": false,
+        "yield_feasible": false
       },
       "planner": {
         "selected_action": {
-          "linear_velocity": 0.3,
+          "linear_velocity": 0.4,
           "angular_velocity": 0.0
         },
-        "event": "yield_start"
+        "event": "resume"
       }
     }
   ]

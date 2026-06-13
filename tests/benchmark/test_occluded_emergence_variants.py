@@ -248,6 +248,25 @@ def test_variant_conflict_time_matches_geometry() -> None:
         assert occlusion["conflict_time_s"] == round(expected_conflict_time, 4)
 
 
+def test_variant_frame_conflict_time_never_rebounds_after_crossing() -> None:
+    """Frame time-to-conflict decreases to zero instead of rebounding after crossing."""
+    for name in VARIANT_NAMES:
+        trace = _load_trace(name)
+        times = [frame["conflict_timing"]["time_to_conflict_s"] for frame in trace["frames"]]
+        assert times == sorted(times, reverse=True)
+        assert times[-1] == 0.0
+
+
+def test_variant_planner_event_does_not_restart_yield_after_conflict() -> None:
+    """Planner events do not return to yield_start after the conflict-time frame."""
+    for name in VARIANT_NAMES:
+        trace = _load_trace(name)
+        events = [frame["planner"]["event"] for frame in trace["frames"]]
+        assert events.count("conflict_time") == 1
+        conflict_index = events.index("conflict_time")
+        assert "yield_start" not in events[conflict_index + 1 :]
+
+
 def test_variant_emergence_sides_vary() -> None:
     """Left and right variants have different occluder x-bounds."""
     left = _load_trace("occluded_emergence_left_close")

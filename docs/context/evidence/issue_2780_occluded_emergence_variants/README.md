@@ -1,4 +1,4 @@
-# Issue 2780 Occluded Emergence Variants
+# Issue #2780 Occluded Emergence Variants 2026-06-13
 
 This evidence note records five simulated occluded-emergence variant fixtures generated for
 issue #2780.  The variants explore different emergence configurations beyond the single

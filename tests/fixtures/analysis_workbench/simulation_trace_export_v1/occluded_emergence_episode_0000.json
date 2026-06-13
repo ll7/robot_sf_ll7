@@ -1,0 +1,265 @@
+{
+  "schema_version": "simulation_trace_export.v1",
+  "trace_id": "issue_2756_occluded_emergence_seed111_ep0000",
+  "source": {
+    "scenario_id": "issue_2756_occluded_emergence",
+    "seed": 111,
+    "planner_id": "hybrid_rule_v0_minimal",
+    "episode_id": "issue_2756_occluded_emergence_ep0000",
+    "generated_by": "hand-authored deterministic fixture for issue #2756"
+  },
+  "evidence_boundary": "smoke_diagnostic_only_not_benchmark_evidence",
+  "coordinate_frame": "world",
+  "units": {
+    "position": "m",
+    "heading": "rad",
+    "time": "s",
+    "velocity": "m/s"
+  },
+  "occlusion": {
+    "occluder_id": "static_wall_behind_corner",
+    "occluder_bounds": {
+      "x_min": 1.0,
+      "x_max": 1.25,
+      "y_min": -0.8,
+      "y_max": 0.8
+    },
+    "first_visible_step": 5,
+    "conflict_zone_center": [2.0, 0.0],
+    "conflict_time_s": 1.0,
+    "stop_feasible_before_step": 7,
+    "yield_feasible_before_step": 9
+  },
+  "frames": [
+    {
+      "step": 0,
+      "time_s": 0.0,
+      "robot": {"position": [0.0, 0.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -1.0], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [],
+      "occlusion_status": {"emerging_ped": "occluded"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 1.0, "stop_feasible": true, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.6, "angular_velocity": 0.0}, "event": "approach_occluder"}
+    },
+    {
+      "step": 1,
+      "time_s": 0.1,
+      "robot": {"position": [0.1, 0.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.9], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [],
+      "occlusion_status": {"emerging_ped": "occluded"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.9, "stop_feasible": true, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.6, "angular_velocity": 0.0}, "event": "approach_occluder"}
+    },
+    {
+      "step": 2,
+      "time_s": 0.2,
+      "robot": {"position": [0.2, 0.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.8], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [],
+      "occlusion_status": {"emerging_ped": "occluded"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.8, "stop_feasible": true, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.6, "angular_velocity": 0.0}, "event": "approach_occluder"}
+    },
+    {
+      "step": 3,
+      "time_s": 0.3,
+      "robot": {"position": [0.3, 0.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.7], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [],
+      "occlusion_status": {"emerging_ped": "occluded"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.7, "stop_feasible": true, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.5, "angular_velocity": 0.0}, "event": "approach_occluder"}
+    },
+    {
+      "step": 4,
+      "time_s": 0.4,
+      "robot": {"position": [0.4, 0.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.6], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [],
+      "occlusion_status": {"emerging_ped": "occluded"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.6, "stop_feasible": true, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.5, "angular_velocity": 0.0}, "event": "last_occluded_frame"}
+    },
+    {
+      "step": 5,
+      "time_s": 0.5,
+      "robot": {"position": [0.5, 0.0], "heading": 0.0, "velocity": [0.8, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.5], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, -0.5], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": true,
+      "conflict_timing": {"time_to_conflict_s": 0.5, "stop_feasible": true, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.4, "angular_velocity": 0.0}, "event": "first_visible"}
+    },
+    {
+      "step": 6,
+      "time_s": 0.6,
+      "robot": {"position": [0.58, 0.0], "heading": 0.0, "velocity": [0.8, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.4], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, -0.4], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.4, "stop_feasible": true, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.3, "angular_velocity": 0.0}, "event": "yield_start"}
+    },
+    {
+      "step": 7,
+      "time_s": 0.7,
+      "robot": {"position": [0.64, 0.0], "heading": 0.0, "velocity": [0.6, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.3], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, -0.3], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.3, "stop_feasible": false, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.2, "angular_velocity": 0.0}, "event": "yield"}
+    },
+    {
+      "step": 8,
+      "time_s": 0.8,
+      "robot": {"position": [0.68, 0.0], "heading": 0.0, "velocity": [0.4, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.2], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, -0.2], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.2, "stop_feasible": false, "yield_feasible": true},
+      "planner": {"selected_action": {"linear_velocity": 0.1, "angular_velocity": 0.0}, "event": "yield"}
+    },
+    {
+      "step": 9,
+      "time_s": 0.9,
+      "robot": {"position": [0.7, 0.0], "heading": 0.0, "velocity": [0.2, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, -0.1], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, -0.1], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.1, "stop_feasible": false, "yield_feasible": false},
+      "planner": {"selected_action": {"linear_velocity": 0.0, "angular_velocity": 0.0}, "event": "yield_complete"}
+    },
+    {
+      "step": 10,
+      "time_s": 1.0,
+      "robot": {"position": [0.7, 0.0], "heading": 0.0, "velocity": [0.0, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, 0.0], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, 0.0], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": 0.0, "stop_feasible": false, "yield_feasible": false},
+      "planner": {"selected_action": {"linear_velocity": 0.0, "angular_velocity": 0.0}, "event": "conflict_time"}
+    },
+    {
+      "step": 11,
+      "time_s": 1.1,
+      "robot": {"position": [0.7, 0.0], "heading": 0.0, "velocity": [0.0, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, 0.1], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, 0.1], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": -0.1, "stop_feasible": false, "yield_feasible": false},
+      "planner": {"selected_action": {"linear_velocity": 0.0, "angular_velocity": 0.0}, "event": "post_conflict"}
+    },
+    {
+      "step": 12,
+      "time_s": 1.2,
+      "robot": {"position": [0.7, 0.0], "heading": 0.0, "velocity": [0.0, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, 0.2], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, 0.2], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": -0.2, "stop_feasible": false, "yield_feasible": false},
+      "planner": {"selected_action": {"linear_velocity": 0.0, "angular_velocity": 0.0}, "event": "post_conflict"}
+    },
+    {
+      "step": 13,
+      "time_s": 1.3,
+      "robot": {"position": [0.72, 0.0], "heading": 0.0, "velocity": [0.2, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, 0.3], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, 0.3], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": -0.3, "stop_feasible": false, "yield_feasible": false},
+      "planner": {"selected_action": {"linear_velocity": 0.2, "angular_velocity": 0.0}, "event": "resume"}
+    },
+    {
+      "step": 14,
+      "time_s": 1.4,
+      "robot": {"position": [0.76, 0.0], "heading": 0.0, "velocity": [0.4, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, 0.4], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, 0.4], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": -0.4, "stop_feasible": false, "yield_feasible": false},
+      "planner": {"selected_action": {"linear_velocity": 0.4, "angular_velocity": 0.0}, "event": "resume"}
+    },
+    {
+      "step": 15,
+      "time_s": 1.5,
+      "robot": {"position": [0.82, 0.0], "heading": 0.0, "velocity": [0.6, 0.0]},
+      "pedestrians": [
+        {"id": 2756, "position": [1.2, 0.5], "velocity": [0.0, 1.0]}
+      ],
+      "observed_pedestrians": [
+        {"id": 2756, "position": [1.2, 0.5], "velocity": [0.0, 1.0]}
+      ],
+      "occlusion_status": {"emerging_ped": "visible"},
+      "first_visible": false,
+      "conflict_timing": {"time_to_conflict_s": -0.5, "stop_feasible": false, "yield_feasible": false},
+      "planner": {"selected_action": {"linear_velocity": 0.6, "angular_velocity": 0.0}, "event": "clear"}
+    }
+  ]
+}

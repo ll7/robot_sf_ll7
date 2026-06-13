@@ -1,0 +1,15 @@
+{
+  "algorithm": "hand_authored_deterministic_fixture",
+  "boundary": "smoke_diagnostic_only_not_benchmark_evidence",
+  "episode_id": "issue_2756_occluded_emergence_ep0000",
+  "issue": 2756,
+  "scenario": "issue_2756_occluded_emergence",
+  "seed": 111,
+  "source_kind": "simulation_trace_export.v1 fixture",
+  "notes": [
+    "Pedestrian is ground-truth present for every frame.",
+    "Observed pedestrian state is empty through step 4, first visible at step 5.",
+    "Conflict timing and stop/yield feasibility are deterministic metadata for diagnostics.",
+    "This fixture is not paper-facing benchmark evidence."
+  ]
+}

@@ -65,11 +65,18 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "planner_id": "hybrid_rule_v0_minimal",
         "seed": 111,
     },
+    {
+        "family": "occluded_emergence",
+        "label": "deterministic_occluded_emergence",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json",
+        "scenario_id": "issue_2756_occluded_emergence",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 111,
+    },
 ]
 
 MISSING_FAMILIES: list[dict[str, str]] = [
     {"family": "signalized_crossing", "reason": "no durable trace fixture available"},
-    {"family": "occluded_emergence", "reason": "no durable trace fixture available"},
     {"family": "dense_pedestrian_interaction", "reason": "no durable trace fixture available"},
     {
         "family": "bottleneck_with_motion",

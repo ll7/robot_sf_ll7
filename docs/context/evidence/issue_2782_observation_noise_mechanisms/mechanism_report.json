@@ -1,0 +1,354 @@
+{
+  "schema_version": "observation_noise_mechanism.v1",
+  "issue": 2782,
+  "claim_boundary": "Diagnostic mechanism-layer classification of observation-noise envelope evidence. Not paper-facing benchmark proof. Classifies each perturbation condition by the pipeline layer at which it had (or did not have) an effect.",
+  "source_evidence": "docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json",
+  "reproducibility": {
+    "issue": 2782,
+    "generated_at_utc": "2026-06-13T15:38:38.522073+00:00",
+    "command": "uv run python scripts/tools/classify_observation_noise_mechanisms.py --evidence docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json --output-dir docs/context/evidence/issue_2782_observation_noise_mechanisms",
+    "repo_head": "d6078ca2"
+  },
+  "fixture": {
+    "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json",
+    "scenario_id": "issue_2756_occluded_emergence",
+    "first_visible_step": 5
+  },
+  "mechanism_labels_valid": [
+    "command_changed_but_trajectory_did_not",
+    "delay_shifted_stop_timing",
+    "diagnostic_only",
+    "inconclusive",
+    "noise_stayed_below_decision_threshold",
+    "observation_affected_source_but_not_command",
+    "observation_did_not_affect_selected_source",
+    "occlusion_changed_first_actionable_frame",
+    "scenario_had_no_actionable_conflict",
+    "stored_action_proxy_prevents_live_conclusion"
+  ],
+  "mechanism_labels_assigned": [
+    "delay_shifted_stop_timing",
+    "diagnostic_only",
+    "noise_stayed_below_decision_threshold",
+    "observation_affected_source_but_not_command",
+    "occlusion_changed_first_actionable_frame"
+  ],
+  "conditions": [
+    {
+      "condition": "noop",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "delay_steps": 0,
+        "noise_profile": "none",
+        "is_noop": true
+      },
+      "mechanism": {
+        "label": "diagnostic_only",
+        "rationale": "No-perturbation baseline; mechanism classification is not applicable to the reference trajectory."
+      },
+      "condition_classification": {
+        "label": "diagnostic_only",
+        "rationale": "No-perturbation baseline. Provides reference robot-pedestrian trajectory and action selection without observation noise."
+      },
+      "response_delay_steps": 0,
+      "closest_distance_m": 0.5,
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_occluder",
+          "last_occluded_frame",
+          "first_visible",
+          "yield_start",
+          "yield",
+          "yield_complete",
+          "conflict_time",
+          "post_conflict",
+          "resume",
+          "clear"
+        ],
+        "velocity_range": [
+          0.0,
+          0.6
+        ]
+      }
+    },
+    {
+      "condition": "low_noise",
+      "spec": {
+        "position_noise_std_m": 0.1,
+        "position_noise_bound_m": 0.2,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false
+      },
+      "mechanism": {
+        "label": "noise_stayed_below_decision_threshold",
+        "rationale": "Gaussian noise (std=0.10 m) applied but policy command sequence matches baseline. Noise stayed below the decision threshold for this planner/scenario combination."
+      },
+      "condition_classification": {
+        "label": "diagnostic_only",
+        "rationale": "Perturbation produced mixed effects. Classified as diagnostic-only pending broader seed/scenario evidence."
+      },
+      "response_delay_steps": 0,
+      "closest_distance_m": 0.5,
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_occluder",
+          "last_occluded_frame",
+          "first_visible",
+          "yield_start",
+          "yield",
+          "yield_complete",
+          "conflict_time",
+          "post_conflict",
+          "resume",
+          "clear"
+        ],
+        "velocity_range": [
+          0.0,
+          0.6
+        ]
+      }
+    },
+    {
+      "condition": "medium_noise",
+      "spec": {
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false
+      },
+      "mechanism": {
+        "label": "observation_affected_source_but_not_command",
+        "rationale": "Gaussian noise (std=0.30 m) perturbed the observation source but the policy command sequence matches baseline. The perturbation did not propagate to the command layer."
+      },
+      "condition_classification": {
+        "label": "diagnostic_only",
+        "rationale": "Perturbation produced mixed effects. Classified as diagnostic-only pending broader seed/scenario evidence."
+      },
+      "response_delay_steps": 0,
+      "closest_distance_m": 0.5,
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_occluder",
+          "last_occluded_frame",
+          "first_visible",
+          "yield_start",
+          "yield",
+          "yield_complete",
+          "conflict_time",
+          "post_conflict",
+          "resume",
+          "clear"
+        ],
+        "velocity_range": [
+          0.0,
+          0.6
+        ]
+      }
+    },
+    {
+      "condition": "missed_detection_only",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 1.0,
+        "has_occlusion_mask": false,
+        "delay_steps": 0,
+        "noise_profile": "missed_detection",
+        "is_noop": false
+      },
+      "mechanism": {
+        "label": "occlusion_changed_first_actionable_frame",
+        "rationale": "Perturbation completely suppressed the pedestrian observation (missed detections or occlusion mask). The first actionable frame was changed or never reached."
+      },
+      "condition_classification": {
+        "label": "scenario_too_weak",
+        "rationale": "Pedestrian fully missed after fixture visibility begins; no observation signal reaches the policy. Cannot test policy robustness."
+      },
+      "response_delay_steps": null,
+      "closest_distance_m": 0.5,
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_occluder",
+          "last_occluded_frame",
+          "first_visible",
+          "yield_start",
+          "yield",
+          "yield_complete",
+          "conflict_time",
+          "post_conflict",
+          "resume",
+          "clear"
+        ],
+        "velocity_range": [
+          0.0,
+          0.6
+        ]
+      }
+    },
+    {
+      "condition": "occlusion_only",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": true,
+        "delay_steps": 0,
+        "noise_profile": "occlusion_mask",
+        "is_noop": false
+      },
+      "mechanism": {
+        "label": "occlusion_changed_first_actionable_frame",
+        "rationale": "Perturbation completely suppressed the pedestrian observation (missed detections or occlusion mask). The first actionable frame was changed or never reached."
+      },
+      "condition_classification": {
+        "label": "scenario_too_weak",
+        "rationale": "Pedestrian position/velocity zeroed by occlusion after fixture visibility begins; no observation signal reaches the policy."
+      },
+      "response_delay_steps": null,
+      "closest_distance_m": 0.5,
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_occluder",
+          "last_occluded_frame",
+          "first_visible",
+          "yield_start",
+          "yield",
+          "yield_complete",
+          "conflict_time",
+          "post_conflict",
+          "resume",
+          "clear"
+        ],
+        "velocity_range": [
+          0.0,
+          0.6
+        ]
+      }
+    },
+    {
+      "condition": "delay_only",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "delay_steps": 2,
+        "noise_profile": "delayed_observation",
+        "is_noop": false
+      },
+      "mechanism": {
+        "label": "delay_shifted_stop_timing",
+        "rationale": "Observation arrived 2 step(s) after first-visible (step 7). Stop/yield feasibility at first observation differs from baseline, indicating the delay shifted decision timing."
+      },
+      "condition_classification": {
+        "label": "robustness_evidence",
+        "rationale": "Pedestrian observed at step 7 (2 steps after first-visible). Perturbation delayed/masked the observation and may have affected policy response timing."
+      },
+      "response_delay_steps": 2,
+      "closest_distance_m": 0.5,
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_occluder",
+          "last_occluded_frame",
+          "first_visible",
+          "yield_start",
+          "yield",
+          "yield_complete",
+          "conflict_time",
+          "post_conflict",
+          "resume",
+          "clear"
+        ],
+        "velocity_range": [
+          0.0,
+          0.6
+        ]
+      }
+    },
+    {
+      "condition": "combined",
+      "spec": {
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": true,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false
+      },
+      "mechanism": {
+        "label": "occlusion_changed_first_actionable_frame",
+        "rationale": "Perturbation completely suppressed the pedestrian observation (missed detections or occlusion mask). The first actionable frame was changed or never reached."
+      },
+      "condition_classification": {
+        "label": "scenario_too_weak",
+        "rationale": "Pedestrian position/velocity zeroed by occlusion after fixture visibility begins; no observation signal reaches the policy."
+      },
+      "response_delay_steps": null,
+      "closest_distance_m": 0.5,
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_occluder",
+          "last_occluded_frame",
+          "first_visible",
+          "yield_start",
+          "yield",
+          "yield_complete",
+          "conflict_time",
+          "post_conflict",
+          "resume",
+          "clear"
+        ],
+        "velocity_range": [
+          0.0,
+          0.6
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "total_conditions": 7,
+    "mechanism_distribution": {
+      "diagnostic_only": 1,
+      "noise_stayed_below_decision_threshold": 1,
+      "observation_affected_source_but_not_command": 1,
+      "occlusion_changed_first_actionable_frame": 3,
+      "delay_shifted_stop_timing": 1
+    },
+    "mechanism_to_conditions": {
+      "diagnostic_only": [
+        "noop"
+      ],
+      "noise_stayed_below_decision_threshold": [
+        "low_noise"
+      ],
+      "observation_affected_source_but_not_command": [
+        "medium_noise"
+      ],
+      "occlusion_changed_first_actionable_frame": [
+        "missed_detection_only",
+        "occlusion_only",
+        "combined"
+      ],
+      "delay_shifted_stop_timing": [
+        "delay_only"
+      ]
+    }
+  }
+}

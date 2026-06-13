@@ -1,0 +1,41 @@
+{
+  "schema": "topology_reselection_cross_slice_summary.v1",
+  "issue": 2716,
+  "claim_boundary": "diagnostic_only_not_benchmark_or_paper_evidence",
+  "classification": "revise",
+  "classification_rationale": "Hard progress-gated rows retained diagnostic influence but all remained horizon_exhausted.",
+  "manifest": "configs/policy_search/topology_reselection_cross_slice_issue_2716.yaml",
+  "command": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 PYGAME_HIDE_SUPPORT_PROMPT=1 DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run python scripts/validation/run_topology_reselection_cross_slice.py --output-dir <local-diagnostic-output-dir>",
+  "row_count": 20,
+  "slices": {
+    "hard": [
+      "bottleneck_transfer",
+      "doorway_transfer",
+      "t_intersection_transfer"
+    ],
+    "negative_control": [
+      "simple_negative_control"
+    ]
+  },
+  "thresholds_m": [
+    0.05,
+    0.1,
+    0.2
+  ],
+  "summary": {
+    "all_rows_diagnostic_complete": true,
+    "hard_progress_gated_terminal_outcomes": {
+      "horizon_exhausted": 9
+    },
+    "negative_control_progress_gated_terminal_outcomes": {
+      "success": 3
+    },
+    "negative_control_progress_gated_switch_count_max": 0,
+    "hard_progress_gated_route_progress_m_range": [
+      1.4485281590086068,
+      6.3857865327825385
+    ],
+    "hard_progress_gated_collision_rate_max": 0.0
+  },
+  "interpretation": "Progress-gated reselection generalizes as an activation/diagnostic mechanism across the selected non-canonical hard slices, but it did not clear any hard slice at h160. Treat as revise/successor-needed, not promotion evidence."
+}

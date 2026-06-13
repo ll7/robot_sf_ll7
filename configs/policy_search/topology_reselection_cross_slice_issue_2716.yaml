@@ -1,0 +1,54 @@
+schema: topology_reselection_cross_slice.v1
+issue: 2716
+claim_boundary: diagnostic_only_not_benchmark_or_paper_evidence
+description: >
+  Predeclared cross-slice diagnostic for progress-gated topology reselection.
+  This manifest compares the baseline topology-guided candidate, the reuse-penalty
+  variant, and progress-gated reselection across non-canonical hard slices plus a
+  negative-control slice. Rows are diagnostic-only and must not be promoted as
+  benchmark or manuscript evidence.
+stage: full_matrix
+horizon: 160
+seed: 111
+max_hypotheses: 3
+min_hypotheses: 2
+block_radius_cells: 3
+block_stride_cells: 8
+progress_gate_thresholds_m:
+  - 0.05
+  - 0.1
+  - 0.2
+candidates:
+  baseline: topology_guided_hybrid_rule_v0
+  reuse_penalty: topology_guided_hybrid_rule_v0_reuse_penalty
+  progress_gated: topology_guided_hybrid_rule_v0_progress_gated_reselection
+slices:
+  - id: bottleneck_transfer
+    scenario_name: classic_bottleneck_medium
+    role: hard
+    source_surface: configs/policy_search/stress_slice_matrix.yaml
+    rationale: Non-canonical bottleneck slice for topology-switch pressure.
+  - id: doorway_transfer
+    scenario_name: classic_doorway_medium
+    role: hard
+    source_surface: configs/policy_search/stress_slice_matrix.yaml
+    rationale: Non-canonical doorway slice for stalled-route recovery pressure.
+  - id: t_intersection_transfer
+    scenario_name: classic_t_intersection_medium
+    role: hard
+    source_surface: configs/policy_search/stress_slice_matrix.yaml
+    rationale: Non-canonical intersection slice for route commitment checks.
+  - id: simple_negative_control
+    scenario_name: empty_map_8_directions_east
+    role: negative_control
+    source_surface: configs/scenarios/confirmation_v1.yaml
+    rationale: Negative-control row should not need unnecessary topology reselection.
+decision_rule:
+  promote_if: >
+    Progress-gated reselection improves or preserves terminal outcome and route progress
+    on hard slices, reduces unnecessary switch/deadlock signals relative to reuse penalty,
+    and the negative-control slice shows no unnecessary reselection increase.
+  stop_if: >
+    Progress-gated reselection loses topology-command influence, worsens negative-control
+    switching, or only changes route labels without route-progress or terminal-outcome signal.
+  otherwise: revise

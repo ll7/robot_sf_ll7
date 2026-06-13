@@ -57,6 +57,7 @@ from robot_sf.benchmark.constants import (
 from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
 )
+from robot_sf.benchmark.signal_metrics import calculate_signal_metrics
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -110,6 +111,7 @@ class EpisodeData:
     other_agents_pos: np.ndarray | None = None
     robot_radius: float = 1.0
     ped_radius: float = 0.4
+    episode_metadata: dict[str, Any] | None = None
 
 
 def has_force_data(data: EpisodeData) -> bool:
@@ -2526,10 +2528,18 @@ METRIC_NAMES: list[str] = [
     "wall_collisions",
     "clearing_distance_min",
     "clearing_distance_avg",
+    "signal_red_phase_violations",
+    "signal_stop_line_crossings_under_red",
+    "signal_min_distance_to_stop_line_before_crossing_m",
+    "signal_delay_after_green_onset_s",
+    "signal_pedestrian_conflict_during_legal_crossing_count",
+    "signal_unavailable_exclusion_count",
+    "signal_metrics_denominator",
+    "signal_metrics_evidence",
 ]
 
 
-def compute_all_metrics(  # noqa: PLR0913
+def compute_all_metrics(  # noqa: PLR0913, PLR0915
     data: EpisodeData,
     *,
     horizon: int,
@@ -2541,7 +2551,7 @@ def compute_all_metrics(  # noqa: PLR0913
     ped_impact_window_steps: int = 5,
     social_proxemic_radius_m: float = 1.2,
     human_proxy_yield_speed_mps: float = 0.15,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """Compute all defined metrics for an episode and return them as a mapping.
 
     Calls each metric implementation on the provided ``EpisodeData`` instance and collects scalar
@@ -2567,7 +2577,7 @@ def compute_all_metrics(  # noqa: PLR0913
         human_proxy_yield_speed_mps: Robot speed threshold used to detect proxy yielding.
 
     Returns:
-        dict[str, float]: Mapping from metric name (e.g., ``success``, ``force_q50``,
+        dict[str, Any]: Mapping from metric name (e.g., ``success``, ``force_q50``,
         ``force_gradient_norm_mean``) to the computed scalar value. When
         ``experimental_ped_impact`` is enabled, additional ``ped_impact_*`` and
         exploratory ``social_proxemic_*`` keys are included.
@@ -2592,7 +2602,26 @@ def compute_all_metrics(  # noqa: PLR0913
         and total_collision_count == 0
     )
 
-    values: dict[str, float] = {}
+    values: dict[str, Any] = {}
+    try:
+        values.update(calculate_signal_metrics(data))
+    except Exception:
+        logger.exception("Failed to compute signal metrics; falling back to unavailable defaults.")
+        values.update(
+            {
+                "signal_red_phase_violations": 0,
+                "signal_stop_line_crossings_under_red": 0,
+                "signal_min_distance_to_stop_line_before_crossing_m": float("nan"),
+                "signal_delay_after_green_onset_s": float("nan"),
+                "signal_pedestrian_conflict_during_legal_crossing_count": 0,
+                "signal_unavailable_exclusion_count": 1,
+                "signal_metrics_denominator": 0,
+                "signal_metrics_evidence": {
+                    "state": "unavailable",
+                    "exclusion_reason": "signal_metrics_computation_failed",
+                },
+            }
+        )
     # Use collision-count-based success semantics for benchmark-facing outputs.
     values["success"] = 1.0 if episode_success else 0.0
     values["time_to_goal_norm"] = (
@@ -2723,6 +2752,11 @@ def post_process_metrics(
         "shield_intervention_count",
         "shield_override_count",
         "shield_hard_constraint_violation_count",
+        "signal_red_phase_violations",
+        "signal_stop_line_crossings_under_red",
+        "signal_pedestrian_conflict_during_legal_crossing_count",
+        "signal_unavailable_exclusion_count",
+        "signal_metrics_denominator",
     ):
         if count_key in metrics and metrics[count_key] is not None:
             try:

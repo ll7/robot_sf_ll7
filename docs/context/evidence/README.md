@@ -313,3 +313,7 @@ Policy caveats:
 - `issue_2270_panel_candidate_manifest_2026-06-05/`: analysis-only panel candidate manifest for
   Issue #2270 / parent Issue #2227, recording static-recenter and topology panel candidates that
   remain blocked on durable `simulation_trace_export.v1` trace pairs.
+- `issue_2753_signalized_crossing_metrics/`: fixture/report-table evidence for the four canonical
+  signalized crossing metric row types (`red_required_stop`, `green_proceed`,
+  `unavailable_no_claim`, `proxy_only_denominator_excluded`).  No simulator or runtime traces;
+  fixture-only claim boundary.

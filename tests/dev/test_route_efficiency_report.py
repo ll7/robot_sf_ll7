@@ -154,6 +154,27 @@ def test_snapshot_provides_acceptance_metadata() -> None:
     assert report["final_outcome"]["note"] == "merged"
 
 
+def test_snapshot_preserves_explicit_falsy_metadata() -> None:
+    """Explicit falsy snapshot values should not be replaced by defaults."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    snapshot = {"accepted": 0, "outcome": ""}
+
+    report = rer.analyze_manifests([manifest], snapshot=snapshot)
+
+    assert report["final_outcome"]["accepted"] is False
+    assert report["final_outcome"]["note"] == ""
+
+
 def test_multiple_manifests_aggregate() -> None:
     """Multiple manifests should sum attempts, reroutes, and incomplete counts."""
     m1 = _manifest(
@@ -360,6 +381,10 @@ def test_defensive_handling_of_missing_fields() -> None:
     report = rer.analyze_manifests([{}])
     assert report["delegated_attempts"] == 0
 
+    # Non-dict manifests and malformed attempted_routes are ignored defensively.
+    report = rer.analyze_manifests([[], {"attempted_routes": "not-a-list"}])  # type: ignore[list-item]
+    assert report["delegated_attempts"] == 0
+
     # Attempt with no compact_artifacts key.
     manifest = _manifest(
         [
@@ -387,6 +412,12 @@ def test_defensive_handling_of_missing_fields() -> None:
     )
     report2 = rer.analyze_manifests([manifest2])
     assert report2["complete_artifacts"]["count"] == 0
+
+    # Non-dict attempts are counted as malformed incomplete attempts.
+    manifest3 = {"attempted_routes": ["not-a-dict"]}
+    report3 = rer.analyze_manifests([manifest3])  # type: ignore[list-item]
+    assert report3["delegated_attempts"] == 1
+    assert report3["incomplete_by_failure_class"]["malformed"] == 1
 
 
 def test_cli_json_output(tmp_path: Path) -> None:
@@ -431,6 +462,19 @@ def test_cli_writes_output_file(tmp_path: Path) -> None:
     assert out_path.exists()
     data = json.loads(out_path.read_text(encoding="utf-8"))
     assert data["schema"] == "route_efficiency_report.v1"
+
+
+def test_cli_rejects_malformed_manifest_json(tmp_path: Path) -> None:
+    """CLI loading should reject non-object manifest payloads."""
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(["not-a-dict"]), encoding="utf-8")
+
+    try:
+        rer.main([str(manifest_path)])
+    except ValueError as exc:
+        assert "manifest list entries" in str(exc)
+    else:  # pragma: no cover - keeps the failure message clear.
+        raise AssertionError("expected malformed manifest list to raise ValueError")
 
 
 def test_cli_markdown_output(tmp_path: Path) -> None:

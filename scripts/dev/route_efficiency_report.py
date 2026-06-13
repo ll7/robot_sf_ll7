@@ -89,13 +89,19 @@ class _Accumulator:
         self.failure_class_incomplete: Counter[str] = Counter()
 
     def process_attempt(self, idx: int, attempt: dict[str, Any]) -> None:
-        compact = attempt.get("compact_artifacts") or {}
+        if not isinstance(attempt, dict):
+            compact: dict[str, Any] = {}
+            provider = "unknown"
+            fc = "malformed"
+        else:
+            compact = attempt.get("compact_artifacts") or {}
+            provider = _provider_name(attempt.get("route"))
+            fc = attempt.get("failure_class") or "unknown"
+
         if _is_complete_artifact_set(compact):
             self.complete_count += 1
         else:
-            provider = _provider_name(attempt.get("route"))
             self.provider_incomplete[provider] += 1
-            fc = attempt.get("failure_class") or "unknown"
             self.failure_class_incomplete[str(fc)] += 1
 
         if _validate_present(compact):
@@ -113,8 +119,10 @@ def _extract_snapshot_outcome(
     """Pull accepted and outcome from optional snapshot metadata."""
     if not isinstance(snapshot, dict):
         return None, None
-    accepted = bool(snapshot["accepted"]) if "accepted" in snapshot else None
-    note = str(snapshot["outcome"]) if "outcome" in snapshot else None
+    accepted_raw = snapshot.get("accepted")
+    accepted = None if accepted_raw is None else bool(accepted_raw)
+    note_raw = snapshot.get("outcome")
+    note = None if note_raw is None else str(note_raw)
     return accepted, note
 
 
@@ -127,7 +135,11 @@ def analyze_manifests(
     acc = _Accumulator()
 
     for manifest in manifests:
+        if not isinstance(manifest, dict):
+            continue
         attempts = manifest.get("attempted_routes") or []
+        if not isinstance(attempts, list):
+            continue
         acc.total_attempts += len(attempts)
         for idx, attempt in enumerate(attempts):
             acc.process_attempt(idx, attempt)
@@ -149,7 +161,11 @@ def analyze_manifests(
         "incomplete_by_failure_class": dict(acc.failure_class_incomplete),
         "final_outcome": {
             "accepted": accepted,
-            "note": acceptance_note or "route evidence only; not task acceptance",
+            "note": (
+                acceptance_note
+                if acceptance_note is not None
+                else "route evidence only; not task acceptance"
+            ),
         },
         "estimated_inspections_avoided": acc.complete_count,
         "warning": ROUTE_EVIDENCE_WARNING,
@@ -217,16 +233,24 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _load_manifest_file(path: Path) -> list[dict[str, Any]]:
+    """Load one manifest file, accepting either one object or a list of objects."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(raw, dict):
+        return [raw]
+    if isinstance(raw, list):
+        if not all(isinstance(item, dict) for item in raw):
+            raise ValueError(f"{path}: manifest list entries must be JSON objects")
+        return raw
+    raise ValueError(f"{path}: manifest input must be a JSON object or list of objects")
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
     manifests: list[dict[str, Any]] = []
     for path_str in args.manifests:
-        raw = json.loads(Path(path_str).read_text(encoding="utf-8"))
-        if isinstance(raw, list):
-            manifests.extend(raw)
-        else:
-            manifests.append(raw)
+        manifests.extend(_load_manifest_file(Path(path_str)))
 
     snapshot: dict[str, Any] | None = None
     if args.snapshot:

@@ -509,6 +509,18 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2804_non_topology_successor.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2804_non_topology_successor/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2804_non_topology_successor/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2704_progress_gated_topology_successor/README.md
     status: evidence
     freshness: evidence

@@ -336,3 +336,7 @@ Policy caveats:
   topology-reselection-as-clearance on the current hard-slice set. Two of three hard slices are
   scenario/geometry insufficiency; the third is ambiguous but switching did not produce clearance.
   Not benchmark or paper-facing evidence.
+- `issue_2804_non_topology_successor/`: analysis-only launch packet for local_policy_scoring
+  investigation of the t_intersection_transfer hard slice. Follows #2801 stop decision and
+  implements the recommended non-topology successor target. Hypothesis: per-step scoring will
+  separate blocked_geometry from switch_too_often. Not benchmark or paper-facing evidence.

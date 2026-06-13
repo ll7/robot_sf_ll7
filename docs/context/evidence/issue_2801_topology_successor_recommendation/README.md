@@ -1,12 +1,14 @@
-# Issue #2801 Topology Successor Recommendation Evidence
+# Issue #2801 Topology Successor Recommendation Evidence (2026-06-13)
 
 Analysis-only successor recommendation after consuming #2751 runtime evidence and #2752 mechanism
 diagnosis.
 
 ## Contents
 
-- `summary.json`: compact structured recommendation with slice-level classifications, rejected
+- [summary.json](summary.json): compact structured recommendation with slice-level classifications, rejected
   alternatives, and stop-rule justification.
+- [issue_2801_topology_successor_recommendation.md](../../issue_2801_topology_successor_recommendation.md):
+  context note and rationale.
 
 ## Claim Boundary
 

@@ -1,0 +1,25 @@
+{
+  "algorithm": "hand_authored_deterministic_fixture",
+  "boundary": "smoke_diagnostic_only_not_benchmark_evidence",
+  "episode_id": "issue_2780_occluded_emergence_late_visibility_ep0000",
+  "issue": 2780,
+  "parent_issue": 2756,
+  "scenario": "issue_2780_occluded_emergence_late_visibility",
+  "seed": 111,
+  "source_kind": "simulation_trace_export.v1 fixture",
+  "variant_name": "occluded_emergence_late_visibility",
+  "expected_failure_mode": "insufficient_braking_distance",
+  "variation_dimensions": [
+    "first_visible_step:8",
+    "ped_speed:1.0",
+    "robot_v0:1.0"
+  ],
+  "safety_relevant_under_live_replay": true,
+  "evidence_boundary": "diagnostic_stress_only_not_benchmark_evidence",
+  "notes": [
+    "Variant of the issue #2756 occluded-emergence fixture for issue #2780.",
+    "Expected failure mode: insufficient_braking_distance.",
+    "Variation dimensions: first_visible_step:8, ped_speed:1.0, robot_v0:1.0.",
+    "This fixture is not paper-facing benchmark evidence."
+  ]
+}

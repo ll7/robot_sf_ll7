@@ -1,0 +1,100 @@
+{
+  "schema_version": "occluded_emergence_variants_summary.v1",
+  "issue": 2780,
+  "parent_issue": 2756,
+  "claim_boundary": "smoke_diagnostic_only_not_benchmark_evidence",
+  "variant_count": 5,
+  "variants": [
+    {
+      "name": "occluded_emergence_left_close",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_left_close_episode_0000.json",
+      "metadata_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/sources/issue_2780_occluded_emergence_left_close_fixture_111_ep0000.meta.json",
+      "scenario_id": "issue_2780_occluded_emergence_left_close",
+      "seed": 111,
+      "episode_id": "issue_2780_occluded_emergence_left_close_ep0000",
+      "expected_failure_mode": "late_detection",
+      "variation_dimensions": ["emergence_side:left", "first_visible_step:4", "ped_speed:1.2"],
+      "safety_relevant_under_live_replay": true
+    },
+    {
+      "name": "occluded_emergence_right_close",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_right_close_episode_0000.json",
+      "metadata_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/sources/issue_2780_occluded_emergence_right_close_fixture_111_ep0000.meta.json",
+      "scenario_id": "issue_2780_occluded_emergence_right_close",
+      "seed": 111,
+      "episode_id": "issue_2780_occluded_emergence_right_close_ep0000",
+      "expected_failure_mode": "wrong_source_selection",
+      "variation_dimensions": ["emergence_side:right", "first_visible_step:4", "ped_speed:1.2"],
+      "safety_relevant_under_live_replay": true
+    },
+    {
+      "name": "occluded_emergence_late_visibility",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_late_visibility_episode_0000.json",
+      "metadata_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/sources/issue_2780_occluded_emergence_late_visibility_fixture_111_ep0000.meta.json",
+      "scenario_id": "issue_2780_occluded_emergence_late_visibility",
+      "seed": 111,
+      "episode_id": "issue_2780_occluded_emergence_late_visibility_ep0000",
+      "expected_failure_mode": "insufficient_braking_distance",
+      "variation_dimensions": ["first_visible_step:8", "ped_speed:1.0", "robot_v0:1.0"],
+      "safety_relevant_under_live_replay": true
+    },
+    {
+      "name": "occluded_emergence_slow_pedestrian",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_slow_pedestrian_episode_0000.json",
+      "metadata_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/sources/issue_2780_occluded_emergence_slow_pedestrian_fixture_111_ep0000.meta.json",
+      "scenario_id": "issue_2780_occluded_emergence_slow_pedestrian",
+      "seed": 111,
+      "episode_id": "issue_2780_occluded_emergence_slow_pedestrian_ep0000",
+      "expected_failure_mode": "unnecessary_stop",
+      "variation_dimensions": ["ped_speed:0.4", "robot_v0:0.8", "first_visible_step:5"],
+      "safety_relevant_under_live_replay": false
+    },
+    {
+      "name": "occluded_emergence_fast_pedestrian",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_fast_pedestrian_episode_0000.json",
+      "metadata_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/sources/issue_2780_occluded_emergence_fast_pedestrian_fixture_111_ep0000.meta.json",
+      "scenario_id": "issue_2780_occluded_emergence_fast_pedestrian",
+      "seed": 111,
+      "episode_id": "issue_2780_occluded_emergence_fast_pedestrian_ep0000",
+      "expected_failure_mode": "forecast_miss",
+      "variation_dimensions": ["ped_speed:2.0", "robot_v0:1.2", "first_visible_step:3"],
+      "safety_relevant_under_live_replay": true
+    }
+  ],
+  "safety_relevance": {
+    "at_least_one_safety_relevant": true,
+    "safety_relevant_variants": [
+      "occluded_emergence_left_close",
+      "occluded_emergence_right_close",
+      "occluded_emergence_late_visibility",
+      "occluded_emergence_fast_pedestrian"
+    ],
+    "non_safety_relevant_variants": [
+      "occluded_emergence_slow_pedestrian"
+    ],
+    "explanation": "Four of five variants exercise detection latency, source selection, or braking distance under stress. The slow-pedestrian variant is non-safety-relevant because the low speed gives ample reaction time. None replace #2777 live replay evidence."
+  },
+  "variation_coverage": {
+    "emergence_side": ["left", "right", "center"],
+    "first_visible_step": [3, 4, 5, 8],
+    "pedestrian_speed_m_s": [0.4, 1.0, 1.2, 2.0],
+    "robot_approach_speed_m_s": [0.8, 1.0, 1.2],
+    "failure_modes": [
+      "late_detection",
+      "wrong_source_selection",
+      "insufficient_braking_distance",
+      "unnecessary_stop",
+      "forecast_miss"
+    ]
+  },
+  "diagnostic_support": {
+    "trace_schema": "simulation_trace_export.v1",
+    "all_variants_forecast_evaluable": true,
+    "distinct_failure_modes": true
+  },
+  "validation": {
+    "targeted_tests": "uv run pytest tests/benchmark/test_occluded_emergence_variants.py -q",
+    "related_tests": "uv run pytest tests/benchmark/test_occluded_emergence_fixture.py tests/benchmark/test_occluded_emergence_variants.py -q",
+    "generator": "uv run python scripts/tools/generate_occluded_emergence_variants.py"
+  }
+}

@@ -28,7 +28,7 @@ def _load_yaml(path: Path) -> dict | list | None:
         return None
     if not path.exists():
         return None
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         return yaml.safe_load(fh)
 
 
@@ -39,7 +39,7 @@ def _check_readiness_doc(doc_path: Path) -> list[str]:
         errors.append(f"readiness doc not found: {doc_path}")
         return errors
 
-    content = doc_path.read_text()
+    content = doc_path.read_text(encoding="utf-8")
     required_sections = [
         "Trace Dataset Registry",
         "Train / Validation / Test Split Metadata",
@@ -58,7 +58,7 @@ def _check_readiness_doc(doc_path: Path) -> list[str]:
     return errors
 
 
-def _check_trace_registry(registry_path: Path) -> list[str]:
+def _check_trace_registry(registry_path: Path) -> list[str]:  # noqa: C901
     """Verify trace registry exists and has at least one viable source entry."""
     errors: list[str] = []
     if not registry_path.exists():
@@ -70,15 +70,28 @@ def _check_trace_registry(registry_path: Path) -> list[str]:
         errors.append(f"trace registry could not be loaded: {registry_path}")
         return errors
 
-    sources = data if isinstance(data, list) else data.get("sources", [])
+    if isinstance(data, list):
+        sources = data
+    elif isinstance(data, dict):
+        sources = data.get("sources", [])
+    else:
+        errors.append("trace registry must be a dictionary or a list")
+        return errors
+
     if not sources:
         errors.append("trace registry has no source entries")
-        return sources
+        return errors
 
     viable = 0
     for src in sources:
+        if not isinstance(src, dict):
+            errors.append("trace registry source entries must be dictionaries")
+            continue
         count = src.get("episode_count", 0)
         actors = src.get("actor_types", [])
+        if not isinstance(count, (int, float)):
+            errors.append("trace registry source episode_count must be numeric")
+            continue
         if count > 0 and actors:
             viable += 1
 
@@ -101,6 +114,10 @@ def _check_split_manifest(manifest_path: Path) -> list[str]:
         errors.append(f"split manifest could not be loaded: {manifest_path}")
         return errors
 
+    if not isinstance(data, dict):
+        errors.append("split manifest must be a dictionary")
+        return errors
+
     train_frac = data.get("train_fraction")
     val_frac = data.get("validation_fraction")
     test_frac = data.get("test_fraction")
@@ -109,6 +126,10 @@ def _check_split_manifest(manifest_path: Path) -> list[str]:
         errors.append(
             "split manifest missing train_fraction, validation_fraction, or test_fraction"
         )
+        return errors
+
+    if not all(isinstance(value, (int, float)) for value in (train_frac, val_frac, test_frac)):
+        errors.append("split fractions must be numeric")
         return errors
 
     total = train_frac + val_frac + test_frac
@@ -126,7 +147,7 @@ def _check_split_manifest(manifest_path: Path) -> list[str]:
     return errors
 
 
-def _check_baseline_evidence(baseline_path: Path) -> list[str]:
+def _check_baseline_evidence(baseline_path: Path) -> list[str]:  # noqa: C901
     """Verify baseline evidence has constant_velocity ADE and FDE."""
     errors: list[str] = []
     if not baseline_path.exists():
@@ -138,11 +159,15 @@ def _check_baseline_evidence(baseline_path: Path) -> list[str]:
         errors.append(f"baseline evidence could not be loaded: {baseline_path}")
         return errors
 
+    if not isinstance(data, (dict, list)):
+        errors.append("baseline evidence must be a dictionary or a list")
+        return errors
+
     baselines = data if isinstance(data, list) else data.get("baselines", {})
     cv = None
     if isinstance(baselines, list):
         for b in baselines:
-            if b.get("name") == "constant_velocity":
+            if isinstance(b, dict) and b.get("name") == "constant_velocity":
                 cv = b
                 break
     elif isinstance(baselines, dict):
@@ -152,9 +177,14 @@ def _check_baseline_evidence(baseline_path: Path) -> list[str]:
         errors.append("baseline evidence missing constant_velocity entry")
         return errors
 
-    if "ade" not in cv:
+    if not isinstance(cv, dict):
+        errors.append("constant_velocity baseline entry must be a dictionary")
+        return errors
+
+    cv_keys = {str(key).lower() for key in cv}
+    if "ade" not in cv_keys:
         errors.append("constant_velocity baseline missing ADE metric")
-    if "fde" not in cv:
+    if "fde" not in cv_keys:
         errors.append("constant_velocity baseline missing FDE metric")
 
     return errors
@@ -166,7 +196,7 @@ def _check_horizon_definition(doc_path: Path) -> list[str]:
     if not doc_path.exists():
         return errors
 
-    content = doc_path.read_text()
+    content = doc_path.read_text(encoding="utf-8")
     if "horizon_seconds" not in content:
         errors.append("readiness doc missing horizon_seconds definition")
     if "horizon_steps" not in content:
@@ -255,12 +285,18 @@ def main(argv: list[str] | None = None) -> int:
     """Validate learned-prediction readiness and return a shell-friendly exit code."""
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+    repo_root = args.repo_root.resolve()
+
+    def _resolve(path: Path | None) -> Path | None:
+        if path is None:
+            return None
+        return path if path.is_absolute() else repo_root / path
 
     report = validate_readiness(
-        doc_path=args.readiness_doc,
-        registry_path=args.trace_registry,
-        split_manifest_path=args.split_manifest,
-        baseline_path=args.baseline_evidence,
+        doc_path=_resolve(args.readiness_doc) or args.readiness_doc,
+        registry_path=_resolve(args.trace_registry),
+        split_manifest_path=_resolve(args.split_manifest),
+        baseline_path=_resolve(args.baseline_evidence),
     )
 
     if args.json:

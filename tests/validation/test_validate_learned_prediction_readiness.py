@@ -141,6 +141,28 @@ def test_blocked_when_trace_registry_missing(tmp_path: Path) -> None:
     assert any("trace registry not found" in e for e in report["errors"])
 
 
+def test_blocked_when_trace_registry_has_no_sources(tmp_path: Path) -> None:
+    """Validator should report an empty registry instead of failing open."""
+    doc = tmp_path / "readiness.md"
+    doc.write_text(_readiness_doc_content(), encoding="utf-8")
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"sources": []}), encoding="utf-8")
+    report = validate_readiness(doc_path=doc, registry_path=registry)
+    assert report["status"] == "blocked"
+    assert "trace registry has no source entries" in report["errors"]
+
+
+def test_blocked_when_trace_registry_shape_invalid(tmp_path: Path) -> None:
+    """Validator should fail closed on malformed trace registry YAML."""
+    doc = tmp_path / "readiness.md"
+    doc.write_text(_readiness_doc_content(), encoding="utf-8")
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump("not-a-registry"), encoding="utf-8")
+    report = validate_readiness(doc_path=doc, registry_path=registry)
+    assert report["status"] == "blocked"
+    assert "trace registry must be a dictionary or a list" in report["errors"]
+
+
 def test_blocked_when_prerequisite_paths_not_provided(tmp_path: Path) -> None:
     """Validator should fail closed when prerequisite artifact paths are omitted."""
     doc = tmp_path / "readiness.md"
@@ -198,6 +220,39 @@ def test_blocked_when_split_fractions_do_not_sum_to_one(tmp_path: Path) -> None:
     assert any("sum to" in e for e in report["errors"])
 
 
+def test_blocked_when_split_manifest_shape_invalid(tmp_path: Path) -> None:
+    """Validator should fail closed on malformed split manifest YAML."""
+    doc = tmp_path / "readiness.md"
+    doc.write_text(_readiness_doc_content(), encoding="utf-8")
+    split = tmp_path / "split.yaml"
+    split.write_text(yaml.safe_dump(["not", "a", "mapping"]), encoding="utf-8")
+    report = validate_readiness(doc_path=doc, split_manifest_path=split)
+    assert report["status"] == "blocked"
+    assert "split manifest must be a dictionary" in report["errors"]
+
+
+def test_blocked_when_split_fractions_are_not_numeric(tmp_path: Path) -> None:
+    """Validator should fail closed before adding nonnumeric split fractions."""
+    doc = tmp_path / "readiness.md"
+    doc.write_text(_readiness_doc_content(), encoding="utf-8")
+    split = tmp_path / "split.yaml"
+    split.write_text(
+        yaml.safe_dump(
+            {
+                "split_strategy": "episode_partition",
+                "train_fraction": "0.7",
+                "validation_fraction": 0.15,
+                "test_fraction": 0.15,
+                "leakage_prevention": "seed hash split",
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = validate_readiness(doc_path=doc, split_manifest_path=split)
+    assert report["status"] == "blocked"
+    assert "split fractions must be numeric" in report["errors"]
+
+
 def test_blocked_when_baseline_missing_cv_entry(tmp_path: Path) -> None:
     """Validator should fail when constant_velocity baseline is absent."""
     doc = tmp_path / "readiness.md"
@@ -212,6 +267,17 @@ def test_blocked_when_baseline_missing_cv_entry(tmp_path: Path) -> None:
     assert any("missing constant_velocity" in e for e in report["errors"])
 
 
+def test_blocked_when_baseline_shape_invalid(tmp_path: Path) -> None:
+    """Validator should fail closed on malformed baseline evidence YAML."""
+    doc = tmp_path / "readiness.md"
+    doc.write_text(_readiness_doc_content(), encoding="utf-8")
+    baseline = tmp_path / "baseline.yaml"
+    baseline.write_text(yaml.safe_dump("not-a-baseline"), encoding="utf-8")
+    report = validate_readiness(doc_path=doc, baseline_path=baseline)
+    assert report["status"] == "blocked"
+    assert "baseline evidence must be a dictionary or a list" in report["errors"]
+
+
 def test_blocked_when_baseline_missing_ade(tmp_path: Path) -> None:
     """Validator should fail when constant_velocity baseline lacks ADE."""
     doc = tmp_path / "readiness.md"
@@ -224,6 +290,29 @@ def test_blocked_when_baseline_missing_ade(tmp_path: Path) -> None:
     report = validate_readiness(doc_path=doc, baseline_path=baseline)
     assert report["status"] == "blocked"
     assert any("missing ADE" in e for e in report["errors"])
+
+
+def test_ready_accepts_uppercase_baseline_metric_keys(tmp_path: Path) -> None:
+    """Validator should accept ADE/FDE metric keys case-insensitively."""
+    doc = tmp_path / "readiness.md"
+    doc.write_text(_readiness_doc_content(), encoding="utf-8")
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(_trace_registry_content(), encoding="utf-8")
+    split = tmp_path / "split.yaml"
+    split.write_text(_split_manifest_content(), encoding="utf-8")
+    baseline = tmp_path / "baseline.yaml"
+    baseline.write_text(
+        yaml.safe_dump({"baselines": {"constant_velocity": {"ADE": 0.45, "FDE": 0.82}}}),
+        encoding="utf-8",
+    )
+
+    report = validate_readiness(
+        doc_path=doc,
+        registry_path=registry,
+        split_manifest_path=split,
+        baseline_path=baseline,
+    )
+    assert report["status"] == "ready"
 
 
 def test_ready_when_all_checks_pass(tmp_path: Path) -> None:
@@ -274,6 +363,45 @@ def test_cli_exits_zero_when_ready(
             str(split),
             "--baseline-evidence",
             str(baseline),
+            "--json",
+        ],
+    )
+    exit_code = main()
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "ready"
+
+
+def test_cli_resolves_relative_paths_against_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI should resolve relative input paths against --repo-root."""
+    doc = tmp_path / "readiness.md"
+    doc.write_text(_readiness_doc_content(), encoding="utf-8")
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(_trace_registry_content(), encoding="utf-8")
+    split = tmp_path / "split.yaml"
+    split.write_text(_split_manifest_content(), encoding="utf-8")
+    baseline = tmp_path / "baseline.yaml"
+    baseline.write_text(_baseline_evidence_content(), encoding="utf-8")
+    monkeypatch.chdir(tmp_path.parent)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "validate_learned_prediction_readiness.py",
+            "--repo-root",
+            str(tmp_path),
+            "--readiness-doc",
+            "readiness.md",
+            "--trace-registry",
+            "registry.yaml",
+            "--split-manifest",
+            "split.yaml",
+            "--baseline-evidence",
+            "baseline.yaml",
             "--json",
         ],
     )

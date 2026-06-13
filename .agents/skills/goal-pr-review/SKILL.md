@@ -101,6 +101,18 @@ Avoid loops:
    - cap parent-thread raw output at about 200 lines; use `rg -l`, `rg --files`, bounded `sed -n`,
      and private artifacts instead of broad `rg -n .` or full file reads,
    - classify findings as fixable now, deferred, or blocker.
+
+Before choosing the next action for any PR, consult the compact snapshot and apply the
+machine-checkable state policy:
+
+```bash
+uv run python scripts/dev/pr_loop_policy.py --snapshot <queue-snapshot.json> --json
+```
+
+The policy classifies each PR into `pending_ci`, `failed_ci`, `missing_artifacts`,
+`stale_worktree`, `ready_to_merge`, or `no_action` and recommends one bounded action
+under the loop budget. Use the policy decision to avoid ad-hoc state inspection.
+
 4. Fix actionable items on writable branches; commit and push.
 5. Validate per required tier.
 6. Re-query unresolved review threads after push and verification before resolving anything, especially

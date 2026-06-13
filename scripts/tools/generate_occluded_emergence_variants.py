@@ -124,6 +124,20 @@ def _build_variant(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
     conflict_time_s = (
         round(abs(cfg["ped_initial_y"] - conflict_y) / ped_speed, 4) if ped_speed > 0 else 999.0
     )
+    stop_feasible_before_step = (
+        max(
+            (frame["step"] for frame in frames if frame["conflict_timing"]["stop_feasible"]),
+            default=-1,
+        )
+        + 1
+    )
+    yield_feasible_before_step = (
+        max(
+            (frame["step"] for frame in frames if frame["conflict_timing"]["yield_feasible"]),
+            default=-1,
+        )
+        + 1
+    )
 
     return {
         "schema_version": "simulation_trace_export.v1",
@@ -144,8 +158,8 @@ def _build_variant(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
             "first_visible_step": first_visible_step,
             "conflict_zone_center": [cfg["ped_x"], conflict_y],
             "conflict_time_s": conflict_time_s,
-            "stop_feasible_before_step": cfg.get("stop_feasible_before_step", 10),
-            "yield_feasible_before_step": cfg.get("yield_feasible_before_step", 12),
+            "stop_feasible_before_step": stop_feasible_before_step,
+            "yield_feasible_before_step": yield_feasible_before_step,
         },
         "variant": {
             "name": name,

@@ -31,7 +31,7 @@
     ],
     "conflict_time_s": 0.6,
     "stop_feasible_before_step": 5,
-    "yield_feasible_before_step": 7
+    "yield_feasible_before_step": 5
   },
   "variant": {
     "name": "occluded_emergence_fast_pedestrian",

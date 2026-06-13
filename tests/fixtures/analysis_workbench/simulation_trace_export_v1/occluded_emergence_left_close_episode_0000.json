@@ -30,8 +30,8 @@
       0.0
     ],
     "conflict_time_s": 0.8333,
-    "stop_feasible_before_step": 8,
-    "yield_feasible_before_step": 10
+    "stop_feasible_before_step": 6,
+    "yield_feasible_before_step": 7
   },
   "variant": {
     "name": "occluded_emergence_left_close",

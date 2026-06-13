@@ -257,6 +257,24 @@ def test_variant_frame_conflict_time_never_rebounds_after_crossing() -> None:
         assert times[-1] == 0.0
 
 
+def test_variant_feasibility_step_metadata_matches_frame_flags() -> None:
+    """Occlusion feasibility step metadata matches frame-level feasibility flags."""
+    for name in VARIANT_NAMES:
+        trace = _load_trace(name)
+        frames = trace["frames"]
+        occlusion = trace["occlusion"]
+        stop_last_true = max(
+            (frame["step"] for frame in frames if frame["conflict_timing"]["stop_feasible"]),
+            default=-1,
+        )
+        yield_last_true = max(
+            (frame["step"] for frame in frames if frame["conflict_timing"]["yield_feasible"]),
+            default=-1,
+        )
+        assert occlusion["stop_feasible_before_step"] == stop_last_true + 1
+        assert occlusion["yield_feasible_before_step"] == yield_last_true + 1
+
+
 def test_variant_planner_event_does_not_restart_yield_after_conflict() -> None:
     """Planner events do not return to yield_start after the conflict-time frame."""
     for name in VARIANT_NAMES:

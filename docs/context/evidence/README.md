@@ -103,6 +103,10 @@ Policy caveats:
   (noop, low/medium Gaussian noise, missed detection, occlusion, delay, combined) against
   the occluded-emergence trace fixture. Delay-only is trace-derived robustness evidence;
   other conditions are diagnostic_only or scenario_too_weak. Not paper-facing benchmark evidence.
+- `issue_2782_observation_noise_mechanisms/`: diagnostic mechanism-layer classification for the
+  Issue #2755 observation-noise envelope. Maps each perturbation condition to the pipeline layer
+  where the perturbation did, did not, or could not be shown to propagate. Not paper-facing
+  benchmark evidence.
 - `issue_2756_occluded_emergence_2026-06-13/`: smoke/diagnostic note for the
   deterministic occluded-emergence trace fixture. The fixture separates ground-truth and observed
   pedestrian state, records first visibility and conflict timing, and feeds observation-noise plus

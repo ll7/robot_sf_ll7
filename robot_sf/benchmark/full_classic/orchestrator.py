@@ -27,6 +27,7 @@ from loguru import logger
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_int
+from robot_sf.benchmark.map_runner import _signal_state_for_metric_metadata
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -742,38 +743,9 @@ def _signal_contract_state_for_metrics(signal_state: Any) -> dict[str, Any] | No
     """Return fail-closed signal-state metadata for metric computation.
 
     The trace-export path can record proxy signal metadata, but metric denominators may only
-    include explicit planner-observable benchmark evidence. This helper mirrors that promotion
-    boundary before passing metadata into ``EpisodeData``.
+    include explicit planner-observable benchmark evidence.
     """
-    if not isinstance(signal_state, dict):
-        return None
-
-    schema_version = str(signal_state.get("schema_version") or "")
-    status = str(signal_state.get("status") or "")
-    observation_mode = str(signal_state.get("observation_mode") or "")
-    planner_observable = bool(signal_state.get("planner_observable", False))
-    benchmark_evidence = bool(signal_state.get("benchmark_evidence", False))
-    is_observable = (
-        schema_version == "signal-state-observable.v1"
-        and status == "planner_observable_signal_state"
-        and observation_mode == "planner_observable"
-        and planner_observable
-        and benchmark_evidence
-    )
-    if not is_observable:
-        return {
-            "contract_state": "proxy_diagnostic",
-            "benchmark_evidence": False,
-        }
-
-    metric_state = {
-        "contract_state": "planner_observable",
-        "benchmark_evidence": True,
-    }
-    for key in ("timeline", "stop_line", "crosswalk_polygon"):
-        if key in signal_state:
-            metric_state[key] = signal_state[key]
-    return metric_state
+    return _signal_state_for_metric_metadata(signal_state)
 
 
 def _episode_metadata_for_metrics(scenario) -> dict[str, Any] | None:

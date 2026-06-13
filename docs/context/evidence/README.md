@@ -327,3 +327,8 @@ Policy caveats:
   (likely scenario/geometry insufficiency), `t_intersection_transfer` as `candidate_route_blocked`
   (ambiguous between blocked geometry and excessive switching without per-step switch_timeline).
   Not benchmark or paper-facing evidence.
+- `issue_2801_topology_successor_recommendation/`: analysis-only successor recommendation after
+  consuming #2751 runtime evidence and #2752 mechanism diagnosis. Recommends **stop** for
+  topology-reselection-as-clearance on the current hard-slice set. Two of three hard slices are
+  scenario/geometry insufficiency; the third is ambiguous but switching did not produce clearance.
+  Not benchmark or paper-facing evidence.

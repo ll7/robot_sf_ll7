@@ -1,0 +1,79 @@
+{
+  "schema": "issue_2801_topology_successor_recommendation.v1",
+  "issue": 2801,
+  "parent_issue": 2742,
+  "successor_to": [2751, 2752],
+  "claim_boundary": "analysis_only_not_benchmark_or_paper_evidence",
+  "classification": "stop",
+  "classification_rationale": "Mechanism diagnosis from #2752 shows 2/3 hard slices are scenario insufficiency (one high confidence), and the third is ambiguous but switching did not produce clearance. No further topology-reselection parameter tuning is expected to clear the current hard-slice set.",
+  "recommendation": "stop_topology_reselection_as_clearance_for_current_hard_slices",
+  "non_topology_followup_issue": 2804,
+  "mechanism_diagnosis_source": "docs/context/issue_2752_topology_reselection_mechanism.md",
+  "runtime_evidence_source": "docs/context/evidence/issue_2751_topology_reselection_runtime/summary.json",
+  "selected_intervention_target": "none_for_topology_reselection",
+  "recommended_next_actions": [
+    "scenario_design_or_geometry for doorway_transfer and bottleneck_transfer",
+    "local_policy_scoring for t_intersection_transfer to separate blocked_geometry from switch_too_often"
+  ],
+  "rejected_alternatives": [
+    {
+      "alternative": "further_progress_gated_threshold_tuning",
+      "reason": "Three thresholds produced identical outcomes per slice; gate parameter is not the limiting factor."
+    },
+    {
+      "alternative": "topology_reselection_runtime_packet",
+      "reason": "No hard slice cleared; mechanism diagnosis shows scenario insufficiency for 2/3 slices."
+    },
+    {
+      "alternative": "reuse_penalty_refinement",
+      "reason": "Marginal progress gain on bottleneck_transfer (6.1m vs 5.2m) but still horizon_exhausted; no gain on doorway_transfer."
+    },
+    {
+      "alternative": "new_topology_reselection_candidate_config",
+      "reason": "Mechanism shows no_useful_topology_alternative for 2/3 slices; new config would face same geometry constraint."
+    }
+  ],
+  "slice_recommendations": [
+    {
+      "slice_id": "doorway_transfer",
+      "scenario": "classic_doorway_medium",
+      "primary_failure_label": "no_useful_topology_alternative",
+      "confidence": "high",
+      "mechanism_or_scenario": "scenario_insufficiency",
+      "recommendation": "stop",
+      "next_action": "scenario_design_or_geometry"
+    },
+    {
+      "slice_id": "bottleneck_transfer",
+      "scenario": "classic_bottleneck_medium",
+      "primary_failure_label": "no_useful_topology_alternative",
+      "confidence": "medium",
+      "mechanism_or_scenario": "scenario_insufficiency_likely",
+      "recommendation": "stop",
+      "next_action": "scenario_design_or_geometry"
+    },
+    {
+      "slice_id": "t_intersection_transfer",
+      "scenario": "classic_t_intersection_medium",
+      "primary_failure_label": "candidate_route_blocked",
+      "confidence": "medium",
+      "mechanism_or_scenario": "mechanism_or_scenario_ambiguous",
+      "recommendation": "stop_for_topology_reselection",
+      "next_action": "local_policy_scoring"
+    }
+  ],
+  "negative_control": {
+    "slice_id": "simple_negative_control",
+    "scenario": "empty_map_8_directions_east",
+    "outcome": "success",
+    "topology_switch_count": 0,
+    "note": "Negative control succeeded with zero topology switching across all candidates."
+  },
+  "stop_rule_met": true,
+  "stop_rule_reason": "All three hard slices remained horizon_exhausted; mechanism diagnosis classifies 2/3 as scenario insufficiency; switching on t_intersection did not produce clearance.",
+  "runtime_packet_proposed": false,
+  "validation": [
+    "uv run python -m json.tool docs/context/evidence/issue_2801_topology_successor_recommendation/summary.json",
+    "uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml --path docs/context/evidence/README.md --path docs/context/issue_2801_topology_successor_recommendation.md --path docs/context/evidence/issue_2801_topology_successor_recommendation/README.md --path docs/context/evidence/issue_2801_topology_successor_recommendation/summary.json --path docs/context/INDEX.md --path docs/context/README.md"
+  ]
+}

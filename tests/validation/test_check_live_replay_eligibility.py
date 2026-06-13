@@ -121,6 +121,20 @@ def test_blocked_claim_boundary_case(tmp_path: Path) -> None:
     assert row["blocked_reasons"] == ["unsafe_claim_boundary"]
 
 
+def test_claim_boundary_accepts_hyphen_and_underscore_variants(tmp_path: Path) -> None:
+    """Boundary matching should normalize common separator variants."""
+    record = _eligible_record(
+        tmp_path,
+        claim_boundary="diagnostic_only; live_replay promotion required; fail_closed",
+    )
+
+    row = checker.evaluate_records([record], base_dir=tmp_path)["live_replay_eligibility"][
+        "classifications"
+    ][0]
+
+    assert row["status"] == "eligible"
+
+
 def test_missing_claim_boundary_blocks_promotion(tmp_path: Path) -> None:
     """Absent claim boundary should fail closed as blocked."""
     record = _eligible_record(tmp_path)
@@ -176,6 +190,9 @@ def test_malformed_record_blocks_fail_closed(tmp_path: Path) -> None:
     assert row["status"] == "blocked"
     assert row["missing_prerequisites"] == ["record_object"]
     assert row["blocked_reasons"] == ["malformed_record"]
+    assert row["fixture_path"] is None
+    assert row["policy_candidate"] is None
+    assert row["claim_boundary"] is None
 
 
 def test_cli_writes_json_and_uses_blocked_exit_code(tmp_path: Path, capsys) -> None:

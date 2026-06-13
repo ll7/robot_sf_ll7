@@ -29,7 +29,7 @@ BOUNDARY_MARKERS = (
     "diagnostic",
     "not benchmark",
     "not paper",
-    "fail-closed",
+    "fail closed",
     "promotion",
     "live replay",
 )
@@ -74,8 +74,8 @@ def _safe_claim_boundary(record: dict[str, Any]) -> tuple[bool, str | None]:
     boundary = _text_value(record, "claim_boundary")
     if boundary is None:
         return False, "missing_claim_boundary"
-    lowered = boundary.lower()
-    if any(marker in lowered for marker in BOUNDARY_MARKERS):
+    normalized = boundary.lower().replace("_", " ").replace("-", " ")
+    if any(marker in normalized for marker in BOUNDARY_MARKERS):
         return True, None
     return False, "unsafe_claim_boundary"
 
@@ -119,6 +119,9 @@ def classify_record(record: Any, *, base_dir: Path | None = None, index: int = 0
             "missing_prerequisites": ["record_object"],
             "blocked_reasons": ["malformed_record"],
             "diagnostic_reasons": [],
+            "fixture_path": None,
+            "policy_candidate": None,
+            "claim_boundary": None,
         }
 
     blocked: list[str] = []

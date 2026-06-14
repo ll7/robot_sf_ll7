@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 from robot_sf.benchmark.forecast_batch import (
     ActorForecast,
@@ -265,6 +268,109 @@ def test_forecast_metrics_keep_actor_classes_separate() -> None:
     assert _aggregate(report, "mean_ade", 1.0, "bicycle")["value"] == 2.0
 
 
+def test_forecast_metrics_prefer_provenance_actor_classes() -> None:
+    """Provenance actor classes should override legacy per-forecast hints."""
+    batch = ForecastBatch(
+        provenance=_provenance(
+            actor_mask=[True, False],
+            actor_classes={"ped_1": "bicycle", "ped_2": "pedestrian"},
+        ),
+        forecasts=[
+            ActorForecast(
+                actor_id="ped_1",
+                deterministic=[[0.0, 0.0], [1.0, 0.0]],
+                uncertainty_metadata={"actor_class": "pedestrian"},
+            )
+        ],
+    )
+    truth = {"ped_1": [[0.0, 0.0], [1.0, 0.0]]}
+
+    report = evaluate_forecast_batch(batch, truth)
+
+    assert _aggregate(report, "mean_ade", 1.0, "bicycle")["value"] == 0.0
+    with pytest.raises(AssertionError, match="missing aggregate"):
+        _aggregate(report, "mean_ade", 1.0, "pedestrian")
+
+
+def test_forecast_metrics_report_actor_class_denominators_and_caveats() -> None:
+    """Mixed fast-agent traces should expose separate active and excluded denominators."""
+    batch = ForecastBatch(
+        provenance=_provenance(
+            actor_ids=["ped_1", "bike_1", "bike_2"],
+            actor_mask=[True, True, False],
+            actor_mask_metadata={
+                "semantics": "true means included",
+                "missing_actor_reasons": {"bike_2": "outside forecast crop"},
+            },
+            actor_classes={
+                "ped_1": "pedestrian",
+                "bike_1": "bicycle",
+                "bike_2": "bicycle",
+            },
+        ),
+        forecasts=[
+            ActorForecast(actor_id="ped_1", deterministic=[[0.0, 0.0], [1.0, 0.0]]),
+            ActorForecast(actor_id="bike_1", deterministic=[[0.0, 0.0], [3.0, 0.0]]),
+        ],
+    )
+    truth = {"ped_1": [[0.0, 0.0], [1.0, 0.0]], "bike_1": [[0.0, 0.0], [1.0, 0.0]]}
+
+    report = evaluate_forecast_batch(batch, truth)
+
+    denominators = {row["actor_class"]: row for row in report["actor_class_denominators"]}
+    assert denominators["pedestrian"]["active_actor_count"] == 1
+    assert denominators["pedestrian"]["excluded_actor_count"] == 0
+    assert denominators["bicycle"]["active_actor_count"] == 1
+    assert denominators["bicycle"]["excluded_actor_count"] == 1
+    assert "fast dynamic actor" in denominators["bicycle"]["caveat"]
+    assert report["denominator_health"]["by_actor_class"] == report["actor_class_denominators"]
+    assert _aggregate(report, "mean_ade", 1.0, "pedestrian")["value"] == 0.0
+    assert _aggregate(report, "mean_ade", 1.0, "bicycle")["value"] == 2.0
+
+
+def test_forecast_metrics_fast_bicycle_fixture_smoke_actor_class_report() -> None:
+    """The #2727 fast-bicycle fixture should flow into bicycle metric denominators."""
+    fixture_path = (
+        Path(__file__).resolve().parents[2]
+        / "configs/scenarios/single/issue_2727_fast_bicycle_dynamic_actor.yaml"
+    )
+    scenario = yaml.safe_load(fixture_path.read_text())["scenarios"][0]
+    actor = scenario["single_pedestrians"][0]
+    actor_class = actor["metadata"]["fast_bicycle_actor"]["actor_type"]
+
+    batch = ForecastBatch(
+        provenance=_provenance(
+            scenario_id=scenario["name"],
+            actor_ids=[actor["id"]],
+            actor_mask=[True],
+            actor_mask_metadata={"semantics": "true means included"},
+            actor_classes={actor["id"]: actor_class},
+        ),
+        forecasts=[ActorForecast(actor_id=actor["id"], deterministic=[[0.0, 0.0], [1.0, 0.0]])],
+        metadata={"scenario_family": scenario["metadata"]["behavior"]},
+    )
+    truth = {actor["id"]: [[0.0, 0.0], [1.0, 0.0]]}
+
+    report = evaluate_forecast_batch(batch, truth)
+    markdown = format_forecast_metrics_markdown(report)
+
+    assert report["actor_class_denominators"] == [
+        {
+            "actor_class": "bicycle",
+            "active_actor_count": 1,
+            "excluded_actor_count": 0,
+            "horizons_s": [0.5, 1.0],
+            "dt_s": 0.5,
+            "caveat": (
+                "fast dynamic actor forecast denominator; compare only with matching "
+                "actor class, horizon, and dt_s settings"
+            ),
+        }
+    ]
+    assert _aggregate(report, "mean_ade", 1.0, "bicycle")["denominator"] == 1
+    assert "bicycle(active=1, excluded=0)" in markdown
+
+
 def test_forecast_metrics_accept_actor_class_from_batch_metadata() -> None:
     """Batch-level actor class metadata should work when forecast metadata is absent."""
     batch = ForecastBatch(
@@ -277,6 +383,54 @@ def test_forecast_metrics_accept_actor_class_from_batch_metadata() -> None:
     report = evaluate_forecast_batch(batch, truth)
 
     assert _aggregate(report, "mean_ade", 1.0, "child")["value"] == 0.0
+    assert report["actor_class_denominators"] == [
+        {
+            "actor_class": "child",
+            "active_actor_count": 1,
+            "excluded_actor_count": 0,
+            "horizons_s": [0.5, 1.0],
+            "dt_s": 0.5,
+            "caveat": (
+                "fast dynamic actor forecast denominator; compare only with matching "
+                "actor class, horizon, and dt_s settings"
+            ),
+        },
+        {
+            "actor_class": "pedestrian",
+            "active_actor_count": 0,
+            "excluded_actor_count": 1,
+            "horizons_s": [0.5, 1.0],
+            "dt_s": 0.5,
+            "caveat": "pedestrian forecast denominator",
+        },
+    ]
+
+
+def test_forecast_metrics_apply_batch_actor_class_default_to_exclusions() -> None:
+    """Batch actor-class defaults should classify active and excluded actors consistently."""
+    batch = ForecastBatch(
+        provenance=_provenance(actor_mask=[True, False]),
+        forecasts=[ActorForecast(actor_id="ped_1", deterministic=[[0.0, 0.0], [1.0, 0.0]])],
+        metadata={"actor_classes": {"actor_class": "bicycle"}},
+    )
+    truth = {"ped_1": [[0.0, 0.0], [1.0, 0.0]]}
+
+    report = evaluate_forecast_batch(batch, truth)
+
+    assert _aggregate(report, "mean_ade", 1.0, "bicycle")["value"] == 0.0
+    assert report["actor_class_denominators"] == [
+        {
+            "actor_class": "bicycle",
+            "active_actor_count": 1,
+            "excluded_actor_count": 1,
+            "horizons_s": [0.5, 1.0],
+            "dt_s": 0.5,
+            "caveat": (
+                "fast dynamic actor forecast denominator; compare only with matching "
+                "actor class, horizon, and dt_s settings"
+            ),
+        }
+    ]
 
 
 def test_forecast_metrics_ignore_none_actor_class_metadata() -> None:

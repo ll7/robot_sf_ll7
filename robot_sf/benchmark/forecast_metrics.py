@@ -104,6 +104,11 @@ def evaluate_forecast_batch(
     }
     forecasts_by_actor = {forecast.actor_id: forecast for forecast in forecast_batch.forecasts}
     scenario_family = _scenario_family(forecast_batch)
+    actor_class_denominators = _actor_class_denominators(
+        forecast_batch,
+        active_actor_ids,
+        forecasts_by_actor,
+    )
 
     for actor_id in sorted(active_actor_ids):
         forecast = forecasts_by_actor[actor_id]
@@ -145,11 +150,13 @@ def evaluate_forecast_batch(
         "denominator_health": {
             "active_actor_count": len(active_actor_ids),
             "excluded_actor_count": excluded_actor_count,
+            "by_actor_class": actor_class_denominators,
             "metric_row_count": len(rows),
             "aggregate_row_count": len(aggregate_rows),
             "unavailable_row_count": unavailable_count,
             "has_empty_denominator": any(row.denominator == 0 for row in rows + aggregate_rows),
         },
+        "actor_class_denominators": actor_class_denominators,
         "metric_rows": [row.to_dict() for row in rows],
         "aggregate_rows": [row.to_dict() for row in aggregate_rows],
         "claim_boundary": (
@@ -541,6 +548,9 @@ def _expected_sample_error(
 
 
 def _actor_class(forecast: ActorForecast, batch: ForecastBatch) -> str:
+    provenance_actor_class = batch.provenance.actor_classes.get(forecast.actor_id)
+    if provenance_actor_class is not None:
+        return provenance_actor_class
     metadata_sources = (
         forecast.uncertainty_metadata,
         forecast.occupancy_summary,
@@ -555,6 +565,65 @@ def _actor_class(forecast: ActorForecast, batch: ForecastBatch) -> str:
             if default_actor_class is not None:
                 return str(default_actor_class)
     return "pedestrian"
+
+
+def _actor_class_denominators(
+    batch: ForecastBatch,
+    active_actor_ids: set[str],
+    forecasts_by_actor: dict[str, ActorForecast],
+) -> list[dict[str, Any]]:
+    counts: dict[str, dict[str, Any]] = {}
+    for actor_id in batch.provenance.actor_ids:
+        actor_class = _actor_class_for_denominator(actor_id, batch, forecasts_by_actor)
+        class_counts = counts.setdefault(
+            actor_class,
+            {
+                "actor_class": actor_class,
+                "active_actor_count": 0,
+                "excluded_actor_count": 0,
+                "horizons_s": list(batch.provenance.horizons_s),
+                "dt_s": batch.provenance.dt_s,
+                "caveat": _actor_class_caveat(actor_class),
+            },
+        )
+        if actor_id in active_actor_ids:
+            class_counts["active_actor_count"] += 1
+        else:
+            class_counts["excluded_actor_count"] += 1
+    return [counts[key] for key in sorted(counts)]
+
+
+def _actor_class_for_denominator(
+    actor_id: str,
+    batch: ForecastBatch,
+    forecasts_by_actor: dict[str, ActorForecast],
+) -> str:
+    forecast = forecasts_by_actor.get(actor_id)
+    if forecast is not None:
+        return _actor_class(forecast, batch)
+
+    actor_class = batch.provenance.actor_classes.get(actor_id)
+    if actor_class is not None:
+        return actor_class
+    batch_actor_classes = batch.metadata.get("actor_classes")
+    if isinstance(batch_actor_classes, dict):
+        actor_class = batch_actor_classes.get(actor_id)
+        if actor_class is not None:
+            return str(actor_class)
+        batch_default_actor_class = batch_actor_classes.get("actor_class")
+        if batch_default_actor_class is not None:
+            return str(batch_default_actor_class)
+    return "pedestrian"
+
+
+def _actor_class_caveat(actor_class: str) -> str:
+    normalized = actor_class.strip().lower()
+    if normalized in {"pedestrian", "person"}:
+        return "pedestrian forecast denominator"
+    return (
+        "fast dynamic actor forecast denominator; compare only with matching actor class, "
+        "horizon, and dt_s settings"
+    )
 
 
 def _scenario_family(batch: ForecastBatch) -> str | None:
@@ -582,6 +651,14 @@ def format_forecast_metrics_markdown(report: dict[str, Any]) -> str:
         (
             f"- Denominators: active={health['active_actor_count']}, "
             f"excluded={health['excluded_actor_count']}, unavailable={health['unavailable_row_count']}"
+        ),
+        "- Actor classes: "
+        + ", ".join(
+            (
+                f"{row['actor_class']}(active={row['active_actor_count']}, "
+                f"excluded={row['excluded_actor_count']})"
+            )
+            for row in report.get("actor_class_denominators", [])
         ),
         "",
         "| metric | horizon_s | actor_class | denominator | status | value |",

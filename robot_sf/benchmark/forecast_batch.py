@@ -56,6 +56,29 @@ def _require_mapping(name: str, value: object) -> dict[str, Any]:
     return {str(key): item for key, item in value.items()}
 
 
+def _normalize_actor_classes(value: object, actor_ids: list[str]) -> dict[str, str]:
+    """Return optional actor-class labels keyed by actor id."""
+    if value is None:
+        return {}
+    if isinstance(value, (list, tuple, np.ndarray)):
+        if len(value) != len(actor_ids):
+            raise ValueError("actor_classes list must align with actor_ids")
+        value = {
+            actor_id: actor_class
+            for actor_id, actor_class in zip(actor_ids, value, strict=True)
+            if actor_class is not None
+        }
+    classes = _require_mapping("actor_classes", value)
+    unknown_actor_ids = sorted(set(classes) - set(actor_ids))
+    if unknown_actor_ids:
+        raise ValueError("actor_classes keys must be declared in actor_ids")
+    return {
+        actor_id: _require_non_empty_str("actor_classes[]", actor_class)
+        for actor_id, actor_class in classes.items()
+        if actor_class is not None
+    }
+
+
 def _contains_oracle_key(value: object) -> bool:
     """True when nested metadata contains oracle-looking keys or values.
 
@@ -135,6 +158,7 @@ class ForecastBatchProvenance:
     actor_mask: list[bool]
     actor_mask_metadata: dict[str, Any]
     feature_schema: dict[str, Any]
+    actor_classes: dict[str, str] = field(default_factory=dict)
     oracle_state: bool = False
 
     def __post_init__(self) -> None:
@@ -159,6 +183,7 @@ class ForecastBatchProvenance:
         ]
         if len(set(self.actor_ids)) != len(self.actor_ids):
             raise ValueError("actor_ids must be unique")
+        self.actor_classes = _normalize_actor_classes(self.actor_classes, self.actor_ids)
         if not isinstance(self.actor_mask, (list, tuple, np.ndarray)) or len(
             self.actor_mask
         ) != len(self.actor_ids):
@@ -207,6 +232,7 @@ class ForecastBatchProvenance:
             actor_mask=list(data.get("actor_mask", [])),
             actor_mask_metadata=data.get("actor_mask_metadata", {}),
             feature_schema=data.get("feature_schema", {}),
+            actor_classes=data.get("actor_classes", {}),
             oracle_state=bool(data.get("oracle_state", False)),
         )
 

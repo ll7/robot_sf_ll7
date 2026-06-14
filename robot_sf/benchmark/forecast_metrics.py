@@ -445,7 +445,7 @@ def _aggregate_rows(rows: list[ForecastMetricRow]) -> list[ForecastMetricRow]:
         )
         for row in rows
     }
-    for key in sorted(seen_keys):
+    for key in sorted(seen_keys, key=_aggregate_sort_key):
         metric, horizon_s, actor_class, scenario_id, observation_tier, dt_s, scenario_family = key
         values = grouped.get(key, [])
         aggregate_rows.append(
@@ -464,6 +464,19 @@ def _aggregate_rows(rows: list[ForecastMetricRow]) -> list[ForecastMetricRow]:
             )
         )
     return aggregate_rows
+
+
+def _aggregate_sort_key(key: tuple[str, float, str, str, str, float, str | None]) -> tuple:
+    metric, horizon_s, actor_class, scenario_id, observation_tier, dt_s, scenario_family = key
+    return (
+        metric,
+        horizon_s,
+        actor_class,
+        scenario_id,
+        observation_tier,
+        dt_s,
+        "" if scenario_family is None else scenario_family,
+    )
 
 
 def _ground_truth_array(
@@ -535,10 +548,12 @@ def _actor_class(forecast: ActorForecast, batch: ForecastBatch) -> str:
     )
     for source in metadata_sources:
         if isinstance(source, dict):
-            if forecast.actor_id in source:
-                return str(source[forecast.actor_id])
-            if source.get("actor_class") is not None:
-                return str(source["actor_class"])
+            actor_class = source.get(forecast.actor_id)
+            if actor_class is not None:
+                return str(actor_class)
+            default_actor_class = source.get("actor_class")
+            if default_actor_class is not None:
+                return str(default_actor_class)
     return "pedestrian"
 
 

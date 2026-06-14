@@ -279,6 +279,26 @@ def test_forecast_metrics_accept_actor_class_from_batch_metadata() -> None:
     assert _aggregate(report, "mean_ade", 1.0, "child")["value"] == 0.0
 
 
+def test_forecast_metrics_ignore_none_actor_class_metadata() -> None:
+    """Explicit None metadata should not become a literal actor class."""
+    batch = ForecastBatch(
+        provenance=_provenance(actor_mask=[True, False]),
+        forecasts=[
+            ActorForecast(
+                actor_id="ped_1",
+                deterministic=[[0.0, 0.0], [1.0, 0.0]],
+                uncertainty_metadata={"ped_1": None},
+            )
+        ],
+        metadata={"actor_classes": {"ped_1": None}},
+    )
+    truth = {"ped_1": [[0.0, 0.0], [1.0, 0.0]]}
+
+    report = evaluate_forecast_batch(batch, truth)
+
+    assert _aggregate(report, "mean_ade", 1.0, "pedestrian")["value"] == 0.0
+
+
 def test_forecast_metrics_reject_misaligned_ground_truth() -> None:
     """Ground-truth trajectories must align with ForecastBatch horizons."""
     batch = ForecastBatch(

@@ -100,6 +100,20 @@ GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES = (
     "compact_worktree_snapshot.py",
     "compact_ci_snapshot.py",
 )
+GOAL_AUTOPILOT_SPARK_REQUIRED_PHRASES = (
+    "spark sidecar routing",
+    "gpt-5.3-codex-spark",
+    "tiny lookup",
+    "read-only review",
+    "docs cross-check",
+    "issue/file surface mapping",
+    "files inspected",
+    "exact evidence",
+    "uncertainty",
+    "recommended next prompt",
+    "github mutation",
+    "shell-executable fallback",
+)
 
 
 def _read_yaml(path: Path) -> Any:
@@ -314,6 +328,9 @@ def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text
         for phrase in GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES:
             if phrase not in lower:
                 errors.append(f"{rel}: missing active-ledger requirement {phrase!r}")
+        for phrase in GOAL_AUTOPILOT_SPARK_REQUIRED_PHRASES:
+            if phrase not in lower:
+                errors.append(f"{rel}: missing Spark sidecar routing requirement {phrase!r}")
 
     if metadata.get("name") == "goal-pr-review":
         for phrase in GOAL_PR_REVIEW_REQUIRED_PHRASES:

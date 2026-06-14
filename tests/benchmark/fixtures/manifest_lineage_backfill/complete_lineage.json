@@ -1,0 +1,10 @@
+{
+  "schema_version": "benchmark_claim.v1",
+  "generator_id": "test-generator",
+  "validator_version": "1.0.0",
+  "claim_boundary": "unit-test-only",
+  "evidence_tier": "test",
+  "denominator_policy": "all-attempts",
+  "execution_gate": "pass",
+  "source": {"type": "test", "path": "fixture"}
+}

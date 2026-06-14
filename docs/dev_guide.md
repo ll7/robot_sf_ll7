@@ -381,6 +381,12 @@ recommendations" section. Route success and complete artifact presence are
 **route evidence only**; they are not task acceptance. The orchestrator must
 still inspect the diff and run the required local validation.
 
+For historical route audits, add `--dashboard` and pass multiple routed-worker
+manifest files. Dashboard mode emits `route_efficiency_dashboard.v1` JSON or
+Markdown with overall metrics, per-manifest breakdowns, provider trends,
+incomplete-provider and failure-class totals, common missing artifact counts,
+and the same route-evidence-only recommendations and warning.
+
 Assume `OWNER`, `REPO`, `ISSUE`, `BRANCH`, and `BASE` are set:
 
 ```bash

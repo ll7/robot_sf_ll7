@@ -1,0 +1,55 @@
+{
+  "chosen_route": {
+    "model": "mimo-v2.5",
+    "provider": "opencode-go"
+  },
+  "route_evidence_only": true,
+  "schema": "routed_worker_manifest.v1",
+  "task_class": "workflow/reporting",
+  "warning": "Wrapper success, zero exit, and manifest presence are route evidence only; they are not task acceptance.",
+  "attempted_routes": [
+    {
+      "attempt_index": 0,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-006/diffstat.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 42
+        },
+        "result_json": {
+          "path": "output/worker-006/result.json",
+          "present": true,
+          "reason": null,
+          "size_bytes": 256
+        },
+        "result_md": {
+          "path": "output/worker-006/RESULT.md",
+          "present": true,
+          "reason": null,
+          "size_bytes": 128
+        },
+        "status": {
+          "path": "output/worker-006/status.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 16
+        },
+        "validation": {
+          "path": "output/worker-006/validation.txt",
+          "present": true,
+          "reason": null,
+          "result": "pytest passed",
+          "size_bytes": 64
+        }
+      },
+      "failure_class": "none",
+      "returncode": 0,
+      "route": {
+        "model": "mimo-v2.5",
+        "provider": "opencode-go"
+      },
+      "run_dir": "output/worker-006"
+    }
+  ]
+}

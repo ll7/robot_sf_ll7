@@ -809,3 +809,449 @@ def test_markdown_includes_routing_recommendations_section() -> None:
     assert "## Routing recommendations" in md
     assert "avoid_provider" in md
     assert "not task acceptance" in md
+
+
+_FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "route_efficiency"
+
+
+def _load_fixture(name: str) -> dict:
+    """Load a fixture JSON file from tests/fixtures/route_efficiency/."""
+    return json.loads((_FIXTURE_DIR / name).read_text(encoding="utf-8"))
+
+
+def _manifest_with_source(name: str) -> tuple[dict, str]:
+    """Load a fixture and return (manifest, source_label)."""
+    manifest = _load_fixture(name)
+    return manifest, name
+
+
+def test_dashboard_single_manifest_equals_single_report() -> None:
+    """Dashboard with one manifest should produce consistent overall metrics."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+
+    dashboard = rer.analyze_dashboard([(manifest, "single.json")])
+    report = rer.analyze_manifests([manifest])
+
+    assert dashboard["schema"] == "route_efficiency_dashboard.v1"
+    assert dashboard["manifests_analyzed"] == 1
+    assert dashboard["overall"]["delegated_attempts"] == report["delegated_attempts"]
+    assert dashboard["overall"]["complete_artifacts"] == report["complete_artifacts"]
+    assert dashboard["overall"]["total_reroutes"] == report["reroutes"]
+    assert len(dashboard["per_manifest"]) == 1
+    assert dashboard["per_manifest"][0]["source"] == "single.json"
+    assert "warning" in dashboard
+    assert "not task acceptance" in dashboard["warning"]
+
+
+def test_dashboard_multiple_manifests_per_manifest_breakdown() -> None:
+    """Dashboard with multiple manifests should include per-manifest breakdown."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    m2 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+        ]
+    )
+
+    dashboard = rer.analyze_dashboard([(m1, "m1.json"), (m2, "m2.json")])
+
+    assert dashboard["manifests_analyzed"] == 2
+    assert len(dashboard["per_manifest"]) == 2
+    assert dashboard["per_manifest"][0]["source"] == "m1.json"
+    assert dashboard["per_manifest"][1]["source"] == "m2.json"
+    assert dashboard["per_manifest"][0]["delegated_attempts"] == 1
+    assert dashboard["per_manifest"][1]["delegated_attempts"] == 2
+    assert dashboard["per_manifest"][0]["complete_artifacts"]["rate"] == 1.0
+    assert dashboard["per_manifest"][1]["complete_artifacts"]["rate"] == 0.5
+
+
+def test_dashboard_provider_trend_time_series() -> None:
+    """Dashboard should expose per-provider trend across manifests."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    m2 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    dashboard = rer.analyze_dashboard([(m1, "m1.json"), (m2, "m2.json")])
+
+    trend = dashboard["provider_trend"]
+    qwen_trend = [t for t in trend if t["provider"] == "qwen"]
+    gemini_trend = [t for t in trend if t["provider"] == "gemini"]
+    assert len(qwen_trend) == 1
+    assert len(qwen_trend[0]["per_manifest"]) == 2
+    assert qwen_trend[0]["per_manifest"][0]["source"] == "m1.json"
+    assert qwen_trend[0]["per_manifest"][0]["complete"] == 1
+    assert qwen_trend[0]["per_manifest"][1]["source"] == "m2.json"
+    assert qwen_trend[0]["per_manifest"][1]["complete"] == 1
+    assert len(gemini_trend) == 1
+    assert gemini_trend[0]["per_manifest"][0]["source"] == "m2.json"
+    assert gemini_trend[0]["per_manifest"][0]["complete"] == 0
+
+
+def test_dashboard_overall_metrics_match_aggregate() -> None:
+    """Dashboard overall metrics should match sum of per-manifest attempts."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    m2 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+        ]
+    )
+
+    dashboard = rer.analyze_dashboard([(m1, "m1.json"), (m2, "m2.json")])
+
+    overall = dashboard["overall"]
+    assert overall["delegated_attempts"] == 3
+    assert overall["complete_artifacts"]["count"] == 2
+    assert overall["complete_artifacts"]["rate"] == round(2 / 3, 4)
+    assert overall["total_reroutes"] == 1
+    assert overall["estimated_inspections_avoided"] == 2
+
+    per_total = sum(p["delegated_attempts"] for p in dashboard["per_manifest"])
+    per_complete = sum(p["complete_artifacts"]["count"] for p in dashboard["per_manifest"])
+    assert overall["delegated_attempts"] == per_total
+    assert overall["complete_artifacts"]["count"] == per_complete
+
+
+def test_dashboard_empty_manifest_list() -> None:
+    """Dashboard with empty manifest list should produce zeroed-out report."""
+    dashboard = rer.analyze_dashboard([])
+
+    assert dashboard["manifests_analyzed"] == 0
+    assert dashboard["overall"]["delegated_attempts"] == 0
+    assert dashboard["overall"]["complete_artifacts"]["rate"] == 0.0
+    assert dashboard["overall"]["estimated_inspections_avoided"] == 0
+    assert dashboard["per_manifest"] == []
+    assert dashboard["provider_trend"] == []
+
+
+def test_dashboard_markdown_output_compactness() -> None:
+    """Dashboard markdown should be shorter than JSON and contain key sections."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    m2 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    dashboard = rer.analyze_dashboard([(m1, "m1.json"), (m2, "m2.json")])
+    md = rer._format_dashboard_markdown(dashboard)
+    js = json.dumps(dashboard, indent=2, sort_keys=True)
+
+    assert "# Route Efficiency Dashboard" in md
+    assert "Delegated attempts" in md
+    assert "Complete artifacts" in md
+    assert "Per-manifest breakdown" in md
+    assert "Provider trend" in md
+    assert "not task acceptance" in md
+    assert len(md) <= len(js)
+
+
+def test_dashboard_cli_json_output(tmp_path: Path) -> None:
+    """CLI --dashboard should produce valid JSON dashboard."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    m2 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+    p1 = tmp_path / "m1.json"
+    p2 = tmp_path / "m2.json"
+    p1.write_text(json.dumps(m1), encoding="utf-8")
+    p2.write_text(json.dumps(m2), encoding="utf-8")
+
+    exit_code = rer.main(["--dashboard", str(p1), str(p2)])
+    assert exit_code == 0
+
+
+def test_dashboard_cli_markdown_output(tmp_path: Path) -> None:
+    """CLI --dashboard --format markdown should produce dashboard markdown."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    p1 = tmp_path / "m1.json"
+    p1.write_text(json.dumps(m1), encoding="utf-8")
+    out_path = tmp_path / "dashboard.md"
+
+    exit_code = rer.main(
+        ["--dashboard", "--format", "markdown", "--output", str(out_path), str(p1)]
+    )
+    assert exit_code == 0
+    text = out_path.read_text(encoding="utf-8")
+    assert "# Route Efficiency Dashboard" in text
+    assert "Per-manifest breakdown" in text
+
+
+def test_dashboard_no_raw_logs_or_secrets() -> None:
+    """Dashboard output should not contain raw logs, secrets, or quota fields."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    dashboard = rer.analyze_dashboard([(m1, "m1.json")])
+    text = json.dumps(dashboard, indent=2, sort_keys=True)
+
+    forbidden = ["api_key", "secret", "token", "quota", "raw_log", "stdout", "stderr"]
+    for key in forbidden:
+        assert key not in text.lower()
+
+
+def test_dashboard_incomplete_failure_visibility() -> None:
+    """Dashboard should surface incomplete and failure class trends."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "copilot"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+    m2 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "validation",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    dashboard = rer.analyze_dashboard([(m1, "m1.json"), (m2, "m2.json")])
+
+    assert "timeout" in dashboard["incomplete_by_failure_class"]
+    assert dashboard["incomplete_by_failure_class"]["timeout"] == 2
+    assert "validation" in dashboard["incomplete_by_failure_class"]
+    assert dashboard["incomplete_by_failure_class"]["validation"] == 1
+    assert dashboard["incomplete_by_provider"]["gemini"] == 2
+    assert dashboard["incomplete_by_provider"]["copilot"] == 1
+    assert dashboard["missing_artifacts"]["result_json"] == 3
+    assert dashboard["missing_artifacts"]["validation"] == 3
+
+
+def test_dashboard_routing_recommendations_have_caveats() -> None:
+    """Dashboard routing recommendations should include route-evidence-only caveats."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 2,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    dashboard = rer.analyze_dashboard([(m1, "m1.json")])
+    recs = dashboard["routing_recommendations"]
+    assert len(recs) >= 1
+    for rec in recs:
+        assert "not task acceptance" in rec["caveat"]
+
+
+def test_dashboard_with_fixture_files() -> None:
+    """Dashboard should load and analyze real fixture files correctly."""
+    fixtures = [
+        "historical_manifest_20260610.json",
+        "historical_manifest_20260612.json",
+        "historical_manifest_20260614.json",
+    ]
+    manifests_with_sources = [_manifest_with_source(f) for f in fixtures]
+
+    dashboard = rer.analyze_dashboard(manifests_with_sources)
+
+    assert dashboard["manifests_analyzed"] == 3
+    assert dashboard["overall"]["delegated_attempts"] == 6
+    assert dashboard["missing_artifacts"]["diffstat"] == 2
+    assert len(dashboard["per_manifest"]) == 3
+    assert len(dashboard["provider_trend"]) >= 2
+    assert "qwen" in [t["provider"] for t in dashboard["provider_trend"]]
+    assert "gemini" in [t["provider"] for t in dashboard["provider_trend"]]
+
+
+def test_dashboard_markdown_includes_recommendations_section() -> None:
+    """Dashboard markdown should include routing recommendations when present."""
+    m1 = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 2,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    dashboard = rer.analyze_dashboard([(m1, "m1.json")])
+    md = rer._format_dashboard_markdown(dashboard)
+
+    assert "## Routing recommendations" in md
+    assert "avoid_provider" in md
+    assert "not task acceptance" in md

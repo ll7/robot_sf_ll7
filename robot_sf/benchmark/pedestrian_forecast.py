@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 
 DEFAULT_FORECAST_HORIZONS_S = (0.5, 1.0, 2.0)
+PEDESTRIAN_ACTOR_TYPES = frozenset({"pedestrian", "person"})
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class PedestrianState:
     intent: str | None = None
     signal: str | None = None
     signal_available: bool = False
+    actor_type: str = "pedestrian"
 
     @classmethod
     def from_trace(cls, payload: dict[str, Any]) -> PedestrianState:
@@ -55,7 +57,37 @@ class PedestrianState:
             else None,
             signal=signal,
             signal_available=signal_available,
+            actor_type=str(payload.get("actor_type") or "pedestrian"),
         )
+
+
+def is_pedestrian_actor(actor_type: str | None) -> bool:
+    """True when the actor type represents a pedestrian (the default).
+
+    Returns:
+        True for pedestrians, persons, or missing types.
+    """
+    if actor_type is None:
+        return True
+    return _canonical_actor_type(actor_type) in PEDESTRIAN_ACTOR_TYPES
+
+
+def _canonical_actor_type(actor_type: str | None) -> str:
+    """Return the stable actor-type label used by forecast denominator metadata."""
+    if actor_type is None:
+        return "pedestrian"
+    label = str(actor_type).strip().lower()
+    return label or "pedestrian"
+
+
+def actor_type_metric_key(actor_type: str | None) -> str:
+    """Normalize actor-type labels for flat metric keys.
+
+    Returns:
+        Lowercase alphanumeric/underscore key segment.
+    """
+    label = _canonical_actor_type(actor_type)
+    return "".join(ch if ch.isalnum() else "_" for ch in label).strip("_") or "unknown"
 
 
 @dataclass(frozen=True)
@@ -229,53 +261,116 @@ def compute_batch_forecast_metrics(
     """Compute aggregate forecast metrics over benchmark trace steps.
 
     Returns:
-        Mean metrics plus per-metric denominator counts.
+        Mean metrics plus per-metric denominator counts and actor exclusion metadata.
     """
 
     if dt_s <= 0.0:
         raise ValueError("dt_s must be positive")
 
-    sample_metrics: list[dict[str, float]] = []
-    for step_index, step in enumerate(trace_steps):
-        for pedestrian_payload in step.get("pedestrians", []):
-            state = PedestrianState.from_trace(pedestrian_payload)
-            ground_truth = _future_pedestrian_positions(
-                state.id,
-                step_index,
-                trace_steps,
-                horizons_s,
-                dt_s,
-            )
-            if not ground_truth:
-                continue
-            sample_metrics.append(
-                evaluate_forecast(
-                    constant_velocity_gaussian_baseline(state, horizons_s),
-                    ground_truth,
-                    confidence_level=confidence_level,
-                    robot_positions=_future_robot_positions(
-                        step_index,
-                        trace_steps,
-                        horizons_s,
-                        dt_s,
-                    ),
-                    collision_distance_m=collision_distance_m,
-                )
-            )
+    (
+        candidate_count,
+        excluded_count,
+        excluded_by_type,
+        sample_metrics,
+    ) = _collect_sample_metrics(
+        trace_steps,
+        horizons_s,
+        dt_s,
+        confidence_level,
+        collision_distance_m,
+    )
+
+    summary = {
+        "pedestrian_forecast_candidate_count": float(candidate_count),
+        "pedestrian_forecast_included_actor_count": float(candidate_count - excluded_count),
+        "pedestrian_forecast_excluded_actor_count": float(excluded_count),
+    }
+    for actor_type, count in excluded_by_type.items():
+        summary[f"pedestrian_forecast_excluded_{actor_type}_count"] = float(count)
 
     if not sample_metrics:
-        return {"forecast_evaluable_samples": 0.0}
+        summary["forecast_evaluable_samples"] = 0.0
+        return summary
 
     values_by_key: dict[str, list[float]] = defaultdict(list)
     for sample in sample_metrics:
         for key, value in sample.items():
             values_by_key[key].append(float(value))
 
-    summary = {"forecast_evaluable_samples": float(len(sample_metrics))}
+    summary["forecast_evaluable_samples"] = float(len(sample_metrics))
     for key, values in sorted(values_by_key.items()):
         summary[f"mean_{key}"] = float(np.mean(values))
         summary[f"count_{key}"] = float(len(values))
     return summary
+
+
+def _collect_sample_metrics(
+    trace_steps: list[dict[str, Any]],
+    horizons_s: list[float] | tuple[float, ...],
+    dt_s: float,
+    confidence_level: float,
+    collision_distance_m: float,
+) -> tuple[int, int, dict[str, int], list[dict[str, float]]]:
+    candidate_count = 0
+    excluded_count = 0
+    excluded_by_type: dict[str, int] = defaultdict(int)
+    sample_metrics: list[dict[str, float]] = []
+
+    for step_index, step in enumerate(trace_steps):
+        for pedestrian_payload in step.get("pedestrians", []):
+            candidate_count += 1
+            actor_type = pedestrian_payload.get("actor_type")
+            if not is_pedestrian_actor(actor_type):
+                excluded_count += 1
+                excluded_by_type[actor_type_metric_key(actor_type)] += 1
+                continue
+
+            metrics = _evaluate_single_pedestrian(
+                pedestrian_payload,
+                step_index,
+                trace_steps,
+                horizons_s,
+                dt_s,
+                confidence_level,
+                collision_distance_m,
+            )
+            if metrics:
+                sample_metrics.append(metrics)
+
+    return candidate_count, excluded_count, excluded_by_type, sample_metrics
+
+
+def _evaluate_single_pedestrian(
+    pedestrian_payload: dict[str, Any],
+    step_index: int,
+    trace_steps: list[dict[str, Any]],
+    horizons_s: list[float] | tuple[float, ...],
+    dt_s: float,
+    confidence_level: float,
+    collision_distance_m: float,
+) -> dict[str, float] | None:
+    state = PedestrianState.from_trace(pedestrian_payload)
+    ground_truth = _future_pedestrian_positions(
+        state.id,
+        step_index,
+        trace_steps,
+        horizons_s,
+        dt_s,
+    )
+    if not ground_truth:
+        return None
+    return evaluate_forecast(
+        constant_velocity_gaussian_baseline(state, horizons_s),
+        ground_truth,
+        confidence_level=confidence_level,
+        robot_positions=_future_robot_positions(
+            step_index,
+            trace_steps,
+            horizons_s,
+            dt_s,
+        ),
+        collision_distance_m=collision_distance_m,
+    )
 
 
 def _future_pedestrian_positions(

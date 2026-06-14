@@ -185,10 +185,107 @@ def test_compute_batch_forecast_metrics_uses_trace_steps_and_denominators() -> N
     assert summary["count_collision_relevance_error_1s"] == 3.0
 
 
+def test_compute_batch_forecast_metrics_excludes_cyclists() -> None:
+    """Cyclist actors are excluded from scoring but tracked in metadata."""
+
+    dt_s = 0.1
+    trace_steps = [
+        {
+            "step": 0,
+            "time_s": 0.0,
+            "pedestrians": [
+                {"id": 1, "position": [0, 0], "velocity": [1, 0], "actor_type": "pedestrian"},
+                {"id": 2, "position": [0, 1], "velocity": [1, 0], "actor_type": "cyclist_like_vru"},
+            ],
+        },
+        {
+            "step": 1,
+            "time_s": 0.1,
+            "pedestrians": [
+                {"id": 1, "position": [0.1, 0], "velocity": [1, 0], "actor_type": "pedestrian"},
+                {
+                    "id": 2,
+                    "position": [0.1, 1],
+                    "velocity": [1, 0],
+                    "actor_type": "cyclist_like_vru",
+                },
+            ],
+        },
+        {
+            "step": 2,
+            "time_s": 0.2,
+            "pedestrians": [
+                {"id": 1, "position": [0.2, 0], "velocity": [1, 0], "actor_type": "pedestrian"},
+                {
+                    "id": 2,
+                    "position": [0.2, 1],
+                    "velocity": [1, 0],
+                    "actor_type": "cyclist_like_vru",
+                },
+            ],
+        },
+    ]
+
+    summary = compute_batch_forecast_metrics(
+        trace_steps,
+        horizons_s=(0.1,),
+        dt_s=dt_s,
+    )
+
+    # Step 0: ped 1 (evaluable), cyclist 2 (excluded)
+    # Step 1: ped 1 (evaluable), cyclist 2 (excluded)
+    # Step 2: ped 1 (not evaluable - no future), cyclist 2 (excluded)
+    assert summary["pedestrian_forecast_candidate_count"] == 6.0
+    assert summary["pedestrian_forecast_included_actor_count"] == 3.0
+    assert summary["pedestrian_forecast_excluded_actor_count"] == 3.0
+    assert summary["pedestrian_forecast_excluded_cyclist_like_vru_count"] == 3.0
+    assert summary["forecast_evaluable_samples"] == 2.0
+
+
+def test_compute_batch_forecast_metrics_normalizes_excluded_actor_type_keys() -> None:
+    """Excluded actor-type denominator keys stay flat even for display labels."""
+    summary = compute_batch_forecast_metrics(
+        [
+            {
+                "step": 0,
+                "time_s": 0.0,
+                "pedestrians": [
+                    {"id": 1, "position": [0, 0], "velocity": [1, 0], "actor_type": "Bicycle/VRU"}
+                ],
+            },
+            {
+                "step": 1,
+                "time_s": 0.1,
+                "pedestrians": [
+                    {
+                        "id": 1,
+                        "position": [0.1, 0],
+                        "velocity": [1, 0],
+                        "actor_type": "Bicycle/VRU",
+                    }
+                ],
+            },
+        ],
+        horizons_s=(0.1,),
+        dt_s=0.1,
+    )
+
+    assert summary["pedestrian_forecast_candidate_count"] == 2.0
+    assert summary["pedestrian_forecast_included_actor_count"] == 0.0
+    assert summary["pedestrian_forecast_excluded_actor_count"] == 2.0
+    assert summary["pedestrian_forecast_excluded_bicycle_vru_count"] == 2.0
+    assert summary["forecast_evaluable_samples"] == 0.0
+
+
 def test_batch_metrics_report_empty_and_invalid_dt_cases() -> None:
     """Empty traces have an explicit denominator and invalid dt fails closed."""
 
-    assert compute_batch_forecast_metrics([]) == {"forecast_evaluable_samples": 0.0}
+    assert compute_batch_forecast_metrics([]) == {
+        "forecast_evaluable_samples": 0.0,
+        "pedestrian_forecast_candidate_count": 0.0,
+        "pedestrian_forecast_included_actor_count": 0.0,
+        "pedestrian_forecast_excluded_actor_count": 0.0,
+    }
     with pytest.raises(ValueError, match="dt_s must be positive"):
         compute_batch_forecast_metrics([], dt_s=0.0)
 

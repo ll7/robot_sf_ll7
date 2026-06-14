@@ -25,10 +25,12 @@ _mod = _load_script_module()
 
 MISSING_FAMILIES = _mod.MISSING_FAMILIES
 TRACE_CANDIDATES = _mod.TRACE_CANDIDATES
+_actor_class_counts = _mod._actor_class_counts
 _build_failure_cases = _mod._build_failure_cases
 _compute_dt_s = _mod._compute_dt_s
 _extract_trace_steps = _mod._extract_trace_steps
 _generate_markdown = _mod._generate_markdown
+_get_actor_classes = _mod._get_actor_classes
 _pedestrian_count = _mod._pedestrian_count
 _trace_has_motion = _mod._trace_has_motion
 evaluate_single_trace = _mod.evaluate_single_trace
@@ -138,6 +140,35 @@ def test_pedestrian_count_returns_max() -> None:
         ]
     }
     assert _pedestrian_count(trace) == 3
+
+
+def test_actor_class_counts_default_legacy_pedestrians_and_count_cyclists() -> None:
+    """Trace metadata exposes actor classes for denominator treatment."""
+    trace = {
+        "frames": [
+            {
+                "pedestrians": [
+                    {"id": 1},
+                    {"id": 2, "actor_type": "cyclist_like_vru"},
+                ]
+            },
+            {
+                "pedestrians": [
+                    {"id": 1, "actor_type": "pedestrian"},
+                    {"id": 2, "actor_type": " cyclist_like_vru "},
+                    {"id": 3, "actor_type": "Pedestrian"},
+                    {"id": 4, "actor_type": "Bicycle/VRU"},
+                ]
+            },
+        ]
+    }
+
+    assert _get_actor_classes(trace) == ["bicycle_vru", "cyclist_like_vru", "pedestrian"]
+    assert _actor_class_counts(trace) == {
+        "bicycle_vru": 1,
+        "cyclist_like_vru": 2,
+        "pedestrian": 3,
+    }
 
 
 def test_evaluate_single_trace_missing_file() -> None:

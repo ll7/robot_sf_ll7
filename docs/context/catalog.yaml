@@ -1268,6 +1268,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2774_motion_rich_forecast_traces_2026-06-14/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2774_motion_rich_forecast_traces_2026-06-14/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2756_occluded_emergence_2026-06-13/README.md
     status: evidence
     freshness: evidence

@@ -347,3 +347,54 @@ def test_generate_markdown_includes_failure_cases() -> None:
     assert "Failure Cases" in md
     assert "test_trace" in md
     assert "test/path.json" in md
+
+
+def test_occluded_emergence_candidate_is_evaluated_with_samples() -> None:
+    """The occluded_emergence trace produces evaluated status with evaluable samples."""
+    candidate = next(c for c in TRACE_CANDIDATES if c["family"] == "occluded_emergence")
+    result = evaluate_single_trace(candidate)
+    assert result["status"] == "evaluated", (
+        f"occluded_emergence expected 'evaluated', got '{result['status']}'"
+    )
+    assert result["metrics"]["forecast_evaluable_samples"] > 0, (
+        "occluded_emergence should have forecast_evaluable_samples > 0"
+    )
+    assert result["has_motion"] is True
+
+
+def test_non_corridor_evaluated_families_appear_in_gap_summary() -> None:
+    """Evaluated non-corridor families are in the evaluated set, not limited or missing."""
+    results = []
+    for candidate in TRACE_CANDIDATES:
+        results.append(evaluate_single_trace(candidate))
+
+    evaluated_families = sorted({r["family"] for r in results if r["status"] == "evaluated"})
+    limited_families = sorted({r["family"] for r in results if r["status"] != "evaluated"})
+
+    assert "corridor_interaction" in evaluated_families
+    assert "occluded_emergence" in evaluated_families
+    assert "occluded_emergence" not in limited_families
+    assert "occluded_emergence" not in [mf["family"] for mf in MISSING_FAMILIES]
+
+
+def test_report_json_distinguishes_evaluated_limited_missing() -> None:
+    """JSON report separates evaluated, limited, and missing trace families."""
+    results = []
+    for candidate in TRACE_CANDIDATES:
+        results.append(evaluate_single_trace(candidate))
+
+    evaluated_families = sorted({r["family"] for r in results if r["status"] == "evaluated"})
+    limited_families = sorted({r["family"] for r in results if r["status"] != "evaluated"})
+
+    assert "corridor_interaction" in evaluated_families
+    assert "occluded_emergence" in evaluated_families
+
+    # crossing_proxy and bottleneck should be limited (zero motion)
+    for fam in ["crossing_proxy", "bottleneck"]:
+        assert fam in limited_families, (
+            f"{fam} should be in limited families, got {limited_families}"
+        )
+
+    # occluded_emergence should NOT be in limited or missing
+    assert "occluded_emergence" not in limited_families
+    assert "occluded_emergence" not in [mf["family"] for mf in MISSING_FAMILIES]

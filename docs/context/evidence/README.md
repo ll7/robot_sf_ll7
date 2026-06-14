@@ -136,6 +136,11 @@ Policy caveats:
   pedestrian forecast baseline evaluation on bounded durable trace fixtures. The corridor traces
   produce short-horizon metrics; crossing, bottleneck, signalized, occluded, and dense-interaction
   coverage remains limited or unavailable.
+- `issue_2774_motion_rich_forecast_traces_2026-06-14/`: diagnostic-only refresh of the
+  constant-velocity pedestrian forecast baseline that promotes the durable occluded-emergence
+  trace fixture as non-corridor forecast evidence. Corridor and occluded-emergence traces are
+  evaluated; crossing and bottleneck remain zero-motion limitations, and signalized/dense/bottleneck
+  motion-rich coverage remains unavailable.
 - `issue_2749_observation_noise_diagnostics/`: diagnostic-only paired no-op vs
   perception-limited observation-noise step diagnostics for `hybrid_rule_v0_minimal` on a
   pedestrian-present stress-slice scenario; perturbation plumbing activated, but the distant

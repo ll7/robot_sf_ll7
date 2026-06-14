@@ -86,6 +86,8 @@ class _Accumulator:
         self.validation_success = 0
         self.reroutes = 0
         self.provider_incomplete: Counter[str] = Counter()
+        self.provider_total: Counter[str] = Counter()
+        self.provider_complete: Counter[str] = Counter()
         self.failure_class_incomplete: Counter[str] = Counter()
 
     def process_attempt(self, idx: int, attempt: dict[str, Any]) -> None:
@@ -98,8 +100,11 @@ class _Accumulator:
             provider = _provider_name(attempt.get("route"))
             fc = attempt.get("failure_class") or "unknown"
 
+        self.provider_total[provider] += 1
+
         if _is_complete_artifact_set(compact):
             self.complete_count += 1
+            self.provider_complete[provider] += 1
         else:
             self.provider_incomplete[provider] += 1
             self.failure_class_incomplete[str(fc)] += 1
@@ -126,6 +131,121 @@ def _extract_snapshot_outcome(
     return accepted, note
 
 
+def _routing_recommendation(
+    recommendation_class: str,
+    action: str,
+    evidence: str,
+) -> dict[str, str]:
+    """Build one route-evidence-only recommendation entry."""
+    return {
+        "class": recommendation_class,
+        "action": action,
+        "evidence": evidence,
+        "caveat": "Route evidence only; not task acceptance.",
+    }
+
+
+def _no_routing_recommendation(evidence: str) -> dict[str, str]:
+    """Build the deterministic no-recommendation entry."""
+    return _routing_recommendation(
+        "no_recommendation",
+        "no_recommendation: insufficient data for routing policy",
+        evidence,
+    )
+
+
+def _provider_recommendations(report: dict[str, Any]) -> list[dict[str, str]]:
+    """Return deterministic provider preference and avoidance hints."""
+    incomplete_by_provider = report.get("incomplete_by_provider", {})
+    by_provider: dict[str, dict[str, int]] = report.get("by_provider", {})
+    recommendations: list[dict[str, str]] = []
+
+    for provider, counts in sorted(by_provider.items()):
+        p_total = counts.get("total", 0)
+        p_complete = counts.get("complete", 0)
+        if p_total == 0:
+            continue
+        if p_complete == p_total and p_total >= 2 and incomplete_by_provider:
+            recommendations.append(
+                _routing_recommendation(
+                    "prefer_provider",
+                    f"prefer_provider: {provider} ({p_complete}/{p_total} complete, 100%)",
+                    f"{p_complete}/{p_total} attempts complete for {provider}",
+                )
+            )
+        if p_complete == 0 and p_total >= 2:
+            recommendations.append(
+                _routing_recommendation(
+                    "avoid_provider",
+                    f"avoid_provider: {provider} (0/{p_total} complete, 0%)",
+                    f"0/{p_total} attempts complete for {provider}",
+                )
+            )
+    return recommendations
+
+
+def _failure_class_recommendations(report: dict[str, Any]) -> list[dict[str, str]]:
+    """Return deterministic failure-class investigation hints."""
+    incomplete_by_fc = report.get("incomplete_by_failure_class", {})
+    incomplete_total = sum(incomplete_by_fc.values())
+    recommendations: list[dict[str, str]] = []
+
+    for failure_class, count in sorted(incomplete_by_fc.items()):
+        if incomplete_total and count > incomplete_total / 2:
+            pct = round(count / incomplete_total * 100)
+            recommendations.append(
+                _routing_recommendation(
+                    "investigate_failure_class",
+                    (
+                        f"investigate_failure_class: {failure_class} "
+                        f"({count}/{incomplete_total} incomplete, {pct}%)"
+                    ),
+                    f"{count}/{incomplete_total} incomplete attempts have failure class {failure_class}",
+                )
+            )
+    return recommendations
+
+
+def _reroute_threshold_recommendation(report: dict[str, Any]) -> dict[str, str] | None:
+    """Return an overall reroute recommendation when completion is low."""
+    total = report.get("delegated_attempts", 0)
+    complete_artifacts = report.get("complete_artifacts", {})
+    rate = complete_artifacts.get("rate", 0.0)
+    if rate >= 0.5 or total < 2:
+        return None
+    return _routing_recommendation(
+        "reroute_threshold_met",
+        (
+            f"reroute_threshold_met: {complete_artifacts.get('count', 0)}/{total} "
+            f"complete ({rate:.0%}), consider fallback strategy"
+        ),
+        f"overall completion rate {rate:.0%} across {total} attempts",
+    )
+
+
+def _derive_routing_recommendations(report: dict[str, Any]) -> list[dict[str, str]]:
+    """Derive deterministic routing recommendations from report metrics."""
+    total = report.get("delegated_attempts", 0)
+    if total < 2:
+        return [_no_routing_recommendation(f"{total} delegated attempt(s)")]
+
+    recommendations = _provider_recommendations(report)
+    recommendations.extend(_failure_class_recommendations(report))
+    reroute_recommendation = _reroute_threshold_recommendation(report)
+    if reroute_recommendation is not None:
+        recommendations.append(reroute_recommendation)
+
+    if recommendations:
+        return recommendations
+
+    rate = report.get("complete_artifacts", {}).get("rate", 0.0)
+    return [
+        _no_routing_recommendation(
+            f"{total} attempts, {rate:.0%} completion rate, no dominant provider or failure pattern"
+        )
+    ]
+
+
 def analyze_manifests(
     manifests: list[dict[str, Any]],
     *,
@@ -147,7 +267,7 @@ def analyze_manifests(
     accepted, acceptance_note = _extract_snapshot_outcome(snapshot)
 
     rate = round(acc.complete_count / acc.total_attempts, 4) if acc.total_attempts else 0.0
-    return {
+    report = {
         "schema": SCHEMA_VERSION,
         "manifests_analyzed": len(manifests),
         "delegated_attempts": acc.total_attempts,
@@ -159,6 +279,10 @@ def analyze_manifests(
         "reroutes": acc.reroutes,
         "incomplete_by_provider": dict(acc.provider_incomplete),
         "incomplete_by_failure_class": dict(acc.failure_class_incomplete),
+        "by_provider": {
+            p: {"total": t, "complete": acc.provider_complete[p]}
+            for p, t in acc.provider_total.items()
+        },
         "final_outcome": {
             "accepted": accepted,
             "note": (
@@ -170,6 +294,8 @@ def analyze_manifests(
         "estimated_inspections_avoided": acc.complete_count,
         "warning": ROUTE_EVIDENCE_WARNING,
     }
+    report["routing_recommendations"] = _derive_routing_recommendations(report)
+    return report
 
 
 def _format_markdown(report: dict[str, Any]) -> str:
@@ -205,6 +331,16 @@ def _format_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- **Final accepted:** {fo['accepted']} - {fo['note']}")
     lines.append(f"- **Estimated inspections avoided:** {report['estimated_inspections_avoided']}")
     lines.append(f"\n> {report['warning']}\n")
+
+    recs = report.get("routing_recommendations")
+    if recs:
+        lines.append("## Routing recommendations\n")
+        for rec in recs:
+            lines.append(f"- **{rec['class']}**: {rec['action']}")
+            lines.append(f"  - Evidence: {rec['evidence']}")
+            lines.append(f"  - Caveat: {rec['caveat']}")
+        lines.append("")
+
     return "\n".join(lines)
 
 

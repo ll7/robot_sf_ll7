@@ -18,6 +18,8 @@ Environment variables:
   PR_READY_FINAL      Legacy compatibility flag: "1", "true", "yes", or "on"
                       for final mode; "0", "false", "no", "off" for interim.
                       Ignored when PR_READY_MODE is set.
+  PR_READY_SKIP_PREFLIGHT  Set to "1" to skip the cheap preflight check for
+                      test-collection dependencies (duckdb, pyarrow).
 EOF
 }
 
@@ -35,36 +37,13 @@ export MIN_COVERAGE="${MIN_COVERAGE:-80}"
 export GOAL_COVERAGE="${GOAL_COVERAGE:-100}"
 export PR_READY_FINAL="${PR_READY_FINAL:-0}"
 export PR_READY_MODE="${PR_READY_MODE:-}"
+export PR_READY_SKIP_PREFLIGHT="${PR_READY_SKIP_PREFLIGHT:-0}"
 
 worktree_state() {
   if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
     printf 'dirty\n'
   else
     printf 'clean\n'
-  fi
-}
-
-check_final_readiness_dependencies() {
-  local missing_output
-  if ! missing_output="$(uv run python - <<'PY'
-from __future__ import annotations
-
-import importlib.util
-
-missing = [
-    module_name
-    for module_name in ("duckdb", "pyarrow")
-    if importlib.util.find_spec(module_name) is None
-]
-if missing:
-    print(", ".join(missing))
-    raise SystemExit(1)
-PY
-  )"; then
-    printf 'Final PR readiness requires analytics dependencies: duckdb and pyarrow.\n' >&2
-    printf 'Missing or unavailable modules: %s\n' "$missing_output" >&2
-    printf 'Run `uv sync --all-extras` in this worktree, then rerun final PR readiness.\n' >&2
-    exit 2
   fi
 }
 
@@ -97,7 +76,7 @@ if [[ "$pr_ready_final" == "1" && "$(worktree_state)" != "clean" ]]; then
 fi
 
 if [[ "$pr_ready_final" == "1" ]]; then
-  check_final_readiness_dependencies
+  preflight_check_test_deps
 fi
 
 "$SCRIPT_DIR/ruff_fix_format.sh"

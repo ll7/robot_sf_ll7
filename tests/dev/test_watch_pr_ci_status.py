@@ -325,16 +325,13 @@ def test_main_poll_interval_alias_cli_flag(capsys: pytest.CaptureFixture[str]) -
 
 def test_help_includes_expected_head_sha_example(capsys: pytest.CaptureFixture[str]) -> None:
     """--help should contain the SHA-guarded long-poll example."""
-    import subprocess as _sp
+    from scripts.dev.watch_pr_ci_status import _parse_args
 
-    result = _sp.run(
-        ["python", "-m", "scripts.dev.watch_pr_ci_status", "--help"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    assert "--expected-head-sha" in result.stdout
-    assert "uv run python scripts/dev/watch_pr_ci_status.py" in result.stdout
-    assert "--json" in result.stdout
-    assert "long-poll" in result.stdout.lower() or "long poll" in result.stdout.lower()
+    with pytest.raises(SystemExit):
+        _parse_args(["--help"])
+
+    captured = capsys.readouterr()
+    assert "--expected-head-sha" in captured.out
+    assert "uv run python scripts/dev/watch_pr_ci_status.py" in captured.out
+    assert "--json" in captured.out
+    assert "long-poll" in captured.out.lower() or "long poll" in captured.out.lower()

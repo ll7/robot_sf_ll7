@@ -243,3 +243,95 @@ def test_main_valueerror_on_invalid_args(capsys: pytest.CaptureFixture[str]) -> 
     captured = capsys.readouterr()
     assert "ERROR" in captured.err
     assert "multiplier" in captured.err
+
+
+def test_poll_interval_alias_sets_same_dest() -> None:
+    """--poll-interval should write to poll_interval_seconds like --poll-interval-seconds."""
+    from scripts.dev.watch_pr_ci_status import _parse_args
+
+    args_alias = _parse_args(["42", "--poll-interval", "45"])
+    args_long = _parse_args(["42", "--poll-interval-seconds", "45"])
+    assert args_alias.poll_interval_seconds == 45
+    assert args_long.poll_interval_seconds == 45
+    assert args_alias.poll_interval_seconds == args_long.poll_interval_seconds
+
+
+def test_budget_seconds_override_sets_budget_overridden() -> None:
+    """--budget-seconds should bypass the baseline*multiplier computation."""
+    result = watch_pr_ci_status(
+        pr_number="42",
+        budget_override_seconds=300,
+        baseline_seconds=920,
+        multiplier=1.3,
+        fetch_status=MagicMock(return_value=_status("success")),
+        fetch_durations=MagicMock(return_value=[1000]),
+    )
+    assert result.budget_seconds == 300
+    assert result.budget_overridden is True
+    assert result.baseline_seconds == 920
+    assert result.multiplier == 1.3
+
+
+def test_budget_seconds_zero_causes_immediate_timeout() -> None:
+    """--budget-seconds 0 should exhaust budget on first poll and return timeout."""
+    result = watch_pr_ci_status(
+        pr_number="42",
+        budget_override_seconds=0,
+        baseline_seconds=920,
+        multiplier=1.3,
+        fetch_status=MagicMock(return_value=_status("pending")),
+        fetch_durations=MagicMock(return_value=[800]),
+    )
+    assert result.final_status == "timeout"
+    assert result.budget_seconds == 0
+    assert result.budget_overridden is True
+
+
+def test_budget_overridden_false_by_default() -> None:
+    """When --budget-seconds is not set, budget_overridden should be False."""
+    result = watch_pr_ci_status(
+        pr_number="42",
+        baseline_seconds=920,
+        multiplier=1.3,
+        fetch_status=MagicMock(return_value=_status("success")),
+        fetch_durations=MagicMock(return_value=[1000]),
+    )
+    assert result.budget_overridden is False
+    assert result.budget_seconds == 1196
+
+
+def test_main_budget_seconds_cli_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    """CLI --budget-seconds should pass through to watch result."""
+    with patch("scripts.dev.watch_pr_ci_status._fetch_ci_status") as fetch_status:
+        fetch_status.return_value = _status("success")
+        rc = main(["42", "--budget-seconds", "500", "--json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["budget_seconds"] == 500
+    assert payload["budget_overridden"] is True
+
+
+def test_main_poll_interval_alias_cli_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    """CLI --poll-interval should be accepted alongside --poll-interval-seconds."""
+    with patch("scripts.dev.watch_pr_ci_status._fetch_ci_status") as fetch_status:
+        fetch_status.return_value = _status("success")
+        rc = main(["42", "--poll-interval", "90", "--json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["poll_interval_seconds"] == 90
+
+
+def test_help_includes_expected_head_sha_example(capsys: pytest.CaptureFixture[str]) -> None:
+    """--help should contain the SHA-guarded long-poll example."""
+    from scripts.dev.watch_pr_ci_status import _parse_args
+
+    with pytest.raises(SystemExit):
+        _parse_args(["--help"])
+
+    captured = capsys.readouterr()
+    assert "--expected-head-sha" in captured.out
+    assert "uv run python scripts/dev/watch_pr_ci_status.py" in captured.out
+    assert "--json" in captured.out
+    assert "long-poll" in captured.out.lower() or "long poll" in captured.out.lower()

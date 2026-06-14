@@ -51,6 +51,7 @@ class WatchResult:
     baseline_seconds: int
     multiplier: float
     budget_seconds: int
+    budget_overridden: bool
     poll_interval_seconds: int
     final_status: str
     checks: dict[str, Any]
@@ -180,12 +181,13 @@ def _build_drift_sample(
     )
 
 
-def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectable dependencies.
+def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit injectable dependencies.
     *,
     pr_number: str,
     expected_head_sha: str = "",
     baseline_seconds: int = DEFAULT_BASELINE_SECONDS,
     multiplier: float = DEFAULT_MULTIPLIER,
+    budget_override_seconds: int | None = None,
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS,
     workflow: str = DEFAULT_WORKFLOW,
     sample_limit: int = DEFAULT_SAMPLE_LIMIT,
@@ -198,7 +200,10 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
     progress_stream: Any = sys.stderr,
 ) -> WatchResult:
     """Poll PR CI status until success, failure, stale head, or budget timeout."""
-    budget_seconds = wait_budget_seconds(baseline_seconds, multiplier)
+    if budget_override_seconds is not None:
+        budget_seconds = max(budget_override_seconds, 0)
+    else:
+        budget_seconds = wait_budget_seconds(baseline_seconds, multiplier)
     deadline = monotonic() + budget_seconds
     last_status: dict[str, Any] = {}
     last_progress_at = 0.0
@@ -216,6 +221,7 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
                 baseline_seconds=baseline_seconds,
                 multiplier=multiplier,
                 budget_seconds=budget_seconds,
+                budget_overridden=budget_override_seconds is not None,
                 poll_interval_seconds=poll_interval_seconds,
                 final_status="error",
                 checks={},
@@ -231,6 +237,7 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
                 baseline_seconds=baseline_seconds,
                 multiplier=multiplier,
                 budget_seconds=budget_seconds,
+                budget_overridden=budget_override_seconds is not None,
                 poll_interval_seconds=poll_interval_seconds,
                 final_status="error",
                 checks=last_status.get("checks", {}),
@@ -245,6 +252,7 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
                 baseline_seconds=baseline_seconds,
                 multiplier=multiplier,
                 budget_seconds=budget_seconds,
+                budget_overridden=budget_override_seconds is not None,
                 poll_interval_seconds=poll_interval_seconds,
                 final_status="error",
                 checks=last_status.get("checks", {}),
@@ -262,6 +270,7 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
                 baseline_seconds=baseline_seconds,
                 multiplier=multiplier,
                 budget_seconds=budget_seconds,
+                budget_overridden=budget_override_seconds is not None,
                 poll_interval_seconds=poll_interval_seconds,
                 final_status=str(overall),
                 checks=checks,
@@ -276,6 +285,7 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
                 baseline_seconds=baseline_seconds,
                 multiplier=multiplier,
                 budget_seconds=budget_seconds,
+                budget_overridden=budget_override_seconds is not None,
                 poll_interval_seconds=poll_interval_seconds,
                 final_status=str(overall or "pending"),
                 checks=checks,
@@ -319,6 +329,7 @@ def watch_pr_ci_status(  # noqa: PLR0913 - CLI/test seam with explicit injectabl
                 baseline_seconds=baseline_seconds,
                 multiplier=multiplier,
                 budget_seconds=budget_seconds,
+                budget_overridden=budget_override_seconds is not None,
                 poll_interval_seconds=poll_interval_seconds,
                 final_status="timeout",
                 checks=checks,
@@ -333,11 +344,14 @@ def format_human(result: WatchResult) -> str:
     lines = [
         f"PR #{result.pr} CI watch: {result.final_status}",
         (f"  head: {result.head_sha}  |  expected: {result.expected_head_sha or 'not set'}"),
-        (
+    ]
+    if result.budget_overridden:
+        lines.append(f"  budget: {result.budget_seconds}s (direct override)")
+    else:
+        lines.append(
             f"  budget: {result.budget_seconds}s "
             f"(baseline {result.baseline_seconds}s * {result.multiplier:g})"
-        ),
-    ]
+        )
     if result.checks:
         lines.append(f"  checks: {result.checks.get('overall', 'unknown')}")
     if result.error:
@@ -352,8 +366,21 @@ def format_human(result: WatchResult) -> str:
     return "\n".join(lines)
 
 
+EXAMPLE = """\
+long-poll with SHA guard (agents should always pass --expected-head-sha):
+
+  uv run python scripts/dev/watch_pr_ci_status.py 123 --json \\
+      --expected-head-sha $(gh pr view 123 --json headRefOid -q .headRefOid) \\
+      --poll-interval 90 --budget-seconds 900
+"""
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog=EXAMPLE,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("pr_number", help="GitHub PR number to monitor.")
     parser.add_argument("--expected-head-sha", default="", help="Optional PR head SHA guard.")
     parser.add_argument(
@@ -368,8 +395,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--multiplier", type=float, default=DEFAULT_MULTIPLIER)
     parser.add_argument(
         "--poll-interval-seconds",
+        "--poll-interval",
         type=int,
         default=DEFAULT_POLL_INTERVAL_SECONDS,
+        help="Seconds between CI status polls.",
+    )
+    parser.add_argument(
+        "--budget-seconds",
+        type=int,
+        default=None,
+        help=(
+            "Override the computed wait budget (baseline * multiplier) with a fixed "
+            "second count.  Use this when agents must not inherit drift-tuned budgets."
+        ),
     )
     parser.add_argument("--sample-limit", type=int, default=DEFAULT_SAMPLE_LIMIT)
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
@@ -396,6 +434,7 @@ def main(argv: list[str] | None = None) -> int:
             expected_head_sha=args.expected_head_sha,
             baseline_seconds=args.baseline_seconds,
             multiplier=args.multiplier,
+            budget_override_seconds=args.budget_seconds,
             poll_interval_seconds=args.poll_interval_seconds,
             workflow=args.workflow,
             sample_limit=args.sample_limit,

@@ -2953,7 +2953,7 @@ def _single_pedestrian_intent_metadata(scenario: dict[str, Any]) -> list[dict[st
 
 
 def _single_pedestrian_vru_metadata(scenario: dict[str, Any]) -> list[dict[str, Any] | None]:
-    """Return authored cyclist-like VRU metadata aligned with scenario single pedestrians."""
+    """Return authored fast-VRU metadata aligned with scenario single pedestrians."""
     single_peds = (
         scenario.get("single_pedestrians")
         if isinstance(scenario.get("single_pedestrians"), list)
@@ -2966,11 +2966,15 @@ def _single_pedestrian_vru_metadata(scenario: dict[str, Any]) -> list[dict[str, 
             result.append(None)
             continue
         ped_metadata = ped.get("metadata") if isinstance(ped.get("metadata"), dict) else {}
-        vru = (
-            ped_metadata.get("cyclist_like_vru")
-            if isinstance(ped_metadata.get("cyclist_like_vru"), dict)
-            else {}
-        )
+        payload_key = "cyclist_like_vru"
+        vru = ped_metadata.get("cyclist_like_vru")
+        if not isinstance(vru, dict):
+            fast_bicycle = ped_metadata.get("fast_bicycle_actor")
+            if isinstance(fast_bicycle, dict):
+                payload_key = "fast_bicycle_actor"
+                vru = fast_bicycle
+            else:
+                vru = {}
         if not vru:
             result.append(None)
             continue
@@ -2983,7 +2987,11 @@ def _single_pedestrian_vru_metadata(scenario: dict[str, Any]) -> list[dict[str, 
             {
                 "single_index": idx,
                 "pedestrian_id": str(ped.get("id") or f"single_{idx}"),
-                "actor_type": str(vru.get("actor_type") or "cyclist_like_vru"),
+                "actor_type": str(
+                    vru.get("actor_type")
+                    or ("bicycle" if payload_key == "fast_bicycle_actor" else "cyclist_like_vru")
+                ),
+                "diagnostic_payload_key": payload_key,
                 "speed_m_s": speed_m_s,
                 "acceleration_m_s2": acceleration_m_s2,
                 "actor_radius_m": actor_radius_m,
@@ -3003,8 +3011,8 @@ def _single_pedestrian_vru_metadata(scenario: dict[str, Any]) -> list[dict[str, 
                 ],
                 "claim_boundary": str(
                     vru.get("claim_boundary")
-                    or "Authored cyclist-like VRU proxy metadata only; not cyclist realism or "
-                    "planner-ranking evidence."
+                    or "Authored fast-VRU proxy metadata only; not cyclist realism or "
+                    "planner-ranking benchmark evidence."
                 ),
             }
         )
@@ -3340,12 +3348,13 @@ def _vru_trace_payload(
                 "pass_overtake_state": _pass_overtake_state(closing_speed),
             }
         )
+    payload_key = str(metadata.get("diagnostic_payload_key") or "cyclist_like_vru")
     return {
         "pedestrian_id": metadata["pedestrian_id"],
         "actor_type": metadata["actor_type"],
         "interaction_role": metadata["interaction_role"],
         "claim_boundary": metadata["claim_boundary"],
-        "cyclist_like_vru": diagnostics,
+        payload_key: diagnostics,
     }
 
 
@@ -3437,22 +3446,62 @@ def _cyclist_like_vru_summary(
     vru_metadata: list[dict[str, Any] | None],
 ) -> dict[str, Any] | None:
     """Return an analysis-only summary for authored cyclist-like VRU fixtures."""
+    return _vru_diagnostic_summary(
+        scenario,
+        vru_metadata,
+        payload_key="cyclist_like_vru",
+        schema_version="cyclist-like-vru-smoke-summary.v1",
+        claim_boundary=(
+            "Authored cyclist-like VRU proxy metadata records speed, acceleration, "
+            "time-to-conflict, clearance, and pass/overtake diagnostics only; it is not "
+            "cyclist realism, cyclist behavior, or planner-ranking evidence."
+        ),
+    )
+
+
+def _fast_bicycle_actor_summary(
+    scenario: dict[str, Any],
+    vru_metadata: list[dict[str, Any] | None],
+) -> dict[str, Any] | None:
+    """Return an analysis-only summary for authored fast-bicycle actor fixtures."""
+    return _vru_diagnostic_summary(
+        scenario,
+        vru_metadata,
+        payload_key="fast_bicycle_actor",
+        schema_version="fast-bicycle-actor-summary.v1",
+        claim_boundary=(
+            "Authored fast-bicycle actor proxy metadata records speed, acceleration, "
+            "time-to-conflict, clearance, and pass/overtake diagnostics only; it is not "
+            "a full bicycle dynamics model, cyclist realism evidence, or planner-ranking evidence."
+        ),
+    )
+
+
+def _vru_diagnostic_summary(
+    scenario: dict[str, Any],
+    vru_metadata: list[dict[str, Any] | None],
+    *,
+    payload_key: str,
+    schema_version: str,
+    claim_boundary: str,
+) -> dict[str, Any] | None:
+    """Return an analysis-only summary for authored fast-VRU fixtures."""
     if not vru_metadata:
         return None
-    summarized = [metadata for metadata in vru_metadata if metadata is not None]
+    summarized = [
+        metadata
+        for metadata in vru_metadata
+        if metadata is not None and metadata.get("diagnostic_payload_key") == payload_key
+    ]
     if not summarized:
         return None
     return {
-        "schema_version": "cyclist-like-vru-smoke-summary.v1",
+        "schema_version": schema_version,
         "scenario_name": _scenario_id(scenario),
         "status": "diagnostic_metadata_only",
         "benchmark_evidence": False,
         "trace_field_source": "algorithm_metadata.simulation_step_trace.steps[].pedestrians[]",
-        "claim_boundary": (
-            "Authored cyclist-like VRU proxy metadata records speed, acceleration, time-to-conflict, "
-            "clearance, and pass/overtake diagnostics only; it is not cyclist realism, cyclist "
-            "behavior, or planner-ranking evidence."
-        ),
+        "claim_boundary": claim_boundary,
         "pedestrians": summarized,
     }
 
@@ -4535,6 +4584,12 @@ def _run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     if vru_summary is not None:
         algo_meta["cyclist_like_vru"] = vru_summary
+    fast_bicycle_summary = _fast_bicycle_actor_summary(
+        scenario,
+        single_pedestrian_vru_metadata,
+    )
+    if fast_bicycle_summary is not None:
+        algo_meta["fast_bicycle_actor"] = fast_bicycle_summary
     if actuation_controller is not None:
         actuation_summary = actuation_controller.summary()
         algo_meta["synthetic_actuation"] = {

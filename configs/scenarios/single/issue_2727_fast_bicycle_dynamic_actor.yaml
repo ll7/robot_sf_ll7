@@ -1,0 +1,158 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: issue_2727_fast_bicycle_crossing
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 160
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    speed_m_s: 5.5
+    trajectory:
+    - - 8.0
+      - 16.0
+    - - 14.0
+      - 10.0
+    - - 20.0
+      - 4.0
+    metadata:
+      fast_bicycle_actor:
+        schema_version: fast-bicycle-actor.v1
+        actor_type: bicycle
+        speed_m_s: 5.5
+        acceleration_m_s2: 1.4
+        actor_radius_m: 0.45
+        robot_radius_m: 0.3
+        interaction_role: oblique_crossing_fast_bicycle
+        diagnostic_metric_subset:
+        - time_to_conflict_zone_s
+        - clearance_m
+        - pass_overtake_state
+        claim_boundary: >
+          Authored fast-bicycle proxy metadata only; not a full bicycle dynamics model,
+          cyclist realism evidence, or planner-ranking benchmark evidence.
+    note: issue #2727 fast bicycle crossing proxy
+  robot_config: {}
+  metadata:
+    purpose: Deterministic fast-bicycle crossing fixture for trace-compatible dynamic-obstacle diagnostics.
+    behavior: fast_bicycle_crossing
+    authoring:
+      status: draft
+      template: francis2023-single-pedestrian-fast-bicycle-proxy
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2727
+      benchmark_evidence: false
+    fast_bicycle_actor:
+      case: crossing
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      claim_boundary: >
+        This fixture records authored fast-bicycle proxy speed, acceleration,
+        time-to-conflict, clearance, and pass/overtake diagnostics only. It does
+        not prove realistic cyclist behavior or planner performance.
+  seeds:
+  - 2727
+- name: issue_2727_fast_bicycle_overtaking
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 160
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    speed_m_s: 6.2
+    trajectory:
+    - - 9.2
+      - 8.0
+    - - 11.4
+      - 10.2
+    - - 13.6
+      - 12.4
+    metadata:
+      fast_bicycle_actor:
+        schema_version: fast-bicycle-actor.v1
+        actor_type: bicycle
+        speed_m_s: 6.2
+        acceleration_m_s2: 1.0
+        actor_radius_m: 0.45
+        robot_radius_m: 0.3
+        interaction_role: overtaking_fast_bicycle
+        diagnostic_metric_subset:
+        - time_to_conflict_zone_s
+        - clearance_m
+        - pass_overtake_state
+        claim_boundary: >
+          Authored fast-bicycle proxy metadata only; not a full bicycle dynamics model,
+          cyclist realism evidence, or planner-ranking benchmark evidence.
+    note: issue #2727 fast bicycle overtaking proxy
+  robot_config: {}
+  metadata:
+    purpose: Deterministic fast-bicycle overtaking fixture for trace-compatible dynamic-obstacle diagnostics.
+    behavior: fast_bicycle_overtaking
+    authoring:
+      status: draft
+      template: francis2023-single-pedestrian-fast-bicycle-proxy
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2727
+      benchmark_evidence: false
+    fast_bicycle_actor:
+      case: overtaking
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      claim_boundary: >
+        This fixture records authored fast-bicycle proxy speed, acceleration,
+        time-to-conflict, clearance, and pass/overtake diagnostics only. It does
+        not prove realistic cyclist behavior or planner performance.
+  seeds:
+  - 2728
+- name: issue_2727_fast_bicycle_parallel_lane
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 160
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    speed_m_s: 4.8
+    trajectory:
+    - - 7.5
+      - 12.0
+    - - 12.0
+      - 12.2
+    - - 16.5
+      - 12.4
+    metadata:
+      fast_bicycle_actor:
+        schema_version: fast-bicycle-actor.v1
+        actor_type: bicycle
+        speed_m_s: 4.8
+        acceleration_m_s2: 0.6
+        actor_radius_m: 0.45
+        robot_radius_m: 0.3
+        interaction_role: parallel_lane_fast_bicycle
+        diagnostic_metric_subset:
+        - time_to_conflict_zone_s
+        - clearance_m
+        - pass_overtake_state
+        claim_boundary: >
+          Authored fast-bicycle proxy metadata only; not a full bicycle dynamics model,
+          cyclist realism evidence, or planner-ranking benchmark evidence.
+    note: issue #2727 fast bicycle parallel-lane proxy
+  robot_config: {}
+  metadata:
+    purpose: Deterministic fast-bicycle parallel-lane fixture for trace-compatible dynamic-obstacle diagnostics.
+    behavior: fast_bicycle_parallel_lane
+    authoring:
+      status: draft
+      template: francis2023-single-pedestrian-fast-bicycle-proxy
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2727
+      benchmark_evidence: false
+    fast_bicycle_actor:
+      case: parallel_lane
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      claim_boundary: >
+        This fixture records authored fast-bicycle proxy speed, acceleration,
+        time-to-conflict, clearance, and pass/overtake diagnostics only. It does
+        not prove realistic cyclist behavior or planner performance.
+  seeds:
+  - 2729

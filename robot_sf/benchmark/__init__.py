@@ -15,6 +15,12 @@ from robot_sf.benchmark.forecast_batch import (
     save_forecast_batch,
     validate_forecast_batch,
 )
+from robot_sf.benchmark.forecast_metrics import (
+    FORECAST_METRICS_SCHEMA_VERSION,
+    ForecastMetricRow,
+    evaluate_forecast_batch,
+    format_forecast_metrics_markdown,
+)
 from robot_sf.benchmark.helper_catalog import (
     load_trained_policy,
     prepare_classic_env,
@@ -30,16 +36,20 @@ from robot_sf.benchmark.helper_registry import (
 
 __all__ = [
     "FORECAST_BATCH_SCHEMA_VERSION",
+    "FORECAST_METRICS_SCHEMA_VERSION",
     "ActorForecast",
     "AggregationMetadataError",
     "CoordinateFrame",
     "ExampleOrchestrator",
     "ForecastBatch",
     "ForecastBatchProvenance",
+    "ForecastMetricRow",
     "HelperCapability",
     "HelperCategory",
     "OrchestratorUsage",
     "RegressionCheck",
+    "evaluate_forecast_batch",
+    "format_forecast_metrics_markdown",
     "load_forecast_batch",
     "load_trained_policy",
     "prepare_classic_env",

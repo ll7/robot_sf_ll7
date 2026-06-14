@@ -1,0 +1,66 @@
+{
+  "schema_version": "generated_scenario_candidate.v1",
+  "candidate_id": "issue-2788-nr002-observation-noise-scout",
+  "generator_family": "heuristic_perturbation",
+  "generator_run_id": "issue-2788-nr002-obs-noise-scout",
+  "generator_config_ref": {
+    "config_path": "configs/scenarios/archetypes/classic_bottleneck.yaml",
+    "config_hash": "69770b7c852687e81b5f9400352cd16df77a0e1f5a79993d63172ca0042a8f13"
+  },
+  "source_scenario_ref": {
+    "scenario_name": "classic_bottleneck_medium",
+    "config_path": "configs/scenarios/archetypes/classic_bottleneck.yaml",
+    "config_hash": "69770b7c852687e81b5f9400352cd16df77a0e1f5a79993d63172ca0042a8f13",
+    "map_id": "classic_bottleneck_medium"
+  },
+  "source_split": "train",
+  "perturbations": [
+    {
+      "family": "pedestrian_route_offset",
+      "parameters": {
+        "dx_m": -0.35,
+        "dy_m": 0.0,
+        "max_magnitude_m": 0.5
+      },
+      "rationale": "Trace-seeded diagnostic from negative-result register NR-002: classic_bottleneck_medium with observation noise showed identical metrics because the pedestrian was too far from the robot. This near-field pedestrian route offset addresses the scenario_too_weak failure mode by moving the candidate toward a closer interaction before any future observation-noise rerun."
+    }
+  ],
+  "validity": {
+    "preflight_passed": true,
+    "scenario_certified": false,
+    "map_exists": true,
+    "spawn_collision_free": true,
+    "goal_reachable": true,
+    "rejection_reasons": [
+      "scenario_certified is false; this candidate is derived from negative-result register NR-002 and has not run scenario certification, replay, or observation-noise evaluation."
+    ]
+  },
+  "metrics_summary": {
+    "severity": {
+      "ttc_min_s": null,
+      "min_clearance_m": null,
+      "comfort_force_max_N": null,
+      "near_miss_count": null,
+      "collision_count": null,
+      "timeout_risk": null,
+      "objective_value": null
+    },
+    "diversity": {
+      "param_distance_min_m": null,
+      "param_distance_mean_m": null,
+      "unique_scenario_families": null,
+      "coverage_fraction": null,
+      "dedup_rate": null
+    }
+  },
+  "trace_lineage": {
+    "seed": 2788,
+    "generated_at_utc": "2026-06-14T10:00:00Z",
+    "git_hash": "d0e394d17f7b17f8cfaef7b36258cf22a9010ec9",
+    "provenance": {
+      "source_issue": "#2788"
+    }
+  },
+  "promotion_status": "not_promoted",
+  "notes": "Scout diagnostic candidate for issue #2788 derived from NR-002 (issue-2749-observation-noise-distant-pedestrian). Addresses the prior scenario_too_weak result with a near-field pedestrian_route_offset mutation rather than repeating the distant-pedestrian slice. Diagnostic-only, not_promoted; severity and diversity metrics are null because this manifest has not run certification, replay, or benchmark evaluation."
+}

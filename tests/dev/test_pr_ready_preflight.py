@@ -41,7 +41,18 @@ def _make_fake_bin(repo: Path, *, fail: bool = True) -> None:
     if fail:
         fake.write_text(
             "#!/usr/bin/env bash\n"
-            'payload="$* $(cat)"\n'
+            "has_stdin=0\n"
+            'for arg in "$@"; do\n'
+            '  if [[ "$arg" == "-" ]]; then\n'
+            "    has_stdin=1\n"
+            "    break\n"
+            "  fi\n"
+            "done\n"
+            'if [[ "$has_stdin" -eq 1 ]]; then\n'
+            '  payload="$* $(cat)"\n'
+            "else\n"
+            '  payload="$*"\n'
+            "fi\n"
             "if [[ \"$payload\" == *'import importlib'* ]]; then\n"
             "  echo 'duckdb, pyarrow' >&2\n"
             "  exit 1\n"
@@ -56,7 +67,7 @@ def _make_fake_bin(repo: Path, *, fail: bool = True) -> None:
         )
     fake.chmod(0o755)
 
-    real_uv = shutil.which("uv") or "/usr/bin/env uv"
+    real_uv = shutil.which("uv") or "uv"
     fake_uv = bin_dir / "uv"
     fake_uv.write_text(
         "#!/usr/bin/env bash\n"
@@ -102,7 +113,7 @@ def _run_pr_ready(
     repo: Path,
     *,
     env_overrides: dict[str, str] | None = None,
-    help_flag: bool = True,
+    help_flag: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``pr_ready_check.sh`` and return the result."""
     cmd = ["scripts/dev/pr_ready_check.sh"]

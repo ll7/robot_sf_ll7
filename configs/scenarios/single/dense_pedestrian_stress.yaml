@@ -1,0 +1,45 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: dense_pedestrian_stress
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_crowd_navigation.svg
+  simulation_config:
+    max_episode_steps: 200
+    ped_density: 0.15
+  robot_config: {}
+  metadata:
+    purpose: >
+      Dense multi-pedestrian diagnostic stress fixture for observation-noise
+      sensitivity testing.  Three pedestrians converge within 2 m of the robot
+      at overlapping time windows to create forecast ambiguity and near-field
+      observation-noise sensitivity.
+    archetype: dense_stress
+    flow: multi_converging
+    behavior: converging_crossing
+    density: high
+    density_advisory: diagnostic_stress_only
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: >
+        Fixture-only diagnostic; synthetic multi-pedestrian trajectories
+        for observation-noise envelope testing.
+      metrics:
+        min_distance: null
+        mean_distance: null
+        robot_ped_within_5m_frac: null
+        ped_force_mean: null
+        force_q95: null
+    authoring:
+      status: draft
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2765
+      benchmark_evidence: false
+      claim_boundary: >
+        Authored multi-pedestrian diagnostic fixture for observation-noise
+        envelope stress testing only.  Does not prove realistic multi-agent
+        interaction modeling or planner-ranking changes.
+  seeds:
+  - 2765
+  - 2766
+  - 2767

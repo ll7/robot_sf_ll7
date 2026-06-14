@@ -1,0 +1,18 @@
+{
+  "algorithm": "hand_authored_deterministic_fixture",
+  "boundary": "smoke_diagnostic_only_not_benchmark_evidence",
+  "episode_id": "dense_pedestrian_stress_ep0000",
+  "issue": 2765,
+  "scenario": "dense_pedestrian_stress",
+  "seed": 2765,
+  "source_kind": "simulation_trace_export.v1 fixture",
+  "expected_failure_mode": "forecast_ambiguity_in_dense_scene",
+  "pedestrian_count": 3,
+  "evidence_boundary": "smoke_diagnostic_only_not_benchmark_evidence",
+  "notes": [
+    "Deterministic multi-pedestrian dense-stress fixture for issue #2765.",
+    "Expected failure mode: forecast_ambiguity_in_dense_scene.",
+    "Three pedestrians converge within 2 m of the robot at overlapping time windows.",
+    "This fixture is not paper-facing benchmark evidence."
+  ]
+}

@@ -111,6 +111,11 @@ Policy caveats:
   Issue #2755 observation-noise envelope. Maps each perturbation condition to the pipeline layer
   where the perturbation did, did not, or could not be shown to propagate. Not paper-facing
   benchmark evidence.
+- `issue_2765_dense_pedestrian_stress_2026-06-14/`: diagnostic trace-derived dense-pedestrian
+  observation-noise envelope. Evaluates ten perturbation conditions against a deterministic
+  three-pedestrian stress fixture; eight conditions expose forecast ambiguity while the full missed
+  detection condition is classified as scenario-too-weak. Uses stored trace action proxies, not
+  live planner replay or paper-facing benchmark evidence.
 - `issue_2756_occluded_emergence_2026-06-13/`: smoke/diagnostic note for the
   deterministic occluded-emergence trace fixture. The fixture separates ground-truth and observed
   pedestrian state, records first visibility and conflict timing, and feeds observation-noise plus

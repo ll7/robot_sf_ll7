@@ -1,0 +1,924 @@
+{
+  "schema_version": "observation_noise_envelope.v1",
+  "issue": 2765,
+  "claim_boundary": "Diagnostic trace-derived evidence only. Not paper-facing benchmark proof. Evaluates near-field observation-noise robustness on a multi-pedestrian dense-stress trace fixture.",
+  "reproducibility": {
+    "issue": 2765,
+    "generated_at_utc": "2026-06-14T07:12:43.816481+00:00",
+    "command": "uv run python scripts/benchmark/run_dense_stress_observation_envelope.py --output-dir docs/context/evidence/issue_2765_dense_pedestrian_stress_2026-06-14",
+    "repo_head": "779a294e"
+  },
+  "fixture": {
+    "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/dense_pedestrian_stress_episode_0000.json",
+    "scenario_id": "dense_pedestrian_stress",
+    "seed": 2765,
+    "planner_id": "hybrid_rule_v0_minimal",
+    "episode_id": "dense_pedestrian_stress_ep0000",
+    "frame_count": 20,
+    "pedestrian_count": 3
+  },
+  "conditions": [
+    {
+      "condition": "noop",
+      "description": "No perturbation applied (baseline).",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "occlusion_mask_size": 0,
+        "delay_steps": 0,
+        "noise_profile": "none",
+        "is_noop": true
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 0,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "diagnostic_only",
+        "rationale": "No-perturbation baseline. Provides reference multi-pedestrian trajectory and action selection without observation noise."
+      }
+    },
+    {
+      "condition": "low_noise",
+      "description": "Bounded Gaussian position noise std=0.10 m, bound=0.20 m on all actors.",
+      "spec": {
+        "position_noise_std_m": 0.1,
+        "position_noise_bound_m": 0.2,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "occlusion_mask_size": 0,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 0,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "forecast_ambiguity_detected",
+        "rationale": "Multiple constant-velocity forecast ellipses overlap (120 overlap events). Dense scene creates forecast ambiguity under observation perturbation."
+      }
+    },
+    {
+      "condition": "medium_noise",
+      "description": "Bounded Gaussian position noise std=0.30 m, bound=0.60 m on all actors.",
+      "spec": {
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "occlusion_mask_size": 0,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 0,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "forecast_ambiguity_detected",
+        "rationale": "Multiple constant-velocity forecast ellipses overlap (120 overlap events). Dense scene creates forecast ambiguity under observation perturbation."
+      }
+    },
+    {
+      "condition": "high_noise",
+      "description": "Bounded Gaussian position noise std=0.50 m, bound=1.00 m on all actors.",
+      "spec": {
+        "position_noise_std_m": 0.5,
+        "position_noise_bound_m": 1.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "occlusion_mask_size": 0,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 0,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "forecast_ambiguity_detected",
+        "rationale": "Multiple constant-velocity forecast ellipses overlap (120 overlap events). Dense scene creates forecast ambiguity under observation perturbation."
+      }
+    },
+    {
+      "condition": "partial_missed_detection",
+      "description": "50% missed detection probability on each actor independently.",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.5,
+        "has_occlusion_mask": false,
+        "occlusion_mask_size": 0,
+        "delay_steps": 0,
+        "noise_profile": "missed_detection",
+        "is_noop": false
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        13,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 35,
+      "occluded_actor_observations_total": 0,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "forecast_ambiguity_detected",
+        "rationale": "Multiple constant-velocity forecast ellipses overlap (120 overlap events). Dense scene creates forecast ambiguity under observation perturbation."
+      }
+    },
+    {
+      "condition": "full_missed_detection",
+      "description": "100% missed detection probability (all actors dropped).",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 1.0,
+        "has_occlusion_mask": false,
+        "occlusion_mask_size": 0,
+        "delay_steps": 0,
+        "noise_profile": "missed_detection",
+        "is_noop": false
+      },
+      "first_observed_step": null,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [],
+      "missed_actor_observations_total": 60,
+      "occluded_actor_observations_total": 0,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": null,
+        "yield_feasible_first_observed": null
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "scenario_too_weak",
+        "rationale": "All pedestrians suppressed by missed detection or occlusion mask; no observation signal reaches the policy."
+      }
+    },
+    {
+      "condition": "single_actor_occlusion",
+      "description": "Occlude only the first actor (ped_a), others visible.",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": true,
+        "occlusion_mask_size": 3,
+        "delay_steps": 0,
+        "noise_profile": "occlusion_mask",
+        "is_noop": false
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 20,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "forecast_ambiguity_detected",
+        "rationale": "Multiple constant-velocity forecast ellipses overlap (120 overlap events). Dense scene creates forecast ambiguity under observation perturbation."
+      }
+    },
+    {
+      "condition": "two_actor_occlusion",
+      "description": "Occlude first two actors (ped_a, ped_b), third visible.",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": true,
+        "occlusion_mask_size": 3,
+        "delay_steps": 0,
+        "noise_profile": "occlusion_mask",
+        "is_noop": false
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 40,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "forecast_ambiguity_detected",
+        "rationale": "Multiple constant-velocity forecast ellipses overlap (120 overlap events). Dense scene creates forecast ambiguity under observation perturbation."
+      }
+    },
+    {
+      "condition": "delay_2_steps",
+      "description": "2-step delayed observation for all actors.",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "occlusion_mask_size": 0,
+        "delay_steps": 2,
+        "noise_profile": "delayed_observation",
+        "is_noop": false
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 0,
+      "delay_steps_configured": 2,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "forecast_ambiguity_detected",
+        "rationale": "Multiple constant-velocity forecast ellipses overlap (120 overlap events). Dense scene creates forecast ambiguity under observation perturbation."
+      }
+    },
+    {
+      "condition": "medium_noise_with_occlusion",
+      "description": "Medium Gaussian noise (std=0.30 m) + occlusion of the first actor.",
+      "spec": {
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": true,
+        "occlusion_mask_size": 3,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false
+      },
+      "first_observed_step": 0,
+      "first_visible_step_reference": 0,
+      "total_frames": 20,
+      "pedestrian_count": 3,
+      "fixture_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "perturbed_observed_steps": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ],
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 20,
+      "delay_steps_configured": 0,
+      "closest_distance_m": 0.1562,
+      "stop_yield_feasibility": {
+        "stop_feasible_first_observed": true,
+        "yield_feasible_first_observed": true
+      },
+      "action_proxy_changes": {
+        "linear_velocity_changed": true,
+        "events": [
+          "approach_dense",
+          "dense_proximity",
+          "dense_critical",
+          "dense_stop"
+        ],
+        "velocity_range": [
+          0.0,
+          0.8
+        ]
+      },
+      "forecast_ambiguity": {
+        "total_overlap_events": 120,
+        "evaluable_frames": 20
+      },
+      "classification": {
+        "label": "forecast_ambiguity_detected",
+        "rationale": "Multiple constant-velocity forecast ellipses overlap (120 overlap events). Dense scene creates forecast ambiguity under observation perturbation."
+      }
+    }
+  ],
+  "summary": {
+    "total_conditions": 10,
+    "pedestrian_count": 3,
+    "classifications": {
+      "noop": "diagnostic_only",
+      "low_noise": "forecast_ambiguity_detected",
+      "medium_noise": "forecast_ambiguity_detected",
+      "high_noise": "forecast_ambiguity_detected",
+      "partial_missed_detection": "forecast_ambiguity_detected",
+      "full_missed_detection": "scenario_too_weak",
+      "single_actor_occlusion": "forecast_ambiguity_detected",
+      "two_actor_occlusion": "forecast_ambiguity_detected",
+      "delay_2_steps": "forecast_ambiguity_detected",
+      "medium_noise_with_occlusion": "forecast_ambiguity_detected"
+    },
+    "forecast_ambiguity_detected": true
+  }
+}

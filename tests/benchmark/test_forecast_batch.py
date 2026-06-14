@@ -109,6 +109,67 @@ def test_forecast_batch_sampled_modes_round_trip() -> None:
     assert loaded.forecasts[0].mode_probabilities == [0.6, 0.4]
 
 
+def test_forecast_batch_actor_classes_round_trip() -> None:
+    """Actor classes should survive the ForecastBatch artifact boundary."""
+    batch = ForecastBatch(
+        provenance=_provenance(actor_classes={"ped_1": "pedestrian", "ped_2": "bicycle"}),
+        forecasts=[
+            ActorForecast(actor_id="ped_1", deterministic=[[1.0, 0.0], [1.5, 0.0]]),
+            ActorForecast(actor_id="ped_2", deterministic=[[0.0, 1.0], [0.0, 1.5]]),
+        ],
+    )
+
+    loaded = ForecastBatch.from_dict(batch.to_dict())
+
+    assert loaded.provenance.actor_classes == {"ped_1": "pedestrian", "ped_2": "bicycle"}
+
+
+def test_forecast_batch_preserves_positional_oracle_state_argument_order() -> None:
+    """Adding actor_classes should not shift the positional oracle_state argument."""
+    provenance = ForecastBatchProvenance(
+        "cv-baseline-v1",
+        "constant_velocity",
+        "deployable_observation",
+        CoordinateFrame(name="world", units="m", axes=("x", "y"), origin="map origin"),
+        0.5,
+        [0.5, 1.0],
+        "crosswalk_001",
+        7,
+        "native",
+        "none",
+        ["ped_1", "ped_2"],
+        [True, True],
+        {
+            "semantics": "true means forecast payload is available for actor_id",
+            "missing_actor_reasons": {},
+        },
+        {"name": "socnav_observation_v1", "features": ["position_m", "velocity_mps"]},
+        True,
+    )
+
+    assert provenance.oracle_state is True
+    assert provenance.actor_classes == {}
+
+
+def test_forecast_batch_actor_class_list_aligns_with_actor_ids() -> None:
+    """Aligned actor-class lists should normalize to an actor-id keyed mapping."""
+    provenance = _provenance(actor_classes=["pedestrian", "bicycle"])
+
+    assert provenance.actor_classes == {"ped_1": "pedestrian", "ped_2": "bicycle"}
+
+
+def test_forecast_batch_actor_classes_reject_unknown_actor_ids() -> None:
+    """Actor-class labels must only reference declared actors."""
+    with pytest.raises(ValueError, match="actor_classes"):
+        _provenance(actor_classes={"bike_1": "bicycle"})
+
+
+def test_forecast_batch_actor_classes_reject_misaligned_lists() -> None:
+    """List-style actor classes must align exactly with actor_ids."""
+    with pytest.raises(ValueError, match="actor_classes"):
+        _provenance(actor_classes=["pedestrian"])
+
+
 def test_forecast_batch_serializes_numpy_scalar_metadata(tmp_path) -> None:
     """JSON output should normalize numpy scalar metadata values."""
     batch = ForecastBatch(

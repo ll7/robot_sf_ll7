@@ -1336,3 +1336,15 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2758_semantic_forecast_baselines_2026-06-14/comparison_report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2758_semantic_forecast_baselines_2026-06-14/comparison_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2758_semantic_forecast_baselines_2026-06-14/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

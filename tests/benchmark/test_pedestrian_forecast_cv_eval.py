@@ -8,6 +8,12 @@ import sys
 
 import pytest
 
+from robot_sf.benchmark.pedestrian_forecast import (
+    goal_aware_cv_baseline,
+    semantic_cv_baseline,
+    signal_aware_cv_baseline,
+)
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 _SCRIPT_PATH = REPO_ROOT / "scripts/benchmark/run_cv_forecast_eval.py"
 
@@ -23,6 +29,7 @@ def _load_script_module():
 
 _mod = _load_script_module()
 
+BASELINE_FUNCTIONS = _mod.BASELINE_FUNCTIONS if hasattr(_mod, "BASELINE_FUNCTIONS") else {}
 MISSING_FAMILIES = _mod.MISSING_FAMILIES
 TRACE_CANDIDATES = _mod.TRACE_CANDIDATES
 _actor_class_counts = _mod._actor_class_counts
@@ -33,7 +40,7 @@ _generate_markdown = _mod._generate_markdown
 _get_actor_classes = _mod._get_actor_classes
 _pedestrian_count = _mod._pedestrian_count
 _trace_has_motion = _mod._trace_has_motion
-evaluate_single_trace = _mod.evaluate_single_trace
+_evaluate_single_trace = _mod.evaluate_single_trace
 
 
 def test_extract_trace_steps_converts_frames_key() -> None:
@@ -173,7 +180,7 @@ def test_actor_class_counts_default_legacy_pedestrians_and_count_cyclists() -> N
 
 def test_evaluate_single_trace_missing_file() -> None:
     """Missing trace file produces trace_file_missing status."""
-    result = evaluate_single_trace(
+    result = _evaluate_single_trace(
         {
             "family": "test",
             "label": "missing",
@@ -189,7 +196,7 @@ def test_evaluate_single_trace_missing_file() -> None:
 
 def test_evaluate_single_trace_with_motion() -> None:
     """Trace with motion produces evaluated status."""
-    result = evaluate_single_trace(
+    result = _evaluate_single_trace(
         {
             "family": "corridor_interaction",
             "label": "test_default_sf",
@@ -206,7 +213,7 @@ def test_evaluate_single_trace_with_motion() -> None:
 def test_evaluate_all_candidate_traces() -> None:
     """All defined trace candidates can be evaluated without crashing."""
     for candidate in TRACE_CANDIDATES:
-        result = evaluate_single_trace(candidate)
+        result = _evaluate_single_trace(candidate)
         assert "status" in result
         assert "metrics" in result
         assert result["status"] != "evaluation_error", (
@@ -352,7 +359,7 @@ def test_generate_markdown_includes_failure_cases() -> None:
 def test_occluded_emergence_candidate_is_evaluated_with_samples() -> None:
     """The occluded_emergence trace produces evaluated status with evaluable samples."""
     candidate = next(c for c in TRACE_CANDIDATES if c["family"] == "occluded_emergence")
-    result = evaluate_single_trace(candidate)
+    result = _evaluate_single_trace(candidate)
     assert result["status"] == "evaluated", (
         f"occluded_emergence expected 'evaluated', got '{result['status']}'"
     )
@@ -366,7 +373,7 @@ def test_non_corridor_evaluated_families_appear_in_gap_summary() -> None:
     """Evaluated non-corridor families are in the evaluated set, not limited or missing."""
     results = []
     for candidate in TRACE_CANDIDATES:
-        results.append(evaluate_single_trace(candidate))
+        results.append(_evaluate_single_trace(candidate))
 
     evaluated_families = sorted({r["family"] for r in results if r["status"] == "evaluated"})
     limited_families = sorted({r["family"] for r in results if r["status"] != "evaluated"})
@@ -381,7 +388,7 @@ def test_report_json_distinguishes_evaluated_limited_missing() -> None:
     """JSON report separates evaluated, limited, and missing trace families."""
     results = []
     for candidate in TRACE_CANDIDATES:
-        results.append(evaluate_single_trace(candidate))
+        results.append(_evaluate_single_trace(candidate))
 
     evaluated_families = sorted({r["family"] for r in results if r["status"] == "evaluated"})
     limited_families = sorted({r["family"] for r in results if r["status"] != "evaluated"})
@@ -389,12 +396,51 @@ def test_report_json_distinguishes_evaluated_limited_missing() -> None:
     assert "corridor_interaction" in evaluated_families
     assert "occluded_emergence" in evaluated_families
 
-    # crossing_proxy and bottleneck should be limited (zero motion)
     for fam in ["crossing_proxy", "bottleneck"]:
         assert fam in limited_families, (
             f"{fam} should be in limited families, got {limited_families}"
         )
 
-    # occluded_emergence should NOT be in limited or missing
     assert "occluded_emergence" not in limited_families
     assert "occluded_emergence" not in [mf["family"] for mf in MISSING_FAMILIES]
+
+
+def test_evaluate_single_trace_with_signal_aware_baseline() -> None:
+    """Trace can be evaluated with signal_aware baseline."""
+    result = _evaluate_single_trace(
+        TRACE_CANDIDATES[0],
+        baseline_function=signal_aware_cv_baseline,
+    )
+    assert "status" in result
+    assert "metrics" in result
+    assert result["status"] != "evaluation_error"
+
+
+def test_evaluate_single_trace_with_goal_aware_baseline() -> None:
+    """Trace can be evaluated with goal_aware baseline."""
+    result = _evaluate_single_trace(
+        TRACE_CANDIDATES[0],
+        baseline_function=goal_aware_cv_baseline,
+    )
+    assert "status" in result
+    assert "metrics" in result
+    assert result["status"] != "evaluation_error"
+
+
+def test_evaluate_single_trace_with_semantic_baseline() -> None:
+    """Trace can be evaluated with semantic baseline."""
+    result = _evaluate_single_trace(
+        TRACE_CANDIDATES[0],
+        baseline_function=semantic_cv_baseline,
+    )
+    assert "status" in result
+    assert "metrics" in result
+    assert result["status"] != "evaluation_error"
+
+
+def test_baseline_functions_dict_has_all_keys() -> None:
+    """BASELINE_FUNCTIONS dict contains all expected baseline names."""
+    assert "cv" in BASELINE_FUNCTIONS
+    assert "signal_aware" in BASELINE_FUNCTIONS
+    assert "goal_aware" in BASELINE_FUNCTIONS
+    assert "semantic" in BASELINE_FUNCTIONS

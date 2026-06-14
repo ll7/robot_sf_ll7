@@ -1,0 +1,280 @@
+{
+  "issue": 2758,
+  "claim_boundary": "Diagnostic-only, not paper-facing evidence. Limited to bounded repository trace fixtures.",
+  "reproducibility": {
+    "issue": 2758,
+    "generated_at_utc": "2026-06-14T23:18:12.251491+00:00",
+    "command": "uv run python scripts/benchmark/run_cv_forecast_eval.py --output-dir docs/context/evidence/issue_2758_semantic_forecast_baselines_2026-06-14 --compare-all",
+    "repo_head": "9ae4a6eb",
+    "horizons_s": [
+      0.5,
+      1.0,
+      2.0
+    ]
+  },
+  "semantic_usefulness": {
+    "fixtures_have_signal_metadata": false,
+    "fixtures_have_intent_metadata": false,
+    "conclusion": "Semantic conditioning is meaningful when fixtures carry signal/intent metadata. Existing durable fixtures lack this metadata, so the comparison shows whether baselines run correctly but does not yet show semantic conditioning improving calibration or collision relevance."
+  },
+  "summary_by_baseline": {
+    "cv": {
+      "evaluated_traces": 3,
+      "total_samples": 71.0
+    },
+    "signal_aware": {
+      "evaluated_traces": 3,
+      "total_samples": 71.0
+    },
+    "goal_aware": {
+      "evaluated_traces": 3,
+      "total_samples": 71.0
+    },
+    "semantic": {
+      "evaluated_traces": 3,
+      "total_samples": 71.0
+    }
+  },
+  "comparison_rows": [
+    {
+      "baseline": "cv",
+      "family": "corridor_interaction",
+      "label": "default_social_force",
+      "status": "evaluated",
+      "evaluable_samples": 30.0,
+      "mean_ade_0.5s": 0.024280292893659475,
+      "mean_ade_1s": 0.07693663848497238,
+      "mean_negative_log_likelihood_1s": 1.952169154331188,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "cv",
+      "family": "corridor_interaction",
+      "label": "ammv_social_force",
+      "status": "evaluated",
+      "evaluable_samples": 30.0,
+      "mean_ade_0.5s": 0.024280292893659475,
+      "mean_ade_1s": 0.07693663848497238,
+      "mean_negative_log_likelihood_1s": 1.952169154331188,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "cv",
+      "family": "crossing_proxy",
+      "label": "synthetic_crossing_proxy_orca",
+      "status": "limited_no_pedestrian_motion",
+      "evaluable_samples": 0.0,
+      "mean_ade_0.5s": null,
+      "mean_ade_1s": null,
+      "mean_negative_log_likelihood_1s": null,
+      "mean_miss_rate_1s": null,
+      "mean_within_95ci_1s": null
+    },
+    {
+      "baseline": "cv",
+      "family": "bottleneck",
+      "label": "minimal_fixture",
+      "status": "limited_no_pedestrian_motion",
+      "evaluable_samples": 0.0,
+      "mean_ade_0.5s": null,
+      "mean_ade_1s": null,
+      "mean_negative_log_likelihood_1s": null,
+      "mean_miss_rate_1s": null,
+      "mean_within_95ci_1s": null
+    },
+    {
+      "baseline": "cv",
+      "family": "occluded_emergence",
+      "label": "deterministic_occluded_emergence",
+      "status": "evaluated",
+      "evaluable_samples": 11.0,
+      "mean_ade_0.5s": 1.5139404881252134e-17,
+      "mean_ade_1s": 2.312964634635743e-17,
+      "mean_negative_log_likelihood_1s": 1.935457394748209,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "signal_aware",
+      "family": "corridor_interaction",
+      "label": "default_social_force",
+      "status": "evaluated",
+      "evaluable_samples": 30.0,
+      "mean_ade_0.5s": 0.024280292893659475,
+      "mean_ade_1s": 0.07693663848497238,
+      "mean_negative_log_likelihood_1s": 1.952169154331188,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "signal_aware",
+      "family": "corridor_interaction",
+      "label": "ammv_social_force",
+      "status": "evaluated",
+      "evaluable_samples": 30.0,
+      "mean_ade_0.5s": 0.024280292893659475,
+      "mean_ade_1s": 0.07693663848497238,
+      "mean_negative_log_likelihood_1s": 1.952169154331188,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "signal_aware",
+      "family": "crossing_proxy",
+      "label": "synthetic_crossing_proxy_orca",
+      "status": "limited_no_pedestrian_motion",
+      "evaluable_samples": 0.0,
+      "mean_ade_0.5s": null,
+      "mean_ade_1s": null,
+      "mean_negative_log_likelihood_1s": null,
+      "mean_miss_rate_1s": null,
+      "mean_within_95ci_1s": null
+    },
+    {
+      "baseline": "signal_aware",
+      "family": "bottleneck",
+      "label": "minimal_fixture",
+      "status": "limited_no_pedestrian_motion",
+      "evaluable_samples": 0.0,
+      "mean_ade_0.5s": null,
+      "mean_ade_1s": null,
+      "mean_negative_log_likelihood_1s": null,
+      "mean_miss_rate_1s": null,
+      "mean_within_95ci_1s": null
+    },
+    {
+      "baseline": "signal_aware",
+      "family": "occluded_emergence",
+      "label": "deterministic_occluded_emergence",
+      "status": "evaluated",
+      "evaluable_samples": 11.0,
+      "mean_ade_0.5s": 1.5139404881252134e-17,
+      "mean_ade_1s": 2.312964634635743e-17,
+      "mean_negative_log_likelihood_1s": 1.935457394748209,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "goal_aware",
+      "family": "corridor_interaction",
+      "label": "default_social_force",
+      "status": "evaluated",
+      "evaluable_samples": 30.0,
+      "mean_ade_0.5s": 0.024280292893659475,
+      "mean_ade_1s": 0.07693663848497238,
+      "mean_negative_log_likelihood_1s": 1.6715050915270422,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "goal_aware",
+      "family": "corridor_interaction",
+      "label": "ammv_social_force",
+      "status": "evaluated",
+      "evaluable_samples": 30.0,
+      "mean_ade_0.5s": 0.024280292893659475,
+      "mean_ade_1s": 0.07693663848497238,
+      "mean_negative_log_likelihood_1s": 1.6715050915270422,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "goal_aware",
+      "family": "crossing_proxy",
+      "label": "synthetic_crossing_proxy_orca",
+      "status": "limited_no_pedestrian_motion",
+      "evaluable_samples": 0.0,
+      "mean_ade_0.5s": null,
+      "mean_ade_1s": null,
+      "mean_negative_log_likelihood_1s": null,
+      "mean_miss_rate_1s": null,
+      "mean_within_95ci_1s": null
+    },
+    {
+      "baseline": "goal_aware",
+      "family": "bottleneck",
+      "label": "minimal_fixture",
+      "status": "limited_no_pedestrian_motion",
+      "evaluable_samples": 0.0,
+      "mean_ade_0.5s": null,
+      "mean_ade_1s": null,
+      "mean_negative_log_likelihood_1s": null,
+      "mean_miss_rate_1s": null,
+      "mean_within_95ci_1s": null
+    },
+    {
+      "baseline": "goal_aware",
+      "family": "occluded_emergence",
+      "label": "deterministic_occluded_emergence",
+      "status": "evaluated",
+      "evaluable_samples": 11.0,
+      "mean_ade_0.5s": 1.5139404881252134e-17,
+      "mean_ade_1s": 2.312964634635743e-17,
+      "mean_negative_log_likelihood_1s": 1.6492557074668623,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "semantic",
+      "family": "corridor_interaction",
+      "label": "default_social_force",
+      "status": "evaluated",
+      "evaluable_samples": 30.0,
+      "mean_ade_0.5s": 0.024280292893659475,
+      "mean_ade_1s": 0.07693663848497238,
+      "mean_negative_log_likelihood_1s": 2.4700745388210485,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "semantic",
+      "family": "corridor_interaction",
+      "label": "ammv_social_force",
+      "status": "evaluated",
+      "evaluable_samples": 30.0,
+      "mean_ade_0.5s": 0.024280292893659475,
+      "mean_ade_1s": 0.07693663848497238,
+      "mean_negative_log_likelihood_1s": 2.4700745388210485,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    },
+    {
+      "baseline": "semantic",
+      "family": "crossing_proxy",
+      "label": "synthetic_crossing_proxy_orca",
+      "status": "limited_no_pedestrian_motion",
+      "evaluable_samples": 0.0,
+      "mean_ade_0.5s": null,
+      "mean_ade_1s": null,
+      "mean_negative_log_likelihood_1s": null,
+      "mean_miss_rate_1s": null,
+      "mean_within_95ci_1s": null
+    },
+    {
+      "baseline": "semantic",
+      "family": "bottleneck",
+      "label": "minimal_fixture",
+      "status": "limited_no_pedestrian_motion",
+      "evaluable_samples": 0.0,
+      "mean_ade_0.5s": null,
+      "mean_ade_1s": null,
+      "mean_negative_log_likelihood_1s": null,
+      "mean_miss_rate_1s": null,
+      "mean_within_95ci_1s": null
+    },
+    {
+      "baseline": "semantic",
+      "family": "occluded_emergence",
+      "label": "deterministic_occluded_emergence",
+      "status": "evaluated",
+      "evaluable_samples": 11.0,
+      "mean_ade_0.5s": 1.5139404881252134e-17,
+      "mean_ade_1s": 2.312964634635743e-17,
+      "mean_negative_log_likelihood_1s": 2.4601859236831913,
+      "mean_miss_rate_1s": 0.0,
+      "mean_within_95ci_1s": 1.0
+    }
+  ]
+}

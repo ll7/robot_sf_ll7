@@ -11,6 +11,9 @@ from robot_sf.benchmark.pedestrian_forecast import (
     compute_batch_forecast_metrics,
     constant_velocity_gaussian_baseline,
     evaluate_forecast,
+    goal_aware_cv_baseline,
+    semantic_cv_baseline,
+    signal_aware_cv_baseline,
 )
 
 
@@ -297,3 +300,252 @@ def test_confidence_threshold_rejects_invalid_probability() -> None:
         chi_square_2d_threshold(0.0)
     with pytest.raises(ValueError, match="between 0 and 1"):
         chi_square_2d_threshold(1.0)
+
+
+def test_signal_aware_cv_red_slows_mean() -> None:
+    """Signal-aware CV with red signal reduces mean displacement."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal="red",
+        signal_available=True,
+    )
+    forecast = signal_aware_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    assert forecast.predictions[0].mean[0] < cv_forecast.predictions[0].mean[0]
+    assert forecast.predictions[0].metadata["signal_status"] == "red_slowed"
+    assert forecast.predictions[0].metadata["model"] == "signal_aware_cv"
+
+
+def test_signal_aware_cv_green_preserves_mean() -> None:
+    """Signal-aware CV with green signal preserves CV mean."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal="green",
+        signal_available=True,
+    )
+    forecast = signal_aware_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    np.testing.assert_allclose(forecast.predictions[0].mean, cv_forecast.predictions[0].mean)
+    assert forecast.predictions[0].metadata["signal_status"] == "green_preserved"
+
+
+def test_signal_aware_cv_unavailable_widens_uncertainty() -> None:
+    """Signal-aware CV with unavailable signal widens uncertainty, not assuming phase."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal=None,
+        signal_available=False,
+    )
+    cv_state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal=None,
+        signal_available=False,
+    )
+    forecast = signal_aware_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(cv_state, horizons_s=(1.0,))
+
+    np.testing.assert_allclose(forecast.predictions[0].mean, cv_forecast.predictions[0].mean)
+    assert forecast.predictions[0].metadata["signal_status"] == "unknown_widened"
+    assert forecast.predictions[0].metadata["std_m"] == pytest.approx(
+        cv_forecast.predictions[0].metadata["std_m"]
+    )
+
+
+def test_signal_aware_cv_unrecognized_signal_preserves_uncertainty() -> None:
+    """Available but unrecognized signal values are labeled without widening uncertainty."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal="yellow",
+        signal_available=True,
+    )
+    forecast = signal_aware_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    np.testing.assert_allclose(forecast.predictions[0].mean, cv_forecast.predictions[0].mean)
+    assert forecast.predictions[0].metadata["signal_status"] == "unrecognized_preserved"
+    assert forecast.predictions[0].metadata["std_m"] == pytest.approx(
+        cv_forecast.predictions[0].metadata["std_m"]
+    )
+
+
+def test_goal_aware_cv_crossing_adjusts_mean() -> None:
+    """Goal-aware CV with crossing intent increases mean displacement."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal="green",
+        signal_available=True,
+    )
+    forecast = goal_aware_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    assert forecast.predictions[0].mean[0] > cv_forecast.predictions[0].mean[0]
+    assert forecast.predictions[0].metadata["intent_status"] == "crossing_adjusted"
+    assert forecast.predictions[0].metadata["model"] == "goal_aware_cv"
+
+
+def test_goal_aware_cv_walking_along_adjusts_mean() -> None:
+    """Goal-aware CV with walking_along intent decreases mean displacement."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="walking_along",
+        signal="green",
+        signal_available=True,
+    )
+    forecast = goal_aware_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    assert forecast.predictions[0].mean[0] < cv_forecast.predictions[0].mean[0]
+    assert forecast.predictions[0].metadata["intent_status"] == "walking_along_adjusted"
+
+
+def test_goal_aware_cv_unavailable_widens_uncertainty() -> None:
+    """Goal-aware CV with absent intent widens uncertainty, not assuming a goal."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent=None,
+        signal="green",
+        signal_available=True,
+    )
+    forecast = goal_aware_cv_baseline(state, horizons_s=(1.0,))
+
+    assert forecast.predictions[0].metadata["intent_status"] == "unknown_widened"
+    assert forecast.predictions[0].metadata["std_m"] == pytest.approx((0.3 + 0.4 * 1.0) * 1.3)
+
+
+def test_goal_aware_cv_unrecognized_intent_preserves_uncertainty() -> None:
+    """Present but unrecognized intent values are labeled without widening uncertainty."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="standing",
+        signal="green",
+        signal_available=True,
+    )
+    forecast = goal_aware_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    np.testing.assert_allclose(forecast.predictions[0].mean, cv_forecast.predictions[0].mean)
+    assert forecast.predictions[0].metadata["intent_status"] == "unrecognized_preserved"
+    assert forecast.predictions[0].metadata["std_m"] == pytest.approx(
+        cv_forecast.predictions[0].metadata["std_m"]
+    )
+
+
+def test_semantic_cv_composes_signal_and_goal() -> None:
+    """Semantic CV composes signal and goal factors correctly."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal="red",
+        signal_available=True,
+    )
+    forecast = semantic_cv_baseline(state, horizons_s=(1.0,))
+    pred = forecast.predictions[0]
+
+    expected_mean_x = 0.0 + 1.0 * 1.0 * 0.4 * 1.2
+    np.testing.assert_allclose(pred.mean[0], expected_mean_x)
+    assert pred.metadata["signal_status"] == "red_slowed"
+    assert pred.metadata["intent_status"] == "crossing_adjusted"
+    assert pred.metadata["model"] == "semantic_cv"
+
+
+def test_semantic_cv_unavailable_widens_both() -> None:
+    """Semantic CV widens uncertainty for both unavailable signal and intent."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent=None,
+        signal=None,
+        signal_available=False,
+    )
+    forecast = semantic_cv_baseline(state, horizons_s=(1.0,))
+    pred = forecast.predictions[0]
+
+    base_std = 0.3 + 0.4 * 1.0
+    expected_std = base_std * 1.5 * 1.3
+    assert pred.metadata["std_m"] == pytest.approx(expected_std)
+    assert pred.metadata["signal_status"] == "unknown_widened"
+    assert pred.metadata["intent_status"] == "unknown_widened"
+
+
+def test_semantic_cv_unrecognized_context_preserves_uncertainty() -> None:
+    """Semantic CV labels present unrecognized context without treating it as unavailable."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="standing",
+        signal="yellow",
+        signal_available=True,
+    )
+    forecast = semantic_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+    pred = forecast.predictions[0]
+
+    np.testing.assert_allclose(pred.mean, cv_forecast.predictions[0].mean)
+    assert pred.metadata["std_m"] == pytest.approx(cv_forecast.predictions[0].metadata["std_m"])
+    assert pred.metadata["signal_status"] == "unrecognized_preserved"
+    assert pred.metadata["intent_status"] == "unrecognized_preserved"
+
+
+def test_compute_batch_forecast_metrics_with_baseline_function() -> None:
+    """Batch metrics accept an explicit baseline function."""
+    dt_s = 0.5
+    trace_steps = []
+    for index in range(5):
+        x = index * dt_s
+        trace_steps.append(
+            {
+                "step": index,
+                "time_s": x,
+                "pedestrians": [
+                    {
+                        "id": 1,
+                        "position": [x, 0.0],
+                        "velocity": [1.0, 0.0],
+                        "intent_label": "crossing",
+                        "signal_state": {"available": True, "label": "green"},
+                    }
+                ],
+            }
+        )
+
+    cv_summary = compute_batch_forecast_metrics(trace_steps, horizons_s=(0.5, 1.0), dt_s=dt_s)
+    signal_summary = compute_batch_forecast_metrics(
+        trace_steps,
+        horizons_s=(0.5, 1.0),
+        dt_s=dt_s,
+        baseline_function=signal_aware_cv_baseline,
+    )
+
+    assert cv_summary["forecast_evaluable_samples"] > 0
+    assert signal_summary["forecast_evaluable_samples"] > 0
+    assert cv_summary["forecast_evaluable_samples"] == signal_summary["forecast_evaluable_samples"]

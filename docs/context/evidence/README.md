@@ -363,3 +363,9 @@ Policy caveats:
   investigation of the t_intersection_transfer hard slice. Follows #2801 stop decision and
   implements the recommended non-topology successor target. Hypothesis: per-step scoring will
   separate blocked_geometry from switch_too_often. Not benchmark or paper-facing evidence.
+- `issue_2758_semantic_forecast_baselines_2026-06-14/`: diagnostic-only comparison of
+  constant-velocity and semantic (signal-aware, goal-aware, combined) forecast baselines on
+  bounded repository trace fixtures. Includes a compact summary plus JSON/Markdown comparison
+  report. Existing durable fixtures lack signal/intent metadata, so the comparison proves
+  baselines run correctly but does not show semantic conditioning improving calibration or
+  collision relevance yet. Not benchmark or paper-facing evidence.

@@ -21,15 +21,20 @@ import hashlib
 import json
 import pathlib
 import subprocess
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from robot_sf.benchmark.pedestrian_forecast import (
+    BASELINE_FUNCTIONS,
     DEFAULT_FORECAST_HORIZONS_S,
+    ForecastBaselineFunction,
     actor_type_metric_key,
     compute_batch_forecast_metrics,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -188,6 +193,7 @@ def _git_head() -> str:
 
 def evaluate_single_trace(
     candidate: dict[str, Any],
+    baseline_function: ForecastBaselineFunction | None = None,
 ) -> dict[str, Any]:
     """Run CV forecast eval on one trace candidate and return a result dict."""
     rel_path = candidate["path"]
@@ -247,6 +253,7 @@ def evaluate_single_trace(
             trace_steps,
             horizons_s=list(DEFAULT_FORECAST_HORIZONS_S),
             dt_s=dt_s,
+            baseline_function=baseline_function,
         )
     except Exception as exc:
         result["status"] = "evaluation_error"
@@ -515,6 +522,18 @@ def main() -> None:
         default="docs/context/evidence/issue_2774_motion_rich_forecast_traces_2026-06-14",
         help="Output directory for evidence artifacts.",
     )
+    parser.add_argument(
+        "--baseline",
+        type=str,
+        default="cv",
+        choices=list(BASELINE_FUNCTIONS.keys()),
+        help="Baseline function to use (default: cv).",
+    )
+    parser.add_argument(
+        "--compare-all",
+        action="store_true",
+        help="Run all baselines and write a comparison report.",
+    )
     args = parser.parse_args()
 
     output_dir = REPO_ROOT / args.output_dir
@@ -522,61 +541,265 @@ def main() -> None:
 
     repo_head = _git_head()
     generated_at = datetime.datetime.now(datetime.UTC).isoformat()
+
+    baselines_to_run = list(BASELINE_FUNCTIONS.keys()) if args.compare_all else [args.baseline]
     command = (
         f"uv run python scripts/benchmark/run_cv_forecast_eval.py --output-dir {args.output_dir}"
+        + (f" --baseline {args.baseline}" if not args.compare_all else " --compare-all")
     )
 
     repro = {
-        "issue": 2774,
+        "issue": 2758,
         "generated_at_utc": generated_at,
         "command": command,
         "repo_head": repo_head,
         "horizons_s": list(DEFAULT_FORECAST_HORIZONS_S),
     }
 
-    results: list[dict[str, Any]] = []
-    for candidate in TRACE_CANDIDATES:
-        result = evaluate_single_trace(candidate)
-        results.append(result)
+    all_results: dict[str, list[dict[str, Any]]] = {}
+    for baseline_name in baselines_to_run:
+        baseline_fn = BASELINE_FUNCTIONS[baseline_name]
+        results: list[dict[str, Any]] = []
+        for candidate in TRACE_CANDIDATES:
+            result = evaluate_single_trace(candidate, baseline_function=baseline_fn)
+            result["baseline"] = baseline_name
+            results.append(result)
+        all_results[baseline_name] = results
 
-    failure_cases = _build_failure_cases(results)
-    evaluated_families = sorted({r["family"] for r in results if r["status"] == "evaluated"})
-    limited_families = sorted({r["family"] for r in results if r["status"] != "evaluated"})
+    if args.compare_all:
+        _write_comparison_report(all_results, repro, output_dir)
+    else:
+        results = all_results[args.baseline]
+        failure_cases = _build_failure_cases(results)
+        evaluated_families = sorted({r["family"] for r in results if r["status"] == "evaluated"})
+        limited_families = sorted({r["family"] for r in results if r["status"] != "evaluated"})
 
-    report_json: dict[str, Any] = {
-        "issue": 2774,
+        report_json: dict[str, Any] = {
+            "issue": 2758,
+            "claim_boundary": (
+                "Diagnostic-only, not paper-facing evidence. "
+                "Limited to bounded repository trace fixtures."
+            ),
+            "reproducibility": repro,
+            "trace_family_gaps": {
+                "evaluated": evaluated_families,
+                "limited": limited_families,
+                "missing": [mf["family"] for mf in MISSING_FAMILIES],
+            },
+            "results_by_trace": results,
+            "failure_cases": failure_cases,
+        }
+
+        json_path = output_dir / "report.json"
+        with open(json_path, "w") as fh:
+            json.dump(report_json, fh, indent=2)
+
+        md_content = _generate_markdown(results, failure_cases, repro)
+        md_path = output_dir / "report.md"
+        with open(md_path, "w") as fh:
+            fh.write(md_content)
+
+        print(f"Wrote {json_path}")
+        print(f"Wrote {md_path}")
+
+    for baseline_name, results in all_results.items():
+        for r in results:
+            status_icon = "+" if r["status"] == "evaluated" else "~"
+            samples = r.get("metrics", {}).get("forecast_evaluable_samples", 0)
+            print(
+                f"  [{status_icon}] {baseline_name}/{r['family']}/{r['label']}: "
+                f"{r['status']} ({samples:.0f} samples)"
+            )
+
+
+def _write_comparison_report(
+    all_results: dict[str, list[dict[str, Any]]],
+    repro: dict[str, Any],
+    output_dir: pathlib.Path,
+) -> None:
+    """Write a comparison report across all baselines."""
+    baselines = list(all_results.keys())
+
+    comparison_rows: list[dict[str, Any]] = []
+    for baseline_name in baselines:
+        results = all_results[baseline_name]
+        for r in results:
+            metrics = r.get("metrics", {})
+            comparison_rows.append(
+                {
+                    "baseline": baseline_name,
+                    "family": r["family"],
+                    "label": r["label"],
+                    "status": r["status"],
+                    "evaluable_samples": metrics.get("forecast_evaluable_samples", 0.0),
+                    "mean_ade_0.5s": metrics.get("mean_ade_0.5s"),
+                    "mean_ade_1s": metrics.get("mean_ade_1s"),
+                    "mean_negative_log_likelihood_1s": metrics.get(
+                        "mean_negative_log_likelihood_1s"
+                    ),
+                    "mean_miss_rate_1s": metrics.get("mean_miss_rate_1s"),
+                    "mean_within_95ci_1s": metrics.get("mean_within_95ci_1s"),
+                }
+            )
+
+    fixture_has_signal = _fixtures_have_signal_metadata(all_results)
+    fixture_has_intent = _fixtures_have_intent_metadata(all_results)
+
+    summary_by_baseline: dict[str, dict[str, Any]] = {}
+    for baseline_name in baselines:
+        results = all_results[baseline_name]
+        evaluable = [r for r in results if r["status"] == "evaluated"]
+        total_samples = sum(
+            r.get("metrics", {}).get("forecast_evaluable_samples", 0.0) for r in evaluable
+        )
+        summary_by_baseline[baseline_name] = {
+            "evaluated_traces": len(evaluable),
+            "total_samples": float(total_samples),
+        }
+
+    report: dict[str, Any] = {
+        "issue": 2758,
         "claim_boundary": (
             "Diagnostic-only, not paper-facing evidence. "
             "Limited to bounded repository trace fixtures."
         ),
         "reproducibility": repro,
-        "trace_family_gaps": {
-            "evaluated": evaluated_families,
-            "limited": limited_families,
-            "missing": [mf["family"] for mf in MISSING_FAMILIES],
+        "semantic_usefulness": {
+            "fixtures_have_signal_metadata": fixture_has_signal,
+            "fixtures_have_intent_metadata": fixture_has_intent,
+            "conclusion": (
+                "Semantic conditioning is meaningful when fixtures carry signal/intent "
+                "metadata. Existing durable fixtures lack this metadata, so the comparison "
+                "shows whether baselines run correctly but does not yet show semantic "
+                "conditioning improving calibration or collision relevance."
+            ),
         },
-        "results_by_trace": results,
-        "failure_cases": failure_cases,
+        "summary_by_baseline": summary_by_baseline,
+        "comparison_rows": comparison_rows,
     }
 
-    json_path = output_dir / "report.json"
+    json_path = output_dir / "comparison_report.json"
     with open(json_path, "w") as fh:
-        json.dump(report_json, fh, indent=2)
+        json.dump(report, fh, indent=2)
 
-    md_content = _generate_markdown(results, failure_cases, repro)
-    md_path = output_dir / "report.md"
+    md_lines = [
+        "# Semantic Forecast Baseline Comparison",
+        "",
+        "## Claim Boundary",
+        "",
+        "**Diagnostic-only, not paper-facing evidence.** Compares constant-velocity and "
+        "semantic forecast baselines on bounded repository trace fixtures.",
+        "",
+        "## Reproducibility",
+        "",
+        f"- **Issue:** #{repro['issue']}",
+        f"- **Generated at (UTC):** {repro['generated_at_utc']}",
+        f"- **Command:** `{repro['command']}`",
+        f"- **Repo HEAD:** `{repro['repo_head']}`",
+        f"- **Forecast horizons:** {repro['horizons_s']}",
+        "",
+        "## Fixture Metadata Assessment",
+        "",
+        f"- **Fixtures have signal metadata:** {fixture_has_signal}",
+        f"- **Fixtures have intent metadata:** {fixture_has_intent}",
+        "",
+    ]
+
+    if not fixture_has_signal and not fixture_has_intent:
+        md_lines.extend(
+            [
+                "Existing durable fixtures lack signal and intent metadata. Semantic "
+                "conditioning baselines run correctly but their calibration/collision-relevance "
+                "improvement cannot be measured until fixtures include this metadata.",
+                "",
+            ]
+        )
+
+    md_lines.extend(
+        [
+            "## Baseline Summary",
+            "",
+            "| Baseline | Evaluated Traces | Total Samples |",
+            "|----------|------------------|---------------|",
+        ]
+    )
+    for baseline_name in baselines:
+        s = summary_by_baseline[baseline_name]
+        md_lines.append(
+            f"| {baseline_name} | {s['evaluated_traces']:.0f} | {s['total_samples']:.0f} |"
+        )
+
+    md_lines.extend(
+        [
+            "",
+            "## Comparison Table",
+            "",
+            "| Baseline | Family | Label | Status | Samples | ADE 1s | NLL 1s | Miss Rate 1s |",
+            "|----------|--------|-------|--------|---------|--------|--------|-------------|",
+        ]
+    )
+    for row in comparison_rows:
+        ade = f"{row['mean_ade_1s']:.4f}" if row["mean_ade_1s"] is not None else "-"
+        nll = (
+            f"{row['mean_negative_log_likelihood_1s']:.4f}"
+            if row["mean_negative_log_likelihood_1s"] is not None
+            else "-"
+        )
+        miss = f"{row['mean_miss_rate_1s']:.2%}" if row["mean_miss_rate_1s"] is not None else "-"
+        md_lines.append(
+            f"| {row['baseline']} | {row['family']} | {row['label']} "
+            f"| {row['status']} | {row['evaluable_samples']:.0f} "
+            f"| {ade} | {nll} | {miss} |"
+        )
+
+    md_content = "\n".join(md_lines)
+    md_path = output_dir / "comparison_report.md"
     with open(md_path, "w") as fh:
         fh.write(md_content)
 
     print(f"Wrote {json_path}")
     print(f"Wrote {md_path}")
 
-    for r in results:
-        status_icon = "+" if r["status"] == "evaluated" else "~"
-        samples = r.get("metrics", {}).get("forecast_evaluable_samples", 0)
-        print(
-            f"  [{status_icon}] {r['family']}/{r['label']}: {r['status']} ({samples:.0f} samples)"
-        )
+
+def _fixtures_have_signal_metadata(all_results: dict[str, list[dict[str, Any]]]) -> bool:
+    """Check whether any evaluated trace has signal metadata on pedestrians."""
+    for ped in _iter_unique_evaluated_pedestrians(all_results):
+        if ped.get("signal_label") is not None:
+            return True
+        ss = ped.get("signal_state")
+        if isinstance(ss, dict) and ss.get("label") is not None:
+            return True
+    return False
+
+
+def _fixtures_have_intent_metadata(all_results: dict[str, list[dict[str, Any]]]) -> bool:
+    """Check whether any evaluated trace has intent metadata on pedestrians."""
+    return any(
+        ped.get("intent_label") is not None
+        for ped in _iter_unique_evaluated_pedestrians(all_results)
+    )
+
+
+def _iter_unique_evaluated_pedestrians(
+    all_results: dict[str, list[dict[str, Any]]],
+) -> Iterator[dict[str, Any]]:
+    """Yield pedestrians from each unique evaluated trace with forecast samples."""
+    checked_paths: set[pathlib.Path] = set()
+    for results in all_results.values():
+        for r in results:
+            if r["status"] != "evaluated":
+                continue
+            metrics = r.get("metrics", {})
+            if metrics.get("forecast_evaluable_samples", 0.0) <= 0.0:
+                continue
+            path = REPO_ROOT / r["trace_path"]
+            if path in checked_paths or not path.exists():
+                continue
+            checked_paths.add(path)
+            trace = _load_trace(path)
+            frames = trace.get("frames") or trace.get("steps") or []
+            for frame in frames:
+                yield from frame.get("pedestrians", [])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,19 @@
+{
+  "schema_version": "dissertation_evidence_ledger.v2",
+  "rows": [
+    {
+      "area": "topology_guidance",
+      "source_issues": [2750],
+      "claim_gap": "Needs a fresh benchmark run before dissertation wording.",
+      "evidence_promotion_path": "benchmark_run",
+      "evidence_tier": "diagnostic"
+    },
+    {
+      "area": "prediction",
+      "source_issues": [2751],
+      "claim_gap": "",
+      "evidence_promotion_path": "",
+      "evidence_tier": "non-claimable"
+    }
+  ]
+}

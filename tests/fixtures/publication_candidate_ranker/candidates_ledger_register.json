@@ -1,0 +1,97 @@
+[
+  {
+    "issue_number": 2750,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2750",
+    "title": "ledger boost candidate with claim gap closed",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.8,
+      "evidence_readiness": 0.65,
+      "implementation_boundedness": 0.75,
+      "artifact_dependency": 0.2,
+      "expected_research_value": 0.8,
+      "duplication_risk": 0.1
+    },
+    "reasons": ["strong evidence", "clear scope"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  },
+  {
+    "issue_number": 2751,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2751",
+    "title": "ledger tracked candidate without promotion",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.7,
+      "evidence_readiness": 0.6,
+      "implementation_boundedness": 0.65,
+      "artifact_dependency": 0.3,
+      "expected_research_value": 0.6,
+      "duplication_risk": 0.15
+    },
+    "reasons": ["moderate relevance"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  },
+  {
+    "issue_number": 2752,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2752",
+    "title": "negative result diagnostic_only candidate",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.75,
+      "evidence_readiness": 0.7,
+      "implementation_boundedness": 0.7,
+      "artifact_dependency": 0.25,
+      "expected_research_value": 0.65,
+      "duplication_risk": 0.1
+    },
+    "reasons": ["similar to prior work"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  },
+  {
+    "issue_number": 2753,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2753",
+    "title": "negative result failed candidate",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.7,
+      "evidence_readiness": 0.65,
+      "implementation_boundedness": 0.6,
+      "artifact_dependency": 0.3,
+      "expected_research_value": 0.55,
+      "duplication_risk": 0.2
+    },
+    "reasons": ["retry of failed benchmark"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  },
+  {
+    "issue_number": 2754,
+    "issue_url": "https://github.com/ll7/robot_sf_ll7/issues/2754",
+    "title": "no ledger or register entry candidate",
+    "linter_ok": true,
+    "linter_findings": [],
+    "scores": {
+      "dissertation_relevance": 0.8,
+      "evidence_readiness": 0.8,
+      "implementation_boundedness": 0.75,
+      "artifact_dependency": 0.2,
+      "expected_research_value": 0.75,
+      "duplication_risk": 0.1
+    },
+    "reasons": ["clean candidate"],
+    "evidence_caveats": [],
+    "duplication_notes": [],
+    "blocked_by": []
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "schema_version": "negative_result_register.v1",
+  "entries": [
+    {
+      "linked_issues": [2752],
+      "result_classification": "diagnostic_only",
+      "why_failed_or_inconclusive": "Previous attempt produced diagnostic-only evidence.",
+      "recommended_next_action": "Change the scenario before retrying.",
+      "claim_boundary": "Diagnostic-only, not benchmark evidence."
+    },
+    {
+      "linked_issues": [2753],
+      "result_classification": "failed",
+      "why_failed_or_inconclusive": "Benchmark run failed closed.",
+      "recommended_next_action": "Repair fail-closed contract first.",
+      "claim_boundary": "Failed run must not be promoted."
+    }
+  ]
+}

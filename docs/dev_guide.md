@@ -387,6 +387,24 @@ Markdown with overall metrics, per-manifest breakdowns, provider trends,
 incomplete-provider and failure-class totals, common missing artifact counts,
 and the same route-evidence-only recommendations and warning.
 
+### PR Review: Route Efficiency
+
+When reviewing PRs with route-efficiency changes, ensure:
+
+- [ ] **Route completeness vs task success**: Complete artifacts or a zero exit code are
+  not evidence that the task was accepted, correct, or merged.
+- [ ] **Validation presence vs validation success**: Check `validation_presence.present`
+  separately from `validation_presence.success_inferable`; a validation artifact can exist
+  while the validation result failed or stayed ambiguous.
+- [ ] **Reroute count interpretation**: Treat high reroute counts (2 or more) and
+  `reroute_threshold_met` warnings as routing-friction evidence, not as proof that the
+  final diff is wrong.
+- [ ] **Raw-log avoidance**: Start from `scripts/dev/route_efficiency_report.py` outputs and
+  compact worker artifacts; read raw worker logs only when compact evidence is missing,
+  inconsistent, failed, or suspicious.
+- [ ] **Visible evidence warning**: Confirm the report still displays the route-evidence-only
+  warning and does not let route metrics replace manual diff inspection or local validation.
+
 Assume `OWNER`, `REPO`, `ISSUE`, `BRANCH`, and `BASE` are set:
 
 ```bash

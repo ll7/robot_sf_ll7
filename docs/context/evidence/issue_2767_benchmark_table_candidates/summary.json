@@ -1,0 +1,27 @@
+{
+  "schema_version": "benchmark_table_candidates.v1",
+  "issue": 2767,
+  "generated_at_utc": "2026-06-14T10:53:54.681211+00:00",
+  "status": "draft_only_not_for_manuscript_use_without_verification",
+  "tables": [
+    "amv_metric_summary",
+    "topology_diagnostic_summary",
+    "signalized_crossing_metric_summary",
+    "prediction_baseline_summary",
+    "observation_noise_diagnostic_summary",
+    "negative_result_summary"
+  ],
+  "source_inputs": {
+    "ledger": "docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json",
+    "claim_map": "docs/context/issue_1542_manuscript_claim_evidence_map.md",
+    "signal_summary": "docs/context/evidence/issue_2799_signalized_runtime/summary.json",
+    "observation_noise_summary": "docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json"
+  },
+  "claim_boundary": "synthesis draft only; not benchmark evidence, paper-facing evidence, or manuscript text",
+  "conservative_rules": [
+    "draft-only unless dependencies are current and claimable",
+    "diagnostic/stale/non-claimable rows weaken or block wording",
+    "fallback/degraded/unavailable/proxy-only rows are not success evidence",
+    "missing tracked sources render a table unavailable rather than inventing values"
+  ]
+}

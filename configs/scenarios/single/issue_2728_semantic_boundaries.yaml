@@ -1,0 +1,73 @@
+schema_version: robot_sf.scenario_matrix.v1
+
+scenarios:
+- name: robot_route_around_separator
+  map_file: ../../../maps/svg_maps/issue_2728_semantic_boundaries.svg
+  simulation_config:
+    max_episode_steps: 300
+    ped_density: 0.0
+  single_pedestrians: []
+  robot_config: {}
+  metadata:
+    claim_boundary: diagnostic_only_not_benchmark
+    archetype: semantic_boundary_topology
+    density: diagnostic_fixture
+    purpose: semantic_boundary_route_around
+    semantic_boundary_expectations:
+    - id: separator
+      label: semantic_boundary_separator__vehicle_blocking__occluding
+      vehicle_blocking: true
+      pedestrian_passable: false
+      occluding: true
+      spawn_edge: false
+    - id: ped_spawn_edge
+      label: semantic_boundary_ped_edge__pedestrian_passable__spawn_edge
+      vehicle_blocking: false
+      pedestrian_passable: true
+      occluding: false
+      spawn_edge: true
+    route_assertions:
+    - description: robot authored route avoids crossing the vehicle_blocking separator
+      route_does_not_cross_boundary: separator
+  seeds:
+  - 2728001
+  - 2728002
+  - 2728003
+
+- name: pedestrian_emergence_from_spawn_edge
+  map_file: ../../../maps/svg_maps/issue_2728_semantic_boundaries.svg
+  simulation_config:
+    max_episode_steps: 300
+    ped_density: 0.0
+  single_pedestrians:
+  - id: ped_emerge_1
+    start: [3.0, 4.0]
+    goal: [12.0, 8.0]
+    note: pedestrian emerges from the pedestrian-passable spawn-edge boundary
+  robot_config: {}
+  metadata:
+    claim_boundary: diagnostic_only_not_benchmark
+    archetype: semantic_boundary_topology
+    density: diagnostic_fixture
+    purpose: semantic_boundary_pedestrian_emergence
+    semantic_boundary_expectations:
+    - id: separator
+      label: semantic_boundary_separator__vehicle_blocking__occluding
+      vehicle_blocking: true
+      pedestrian_passable: false
+      occluding: true
+      spawn_edge: false
+    - id: ped_spawn_edge
+      label: semantic_boundary_ped_edge__pedestrian_passable__spawn_edge
+      vehicle_blocking: false
+      pedestrian_passable: true
+      occluding: false
+      spawn_edge: true
+    emergence_assertions:
+    - description: pedestrian start is near the pedestrian_passable spawn_edge boundary
+      start_near_boundary: ped_spawn_edge
+      max_distance: 5.0
+  seeds:
+  - 2728011
+  - 2728012
+  - 2728013

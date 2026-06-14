@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Fixture map for issue 2728: semantic boundary metadata validation.
+
+     Features:
+     - Vehicle-blocking/occluding separator at x=18 (y=5..15)
+     - Pedestrian-passable/spawn-edge boundary at x=1 (y=5..15)
+     - Robot route that goes around the separator (above it)
+     - Pedestrian route that emerges from the spawn-edge boundary
+-->
+
+<svg
+   width="40"
+   height="20"
+   viewBox="0 0 40 20"
+   version="1.1"
+   id="svg_issue_2728"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns="http://www.w3.org/2000/svg">
+  <defs id="defs1" />
+  <g id="layer1" inkscape:label="Layer 1">
+    <!-- Boundary walls -->
+    <rect style="fill:#000000;fill-opacity:1;stroke:none"
+          id="wall_left" width="1" height="20" x="0" y="0"
+          inkscape:label="obstacle" />
+    <rect style="fill:#000000;fill-opacity:1;stroke:none"
+          id="wall_right" width="1" height="20" x="39" y="0"
+          inkscape:label="obstacle" />
+    <rect style="fill:#000000;fill-opacity:1;stroke:none"
+          id="wall_top" width="40" height="1" x="0" y="0"
+          inkscape:label="obstacle" />
+    <rect style="fill:#000000;fill-opacity:1;stroke:none"
+          id="wall_bottom" width="40" height="1" x="0" y="19"
+          inkscape:label="obstacle" />
+
+    <!-- Robot spawn zone (yellow) -->
+    <rect style="fill:#ffdf00;fill-opacity:1;stroke:none"
+          id="robot_spawn_zone" width="4" height="4" x="2" y="8"
+          inkscape:label="robot_spawn_zone" />
+    <!-- Robot goal zone (orange) -->
+    <rect style="fill:#ff6c00;fill-opacity:1;stroke:none"
+          id="robot_goal_zone" width="4" height="4" x="34" y="8"
+          inkscape:label="robot_goal_zone" />
+    <!-- Pedestrian spawn zone (light green) -->
+    <rect style="fill:#90ee90;fill-opacity:1;stroke:none"
+          id="ped_spawn_zone" width="4" height="4" x="2" y="2"
+          inkscape:label="ped_spawn_zone" />
+    <!-- Pedestrian goal zone (dark green) -->
+    <rect style="fill:#228b22;fill-opacity:1;stroke:none"
+          id="ped_goal_zone" width="4" height="4" x="2" y="14"
+          inkscape:label="ped_goal_zone" />
+
+    <!-- Semantic boundary: vehicle-blocking / occluding separator (red) -->
+    <path style="fill:none;stroke:#ff0000;stroke-width:0.3;stroke-opacity:1"
+          d="M 18,5 L 18,15"
+          id="separator"
+          inkscape:label="semantic_boundary_separator__vehicle_blocking__occluding" />
+
+    <!-- Semantic boundary: pedestrian-passable / spawn-edge (blue) -->
+    <path style="fill:none;stroke:#0000ff;stroke-width:0.3;stroke-opacity:1"
+          d="M 1,5 L 1,15"
+          id="ped_spawn_edge"
+          inkscape:label="semantic_boundary_ped_edge__pedestrian_passable__spawn_edge" />
+
+    <!-- Robot route: goes above the separator (around it) -->
+    <path style="fill:none;stroke:#0310b4;stroke-width:0.2;stroke-opacity:0.5"
+          d="M 4,10 L 10,10 L 16,3 L 22,3 L 28,10 L 36,10"
+          id="robot_route_0_0"
+          inkscape:label="robot_route_0_0" />
+
+    <!-- Pedestrian route: emerges from spawn-edge boundary, crosses to goal -->
+    <path style="fill:none;stroke:#006400;stroke-width:0.2;stroke-opacity:0.5"
+          d="M 3,4 L 8,6 L 12,8"
+          id="ped_route_0_0"
+          inkscape:label="ped_route_0_0" />
+  </g>
+</svg>

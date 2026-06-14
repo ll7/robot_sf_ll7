@@ -16,6 +16,7 @@ from shapely.geometry import Point, Polygon
 
 from robot_sf.common.types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
+from robot_sf.nav.nav_types import SemanticBoundary
 from robot_sf.nav.obstacle import Obstacle
 
 
@@ -326,6 +327,14 @@ class MapDefinition:
 
     allowed_areas: list[Polygon] | None = None
     """Explicit driveable areas from OSM. Optional, used for path planning bounds."""
+
+    semantic_boundaries: list[SemanticBoundary] = field(default_factory=list)
+    """2D semantic boundary metadata parsed from SVG path labels.
+
+    This is diagnostic-only metadata: it does not affect collision physics,
+    obstacle logic, or planner behaviour.  It is consumed by topology,
+    prediction, and observation-noise diagnostics.
+    """
 
     _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
     """Internal lookup table from POI label to position for faster access."""
@@ -641,6 +650,8 @@ class MapDefinition:
             self.poi_positions = []
         if not hasattr(self, "single_pedestrians"):
             self.single_pedestrians = []
+        if not hasattr(self, "semantic_boundaries"):
+            self.semantic_boundaries = []
         self._build_poi_lookup()
 
 

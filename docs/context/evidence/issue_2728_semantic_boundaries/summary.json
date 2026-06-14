@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "evidence_classification": "diagnostic_only_not_benchmark",
+  "checks": [
+    {
+      "name": "map_load",
+      "passed": true,
+      "detail": "Loaded map with 2 semantic boundaries"
+    },
+    {
+      "name": "boundary_count",
+      "passed": true,
+      "detail": "Expected 2, got 2"
+    },
+    {
+      "name": "separator_vehicle_blocking",
+      "passed": true,
+      "detail": "vehicle_blocking=True"
+    },
+    {
+      "name": "separator_occluding",
+      "passed": true,
+      "detail": "occluding=True"
+    },
+    {
+      "name": "separator_not_pedestrian_passable",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "separator_not_spawn_edge",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ped_edge_pedestrian_passable",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ped_edge_spawn_edge",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ped_edge_not_vehicle_blocking",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "ped_edge_not_occluding",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "unsupported_token_fail_closed",
+      "passed": true,
+      "detail": "Unsupported semantic boundary token 'bogus_token' in label 'semantic_boundary_test__vehicle_blocking__bogus_token'. Supported tokens: ['occluding', 'pedestrian_passable', 'spawn_edge', 'vehicle_blocking']"
+    },
+    {
+      "name": "robot_route_avoids_separator",
+      "passed": true,
+      "detail": "route crosses=False, direct line crosses=True"
+    },
+    {
+      "name": "ped_start_near_spawn_edge",
+      "passed": true,
+      "detail": "distance=2.24, max=5.0"
+    }
+  ]
+}

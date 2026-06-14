@@ -48,7 +48,13 @@ from robot_sf.common.errors import raise_fatal_with_remedy
 from robot_sf.common.types import Line2D, Rect, Zone
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
-from robot_sf.nav.nav_types import SvgCircle, SvgPath, SvgRectangle
+from robot_sf.nav.nav_types import (
+    SUPPORTED_SEMANTIC_BOUNDARY_FLAGS,
+    SemanticBoundary,
+    SvgCircle,
+    SvgPath,
+    SvgRectangle,
+)
 from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
 
 _LOGGED_OBSTACLE_PATH_EVENTS: set[tuple[str, str, str]] = set()
@@ -994,6 +1000,58 @@ class SvgMapConverter:
         """
         return Zone(list(path.coordinates))
 
+    @staticmethod
+    def _parse_semantic_boundary_label(label: str) -> tuple[str, frozenset[str]]:
+        """Parse a semantic boundary label into a name and set of flags.
+
+        Labels may be simple flag labels such as
+        ``semantic_boundary_vehicle_blocking`` or named multi-flag labels such
+        as ``semantic_boundary_separator__vehicle_blocking__occluding``. The
+        prefix ``semantic_boundary_`` is stripped and ``__`` separates tokens.
+
+        Args:
+            label: Raw SVG inkscape:label value.
+
+        Returns:
+            tuple[str, frozenset[str]]: Boundary name and validated flag set.
+
+        Raises:
+            ValueError: If an unsupported token is encountered.
+        """
+        prefix = "semantic_boundary_"
+        rest = label[len(prefix) :]
+        parts = rest.split("__")
+        name = parts[0] if parts else ""
+        flags: set[str] = set()
+        tokens = parts
+        if name not in SUPPORTED_SEMANTIC_BOUNDARY_FLAGS:
+            tokens = parts[1:]
+        for token in tokens:
+            if token not in SUPPORTED_SEMANTIC_BOUNDARY_FLAGS:
+                raise ValueError(
+                    f"Unsupported semantic boundary token {token!r} in label {label!r}. "
+                    f"Supported tokens: {sorted(SUPPORTED_SEMANTIC_BOUNDARY_FLAGS)}"
+                )
+            flags.add(token)
+        return name, frozenset(flags)
+
+    def _process_semantic_boundary_path(self, path: SvgPath) -> SemanticBoundary:
+        """Convert a semantic-boundary-prefixed SVG path into a SemanticBoundary.
+
+        Returns:
+            SemanticBoundary: Parsed boundary with coordinates and boolean flags.
+        """
+        _name, flags = self._parse_semantic_boundary_label(path.label)
+        return SemanticBoundary(
+            coordinates=path.coordinates,
+            label=path.label,
+            id_=path.id,
+            vehicle_blocking="vehicle_blocking" in flags,
+            pedestrian_passable="pedestrian_passable" in flags,
+            occluding="occluding" in flags,
+            spawn_edge="spawn_edge" in flags,
+        )
+
     def _process_paths(
         self,
         obstacles: list[Obstacle],
@@ -1002,8 +1060,8 @@ class SvgMapConverter:
         robot_goal_zones: list[Rect],
         ped_goal_zones: list[Rect],
         ped_crowded_zones: list[Rect],
-    ) -> tuple[list[GlobalRoute], list[GlobalRoute]]:
-        """Convert parsed paths into routes, obstacles, or crowded zones.
+    ) -> tuple[list[GlobalRoute], list[GlobalRoute], list[SemanticBoundary]]:
+        """Convert parsed paths into routes, obstacles, crowded zones, or semantic boundaries.
 
         Args:
             obstacles: Mutable obstacle list to append parsed obstacle paths to.
@@ -1014,11 +1072,13 @@ class SvgMapConverter:
             ped_crowded_zones: Crowded zones list mutated when crowded paths are parsed.
 
         Returns:
-            tuple[list[GlobalRoute], list[GlobalRoute]]: Parsed robot and pedestrian routes
-                (robot_routes, ped_routes) extracted from the SVG paths.
+            tuple[list[GlobalRoute], list[GlobalRoute], list[SemanticBoundary]]: Parsed
+                robot routes, pedestrian routes, and semantic boundaries extracted from
+                the SVG paths.
         """
         robot_routes: list[GlobalRoute] = []
         ped_routes: list[GlobalRoute] = []
+        semantic_boundaries: list[SemanticBoundary] = []
         ped_route_only_mode = not ped_spawn_zones and not ped_goal_zones
         robot_route_only_mode = not robot_spawn_zones and not robot_goal_zones
 
@@ -1060,19 +1120,20 @@ class SvgMapConverter:
 
         for path in self.path_info:
             label = path.label
-            if "ped_route" in label:
-                processor = path_processors["ped_route"]
+            if label.startswith("semantic_boundary_"):
+                semantic_boundaries.append(self._process_semantic_boundary_path(path))
+            elif "ped_route" in label:
+                path_processors["ped_route"](path)
             elif "robot_route" in label:
-                processor = path_processors["robot_route"]
+                path_processors["robot_route"](path)
             else:
                 processor = path_processors.get(label)
+                if processor:
+                    processor(path)
+                else:
+                    logger.error(f"Unknown label <{label}> in id <{path.id}>")
 
-            if processor:
-                processor(path)
-            else:
-                logger.error(f"Unknown label <{label}> in id <{path.id}>")
-
-        return robot_routes, ped_routes
+        return robot_routes, ped_routes, semantic_boundaries
 
     def _process_single_pedestrians_from_circles(self) -> list[SinglePedestrianDefinition]:
         """
@@ -1473,7 +1534,7 @@ class SvgMapConverter:
             ped_crowded_zones,
         ) = self._process_rects(width, height)
 
-        robot_routes, ped_routes = self._process_paths(
+        robot_routes, ped_routes, semantic_boundaries = self._process_paths(
             obstacles,
             robot_spawn_zones,
             ped_spawn_zones,
@@ -1507,6 +1568,7 @@ class SvgMapConverter:
             single_pedestrians,
             poi_positions=poi_positions,
             poi_labels=poi_labels,
+            semantic_boundaries=semantic_boundaries,
         )
         logger.debug(f"MapDefinition object created: {type(self.map_definition)}")
 

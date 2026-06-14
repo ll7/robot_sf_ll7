@@ -1304,3 +1304,11 @@ entries:
     status: evidence
     freshness: evidence
     area: adversarial_search
+  - path: docs/context/evidence/issue_2728_semantic_boundaries/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2728_semantic_boundaries/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

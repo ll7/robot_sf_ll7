@@ -8,6 +8,10 @@ from dataclasses import dataclass
 
 from robot_sf.common.types import Vec2D, Zone
 
+SUPPORTED_SEMANTIC_BOUNDARY_FLAGS = frozenset(
+    {"vehicle_blocking", "pedestrian_passable", "occluding", "spawn_edge"}
+)
+
 
 @dataclass
 class SvgRectangle:
@@ -105,3 +109,31 @@ class SvgPath:
     coordinates: tuple[Vec2D, ...]
     label: str
     id: str
+
+
+@dataclass(frozen=True)
+class SemanticBoundary:
+    """2D semantic boundary metadata parsed from SVG path labels.
+
+    This is pure metadata: it does not affect collision physics, obstacle
+    logic, or planner behaviour.  It is consumed by diagnostic, topology,
+    prediction, and observation-noise consumers.
+
+    Attributes:
+        coordinates: Ordered 2D polyline waypoints.
+        label: Raw SVG inkscape:label value.
+        id_: Raw SVG element id.
+        vehicle_blocking: If True, vehicles (including the robot) should not
+            cross this boundary.
+        pedestrian_passable: If True, pedestrians are allowed to cross.
+        occluding: If True, this boundary may occlude line-of-sight.
+        spawn_edge: If True, pedestrians may emerge from this boundary.
+    """
+
+    coordinates: tuple[Vec2D, ...]
+    label: str
+    id_: str
+    vehicle_blocking: bool = False
+    pedestrian_passable: bool = False
+    occluding: bool = False
+    spawn_edge: bool = False

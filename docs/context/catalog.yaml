@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-13
+updated_at: 2026-06-14
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -566,6 +566,22 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_2784_dissertation_gap_report/gap_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2792_next_issue_shortlist/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2792_next_issue_shortlist/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2792_next_issue_shortlist/open_issues_snapshot.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2792_next_issue_shortlist/recent_prs_snapshot.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

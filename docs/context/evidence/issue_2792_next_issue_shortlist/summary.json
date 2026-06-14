@@ -1,0 +1,1575 @@
+{
+  "schema_version": "next_issue_shortlist.v1",
+  "generated_at": "2026-06-14T02:10:57.333370+00:00",
+  "purpose": "synthesis/planning aid; not new benchmark, paper, dissertation, or safety evidence",
+  "sources_status": {
+    "negative_result_register": {
+      "path": "docs/context/evidence/issue_2762_negative_result_register/register.json",
+      "available": true
+    },
+    "dissertation_evidence_ledger": {
+      "path": "docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json",
+      "available": true
+    },
+    "dissertation_gap_report": {
+      "path": "docs/context/evidence/issue_2784_dissertation_gap_report/gap_report.json",
+      "available": true
+    },
+    "route_efficiency": {
+      "available": false,
+      "reason": "no routing_manifest.json found in output/"
+    },
+    "algorithm_readiness": {
+      "path": "robot_sf/benchmark/algorithm_readiness.py",
+      "available": true
+    },
+    "open_issues_snapshot": {
+      "path": "docs/context/evidence/issue_2792_next_issue_shortlist/open_issues_snapshot.json",
+      "available": true,
+      "count": 30
+    },
+    "recent_prs_snapshot": {
+      "path": "docs/context/evidence/issue_2792_next_issue_shortlist/recent_prs_snapshot.json",
+      "available": true,
+      "count": 20,
+      "latest": [
+        {
+          "number": 2810,
+          "title": "test: add semantic boundary diagnostics"
+        },
+        {
+          "number": 2809,
+          "title": "test: add trace-seeded adversarial candidate"
+        },
+        {
+          "number": 2808,
+          "title": "docs: define learned prediction readiness"
+        },
+        {
+          "number": 2807,
+          "title": "docs: add non-topology successor launch packet"
+        },
+        {
+          "number": 2806,
+          "title": "benchmark: add signalized runtime denominator smoke"
+        }
+      ]
+    }
+  },
+  "degradation_notes": [
+    "route_efficiency: no routing_manifest.json found in output/ -- signal skipped, no route-efficiency ranking component applied"
+  ],
+  "candidates": [
+    {
+      "id": "ledger-pedestrian_density_stress",
+      "title": "Address gap in pedestrian_density_stress",
+      "source": "dissertation_evidence_ledger",
+      "source_issue": 1240,
+      "bucket": "negative_revise_only",
+      "evidence_tier": "diagnostic",
+      "result_classification": null,
+      "reason": "Requires runtime execution evidence, failure-semantics classification, and planner-comparison rows before any pedestrian-density stress benchmark claim.",
+      "blockers": [
+        "Coverage entropy is a diagnostic planning aid. It does not prove benchmark value, runtime stress effectiveness, or planner ranking. Dense stress rows should not be promoted without runtime and failure-semantics proof."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 1,
+      "ranking_score": 95
+    },
+    {
+      "id": "ledger-observation_robustness",
+      "title": "Address gap in observation_robustness",
+      "source": "dissertation_evidence_ledger",
+      "source_issue": 1246,
+      "bucket": "negative_revise_only",
+      "evidence_tier": "release-backed",
+      "result_classification": null,
+      "reason": "Requires actual perception pipeline, calibrated tracking, or simulator-level observation fidelity before any robustness claim. Cross-track comparison is not valid without matched observation contracts.",
+      "blockers": [
+        "The levels are benchmark evidence labels and compatibility gates, not sim-to-real validity claims. No real camera perception, detector training, calibrated tracking, or new environment observation implementation exists yet."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 2,
+      "ranking_score": 85
+    },
+    {
+      "id": "gap-issue-2716-topology-reselection-cross-slice",
+      "title": "Design a successor targeting actual clearance or terminal-outcome movement. Stop same-family selector reruns on the canonical slice.",
+      "source": "dissertation_gap_report",
+      "source_issue": 2716,
+      "bucket": "negative_revise_only",
+      "evidence_tier": null,
+      "result_classification": "revise",
+      "reason": "All 9 hard progress-gated rows ended horizon_exhausted (159 deadlock steps, 0 collision). The mechanism activates and generalizes diagnostically but does not clear any hard slice at h160. Negative-control rows succeeded cleanly (3/3 success, 0 topology switches).",
+      "blockers": [
+        "Diagnostic-only, not benchmark or paper evidence. Classification is revise, not promote."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 3,
+      "ranking_score": 80
+    },
+    {
+      "id": "gap-issue-2749-observation-noise-distant-pedestrian",
+      "title": "Retest with a closer pedestrian, higher pedestrian count, or a scenario where the planner must actively avoid pedestrians.",
+      "source": "dissertation_gap_report",
+      "source_issue": 2749,
+      "bucket": "negative_revise_only",
+      "evidence_tier": null,
+      "result_classification": "diagnostic_only",
+      "reason": "All progress, risk, and planner metrics are identical between baseline and perception-limited. The single pedestrian is too far from the robot to influence planner decisions; the planner is dominated by static obstacle clearance. Perturbation plumbing is confirmed working (occlusion masking active, 1 missed detection at step 15) but no behavioral degradation is measurable.",
+      "blockers": [
+        "Diagnostic-only, not benchmark or paper evidence. Confirms perturbation infrastructure works; does not measure behavioral degradation."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 4,
+      "ranking_score": 80
+    },
+    {
+      "id": "gap-issue-2760-dissertation-evidence-ledger-diagnostic-rows",
+      "title": "Use the ledger as a planning aid to identify which thesis areas need new experiments before Results wording is possible. Do not cite any current row as benchmark-strength evidence.",
+      "source": "dissertation_gap_report",
+      "source_issue": 2760,
+      "bucket": "negative_revise_only",
+      "evidence_tier": null,
+      "result_classification": "diagnostic_only",
+      "reason": "Four of six areas are classified as diagnostic-tier evidence (topology, signalized behavior, prediction, pedestrian density). One area (observation robustness) is release-backed but is a contract/provenance layer only. One area (exported tables) is stale/non-claimable. No row supports Results-chapter wording without qualification.",
+      "blockers": [
+        "Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 5,
+      "ranking_score": 80
+    },
+    {
+      "id": "issue-2716-topology-reselection-cross-slice",
+      "title": "Design a successor targeting actual clearance or terminal-outcome movement. Stop same-family selector reruns on the canonical slice.",
+      "source": "negative_result_register",
+      "source_issue": 2716,
+      "bucket": "negative_revise_only",
+      "evidence_tier": null,
+      "result_classification": "revise",
+      "reason": "All 9 hard progress-gated rows ended horizon_exhausted (159 deadlock steps, 0 collision). The mechanism activates and generalizes diagnostically but does not clear any hard slice at h160. Negative-control rows succeeded cleanly (3/3 success, 0 topology switches).",
+      "blockers": [
+        "Diagnostic-only, not benchmark or paper evidence. Classification is revise, not promote."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 6,
+      "ranking_score": 80
+    },
+    {
+      "id": "issue-2749-observation-noise-distant-pedestrian",
+      "title": "Retest with a closer pedestrian, higher pedestrian count, or a scenario where the planner must actively avoid pedestrians.",
+      "source": "negative_result_register",
+      "source_issue": 2749,
+      "bucket": "negative_revise_only",
+      "evidence_tier": null,
+      "result_classification": "diagnostic_only",
+      "reason": "All progress, risk, and planner metrics are identical between baseline and perception-limited. The single pedestrian is too far from the robot to influence planner decisions; the planner is dominated by static obstacle clearance. Perturbation plumbing is confirmed working (occlusion masking active, 1 missed detection at step 15) but no behavioral degradation is measurable.",
+      "blockers": [
+        "Diagnostic-only, not benchmark or paper evidence. Confirms perturbation infrastructure works; does not measure behavioral degradation."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 7,
+      "ranking_score": 80
+    },
+    {
+      "id": "issue-2760-dissertation-evidence-ledger-diagnostic-rows",
+      "title": "Use the ledger as a planning aid to identify which thesis areas need new experiments before Results wording is possible. Do not cite any current row as benchmark-strength evidence.",
+      "source": "negative_result_register",
+      "source_issue": 2760,
+      "bucket": "negative_revise_only",
+      "evidence_tier": null,
+      "result_classification": "diagnostic_only",
+      "reason": "Four of six areas are classified as diagnostic-tier evidence (topology, signalized behavior, prediction, pedestrian density). One area (observation robustness) is release-backed but is a contract/provenance layer only. One area (exported tables) is stale/non-claimable. No row supports Results-chapter wording without qualification.",
+      "blockers": [
+        "Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 8,
+      "ranking_score": 80
+    },
+    {
+      "id": "gap-prediction",
+      "title": "denominator repair: an executed planner campaign with matched metrics and fail-closed row handling is required before any benchmark claim.",
+      "source": "dissertation_gap_report",
+      "source_issue": 2475,
+      "bucket": "blocked",
+      "evidence_tier": "diagnostic",
+      "result_classification": null,
+      "reason": "Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim.",
+      "blockers": [
+        "This is contract evidence only. The runner uses deterministic fixtures, does not execute a planner campaign, and does not measure prediction quality or compare planning performance."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 9,
+      "ranking_score": 75
+    },
+    {
+      "id": "gap-signalized_behavior",
+      "title": "live replay: explicit runtime signal phase state, planner-observation policy, and planner_observable promotion are required before any benchmark row.",
+      "source": "dissertation_gap_report",
+      "source_issue": 2527,
+      "bucket": "blocked",
+      "evidence_tier": "diagnostic",
+      "result_classification": null,
+      "reason": "Requires explicit runtime signal phase state, planner-observation policy, zone/legality trace fields, and planner_observable promotion before any benchmark row.",
+      "blockers": [
+        "Signal state is proxy_diagnostic only. Do not claim planner observability, forced-waiting reasoning, legality compliance, or benchmark ranking improvement."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 10,
+      "ranking_score": 75
+    },
+    {
+      "id": "gap-topology_guidance",
+      "title": "live replay: a fresh topology-guided planner campaign with non-same-family selector variants and an independent seed set is required before any benchmark promotion.",
+      "source": "dissertation_gap_report",
+      "source_issue": 2518,
+      "bucket": "blocked",
+      "evidence_tier": "diagnostic",
+      "result_classification": null,
+      "reason": "A new hypothesis with a different mechanism and metric is needed before further topology work. No current row supports Results wording.",
+      "blockers": [
+        "Do not claim topology guidance improves success, transfer, or leaderboard performance. The lane is stop for same-family selector reruns on the canonical slice."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 11,
+      "ranking_score": 75
+    },
+    {
+      "id": "ledger-prediction",
+      "title": "denominator repair: an executed planner campaign with matched metrics and fail-closed row handling is required before any benchmark claim.",
+      "source": "dissertation_evidence_ledger",
+      "source_issue": 2475,
+      "bucket": "blocked",
+      "evidence_tier": "diagnostic",
+      "result_classification": null,
+      "reason": "Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim.",
+      "blockers": [
+        "This is contract evidence only. The runner uses deterministic fixtures, does not execute a planner campaign, and does not measure prediction quality or compare planning performance."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 12,
+      "ranking_score": 75
+    },
+    {
+      "id": "ledger-signalized_behavior",
+      "title": "live replay: explicit runtime signal phase state, planner-observation policy, and planner_observable promotion are required before any benchmark row.",
+      "source": "dissertation_evidence_ledger",
+      "source_issue": 2527,
+      "bucket": "blocked",
+      "evidence_tier": "diagnostic",
+      "result_classification": null,
+      "reason": "Requires explicit runtime signal phase state, planner-observation policy, zone/legality trace fields, and planner_observable promotion before any benchmark row.",
+      "blockers": [
+        "Signal state is proxy_diagnostic only. Do not claim planner observability, forced-waiting reasoning, legality compliance, or benchmark ranking improvement."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 13,
+      "ranking_score": 75
+    },
+    {
+      "id": "ledger-topology_guidance",
+      "title": "live replay: a fresh topology-guided planner campaign with non-same-family selector variants and an independent seed set is required before any benchmark promotion.",
+      "source": "dissertation_evidence_ledger",
+      "source_issue": 2518,
+      "bucket": "blocked",
+      "evidence_tier": "diagnostic",
+      "result_classification": null,
+      "reason": "A new hypothesis with a different mechanism and metric is needed before further topology work. No current row supports Results wording.",
+      "blockers": [
+        "Do not claim topology guidance improves success, transfer, or leaderboard performance. The lane is stop for same-family selector reruns on the canonical slice."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 14,
+      "ranking_score": 75
+    },
+    {
+      "id": "ledger-exported_tables",
+      "title": "stale artifact refresh: payload file recovery or re-export from a fresh campaign is required before any reuse.",
+      "source": "dissertation_evidence_ledger",
+      "source_issue": 1023,
+      "bucket": "blocked",
+      "evidence_tier": "non-claimable",
+      "result_classification": null,
+      "reason": "Requires payload file recovery or re-export before any reuse.",
+      "blockers": [
+        "The claim matrix reports missing payload files for both artifacts, and the stale-artifact detector classifies the bundle manifest as stale. The tables remain historical tracked evidence and do not establish new benchmark claims."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 15,
+      "ranking_score": 70
+    },
+    {
+      "id": "algo-adaptive_proxemic_selector_v0",
+      "title": "Validate experimental algorithm: adaptive_proxemic_selector_v0",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Diagnostic selector over fixed conservative, neutral, and open proxemic hybrid-rule profile candidates.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 16,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-adaptive_proxemic_selector_v1",
+      "title": "Validate experimental algorithm: adaptive_proxemic_selector_v1",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Diagnostic neutral-default selector over fixed proxemic hybrid-rule profiles; open profile is reserved for sparse low-progress recovery.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 17,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-crowdnav_height",
+      "title": "Validate experimental algorithm: crowdnav_height",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Upstream CrowdNav_HEIGHT model-only checkpoint wrapper.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 18,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-dr_mpc",
+      "title": "Validate experimental algorithm: dr_mpc",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "External DR-MPC wrapper; dependency-sensitive assessment anchor.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 19,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-drl_vo",
+      "title": "Validate experimental algorithm: drl_vo",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "DRL-VO hybrid planner (learned policy augmented with velocity obstacle fallback); prototype stage.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 20,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-gap_prediction",
+      "title": "Validate experimental algorithm: gap_prediction",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Predictive planner with stream-gap veto layer.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 21,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-gensafenav_gst_predictor_rand",
+      "title": "Validate experimental algorithm: gensafenav_gst_predictor_rand",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Upstream GenSafeNav CrowdNav++-style learned checkpoint wrapper with fail-fast asset checks.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 22,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-gensafenav_gst_predictor_rand_guarded",
+      "title": "Validate experimental algorithm: gensafenav_gst_predictor_rand_guarded",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "GenSafeNav GST_predictor_rand wrapper with explicit short-horizon safety guard and goal fallback for static-risk-heavy slices.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 23,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-gensafenav_ours_gst",
+      "title": "Validate experimental algorithm: gensafenav_ours_gst",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Upstream GenSafeNav constrained learned checkpoint wrapper with fail-fast asset checks.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 24,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-gensafenav_ours_gst_guarded",
+      "title": "Validate experimental algorithm: gensafenav_ours_gst_guarded",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "GenSafeNav Ours_GST wrapper with explicit short-horizon safety guard and goal fallback for static-risk-heavy slices.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 25,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-grid_route",
+      "title": "Validate experimental algorithm: grid_route",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Testing-only occupancy-grid route planner for static obstacle slices.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 26,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-guarded_ppo",
+      "title": "Validate experimental algorithm: guarded_ppo",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "PPO baseline with short-horizon safety veto and local fallback.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 27,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-hrvo",
+      "title": "Validate experimental algorithm: hrvo",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Local hybrid reciprocal velocity obstacles planner.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 28,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-hybrid_orca_sampler",
+      "title": "Validate experimental algorithm: hybrid_orca_sampler",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "ORCA primary planner with short-horizon MPPI repair for stalled or unsafe scenes.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 29,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-hybrid_portfolio",
+      "title": "Validate experimental algorithm: hybrid_portfolio",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Risk-regime switch between risk_dwa, ORCA, and prediction planner.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 30,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-hybrid_rule_local_planner",
+      "title": "Validate experimental algorithm: hybrid_rule_local_planner",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Deterministic hybrid-rule local planner family; v0 is minimal DWA-style. Actuation-aware aliases are synthetic diagnostic-only candidates.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 31,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-lidar_grid_route",
+      "title": "Validate experimental algorithm: lidar_grid_route",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Testing-only LiDAR-derived ego occupancy adapter wrapped around grid_route; not benchmark evidence without explicit opt-in.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 32,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-lidar_social_force",
+      "title": "Validate experimental algorithm: lidar_social_force",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Testing-only LiDAR endpoint-cluster tracked-agent adapter wrapped around SocialForce; not benchmark evidence without explicit opt-in.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 33,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-mppi_social",
+      "title": "Validate experimental algorithm: mppi_social",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Sampling-based MPPI/CEM social local planner.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 34,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-nmpc_social",
+      "title": "Validate experimental algorithm: nmpc_social",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Native NMPC-style local planner with short-horizon nonlinear optimization.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 35,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-planner_selector_v2_diagnostic",
+      "title": "Validate experimental algorithm: planner_selector_v2_diagnostic",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Diagnostic-only deterministic selector over existing local planner candidates; not benchmark-strength evidence.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 36,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-policy_stack_v1",
+      "title": "Validate experimental algorithm: policy_stack_v1",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Minimal non-learning portfolio over goal and risk_dwa proposal sources.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 37,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-ppo",
+      "title": "Validate experimental algorithm: ppo",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Learned PPO baseline (paper profile requires provenance + quality gate).",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 38,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-prediction_planner",
+      "title": "Validate experimental algorithm: prediction_planner",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "RGL-inspired predictive planner; requires trained checkpoint.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 39,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-predictive_mppi",
+      "title": "Validate experimental algorithm: predictive_mppi",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Learned-prediction sequence optimizer over short action horizons.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 40,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-risk_dwa",
+      "title": "Validate experimental algorithm: risk_dwa",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Risk-aware dynamic-window planner (non-learning).",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 41,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-risk_surface_dwa",
+      "title": "Validate experimental algorithm: risk_surface_dwa",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Deterministic local risk-surface producer wrapped around risk_dwa; prototype-only and not learned-risk benchmark evidence.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 42,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-sac",
+      "title": "Validate experimental algorithm: sac",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Learned SB3 SAC baseline; benchmarkable only after checkpoint-specific quality gate.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 43,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-sacadrl",
+      "title": "Validate experimental algorithm: sacadrl",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "GA3C-CADRL adapter; dependency/model-sensitive.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 44,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-safety_barrier",
+      "title": "Validate experimental algorithm: safety_barrier",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Testing-only clean-room static-obstacle safety-barrier planner.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 45,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-sicnav",
+      "title": "Validate experimental algorithm: sicnav",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "External SICNav MPC wrapper; dependency-sensitive and testing-only.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 46,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-social_navigation_pyenvs_hsfm_new_guo",
+      "title": "Validate experimental algorithm: social_navigation_pyenvs_hsfm_new_guo",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Upstream Social-Navigation-PyEnvs non-trainable HSFM-New-Guo wrapper.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 47,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-social_navigation_pyenvs_orca",
+      "title": "Validate experimental algorithm: social_navigation_pyenvs_orca",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Upstream Social-Navigation-PyEnvs non-trainable ORCA wrapper.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 48,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-social_navigation_pyenvs_sfm_helbing",
+      "title": "Validate experimental algorithm: social_navigation_pyenvs_sfm_helbing",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Upstream Social-Navigation-PyEnvs non-trainable SFM-Helbing wrapper.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 49,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-social_navigation_pyenvs_socialforce",
+      "title": "Validate experimental algorithm: social_navigation_pyenvs_socialforce",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Upstream Social-Navigation-PyEnvs non-trainable SocialForce wrapper.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 50,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-socnav_bench",
+      "title": "Validate experimental algorithm: socnav_bench",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "SocNav benchmark adapter; dependency-sensitive.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 51,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-socnav_hrvo",
+      "title": "Validate experimental algorithm: socnav_hrvo",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "SocNav HRVO variant with hybrid reciprocal velocity obstacles.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 52,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-socnav_orca_dd",
+      "title": "Validate experimental algorithm: socnav_orca_dd",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "SocNav ORCA variant tuned for differential-drive compatibility.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 53,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-socnav_orca_nonholonomic",
+      "title": "Validate experimental algorithm: socnav_orca_nonholonomic",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "SocNav ORCA variant tuned for nonholonomic commitment.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 54,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-socnav_orca_relaxed",
+      "title": "Validate experimental algorithm: socnav_orca_relaxed",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "SocNav ORCA variant with relaxed safety tuning.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 55,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-socnav_sampling",
+      "title": "Validate experimental algorithm: socnav_sampling",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "SocNav sampling adapter; dependency-sensitive.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 56,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-sonic_crowdnav",
+      "title": "Validate experimental algorithm: sonic_crowdnav",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Upstream SoNIC model-only checkpoint wrapper with fail-fast source asset checks.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 57,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-stream_gap",
+      "title": "Validate experimental algorithm: stream_gap",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Gap-acceptance local planner for crossing/bottleneck experiments.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 58,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-teb",
+      "title": "Validate experimental algorithm: teb",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Native corridor-commitment planner inspired by TEB-style local optimization.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 59,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-topology_guided_hybrid_rule_v0",
+      "title": "Validate experimental algorithm: topology_guided_hybrid_rule_v0",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Diagnostic-only masked-route hypothesis selector feeding the hybrid-rule local scorer; not benchmark evidence.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 60,
+      "ranking_score": 60
+    },
+    {
+      "id": "algo-trivial_reference",
+      "title": "Validate experimental algorithm: trivial_reference",
+      "source": "algorithm_readiness",
+      "source_issue": null,
+      "bucket": "blocked",
+      "evidence_tier": null,
+      "result_classification": null,
+      "reason": "Diagnostic starter-template adapter for contributor onboarding; not benchmark evidence.",
+      "blockers": [
+        "Requires benchmark validation before baseline promotion"
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 61,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2414",
+      "title": "data: validate SocNavBench ETH traversible manifest and run eth_first converter preflight",
+      "source": "open_issues_snapshot",
+      "source_issue": 2414,
+      "bucket": "blocked",
+      "evidence_tier": "blocked",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 62,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2415",
+      "title": "data: stage real AMV command-response trace manifest through amv-calibration path",
+      "source": "open_issues_snapshot",
+      "source_issue": 2415,
+      "bucket": "blocked",
+      "evidence_tier": "blocked",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 63,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2416",
+      "title": "blocked: hold AMV profile implementation until source provenance is accepted",
+      "source": "open_issues_snapshot",
+      "source_issue": 2416,
+      "bucket": "blocked",
+      "evidence_tier": "blocked",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 64,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2417",
+      "title": "blocked: keep AMV paper-facing unlock criteria gated on real source status",
+      "source": "open_issues_snapshot",
+      "source_issue": 2417,
+      "bucket": "blocked",
+      "evidence_tier": "blocked",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 65,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2444",
+      "title": "analysis: find AMMV trace pair with nonzero mechanism divergence",
+      "source": "open_issues_snapshot",
+      "source_issue": 2444,
+      "bucket": "blocked",
+      "evidence_tier": "blocked",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 66,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2445",
+      "title": "research: classify ORCA-residual progress-probe target after v1 smoke",
+      "source": "open_issues_snapshot",
+      "source_issue": 2445,
+      "bucket": "blocked",
+      "evidence_tier": "blocked",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 67,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2446",
+      "title": "research: evaluate actuation feasibility as a diagnostic ranking dimension",
+      "source": "open_issues_snapshot",
+      "source_issue": 2446,
+      "bucket": "blocked",
+      "evidence_tier": "analysis-only",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 68,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2546",
+      "title": "research: evaluate ScenarioBelief uncertainty effects on local policy observations",
+      "source": "open_issues_snapshot",
+      "source_issue": 2546,
+      "bucket": "blocked",
+      "evidence_tier": "stress",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 69,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2601",
+      "title": "research: define adversarial manifest quality metrics after first planner smoke",
+      "source": "open_issues_snapshot",
+      "source_issue": 2601,
+      "bucket": "blocked",
+      "evidence_tier": "proposal",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 70,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2722",
+      "title": "schema: add manifest lineage graph report",
+      "source": "open_issues_snapshot",
+      "source_issue": 2722,
+      "bucket": "blocked",
+      "evidence_tier": "nominal",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 71,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2723",
+      "title": "schema: add manifest lineage migration and backfill validator",
+      "source": "open_issues_snapshot",
+      "source_issue": 2723,
+      "bucket": "blocked",
+      "evidence_tier": "smoke",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 72,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2726",
+      "title": "data: calibrate scenario priors from benchmark trace clusters",
+      "source": "open_issues_snapshot",
+      "source_issue": 2726,
+      "bucket": "blocked",
+      "evidence_tier": "analysis-only",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 73,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2727",
+      "title": "benchmark: add fast-moving bicycle actor as a trace-compatible dynamic obstacle",
+      "source": "open_issues_snapshot",
+      "source_issue": 2727,
+      "bucket": "blocked",
+      "evidence_tier": "stress",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 74,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2754",
+      "title": "benchmark: add signalized-crossing failure-case pack with trace snapshots",
+      "source": "open_issues_snapshot",
+      "source_issue": 2754,
+      "bucket": "blocked",
+      "evidence_tier": "analysis-only",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 75,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2758",
+      "title": "prediction: add signal-aware and goal-aware forecast baselines",
+      "source": "open_issues_snapshot",
+      "source_issue": 2758,
+      "bucket": "blocked",
+      "evidence_tier": "nominal",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 76,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2759",
+      "title": "benchmark: connect forecast uncertainty to local-policy risk scoring",
+      "source": "open_issues_snapshot",
+      "source_issue": 2759,
+      "bucket": "blocked",
+      "evidence_tier": "stress",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 77,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2761",
+      "title": "publication: add chapter-target labels to claim matrix rows",
+      "source": "open_issues_snapshot",
+      "source_issue": 2761,
+      "bucket": "blocked",
+      "evidence_tier": "synthesis",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 78,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2763",
+      "title": "workflow: connect PR-loop dry-run policy to routed-worker artifact manifests",
+      "source": "open_issues_snapshot",
+      "source_issue": 2763,
+      "bucket": "blocked",
+      "evidence_tier": "nominal",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 79,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2765",
+      "title": "benchmark: add dense pedestrian interaction stress slice for prediction and observation diagnostics",
+      "source": "open_issues_snapshot",
+      "source_issue": 2765,
+      "bucket": "blocked",
+      "evidence_tier": "stress",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 80,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2766",
+      "title": "research: compare topology, signal, prediction, and observation evidence in one mixed-scenario matrix",
+      "source": "open_issues_snapshot",
+      "source_issue": 2766,
+      "bucket": "blocked",
+      "evidence_tier": "synthesis",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 81,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2767",
+      "title": "paper: draft benchmark-results table candidates from claim matrix",
+      "source": "open_issues_snapshot",
+      "source_issue": 2767,
+      "bucket": "blocked",
+      "evidence_tier": "synthesis",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 82,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2781",
+      "title": "prediction: add interaction-aware baseline before learned prediction",
+      "source": "open_issues_snapshot",
+      "source_issue": 2781,
+      "bucket": "blocked",
+      "evidence_tier": "nominal",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 83,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2783",
+      "title": "publication: propagate evidence ledger and negative-result register into issue ranking",
+      "source": "open_issues_snapshot",
+      "source_issue": 2783,
+      "bucket": "blocked",
+      "evidence_tier": "nominal",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 84,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2785",
+      "title": "research: use negative-result register to prevent repeated weak scenarios",
+      "source": "open_issues_snapshot",
+      "source_issue": 2785,
+      "bucket": "blocked",
+      "evidence_tier": "nominal",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 85,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2786",
+      "title": "workflow: add historical route-efficiency dashboard",
+      "source": "open_issues_snapshot",
+      "source_issue": 2786,
+      "bucket": "blocked",
+      "evidence_tier": "analysis-only",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 86,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2787",
+      "title": "workflow: add routing policy feedback from route-efficiency report",
+      "source": "open_issues_snapshot",
+      "source_issue": 2787,
+      "bucket": "blocked",
+      "evidence_tier": "nominal",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 87,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2788",
+      "title": "adversarial: generate scenario candidates from negative-result register entries",
+      "source": "open_issues_snapshot",
+      "source_issue": 2788,
+      "bucket": "blocked",
+      "evidence_tier": "smoke",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 88,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2790",
+      "title": "analysis: compare trace-derived and live-replay evidence after #2777",
+      "source": "open_issues_snapshot",
+      "source_issue": 2790,
+      "bucket": "blocked",
+      "evidence_tier": "analysis-only",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 89,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2792",
+      "title": "planning: generate next-issue shortlist from open gaps and closed PR evidence",
+      "source": "open_issues_snapshot",
+      "source_issue": 2792,
+      "bucket": "blocked",
+      "evidence_tier": "analysis-only",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 90,
+      "ranking_score": 60
+    },
+    {
+      "id": "open-issue-2793",
+      "title": "benchmark: add bicycle forecast/evaluation exclusion contract",
+      "source": "open_issues_snapshot",
+      "source_issue": 2793,
+      "bucket": "blocked",
+      "evidence_tier": "smoke",
+      "result_classification": null,
+      "reason": "Open issue snapshot candidate.",
+      "blockers": [],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 91,
+      "ranking_score": 60
+    },
+    {
+      "id": "gap-exported_tables",
+      "title": "stale artifact refresh: payload file recovery or re-export from a fresh campaign is required before any reuse.",
+      "source": "dissertation_gap_report",
+      "source_issue": 1023,
+      "bucket": "remove_weaken",
+      "evidence_tier": "non-claimable",
+      "result_classification": null,
+      "reason": "Requires payload file recovery or re-export before any reuse.",
+      "blockers": [
+        "The claim matrix reports missing payload files for both artifacts, and the stale-artifact detector classifies the bundle manifest as stale. The tables remain historical tracked evidence and do not establish new benchmark claims."
+      ],
+      "data_source_status": "available",
+      "degradation_notes": [],
+      "rank": 92,
+      "ranking_score": 50
+    }
+  ],
+  "candidate_count": 92,
+  "claim_boundaries": [
+    "This shortlist is a synthesis/planning aid. It does not produce new benchmark evidence, paper-facing results, or safety claims.",
+    "Ranking is deterministic: same inputs always produce the same order.",
+    "Missing sources are recorded as degradation notes; the shortlist still emits candidates from available sources.",
+    "No GitHub mutation, no Project #5 writes, and no issue creation occurred."
+  ]
+}

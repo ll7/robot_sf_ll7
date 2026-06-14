@@ -103,7 +103,7 @@ def test_main_reports_failures_for_stale_issue(
             "--comments-json",
             str(comments_path),
             "--recent-comment-hours",
-            "24",
+            "999",
         ]
     )
     payload = json.loads(capsys.readouterr().out)
@@ -114,3 +114,139 @@ def test_main_reports_failures_for_stale_issue(
     assert any(
         check["name"] == "issue_state_open" and check["ok"] is False for check in payload["checks"]
     )
+
+
+def test_negative_result_guard_flags_repeat_without_rationale() -> None:
+    """Repeated weak scenarios without a 'why this is different' rationale should be flagged."""
+    issue = {
+        "title": "Rerunning NR-001 topology reselection",
+        "body": "We need to check the doorway_transfer scenario again with same thresholds.",
+        "state": "open",
+        "repository": {"owner": {"login": "ll7"}, "name": "robot_sf_ll7"},
+    }
+    findings = linter.check_negative_result_guard(issue)
+    assert any(
+        finding.code == "repeated_negative_result_without_rationale"
+        and finding.severity == "warning"
+        for finding in findings
+    )
+
+
+def test_negative_result_guard_allows_repeat_with_rationale() -> None:
+    """Repeated weak scenarios WITH a rationale should not be flagged."""
+    issue = {
+        "title": "Rerunning NR-002 observation-noise",
+        "body": (
+            "Observation-noise distant pedestrian test. Retest with a closer pedestrian and "
+            "higher pedestrian count."
+        ),
+        "metadata": {
+            "why_this_is_different": (
+                "Addresses NR-002 by replacing the distant pedestrian with a near-field "
+                "avoidance requirement."
+            )
+        },
+        "state": "open",
+        "repository": {"owner": {"login": "ll7"}, "name": "robot_sf_ll7"},
+    }
+    findings = linter.check_negative_result_guard(issue)
+    assert not any(
+        finding.code == "repeated_negative_result_without_rationale" for finding in findings
+    )
+
+
+def test_negative_result_guard_ignores_unrelated_issues() -> None:
+    """Unrelated issues should not trigger the negative result guard."""
+    issue = {
+        "title": "Fix bug in path planner",
+        "body": "The A* implementation has a small bug when handling off-grid goals.",
+        "state": "open",
+        "repository": {"owner": {"login": "ll7"}, "name": "robot_sf_ll7"},
+    }
+    findings = linter.check_negative_result_guard(issue)
+    assert not findings
+
+
+def test_negative_result_guard_flags_space_separated_observation_noise_repeat() -> None:
+    """Observation noise wording should not need the exact hyphenated form."""
+    issue = {
+        "title": "Observation noise diagnostic for classic_bottleneck_medium",
+        "body": "Repeat the scenario_too_weak distant pedestrian diagnostic.",
+        "state": "open",
+        "repository": {"owner": {"login": "ll7"}, "name": "robot_sf_ll7"},
+    }
+
+    findings = linter.check_negative_result_guard(issue)
+
+    assert any(finding.code == "repeated_negative_result_without_rationale" for finding in findings)
+
+
+def test_negative_result_guard_ignores_null_optional_text_fields() -> None:
+    """Null optional issue fields should not be coerced into searchable 'None' text."""
+    issue = {
+        "title": None,
+        "body": 0,
+        "labels": [{"name": None}, 0],
+        "metadata": {"why_this_is_different": "0"},
+        "state": "open",
+        "repository": {"owner": {"login": "ll7"}, "name": "robot_sf_ll7"},
+    }
+
+    findings = linter.check_negative_result_guard(issue)
+
+    assert not findings
+
+
+def test_negative_result_guard_ignores_non_list_labels() -> None:
+    """Malformed scalar label payloads should not abort candidate text extraction."""
+    issue = {
+        "title": "Fix bug in path planner",
+        "body": "No negative-result repeat here.",
+        "labels": 1,
+        "state": "open",
+        "repository": {"owner": {"login": "ll7"}, "name": "robot_sf_ll7"},
+    }
+
+    findings = linter.check_negative_result_guard(issue)
+
+    assert not findings
+
+
+def test_main_reports_negative_result_guard_as_warning(tmp_path, capsys) -> None:
+    """Negative-result repeats should warn without failing the read-only linter."""
+    issue_path = tmp_path / "issue.json"
+    comments_path = tmp_path / "comments.json"
+    issue_path.write_text(
+        json.dumps(
+            {
+                "number": 2785,
+                "url": "https://github.com/ll7/robot_sf_ll7/issues/2785",
+                "title": "Observation noise diagnostic for classic_bottleneck_medium",
+                "body": "Repeat the scenario_too_weak distant pedestrian diagnostic.",
+                "state": "open",
+                "repository": {"owner": {"login": "ll7"}, "name": "robot_sf_ll7"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    comments_path.write_text(
+        json.dumps([{"createdAt": "2026-06-12T12:00:00Z"}]),
+        encoding="utf-8",
+    )
+
+    exit_code = linter.main(
+        [
+            "--issue-json",
+            str(issue_path),
+            "--comments-json",
+            str(comments_path),
+            "--recent-comment-hours",
+            "999",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert payload["ok"] is True
+    assert payload["failure_summary"] is None
+    assert payload["warnings"][0]["code"] == "repeated_negative_result_without_rationale"

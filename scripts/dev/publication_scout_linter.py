@@ -26,10 +26,16 @@ class LinterFinding:
 
     code: str
     detail: str
+    severity: str = "error"
 
     def to_payload(self) -> dict[str, str]:
         """Serialize to a JSON-friendly payload."""
-        return {"code": self.code, "detail": self.detail}
+        return {"code": self.code, "detail": self.detail, "severity": self.severity}
+
+    @property
+    def is_error(self) -> bool:
+        """Return true when this finding should fail readiness."""
+        return self.severity != "warning"
 
 
 def parse_iso_datetime(raw: object) -> datetime | None:
@@ -171,7 +177,77 @@ def validate_candidate(
             )
         )
 
+    findings.extend(check_negative_result_guard(issue))
+
     return findings
+
+
+def check_negative_result_guard(issue: dict[str, Any]) -> list[LinterFinding]:
+    """Advisory check for repeated weak scenarios without rationale."""
+    findings: list[LinterFinding] = []
+    content = _candidate_negative_result_text(issue)
+
+    has_rationale = "why this is different" in content
+
+    # NR-001: Topology reselection/threshold tweaks
+    is_nr001 = "topology" in content and (
+        "reselection" in content
+        or "threshold" in content
+        or any(
+            kw in content
+            for kw in ["bottleneck transfer", "doorway transfer", "t intersection transfer"]
+        )
+    )
+
+    # NR-002: observation-noise diagnostic on a distant pedestrian.
+    is_nr002 = "observation noise" in content and (
+        "distant pedestrian" in content
+        or "classic bottleneck medium" in content
+        or "scenario too weak" in content
+    )
+
+    if (is_nr001 or is_nr002) and not has_rationale:
+        findings.append(
+            LinterFinding(
+                code="repeated_negative_result_without_rationale",
+                detail=(
+                    "candidate resembles a registered weak-scenario repeat (NR-001 or NR-002) "
+                    "but lacks a 'why this is different' rationale in the body or metadata; "
+                    "please clarify why this rerun will produce new benchmark-strength information"
+                ),
+                severity="warning",
+            )
+        )
+
+    return findings
+
+
+def _candidate_negative_result_text(issue: dict[str, Any]) -> str:
+    """Collect candidate text fields relevant to negative-result guard matching.
+
+    Returns:
+        Lowercase text across title, body, labels, and simple metadata values.
+    """
+    parts = []
+    title = issue.get("title")
+    parts.append(str(title) if title is not None else "")
+    body = issue.get("body")
+    parts.append(str(body) if body is not None else "")
+    raw_labels = issue.get("labels")
+    labels = raw_labels if isinstance(raw_labels, list) else []
+    for label in labels:
+        if isinstance(label, dict):
+            name = label.get("name")
+            parts.append(str(name) if name is not None else "")
+        elif label is not None:
+            parts.append(str(label))
+    metadata = issue.get("metadata")
+    if isinstance(metadata, dict):
+        for key, value in metadata.items():
+            if isinstance(value, (str, int, float, bool)):
+                parts.append(str(key))
+                parts.append(str(value))
+    return "\n".join(parts).lower().replace("_", " ").replace("-", " ")
 
 
 def classify_comment_publication_result(raw_payload: object) -> dict[str, Any]:
@@ -233,9 +309,11 @@ def _build_report(
     has_recent_comments: bool,
 ) -> dict[str, Any]:
     """Build the machine-readable CLI report."""
+    error_findings = [finding for finding in findings if finding.is_error]
+    warning_findings = [finding for finding in findings if not finding.is_error]
     return {
         "schema": SCHEMA,
-        "ok": not findings,
+        "ok": not error_findings,
         "read_only": True,
         "project_writes": False,
         "expected_repo": expected_repo,
@@ -252,11 +330,12 @@ def _build_report(
         "issue_number": issue.get("number"),
         "issue_url": issue.get("url"),
         "findings": [finding.to_payload() for finding in findings],
+        "warnings": [finding.to_payload() for finding in warning_findings],
         "failure_summary": None
-        if not findings
+        if not error_findings
         else {
-            "count": len(findings),
-            "codes": [finding.code for finding in findings],
+            "count": len(error_findings),
+            "codes": [finding.code for finding in error_findings],
         },
     }
 

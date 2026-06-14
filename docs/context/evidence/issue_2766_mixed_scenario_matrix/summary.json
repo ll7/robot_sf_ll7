@@ -1,0 +1,39 @@
+{
+  "schema_version": "mixed_scenario_matrix.v1",
+  "issue": 2766,
+  "generated_at_utc": "2026-06-14T12:01:06.607884+00:00",
+  "scenario_count": 8,
+  "column_count": 7,
+  "total_cells": 56,
+  "eligible_scenario_count": 0,
+  "not_eligible_scenario_count": 8,
+  "status_counts": {
+    "diagnostic_only": 16,
+    "proxy_only": 7,
+    "unavailable": 6,
+    "not_applicable": 6,
+    "stale": 2,
+    "not_eligible": 8,
+    "limited_no_motion": 1,
+    "current": 4,
+    "available": 1,
+    "partial": 2,
+    "partial_robustness": 1,
+    "current_negative": 2
+  },
+  "source_inputs": {
+    "ledger": "docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json",
+    "signal_summary": "docs/context/evidence/issue_2799_signalized_runtime/summary.json",
+    "obs_noise_summary": "docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json",
+    "cv_forecast": "docs/context/evidence/issue_2757_cv_forecast_eval_2026-06-13/report.json",
+    "gap_report": "docs/context/evidence/issue_2784_dissertation_gap_report/gap_report.json",
+    "negative_result_dir": "docs/context/evidence/issue_2788_negative_result_scenario_candidates"
+  },
+  "claim_boundary": "synthesis draft only; not benchmark evidence, paper-facing evidence, or manuscript text",
+  "conservative_rules": [
+    "diagnostic/stale/non-claimable rows weaken or block wording",
+    "fallback/degraded/unavailable/proxy-only rows are not success evidence",
+    "missing tracked sources produce unavailable rows rather than invented values",
+    "no benchmark or paper-facing overclaims"
+  ]
+}

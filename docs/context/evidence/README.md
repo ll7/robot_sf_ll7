@@ -344,6 +344,11 @@ Policy caveats:
   (likely scenario/geometry insufficiency), `t_intersection_transfer` as `candidate_route_blocked`
   (ambiguous between blocked geometry and excessive switching without per-step switch_timeline).
   Not benchmark or paper-facing evidence.
+- `issue_2766_mixed_scenario_matrix/`: synthesis-only mixed-scenario coverage matrix comparing
+  topology reselection, signal metrics, prediction baseline, observation perturbation,
+  denominator health, stale/current status, and claim eligibility across canonical scenario
+  slices. All rows remain non-claimable or diagnostic-only; unavailable, proxy-only, stale, and
+  missing-denominator cells include explicit reasons.
 - `issue_2801_topology_successor_recommendation/`: analysis-only successor recommendation after
   consuming #2751 runtime evidence and #2752 mechanism diagnosis. Recommends **stop** for
   topology-reselection-as-clearance on the current hard-slice set. Two of three hard slices are

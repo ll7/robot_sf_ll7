@@ -381,6 +381,18 @@ recommendations" section. Route success and complete artifact presence are
 **route evidence only**; they are not task acceptance. The orchestrator must
 still inspect the diff and run the required local validation.
 
+PR-loop dry-run policy can consume the same routed-worker manifests directly:
+
+```bash
+uv run python scripts/dev/pr_loop_policy.py --snapshot output/pr_queue.json \
+  --manifest 1234=output/issue-2764/worker/routing_manifest.json --json
+```
+
+Manifest-driven decisions remain dry-run and mutation-free. Complete artifacts can unblock
+`ready_to_merge` classification only when the compact PR snapshot is otherwise ready; missing
+artifacts, failed validation text, stale expected heads, risky manifest paths, and draft PRs stay
+reroute/stop signals instead of task acceptance.
+
 For historical route audits, add `--dashboard` and pass multiple routed-worker
 manifest files. Dashboard mode emits `route_efficiency_dashboard.v1` JSON or
 Markdown with overall metrics, per-manifest breakdowns, provider trends,

@@ -1009,6 +1009,11 @@ class SvgMapConverter:
         as ``semantic_boundary_separator__vehicle_blocking__occluding``. The
         prefix ``semantic_boundary_`` is stripped and ``__`` separates tokens.
 
+        Fail-closed policy: if no supported semantic flag is found among the
+        parsed tokens the function raises ``ValueError`` rather than returning
+        an empty flag set.  This prevents silently accepting labels that
+        contain only an unsupported name or typo tokens.
+
         Args:
             label: Raw SVG inkscape:label value.
 
@@ -1016,7 +1021,8 @@ class SvgMapConverter:
             tuple[str, frozenset[str]]: Boundary name and validated flag set.
 
         Raises:
-            ValueError: If an unsupported token is encountered.
+            ValueError: If an unsupported token is encountered or no supported
+                flag is present in the label.
         """
         prefix = "semantic_boundary_"
         rest = label[len(prefix) :]
@@ -1033,6 +1039,11 @@ class SvgMapConverter:
                     f"Supported tokens: {sorted(SUPPORTED_SEMANTIC_BOUNDARY_FLAGS)}"
                 )
             flags.add(token)
+        if not flags:
+            raise ValueError(
+                f"No supported semantic boundary flag found in label {label!r}. "
+                f"Supported tokens: {sorted(SUPPORTED_SEMANTIC_BOUNDARY_FLAGS)}"
+            )
         return name, frozenset(flags)
 
     def _process_semantic_boundary_path(self, path: SvgPath) -> SemanticBoundary:

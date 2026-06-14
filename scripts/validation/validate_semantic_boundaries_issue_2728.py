@@ -27,7 +27,11 @@ def _line_segment_intersection(
     p3: tuple[float, float],
     p4: tuple[float, float],
 ) -> bool:
-    """Check if segment p1-p2 intersects segment p3-p4 using orientation tests."""
+    """Check if segment p1-p2 intersects segment p3-p4.
+
+    Handles general crossing, collinear overlap, and endpoint-touch cases
+    using orientation tests.
+    """
 
     def _orient(a: tuple[float, float], b: tuple[float, float], c: tuple[float, float]) -> int:
         val = (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
@@ -35,12 +39,34 @@ def _line_segment_intersection(
             return 0
         return 1 if val > 0 else 2
 
+    def _on_segment(
+        s: tuple[float, float],
+        e: tuple[float, float],
+        p: tuple[float, float],
+    ) -> bool:
+        """Return True when collinear point *p* lies on segment *s*-*e*."""
+        return (
+            min(s[0], e[0]) - 1e-9 <= p[0] <= max(s[0], e[0]) + 1e-9
+            and min(s[1], e[1]) - 1e-9 <= p[1] <= max(s[1], e[1]) + 1e-9
+        )
+
     o1 = _orient(p1, p2, p3)
     o2 = _orient(p1, p2, p4)
     o3 = _orient(p3, p4, p1)
     o4 = _orient(p3, p4, p2)
+
     if o1 != o2 and o3 != o4:
         return True
+
+    if o1 == 0 and _on_segment(p1, p2, p3):
+        return True
+    if o2 == 0 and _on_segment(p1, p2, p4):
+        return True
+    if o3 == 0 and _on_segment(p3, p4, p1):
+        return True
+    if o4 == 0 and _on_segment(p3, p4, p2):
+        return True
+
     return False
 
 
@@ -91,7 +117,12 @@ def _min_distance_to_boundary(
     return min_dist
 
 
-def run_validation() -> dict:
+def _find_scenario_by_name(scenarios: list[dict], name: str) -> dict | None:
+    """Return the scenario with the requested name, if present."""
+    return next((scenario for scenario in scenarios if scenario.get("name") == name), None)
+
+
+def run_validation() -> dict:  # noqa: C901, PLR0915
     """Run all validation checks and return a summary dict."""
     import yaml
 
@@ -165,18 +196,25 @@ def run_validation() -> dict:
     # --- 3. Robot route does not cross vehicle_blocking separator ---
     if sep and map_def.robot_routes:
         route = map_def.robot_routes[0]
-        crosses = _route_crosses_boundary(list(route.waypoints), sep.coordinates)
-        direct_crosses = _line_segment_intersection(
-            route.waypoints[0],
-            route.waypoints[-1],
-            sep.coordinates[0],
-            sep.coordinates[-1],
-        )
-        _check(
-            "robot_route_avoids_separator",
-            not crosses,
-            f"route crosses={crosses}, direct line crosses={direct_crosses}",
-        )
+        if len(route.waypoints) < 2:
+            _check(
+                "robot_route_avoids_separator",
+                False,
+                f"Robot route has only {len(route.waypoints)} waypoint(s); need >= 2",
+            )
+        else:
+            crosses = _route_crosses_boundary(list(route.waypoints), sep.coordinates)
+            direct_crosses = _line_segment_intersection(
+                route.waypoints[0],
+                route.waypoints[-1],
+                sep.coordinates[0],
+                sep.coordinates[-1],
+            )
+            _check(
+                "robot_route_avoids_separator",
+                not crosses,
+                f"route crosses={crosses}, direct line crosses={direct_crosses}",
+            )
     else:
         _check("robot_route_avoids_separator", False, "No robot routes or separator found")
 
@@ -185,7 +223,12 @@ def run_validation() -> dict:
     with open(scenario_path, encoding="utf-8") as f:
         scenario_data = yaml.safe_load(f)
 
-    ped_scenario = scenario_data["scenarios"][1]
+    ped_scenario = _find_scenario_by_name(
+        scenario_data["scenarios"], "pedestrian_emergence_from_spawn_edge"
+    )
+    if ped_scenario is None:
+        _check("ped_start_near_spawn_edge", False, "Pedestrian emergence scenario not found")
+        return results
     ped_start = tuple(ped_scenario["single_pedestrians"][0]["start"])
 
     if ped_edge:

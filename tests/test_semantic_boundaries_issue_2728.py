@@ -98,13 +98,19 @@ class TestParseSemanticBoundaryLabel:
         assert name == "sep"
         assert flags == frozenset({"vehicle_blocking", "occluding"})
 
-    def test_no_flags(self):
-        """No flags produces empty frozenset."""
+    def test_no_flags_raises(self):
+        """No flags in label raises ValueError (fail-closed)."""
         from robot_sf.nav.svg_map_parser import SvgMapConverter
 
-        name, flags = SvgMapConverter._parse_semantic_boundary_label("semantic_boundary_barrier")
-        assert name == "barrier"
-        assert flags == frozenset()
+        with pytest.raises(ValueError, match="No supported semantic boundary flag found"):
+            SvgMapConverter._parse_semantic_boundary_label("semantic_boundary_barrier")
+
+    def test_single_typo_token_raises(self):
+        """Single typo token raises ValueError (fail-closed)."""
+        from robot_sf.nav.svg_map_parser import SvgMapConverter
+
+        with pytest.raises(ValueError, match="No supported semantic boundary flag found"):
+            SvgMapConverter._parse_semantic_boundary_label("semantic_boundary_vehicle_blockingg")
 
     def test_unsupported_token_raises(self):
         """Unsupported token raises ValueError."""
@@ -197,7 +203,7 @@ class TestScenarioLoad:
         """Scenario YAML loads without error."""
         import yaml
 
-        with open(SCENARIO_PATH) as f:
+        with open(SCENARIO_PATH, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         assert "scenarios" in data
         assert len(data["scenarios"]) == 2
@@ -206,7 +212,7 @@ class TestScenarioLoad:
         """Both scenarios have diagnostic_only_not_benchmark claim boundary."""
         import yaml
 
-        with open(SCENARIO_PATH) as f:
+        with open(SCENARIO_PATH, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         for scenario in data["scenarios"]:
             assert scenario["metadata"]["claim_boundary"] == "diagnostic_only_not_benchmark"
@@ -215,7 +221,7 @@ class TestScenarioLoad:
         """Both scenarios have semantic_boundary_expectations."""
         import yaml
 
-        with open(SCENARIO_PATH) as f:
+        with open(SCENARIO_PATH, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         for scenario in data["scenarios"]:
             assert "semantic_boundary_expectations" in scenario["metadata"]
@@ -260,3 +266,71 @@ class TestValidationSummaryContract:
         results = run_validation()
         ped_check = next(c for c in results["checks"] if c["name"] == "ped_start_near_spawn_edge")
         assert ped_check["passed"]
+
+
+class TestLineSegmentIntersection:
+    """Focused tests for _line_segment_intersection endpoint and collinear cases."""
+
+    def test_general_cross(self):
+        """Two segments that cross at a single interior point."""
+        from scripts.validation.validate_semantic_boundaries_issue_2728 import (
+            _line_segment_intersection,
+        )
+
+        assert _line_segment_intersection((0, 0), (4, 4), (0, 4), (4, 0)) is True
+
+    def test_no_intersection(self):
+        """Two non-intersecting segments."""
+        from scripts.validation.validate_semantic_boundaries_issue_2728 import (
+            _line_segment_intersection,
+        )
+
+        assert _line_segment_intersection((0, 0), (1, 0), (0, 1), (1, 1)) is False
+
+    def test_endpoint_touch(self):
+        """Segments share exactly one endpoint."""
+        from scripts.validation.validate_semantic_boundaries_issue_2728 import (
+            _line_segment_intersection,
+        )
+
+        assert _line_segment_intersection((0, 0), (2, 2), (2, 2), (4, 0)) is True
+
+    def test_collinear_partial_overlap(self):
+        """Collinear segments that partially overlap."""
+        from scripts.validation.validate_semantic_boundaries_issue_2728 import (
+            _line_segment_intersection,
+        )
+
+        assert _line_segment_intersection((0, 0), (3, 0), (2, 0), (5, 0)) is True
+
+    def test_collinear_no_overlap(self):
+        """Collinear segments that do not overlap."""
+        from scripts.validation.validate_semantic_boundaries_issue_2728 import (
+            _line_segment_intersection,
+        )
+
+        assert _line_segment_intersection((0, 0), (1, 0), (2, 0), (3, 0)) is False
+
+    def test_collinear_endpoint_touch(self):
+        """Collinear segments that touch at a single endpoint."""
+        from scripts.validation.validate_semantic_boundaries_issue_2728 import (
+            _line_segment_intersection,
+        )
+
+        assert _line_segment_intersection((0, 0), (2, 0), (2, 0), (4, 0)) is True
+
+    def test_identical_segments(self):
+        """Identical segments overlap entirely."""
+        from scripts.validation.validate_semantic_boundaries_issue_2728 import (
+            _line_segment_intersection,
+        )
+
+        assert _line_segment_intersection((0, 0), (3, 3), (0, 0), (3, 3)) is True
+
+    def test_vertical_endpoint_touch(self):
+        """Vertical segments touching at an endpoint."""
+        from scripts.validation.validate_semantic_boundaries_issue_2728 import (
+            _line_segment_intersection,
+        )
+
+        assert _line_segment_intersection((1, 0), (1, 3), (1, 3), (1, 6)) is True

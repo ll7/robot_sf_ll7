@@ -1,4 +1,4 @@
-# Issue 2728: Semantic Boundaries - Evidence
+# Issue 2728: Semantic Boundaries - Evidence (2026-06-14)
 
 ## Claim
 Diagnostic-only proof that 2D semantic boundary metadata can be parsed from SVG

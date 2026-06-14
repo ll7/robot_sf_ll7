@@ -15,6 +15,7 @@ from scripts.dev.pr_loop_policy import (
     classify_pr_state,
     evaluate_queue,
     format_text,
+    load_manifest_artifacts,
     main,
     recommend_action,
 )
@@ -58,6 +59,53 @@ def _pr(
 def _snapshot(prs: list[dict[str, object]]) -> dict[str, object]:
     """Build a snapshot dict wrapping multiple PRs."""
     return {"schema": "pr_queue_snapshot.v1", "prs": prs}
+
+
+def _compact_artifacts(*, validation_result: str = "passed") -> dict[str, object]:
+    """Build a complete routed-worker compact artifact map."""
+    return {
+        "result_json": {"present": True, "path": "result.json", "size_bytes": 2},
+        "result_md": {"present": True, "path": "RESULT.md", "size_bytes": 2},
+        "diffstat": {"present": True, "path": "diffstat.txt", "size_bytes": 2},
+        "status": {"present": True, "path": "status.txt", "size_bytes": 2},
+        "validation": {
+            "present": True,
+            "path": "validation.txt",
+            "size_bytes": 2,
+            "result": validation_result,
+        },
+    }
+
+
+def _write_manifest(
+    tmp_path: Path,
+    *,
+    compact: dict[str, object] | None = None,
+    name: str = "routing_manifest.json",
+) -> Path:
+    """Write a minimal routed-worker manifest fixture."""
+    path = tmp_path / name
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v1",
+                "route_evidence_only": True,
+                "chosen_run_dir": "output/worker",
+                "compact_artifacts": compact if compact is not None else _compact_artifacts(),
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "run_dir": "output/worker",
+                        "compact_artifacts": compact
+                        if compact is not None
+                        else _compact_artifacts(),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +179,64 @@ def test_classify_artifacts_true_not_missing() -> None:
     assert classify_pr_state(pr) == "no_action"
 
 
+def test_classify_complete_manifest_success_ready_to_merge() -> None:
+    """Complete manifest artifacts allow an otherwise ready PR to continue."""
+    pr = _pr(110, overall="success", labels=["merge-ready"])
+    state = classify_pr_state(pr, compact_artifacts=_compact_artifacts())
+    assert state == "ready_to_merge"
+
+
+def test_classify_manifest_missing_validation_artifact() -> None:
+    """Missing validation artifact should classify as missing_artifacts."""
+    compact = _compact_artifacts()
+    compact.pop("validation")
+    pr = _pr(111, overall="success", labels=["merge-ready"])
+    assert classify_pr_state(pr, compact_artifacts=compact) == "missing_artifacts"
+
+
+def test_classify_manifest_failed_validation() -> None:
+    """Failed validation artifact should classify as failed_validation."""
+    pr = _pr(112, overall="success", labels=["merge-ready"])
+    assert (
+        classify_pr_state(
+            pr,
+            compact_artifacts=_compact_artifacts(validation_result="2 errors found"),
+        )
+        == "failed_validation"
+    )
+
+
+def test_classify_manifest_ambiguous_validation() -> None:
+    """Ambiguous validation artifact should fail closed."""
+    pr = _pr(115, overall="success", labels=["merge-ready"])
+    assert (
+        classify_pr_state(
+            pr,
+            compact_artifacts=_compact_artifacts(validation_result="unknown status"),
+        )
+        == "failed_validation"
+    )
+
+
+def test_classify_reads_enriched_compact_artifacts() -> None:
+    """Enriched PR dict compact artifacts should be honored."""
+    pr = _pr(116, overall="success", labels=["merge-ready"])
+    pr["compact_artifacts"] = _compact_artifacts(validation_result="unknown status")
+    assert classify_pr_state(pr) == "failed_validation"
+
+
+def test_classify_manifest_stale_head_takes_priority() -> None:
+    """Stale head should still reroute before manifest artifact checks."""
+    pr = _pr(113, head_sha="new", expected_head_sha="old", labels=["merge-ready"])
+    assert classify_pr_state(pr, compact_artifacts=_compact_artifacts()) == "stale_worktree"
+
+
+def test_classify_manifest_draft_no_action() -> None:
+    """Draft PRs ignore otherwise complete manifest artifacts."""
+    pr = _pr(114, overall="success", labels=["merge-ready"], draft=True)
+    assert classify_pr_state(pr, compact_artifacts=_compact_artifacts()) == "no_action"
+
+
 # ---------------------------------------------------------------------------
 # recommend_action
 # ---------------------------------------------------------------------------
@@ -153,6 +259,13 @@ def test_recommend_verify_for_missing_artifacts() -> None:
     """Missing artifacts should recommend verify_artifacts."""
     decision = recommend_action("missing_artifacts", pr_number=202, actions_remaining=3)
     assert decision.action == "verify_artifacts"
+
+
+def test_recommend_verify_for_failed_validation() -> None:
+    """Failed validation artifact should recommend artifact verification."""
+    decision = recommend_action("failed_validation", pr_number=208, actions_remaining=3)
+    assert decision.action == "verify_artifacts"
+    assert decision.flow_decision == "reroute"
 
 
 def test_recommend_refresh_for_stale() -> None:
@@ -251,6 +364,19 @@ def test_evaluate_queue_artifact_presence_injection() -> None:
     )
     # Artifact check overrides ready_to_merge when artifacts are missing
     assert result["decisions"][0]["state"] == "missing_artifacts"
+
+
+def test_evaluate_queue_manifest_failed_validation() -> None:
+    """Compact manifest artifacts should drive failed-validation decisions."""
+    prs = [_pr(701, overall="success", labels=["merge-ready"])]
+    result = evaluate_queue(
+        prs,
+        max_actions=3,
+        compact_artifacts={701: _compact_artifacts(validation_result="FAILED")},
+    )
+    decision = result["decisions"][0]
+    assert decision["state"] == "failed_validation"
+    assert decision["flow_decision"] == "reroute"
 
 
 def test_evaluate_queue_mixed_states() -> None:
@@ -425,6 +551,51 @@ def test_main_artifact_present_pairs(capsys: pytest.CaptureFixture[str], tmp_pat
     assert output["decisions"][0]["state"] == "missing_artifacts"
 
 
+def test_main_manifest_pair_overrides_artifact_present(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """CLI --manifest should override a conflicting --artifact-present pair."""
+    monkeypatch.chdir(tmp_path)
+    snapshot = _snapshot([_pr(1501, overall="success", labels=["merge-ready"])])
+    snap_file = tmp_path / "queue.json"
+    snap_file.write_text(json.dumps(snapshot), encoding="utf-8")
+    manifest = _write_manifest(tmp_path)
+
+    rc = main(
+        [
+            "--snapshot",
+            str(snap_file),
+            "--artifact-present",
+            "1501=false",
+            "--manifest",
+            f"1501={manifest}",
+            "--json",
+        ]
+    )
+
+    assert rc == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["decisions"][0]["state"] == "ready_to_merge"
+
+
+def test_load_manifest_artifacts_rejects_symlink(tmp_path: Path) -> None:
+    """Symlink manifest paths should warn and provide no artifact signal."""
+    manifest = _write_manifest(tmp_path)
+    symlink = tmp_path / "manifest-link.json"
+    symlink.symlink_to(manifest)
+
+    artifact_presence, compact, warnings = load_manifest_artifacts(
+        [f"1502={symlink}"],
+        target_repo=tmp_path,
+    )
+
+    assert artifact_presence == {}
+    assert compact == {}
+    assert warnings
+
+
 def test_main_cli_dry_run_no_gh(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     """CLI dry-run should never call gh, even with a realistic snapshot."""
     snapshot = _snapshot(
@@ -541,6 +712,12 @@ def test_flow_decision_failed_ci_reroutes() -> None:
 def test_flow_decision_missing_artifacts_reroutes() -> None:
     """Missing artifacts should yield reroute."""
     decision = recommend_action("missing_artifacts", pr_number=9104, actions_remaining=3)
+    assert decision.flow_decision == "reroute"
+
+
+def test_flow_decision_failed_validation_reroutes() -> None:
+    """Failed validation should yield reroute."""
+    decision = recommend_action("failed_validation", pr_number=9111, actions_remaining=3)
     assert decision.flow_decision == "reroute"
 
 

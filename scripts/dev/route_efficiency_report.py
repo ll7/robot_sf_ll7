@@ -29,6 +29,7 @@ ROUTE_EVIDENCE_WARNING = (
 _EXPECTED_ARTIFACT_KEYS = frozenset(
     {"result_json", "result_md", "diffstat", "status", "validation"}
 )
+EXPECTED_ARTIFACT_KEYS = _EXPECTED_ARTIFACT_KEYS
 
 
 def _is_complete_artifact_set(compact: dict[str, Any]) -> bool:
@@ -39,6 +40,11 @@ def _is_complete_artifact_set(compact: dict[str, Any]) -> bool:
         isinstance(compact.get(k), dict) and compact[k].get("present") is True
         for k in _EXPECTED_ARTIFACT_KEYS
     )
+
+
+def is_complete_artifact_set(compact: dict[str, Any]) -> bool:
+    """Public wrapper for routed-worker artifact completeness checks."""
+    return _is_complete_artifact_set(compact)
 
 
 def _has_validation_success(compact: dict[str, Any]) -> bool | None:
@@ -61,6 +67,11 @@ def _has_validation_success(compact: dict[str, Any]) -> bool | None:
         if re.search(r"\b(?:pass|passed|success|successful|succeeded|ok)\b", neutralized):
             return True
     return None
+
+
+def has_validation_success(compact: dict[str, Any]) -> bool | None:
+    """Public wrapper for routed-worker validation-result parsing."""
+    return _has_validation_success(compact)
 
 
 def _provider_name(route: Any) -> str:

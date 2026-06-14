@@ -534,6 +534,12 @@ def main() -> None:
         action="store_true",
         help="Run all baselines and write a comparison report.",
     )
+    parser.add_argument(
+        "--issue",
+        type=int,
+        default=2758,
+        help="Issue number to record in generated evidence metadata.",
+    )
     args = parser.parse_args()
 
     output_dir = REPO_ROOT / args.output_dir
@@ -546,10 +552,11 @@ def main() -> None:
     command = (
         f"uv run python scripts/benchmark/run_cv_forecast_eval.py --output-dir {args.output_dir}"
         + (f" --baseline {args.baseline}" if not args.compare_all else " --compare-all")
+        + f" --issue {args.issue}"
     )
 
     repro = {
-        "issue": 2758,
+        "issue": args.issue,
         "generated_at_utc": generated_at,
         "command": command,
         "repo_head": repo_head,
@@ -575,7 +582,7 @@ def main() -> None:
         limited_families = sorted({r["family"] for r in results if r["status"] != "evaluated"})
 
         report_json: dict[str, Any] = {
-            "issue": 2758,
+            "issue": args.issue,
             "claim_boundary": (
                 "Diagnostic-only, not paper-facing evidence. "
                 "Limited to bounded repository trace fixtures."
@@ -644,6 +651,7 @@ def _write_comparison_report(
 
     fixture_has_signal = _fixtures_have_signal_metadata(all_results)
     fixture_has_intent = _fixtures_have_intent_metadata(all_results)
+    interaction_effect = _summarize_interaction_effect(comparison_rows)
 
     summary_by_baseline: dict[str, dict[str, Any]] = {}
     for baseline_name in baselines:
@@ -658,7 +666,7 @@ def _write_comparison_report(
         }
 
     report: dict[str, Any] = {
-        "issue": 2758,
+        "issue": repro["issue"],
         "claim_boundary": (
             "Diagnostic-only, not paper-facing evidence. "
             "Limited to bounded repository trace fixtures."
@@ -677,18 +685,21 @@ def _write_comparison_report(
         "summary_by_baseline": summary_by_baseline,
         "comparison_rows": comparison_rows,
     }
+    if interaction_effect is not None:
+        report["interaction_effect"] = interaction_effect
 
     json_path = output_dir / "comparison_report.json"
     with open(json_path, "w") as fh:
         json.dump(report, fh, indent=2)
 
     md_lines = [
-        "# Semantic Forecast Baseline Comparison",
+        "# Forecast Baseline Comparison",
         "",
         "## Claim Boundary",
         "",
-        "**Diagnostic-only, not paper-facing evidence.** Compares constant-velocity and "
-        "semantic forecast baselines on bounded repository trace fixtures.",
+        "**Diagnostic-only, not paper-facing evidence.** Compares constant-velocity, "
+        "semantic, and interaction-aware forecast baselines on bounded repository trace "
+        "fixtures when those baselines are requested.",
         "",
         "## Reproducibility",
         "",
@@ -711,6 +722,19 @@ def _write_comparison_report(
                 "Existing durable fixtures lack signal and intent metadata. Semantic "
                 "conditioning baselines run correctly but their calibration/collision-relevance "
                 "improvement cannot be measured until fixtures include this metadata.",
+                "",
+            ]
+        )
+
+    if interaction_effect is not None:
+        md_lines.extend(
+            [
+                "## Interaction-Aware Diagnostic Effect",
+                "",
+                f"- **Matched evaluated rows:** {interaction_effect['matched_rows']}",
+                f"- **Mean ADE 1s delta vs CV:** {interaction_effect['mean_ade_1s_delta_vs_cv']:.4f}",
+                f"- **Mean NLL 1s delta vs CV:** {interaction_effect['mean_nll_1s_delta_vs_cv']:.4f}",
+                f"- **Conclusion:** {interaction_effect['conclusion']}",
                 "",
             ]
         )
@@ -759,6 +783,87 @@ def _write_comparison_report(
 
     print(f"Wrote {json_path}")
     print(f"Wrote {md_path}")
+
+
+def _summarize_interaction_effect(
+    comparison_rows: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Summarize interaction-aware row deltas against matching CV rows.
+
+    Returns:
+        Interaction effect summary, or None when comparison rows are unavailable.
+    """
+    rows_by_key = {
+        (row["baseline"], row["family"], row["label"]): row
+        for row in comparison_rows
+        if row["status"] == "evaluated"
+    }
+    deltas: list[tuple[float, float]] = []
+    for (baseline, family, label), interaction_row in rows_by_key.items():
+        if baseline != "interaction_aware":
+            continue
+        cv_row = rows_by_key.get(("cv", family, label))
+        if cv_row is None:
+            continue
+        ade_delta = _metric_delta(interaction_row, cv_row, "mean_ade_1s")
+        nll_delta = _metric_delta(
+            interaction_row,
+            cv_row,
+            "mean_negative_log_likelihood_1s",
+        )
+        if ade_delta is not None and nll_delta is not None:
+            deltas.append((ade_delta, nll_delta))
+
+    if not deltas:
+        return None
+
+    mean_ade_delta = sum(delta[0] for delta in deltas) / len(deltas)
+    mean_nll_delta = sum(delta[1] for delta in deltas) / len(deltas)
+    if mean_nll_delta < 0.0 and mean_ade_delta > 0.0:
+        conclusion = (
+            "Interaction-aware heuristic improved Gaussian likelihood/calibration proxy "
+            "but worsened point accuracy on matched diagnostic rows; revise before "
+            "closed-loop coupling claims."
+        )
+    elif mean_nll_delta < 0.0 and mean_ade_delta <= 0.0:
+        conclusion = (
+            "Interaction-aware heuristic improved likelihood without worsening point "
+            "accuracy on matched diagnostic rows; still diagnostic-only."
+        )
+    elif mean_nll_delta >= 0.0 and mean_ade_delta > 0.0:
+        conclusion = (
+            "Interaction-aware heuristic worsened both likelihood proxy and point "
+            "accuracy on matched diagnostic rows; treat as a negative result."
+        )
+    else:
+        conclusion = (
+            "Interaction-aware heuristic has mixed or negligible open-loop effect on "
+            "matched diagnostic rows."
+        )
+
+    return {
+        "matched_rows": len(deltas),
+        "mean_ade_1s_delta_vs_cv": mean_ade_delta,
+        "mean_nll_1s_delta_vs_cv": mean_nll_delta,
+        "conclusion": conclusion,
+    }
+
+
+def _metric_delta(
+    left: dict[str, Any],
+    right: dict[str, Any],
+    metric: str,
+) -> float | None:
+    """Return ``left - right`` for a numeric metric when both rows define it.
+
+    Returns:
+        Metric delta, or None when either value is missing.
+    """
+    left_value = left.get(metric)
+    right_value = right.get(metric)
+    if left_value is None or right_value is None:
+        return None
+    return float(left_value) - float(right_value)
 
 
 def _fixtures_have_signal_metadata(all_results: dict[str, list[dict[str, Any]]]) -> bool:

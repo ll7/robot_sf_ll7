@@ -369,3 +369,10 @@ Policy caveats:
   report. Existing durable fixtures lack signal/intent metadata, so the comparison proves
   baselines run correctly but does not show semantic conditioning improving calibration or
   collision relevance yet. Not benchmark or paper-facing evidence.
+- `issue_2781_interaction_aware_forecast_2026-06-15/`: diagnostic-only comparison of all five
+  forecast baselines (cv, signal_aware, goal_aware, semantic, interaction_aware) on bounded
+  repository trace fixtures. Adds interaction-aware deterministic forecast baseline with
+  proximity-based repulsion and crowding uncertainty. On matched evaluated rows, interaction-aware
+  conditioning improves the Gaussian likelihood/calibration proxy while worsening 1s point
+  accuracy, so the result is mixed, diagnostic-only, and a revise signal before closed-loop
+  coupling. Not benchmark or paper-facing evidence.

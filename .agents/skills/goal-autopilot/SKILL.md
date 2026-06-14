@@ -455,6 +455,31 @@ one of:
 A phase is not complete until the cleanup checkpoint passes for every delegate used
 in that phase.
 
+### Spark Sidecar Routing
+
+Spark (`gpt-5.3-codex-spark`, or the configured Spark sidecar model) is a first-class route for
+small, low-risk read-only task classes during the autopilot cycle. Route Spark when the task fits
+one of:
+
+- **tiny lookup** — file location, name resolution, short grep.
+- **read-only review** — narrow diff inspection, single-file summary.
+- **docs cross-check** — link validation, path reference checks.
+- **issue/file surface mapping** — issue-to-file coverage, surface enumeration.
+- **inspect small command output** — bounded stdout/stderr review.
+
+Spark prompts must require compact output: files inspected, exact evidence, uncertainty, and
+recommended next prompt.
+
+Do not route Spark to:
+
+- final benchmark interpretation and paper claims,
+- merge readiness and publication decisions,
+- GitHub mutation (labels, comments, PR creation, merge, close),
+- long CI polling unless a bounded monitor helper exists,
+- shell-executable fallback unless a real headless wrapper is available.
+
+This is routing guidance only; do not configure Spark as a shell-executable fallback.
+
 ## Delegation Failure Recovery
 
 Each delegate skill may fail. Handle failures per phase:

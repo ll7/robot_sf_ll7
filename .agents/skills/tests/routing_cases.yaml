@@ -91,3 +91,19 @@ cases:
   - gh-pr-merger
   - goal-pr-review
   - goal-issue-discovery
+- intent: Locate a file by name or content
+  primary: skill-picker
+  secondary:
+  - context-map
+- intent: Summarize a single file or narrow diff
+  primary: review-and-refactor
+  secondary:
+  - context-map
+- intent: Cross-check docs links and path references
+  primary: update-docs-on-code-change
+  secondary:
+  - context-note-maintainer
+- intent: Map issue to touched files and surfaces
+  primary: context-map
+  secondary:
+  - skill-picker

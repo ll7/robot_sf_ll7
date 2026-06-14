@@ -439,6 +439,29 @@ automation:
 - `.agents/skills/paper-facing-docs/SKILL.md`
 - `.agents/skills/review-benchmark-change/SKILL.md`
 
+## Spark Sidecar Routing
+
+Spark (`gpt-5.3-codex-spark`, or the configured Spark sidecar model) is eligible for small, low-risk
+read-only task classes:
+
+- **tiny lookup** — file location, name resolution, short grep.
+- **read-only review** — narrow diff inspection, single-file summary.
+- **docs cross-check** — link validation, path reference checks.
+- **issue/file surface mapping** — issue-to-file coverage, surface enumeration.
+
+Spark prompts must require compact output: files inspected, exact evidence, uncertainty, and
+recommended next prompt.
+
+Spark is explicitly excluded from:
+
+- final benchmark interpretation and paper claims,
+- merge readiness and publication decisions,
+- GitHub mutation (labels, comments, PR creation, merge, close),
+- long CI polling unless a bounded monitor helper exists,
+- shell-executable fallback unless a real headless wrapper is available.
+
+Do not configure Spark as a shell-executable fallback; this is routing guidance only.
+
 ## Donts
 
 - Never change code in `.venv`. To manage dependencies, edit `pyproject.toml` and run `uv sync` to update the virtual environment.

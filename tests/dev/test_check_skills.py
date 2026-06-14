@@ -91,6 +91,10 @@ Use compact_worktree_snapshot.py and compact_ci_snapshot.py before broad worktre
 Pass ledger snapshot paths to workers, avoid repeating broad state polling, and run
 fresh live checks before issue claim, push, PR publication, label/project mutation,
 or merge-ready decisions.
+Spark sidecar routing supports gpt-5.3-codex-spark for tiny lookup, read-only review,
+docs cross-check, and issue/file surface mapping. Spark prompts must report files inspected,
+exact evidence, uncertainty, and recommended next prompt. Do not use Spark for GitHub mutation
+or shell-executable fallback.
 """
     errors = check_skills._validate_artifact_first_contract(
         skill_path,
@@ -116,6 +120,7 @@ def test_artifact_first_contract_fails_when_missing_required_artifacts(tmp_path:
     assert any("artifact-first phrase requirement" in e for e in errors)
     assert any("worker-output limit requirement" in e for e in errors)
     assert any("active-ledger requirement" in e for e in errors)
+    assert any("Spark sidecar routing requirement" in e for e in errors)
 
 
 def test_artifact_first_contract_requires_canonical_result_markdown_case(

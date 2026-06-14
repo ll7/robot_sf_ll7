@@ -16,12 +16,17 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from scripts.dev.check_pr_ci_status import _fetch_ci_status
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from scripts.dev.check_pr_ci_status import _fetch_ci_status  # noqa: E402
 
 DEFAULT_BASELINE_SECONDS = 920
 DEFAULT_MULTIPLIER = 1.3

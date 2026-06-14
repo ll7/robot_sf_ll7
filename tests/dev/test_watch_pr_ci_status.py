@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -335,3 +337,63 @@ def test_help_includes_expected_head_sha_example(capsys: pytest.CaptureFixture[s
     assert "uv run python scripts/dev/watch_pr_ci_status.py" in captured.out
     assert "--json" in captured.out
     assert "long-poll" in captured.out.lower() or "long poll" in captured.out.lower()
+
+
+def test_repo_root_on_sys_path() -> None:
+    """The script should insert the repo root into sys.path before importing check_pr_ci_status."""
+    from pathlib import Path
+
+    from scripts.dev.watch_pr_ci_status import _REPO_ROOT
+
+    repo_root = str(Path(__file__).resolve().parent.parent.parent)
+    assert _REPO_ROOT == repo_root
+    assert _REPO_ROOT in sys.path
+
+
+def test_direct_invocation_help_succeeds() -> None:
+    """python scripts/dev/watch_pr_ci_status.py --help should succeed without PYTHONPATH."""
+    import os
+    import subprocess
+    import sys as _sys
+
+    script = str(
+        Path(__file__).resolve().parent.parent.parent / "scripts" / "dev" / "watch_pr_ci_status.py"
+    )
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [_sys.executable, script, "--help"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    assert "--expected-head-sha" in result.stdout
+
+
+def test_direct_invocation_import_without_pythonpath() -> None:
+    """The module should be importable when the repo root is not explicitly on PYTHONPATH."""
+    import importlib
+    import sys as _sys
+
+    repo_root = str(Path(__file__).resolve().parent.parent.parent)
+    paths_to_remove = [p for p in _sys.path if p == repo_root]
+    for p in paths_to_remove:
+        _sys.path.remove(p)
+
+    saved_modules = {}
+    for name in ("scripts.dev.watch_pr_ci_status", "scripts.dev.check_pr_ci_status"):
+        if name in _sys.modules:
+            saved_modules[name] = _sys.modules.pop(name)
+
+    try:
+        mod = importlib.import_module("scripts.dev.watch_pr_ci_status")
+        assert hasattr(mod, "_REPO_ROOT")
+        assert mod._REPO_ROOT == repo_root
+    finally:
+        _sys.modules.update(saved_modules)
+        for p in paths_to_remove:
+            if p not in _sys.path:
+                _sys.path.insert(0, p)

@@ -98,6 +98,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2767_benchmark_table_candidates/`: draft-only benchmark-results table candidates generated
+  from tracked claim/evidence inputs. The bundle is a synthesis review surface only; stale,
+  diagnostic, unavailable, fallback, degraded, proxy-only, and missing-denominator evidence remains
+  caveated or blocked and is not promoted to manuscript evidence.
 - `issue_2788_negative_result_scenario_candidates/`: diagnostic-only generated scenario candidate
   manifests derived from negative-result register entries NR-001 and NR-002. The manifests encode
   clearance-targeted topology variants and a near-field observation-noise successor candidate;

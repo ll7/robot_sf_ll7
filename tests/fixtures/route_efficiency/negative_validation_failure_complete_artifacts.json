@@ -1,0 +1,55 @@
+{
+  "chosen_route": {
+    "model": "qwen-max",
+    "provider": "qwen"
+  },
+  "route_evidence_only": true,
+  "schema": "routed_worker_manifest.v1",
+  "task_class": "workflow/reporting",
+  "warning": "Wrapper success, zero exit, and manifest presence are route evidence only; they are not task acceptance.",
+  "attempted_routes": [
+    {
+      "attempt_index": 0,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-neg-009/diffstat.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 42
+        },
+        "result_json": {
+          "path": "output/worker-neg-009/result.json",
+          "present": true,
+          "reason": null,
+          "size_bytes": 256
+        },
+        "result_md": {
+          "path": "output/worker-neg-009/RESULT.md",
+          "present": true,
+          "reason": null,
+          "size_bytes": 128
+        },
+        "status": {
+          "path": "output/worker-neg-009/status.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 16
+        },
+        "validation": {
+          "path": "output/worker-neg-009/validation.txt",
+          "present": true,
+          "reason": null,
+          "result": "3 failed, 12 passed, 15 total",
+          "size_bytes": 64
+        }
+      },
+      "failure_class": "validation",
+      "returncode": 1,
+      "route": {
+        "model": "qwen-max",
+        "provider": "qwen"
+      },
+      "run_dir": "output/worker-neg-009"
+    }
+  ]
+}

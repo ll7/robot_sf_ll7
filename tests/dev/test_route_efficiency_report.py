@@ -1255,3 +1255,164 @@ def test_dashboard_markdown_includes_recommendations_section() -> None:
     assert "## Routing recommendations" in md
     assert "avoid_provider" in md
     assert "not task acceptance" in md
+
+
+# ---------------------------------------------------------------------------
+# Negative-fixture tests (issue-2817): ensure the report cannot overinterpret
+# bad delegated outputs.
+# ---------------------------------------------------------------------------
+
+
+def test_negative_fixture_all_attempts_failed() -> None:
+    """All attempts failed should yield zero completion and clear missing counts."""
+    manifest = _load_fixture("negative_all_attempts_failed.json")
+    report = rer.analyze_manifests([manifest])
+
+    assert report["delegated_attempts"] == 3
+    assert report["complete_artifacts"]["count"] == 0
+    assert report["complete_artifacts"]["rate"] == 0.0
+    assert report["validation_presence"]["present"] == 0
+    assert report["validation_presence"]["success_inferable"] == 0
+    assert report["reroutes"] == 2
+    assert report["incomplete_by_provider"]["gemini"] == 2
+    assert report["incomplete_by_provider"]["copilot"] == 1
+    assert report["incomplete_by_failure_class"]["timeout"] == 2
+    assert report["incomplete_by_failure_class"]["route-collapse"] == 1
+    expected_missing = len(rer._EXPECTED_ARTIFACT_KEYS) * 3
+    assert sum(report["missing_artifacts"].values()) == expected_missing
+
+
+def test_negative_fixture_partial_artifacts_not_complete() -> None:
+    """Partial artifacts should not be counted as complete."""
+    manifest = _load_fixture("negative_partial_artifacts.json")
+    report = rer.analyze_manifests([manifest])
+
+    assert report["delegated_attempts"] == 2
+    assert report["complete_artifacts"]["count"] == 0
+    assert report["complete_artifacts"]["rate"] == 0.0
+    assert report["validation_presence"]["present"] == 1
+    assert report["validation_presence"]["success_inferable"] == 0
+    assert report["incomplete_by_failure_class"]["partial-artifacts"] == 1
+    assert report["incomplete_by_failure_class"]["validation"] == 1
+
+
+def test_negative_fixture_malformed_compact_artifacts() -> None:
+    """Malformed compact_artifacts should be counted as incomplete, not crash."""
+    manifest = _load_fixture("negative_malformed_compact_artifacts.json")
+    report = rer.analyze_manifests([manifest])
+
+    assert report["delegated_attempts"] == 3
+    assert report["complete_artifacts"]["count"] == 1
+    assert report["complete_artifacts"]["rate"] == round(1 / 3, 4)
+    assert report["incomplete_by_provider"]["qwen"] == 1
+    assert report["incomplete_by_provider"]["gemini"] == 1
+    assert report["incomplete_by_failure_class"]["malformed"] == 2
+
+
+def test_negative_fixture_empty_routes() -> None:
+    """Empty attempted_routes should yield zeroed report without error."""
+    manifest = _load_fixture("negative_empty_routes.json")
+    report = rer.analyze_manifests([manifest])
+
+    assert report["delegated_attempts"] == 0
+    assert report["complete_artifacts"]["count"] == 0
+    assert report["complete_artifacts"]["rate"] == 0.0
+    assert report["incomplete_by_provider"] == {}
+    assert report["incomplete_by_failure_class"] == {}
+    assert report["missing_artifacts"] == {}
+
+
+def test_negative_fixture_validation_failure_with_complete_artifacts() -> None:
+    """Complete artifacts with failing validation should not count as success."""
+    manifest = _load_fixture("negative_validation_failure_complete_artifacts.json")
+    report = rer.analyze_manifests([manifest])
+
+    assert report["delegated_attempts"] == 1
+    assert report["complete_artifacts"]["count"] == 1
+    assert report["complete_artifacts"]["rate"] == 1.0
+    assert report["validation_presence"]["present"] == 1
+    assert report["validation_presence"]["success_inferable"] == 0
+
+
+def test_negative_fixture_single_attempt_all_missing() -> None:
+    """Single attempt with all artifacts missing should show full missing counts."""
+    manifest = _load_fixture("negative_single_attempt_all_missing.json")
+    report = rer.analyze_manifests([manifest])
+
+    assert report["delegated_attempts"] == 1
+    assert report["complete_artifacts"]["count"] == 0
+    assert report["complete_artifacts"]["rate"] == 0.0
+    assert report["incomplete_by_provider"]["gemini"] == 1
+    assert report["incomplete_by_failure_class"]["route-collapse"] == 1
+    for key in rer._EXPECTED_ARTIFACT_KEYS:
+        assert report["missing_artifacts"][key] == 1
+
+
+def test_negative_fixture_reroute_success_not_accepted() -> None:
+    """A reroute can complete validation while still lacking task acceptance."""
+    manifest = _load_fixture("negative_reroute_success_not_accepted.json")
+    report = rer.analyze_manifests([manifest])
+
+    assert report["delegated_attempts"] == 2
+    assert report["complete_artifacts"] == {"count": 1, "rate": 0.5}
+    assert report["validation_presence"] == {"present": 1, "success_inferable": 1}
+    assert report["reroutes"] == 1
+    assert report["incomplete_by_provider"]["gemini"] == 1
+    assert report["incomplete_by_failure_class"]["missing-artifact-paths"] == 1
+    assert report["by_provider"]["qwen"] == {"total": 1, "complete": 1}
+    for key in rer._EXPECTED_ARTIFACT_KEYS:
+        assert report["missing_artifacts"][key] == 1
+    assert report["final_outcome"]["accepted"] is None
+    assert "not task acceptance" in report["final_outcome"]["note"]
+    assert "not task acceptance" in report["warning"]
+
+
+def test_negative_fixture_reroute_threshold_triggered() -> None:
+    """All-failed manifest should trigger reroute_threshold_met recommendation."""
+    manifest = _load_fixture("negative_all_attempts_failed.json")
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    reroute = [r for r in recs if r["class"] == "reroute_threshold_met"]
+    assert len(reroute) >= 1
+    assert "0/3" in reroute[0]["action"]
+    assert "not task acceptance" in reroute[0]["caveat"]
+
+
+def test_negative_fixture_avoid_provider_triggered() -> None:
+    """Provider with 0% completion across >= 2 attempts should trigger avoid."""
+    manifest = _load_fixture("negative_all_attempts_failed.json")
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    avoid = [r for r in recs if r["class"] == "avoid_provider"]
+    assert len(avoid) >= 1
+    assert "gemini" in avoid[0]["action"]
+    assert "0/2" in avoid[0]["action"]
+
+
+def test_negative_fixture_dashboard_all_failed() -> None:
+    """Dashboard with all-failed fixture should surface zero completion."""
+    manifest, source = _manifest_with_source("negative_all_attempts_failed.json")
+    dashboard = rer.analyze_dashboard([(manifest, source)])
+
+    assert dashboard["overall"]["delegated_attempts"] == 3
+    assert dashboard["overall"]["complete_artifacts"]["count"] == 0
+    assert dashboard["overall"]["complete_artifacts"]["rate"] == 0.0
+    assert len(dashboard["per_manifest"]) == 1
+    assert dashboard["per_manifest"][0]["source"] == source
+    assert dashboard["per_manifest"][0]["complete_artifacts"]["rate"] == 0.0
+
+
+def test_negative_fixture_dashboard_mixed_with_positive() -> None:
+    """Dashboard mixing positive and negative fixtures should aggregate correctly."""
+    pos, src_pos = _manifest_with_source("routing_manifest_complete.json")
+    neg, src_neg = _manifest_with_source("negative_all_attempts_failed.json")
+    dashboard = rer.analyze_dashboard([(pos, src_pos), (neg, src_neg)])
+
+    assert dashboard["overall"]["delegated_attempts"] == 4
+    assert dashboard["overall"]["complete_artifacts"]["count"] == 1
+    assert dashboard["overall"]["complete_artifacts"]["rate"] == 0.25
+    assert len(dashboard["per_manifest"]) == 2
+    assert dashboard["per_manifest"][0]["complete_artifacts"]["rate"] == 1.0
+    assert dashboard["per_manifest"][1]["complete_artifacts"]["rate"] == 0.0

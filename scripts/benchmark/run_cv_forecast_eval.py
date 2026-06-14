@@ -27,6 +27,7 @@ import numpy as np
 
 from robot_sf.benchmark.pedestrian_forecast import (
     DEFAULT_FORECAST_HORIZONS_S,
+    actor_type_metric_key,
     compute_batch_forecast_metrics,
 )
 
@@ -153,6 +154,22 @@ def _pedestrian_count(trace: dict[str, Any]) -> int:
     return max_peds
 
 
+def _get_actor_classes(trace: dict[str, Any]) -> list[str]:
+    """Collect all unique actor_type values from pedestrians in the trace."""
+    return sorted(_actor_class_counts(trace))
+
+
+def _actor_class_counts(trace: dict[str, Any]) -> dict[str, int]:
+    """Count trace actors by declared actor_type, defaulting legacy traces to pedestrian."""
+    frames = trace.get("frames") or trace.get("steps") or []
+    counts: dict[str, int] = {}
+    for frame in frames:
+        for ped in frame.get("pedestrians", []):
+            actor_class = actor_type_metric_key(ped.get("actor_type"))
+            counts[actor_class] = counts.get(actor_class, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def _git_head() -> str:
     """Return the short git HEAD, or '' on failure."""
     try:
@@ -197,6 +214,12 @@ def evaluate_single_trace(
     frames = trace.get("frames") or trace.get("steps") or []
     result["frame_count"] = len(frames)
     result["pedestrians_per_frame"] = _pedestrian_count(trace)
+    result["actor_classes"] = _get_actor_classes(trace)
+    result["actor_class_counts"] = _actor_class_counts(trace)
+    result["pedestrian_forecast_denominator_policy"] = (
+        "Only pedestrian/person actors are scored by pedestrian forecast metrics; "
+        "non-pedestrian actor classes are excluded and counted separately."
+    )
     result["has_motion"] = _trace_has_motion(trace)
 
     if not _trace_has_motion(trace):

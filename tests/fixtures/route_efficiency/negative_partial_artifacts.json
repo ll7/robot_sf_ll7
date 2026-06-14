@@ -1,0 +1,97 @@
+{
+  "chosen_route": {
+    "model": "qwen-max",
+    "provider": "qwen"
+  },
+  "route_evidence_only": true,
+  "schema": "routed_worker_manifest.v1",
+  "task_class": "workflow/reporting",
+  "warning": "Wrapper success, zero exit, and manifest presence are route evidence only; they are not task acceptance.",
+  "attempted_routes": [
+    {
+      "attempt_index": 0,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-neg-004/diffstat.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 42
+        },
+        "result_json": {
+          "path": "output/worker-neg-004/result.json",
+          "present": true,
+          "reason": null,
+          "size_bytes": 256
+        },
+        "result_md": {
+          "path": "output/worker-neg-004/RESULT.md",
+          "present": false,
+          "reason": "truncated",
+          "size_bytes": 0
+        },
+        "status": {
+          "path": "output/worker-neg-004/status.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 16
+        },
+        "validation": {
+          "path": "output/worker-neg-004/validation.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        }
+      },
+      "failure_class": "partial-artifacts",
+      "returncode": 0,
+      "route": {
+        "model": "qwen-max",
+        "provider": "qwen"
+      },
+      "run_dir": "output/worker-neg-004"
+    },
+    {
+      "attempt_index": 1,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-neg-005/diffstat.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 42
+        },
+        "result_json": {
+          "path": "output/worker-neg-005/result.json",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "result_md": {
+          "path": "output/worker-neg-005/RESULT.md",
+          "present": true,
+          "reason": null,
+          "size_bytes": 128
+        },
+        "status": {
+          "path": "output/worker-neg-005/status.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 16
+        },
+        "validation": {
+          "path": "output/worker-neg-005/validation.txt",
+          "present": true,
+          "reason": null,
+          "result": "2 errors found",
+          "size_bytes": 64
+        }
+      },
+      "failure_class": "validation",
+      "returncode": 1,
+      "route": {
+        "model": "gpt-4o",
+        "provider": "copilot"
+      },
+      "run_dir": "output/worker-neg-005"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "chosen_route": {
+    "model": "qwen-max",
+    "provider": "qwen"
+  },
+  "route_evidence_only": true,
+  "schema": "routed_worker_manifest.v1",
+  "task_class": "workflow/reporting",
+  "warning": "Wrapper success, zero exit, and manifest presence are route evidence only; they are not task acceptance.",
+  "attempted_routes": [
+    {
+      "attempt_index": 0,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-neg-011/diffstat.txt",
+          "present": false,
+          "reason": "path does not exist",
+          "size_bytes": 0
+        },
+        "result_json": {
+          "path": "output/worker-neg-011/result.json",
+          "present": false,
+          "reason": "path does not exist",
+          "size_bytes": 0
+        },
+        "result_md": {
+          "path": "output/worker-neg-011/RESULT.md",
+          "present": false,
+          "reason": "path does not exist",
+          "size_bytes": 0
+        },
+        "status": {
+          "path": "output/worker-neg-011/status.txt",
+          "present": false,
+          "reason": "path does not exist",
+          "size_bytes": 0
+        },
+        "validation": {
+          "path": "output/worker-neg-011/validation.json",
+          "present": false,
+          "reason": "path does not exist",
+          "size_bytes": 0
+        }
+      },
+      "failure_class": "missing-artifact-paths",
+      "returncode": 1,
+      "route": {
+        "model": "gemini-pro",
+        "provider": "gemini"
+      },
+      "run_dir": "output/worker-neg-011"
+    },
+    {
+      "attempt_index": 1,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-neg-012/diffstat.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 44
+        },
+        "result_json": {
+          "path": "output/worker-neg-012/result.json",
+          "present": true,
+          "reason": null,
+          "size_bytes": 384
+        },
+        "result_md": {
+          "path": "output/worker-neg-012/RESULT.md",
+          "present": true,
+          "reason": null,
+          "size_bytes": 180
+        },
+        "status": {
+          "path": "output/worker-neg-012/status.txt",
+          "present": true,
+          "reason": null,
+          "size_bytes": 18
+        },
+        "validation": {
+          "path": "output/worker-neg-012/validation.json",
+          "present": true,
+          "reason": null,
+          "result": "51 passed",
+          "size_bytes": 72
+        }
+      },
+      "failure_class": "none",
+      "returncode": 0,
+      "route": {
+        "model": "qwen-max",
+        "provider": "qwen"
+      },
+      "run_dir": "output/worker-neg-012"
+    }
+  ]
+}

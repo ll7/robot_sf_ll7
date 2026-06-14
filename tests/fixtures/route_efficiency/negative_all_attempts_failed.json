@@ -1,0 +1,138 @@
+{
+  "chosen_route": {
+    "model": "gemini-pro",
+    "provider": "gemini"
+  },
+  "route_evidence_only": true,
+  "schema": "routed_worker_manifest.v1",
+  "task_class": "workflow/reporting",
+  "warning": "Wrapper success, zero exit, and manifest presence are route evidence only; they are not task acceptance.",
+  "attempted_routes": [
+    {
+      "attempt_index": 0,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-neg-001/diffstat.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "result_json": {
+          "path": "output/worker-neg-001/result.json",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "result_md": {
+          "path": "output/worker-neg-001/RESULT.md",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "status": {
+          "path": "output/worker-neg-001/status.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "validation": {
+          "path": "output/worker-neg-001/validation.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        }
+      },
+      "failure_class": "timeout",
+      "returncode": 1,
+      "route": {
+        "model": "gemini-pro",
+        "provider": "gemini"
+      },
+      "run_dir": "output/worker-neg-001"
+    },
+    {
+      "attempt_index": 1,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-neg-002/diffstat.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "result_json": {
+          "path": "output/worker-neg-002/result.json",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "result_md": {
+          "path": "output/worker-neg-002/RESULT.md",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "status": {
+          "path": "output/worker-neg-002/status.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "validation": {
+          "path": "output/worker-neg-002/validation.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        }
+      },
+      "failure_class": "route-collapse",
+      "returncode": 2,
+      "route": {
+        "model": "gpt-4o",
+        "provider": "copilot"
+      },
+      "run_dir": "output/worker-neg-002"
+    },
+    {
+      "attempt_index": 2,
+      "compact_artifacts": {
+        "diffstat": {
+          "path": "output/worker-neg-003/diffstat.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "result_json": {
+          "path": "output/worker-neg-003/result.json",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "result_md": {
+          "path": "output/worker-neg-003/RESULT.md",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "status": {
+          "path": "output/worker-neg-003/status.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        },
+        "validation": {
+          "path": "output/worker-neg-003/validation.txt",
+          "present": false,
+          "reason": "missing",
+          "size_bytes": 0
+        }
+      },
+      "failure_class": "timeout",
+      "returncode": 1,
+      "route": {
+        "model": "gemini-pro",
+        "provider": "gemini"
+      },
+      "run_dir": "output/worker-neg-003"
+    }
+  ]
+}

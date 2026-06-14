@@ -15,10 +15,12 @@ import argparse
 import json
 import re
 from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "route_efficiency_report.v1"
+DASHBOARD_SCHEMA_VERSION = "route_efficiency_dashboard.v1"
 ROUTE_EVIDENCE_WARNING = (
     "Route success and complete artifact presence are route evidence only; "
     "they are not task acceptance. The orchestrator must still inspect the "
@@ -89,6 +91,7 @@ class _Accumulator:
         self.provider_total: Counter[str] = Counter()
         self.provider_complete: Counter[str] = Counter()
         self.failure_class_incomplete: Counter[str] = Counter()
+        self.missing_artifacts: Counter[str] = Counter()
 
     def process_attempt(self, idx: int, attempt: dict[str, Any]) -> None:
         if not isinstance(attempt, dict):
@@ -108,6 +111,11 @@ class _Accumulator:
         else:
             self.provider_incomplete[provider] += 1
             self.failure_class_incomplete[str(fc)] += 1
+            if isinstance(compact, dict):
+                for key in sorted(_EXPECTED_ARTIFACT_KEYS):
+                    artifact = compact.get(key)
+                    if not isinstance(artifact, dict) or artifact.get("present") is not True:
+                        self.missing_artifacts[key] += 1
 
         if _validate_present(compact):
             self.validation_present += 1
@@ -246,6 +254,220 @@ def _derive_routing_recommendations(report: dict[str, Any]) -> list[dict[str, st
     ]
 
 
+def _analyze_single_manifest(
+    manifest: dict[str, Any],
+    source: str,
+) -> dict[str, Any]:
+    """Build a per-manifest sub-report with source label."""
+    acc = _Accumulator()
+    attempts = manifest.get("attempted_routes") if isinstance(manifest, dict) else None
+    if isinstance(attempts, list):
+        acc.total_attempts = len(attempts)
+        for idx, attempt in enumerate(attempts):
+            acc.process_attempt(idx, attempt)
+
+    rate = round(acc.complete_count / acc.total_attempts, 4) if acc.total_attempts else 0.0
+    return {
+        "source": source,
+        "delegated_attempts": acc.total_attempts,
+        "complete_artifacts": {"count": acc.complete_count, "rate": rate},
+        "validation_presence": {
+            "present": acc.validation_present,
+            "success_inferable": acc.validation_success,
+        },
+        "reroutes": acc.reroutes,
+        "incomplete_by_provider": dict(acc.provider_incomplete),
+        "incomplete_by_failure_class": dict(acc.failure_class_incomplete),
+        "missing_artifacts": dict(acc.missing_artifacts),
+        "by_provider": {
+            p: {"total": t, "complete": acc.provider_complete[p]}
+            for p, t in acc.provider_total.items()
+        },
+    }
+
+
+def analyze_dashboard(
+    manifests_with_sources: list[tuple[dict[str, Any], str]],
+    *,
+    snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a dashboard report from multiple manifests with source labels."""
+    per_manifest: list[dict[str, Any]] = []
+    for manifest, source in manifests_with_sources:
+        per_manifest.append(_analyze_single_manifest(manifest, source))
+
+    overall_acc = _Accumulator()
+    for manifest, _source in manifests_with_sources:
+        attempts = manifest.get("attempted_routes") if isinstance(manifest, dict) else None
+        if isinstance(attempts, list):
+            overall_acc.total_attempts += len(attempts)
+            for idx, attempt in enumerate(attempts):
+                overall_acc.process_attempt(idx, attempt)
+
+    total = overall_acc.total_attempts
+    rate = round(overall_acc.complete_count / total, 4) if total else 0.0
+
+    provider_trend_map: dict[str, list[dict[str, Any]]] = {}
+    for sub in per_manifest:
+        for provider, counts in sub.get("by_provider", {}).items():
+            p_total = counts.get("total", 0)
+            p_complete = counts.get("complete", 0)
+            p_rate = round(p_complete / p_total, 4) if p_total else 0.0
+            entry = {
+                "source": sub["source"],
+                "total": p_total,
+                "complete": p_complete,
+                "rate": p_rate,
+            }
+            provider_trend_map.setdefault(provider, []).append(entry)
+
+    provider_trend = [
+        {"provider": provider, "per_manifest": entries}
+        for provider, entries in sorted(provider_trend_map.items())
+    ]
+
+    accepted, acceptance_note = _extract_snapshot_outcome(snapshot)
+
+    overall_report = {
+        "schema": DASHBOARD_SCHEMA_VERSION,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "manifests_analyzed": len(manifests_with_sources),
+        "overall": {
+            "delegated_attempts": overall_acc.total_attempts,
+            "complete_artifacts": {"count": overall_acc.complete_count, "rate": rate},
+            "validation_presence": {
+                "present": overall_acc.validation_present,
+                "success_inferable": overall_acc.validation_success,
+            },
+            "total_reroutes": overall_acc.reroutes,
+            "estimated_inspections_avoided": overall_acc.complete_count,
+        },
+        "per_manifest": per_manifest,
+        "provider_trend": provider_trend,
+        "incomplete_by_provider": dict(overall_acc.provider_incomplete),
+        "incomplete_by_failure_class": dict(overall_acc.failure_class_incomplete),
+        "missing_artifacts": dict(overall_acc.missing_artifacts),
+        "by_provider": {
+            p: {"total": t, "complete": overall_acc.provider_complete[p]}
+            for p, t in overall_acc.provider_total.items()
+        },
+        "final_outcome": {
+            "accepted": accepted,
+            "note": (
+                acceptance_note
+                if acceptance_note is not None
+                else "route evidence only; not task acceptance"
+            ),
+        },
+        "warning": ROUTE_EVIDENCE_WARNING,
+    }
+
+    recommendations_source = {
+        "delegated_attempts": overall_acc.total_attempts,
+        "complete_artifacts": {"count": overall_acc.complete_count, "rate": rate},
+        "incomplete_by_provider": dict(overall_acc.provider_incomplete),
+        "incomplete_by_failure_class": dict(overall_acc.failure_class_incomplete),
+        "missing_artifacts": dict(overall_acc.missing_artifacts),
+        "by_provider": {
+            p: {"total": t, "complete": overall_acc.provider_complete[p]}
+            for p, t in overall_acc.provider_total.items()
+        },
+    }
+    overall_report["routing_recommendations"] = _derive_routing_recommendations(
+        recommendations_source
+    )
+    return overall_report
+
+
+def _append_dashboard_summary(lines: list[str], dashboard: dict[str, Any]) -> None:
+    """Append dashboard headline metrics."""
+    overall = dashboard["overall"]
+    ca = overall["complete_artifacts"]
+    vp = overall["validation_presence"]
+    lines.append("# Route Efficiency Dashboard\n")
+    lines.append(f"- **Manifests analyzed:** {dashboard['manifests_analyzed']}")
+    lines.append(f"- **Generated at:** {dashboard['generated_at']}")
+    lines.append(f"- **Delegated attempts:** {overall['delegated_attempts']}")
+    lines.append(
+        f"- **Complete artifacts:** {ca['count']}/{overall['delegated_attempts']} ({ca['rate']:.0%})"
+    )
+    lines.append(
+        f"- **Validation present:** {vp['present']}"
+        f" | **success inferable:** {vp['success_inferable']}"
+    )
+    lines.append(f"- **Total reroutes:** {overall['total_reroutes']}")
+    lines.append(f"- **Estimated inspections avoided:** {overall['estimated_inspections_avoided']}")
+
+    ibp = dashboard.get("incomplete_by_provider", {})
+    if ibp:
+        parts = [f"{k}: {v}" for k, v in sorted(ibp.items())]
+        lines.append(f"- **Incomplete by provider:** {', '.join(parts)}")
+
+    ibf = dashboard.get("incomplete_by_failure_class", {})
+    if ibf:
+        parts = [f"{k}: {v}" for k, v in sorted(ibf.items())]
+        lines.append(f"- **Incomplete by failure class:** {', '.join(parts)}")
+
+    missing_artifacts = dashboard.get("missing_artifacts", {})
+    if missing_artifacts:
+        parts = [f"{k}: {v}" for k, v in sorted(missing_artifacts.items())]
+        lines.append(f"- **Missing artifacts:** {', '.join(parts)}")
+
+    lines.append(f"\n> {dashboard['warning']}\n")
+
+
+def _append_dashboard_tables(lines: list[str], dashboard: dict[str, Any]) -> None:
+    """Append dashboard per-manifest and provider-trend tables."""
+    per_manifest = dashboard.get("per_manifest", [])
+    if per_manifest:
+        lines.append("## Per-manifest breakdown\n")
+        lines.append("| Source | Attempts | Complete | Rate | Reroutes |")
+        lines.append("|--------|----------|----------|------|----------|")
+        for sub in per_manifest:
+            src = sub["source"]
+            att = sub["delegated_attempts"]
+            cnt = sub["complete_artifacts"]["count"]
+            r = sub["complete_artifacts"]["rate"]
+            rr = sub["reroutes"]
+            lines.append(f"| {src} | {att} | {cnt} | {r:.0%} | {rr} |")
+        lines.append("")
+
+    provider_trend = dashboard.get("provider_trend", [])
+    if provider_trend:
+        lines.append("## Provider trend\n")
+        lines.append("| Provider | Source | Total | Complete | Rate |")
+        lines.append("|----------|--------|-------|----------|------|")
+        for pt in provider_trend:
+            provider = pt["provider"]
+            for entry in pt["per_manifest"]:
+                lines.append(
+                    f"| {provider} | {entry['source']} | {entry['total']} |"
+                    f" {entry['complete']} | {entry['rate']:.0%} |"
+                )
+        lines.append("")
+
+
+def _append_routing_recommendations(lines: list[str], recs: list[dict[str, str]]) -> None:
+    """Append compact routing recommendation bullets."""
+    lines.append("## Routing recommendations\n")
+    for rec in recs:
+        lines.append(f"- **{rec['class']}**: {rec['action']}")
+        lines.append(f"  - Evidence: {rec['evidence']}")
+        lines.append(f"  - Caveat: {rec['caveat']}")
+    lines.append("")
+
+
+def _format_dashboard_markdown(dashboard: dict[str, Any]) -> str:
+    """Render the dashboard as a compact Markdown summary."""
+    lines: list[str] = []
+    _append_dashboard_summary(lines, dashboard)
+    _append_dashboard_tables(lines, dashboard)
+    recs = dashboard.get("routing_recommendations")
+    if recs:
+        _append_routing_recommendations(lines, recs)
+    return "\n".join(lines)
+
+
 def analyze_manifests(
     manifests: list[dict[str, Any]],
     *,
@@ -279,6 +501,7 @@ def analyze_manifests(
         "reroutes": acc.reroutes,
         "incomplete_by_provider": dict(acc.provider_incomplete),
         "incomplete_by_failure_class": dict(acc.failure_class_incomplete),
+        "missing_artifacts": dict(acc.missing_artifacts),
         "by_provider": {
             p: {"total": t, "complete": acc.provider_complete[p]}
             for p, t in acc.provider_total.items()
@@ -366,6 +589,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output",
         help="Write report to this file instead of stdout.",
     )
+    parser.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="Enable dashboard mode over multiple manifests with per-manifest breakdown and provider trends.",
+    )
     return parser.parse_args(argv)
 
 
@@ -392,10 +620,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.snapshot:
         snapshot = json.loads(Path(args.snapshot).read_text(encoding="utf-8"))
 
-    report = analyze_manifests(manifests, snapshot=snapshot)
+    if args.dashboard:
+        manifests_with_sources: list[tuple[dict[str, Any], str]] = [
+            (m, str(p)) for p in (Path(s) for s in args.manifests) for m in _load_manifest_file(p)
+        ]
+        report = analyze_dashboard(manifests_with_sources, snapshot=snapshot)
+    else:
+        report = analyze_manifests(manifests, snapshot=snapshot)
 
     if args.output_format == "markdown":
-        text = _format_markdown(report)
+        if args.dashboard:
+            text = _format_dashboard_markdown(report)
+        else:
+            text = _format_markdown(report)
     else:
         text = json.dumps(report, indent=2, sort_keys=True) + "\n"
 

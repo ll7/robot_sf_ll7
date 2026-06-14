@@ -8,7 +8,7 @@ and writes JSON + Markdown evidence to the requested output directory.
 Usage::
 
     uv run python scripts/benchmark/run_cv_forecast_eval.py \\
-        --output-dir docs/context/evidence/issue_2757_cv_forecast_eval_2026-06-13
+        --output-dir docs/context/evidence/issue_2774_motion_rich_forecast_traces_2026-06-14
 
 This is diagnostic-only evidence, not paper-facing benchmark proof.
 """
@@ -470,10 +470,16 @@ def _md_interpretation() -> list[str]:
         "1s metrics remain available and low-error, while 2s metrics are unavailable "
         "because the durable traces are too short for that forecast horizon.",
         "",
+        "The occluded_emergence family is now evaluated with the durable fixture "
+        "from #2756. It produces 11 evaluable samples with motion-rich pedestrian "
+        "trajectories, extending forecast evidence beyond the corridor family. "
+        "This is diagnostic-only evidence for a single occluded-emergence episode, "
+        "not a statistically powered claim across the family.",
+        "",
         "The available crossing_proxy and bottleneck fixtures are limitation records, "
         "not forecast-quality evidence: they contain zero pedestrian motion, so they "
-        "do not test whether constant velocity handles crossing, bottleneck, occluded, "
-        "or dense interaction dynamics.",
+        "do not test whether constant velocity handles crossing, bottleneck, or "
+        "dense interaction dynamics.",
         "",
         "All traces in this evaluation lack intent and signal context metadata, "
         "so the forecast operates in 'uncertain' mode with 1.5x widened standard "
@@ -506,7 +512,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="docs/context/evidence/issue_2757_cv_forecast_eval_2026-06-13",
+        default="docs/context/evidence/issue_2774_motion_rich_forecast_traces_2026-06-14",
         help="Output directory for evidence artifacts.",
     )
     args = parser.parse_args()
@@ -521,7 +527,7 @@ def main() -> None:
     )
 
     repro = {
-        "issue": 2757,
+        "issue": 2774,
         "generated_at_utc": generated_at,
         "command": command,
         "repo_head": repo_head,
@@ -538,7 +544,7 @@ def main() -> None:
     limited_families = sorted({r["family"] for r in results if r["status"] != "evaluated"})
 
     report_json: dict[str, Any] = {
-        "issue": 2757,
+        "issue": 2774,
         "claim_boundary": (
             "Diagnostic-only, not paper-facing evidence. "
             "Limited to bounded repository trace fixtures."

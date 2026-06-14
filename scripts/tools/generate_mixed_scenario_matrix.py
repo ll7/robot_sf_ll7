@@ -22,7 +22,7 @@ DEFAULT_OBS_NOISE_SUMMARY = Path(
     "docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json"
 )
 DEFAULT_CV_FORECAST = Path(
-    "docs/context/evidence/issue_2757_cv_forecast_eval_2026-06-13/report.json"
+    "docs/context/evidence/issue_2774_motion_rich_forecast_traces_2026-06-14/report.json"
 )
 DEFAULT_GAP_REPORT = Path(
     "docs/context/evidence/issue_2784_dissertation_gap_report/gap_report.json"

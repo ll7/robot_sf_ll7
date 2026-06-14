@@ -572,20 +572,24 @@ def _actor_class_denominators(
     active_actor_ids: set[str],
     forecasts_by_actor: dict[str, ActorForecast],
 ) -> list[dict[str, Any]]:
+    """Compute per-class active and excluded actor counts for report denominators.
+
+    Returns:
+        Sorted actor-class denominator rows for JSON and Markdown reports.
+    """
     counts: dict[str, dict[str, Any]] = {}
     for actor_id in batch.provenance.actor_ids:
         actor_class = _actor_class_for_denominator(actor_id, batch, forecasts_by_actor)
-        class_counts = counts.setdefault(
-            actor_class,
-            {
+        if actor_class not in counts:
+            counts[actor_class] = {
                 "actor_class": actor_class,
                 "active_actor_count": 0,
                 "excluded_actor_count": 0,
                 "horizons_s": list(batch.provenance.horizons_s),
                 "dt_s": batch.provenance.dt_s,
                 "caveat": _actor_class_caveat(actor_class),
-            },
-        )
+            }
+        class_counts = counts[actor_class]
         if actor_id in active_actor_ids:
             class_counts["active_actor_count"] += 1
         else:
@@ -598,6 +602,11 @@ def _actor_class_for_denominator(
     batch: ForecastBatch,
     forecasts_by_actor: dict[str, ActorForecast],
 ) -> str:
+    """Resolve the class used for denominator accounting, including excluded actors.
+
+    Returns:
+        Actor class label used to bucket active or excluded actor counts.
+    """
     forecast = forecasts_by_actor.get(actor_id)
     if forecast is not None:
         return _actor_class(forecast, batch)
@@ -617,6 +626,7 @@ def _actor_class_for_denominator(
 
 
 def _actor_class_caveat(actor_class: str) -> str:
+    """Return the claim-boundary caveat associated with an actor class."""
     normalized = actor_class.strip().lower()
     if normalized in {"pedestrian", "person"}:
         return "pedestrian forecast denominator"

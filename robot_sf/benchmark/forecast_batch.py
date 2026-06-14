@@ -158,8 +158,8 @@ class ForecastBatchProvenance:
     actor_mask: list[bool]
     actor_mask_metadata: dict[str, Any]
     feature_schema: dict[str, Any]
-    actor_classes: dict[str, str] = field(default_factory=dict)
     oracle_state: bool = False
+    actor_classes: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Fail closed on missing provenance or inconsistent actor masks."""

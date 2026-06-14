@@ -372,9 +372,14 @@ uv run python scripts/dev/route_efficiency_report.py output/issue-2764/worker/ro
 ```
 
 The report counts delegated attempts, complete artifact sets, reroutes,
-validation presence, and optional final acceptance metadata. It is route
-evidence only; local diff review and validation still decide whether the task is
-accepted.
+validation presence, and optional final acceptance metadata. It also emits a
+`routing_recommendations` array with deterministic classes (`prefer_provider`,
+`avoid_provider`, `investigate_failure_class`, `reroute_threshold_met`,
+`no_recommendation`). Each entry includes `class`, `action`, `evidence`, and
+`caveat` keys, and the markdown report includes a compact "Routing
+recommendations" section. Route success and complete artifact presence are
+**route evidence only**; they are not task acceptance. The orchestrator must
+still inspect the diff and run the required local validation.
 
 Assume `OWNER`, `REPO`, `ISSUE`, `BRANCH`, and `BASE` are set:
 

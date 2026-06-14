@@ -498,3 +498,314 @@ def test_cli_markdown_output(tmp_path: Path) -> None:
     assert exit_code == 0
     text = out_path.read_text(encoding="utf-8")
     assert "# Route Efficiency Report" in text
+
+
+def test_routing_recommendations_no_recommendation_single_attempt() -> None:
+    """Single attempt should yield no_recommendation due to insufficient data."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    assert len(recs) == 1
+    assert recs[0]["class"] == "no_recommendation"
+    assert "insufficient data" in recs[0]["action"]
+    assert "not task acceptance" in recs[0]["caveat"]
+
+
+def test_routing_recommendations_prefer_provider() -> None:
+    """Provider with 100% completion and >= 2 attempts should trigger prefer_provider."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 2,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    prefer = [r for r in recs if r["class"] == "prefer_provider"]
+    assert len(prefer) >= 1
+    assert "qwen" in prefer[0]["action"]
+    assert "2/2" in prefer[0]["action"]
+    assert "not task acceptance" in prefer[0]["caveat"]
+
+
+def test_routing_recommendations_avoid_provider() -> None:
+    """Provider with 0% completion should trigger avoid_provider."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 2,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    avoid = [r for r in recs if r["class"] == "avoid_provider"]
+    assert len(avoid) >= 1
+    assert "gemini" in avoid[0]["action"]
+    assert "0/2" in avoid[0]["action"]
+    assert "not task acceptance" in avoid[0]["caveat"]
+
+
+def test_routing_recommendations_avoid_provider_requires_two_attempts() -> None:
+    """A single failed attempt should not produce a provider avoidance recommendation."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    assert not [r for r in recs if r["class"] == "avoid_provider"]
+    assert any(r["class"] == "investigate_failure_class" for r in recs)
+
+
+def test_routing_recommendations_investigate_failure_class() -> None:
+    """Dominant failure class should trigger investigate_failure_class."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 2,
+                "route": {"provider": "copilot"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 3,
+                "route": {"provider": "claude"},
+                "returncode": 1,
+                "failure_class": "other",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    invest = [r for r in recs if r["class"] == "investigate_failure_class"]
+    assert len(invest) >= 1
+    assert "timeout" in invest[0]["action"]
+    assert "not task acceptance" in invest[0]["caveat"]
+
+
+def test_routing_recommendations_reroute_threshold_met() -> None:
+    """Completion rate below 50% should trigger reroute_threshold_met."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 2,
+                "route": {"provider": "copilot"},
+                "returncode": 1,
+                "failure_class": "validation",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    reroute = [r for r in recs if r["class"] == "reroute_threshold_met"]
+    assert len(reroute) >= 1
+    assert "1/3" in reroute[0]["action"]
+    assert "not task acceptance" in reroute[0]["caveat"]
+
+
+def test_routing_recommendations_no_recommendation_mixed() -> None:
+    """Mixed results with no dominant pattern should yield no_recommendation."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+
+    recs = report["routing_recommendations"]
+    assert len(recs) == 1
+    assert recs[0]["class"] == "no_recommendation"
+    assert "insufficient data" in recs[0]["action"]
+
+
+def test_routing_recommendations_entry_structure() -> None:
+    """Each recommendation entry must have class, action, evidence, caveat keys."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 2,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+
+    for rec in report["routing_recommendations"]:
+        assert "class" in rec
+        assert "action" in rec
+        assert "evidence" in rec
+        assert "caveat" in rec
+        assert "not task acceptance" in rec["caveat"]
+
+
+def test_markdown_includes_routing_recommendations_section() -> None:
+    """Markdown output should include Routing recommendations section when present."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            },
+            {
+                "attempt_index": 1,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+            {
+                "attempt_index": 2,
+                "route": {"provider": "gemini"},
+                "returncode": 1,
+                "failure_class": "timeout",
+                "compact_artifacts": _compact_artifacts(present=False),
+            },
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+    md = rer._format_markdown(report)
+
+    assert "## Routing recommendations" in md
+    assert "avoid_provider" in md
+    assert "not task acceptance" in md

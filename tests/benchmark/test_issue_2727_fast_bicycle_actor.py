@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.map_runner import (
+    _cyclist_like_vru_summary,
     _fast_bicycle_actor_summary,
     _single_pedestrian_vru_metadata,
     _trace_pedestrians,
@@ -105,3 +106,28 @@ def test_issue_2727_existing_cyclist_like_payload_key_is_preserved() -> None:
     assert frames[0]["actor_type"] == "cyclist_like_vru"
     assert "cyclist_like_vru" in frames[0]
     assert "fast_bicycle_actor" not in frames[0]
+
+
+def test_issue_2727_legacy_vru_metadata_defaults_to_cyclist_summary() -> None:
+    """Legacy mock metadata without a payload key should still summarize as cyclist-like."""
+    scenario = {"name": "legacy_cyclist_like"}
+    legacy_metadata = [
+        {
+            "pedestrian_id": "h1",
+            "actor_type": "cyclist_like_vru",
+            "speed_m_s": 4.5,
+            "acceleration_m_s2": 1.0,
+            "actor_radius_m": 0.35,
+            "robot_radius_m": 0.3,
+            "interaction_role": "legacy_fixture",
+            "claim_boundary": "legacy diagnostic-only fixture",
+        }
+    ]
+
+    summary = _cyclist_like_vru_summary(scenario, legacy_metadata)
+    fast_bicycle_summary = _fast_bicycle_actor_summary(scenario, legacy_metadata)
+
+    assert summary is not None
+    assert summary["schema_version"] == "cyclist-like-vru-smoke-summary.v1"
+    assert summary["pedestrians"] == legacy_metadata
+    assert fast_bicycle_summary is None

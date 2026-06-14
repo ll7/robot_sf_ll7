@@ -3491,7 +3491,8 @@ def _vru_diagnostic_summary(
     summarized = [
         metadata
         for metadata in vru_metadata
-        if metadata is not None and metadata.get("diagnostic_payload_key") == payload_key
+        if metadata is not None
+        and (metadata.get("diagnostic_payload_key") or "cyclist_like_vru") == payload_key
     ]
     if not summarized:
         return None

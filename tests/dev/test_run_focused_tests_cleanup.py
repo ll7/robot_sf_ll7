@@ -43,6 +43,8 @@ def _run_focused(repo: Path, *, keep_coverage: bool = False) -> subprocess.Compl
     env = {**os.environ, "PATH": f"{repo / 'bin'}{os.pathsep}{os.environ['PATH']}"}
     if keep_coverage:
         env["FOCUSED_TEST_KEEP_COVERAGE"] = "1"
+    else:
+        env.pop("FOCUSED_TEST_KEEP_COVERAGE", None)
     return subprocess.run(
         ["scripts/dev/run_focused_tests.sh", "tests/dev/test_tiny.py", "-q"],
         cwd=repo,

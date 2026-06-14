@@ -112,7 +112,15 @@ def _valid_candidate(field_name: str, value: Any) -> InferenceValue | None:
 def _candidate_values(
     manifest: dict[str, Any], field_name: str
 ) -> list[tuple[str, InferenceValue]]:
-    """Return labeled candidate lineage values from explicit nearby paths."""
+    """Return labeled candidate lineage values from explicit nearby paths.
+
+    Args:
+        manifest: The parsed manifest payload.
+        field_name: The lineage field to collect candidates for.
+
+    Returns:
+        List of ``(source_label, normalized_value)`` tuples for valid candidates.
+    """
     candidates: list[tuple[str, InferenceValue]] = []
     for source_label in INFERENCE_PATHS.get(field_name, ()):
         value = _valid_candidate(field_name, _lookup_path(manifest, source_label))
@@ -300,7 +308,12 @@ def analyze_manifest(
 
     Returns:
         ManifestBackfillPlan with per-field classification.
+
+    Raises:
+        ValueError: If manifest is not a dictionary mapping.
     """
+    if not isinstance(manifest, dict):
+        raise ValueError("Manifest contract payload must be a dictionary mapping.")
     validation_errors = validate_lineage_contract(manifest)
     fields: list[FieldBackfillEntry] = []
     for field_name in MANDATORY_LINEAGE_FIELDS:
@@ -444,7 +457,7 @@ def run_backfill_check(
         )
         plans.append(plan)
 
-        if write_backfill:
+        if write_backfill and plan.has_inferred:
             manifest = _apply_backfill(manifest, plan)
             path.write_text(
                 json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"

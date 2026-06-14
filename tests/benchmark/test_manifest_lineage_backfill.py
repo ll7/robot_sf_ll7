@@ -243,6 +243,24 @@ def test_write_backfill_applies_inferred_fields(tmp_path: Path) -> None:
     assert updated["execution_gate"] == "pass"
 
 
+def test_write_backfill_skips_files_without_inferred_fields(tmp_path: Path) -> None:
+    """Write-backfill avoids rewriting files when no fields are inferred."""
+    src = FIXTURE_DIR / "complete_lineage.json"
+    dest = tmp_path / "complete_lineage.json"
+    shutil.copy2(src, dest)
+    original_content = dest.read_text(encoding="utf-8")
+
+    plan = run_backfill_check(
+        [str(dest)],
+        write_backfill=True,
+        json_output=False,
+    )
+
+    assert plan.write_mode
+    assert plan.written_paths == []
+    assert dest.read_text(encoding="utf-8") == original_content
+
+
 def test_write_backfill_refuses_directory(tmp_path: Path) -> None:
     """Write-backfill mode refuses directory paths."""
     with pytest.raises(SystemExit):
@@ -367,11 +385,13 @@ def test_field_status_values() -> None:
 # Edge cases
 
 
-def test_analyze_manifest_non_dict_returns_errors() -> None:
-    """validate_lineage_contract reports non-dict payloads."""
-    errors = analyze_manifest({"not_a_dict": True}, path="edge.json")
-    # Non-dict payload is caught by validate_lineage_contract
-    assert isinstance(errors, ManifestBackfillPlan)
+def test_analyze_manifest_non_dict_raises_value_error() -> None:
+    """analyze_manifest fails closed for non-dictionary payloads."""
+    with pytest.raises(ValueError) as exc_info:
+        analyze_manifest(None, path="edge.json")  # type: ignore[arg-type]
+    assert "Manifest contract payload must be a dictionary mapping" in str(exc_info.value), (
+        f"Expected ValueError with contract mapping message, got: {exc_info.value}"
+    )
 
 
 def test_empty_manifest_all_fields_blocked() -> None:
@@ -408,9 +428,7 @@ def test_inferred_fields_write_backfill_only_writes_inferred(tmp_path: Path) -> 
     # generator_id is inferred from metadata, so it is written.
     assert updated["generator_id"] == "gen-x"
     # validator_version is ambiguous (metadata vs config), so it is not written.
-    assert "validator_version" not in updated or updated.get("validator_version") == payload.get(
-        "validator_version"
-    )
+    assert "validator_version" not in updated
 
 
 def test_human_readable_output_includes_status_markers(

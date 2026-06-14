@@ -1296,3 +1296,11 @@ entries:
     status: evidence
     freshness: evidence
     area: evidence_policy
+  - path: docs/context/evidence/issue_2724_adversarial_candidate/candidate.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_2724_adversarial_candidate/README.md
+    status: evidence
+    freshness: evidence
+    area: adversarial_search

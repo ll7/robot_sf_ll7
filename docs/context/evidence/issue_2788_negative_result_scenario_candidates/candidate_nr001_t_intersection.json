@@ -1,0 +1,66 @@
+{
+  "schema_version": "generated_scenario_candidate.v1",
+  "candidate_id": "issue-2788-nr001-t-intersection-transfer-scout",
+  "generator_family": "heuristic_perturbation",
+  "generator_run_id": "issue-2788-nr001-topology-trace-scout",
+  "generator_config_ref": {
+    "config_path": "configs/policy_search/topology_reselection_cross_slice_issue_2716.yaml",
+    "config_hash": "591f7642a370597084b439acdd39f402d1f3a301000c29a144ccf7ebd82e30f9"
+  },
+  "source_scenario_ref": {
+    "scenario_name": "t_intersection_transfer/classic_t_intersection_medium",
+    "config_path": "configs/policy_search/topology_reselection_cross_slice_issue_2716.yaml",
+    "config_hash": "591f7642a370597084b439acdd39f402d1f3a301000c29a144ccf7ebd82e30f9",
+    "map_id": "classic_t_intersection_medium"
+  },
+  "source_split": "train",
+  "perturbations": [
+    {
+      "family": "robot_route_offset",
+      "parameters": {
+        "dx_m": -0.1,
+        "dy_m": 0.2,
+        "max_magnitude_m": 0.5
+      },
+      "rationale": "Trace-seeded diagnostic from negative-result register NR-001: the t_intersection_transfer hard slice ended horizon_exhausted under progress-gated topology reselection. This bounded route offset addresses the prior failure mode by probing terminal clearance pressure at the intersection rather than repeating the failed threshold sweep."
+    }
+  ],
+  "validity": {
+    "preflight_passed": true,
+    "scenario_certified": false,
+    "map_exists": true,
+    "spawn_collision_free": true,
+    "goal_reachable": true,
+    "rejection_reasons": [
+      "scenario_certified is false; this candidate is derived from negative-result register NR-001 and has not run scenario certification."
+    ]
+  },
+  "metrics_summary": {
+    "severity": {
+      "ttc_min_s": null,
+      "min_clearance_m": null,
+      "comfort_force_max_N": null,
+      "near_miss_count": null,
+      "collision_count": null,
+      "timeout_risk": null,
+      "objective_value": null
+    },
+    "diversity": {
+      "param_distance_min_m": null,
+      "param_distance_mean_m": null,
+      "unique_scenario_families": null,
+      "coverage_fraction": null,
+      "dedup_rate": null
+    }
+  },
+  "trace_lineage": {
+    "seed": 2788,
+    "generated_at_utc": "2026-06-14T10:00:00Z",
+    "git_hash": "d0e394d17f7b17f8cfaef7b36258cf22a9010ec9",
+    "provenance": {
+      "source_issue": "#2788"
+    }
+  },
+  "promotion_status": "not_promoted",
+  "notes": "Scout diagnostic candidate for issue #2788 derived from NR-001 (issue-2716-topology-reselection-cross-slice). Addresses the prior mechanism_failed result with a clearance-targeted t_intersection_transfer mutation. Diagnostic-only, not_promoted; severity and diversity metrics are null because this manifest has not run certification, replay, or benchmark evaluation."
+}

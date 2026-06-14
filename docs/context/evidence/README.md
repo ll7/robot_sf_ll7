@@ -98,6 +98,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2788_negative_result_scenario_candidates/`: diagnostic-only generated scenario candidate
+  manifests derived from negative-result register entries NR-001 and NR-002. The manifests encode
+  clearance-targeted topology variants and a near-field observation-noise successor candidate;
+  all remain `not_promoted` with null severity/diversity metrics and are not benchmark evidence.
 - `issue_2751_topology_reselection_runtime/`: diagnostic-only runtime evidence for the
   clearance-targeted topology-reselection successor. The result is `revise`: all hard slices
   remained `horizon_exhausted`, while the negative-control rows succeeded with zero topology

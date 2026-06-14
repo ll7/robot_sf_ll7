@@ -1,0 +1,26 @@
+{
+  "schema_version": "semantic_forecast_baselines_summary.v1",
+  "issue": 2758,
+  "claim_boundary": "diagnostic_only_not_benchmark_or_paper_evidence",
+  "input_fixture_source": "bounded repository trace fixtures from the #2774 forecast evidence set",
+  "baselines": [
+    "cv",
+    "signal_aware",
+    "goal_aware",
+    "semantic"
+  ],
+  "fixture_metadata": {
+    "has_signal_metadata": false,
+    "has_intent_metadata": false
+  },
+  "result_classification": "diagnostic_only",
+  "conclusion": "Semantic forecast baselines run on the durable trace set, but the current fixtures lack signal and intent metadata, so this evidence does not show semantic conditioning improving calibration or collision relevance.",
+  "artifacts": {
+    "comparison_json": "docs/context/evidence/issue_2758_semantic_forecast_baselines_2026-06-14/comparison_report.json",
+    "comparison_markdown": "docs/context/evidence/issue_2758_semantic_forecast_baselines_2026-06-14/comparison_report.md"
+  },
+  "validation": {
+    "targeted_tests": "uv run pytest tests/benchmark/test_pedestrian_forecast.py tests/benchmark/test_pedestrian_forecast_cv_eval.py",
+    "comparison_smoke": "uv run python scripts/benchmark/run_cv_forecast_eval.py --compare-all --output-dir docs/context/evidence/issue_2758_semantic_forecast_baselines_2026-06-14"
+  }
+}

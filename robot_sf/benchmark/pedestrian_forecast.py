@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -108,6 +109,12 @@ class PedestrianForecast:
     predictions: list[ForecastDistribution]
 
 
+ForecastBaselineFunction = Callable[
+    [PedestrianState, list[float] | tuple[float, ...]],
+    PedestrianForecast,
+]
+
+
 def constant_velocity_gaussian_baseline(
     state: PedestrianState,
     horizons_s: list[float] | tuple[float, ...] = DEFAULT_FORECAST_HORIZONS_S,
@@ -152,6 +159,223 @@ def constant_velocity_gaussian_baseline(
         )
 
     return PedestrianForecast(id=state.id, predictions=predictions)
+
+
+def signal_aware_cv_baseline(
+    state: PedestrianState,
+    horizons_s: list[float] | tuple[float, ...] = DEFAULT_FORECAST_HORIZONS_S,
+    *,
+    base_std_m: float = 0.3,
+    velocity_std_rate: float = 0.4,
+    red_slowdown_factor: float = 0.4,
+    signal_unavailable_multiplier: float = 1.5,
+) -> PedestrianForecast:
+    """Signal-aware constant-velocity baseline.
+
+    When signal is available: red reduces mean displacement (slowdown_factor),
+    green preserves mean displacement, and unrecognized present values preserve
+    plain-CV without widening uncertainty.  When signal is unavailable the mean
+    stays at plain-CV and uncertainty is widened rather than assuming a phase.
+
+    This is deterministic and labeled; it does not claim human realism.
+
+    Returns:
+        Forecast distributions for the requested horizons.
+    """
+
+    predictions: list[ForecastDistribution] = []
+
+    for horizon_s in horizons_s:
+        horizon = float(horizon_s)
+        std_m = base_std_m + velocity_std_rate * horizon
+
+        if not state.signal_available or state.signal is None:
+            mean = state.position + state.velocity * horizon
+            signal_status = "unknown_widened"
+            std_m *= signal_unavailable_multiplier
+        elif state.signal == "red":
+            mean = state.position + state.velocity * horizon * red_slowdown_factor
+            signal_status = "red_slowed"
+        elif state.signal == "green":
+            mean = state.position + state.velocity * horizon
+            signal_status = "green_preserved"
+        else:
+            mean = state.position + state.velocity * horizon
+            signal_status = "unrecognized_preserved"
+
+        if std_m <= 0.0:
+            raise ValueError("forecast standard deviation must be positive")
+
+        predictions.append(
+            ForecastDistribution(
+                horizon_s=horizon,
+                mean=mean,
+                covariance=np.eye(2, dtype=float) * (std_m**2),
+                metadata={
+                    "model": "signal_aware_cv",
+                    "std_m": float(std_m),
+                    "is_intent_aware": state.intent is not None,
+                    "is_signal_aware": state.signal_available,
+                    "signal_state": state.signal if state.signal_available else "unknown",
+                    "signal_status": signal_status,
+                },
+            )
+        )
+
+    return PedestrianForecast(id=state.id, predictions=predictions)
+
+
+def goal_aware_cv_baseline(
+    state: PedestrianState,
+    horizons_s: list[float] | tuple[float, ...] = DEFAULT_FORECAST_HORIZONS_S,
+    *,
+    base_std_m: float = 0.3,
+    velocity_std_rate: float = 0.4,
+    crossing_speed_factor: float = 1.2,
+    walking_along_speed_factor: float = 0.8,
+    intent_unavailable_multiplier: float = 1.3,
+) -> PedestrianForecast:
+    """Goal-aware constant-velocity baseline.
+
+    When intent metadata is present: crossing increases mean displacement,
+    walking_along decreases mean displacement, and unrecognized present values
+    preserve plain-CV without widening uncertainty.  Absent intent keeps
+    plain-CV mean and widens uncertainty rather than assuming a goal.
+
+    This is deterministic and labeled; it does not claim human realism.
+
+    Returns:
+        Forecast distributions for the requested horizons.
+    """
+
+    predictions: list[ForecastDistribution] = []
+
+    for horizon_s in horizons_s:
+        horizon = float(horizon_s)
+        std_m = base_std_m + velocity_std_rate * horizon
+
+        if state.intent is None:
+            mean = state.position + state.velocity * horizon
+            intent_status = "unknown_widened"
+            std_m *= intent_unavailable_multiplier
+        elif state.intent == "crossing":
+            mean = state.position + state.velocity * horizon * crossing_speed_factor
+            intent_status = "crossing_adjusted"
+        elif state.intent == "walking_along":
+            mean = state.position + state.velocity * horizon * walking_along_speed_factor
+            intent_status = "walking_along_adjusted"
+        else:
+            mean = state.position + state.velocity * horizon
+            intent_status = "unrecognized_preserved"
+
+        if std_m <= 0.0:
+            raise ValueError("forecast standard deviation must be positive")
+
+        predictions.append(
+            ForecastDistribution(
+                horizon_s=horizon,
+                mean=mean,
+                covariance=np.eye(2, dtype=float) * (std_m**2),
+                metadata={
+                    "model": "goal_aware_cv",
+                    "std_m": float(std_m),
+                    "is_intent_aware": state.intent is not None,
+                    "is_signal_aware": state.signal_available,
+                    "intent_state": state.intent or "unknown",
+                    "intent_status": intent_status,
+                },
+            )
+        )
+
+    return PedestrianForecast(id=state.id, predictions=predictions)
+
+
+def semantic_cv_baseline(  # noqa: PLR0913
+    state: PedestrianState,
+    horizons_s: list[float] | tuple[float, ...] = DEFAULT_FORECAST_HORIZONS_S,
+    *,
+    base_std_m: float = 0.3,
+    velocity_std_rate: float = 0.4,
+    red_slowdown_factor: float = 0.4,
+    signal_unavailable_multiplier: float = 1.5,
+    crossing_speed_factor: float = 1.2,
+    walking_along_speed_factor: float = 0.8,
+    intent_unavailable_multiplier: float = 1.3,
+) -> PedestrianForecast:
+    """Combined semantic CV baseline composing signal and goal factors.
+
+    Applies signal_aware adjustments to the mean, then goal_aware adjustments.
+    Unavailable context widens uncertainty; present but unrecognized context is
+    labeled and preserved as neutral.  This is deterministic and labeled; it
+    does not claim human realism.
+
+    Returns:
+        Forecast distributions for the requested horizons.
+    """
+
+    predictions: list[ForecastDistribution] = []
+
+    for horizon_s in horizons_s:
+        horizon = float(horizon_s)
+        std_m = base_std_m + velocity_std_rate * horizon
+
+        speed_factor = 1.0
+        signal_status = "unknown_widened"
+        intent_status = "unknown_widened"
+
+        if not state.signal_available or state.signal is None:
+            std_m *= signal_unavailable_multiplier
+        elif state.signal == "red":
+            speed_factor *= red_slowdown_factor
+            signal_status = "red_slowed"
+        elif state.signal == "green":
+            signal_status = "green_preserved"
+        else:
+            signal_status = "unrecognized_preserved"
+
+        if state.intent is None:
+            std_m *= intent_unavailable_multiplier
+        elif state.intent == "crossing":
+            speed_factor *= crossing_speed_factor
+            intent_status = "crossing_adjusted"
+        elif state.intent == "walking_along":
+            speed_factor *= walking_along_speed_factor
+            intent_status = "walking_along_adjusted"
+        else:
+            intent_status = "unrecognized_preserved"
+
+        mean = state.position + state.velocity * horizon * speed_factor
+
+        if std_m <= 0.0:
+            raise ValueError("forecast standard deviation must be positive")
+
+        predictions.append(
+            ForecastDistribution(
+                horizon_s=horizon,
+                mean=mean,
+                covariance=np.eye(2, dtype=float) * (std_m**2),
+                metadata={
+                    "model": "semantic_cv",
+                    "std_m": float(std_m),
+                    "is_intent_aware": state.intent is not None,
+                    "is_signal_aware": state.signal_available,
+                    "signal_state": state.signal if state.signal_available else "unknown",
+                    "signal_status": signal_status,
+                    "intent_state": state.intent or "unknown",
+                    "intent_status": intent_status,
+                },
+            )
+        )
+
+    return PedestrianForecast(id=state.id, predictions=predictions)
+
+
+BASELINE_FUNCTIONS: dict[str, ForecastBaselineFunction] = {
+    "cv": constant_velocity_gaussian_baseline,
+    "signal_aware": signal_aware_cv_baseline,
+    "goal_aware": goal_aware_cv_baseline,
+    "semantic": semantic_cv_baseline,
+}
 
 
 def evaluate_forecast(
@@ -257,8 +481,18 @@ def compute_batch_forecast_metrics(
     dt_s: float = 0.1,
     confidence_level: float = 0.95,
     collision_distance_m: float = 0.8,
+    baseline_function: ForecastBaselineFunction | None = None,
 ) -> dict[str, float]:
     """Compute aggregate forecast metrics over benchmark trace steps.
+
+    Args:
+        trace_steps: Sequence of simulation step dicts with pedestrian lists.
+        horizons_s: Forecast horizons to evaluate.
+        dt_s: Simulation timestep for horizon alignment.
+        confidence_level: Confidence level for evaluation ellipse.
+        collision_distance_m: Collision proximity threshold.
+        baseline_function: Forecast function taking (state, horizons_s) and
+            returning a PedestrianForecast. Defaults to constant_velocity_gaussian_baseline.
 
     Returns:
         Mean metrics plus per-metric denominator counts and actor exclusion metadata.
@@ -266,6 +500,9 @@ def compute_batch_forecast_metrics(
 
     if dt_s <= 0.0:
         raise ValueError("dt_s must be positive")
+
+    if baseline_function is None:
+        baseline_function = constant_velocity_gaussian_baseline
 
     (
         candidate_count,
@@ -278,6 +515,7 @@ def compute_batch_forecast_metrics(
         dt_s,
         confidence_level,
         collision_distance_m,
+        baseline_function,
     )
 
     summary = {
@@ -310,6 +548,7 @@ def _collect_sample_metrics(
     dt_s: float,
     confidence_level: float,
     collision_distance_m: float,
+    baseline_function: ForecastBaselineFunction,
 ) -> tuple[int, int, dict[str, int], list[dict[str, float]]]:
     candidate_count = 0
     excluded_count = 0
@@ -333,6 +572,7 @@ def _collect_sample_metrics(
                 dt_s,
                 confidence_level,
                 collision_distance_m,
+                baseline_function,
             )
             if metrics:
                 sample_metrics.append(metrics)
@@ -348,6 +588,7 @@ def _evaluate_single_pedestrian(
     dt_s: float,
     confidence_level: float,
     collision_distance_m: float,
+    baseline_function: ForecastBaselineFunction,
 ) -> dict[str, float] | None:
     state = PedestrianState.from_trace(pedestrian_payload)
     ground_truth = _future_pedestrian_positions(
@@ -360,7 +601,7 @@ def _evaluate_single_pedestrian(
     if not ground_truth:
         return None
     return evaluate_forecast(
-        constant_velocity_gaussian_baseline(state, horizons_s),
+        baseline_function(state, horizons_s),
         ground_truth,
         confidence_level=confidence_level,
         robot_positions=_future_robot_positions(

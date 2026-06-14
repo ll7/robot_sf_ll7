@@ -1,0 +1,10 @@
+{
+  "schema_version": "benchmark_claim.v1",
+  "metadata": {
+    "validator_version": "2.0.0",
+    "evidence_tier": "diagnostic"
+  },
+  "config": {
+    "validator_version": "3.0.0"
+  }
+}

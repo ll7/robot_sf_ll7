@@ -1,0 +1,8 @@
+{
+  "schema_version": "benchmark_claim.v1",
+  "metadata": {
+    "source": "not-a-source-map",
+    "generator_id": "",
+    "claim_boundary": ""
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "schema_version": "benchmark_claim.v1",
+  "metadata": {
+    "generator_id": "inferred-gen",
+    "validator_version": "2.1.0",
+    "evidence_tier": "diagnostic",
+    "denominator_policy": "successful-only",
+    "execution_gate": "pass"
+  }
+}

@@ -19,6 +19,12 @@ def helper_repo(tmp_path: Path) -> Path:
     scripts_dir.mkdir(parents=True)
     shutil.copy2(SCRIPT, scripts_dir / "run_focused_tests.sh")
     shutil.copy2(REPO_ROOT / "scripts" / "dev" / "common_setup.sh", scripts_dir / "common_setup.sh")
+    shutil.copy2(
+        REPO_ROOT / "scripts" / "dev" / "clean_generated_output.py",
+        scripts_dir / "clean_generated_output.py",
+    )
+    (repo / "output" / "coverage").mkdir(parents=True)
+    (repo / "output" / "coverage" / "tracked.txt").write_text("tracked", encoding="utf-8")
     (repo / "bin").mkdir()
     (repo / "bin" / "uv").write_text(
         "\n".join(
@@ -35,6 +41,37 @@ def helper_repo(tmp_path: Path) -> Path:
     )
     (repo / "bin" / "uv").chmod(0o755)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=CI",
+            "-c",
+            "user.email=ci@example.com",
+            "add",
+            "scripts/dev/run_focused_tests.sh",
+            "scripts/dev/common_setup.sh",
+            "scripts/dev/clean_generated_output.py",
+            "bin/uv",
+            "output/coverage/tracked.txt",
+        ],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=CI",
+            "-c",
+            "user.email=ci@example.com",
+            "commit",
+            "-m",
+            "seed tracked focused test fixture",
+        ],
+        cwd=repo,
+        check=True,
+    )
     return repo
 
 
@@ -61,9 +98,16 @@ def test_focused_tests_removes_coverage_on_success(helper_repo: Path) -> None:
     result = _run_focused(helper_repo)
 
     assert result.returncode == 0, f"Script failed: {result.stderr}"
-    assert not (helper_repo / "output" / "coverage").exists(), (
-        "output/coverage should be removed after a successful focused run"
+    assert not (helper_repo / "output" / "coverage" / "generated.txt").exists(), (
+        "generated coverage output should be removed after a successful focused run"
     )
+    assert (helper_repo / "output" / "coverage" / "tracked.txt").exists(), (
+        "tracked output files should remain after cleanup"
+    )
+    status = subprocess.run(
+        ["git", "status", "--short"], cwd=helper_repo, check=True, text=True, capture_output=True
+    ).stdout.strip()
+    assert status == "", status
 
 
 def test_focused_tests_preserves_coverage_when_keep_flag_set(helper_repo: Path) -> None:

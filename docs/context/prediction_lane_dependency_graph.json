@@ -1,0 +1,257 @@
+{
+  "schema_version": "prediction_lane_dependency_graph.v1",
+  "lane": "learned_prediction",
+  "title": "Prediction lane execution dependency graph",
+  "anchor_issue": 2835,
+  "required_issue_set": [2835, 2836, 2837, 2838, 2839, 2840, 2841, 2842, 2843, 2844, 2845, 2846, 2847],
+  "generated_on": "2026-06-15",
+  "validation_note": "Run rtk uv run python scripts/dev/validate_prediction_dependency_graph.py docs/context/prediction_lane_dependency_graph.json",
+  "execution_order": [2835, 2836, 2838, 2839, 2843, 2840, 2841, 2837, 2842, 2844, 2845, 2846, 2847],
+  "nodes": [
+    {
+      "issue": 2835,
+      "title": "epic: establish first-class forecast research lane for local navigation",
+      "issue_state": "open",
+      "execution_state": "ready",
+      "node_type": "epic",
+      "depends_on": [],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "forecast_schema",
+          "status": "passed",
+          "depends_on": [2836],
+          "description": "ForecastBatch contract is present before lane execution starts."
+        },
+        {
+          "id": "closed_loop_coupling_gate",
+          "status": "passed",
+          "depends_on": [2843],
+          "description": "Forecast-to-control coupling gate is defined before learned predictor expansion."
+        }
+      ]
+    },
+    {
+      "issue": 2836,
+      "title": "prediction: define ForecastBatch.v1 schema and provenance contract",
+      "issue_state": "closed",
+      "execution_state": "closed_scaffold",
+      "node_type": "scaffold",
+      "depends_on": [2835],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "schema_contract",
+          "status": "passed",
+          "depends_on": [],
+          "description": "ForecastBatch contract in issue 2836 is complete."
+        }
+      ]
+    },
+    {
+      "issue": 2838,
+      "title": "prediction: add observation-level forecast adapters",
+      "issue_state": "closed",
+      "execution_state": "closed_scaffold",
+      "node_type": "scaffold",
+      "depends_on": [2836],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "schema_contract",
+          "status": "passed",
+          "depends_on": [2836],
+          "description": "Schema-bound forecast adapters are in place."
+        }
+      ]
+    },
+    {
+      "issue": 2839,
+      "title": "prediction: add forecast dataset recorder and split manifest",
+      "issue_state": "closed",
+      "execution_state": "closed_scaffold",
+      "node_type": "scaffold",
+      "depends_on": [2836, 2838],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "dataset_manifest",
+          "status": "passed",
+          "depends_on": [2838],
+          "description": "Closed issue with split-manifest and recorder provenance in place."
+        }
+      ]
+    },
+    {
+      "issue": 2843,
+      "title": "prediction: define closed-loop coupling gate before learned predictor training",
+      "issue_state": "closed",
+      "execution_state": "closed_scaffold",
+      "node_type": "scaffold",
+      "depends_on": [2836],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "closed_loop_gate",
+          "status": "passed",
+          "depends_on": [2836],
+          "description": "Coupling gate contract is available before training candidates."
+        }
+      ]
+    },
+    {
+      "issue": 2840,
+      "title": "prediction: generalize probabilistic forecast metrics",
+      "issue_state": "closed",
+      "execution_state": "closed_scaffold",
+      "node_type": "scaffold",
+      "depends_on": [2836],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "probabilistic_metrics",
+          "status": "passed",
+          "depends_on": [2836],
+          "description": "Probabilistic forecast metric contract exists."
+        }
+      ]
+    },
+    {
+      "issue": 2841,
+      "title": "prediction: add forecast calibration and reliability report",
+      "issue_state": "closed",
+      "execution_state": "closed_scaffold",
+      "node_type": "scaffold",
+      "depends_on": [2840],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "forecast_reliability",
+          "status": "passed",
+          "depends_on": [2840],
+          "description": "Calibration and reliability outputs are available." 
+        }
+      ]
+    },
+    {
+      "issue": 2837,
+      "title": "prediction: add horizon and timestep ablation report",
+      "issue_state": "open",
+      "execution_state": "ready",
+      "node_type": "analysis",
+      "depends_on": [2836, 2838, 2839],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "forecast_schema",
+          "status": "passed",
+          "depends_on": [2836],
+          "description": "Ablation report requires ForecastBatch schema contract."
+        },
+        {
+          "id": "dataset_manifest",
+          "status": "passed",
+          "depends_on": [2839],
+          "description": "Requires split manifest for reproducible ablation rows."
+        }
+      ]
+    },
+    {
+      "issue": 2842,
+      "title": "prediction: add conformal or reachable-set forecast pilot",
+      "issue_state": "open",
+      "execution_state": "running",
+      "node_type": "analysis",
+      "depends_on": [2836, 2838, 2839, 2837],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "reachable_set_gate",
+          "status": "running",
+          "depends_on": [2837],
+          "description": "Pilot depends on ablation and recorder/scalar contracts."
+        }
+      ]
+    },
+    {
+      "issue": 2844,
+      "title": "prediction: add learned probabilistic graph predictor v1",
+      "issue_state": "open",
+      "execution_state": "blocked",
+      "node_type": "training",
+      "depends_on": [2837, 2839, 2843],
+      "blocked_by": [2842],
+      "evidence_gates": [
+        {
+          "id": "coupling_gate",
+          "status": "passed",
+          "depends_on": [2843],
+          "description": "Learned predictor should wait on closed-loop coupling gate."
+        },
+        {
+          "id": "dataset_manifest",
+          "status": "passed",
+          "depends_on": [2839],
+          "description": "Requires split manifest and dataset provenance."
+        },
+        {
+          "id": "conformal_pilot",
+          "status": "blocked",
+          "depends_on": [2842],
+          "description": "Blocked by pilot evidence in #2842 before launching predictor training."
+        }
+      ]
+    },
+    {
+      "issue": 2845,
+      "title": "prediction: offline transformer or diffusion benchmark study",
+      "issue_state": "open",
+      "execution_state": "blocked",
+      "node_type": "benchmark",
+      "depends_on": [2835, 2844],
+      "blocked_by": [2844],
+      "evidence_gates": [
+        {
+          "id": "predictor_available",
+          "status": "blocked",
+          "depends_on": [2844],
+          "description": "Requires a trained predictor artifact from #2844."
+        }
+      ]
+    },
+    {
+      "issue": 2846,
+      "title": "prediction: extend forecast metrics to fast dynamic actor classes",
+      "issue_state": "closed",
+      "execution_state": "closed_scaffold",
+      "node_type": "scaffold",
+      "depends_on": [2838],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "actor_class_extension",
+          "status": "passed",
+          "depends_on": [2838],
+          "description": "Fast dynamic actor metric extension is already complete."
+        }
+      ]
+    },
+    {
+      "issue": 2847,
+      "title": "prediction: add transferability stress matrix",
+      "issue_state": "closed",
+      "execution_state": "closed_scaffold",
+      "node_type": "benchmark",
+      "depends_on": [2840, 2846],
+      "blocked_by": [],
+      "evidence_gates": [
+        {
+          "id": "transferability_matrix",
+          "status": "passed",
+          "depends_on": [2840, 2846],
+          "description": "Transferability stress matrix is in place as scaffold for future studies."
+        }
+      ]
+    }
+  ]
+}

@@ -35,6 +35,19 @@ or baseline evidence is missing.
 
 ## Prerequisites
 
+Before selecting or unblocking learned-prediction work under this contract, run the lane routing guard:
+
+```bash
+rtk uv run python scripts/dev/validate_prediction_dependency_graph.py docs/context/prediction_lane_dependency_graph.json
+```
+
+and read `docs/context/prediction_lane_dependency_graph.json` to confirm dependency order and blockers.
+
+Blocked learned-prediction candidates under this issue should not be executed until their listed
+upstream nodes and gates are satisfied in the graph, including #2836, #2838, #2839, #2840,
+\#2841, \#2843, and their derived readiness gates.
+
+
 ### 1. Trace Dataset Registry
 
 A durable trace dataset registry must name every source that will feed learned prediction

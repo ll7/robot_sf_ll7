@@ -4,6 +4,10 @@ This note is the agent-facing routing map for forecast and prediction work under
 It keeps the lane discoverable without turning diagnostic forecast results into benchmark,
 safety, dissertation, or paper-facing claims.
 
+For machine-readable ordering, blockers, issue states, and evidence gates, use
+`docs/context/prediction_lane_dependency_graph.json` and validate it with
+`uv run python scripts/dev/validate_prediction_dependency_graph.py`.
+
 ## Current Boundary
 
 Prediction work in this repository is a staged research lane for local navigation, not a default
@@ -76,14 +80,14 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 | #2846 | closed | Fast dynamic actor forecast metrics | Separates pedestrian and fast-agent denominators. |
 | #1490 | open, blocked | Predictive planner v2 comparison | Do not repeat the old four-way expansion until revised gate evidence exists. |
 | #2837 | open | Horizon and timestep ablation | Analysis-only report for forecast horizon/output-step presets. |
-| #2838 | open | Observation-level adapters | Required before deployable/oracle observation tiers can be compared safely. |
-| #2839 | open | Dataset recorder and split manifest | Required before learned predictor training or durable split comparisons. |
-| #2841 | open | Calibration and reliability | Metric/report surface for probabilistic forecast quality. |
-| #2842 | open | Conformal/reachable-set pilot | Diagnostic uncertainty pilot; no planner/safety claim by itself. |
+| #2838 | closed | Observation-level adapters | Required before deployable/oracle observation tiers can be compared safely. |
+| #2839 | closed | Dataset recorder and split manifest | Required before learned predictor training or durable split comparisons. |
+| #2841 | closed | Calibration and reliability | Metric/report surface for probabilistic forecast quality. |
+| #2842 | open, running | Conformal/reachable-set pilot | Diagnostic uncertainty pilot; no planner/safety claim by itself. |
 | #2844 | open, blocked | Learned probabilistic graph predictor | Blocked until schema/data/metrics/coupling prerequisites unblock. |
 | #2845 | open, blocked | Transformer/diffusion study | Blocked analysis until lighter prerequisites and bounded data exist. |
-| #2847 | open | Transferability stress matrix | Should run after observation tier, metrics, and fixture/split surfaces are usable. |
-| #2848 | open | This routing doc | Keep this map current when lane gates or issue states change materially. |
+| #2847 | closed | Transferability stress matrix | Should run after observation tier, metrics, and fixture/split surfaces are usable. |
+| #2848 | closed | This routing doc | Keep this map current when lane gates or issue states change materially. |
 
 ## Gate Conditions
 

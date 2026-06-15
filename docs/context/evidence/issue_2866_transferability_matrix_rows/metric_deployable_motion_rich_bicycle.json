@@ -1,0 +1,51 @@
+{
+  "aggregate_rows": [
+    {
+      "actor_class": "bicycle",
+      "denominator": 8,
+      "horizon_s": 0.5,
+      "metric": "mean_ade",
+      "scenario_family": "motion_rich_occluded_emergence",
+      "status": "ok",
+      "value": 0.42
+    },
+    {
+      "actor_class": "bicycle",
+      "denominator": 8,
+      "horizon_s": 1.0,
+      "metric": "mean_ade",
+      "scenario_family": "motion_rich_occluded_emergence",
+      "status": "ok",
+      "value": 0.91
+    }
+  ],
+  "artifact_input": {
+    "command": "tracked metric fixture for issue #2866 transferability matrix rows",
+    "generated_at_utc": "2026-06-15T00:00:00+00:00",
+    "issue": 2866,
+    "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/metric_deployable_motion_rich_bicycle.json"
+  },
+  "provenance": {
+    "dt_s": 0.5,
+    "horizons_s": [
+      0.5,
+      1.0
+    ],
+    "observation_tier": "deployable_tracked",
+    "predictor_family": "constant_velocity",
+    "predictor_id": "cv-deployable-motion-rich-bicycle-fixture",
+    "scenario_id": "motion_rich_occluded_emergence_fixture",
+    "scenario_family": "motion_rich_occluded_emergence"
+  },
+  "schema_version": "ForecastMetrics.v1",
+  "transfer_dimensions": {
+    "density": "medium",
+    "dropout": "synthetic_dropout_0.1",
+    "latency": "1_step",
+    "map_family": "motion_rich_fixture",
+    "observation_noise": "tracked_noise_low",
+    "occlusion": "occluded_emergence",
+    "pedestrian_model_family": "fast_actor_fixture",
+    "semantic_metadata_present": true
+  }
+}

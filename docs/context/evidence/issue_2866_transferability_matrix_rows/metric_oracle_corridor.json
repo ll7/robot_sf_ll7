@@ -1,0 +1,51 @@
+{
+  "aggregate_rows": [
+    {
+      "actor_class": "pedestrian",
+      "denominator": 20,
+      "horizon_s": 0.5,
+      "metric": "mean_ade",
+      "scenario_family": "corridor_fixture",
+      "status": "ok",
+      "value": 0.18
+    },
+    {
+      "actor_class": "pedestrian",
+      "denominator": 20,
+      "horizon_s": 1.0,
+      "metric": "mean_ade",
+      "scenario_family": "corridor_fixture",
+      "status": "ok",
+      "value": 0.34
+    }
+  ],
+  "artifact_input": {
+    "command": "tracked metric fixture for issue #2866 transferability matrix rows",
+    "generated_at_utc": "2026-06-15T00:00:00+00:00",
+    "issue": 2866,
+    "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/metric_oracle_corridor.json"
+  },
+  "provenance": {
+    "dt_s": 0.5,
+    "horizons_s": [
+      0.5,
+      1.0
+    ],
+    "observation_tier": "oracle_full_state",
+    "predictor_family": "constant_velocity",
+    "predictor_id": "cv-oracle-corridor-fixture",
+    "scenario_id": "classic_corridor_fixture",
+    "scenario_family": "corridor_fixture"
+  },
+  "schema_version": "ForecastMetrics.v1",
+  "transfer_dimensions": {
+    "density": "low",
+    "dropout": "none",
+    "latency": "0_steps",
+    "map_family": "corridor_fixture",
+    "observation_noise": "none",
+    "occlusion": "clear",
+    "pedestrian_model_family": "social_force",
+    "semantic_metadata_present": false
+  }
+}

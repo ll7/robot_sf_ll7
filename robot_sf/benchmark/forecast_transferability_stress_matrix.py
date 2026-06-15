@@ -18,10 +18,12 @@ DEFAULT_TRANSFER_DIMENSIONS = (
     "latency",
     "dropout",
     "occlusion",
+    "scenario_family",
     "map_family",
     "density",
     "pedestrian_model_family",
     "actor_type",
+    "semantic_metadata_present",
 )
 
 _METRIC_PROVENANCE_KEYS = {
@@ -30,6 +32,13 @@ _METRIC_PROVENANCE_KEYS = {
     "latency": ("latency", "latency_s", "latency_steps"),
     "dropout": ("dropout", "dropout_rate", "missed_detection_probability"),
     "occlusion": ("occlusion", "occlusion_level", "occlusion_status"),
+    "scenario_family": ("scenario_family", "map_family", "scenario_family_id"),
+    "semantic_metadata_present": (
+        "semantic_metadata_present",
+        "semantic_metadata",
+        "intent_metadata_present",
+        "signal_metadata_present",
+    ),
     "map_family": ("map_family", "scenario_family"),
     "density": ("density", "density_label", "ped_density_bucket"),
     "pedestrian_model_family": ("pedestrian_model_family", "ped_model_family"),
@@ -79,14 +88,14 @@ def build_forecast_transferability_stress_matrix(
                 {
                     **report_key,
                     "dimension": dimension,
-                    "availability_status": "not_available",
+                    "availability_status": "blocked",
                     "reason": "dimension metadata unavailable in ForecastMetrics.v1 report",
                 }
             )
         for aggregate_row in report["aggregate_rows"]:
             actor_type_value = aggregate_row.get("actor_class")
-            actor_type = "unknown" if actor_type_value is None else str(actor_type_value)
-            row_dimensions = dict(transfer_dimensions)
+            actor_type = None if actor_type_value is None else str(actor_type_value)
+            row_dimensions = _transfer_dimensions(report, aggregate_row=aggregate_row)
             row_dimensions["actor_type"] = actor_type
             row_missing_dimensions = [
                 dimension
@@ -102,6 +111,7 @@ def build_forecast_transferability_stress_matrix(
                     "mean_value": aggregate_row.get("value"),
                     "metric_status": str(_required_value(aggregate_row, "status")),
                     "denominator": int(_required_value(aggregate_row, "denominator")),
+                    "artifact_input": _artifact_input(report),
                     "transfer_dimensions": {
                         dimension: row_dimensions.get(dimension)
                         for dimension in required_dimensions
@@ -111,10 +121,12 @@ def build_forecast_transferability_stress_matrix(
                         observation_tier=report_key["observation_tier"],
                         unavailable_dimensions=row_missing_dimensions,
                         metric_status=str(_required_value(aggregate_row, "status")),
+                        denominator=int(_required_value(aggregate_row, "denominator")),
                     ),
                     "claim_boundary": _row_claim_boundary(
                         observation_tier=report_key["observation_tier"],
                         unavailable_dimensions=row_missing_dimensions,
+                        denominator=int(_required_value(aggregate_row, "denominator")),
                     ),
                 }
             )
@@ -131,9 +143,9 @@ def build_forecast_transferability_stress_matrix(
         "dimension_coverage": dimension_coverage,
         "recommendation": recommendation,
         "claim_boundary": (
-            "Forecast transferability stress rows are diagnostic unless every required "
-            "dimension is available, denominators are non-empty, and observation tiers are "
-            "deployable or explicitly separated from oracle-only rows."
+            "Forecast transferability stress rows are benchmark-eligible only when each cell has "
+            "all required dimensions, non-empty deployable metric denominators, and "
+            "non-oracle observation tiers."
         ),
     }
 
@@ -245,7 +257,7 @@ def _empty_report(
         "limitation_rows": [
             {
                 "dimension": "all",
-                "availability_status": "not_available",
+                "availability_status": "blocked",
                 "reason": "no ForecastMetrics.v1 reports supplied",
             }
         ],
@@ -293,7 +305,11 @@ def _require_transferability_report(report: dict[str, Any]) -> None:
         raise ValueError("report must use ForecastTransferabilityStressMatrix.v1")
 
 
-def _transfer_dimensions(report: dict[str, Any]) -> dict[str, str | None]:
+def _transfer_dimensions(
+    report: dict[str, Any],
+    *,
+    aggregate_row: dict[str, Any] | None = None,
+) -> dict[str, str | None]:
     provenance = report.get("provenance", {})
     if not isinstance(provenance, dict):
         provenance = {}
@@ -302,13 +318,50 @@ def _transfer_dimensions(report: dict[str, Any]) -> dict[str, str | None]:
         metadata = report.get("metadata")
     if not isinstance(metadata, dict):
         metadata = {}
+    row_payload = aggregate_row if isinstance(aggregate_row, dict) else {}
     dimensions: dict[str, str | None] = {}
     for dimension, keys in _METRIC_PROVENANCE_KEYS.items():
-        value = _first_present(metadata, keys)
+        value = _first_present(row_payload, keys)
+        if value is None:
+            value = _first_present(metadata, keys)
         if value is None:
             value = _first_present(provenance, keys)
+        if dimension == "semantic_metadata_present":
+            value = _normalize_semantic_metadata_present(value)
         dimensions[dimension] = None if value is None else str(value)
     return dimensions
+
+
+def _normalize_semantic_metadata_present(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "present" if value else "absent"
+    if isinstance(value, (int, float)):
+        return "present" if int(value) != 0 else "absent"
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "present", "yes"}:
+            return "present"
+        if normalized in {"0", "false", "absent", "no"}:
+            return "absent"
+        return normalized
+    return str(value)
+
+
+def _artifact_input(report: dict[str, Any]) -> dict[str, Any] | None:
+    """Return optional provenance for matrix cells."""
+    artifact = report.get("artifact_input")
+    if isinstance(artifact, dict) and artifact:
+        return {
+            "source": str(artifact.get("source")) if artifact.get("source") is not None else "",
+            "issue": artifact.get("issue"),
+            "command": artifact.get("command"),
+            "generated_at_utc": artifact.get("generated_at_utc"),
+        }
+    if isinstance(report.get("artifact_source"), str):
+        return {"source": report["artifact_source"]}
+    return None
 
 
 def _first_present(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:
@@ -335,8 +388,8 @@ def _dimension_coverage(
         for dimension, value in row["transfer_dimensions"].items():
             if value is not None:
                 values_by_dimension[dimension].add(str(value))
-    for row in limitation_rows:
-        unavailable_counts[str(row["dimension"])] += 1
+        for dimension in row.get("unavailable_dimensions", []):
+            unavailable_counts[dimension] += 1
     coverage = {}
     for dimension in required_dimensions:
         observed_values = sorted(values_by_dimension[dimension])
@@ -363,17 +416,29 @@ def _recommendation(
             "claim_status": "blocked",
             "reason": "no matrix rows were produced",
         }
-    if limitation_rows:
+    if any(row["evidence_status"] == "blocked" for row in rows):
+        return {
+            "decision": "stop",
+            "claim_status": "blocked",
+            "reason": "one or more transfer cells are blocked by unavailable required metadata",
+        }
+    if any(row["evidence_status"] == "unavailable" for row in rows):
         return {
             "decision": "revise",
             "claim_status": "diagnostic-only",
-            "reason": "one or more transfer dimensions are unavailable",
+            "reason": "one or more transfer cells have unavailable metrics",
         }
     if any(_is_oracle_tier(row["observation_tier"]) for row in rows):
         return {
             "decision": "revise",
             "claim_status": "diagnostic-only",
             "reason": "oracle-state rows must not be promoted as deployable transfer evidence",
+        }
+    if limitation_rows:
+        return {
+            "decision": "revise",
+            "claim_status": "diagnostic-only",
+            "reason": "one or more transfer dimensions are unavailable",
         }
     if any(row["denominator"] == 0 or row["metric_status"] != "ok" for row in rows):
         return {
@@ -393,11 +458,14 @@ def _row_evidence_status(
     observation_tier: str,
     unavailable_dimensions: list[str],
     metric_status: str,
+    denominator: int,
 ) -> str:
-    if unavailable_dimensions or metric_status != "ok":
-        return "diagnostic-only"
+    if unavailable_dimensions:
+        return "blocked"
+    if metric_status != "ok" or denominator <= 0:
+        return "unavailable"
     if _is_oracle_tier(observation_tier):
-        return "oracle-only"
+        return "diagnostic-only"
     return "benchmark-eligible"
 
 
@@ -405,9 +473,12 @@ def _row_claim_boundary(
     *,
     observation_tier: str,
     unavailable_dimensions: list[str],
+    denominator: int,
 ) -> str:
     if unavailable_dimensions:
-        return "unavailable transfer dimensions prevent benchmark-strength transfer claims"
+        return "blocked transfer dimensions prevent benchmark-strength transfer claims"
+    if denominator <= 0:
+        return "unavailable metric cell prevents benchmark-strength transfer claims"
     if _is_oracle_tier(observation_tier):
         return "oracle-state row; not deployable transfer evidence"
     return "deployable observation row; still simulation-only transfer evidence"

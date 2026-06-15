@@ -388,3 +388,6 @@ Policy caveats:
   false_positive_suppresses_penalty (penalty suppressed, goal retained with zero unnecessary
   slowdown count).
   claim_boundary=diagnostic_only_not_benchmark_evidence. Not a safety or live benchmark claim.
+- `issue_2866_transferability_matrix_rows/`: tracked bounded-input evidence for the Issue #2866
+  transferability matrix follow-up, including generated JSON/Markdown matrix output with explicit
+  observation-tier, actor-class, scenario-family, horizon, semantic-metadata, and blocked-cell rows.

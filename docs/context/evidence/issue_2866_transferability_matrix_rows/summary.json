@@ -1,0 +1,36 @@
+{
+  "issue": 2866,
+  "schema_version": "ForecastTransferabilityEvidence.v1",
+  "status": "blocked",
+  "claim_boundary": "Transferability rows are preserved with explicit blocked cells; no transferability, safety, progress, paper-facing, or dissertation claim is supported.",
+  "generated_at_utc": "2026-06-15T13:27:08.661985+00:00",
+  "provenance": {
+    "command": "uv run python scripts/benchmark/build_forecast_transferability_matrix.py docs/context/evidence/issue_2866_transferability_matrix_rows/metric_oracle_corridor.json docs/context/evidence/issue_2866_transferability_matrix_rows/metric_deployable_motion_rich_bicycle.json docs/context/evidence/issue_2866_transferability_matrix_rows/metric_deployable_unavailable_cells.json --report-id issue_2866_transferability_matrix_rows --generated-at-utc 2026-06-15T00:00:00+00:00 --out-json docs/context/evidence/issue_2866_transferability_matrix_rows/transferability_matrix.json --out-md docs/context/evidence/issue_2866_transferability_matrix_rows/transferability_matrix.md",
+    "commit": "3f9504e32d3fab87ed3cb9304fea4b8371d84b13",
+    "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/*.json"
+  },
+  "coverage": {
+    "matrix_rows": 5,
+    "limitation_rows": 2,
+    "recommendation": {
+      "decision": "stop",
+      "claim_status": "blocked"
+    },
+    "tracked_rows": [
+      "observation_tier",
+      "scenario_family",
+      "actor_type",
+      "horizon_s",
+      "semantic_metadata_present"
+    ],
+    "blocked_cells": [
+      "scenario_family",
+      "map_family",
+      "actor_type"
+    ],
+    "notes": [
+      "The tracked metric inputs are bounded schema-compatible fixtures, not benchmark campaign outputs.",
+      "Complete deployable fixture rows demonstrate metadata preservation only; blocked cells prevent transfer claims."
+    ]
+  }
+}

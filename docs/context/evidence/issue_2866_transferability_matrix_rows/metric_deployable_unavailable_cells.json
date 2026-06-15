@@ -1,0 +1,37 @@
+{
+  "aggregate_rows": [
+    {
+      "denominator": 0,
+      "horizon_s": 1.0,
+      "metric": "mean_ade",
+      "status": "unavailable",
+      "value": null
+    }
+  ],
+  "artifact_input": {
+    "command": "tracked unavailable-cell fixture for issue #2866 transferability matrix rows",
+    "generated_at_utc": "2026-06-15T00:00:00+00:00",
+    "issue": 2866,
+    "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/metric_deployable_unavailable_cells.json"
+  },
+  "provenance": {
+    "dt_s": 0.5,
+    "horizons_s": [
+      1.0
+    ],
+    "observation_tier": "deployable_tracked",
+    "predictor_family": "constant_velocity",
+    "predictor_id": "cv-deployable-unavailable-cell-fixture",
+    "scenario_id": "missing_metadata_fixture"
+  },
+  "schema_version": "ForecastMetrics.v1",
+  "transfer_dimensions": {
+    "density": "unknown",
+    "dropout": "unknown",
+    "latency": "unknown",
+    "observation_noise": "tracked_noise_unknown",
+    "occlusion": "unknown",
+    "pedestrian_model_family": "unknown",
+    "semantic_metadata_present": "unknown"
+  }
+}

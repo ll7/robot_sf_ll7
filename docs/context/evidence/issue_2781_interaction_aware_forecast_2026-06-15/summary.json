@@ -1,0 +1,30 @@
+{
+  "issue": 2781,
+  "claim_boundary": "Diagnostic-only, not paper-facing evidence. Adds interaction-aware deterministic forecast baseline to the open-loop forecast baseline registry. On matched evaluated rows, the heuristic improves the Gaussian likelihood/calibration proxy while worsening 1s point accuracy, so it should be revised before any closed-loop coupling claim.",
+  "generated_at_utc": "2026-06-14T23:50:04.341120+00:00",
+  "repo_head": "a965d7bc",
+  "baselines": ["cv", "signal_aware", "goal_aware", "semantic", "interaction_aware"],
+  "interaction_aware_mechanism": {
+    "model": "interaction_aware_cv",
+    "repulsion": "Mean displacement deflected away from nearby pedestrians within interaction_radius_m",
+    "crowding": "Uncertainty increased proportionally to sqrt(density) of active neighbors",
+    "parameters": {
+      "interaction_radius_m": 2.0,
+      "avoidance_strength": 0.15,
+      "crowding_std_factor": 0.25
+    }
+  },
+  "interaction_effect": {
+    "matched_rows": 3,
+    "mean_ade_1s_delta_vs_cv": 0.02464957446502613,
+    "mean_nll_1s_delta_vs_cv": -0.6717039148640245,
+    "conclusion": "Interaction-aware heuristic improved Gaussian likelihood/calibration proxy but worsened point accuracy on matched diagnostic rows; revise before closed-loop coupling claims."
+  },
+  "fixture_limitation": "Existing durable fixtures still lack signal and intent metadata, so semantic conditioning remains unproven. Interaction-aware neighbor proximity is available in matched evaluated rows, but the result is mixed and diagnostic-only.",
+  "results_summary": {
+    "total_baselines": 5,
+    "traces_evaluated_per_baseline": 3,
+    "traces_limited_per_baseline": 2,
+    "total_evaluable_samples_per_baseline": 71
+  }
+}

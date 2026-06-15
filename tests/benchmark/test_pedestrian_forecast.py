@@ -6,12 +6,14 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark.pedestrian_forecast import (
+    NeighborContext,
     PedestrianState,
     chi_square_2d_threshold,
     compute_batch_forecast_metrics,
     constant_velocity_gaussian_baseline,
     evaluate_forecast,
     goal_aware_cv_baseline,
+    interaction_aware_cv_baseline,
     semantic_cv_baseline,
     signal_aware_cv_baseline,
 )
@@ -549,3 +551,182 @@ def test_compute_batch_forecast_metrics_with_baseline_function() -> None:
     assert cv_summary["forecast_evaluable_samples"] > 0
     assert signal_summary["forecast_evaluable_samples"] > 0
     assert cv_summary["forecast_evaluable_samples"] == signal_summary["forecast_evaluable_samples"]
+
+
+def test_interaction_aware_cv_no_neighbors_matches_cv() -> None:
+    """Without neighbors, interaction-aware CV degrades to plain CV."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal="green",
+        signal_available=True,
+    )
+    forecast = interaction_aware_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    np.testing.assert_allclose(forecast.predictions[0].mean, cv_forecast.predictions[0].mean)
+    np.testing.assert_allclose(
+        forecast.predictions[0].covariance, cv_forecast.predictions[0].covariance
+    )
+    assert forecast.predictions[0].metadata["interaction_status"] == "no_neighbors"
+    assert forecast.predictions[0].metadata["neighbor_count"] == 0.0
+    assert forecast.predictions[0].metadata["model"] == "interaction_aware_cv"
+
+
+def test_interaction_aware_cv_nearby_neighbor_deflects_mean() -> None:
+    """A nearby neighbor pushes the forecast mean away (repulsion)."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal="green",
+        signal_available=True,
+    )
+    neighbor = NeighborContext(
+        position=np.array([0.5, 0.5]),
+        velocity=np.array([-0.5, 0.0]),
+    )
+    forecast = interaction_aware_cv_baseline(state, horizons_s=(1.0,), neighbors=[neighbor])
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    # Mean should be deflected away from neighbor (repulsion is toward -y and -x relative to neighbor)
+    pred = forecast.predictions[0]
+    assert pred.metadata["interaction_status"] == "repulsion_active"
+    assert pred.metadata["active_neighbor_count"] == 1.0
+    # Repulsion pushes ego away from neighbor, so mean x < cv mean x
+    assert pred.mean[0] < cv_forecast.predictions[0].mean[0]
+    # Uncertainty increases due to crowding
+    assert pred.metadata["std_m"] > cv_forecast.predictions[0].metadata["std_m"]
+
+
+def test_interaction_aware_cv_far_neighbor_no_effect() -> None:
+    """A neighbor outside the interaction radius has no effect."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+    )
+    far_neighbor = NeighborContext(
+        position=np.array([10.0, 10.0]),
+        velocity=np.array([0.0, 0.0]),
+    )
+    forecast = interaction_aware_cv_baseline(state, horizons_s=(1.0,), neighbors=[far_neighbor])
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    np.testing.assert_allclose(forecast.predictions[0].mean, cv_forecast.predictions[0].mean)
+    assert forecast.predictions[0].metadata["interaction_status"] == "no_neighbors_in_radius"
+
+
+def test_interaction_aware_cv_multiple_neighbors_increase_crowding() -> None:
+    """More nearby neighbors increase uncertainty more than fewer."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+    )
+    one_neighbor = [NeighborContext(position=np.array([0.5, 0.0]), velocity=np.zeros(2))]
+    three_neighbors = [
+        NeighborContext(position=np.array([0.5, 0.0]), velocity=np.zeros(2)),
+        NeighborContext(position=np.array([-0.3, 0.4]), velocity=np.zeros(2)),
+        NeighborContext(position=np.array([0.2, -0.5]), velocity=np.zeros(2)),
+    ]
+
+    forecast_one = interaction_aware_cv_baseline(state, horizons_s=(1.0,), neighbors=one_neighbor)
+    forecast_many = interaction_aware_cv_baseline(
+        state, horizons_s=(1.0,), neighbors=three_neighbors
+    )
+
+    assert (
+        forecast_many.predictions[0].metadata["std_m"]
+        > forecast_one.predictions[0].metadata["std_m"]
+    )
+    assert forecast_many.predictions[0].metadata["active_neighbor_count"] == 3.0
+
+
+def test_interaction_aware_cv_is_deterministic() -> None:
+    """Interaction-aware forecast is deterministic for fixed inputs."""
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+    )
+    neighbors = [NeighborContext(position=np.array([0.5, 0.0]), velocity=np.zeros(2))]
+
+    first = interaction_aware_cv_baseline(state, horizons_s=(0.5, 1.0), neighbors=neighbors)
+    second = interaction_aware_cv_baseline(state, horizons_s=(0.5, 1.0), neighbors=neighbors)
+
+    for left, right in zip(first.predictions, second.predictions, strict=True):
+        np.testing.assert_allclose(left.mean, right.mean)
+        np.testing.assert_allclose(left.covariance, right.covariance)
+
+
+def test_interaction_aware_cv_composes_with_semantic_context() -> None:
+    """Interaction-aware forecast respects signal/intent context when provided."""
+    state_with_context = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent="crossing",
+        signal="green",
+        signal_available=True,
+    )
+    state_no_context = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+        intent=None,
+        signal=None,
+        signal_available=False,
+    )
+    neighbors = [NeighborContext(position=np.array([0.5, 0.0]), velocity=np.zeros(2))]
+
+    forecast_ctx = interaction_aware_cv_baseline(
+        state_with_context, horizons_s=(1.0,), neighbors=neighbors
+    )
+    forecast_no_ctx = interaction_aware_cv_baseline(
+        state_no_context, horizons_s=(1.0,), neighbors=neighbors
+    )
+
+    assert forecast_ctx.predictions[0].metadata["is_intent_aware"] is True
+    assert forecast_ctx.predictions[0].metadata["is_signal_aware"] is True
+    assert forecast_no_ctx.predictions[0].metadata["is_intent_aware"] is False
+    assert forecast_no_ctx.predictions[0].metadata["is_signal_aware"] is False
+
+
+def test_compute_batch_forecast_metrics_with_interaction_aware_baseline() -> None:
+    """Batch metrics accept interaction_aware baseline via the registry."""
+    dt_s = 0.5
+    trace_steps = []
+    for index in range(5):
+        x = index * dt_s
+        trace_steps.append(
+            {
+                "step": index,
+                "time_s": x,
+                "pedestrians": [
+                    {
+                        "id": 1,
+                        "position": [x, 0.0],
+                        "velocity": [1.0, 0.0],
+                    },
+                    {
+                        "id": 2,
+                        "position": [x, 1.0],
+                        "velocity": [0.5, 0.0],
+                    },
+                ],
+            }
+        )
+
+    summary = compute_batch_forecast_metrics(
+        trace_steps,
+        horizons_s=(0.5, 1.0),
+        dt_s=dt_s,
+        baseline_function=interaction_aware_cv_baseline,
+    )
+
+    assert summary["forecast_evaluable_samples"] > 0
+    assert summary["mean_ade_0.5s"] >= 0.0

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 import math
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Any
 
 import numpy as np
@@ -113,6 +115,15 @@ ForecastBaselineFunction = Callable[
     [PedestrianState, list[float] | tuple[float, ...]],
     PedestrianForecast,
 ]
+
+
+@dataclass(frozen=True)
+class NeighborContext:
+    """Snapshot of a neighboring pedestrian's state for interaction-aware forecasts."""
+
+    position: np.ndarray
+    velocity: np.ndarray
+    actor_type: str = "pedestrian"
 
 
 def constant_velocity_gaussian_baseline(
@@ -370,11 +381,135 @@ def semantic_cv_baseline(  # noqa: PLR0913
     return PedestrianForecast(id=state.id, predictions=predictions)
 
 
+def interaction_aware_cv_baseline(
+    state: PedestrianState,
+    horizons_s: list[float] | tuple[float, ...] = DEFAULT_FORECAST_HORIZONS_S,
+    *,
+    base_std_m: float = 0.3,
+    velocity_std_rate: float = 0.4,
+    interaction_radius_m: float = 2.0,
+    avoidance_strength: float = 0.15,
+    crowding_std_factor: float = 0.25,
+    neighbors: list[NeighborContext] | None = None,
+) -> PedestrianForecast:
+    """Interaction-aware constant-velocity baseline.
+
+    Modulates the mean displacement and uncertainty based on proximity to
+    neighboring pedestrians: nearby agents push the forecast away (repulsive
+    interaction) and increase uncertainty proportionally to crowding density.
+
+    When no neighbor context is provided the forecast degrades to plain CV
+    without widening uncertainty, preserving a deterministic diagnostic-only
+    baseline.  This is labeled and deterministic; it does not claim human
+    realism.
+
+    Returns:
+        Forecast distributions for the requested horizons.
+    """
+    predictions: list[ForecastDistribution] = []
+
+    effective_neighbors = neighbors or []
+    active_neighbors = (
+        _active_neighbor_repulsion(
+            state.position,
+            effective_neighbors,
+            interaction_radius_m,
+        )
+        if effective_neighbors
+        else []
+    )
+    active_neighbor_count = len(active_neighbors)
+    repulsion = np.zeros(2, dtype=float)
+    crowding_std_increment = 0.0
+    interaction_status = "no_neighbors"
+    if effective_neighbors:
+        if active_neighbors:
+            repulsion = _compute_repulsion(
+                state.position,
+                active_neighbors,
+                interaction_radius_m,
+                avoidance_strength,
+            )
+            crowding_density = active_neighbor_count / (math.pi * interaction_radius_m**2)
+            crowding_std_increment = crowding_std_factor * math.sqrt(crowding_density)
+            interaction_status = "repulsion_active"
+        else:
+            interaction_status = "no_neighbors_in_radius"
+
+    for horizon_s in horizons_s:
+        horizon = float(horizon_s)
+        std_m = base_std_m + velocity_std_rate * horizon + crowding_std_increment
+        mean = state.position + state.velocity * horizon + repulsion * horizon
+
+        if std_m <= 0.0:
+            raise ValueError("forecast standard deviation must be positive")
+
+        predictions.append(
+            ForecastDistribution(
+                horizon_s=horizon,
+                mean=mean,
+                covariance=np.eye(2, dtype=float) * (std_m**2),
+                metadata={
+                    "model": "interaction_aware_cv",
+                    "std_m": float(std_m),
+                    "is_intent_aware": state.intent is not None,
+                    "is_signal_aware": state.signal_available,
+                    "signal_state": state.signal if state.signal_available else "unknown",
+                    "interaction_status": interaction_status,
+                    "neighbor_count": float(len(effective_neighbors)),
+                    "active_neighbor_count": float(active_neighbor_count),
+                },
+            )
+        )
+
+    return PedestrianForecast(id=state.id, predictions=predictions)
+
+
+def _active_neighbor_repulsion(
+    ego_position: np.ndarray,
+    neighbors: list[NeighborContext],
+    interaction_radius_m: float,
+) -> list[NeighborContext]:
+    """Return neighbors within the interaction radius."""
+    return [
+        n
+        for n in neighbors
+        if float(np.linalg.norm(n.position - ego_position)) <= interaction_radius_m
+    ]
+
+
+def _compute_repulsion(
+    ego_position: np.ndarray,
+    active_neighbors: list[NeighborContext],
+    interaction_radius_m: float,
+    avoidance_strength: float,
+) -> np.ndarray:
+    """Compute a mean repulsive displacement vector from active neighbors.
+
+    Each neighbor contributes a repulsive force inversely proportional to
+    distance, bounded by the interaction radius.  The result is a per-step
+    displacement correction that accumulates linearly with horizon.
+
+    Returns:
+        2D repulsive displacement vector.
+    """
+    repulsion = np.zeros(2, dtype=float)
+    for neighbor in active_neighbors:
+        diff = ego_position - neighbor.position
+        dist = float(np.linalg.norm(diff))
+        if dist < 1e-6:
+            continue
+        weight = 1.0 - dist / interaction_radius_m
+        repulsion += (diff / dist) * weight * avoidance_strength
+    return repulsion
+
+
 BASELINE_FUNCTIONS: dict[str, ForecastBaselineFunction] = {
     "cv": constant_velocity_gaussian_baseline,
     "signal_aware": signal_aware_cv_baseline,
     "goal_aware": goal_aware_cv_baseline,
     "semantic": semantic_cv_baseline,
+    "interaction_aware": interaction_aware_cv_baseline,
 }
 
 
@@ -600,8 +735,12 @@ def _evaluate_single_pedestrian(
     )
     if not ground_truth:
         return None
+
+    neighbors = _collect_neighbor_context(pedestrian_payload, step_index, trace_steps)
+    forecast = _call_baseline_with_neighbors(baseline_function, state, horizons_s, neighbors)
+
     return evaluate_forecast(
-        baseline_function(state, horizons_s),
+        forecast,
         ground_truth,
         confidence_level=confidence_level,
         robot_positions=_future_robot_positions(
@@ -612,6 +751,60 @@ def _evaluate_single_pedestrian(
         ),
         collision_distance_m=collision_distance_m,
     )
+
+
+def _collect_neighbor_context(
+    ego_payload: dict[str, Any],
+    step_index: int,
+    trace_steps: list[dict[str, Any]],
+) -> list[NeighborContext]:
+    """Build neighbor context from the current step, excluding the ego pedestrian.
+
+    Returns:
+        List of NeighborContext for nearby pedestrians.
+    """
+    if step_index >= len(trace_steps):
+        return []
+    ego_id = int(ego_payload["id"])
+    neighbors: list[NeighborContext] = []
+    for ped in trace_steps[step_index].get("pedestrians", []):
+        if int(ped["id"]) == ego_id:
+            continue
+        neighbors.append(
+            NeighborContext(
+                position=np.asarray(ped["position"], dtype=float),
+                velocity=np.asarray(ped["velocity"], dtype=float),
+                actor_type=str(ped.get("actor_type") or "pedestrian"),
+            )
+        )
+    return neighbors
+
+
+def _call_baseline_with_neighbors(
+    baseline_function: ForecastBaselineFunction,
+    state: PedestrianState,
+    horizons_s: list[float] | tuple[float, ...],
+    neighbors: list[NeighborContext],
+) -> PedestrianForecast:
+    """Call baseline, passing neighbors if the function accepts them.
+
+    Returns:
+        Forecast from the baseline function.
+    """
+
+    if _baseline_accepts_neighbors(baseline_function):
+        return baseline_function(state, horizons_s, neighbors=neighbors)  # type: ignore[call-arg]
+    return baseline_function(state, horizons_s)
+
+
+@cache
+def _baseline_accepts_neighbors(baseline_function: ForecastBaselineFunction) -> bool:
+    """Return whether a baseline accepts neighbor context.
+
+    Returns:
+        True when ``baseline_function`` declares a ``neighbors`` parameter.
+    """
+    return "neighbors" in inspect.signature(baseline_function).parameters
 
 
 def _future_pedestrian_positions(

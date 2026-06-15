@@ -10,6 +10,7 @@ import pytest
 
 from robot_sf.benchmark.pedestrian_forecast import (
     goal_aware_cv_baseline,
+    interaction_aware_cv_baseline,
     semantic_cv_baseline,
     signal_aware_cv_baseline,
 )
@@ -39,6 +40,7 @@ _extract_trace_steps = _mod._extract_trace_steps
 _generate_markdown = _mod._generate_markdown
 _get_actor_classes = _mod._get_actor_classes
 _pedestrian_count = _mod._pedestrian_count
+_summarize_interaction_effect = _mod._summarize_interaction_effect
 _trace_has_motion = _mod._trace_has_motion
 _evaluate_single_trace = _mod.evaluate_single_trace
 
@@ -444,3 +446,45 @@ def test_baseline_functions_dict_has_all_keys() -> None:
     assert "signal_aware" in BASELINE_FUNCTIONS
     assert "goal_aware" in BASELINE_FUNCTIONS
     assert "semantic" in BASELINE_FUNCTIONS
+    assert "interaction_aware" in BASELINE_FUNCTIONS
+
+
+def test_evaluate_single_trace_with_interaction_aware_baseline() -> None:
+    """Trace can be evaluated with interaction_aware baseline."""
+    result = _evaluate_single_trace(
+        TRACE_CANDIDATES[0],
+        baseline_function=interaction_aware_cv_baseline,
+    )
+    assert "status" in result
+    assert "metrics" in result
+    assert result["status"] != "evaluation_error"
+
+
+def test_summarize_interaction_effect_reports_matched_deltas() -> None:
+    """Interaction summary compares matched interaction-aware and CV rows."""
+    summary = _summarize_interaction_effect(
+        [
+            {
+                "baseline": "cv",
+                "family": "corridor_interaction",
+                "label": "default",
+                "status": "evaluated",
+                "mean_ade_1s": 0.1,
+                "mean_negative_log_likelihood_1s": 2.0,
+            },
+            {
+                "baseline": "interaction_aware",
+                "family": "corridor_interaction",
+                "label": "default",
+                "status": "evaluated",
+                "mean_ade_1s": 0.2,
+                "mean_negative_log_likelihood_1s": 1.5,
+            },
+        ]
+    )
+
+    assert summary is not None
+    assert summary["matched_rows"] == 1
+    assert summary["mean_ade_1s_delta_vs_cv"] == pytest.approx(0.1)
+    assert summary["mean_nll_1s_delta_vs_cv"] == pytest.approx(-0.5)
+    assert "improved Gaussian likelihood" in summary["conclusion"]

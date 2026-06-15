@@ -171,6 +171,24 @@ Deterministic or uncertainty-incomplete rows are reported as calibration-unavail
 The recommendation field is analysis-only guidance for continue/revise/wait decisions before any
 planner-risk coupling.
 
+Use the conformal pilot builder to fit split-conformal deterministic forecast tubes on calibration
+`ForecastBatch.v1` artifacts and evaluate coverage on separate held-out forecast artifacts:
+
+```bash
+uv run python scripts/benchmark/build_forecast_conformal_pilot.py \
+  --calibration-batch path/to/calibration_forecast_batch.json \
+  --calibration-ground-truth path/to/calibration_ground_truth.json \
+  --evaluation-batch path/to/heldout_forecast_batch.json \
+  --evaluation-ground-truth path/to/heldout_ground_truth.json \
+  --report-id prediction_conformal_smoke \
+  --out-json output/forecast_conformal_pilot.json \
+  --out-md output/forecast_conformal_pilot.md
+```
+
+The pilot records split provenance, empirical held-out coverage, radius/set-size diagnostics, and
+missing-denominator limitations. Its recommendation is smoke-only guidance and must not be treated
+as planner safety or real-world coverage evidence.
+
 Testing-only planners remain opt-in only under the guardrail policy in
 `docs/benchmark_experimental_planners.md` . Issue 596 adds a verified-simple stage gate for any
 future reconsideration, but does not remove the opt-in requirement by itself.

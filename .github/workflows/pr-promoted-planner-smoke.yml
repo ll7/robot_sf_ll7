@@ -41,7 +41,9 @@ jobs:
           sudo apt-get install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
 
       - name: Sync dependencies (locked)
-        run: uv sync --all-extras --frozen
+        env:
+          CI_STEP_TIMEOUT_SECONDS: "1200"
+        run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
 
       - name: Run promoted planner smoke
         run: |

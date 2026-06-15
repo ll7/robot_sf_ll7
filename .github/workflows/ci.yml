@@ -57,6 +57,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
 
       - name: Sync dependencies (locked)
+        env:
+          CI_STEP_TIMEOUT_SECONDS: "1200"
         run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
 
       - name: Migrate legacy artifacts into canonical root
@@ -146,6 +148,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
 
       - name: Sync dependencies (locked)
+        env:
+          CI_STEP_TIMEOUT_SECONDS: "1200"
         run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
 
       - name: Migrate legacy artifacts into canonical root
@@ -210,7 +214,9 @@ jobs:
 
       - name: Enforce artifact root policy
         if: always()
-        run: scripts/dev/ci_driver.sh artifact-policy
+        env:
+          CI_STEP_TIMEOUT_SECONDS: "300"
+        run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
 
   examples-smoke:
     runs-on: ubuntu-latest
@@ -241,6 +247,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
 
       - name: Sync dependencies (locked)
+        env:
+          CI_STEP_TIMEOUT_SECONDS: "1200"
         run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
 
       - name: Migrate legacy artifacts into canonical root

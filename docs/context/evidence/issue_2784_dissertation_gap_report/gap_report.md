@@ -2,9 +2,9 @@
 
 **Purpose**: synthesis/planning aid; not new benchmark, paper, dissertation, or safety evidence.
 
-Generated: 2026-06-13  | Schema: dissertation_gap_report.v1
+Generated: 2026-06-15  | Schema: dissertation_gap_report.v1
 
-Sources: ledger #2760 (6 rows), register #2762 (3 entries)
+Sources: ledger #2760 (7 rows), register #2762 (3 entries)
 
 ## Supported (release-backed, current)
 
@@ -34,13 +34,21 @@ Sources: ledger #2760 (6 rows), register #2762 (3 entries)
 - **Caveat**: Signal state is proxy_diagnostic only. Do not claim planner observability, forced-waiting reasoning, legality compliance, or benchmark ranking improvement.
 - **Claim gap / reason**: Requires explicit runtime signal phase state, planner-observation policy, zone/legality trace fields, and planner_observable promotion before any benchmark row.
 
-### prediction [ledger]
+### prediction_supported [ledger]
 
 - **Tier/Classification**: diagnostic
-- **Promotion step or reason**: denominator repair: an executed planner campaign with matched metrics and fail-closed row handling is required before any benchmark claim.
-- **Allowed wording / boundary**: The repository has a merged probabilistic prediction interface and a contract-smoke runner that materializes native and fail-closed row shapes for multimodal prediction configurations.
-- **Caveat**: This is contract evidence only. The runner uses deterministic fixtures, does not execute a planner campaign, and does not measure prediction quality or compare planning performance.
-- **Claim gap / reason**: Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim.
+- **Promotion step or reason**: benchmark promotion requires executed transfer-aware closed-loop comparison rows with calibrated ADE/FDE/miss-rate and collision/progress metrics.
+- **Allowed wording / boundary**: The repository now supports forecast-lane infrastructure for typed artifact contracts, observation tiers, probabilistic metric pipelines, deterministic baselines, dataset-level provenance, transfer diagnostics, uncertainty pilots, and a closed-loop coupling gate.
+- **Caveat**: Current evidence is infrastructure and diagnostic in nature: it marks what is implemented and what the next coupling step reports, but it is not yet benchmark- or paper-grade claim support.
+- **Claim gap / reason**: Requires a transfer-aware, same-seed closed-loop campaign that compares forecast-enabled planners to deterministic and baseline modes using calibrated, fail-closed, and same-denominator metrics.
+
+### prediction_unsupported [ledger]
+
+- **Tier/Classification**: diagnostic
+- **Promotion step or reason**: run transfer-focused closed-loop planner campaigns with matched deterministic baselines and explicit safety/progress deltas before promoting this claim.
+- **Allowed wording / boundary**: Forecast artifacts and tooling are in place, but forecast-driven gains in safety, progress, or transfer performance are not established.
+- **Caveat**: Forecast coupling and transfer diagnostics currently show mixed or insufficient evidence (#2843 revise recommendation; mixed baseline-point results in #2781; transferability matrix is not a safety proof).
+- **Claim gap / reason**: Requires transfer-aware transferability campaigns with false-positive accounting, non-regression on success/progress, and statistical uncertainty before any safety/progress claim.
 
 ## Negative / Revise-Only
 

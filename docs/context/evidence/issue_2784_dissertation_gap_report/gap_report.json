@@ -1,11 +1,11 @@
 {
   "schema_version": "dissertation_gap_report.v1",
-  "generated_at": "2026-06-13",
+  "generated_at": "2026-06-15",
   "purpose": "synthesis/planning aid; not new benchmark, paper, dissertation, or safety evidence",
   "source_ledger": {
     "path": "docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json",
     "issue": 2760,
-    "row_count": 6
+    "row_count": 7
   },
   "source_register": {
     "path": "docs/context/evidence/issue_2762_negative_result_register/register.json",
@@ -53,17 +53,30 @@
       "claim_gap_or_reason": "Requires actual perception pipeline, calibrated tracking, or simulator-level observation fidelity before any robustness claim. Cross-track comparison is not valid without matched observation contracts."
     },
     {
-      "area": "prediction",
+      "area": "prediction_supported",
       "entry_id": null,
       "bucket": "blocked",
-      "promotion_step_or_reason": "denominator repair: an executed planner campaign with matched metrics and fail-closed row handling is required before any benchmark claim.",
+      "promotion_step_or_reason": "benchmark promotion requires executed transfer-aware closed-loop comparison rows with calibrated ADE/FDE/miss-rate and collision/progress metrics.",
       "source": "ledger",
-      "source_issue": 2475,
+      "source_issue": 2761,
       "evidence_tier": "diagnostic",
       "result_classification": null,
-      "allowed_wording_or_boundary": "The repository has a merged probabilistic prediction interface and a contract-smoke runner that materializes native and fail-closed row shapes for multimodal prediction configurations.",
-      "caveat": "This is contract evidence only. The runner uses deterministic fixtures, does not execute a planner campaign, and does not measure prediction quality or compare planning performance.",
-      "claim_gap_or_reason": "Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim."
+      "allowed_wording_or_boundary": "The repository now supports forecast-lane infrastructure for typed artifact contracts, observation tiers, probabilistic metric pipelines, deterministic baselines, dataset-level provenance, transfer diagnostics, uncertainty pilots, and a closed-loop coupling gate.",
+      "caveat": "Current evidence is infrastructure and diagnostic in nature: it marks what is implemented and what the next coupling step reports, but it is not yet benchmark- or paper-grade claim support.",
+      "claim_gap_or_reason": "Requires a transfer-aware, same-seed closed-loop campaign that compares forecast-enabled planners to deterministic and baseline modes using calibrated, fail-closed, and same-denominator metrics."
+    },
+    {
+      "area": "prediction_unsupported",
+      "entry_id": null,
+      "bucket": "blocked",
+      "promotion_step_or_reason": "run transfer-focused closed-loop planner campaigns with matched deterministic baselines and explicit safety/progress deltas before promoting this claim.",
+      "source": "ledger",
+      "source_issue": 2761,
+      "evidence_tier": "diagnostic",
+      "result_classification": null,
+      "allowed_wording_or_boundary": "Forecast artifacts and tooling are in place, but forecast-driven gains in safety, progress, or transfer performance are not established.",
+      "caveat": "Forecast coupling and transfer diagnostics currently show mixed or insufficient evidence (#2843 revise recommendation; mixed baseline-point results in #2781; transferability matrix is not a safety proof).",
+      "claim_gap_or_reason": "Requires transfer-aware transferability campaigns with false-positive accounting, non-regression on success/progress, and statistical uncertainty before any safety/progress claim."
     },
     {
       "area": "pedestrian_density_stress",

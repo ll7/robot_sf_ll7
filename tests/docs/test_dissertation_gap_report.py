@@ -38,7 +38,7 @@ REQUIRED_GAP_FIELDS = {
     "claim_gap_or_reason",
 }
 VALID_BUCKETS = {"supported", "blocked", "negative_revise_only", "remove_weaken"}
-LEDGER_ROW_COUNT = 6
+LEDGER_ROW_COUNT = 7
 REGISTER_ENTRY_COUNT = 3
 
 
@@ -162,9 +162,10 @@ class TestSourceAccounting:
         assert buckets.get("supported", 0) == 1, (
             f"Expected 1 supported gap, got {buckets.get('supported', 0)}"
         )
-        # blocked: 3 (topology_guidance, signalized_behavior, prediction)
-        assert buckets.get("blocked", 0) == 3, (
-            f"Expected 3 blocked gaps, got {buckets.get('blocked', 0)}"
+        # blocked: 4 (topology_guidance, signalized_behavior, forecast-supported,
+        # forecast-unsupported)
+        assert buckets.get("blocked", 0) == 4, (
+            f"Expected 4 blocked gaps, got {buckets.get('blocked', 0)}"
         )
         # negative_revise_only: 4 (pedestrian_density_stress + NR-001 + NR-002 + NR-003)
         assert buckets.get("negative_revise_only", 0) == 4, (

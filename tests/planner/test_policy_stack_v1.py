@@ -11,6 +11,7 @@ import pytest
 from robot_sf.planner.policy_stack_v1 import (
     PolicyStackV1Adapter,
     PolicyStackV1Config,
+    build_policy_stack_v1_build_config,
 )
 
 
@@ -140,6 +141,10 @@ def test_policy_stack_arbitration_trace_packet_contract() -> None:
     assert packet["proposal_sources"] == ["goal", "missing_optional"]
     assert packet["command_contract"]["action_space"] == "unicycle_vw"
     assert packet["switching_contract"]["min_dwell_steps"] == 1
+    assert (
+        "forecast_risk_channel"
+        not in packet["observation_contract"]["inference_available_features"]
+    )
     assert "future_trajectory" in packet["observation_contract"]["leakage_exclusions"]
     assert "not_available" in packet["status_policy"]["not_available_statuses"]
     assert packet["status_policy"]["non_executable_statuses"] == [
@@ -243,8 +248,6 @@ def test_policy_stack_hard_shield_stops_unsafe_moving_command_and_resets() -> No
 
 def test_policy_stack_build_config_preserves_nested_risk_dwa_fields() -> None:
     """Config builder should pass nested risk_dwa settings to the existing builder."""
-    from robot_sf.planner.policy_stack_v1 import build_policy_stack_v1_build_config
-
     build = build_policy_stack_v1_build_config(
         {
             "proposal_sources": ["goal", "risk_dwa"],
@@ -348,3 +351,180 @@ def test_policy_stack_runs_atomic_topology_smoke_through_map_runner(tmp_path: Pa
     assert runtime["proposal_status_counts"]["native"] > 0
     assert runtime["proposal_status_counts"]["adapter"] > 0
     assert runtime["last_step"]["selected_proposal_key"] in {"goal", "risk_dwa", "shield_stop"}
+
+
+def test_forecast_risk_default_off_ignores_channel() -> None:
+    """Default weight=0.0 should not inject forecast risk keys into scores."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(proposal_sources=("goal",)),
+        risk_dwa=_DummyRiskDWA(),
+    )
+    obs = _obs()
+    obs["forecast_risk_channel"] = {"status": "available", "risk": 1.0}
+    stack.plan(obs)
+    last = stack.diagnostics()["last_step"]
+    for components in last["risk_score_components"].values():
+        assert "forecast_risk_raw" not in components
+        assert "forecast_risk_penalty" not in components
+
+
+def test_forecast_risk_high_can_shift_selection_to_risk_dwa() -> None:
+    """High forecast risk with weight>0 should penalize goal enough to select risk_dwa."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("goal", "risk_dwa"),
+            forecast_risk_weight=5.0,
+        ),
+        risk_dwa=_DummyRiskDWA(command=(0.2, 0.0)),
+    )
+    obs = _obs()
+    obs["forecast_risk_channel"] = {"status": "available", "risk": 1.0}
+    stack.plan(obs)
+    last = stack.diagnostics()["last_step"]
+    assert last["selected_proposal_key"] == "risk_dwa"
+    goal_components = last["risk_score_components"]["goal"]
+    assert goal_components["forecast_risk_available"] == 1.0
+    assert goal_components["forecast_risk_raw"] == 1.0
+    assert goal_components["forecast_risk_penalty"] > 0.0
+    assert last["candidate_ranking"][0]["proposal_key"] == "risk_dwa"
+
+
+def test_forecast_risk_false_positive_suppresses_penalty() -> None:
+    """false_positive_risk=1 should cancel the forecast penalty; goal stays preferred."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("goal",),
+            forecast_risk_weight=10.0,
+        ),
+        risk_dwa=_DummyRiskDWA(),
+    )
+    obs = _obs()
+    obs["forecast_risk_channel"] = {
+        "status": "available",
+        "risk": 1.0,
+        "false_positive_risk": 1.0,
+    }
+    stack.plan(obs)
+    last = stack.diagnostics()["last_step"]
+    assert last["selected_proposal_key"] == "goal"
+    goal_components = last["risk_score_components"]["goal"]
+    assert goal_components["forecast_risk_penalty"] == 0.0
+    assert goal_components["forecast_risk_false_positive"] == 1.0
+    assert goal_components["forecast_risk_effective"] == 0.0
+
+
+def test_forecast_risk_unavailable_status_is_trace_visible_without_penalty() -> None:
+    """Unavailable forecast-risk payloads should be visible but non-penalizing."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("goal",),
+            forecast_risk_weight=10.0,
+        ),
+        risk_dwa=_DummyRiskDWA(),
+    )
+    obs = _obs()
+    obs["forecast_risk_channel"] = {"status": "unavailable", "risk": 1.0}
+    stack.plan(obs)
+    goal_components = stack.diagnostics()["last_step"]["risk_score_components"]["goal"]
+    assert goal_components["forecast_risk_available"] == 0.0
+    assert goal_components["forecast_risk_raw"] == 0.0
+    assert goal_components["forecast_risk_penalty"] == 0.0
+
+
+@pytest.mark.parametrize("payload", [{"risk": 1.0}, {"status": "", "risk": 1.0}])
+def test_forecast_risk_requires_explicit_active_status(payload: dict[str, float | str]) -> None:
+    """Missing or blank forecast-risk status should not change scoring."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("goal",),
+            forecast_risk_weight=10.0,
+        ),
+        risk_dwa=_DummyRiskDWA(),
+    )
+    obs = _obs()
+    obs["forecast_risk_channel"] = payload
+    stack.plan(obs)
+    goal_components = stack.diagnostics()["last_step"]["risk_score_components"]["goal"]
+    assert goal_components["forecast_risk_available"] == 0.0
+    assert goal_components["forecast_risk_raw"] == 0.0
+    assert goal_components["forecast_risk_penalty"] == 0.0
+
+
+def test_forecast_risk_trace_packet_declares_enabled_observation_key() -> None:
+    """Forecast-risk-enabled traces should declare the configured diagnostic input."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("goal",),
+            forecast_risk_weight=2.0,
+            forecast_risk_observation_key="my_forecast_risk",
+        ),
+        risk_dwa=_DummyRiskDWA(),
+    )
+    stack.plan(_obs())
+    observation_contract = stack.arbitration_trace_packet()["observation_contract"]
+    assert "my_forecast_risk" in observation_contract["inference_available_features"]
+    assert observation_contract["forecast_risk_observation_key"] == "my_forecast_risk"
+    assert "" not in observation_contract["forecast_risk_active_statuses"]
+    assert "diagnostic" in observation_contract["forecast_risk_active_statuses"]
+
+
+def test_forecast_risk_build_config_parses_fields() -> None:
+    """Build config should parse forecast_risk_weight and forecast_risk_observation_key."""
+    build = build_policy_stack_v1_build_config(
+        {
+            "proposal_sources": ["goal", "risk_dwa"],
+            "forecast_risk_weight": 3.5,
+            "forecast_risk_observation_key": "my_custom_channel",
+        }
+    )
+    assert build.policy_stack.forecast_risk_weight == 3.5
+    assert build.policy_stack.forecast_risk_observation_key == "my_custom_channel"
+
+
+def test_forecast_risk_build_config_defaults() -> None:
+    """Build config should default forecast fields when absent."""
+    build = build_policy_stack_v1_build_config({"proposal_sources": ["goal"]})
+    assert build.policy_stack.forecast_risk_weight == 0.0
+    assert build.policy_stack.forecast_risk_observation_key == "forecast_risk_channel"
+
+
+def test_forecast_risk_build_config_treats_null_fields_as_defaults() -> None:
+    """Explicit null forecast-risk config values should use safe defaults."""
+    build = build_policy_stack_v1_build_config(
+        {
+            "proposal_sources": ["goal"],
+            "forecast_risk_weight": None,
+            "forecast_risk_observation_key": None,
+        }
+    )
+    assert build.policy_stack.forecast_risk_weight == 0.0
+    assert build.policy_stack.forecast_risk_observation_key == "forecast_risk_channel"
+
+
+def test_forecast_risk_diagnostics_json_safe() -> None:
+    """Diagnostics and trace packet should remain JSON-serializable with forecast risk."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("goal",),
+            forecast_risk_weight=2.0,
+        ),
+        risk_dwa=_DummyRiskDWA(),
+    )
+    obs = _obs()
+    obs["forecast_risk_channel"] = {
+        "status": "diagnostic",
+        "risk": 0.5,
+        "occupancy_risk": 0.3,
+        "collision_relevance": 0.2,
+        "false_positive_risk": 0.1,
+        "unnecessary_stop_risk": 0.05,
+    }
+    stack.plan(obs)
+    diagnostics = stack.diagnostics()
+    goal_components = diagnostics["last_step"]["risk_score_components"]["goal"]
+    assert goal_components["forecast_risk_raw"] == 0.5
+    assert goal_components["forecast_risk_false_positive"] == 0.1
+    assert goal_components["forecast_risk_effective"] == pytest.approx(0.45)
+    packet = stack.arbitration_trace_packet()
+    json.dumps(diagnostics, allow_nan=False)
+    json.dumps(packet, allow_nan=False)

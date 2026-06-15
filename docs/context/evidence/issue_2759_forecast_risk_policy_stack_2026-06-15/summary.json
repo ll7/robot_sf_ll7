@@ -1,0 +1,7 @@
+{
+  "case_count": 2,
+  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "diagnostic_weight": 5.0,
+  "false_positive_unnecessary_slowdown_count": 0,
+  "recommendation": "forecast_risk_scoring_diagnostic_consistent"
+}

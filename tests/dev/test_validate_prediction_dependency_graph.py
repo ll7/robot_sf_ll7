@@ -82,9 +82,24 @@ def test_validate_prediction_dependency_graph_rejects_unknown_status(
     assert validate(_write_graph(tmp_path, graph)) == 1
 
 
+def test_validate_prediction_dependency_graph_rejects_missing_order_without_crashing(
+    tmp_path: Path,
+) -> None:
+    """Missing execution order entries should fail validation without KeyError."""
+    graph = _minimal_graph()
+    graph["execution_order"] = [1]
+
+    assert validate(_write_graph(tmp_path, graph)) == 1
+
+
 def test_validate_prediction_dependency_graph_rejects_cycles(tmp_path: Path) -> None:
     """Dependency cycles should fail validation without raising."""
     graph = _minimal_graph()
     graph["nodes"][0]["depends_on"] = [2]
 
     assert validate(_write_graph(tmp_path, graph)) == 1
+
+
+def test_validate_prediction_dependency_graph_rejects_missing_file(tmp_path: Path) -> None:
+    """Missing graph files should return a validation failure."""
+    assert validate(tmp_path / "missing.json") == 1

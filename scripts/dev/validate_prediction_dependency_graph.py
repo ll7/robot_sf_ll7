@@ -27,9 +27,9 @@ def _load_graph(path: Path) -> dict:
         with path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
     except OSError as error:
-        raise SystemExit(f"prediction dependency graph validation failed: cannot read {path}: {error}") from error
+        raise ValueError(f"cannot read {path}: {error}") from error
     except json.JSONDecodeError as error:
-        raise SystemExit(f"prediction dependency graph validation failed: invalid JSON in {path}: {error}") from error
+        raise ValueError(f"invalid JSON in {path}: {error}") from error
 
 
 def _validate_graph_header(data: dict) -> list[str]:
@@ -67,7 +67,9 @@ def _validate_gate(node_issue: int, gate: dict, known: set[int]) -> list[str]:
         return errors
     for dep in deps:
         if not isinstance(dep, int):
-            errors.append(f"issue {node_issue}: gate {gate_id} has non-int depends_on value {dep!r}")
+            errors.append(
+                f"issue {node_issue}: gate {gate_id} has non-int depends_on value {dep!r}"
+            )
         elif dep not in known:
             errors.append(f"issue {node_issue}: gate {gate_id} depends on unknown issue {dep}")
     return errors
@@ -133,7 +135,8 @@ def _validate_acyclic(nodes_by_issue: dict[int, dict]) -> list[str]:
     def walk(issue: int) -> None:
         state = visit_state.get(issue, 0)
         if state == 1:
-            raise RuntimeError(f"dependency cycle detected at issue {issue}")
+            errors.append(f"dependency cycle detected at issue {issue}")
+            return
         if state == 2:
             return
         visit_state[issue] = 1
@@ -142,25 +145,38 @@ def _validate_acyclic(nodes_by_issue: dict[int, dict]) -> list[str]:
         visit_state[issue] = 2
 
     for issue in nodes_by_issue:
-        walk(issue)
+        if issue not in visit_state:
+            walk(issue)
     return errors
 
 
 def validate(path: Path) -> int:  # noqa: C901,PLR0912
     """Validate graph payload and return non-zero on violations."""
-    data = _load_graph(path)
+    try:
+        data = _load_graph(path)
+    except ValueError as error:
+        print(f"prediction dependency graph validation failed: {error}", file=sys.stderr)
+        return 1
     issues = data.get("nodes", [])
 
     errors = _validate_graph_header(data)
     if errors:
-        print("prediction dependency graph validation failed: " + "; ".join(errors), file=sys.stderr)
+        print(
+            "prediction dependency graph validation failed: " + "; ".join(errors), file=sys.stderr
+        )
         return 1
 
     required_set = data.get("required_issue_set", [])
     known: set[int] = {
-        node.get("issue") for node in issues if isinstance(node, dict) and isinstance(node.get("issue"), int)
+        node.get("issue")
+        for node in issues
+        if isinstance(node, dict) and isinstance(node.get("issue"), int)
     }
-    data_map = {node.get("issue"): node for node in issues if isinstance(node, dict) and isinstance(node.get("issue"), int)}
+    data_map = {
+        node.get("issue"): node
+        for node in issues
+        if isinstance(node, dict) and isinstance(node.get("issue"), int)
+    }
 
     seen: set[int] = set()
     node_errors: list[str] = []
@@ -191,7 +207,9 @@ def validate(path: Path) -> int:  # noqa: C901,PLR0912
         depends_on = data_map.get(issue, {}).get("depends_on", [])
         if not isinstance(depends_on, list):
             continue
-        position = order_position[issue]
+        position = order_position.get(issue)
+        if position is None:
+            continue
         for dep in depends_on:
             if dep in order_position and order_position[dep] > position:
                 node_errors.append(
@@ -199,13 +217,13 @@ def validate(path: Path) -> int:  # noqa: C901,PLR0912
                 )
 
     if not node_errors:
-        try:
-            node_errors.extend(_validate_acyclic(data_map))
-        except RuntimeError as error:
-            node_errors.append(str(error))
+        node_errors.extend(_validate_acyclic(data_map))
 
     if node_errors:
-        print("prediction dependency graph validation failed: " + "; ".join(node_errors), file=sys.stderr)
+        print(
+            "prediction dependency graph validation failed: " + "; ".join(node_errors),
+            file=sys.stderr,
+        )
         return 1
 
     print(f"prediction dependency graph validation passed for {len(known)} issue nodes")

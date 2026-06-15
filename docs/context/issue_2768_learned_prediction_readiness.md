@@ -45,7 +45,7 @@ and read `docs/context/prediction_lane_dependency_graph.json` to confirm depende
 
 Blocked learned-prediction candidates under this issue should not be executed until their listed
 upstream nodes and gates are satisfied in the graph, including #2836, #2838, #2839, #2840,
-#2841, #2843, and their derived readiness gates.
+\#2841, \#2843, and their derived readiness gates.
 
 
 ### 1. Trace Dataset Registry

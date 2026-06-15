@@ -185,22 +185,6 @@ def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _load_candidates(candidates_path: Path | None) -> list[dict[str, Any]]:
-    """Load artifact candidates from a JSON list file.
-
-    Returns:
-        List of candidate dictionaries. Empty when no candidate file is given.
-    """
-    if candidates_path is None or not candidates_path.exists():
-        return []
-    payload = _load_json(candidates_path)
-    if isinstance(payload, dict):
-        payload = payload.get("candidates", [])
-    if not isinstance(payload, list):
-        return []
-    return [dict(item) for item in payload if isinstance(item, Mapping)]
-
-
 def _resolve_manifest_path(
     manifest_value: str,
     *,
@@ -213,13 +197,26 @@ def _resolve_manifest_path(
         return candidate
     if candidate_path is not None and candidate_path.is_file():
         candidate_relative = candidate_path.parent / candidate
-        if candidate_relative.exists():
+        if candidate_relative.is_file():
             return candidate_relative.resolve()
     repo_root = repo_root or get_repository_root()
     repo_relative = repo_root / candidate
-    if repo_relative.exists():
+    if repo_relative.is_file():
         return repo_relative.resolve()
     return candidate.resolve()
+
+
+def _dedupe_paths(paths: Sequence[Path]) -> list[Path]:
+    """Return paths with duplicate resolved files removed while preserving order."""
+    deduped: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        deduped.append(resolved)
+        seen.add(resolved)
+    return deduped
 
 
 def _lineage_status_from_entry(entry: FieldBackfillEntry) -> str:
@@ -281,7 +278,7 @@ def _analyze_manifest_at_path(path: Path) -> ManifestBackfillPlan:
     return analyze_manifest(dict(payload), path=rel_path)
 
 
-def build_manifest_lineage_graph(  # noqa: C901, PLR0912, PLR0915
+def build_manifest_lineage_graph(  # noqa: C901, PLR0915
     manifest_paths: Sequence[Path],
     *,
     artifact_candidates: Sequence[Mapping[str, Any]] = (),
@@ -316,7 +313,7 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0912, PLR0915
     rel_manifest_paths = []
     plans: list[ManifestBackfillPlan] = []
 
-    for path in manifest_paths:
+    for path in _dedupe_paths(manifest_paths):
         plan = _analyze_manifest_at_path(path)
         plans.append(plan)
         rel_path = plan.path or _repo_relative(path)
@@ -425,9 +422,6 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0912, PLR0915
             )
             source_manifest_path = _repo_relative(resolved)
             matching_plan = path_to_plan.get(source_manifest_path)
-            if matching_plan is None and resolved.exists():
-                matching_plan = _analyze_manifest_at_path(resolved)
-                path_to_plan[matching_plan.path or source_manifest_path] = matching_plan
             if matching_plan is None:
                 trace_status = LineageStatus.INCONCLUSIVE
                 reason = f"source manifest not found in graph inputs: {source_manifest_path}"

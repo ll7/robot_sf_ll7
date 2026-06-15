@@ -224,6 +224,16 @@ def test_repo_relative_paths_in_graph(tmp_path: Path) -> None:
     assert manifest_node.path.startswith("tests/benchmark/fixtures/manifest_lineage_graph/")
 
 
+def test_duplicate_manifest_paths_are_deduplicated() -> None:
+    """Duplicate manifest inputs should not duplicate nodes or edges."""
+    manifest_path = FIXTURE_DIR / "connected_manifest.json"
+
+    graph = build_manifest_lineage_graph([manifest_path, manifest_path])
+
+    assert graph.summary["manifest_count"] == 1
+    assert graph.summary["edge_kind_counts"]["validates_with"] == 1
+
+
 def test_missing_field_produces_missing_edges() -> None:
     """Missing lineage fields produce missing field nodes and no proxy edges."""
     manifest_path = FIXTURE_DIR / "missing_manifest.json"

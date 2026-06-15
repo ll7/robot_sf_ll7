@@ -67,12 +67,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _resolve_manifest_paths(paths: list[Path]) -> list[Path]:
     """Resolve and validate manifest paths from CLI arguments."""
     resolved: list[Path] = []
+    seen: set[Path] = set()
     for path in paths:
         if not path.exists():
             raise FileNotFoundError(f"manifest not found: {path}")
         if not path.is_file():
             raise ValueError(f"manifest path is not a file: {path}")
-        resolved.append(path.resolve())
+        resolved_path = path.resolve()
+        if resolved_path in seen:
+            continue
+        resolved.append(resolved_path)
+        seen.add(resolved_path)
     return resolved
 
 
@@ -80,12 +85,6 @@ def main(argv: list[str] | None = None) -> int:
     """Run the manifest lineage graph report builder."""
     args = _parse_args(argv)
     manifest_paths = _resolve_manifest_paths(args.manifest)
-
-    graph = build_manifest_lineage_graph(
-        manifest_paths,
-        artifact_candidates=(),
-        candidate_source_path=None,
-    )
 
     # Load candidates after resolving manifest paths so the source path is
     # available for relative manifest resolution.

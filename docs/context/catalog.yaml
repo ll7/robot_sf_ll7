@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-14
+updated_at: 2026-06-15
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -1373,6 +1373,18 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_2843_closed_loop_forecast_coupling_gate_2026-06-15/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2759_forecast_risk_policy_stack_2026-06-15/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2759_forecast_risk_policy_stack_2026-06-15/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2759_forecast_risk_policy_stack_2026-06-15/summary.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

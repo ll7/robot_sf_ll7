@@ -45,6 +45,18 @@ _LEAKAGE_EXCLUSIONS = (
     "route_outcome_label",
     "benchmark_metric_rollups",
 )
+_FORECAST_RISK_ACTIVE_STATUSES = {"available", "computed", "diagnostic"}
+_FORECAST_PRIMARY_RISK_FIELDS = (
+    "risk",
+    "occupancy_risk",
+    "collision_relevance",
+    "collision_relevance_risk",
+    "miss_rate",
+)
+_FORECAST_FALSE_POSITIVE_FIELDS = (
+    "false_positive_risk",
+    "unnecessary_stop_risk",
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +79,9 @@ class PolicyStackV1Config:
     heading_weight: float = 0.8
     angular_penalty_weight: float = 0.2
     clearance_weight: float = 0.8
+
+    forecast_risk_weight: float = 0.0
+    forecast_risk_observation_key: str = "forecast_risk_channel"
 
 
 @dataclass(frozen=True)
@@ -254,6 +269,9 @@ class PolicyStackV1Adapter:
             Trace packet with proposal, action, observation, cadence, and status contracts.
         """
         diagnostics = self.diagnostics()
+        inference_features = list(_INFERENCE_AVAILABLE_FEATURES)
+        if float(self.config.forecast_risk_weight) > 0.0:
+            inference_features.append(self.config.forecast_risk_observation_key)
         return {
             "schema_version": ARBITRATION_TRACE_SCHEMA,
             "planner_key": "policy_stack_v1",
@@ -269,7 +287,9 @@ class PolicyStackV1Adapter:
                 "executable_statuses": sorted(_COMMAND_STATUSES),
             },
             "observation_contract": {
-                "inference_available_features": list(_INFERENCE_AVAILABLE_FEATURES),
+                "inference_available_features": inference_features,
+                "forecast_risk_observation_key": self.config.forecast_risk_observation_key,
+                "forecast_risk_active_statuses": sorted(_FORECAST_RISK_ACTIVE_STATUSES),
                 "leakage_exclusions": list(_LEAKAGE_EXCLUSIONS),
             },
             "switching_contract": {
@@ -438,13 +458,36 @@ class PolicyStackV1Adapter:
             + float(self.config.clearance_weight) * clearance_bonus
             - float(self.config.angular_penalty_weight) * angular_penalty
         )
-        return {
+        result: dict[str, float] = {
             "total": float(total),
             "goal_progress": float(progress),
             "heading_alignment": float(heading_alignment),
             "ped_clearance": float(clearance_bonus),
             "angular_penalty": float(angular_penalty),
         }
+
+        fr_weight = float(self.config.forecast_risk_weight)
+        if fr_weight > 0.0:
+            fr_key = self.config.forecast_risk_observation_key
+            payload = observation.get(fr_key) if isinstance(observation.get(fr_key), dict) else None
+            raw_risk, effective_risk, false_positive, available = _forecast_risk_values(payload)
+
+            linear_frac = (
+                min(abs(float(command[0])) / float(self.config.max_linear_speed), 1.0)
+                if float(self.config.max_linear_speed) > 0.0
+                else 0.0
+            )
+            forecast_penalty = fr_weight * effective_risk * linear_frac
+
+            total -= forecast_penalty
+            result["total"] = float(total)
+            result["forecast_risk_raw"] = float(raw_risk)
+            result["forecast_risk_effective"] = float(effective_risk)
+            result["forecast_risk_penalty"] = float(forecast_penalty)
+            result["forecast_risk_false_positive"] = float(false_positive)
+            result["forecast_risk_available"] = float(available)
+
+        return result
 
     def _violates_hard_stop(
         self,
@@ -503,6 +546,11 @@ def build_policy_stack_v1_build_config(
         heading_weight=float(merged_stack.get("heading_weight", 0.8)),
         angular_penalty_weight=float(merged_stack.get("angular_penalty_weight", 0.2)),
         clearance_weight=float(merged_stack.get("clearance_weight", 0.8)),
+        forecast_risk_weight=_as_float(merged_stack.get("forecast_risk_weight")),
+        forecast_risk_observation_key=_config_string(
+            merged_stack.get("forecast_risk_observation_key"),
+            default="forecast_risk_channel",
+        ),
     )
     risk_raw = cfg.get("risk_dwa", {}) if isinstance(cfg.get("risk_dwa"), dict) else {}
     return PolicyStackV1BuildConfig(
@@ -557,6 +605,66 @@ def _as_vector(value: Any, *, pad: int) -> np.ndarray:
     if arr.size < pad:
         arr = np.pad(arr, (0, pad - arr.size), constant_values=0.0)
     return arr
+
+
+def _as_float(value: Any, *, default: float = 0.0) -> float:
+    """Safely coerce a payload value to float, returning *default* on failure.
+
+    Returns:
+        float: Coerced value or *default* when conversion or finiteness fails.
+    """
+    if value is None:
+        return default
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not np.isfinite(result):
+        return default
+    return result
+
+
+def _config_string(value: Any, *, default: str) -> str:
+    """Return a stripped config string with a fallback for null or blank values.
+
+    Returns:
+        str: Normalized config value.
+    """
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text if text else default
+
+
+def _bounded_unit_float(value: Any) -> float:
+    """Return a finite float clamped to the unit interval.
+
+    Returns:
+        float: Value in ``[0, 1]``; invalid inputs become ``0``.
+    """
+    return min(max(_as_float(value), 0.0), 1.0)
+
+
+def _forecast_risk_values(payload: dict[str, Any] | None) -> tuple[float, float, float, float]:
+    """Extract bounded forecast-risk values from an optional observation payload.
+
+    Returns:
+        tuple[float, float, float, float]: Raw risk, effective risk, false-positive
+        attenuation, and availability flag.
+    """
+    if payload is None:
+        return 0.0, 0.0, 0.0, 0.0
+
+    status = str(payload.get("status") or "").strip().lower()
+    if status not in _FORECAST_RISK_ACTIVE_STATUSES:
+        return 0.0, 0.0, 0.0, 0.0
+
+    raw_risk = max(_bounded_unit_float(payload.get(key)) for key in _FORECAST_PRIMARY_RISK_FIELDS)
+    false_positive = max(
+        _bounded_unit_float(payload.get(key)) for key in _FORECAST_FALSE_POSITIVE_FIELDS
+    )
+    effective_risk = raw_risk * (1.0 - false_positive)
+    return float(raw_risk), float(effective_risk), float(false_positive), 1.0
 
 
 def _tuple_of_strings(value: Any, *, default: tuple[str, ...] = ()) -> tuple[str, ...]:

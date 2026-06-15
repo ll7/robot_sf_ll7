@@ -381,3 +381,10 @@ Policy caveats:
   metrics. Recommendation: revise. Forecast interaction_aware worsened 1s ADE by 0.0246 m vs CV
   while improving NLL by 0.6717; closed-loop gate failed (global_success_delta 0.0). No learned
   training involved. Not benchmark or paper-facing evidence.
+- `issue_2759_forecast_risk_policy_stack_2026-06-15/`: diagnostic-only same-seed comparison
+  of baseline (forecast_risk_weight=0) vs diagnostic (forecast_risk_weight=5.0) scoring in
+  PolicyStackV1Adapter. Two deterministic fixture cases: high_risk_diagnostic_slows_goal
+  (penalty shifts selection to risk_dwa, speed/progress proxy reduced) and
+  false_positive_suppresses_penalty (penalty suppressed, goal retained with zero unnecessary
+  slowdown count).
+  claim_boundary=diagnostic_only_not_benchmark_evidence. Not a safety or live benchmark claim.

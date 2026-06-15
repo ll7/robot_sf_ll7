@@ -8,6 +8,8 @@ hard_stop_clearance: 0.35
 max_linear_speed: 1.0
 max_angular_speed: 1.2
 goal_tolerance: 0.25
+forecast_risk_weight: 0.0
+forecast_risk_observation_key: forecast_risk_channel
 
 risk_dwa:
   max_linear_speed: 1.0

@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "baseline": {
+        "forecast_penalty": 0.0,
+        "high_risk_speed_reduction": 0.0,
+        "progress_proxy": 1.0,
+        "ranking_top": "goal",
+        "selected_proposal": "goal",
+        "shield_intervened": false,
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "case_name": "high_risk_diagnostic_slows_goal",
+      "delta_forecast_penalty": 5.0,
+      "delta_progress_proxy": -0.8,
+      "diagnostic": {
+        "forecast_penalty": 5.0,
+        "high_risk_speed_reduction": 1.0,
+        "progress_proxy": 0.2,
+        "ranking_top": "risk_dwa",
+        "selected_proposal": "risk_dwa",
+        "shield_intervened": false,
+        "shield_stop_count": 0,
+        "speed": 0.2
+      },
+      "false_positive_unnecessary_slowdown_count": 0
+    },
+    {
+      "baseline": {
+        "forecast_penalty": 0.0,
+        "high_risk_speed_reduction": 0.0,
+        "progress_proxy": 1.0,
+        "ranking_top": "goal",
+        "selected_proposal": "goal",
+        "shield_intervened": false,
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "case_name": "false_positive_suppresses_penalty",
+      "delta_forecast_penalty": 0.0,
+      "delta_progress_proxy": 0.0,
+      "diagnostic": {
+        "forecast_penalty": 0.0,
+        "high_risk_speed_reduction": 0.0,
+        "progress_proxy": 1.0,
+        "ranking_top": "goal",
+        "selected_proposal": "goal",
+        "shield_intervened": false,
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "false_positive_unnecessary_slowdown_count": 0
+    }
+  ],
+  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "diagnostic_weight": 5.0,
+  "recommendation": "forecast_risk_scoring_diagnostic_consistent",
+  "schema_version": "forecast_risk_policy_stack.diagnostic_comparison.v1"
+}

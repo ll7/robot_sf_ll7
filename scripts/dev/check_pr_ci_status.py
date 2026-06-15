@@ -2,6 +2,7 @@
 """Check CI status for a GitHub PR using the gh CLI.
 
 Output is compact and cache-friendly.  Use --json for machine-readable output.
+Run `--help` for the worktree-safe invocation used by agent workflows.
 """
 
 from __future__ import annotations
@@ -315,7 +316,21 @@ def _poll_ci_status(
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point: check CI status and print results."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    epilog = """\
+Recommended agent workflow (fresh linked worktree, no local .venv):
+
+  scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \\
+      <pr-number> --expected-head-sha <head-sha> --poll-attempts 40 \\
+      --poll-interval 30 --json
+
+The wrapper reuses the owning checkout's shared virtualenv and sets UV_NO_SYNC=1
+so uv will not create or prompt for a per-worktree .venv.
+"""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog,
+    )
     parser.add_argument(
         "pr_number",
         nargs="?",

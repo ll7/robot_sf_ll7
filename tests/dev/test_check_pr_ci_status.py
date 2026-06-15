@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -651,3 +653,40 @@ def test_main_gh_timeout() -> None:
     ):
         rc = main(["42"])
     assert rc == 1
+
+
+def test_help_includes_worktree_safe_invocation(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """--help should document the wrapper invocation used by agent workflows."""
+    with pytest.raises(SystemExit):
+        main(["--help"])
+
+    captured = capsys.readouterr()
+    assert "run_worktree_shared_venv.sh" in captured.out
+    assert "uv run python scripts/dev/check_pr_ci_status.py" in captured.out
+    assert "--expected-head-sha" in captured.out
+    assert "no local .venv" in captured.out
+    assert "UV_NO_SYNC" in captured.out
+
+
+def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
+    """python scripts/dev/check_pr_ci_status.py --help should work without PYTHONPATH."""
+    import os
+
+    script = str(
+        Path(__file__).resolve().parent.parent.parent / "scripts" / "dev" / "check_pr_ci_status.py"
+    )
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [sys.executable, script, "--help"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    assert "run_worktree_shared_venv.sh" in result.stdout
+    assert "--expected-head-sha" in result.stdout

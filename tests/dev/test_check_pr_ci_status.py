@@ -597,6 +597,7 @@ def test_main_bounded_polling_json_includes_monitor_metadata(
         "poll_attempts": 5,
         "poll_interval_seconds": 2.0,
         "wait_budget_seconds": 8.0,
+        "max_wall_seconds": None,
         "deadline_epoch_seconds": 1008,
         "route_evidence_only": True,
     }
@@ -635,6 +636,59 @@ def test_main_expected_head_sha_mismatch_returns_json_error(
     assert payload["monitor"]["route_evidence_only"] is True
 
 
+def test_main_bounded_polling_json_respects_max_wall_seconds(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A local wall cap should stop pending monitors without cancelling remote checks."""
+    pending_data = json.dumps(
+        {
+            "number": 11,
+            "title": "wall cap",
+            "state": "OPEN",
+            "mergeable": "UNKNOWN",
+            "headRefName": "wall-cap",
+            "headRefOid": "abc123",
+            "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
+            "reviews": [],
+        }
+    )
+
+    with (
+        patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run,
+        patch("scripts.dev.check_pr_ci_status.time.sleep") as mock_sleep,
+        patch("scripts.dev.check_pr_ci_status.time.time", return_value=1000.0),
+        patch("scripts.dev.check_pr_ci_status.time.monotonic", side_effect=[0.0, 0.0, 1.0]),
+    ):
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=pending_data, stderr=""),
+            MagicMock(returncode=0, stdout=pending_data, stderr=""),
+        ]
+        rc = main(
+            [
+                "11",
+                "--json",
+                "--expected-head-sha",
+                "abc123",
+                "--poll-attempts",
+                "40",
+                "--poll-interval",
+                "30",
+                "--max-wall-seconds",
+                "1",
+            ]
+        )
+
+    assert rc == 2
+    assert mock_run.call_count == 2
+    mock_sleep.assert_called_once_with(1.0)
+    payloads = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    assert len(payloads) == 2
+    assert payloads[-1]["checks"]["overall"] == "pending"
+    assert payloads[-1]["monitor"]["max_wall_seconds"] == 1.0
+    assert payloads[-1]["monitor"]["deadline_epoch_seconds"] == 1001
+    assert payloads[-1]["monitor"]["local_stop_reason"] == "max_wall_seconds"
+
+
 def test_main_gh_not_installed() -> None:
     """main() should exit non-zero when gh is not on PATH."""
     with patch(
@@ -666,8 +720,20 @@ def test_help_includes_worktree_safe_invocation(
     assert "run_worktree_shared_venv.sh" in captured.out
     assert "uv run python scripts/dev/check_pr_ci_status.py" in captured.out
     assert "--expected-head-sha" in captured.out
+    assert "--max-wall-seconds" in captured.out
     assert "no local .venv" in captured.out
     assert "UV_NO_SYNC" in captured.out
+
+
+def test_negative_max_wall_seconds_is_rejected(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """--max-wall-seconds should reject negative local duration caps."""
+    with pytest.raises(SystemExit) as excinfo:
+        main(["42", "--max-wall-seconds", "-1"])
+
+    assert excinfo.value.code == 2
+    assert "value must be non-negative" in capsys.readouterr().err
 
 
 def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
@@ -690,3 +756,4 @@ def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
     assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
     assert "run_worktree_shared_venv.sh" in result.stdout
     assert "--expected-head-sha" in result.stdout
+    assert "--max-wall-seconds" in result.stdout

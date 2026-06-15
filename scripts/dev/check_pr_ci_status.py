@@ -204,6 +204,7 @@ def _add_monitor_metadata(
     attempts: int,
     poll_interval: float,
     wait_budget_seconds: float,
+    max_wall_seconds: float | None,
     deadline_epoch_seconds: int | None,
 ) -> None:
     """Attach compact CI monitor resume metadata to a status payload."""
@@ -220,6 +221,7 @@ def _add_monitor_metadata(
         "poll_attempts": attempts,
         "poll_interval_seconds": poll_interval,
         "wait_budget_seconds": wait_budget_seconds,
+        "max_wall_seconds": max_wall_seconds,
         "deadline_epoch_seconds": deadline_epoch_seconds,
         "route_evidence_only": True,
     }
@@ -266,6 +268,28 @@ def _format_human(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _bounded_sleep_seconds(
+    poll_interval: float,
+    wall_deadline: float | None,
+) -> tuple[float, bool]:
+    """Return the next sleep duration and whether the local wall cap is exhausted."""
+    sleep_seconds = max(0.0, poll_interval)
+    if wall_deadline is None:
+        return sleep_seconds, False
+    remaining_seconds = wall_deadline - time.monotonic()
+    if remaining_seconds <= 0:
+        return 0.0, True
+    return min(sleep_seconds, remaining_seconds), False
+
+
+def _non_negative_float(value: str) -> float:
+    """Parse a non-negative float for local duration limits."""
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
+    return parsed
+
+
 def _poll_ci_status(
     pr: str,
     *,
@@ -274,11 +298,18 @@ def _poll_ci_status(
     backoff: float,
     json_output: bool,
     expected_head_sha: str = "",
+    max_wall_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Fetch CI status once or poll until checks settle or the budget expires."""
     data: dict[str, Any] = {}
     wait_budget_seconds = max(0.0, float(attempts - 1) * max(0.0, poll_interval))
-    deadline_epoch_seconds = int(time.time() + wait_budget_seconds) if attempts > 1 else None
+    effective_wait_budget = wait_budget_seconds
+    if max_wall_seconds is not None:
+        effective_wait_budget = min(wait_budget_seconds, max(0.0, max_wall_seconds))
+    deadline_epoch_seconds = int(time.time() + effective_wait_budget) if attempts > 1 else None
+    wall_deadline = (
+        time.monotonic() + max(0.0, max_wall_seconds) if max_wall_seconds is not None else None
+    )
     for attempt in range(1, attempts + 1):
         data = _fetch_ci_status(pr, backoff=backoff if attempt == 1 else 0.0)
         _add_monitor_metadata(
@@ -288,6 +319,7 @@ def _poll_ci_status(
             attempts=attempts,
             poll_interval=poll_interval,
             wait_budget_seconds=wait_budget_seconds,
+            max_wall_seconds=max_wall_seconds,
             deadline_epoch_seconds=deadline_epoch_seconds,
         )
         if data.get("status") == "error":
@@ -302,15 +334,18 @@ def _poll_ci_status(
             data["error"] = "PR head SHA changed while monitoring CI"
             break
         overall = data.get("checks", {}).get("overall")
+        sleep_seconds, local_stop = _bounded_sleep_seconds(poll_interval, wall_deadline)
+        if overall == "pending" and attempt < attempts and local_stop:
+            data["monitor"]["local_stop_reason"] = "max_wall_seconds"
         if attempts > 1:
             if json_output:
                 print(json.dumps(data), flush=True)
             else:
                 print(f"poll attempt {attempt}/{attempts}", flush=True)
                 print(_format_human(data), flush=True)
-        if overall != "pending" or attempt == attempts:
+        if overall != "pending" or attempt == attempts or local_stop:
             break
-        time.sleep(max(0.0, poll_interval))
+        time.sleep(sleep_seconds)
     return data
 
 
@@ -321,10 +356,13 @@ Recommended agent workflow (fresh linked worktree, no local .venv):
 
   scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \\
       <pr-number> --expected-head-sha <head-sha> --poll-attempts 40 \\
-      --poll-interval 30 --json
+      --poll-interval 30 --max-wall-seconds 1200 --json
 
 The wrapper reuses the owning checkout's shared virtualenv and sets UV_NO_SYNC=1
 so uv will not create or prompt for a per-worktree .venv.
+`--max-wall-seconds` gives long-running agents a non-interactive local stop path;
+exit code 2 means checks were still pending locally, not that remote GitHub checks
+were cancelled or failed.
 """
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -365,6 +403,15 @@ so uv will not create or prompt for a per-worktree .venv.
         default="",
         help="optional PR head SHA guard; stale heads return error without claiming readiness",
     )
+    parser.add_argument(
+        "--max-wall-seconds",
+        type=_non_negative_float,
+        default=None,
+        help=(
+            "optional local wall-clock cap for bounded polling; pending checks return exit code 2 "
+            "without affecting remote GitHub checks"
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -377,6 +424,7 @@ so uv will not create or prompt for a per-worktree .venv.
             backoff=args.backoff,
             json_output=args.json,
             expected_head_sha=args.expected_head_sha,
+            max_wall_seconds=args.max_wall_seconds,
         )
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)

@@ -125,8 +125,9 @@ artifacts into a disposable bundle and writes:
 - `checksums.sha256`: checksums for files under `payload/artifacts/`;
 - per-artifact rows with `artifact_id`, `source_path`, `source_artifact`,
   `output_path`, `sha256`, `source_commit`, `generation_command`,
-  `caption_draft`, `claim_boundary`, `recommended_manuscript_use`, and
-  `fallback_degraded_summary`.
+  `caption_draft`, `claim_boundary`, `recommended_manuscript_use`,
+  `fallback_degraded_summary`, and optionally `chapter_target` and
+  `chapter_target_justification`.
 
 The artifact spec is a compact JSON file so reviewers can see exactly which
 figure/table candidates are being handed off:
@@ -141,7 +142,8 @@ figure/table candidates are being handed off:
       "caption_draft": "Campaign table preserving fallback and degraded rows.",
       "claim_boundary": "Formatted table only; not new benchmark evidence.",
       "recommended_manuscript_use": "discussion",
-      "fallback_degraded_summary": "Fallback and degraded rows remain visible."
+      "fallback_degraded_summary": "Fallback and degraded rows remain visible.",
+      "chapter_target": "Results, Section 4.2"
     }
   ]
 }
@@ -149,6 +151,12 @@ figure/table candidates are being handed off:
 
 Allowed `recommended_manuscript_use` values are `results`, `methodology`,
 `discussion`, `outlook`, and `do-not-use`; unsupported values fail closed.
+
+Optional `chapter_target` is a free-form dissertation chapter/section label
+(e.g. `Results, Section 4.2` or `Limitations, Section 5.1`). Diagnostic-only
+rows should target limitations, methodology, or future-work style sections
+unless `chapter_target_justification` explicitly explains why another target
+is appropriate.
 
 Example command:
 

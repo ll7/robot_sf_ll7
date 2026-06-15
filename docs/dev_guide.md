@@ -287,17 +287,21 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci
   --expected-head-sha <head-sha> \
   --poll-attempts 40 \
   --poll-interval 30 \
+  --max-wall-seconds 1200 \
   --json
 ```
 
 The wrapper sets `UV_PROJECT_ENVIRONMENT` to the owning checkout's `.venv` and `UV_NO_SYNC=1`,
 so the command works from a worktree that has not run `uv sync`. The `--help` output of
 `scripts/dev/check_pr_ci_status.py` also prints this invocation for quick agent copy/paste.
+Use `--max-wall-seconds` to give long-running monitors a clean local stop path before patching or
+pushing a branch; exit code 2 means checks were still pending when the local cap expired, not that
+remote GitHub checks were cancelled or failed.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
-SHA-match result, poll attempt, wait budget, deadline, and `route_evidence_only: true`. Monitor
-success is route evidence only; reassess the current PR head SHA and normal readiness proof before
-labeling or merging.
+SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and
+`route_evidence_only: true`. Monitor success is route evidence only; reassess the current PR head
+SHA and normal readiness proof before labeling or merging.
 
 For routine goal-autopilot orientation, prefer the compact state snapshot helper before broad parent
 thread reads:

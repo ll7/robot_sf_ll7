@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -182,7 +183,7 @@ def test_recorder_rows_use_trace_source_metadata(tmp_path: Path) -> None:
 def test_recorder_uses_nearest_timestamp_for_irregular_frame_spacing(tmp_path: Path) -> None:
     """Future labels should align by time instead of assuming constant frame indexes."""
     payload = load_simulation_trace_export(TRACE_FIXTURES[0]).to_dict()
-    payload["frames"].append(dict(payload["frames"][1]))
+    payload["frames"].append(copy.deepcopy(payload["frames"][1]))
     payload["frames"][1]["step"] = 1
     payload["frames"][1]["time_s"] = 0.07
     payload["frames"][1]["pedestrians"][0]["position"] = [7.0, 0.0]
@@ -207,3 +208,15 @@ def test_pedestrian_lookup_does_not_match_missing_ids_to_none_actor_id() -> None
     """Missing target ids should not stringify to a false actor-id match."""
     assert _pedestrian_by_id([{"position": [0.0, 0.0]}], "None") is None
     assert _pedestrian_by_id([{"id": 0, "position": [0.0, 0.0]}], "0") is not None
+
+
+def test_recorder_rejects_dataset_id_path_separators(tmp_path: Path) -> None:
+    """Dataset ids should never be able to steer artifact paths outside output_dir."""
+    with pytest.raises(ValueError, match="dataset_id"):
+        record_forecast_dataset_from_trace_exports(
+            TRACE_FIXTURES[:1],
+            tmp_path,
+            feature_schema=_feature_schema(),
+            horizons_s=[0.1],
+            dataset_id="../forecast_dataset_escape",
+        )

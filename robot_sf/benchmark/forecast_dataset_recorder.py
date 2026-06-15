@@ -57,6 +57,7 @@ def record_forecast_dataset_from_trace_exports(
     paths = [Path(path) for path in trace_paths]
     if not paths:
         raise ValueError("trace_paths must be non-empty")
+    safe_dataset_id = _validate_dataset_id(dataset_id)
     schema = _require_feature_schema(feature_schema)
     horizons = _validate_horizons(horizons_s)
     observation_adapter = adapter or OracleFullStateForecastAdapter()
@@ -65,7 +66,7 @@ def record_forecast_dataset_from_trace_exports(
 
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
-    dataset_path = output / f"{dataset_id}.jsonl"
+    dataset_path = output / f"{safe_dataset_id}.jsonl"
     rows = _build_dataset_rows(
         traces,
         splits=splits,
@@ -81,7 +82,7 @@ def record_forecast_dataset_from_trace_exports(
         traces=traces,
         rows=rows,
         splits=splits,
-        dataset_id=dataset_id,
+        dataset_id=safe_dataset_id,
         dataset_path=dataset_path,
         output_dir=output,
         adapter=observation_adapter,
@@ -89,7 +90,7 @@ def record_forecast_dataset_from_trace_exports(
         horizons_s=horizons,
     )
     validate_forecast_dataset_manifest(manifest)
-    manifest_path = output / f"{dataset_id}.manifest.json"
+    manifest_path = output / f"{safe_dataset_id}.manifest.json"
     _atomic_write_json(manifest_path, manifest)
     return ForecastDatasetRecordResult(
         dataset_path=dataset_path,
@@ -397,14 +398,24 @@ def _validate_horizons(horizons_s: Sequence[float]) -> list[float]:
     return horizons
 
 
+def _validate_dataset_id(dataset_id: str) -> str:
+    """Return a filename-safe dataset id for artifact path construction."""
+    value = str(dataset_id).strip()
+    if not value or value in {".", ".."}:
+        raise ValueError("dataset_id is required")
+    if Path(value).name != value or "/" in value or "\\" in value:
+        raise ValueError("dataset_id must not contain path separators")
+    return value
+
+
 def _write_jsonl(path: Path, rows: Sequence[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     try:
-        tmp_path.write_text(
-            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
-            encoding="utf-8",
-        )
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, sort_keys=True))
+                handle.write("\n")
         tmp_path.replace(path)
     finally:
         tmp_path.unlink(missing_ok=True)

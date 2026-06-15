@@ -1,0 +1,40 @@
+{
+  "issue": 2868,
+  "schema_version": "ForecastSemanticMetadataFixtureEvidence.v1",
+  "status": "diagnostic-only",
+  "claim_boundary": "Metadata-bearing fixtures prove semantic fields are present and consumed by the forecast comparison path; no human-realism, closed-loop navigation, safety, paper-facing, or dissertation claim is supported.",
+  "generated_at_utc": "2026-06-15T00:00:00+00:00",
+  "provenance": {
+    "command": "uv run python scripts/benchmark/run_cv_forecast_eval.py --output-dir docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15 --compare-all --issue 2868 --generated-at-utc 2026-06-15T00:00:00+00:00",
+    "commit": "f983398d0490cc789a83c28a6b1f72b06bff81f6",
+    "source": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_*_fixture_0000.json"
+  },
+  "coverage": {
+    "baselines": [
+      "cv",
+      "signal_aware",
+      "goal_aware",
+      "semantic",
+      "interaction_aware"
+    ],
+    "semantic_fixture_families": [
+      "signalized_crossing",
+      "goal_directed_crossing",
+      "waiting_with_intent_change",
+      "route_conflict_goal"
+    ],
+    "metadata_rows_summary": {
+      "rows_with_metadata": 20,
+      "rows_without_metadata": 25,
+      "rows_with_signal_metadata": 20,
+      "rows_with_intent_metadata": 15,
+      "rows_total": 45
+    },
+    "evaluated_traces_per_baseline": 7,
+    "samples_per_baseline": 99.0,
+    "notes": [
+      "The Issue #2868 fixtures are authored analysis-workbench fixtures, not simulator benchmark campaigns.",
+      "Legacy metadata-absent rows remain in the report so missing metadata cannot be hidden."
+    ]
+  }
+}

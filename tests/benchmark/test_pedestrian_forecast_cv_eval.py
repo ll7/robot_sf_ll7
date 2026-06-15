@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import sys
 
@@ -41,8 +42,23 @@ _generate_markdown = _mod._generate_markdown
 _get_actor_classes = _mod._get_actor_classes
 _pedestrian_count = _mod._pedestrian_count
 _summarize_interaction_effect = _mod._summarize_interaction_effect
+_metadata_summary = _mod._metadata_summary
+_fixtures_have_intent_metadata = _mod._fixtures_have_intent_metadata
+_fixtures_have_signal_metadata = _mod._fixtures_have_signal_metadata
 _trace_has_motion = _mod._trace_has_motion
 _evaluate_single_trace = _mod.evaluate_single_trace
+_write_comparison_report = _mod._write_comparison_report
+
+
+def _results_for_two_baselines() -> dict[str, list[dict[str, object]]]:
+    """Evaluate all trace candidates for two baselines."""
+    return {
+        "cv": [_evaluate_single_trace(candidate) for candidate in TRACE_CANDIDATES],
+        "goal_aware": [
+            _evaluate_single_trace(candidate, baseline_function=goal_aware_cv_baseline)
+            for candidate in TRACE_CANDIDATES
+        ],
+    }
 
 
 def test_extract_trace_steps_converts_frames_key() -> None:
@@ -405,6 +421,83 @@ def test_report_json_distinguishes_evaluated_limited_missing() -> None:
 
     assert "occluded_emergence" not in limited_families
     assert "occluded_emergence" not in [mf["family"] for mf in MISSING_FAMILIES]
+
+
+def test_evaluate_single_trace_records_metadata_coverage() -> None:
+    """Metadata coverage is carried with each evaluated trace row."""
+    signalized = next(
+        candidate for candidate in TRACE_CANDIDATES if candidate["family"] == "signalized_crossing"
+    )
+    no_metadata = next(
+        candidate for candidate in TRACE_CANDIDATES if candidate["family"] == "corridor_interaction"
+    )
+
+    signalized_result = _evaluate_single_trace(signalized)
+    no_metadata_result = _evaluate_single_trace(no_metadata)
+
+    assert signalized_result["metadata_coverage"]["metadata_presence"] == "present"
+    assert signalized_result["metadata_coverage"]["has_signal_metadata"] is True
+    assert no_metadata_result["metadata_coverage"]["metadata_presence"] in {"present", "absent"}
+    if no_metadata_result["status"] == "evaluated":
+        assert no_metadata_result["metadata_coverage"]["has_signal_metadata"] is False
+
+
+def test_issue_2868_semantic_fixture_families_are_evaluated() -> None:
+    """Issue #2868 metadata fixture rows should be durable evaluated rows."""
+    expected_families = {
+        "signalized_crossing",
+        "goal_directed_crossing",
+        "waiting_with_intent_change",
+        "route_conflict_goal",
+    }
+    results = {
+        candidate["family"]: _evaluate_single_trace(candidate)
+        for candidate in TRACE_CANDIDATES
+        if candidate["family"] in expected_families
+    }
+
+    assert set(results) == expected_families
+    for family, result in results.items():
+        assert result["status"] == "evaluated", f"{family}: {result}"
+        assert result["metrics"]["forecast_evaluable_samples"] > 0.0
+        assert result["metadata_coverage"]["metadata_presence"] == "present"
+
+
+def test_metadata_summary_distinguishes_present_and_absent_rows() -> None:
+    """Summary distinguishes metadata-present vs metadata-absent rows."""
+    results = [_evaluate_single_trace(candidate) for candidate in TRACE_CANDIDATES]
+    summary = _metadata_summary(results)
+
+    assert summary["rows_total"] == len(TRACE_CANDIDATES)
+    assert summary["rows_with_metadata"] >= 1
+    assert summary["rows_without_metadata"] >= 1
+
+
+def test_compare_report_records_row_metadata_presence(tmp_path: pathlib.Path) -> None:
+    """Comparison rows include explicit metadata presence flags."""
+    all_results = _results_for_two_baselines()
+    repro = {
+        "issue": 2868,
+        "generated_at_utc": "2026-06-15T00:00:00+00:00",
+        "command": "unit-test",
+        "repo_head": "abc123",
+        "horizons_s": [0.5, 1.0, 2.0],
+    }
+    _write_comparison_report(all_results, repro, tmp_path)
+
+    payload = json.loads((tmp_path / "comparison_report.json").read_text())
+    rows = payload["comparison_rows"]
+    assert rows
+    assert {row["metadata_presence"] for row in rows}.issuperset({"present", "absent"})
+    assert payload["metadata_rows_summary"]["rows_total"] == len(TRACE_CANDIDATES) * 2
+
+
+def test_fixtures_with_metadata_are_detected() -> None:
+    """Fixture-level metadata detection distinguishes signal and intent fields."""
+    all_results = _results_for_two_baselines()
+
+    assert _fixtures_have_signal_metadata(all_results) is True
+    assert _fixtures_have_intent_metadata(all_results) is True
 
 
 def test_evaluate_single_trace_with_signal_aware_baseline() -> None:

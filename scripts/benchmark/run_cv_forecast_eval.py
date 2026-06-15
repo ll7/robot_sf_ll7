@@ -79,16 +79,120 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
         "planner_id": "hybrid_rule_v0_minimal",
         "seed": 111,
     },
+    {
+        "family": "signalized_crossing",
+        "label": "signalized_crossing_semantic_metadata",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json",
+        "scenario_id": "issue_2868_signalized_crossing",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 2868,
+    },
+    {
+        "family": "goal_directed_crossing",
+        "label": "goal_directed_crossing_fixture",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json",
+        "scenario_id": "issue_2868_goal_directed_crossing",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 2868,
+    },
+    {
+        "family": "waiting_with_intent_change",
+        "label": "waiting_intent_change_fixture",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_waiting_intent_change_fixture_0000.json",
+        "scenario_id": "issue_2868_waiting_intent_change",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 2868,
+    },
+    {
+        "family": "route_conflict_goal",
+        "label": "route_conflict_goal_fixture",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json",
+        "scenario_id": "issue_2868_route_conflict_goal",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "seed": 2868,
+    },
 ]
 
 MISSING_FAMILIES: list[dict[str, str]] = [
-    {"family": "signalized_crossing", "reason": "no durable trace fixture available"},
     {"family": "dense_pedestrian_interaction", "reason": "no durable trace fixture available"},
     {
         "family": "bottleneck_with_motion",
         "reason": "existing bottleneck fixture has zero pedestrian velocity",
     },
 ]
+
+
+def _trace_has_signal_metadata(ped: dict[str, Any]) -> bool:
+    """Return whether the pedestrian carries explicit signal metadata."""
+
+    signal_state = ped.get("signal_state")
+    if isinstance(signal_state, dict):
+        return "available" in signal_state or "label" in signal_state
+    return ped.get("signal_label") is not None
+
+
+def _trace_has_intent_metadata(ped: dict[str, Any]) -> bool:
+    """Return whether the pedestrian carries explicit intent metadata."""
+
+    return ped.get("intent_label") is not None
+
+
+def _trace_metadata_coverage(trace: dict[str, Any]) -> dict[str, Any]:
+    """Return pedestrian metadata coverage statistics from a raw trace."""
+
+    frames = trace.get("frames") or trace.get("steps") or []
+    coverage: dict[str, Any] = {
+        "pedestrian_observations": 0,
+        "signal_metadata_records": 0,
+        "intent_metadata_records": 0,
+    }
+    for frame in frames:
+        for ped in frame.get("pedestrians", []):
+            if not isinstance(ped, dict):
+                continue
+            coverage["pedestrian_observations"] += 1
+            if _trace_has_signal_metadata(ped):
+                coverage["signal_metadata_records"] += 1
+            if _trace_has_intent_metadata(ped):
+                coverage["intent_metadata_records"] += 1
+
+    coverage["has_signal_metadata"] = coverage["signal_metadata_records"] > 0
+    coverage["has_intent_metadata"] = coverage["intent_metadata_records"] > 0
+    coverage["metadata_presence"] = (
+        "present"
+        if coverage["has_signal_metadata"] or coverage["has_intent_metadata"]
+        else "absent"
+    )
+    return coverage
+
+
+def _metadata_summary(results: list[dict[str, Any]]) -> dict[str, int]:
+    """Summarize metadata presence across evaluation rows."""
+
+    present_rows = 0
+    absent_rows = 0
+    signal_rows = 0
+    intent_rows = 0
+    for row in results:
+        coverage = row.get("metadata_coverage", {})
+        has_signal = bool(coverage.get("has_signal_metadata"))
+        has_intent = bool(coverage.get("has_intent_metadata"))
+        if has_signal:
+            signal_rows += 1
+        if has_intent:
+            intent_rows += 1
+        if coverage.get("metadata_presence") == "present":
+            present_rows += 1
+        else:
+            absent_rows += 1
+
+    return {
+        "rows_with_metadata": present_rows,
+        "rows_without_metadata": absent_rows,
+        "rows_with_signal_metadata": signal_rows,
+        "rows_with_intent_metadata": intent_rows,
+        "rows_total": len(results),
+    }
 
 
 def _load_trace(path: pathlib.Path) -> dict[str, Any]:
@@ -222,6 +326,7 @@ def evaluate_single_trace(
     result["pedestrians_per_frame"] = _pedestrian_count(trace)
     result["actor_classes"] = _get_actor_classes(trace)
     result["actor_class_counts"] = _actor_class_counts(trace)
+    result["metadata_coverage"] = _trace_metadata_coverage(trace)
     result["pedestrian_forecast_denominator_policy"] = (
         "Only pedestrian/person actors are scored by pedestrian forecast metrics; "
         "non-pedestrian actor classes are excluded and counted separately."
@@ -393,6 +498,20 @@ def _md_trace_table(results: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _md_metadata_summary(results: list[dict[str, Any]]) -> list[str]:
+    """Return metadata coverage summary lines."""
+    summary = _metadata_summary(results)
+    return [
+        "",
+        "## Metadata Coverage",
+        "",
+        f"- **Rows with metadata:** {summary['rows_with_metadata']}",
+        f"- **Rows without metadata:** {summary['rows_without_metadata']}",
+        f"- **Rows with signal metadata:** {summary['rows_with_signal_metadata']}",
+        f"- **Rows with intent metadata:** {summary['rows_with_intent_metadata']}",
+    ]
+
+
 def _md_missing_families() -> list[str]:
     """Return the missing families section."""
     lines = [
@@ -488,9 +607,9 @@ def _md_interpretation() -> list[str]:
         "do not test whether constant velocity handles crossing, bottleneck, or "
         "dense interaction dynamics.",
         "",
-        "All traces in this evaluation lack intent and signal context metadata, "
-        "so the forecast operates in 'uncertain' mode with 1.5x widened standard "
-        "deviation. This is a systematic limitation of the available trace fixtures.",
+        "Metadata coverage is mixed in this issue's expanded fixture set: some rows "
+        "carry explicit intent/signal fields while others remain metadata-absent.",
+        "Metadata-absent rows run in uncertainty-only mode by design.",
     ]
 
 
@@ -504,6 +623,7 @@ def _generate_markdown(
     lines.extend(_md_header())
     lines.extend(_md_repro(repro))
     lines.extend(_md_trace_table(results))
+    lines.extend(_md_metadata_summary(results))
     lines.extend(_md_missing_families())
     lines.extend(_md_metrics_section(results))
     lines.extend(_md_failure_cases(failure_cases))
@@ -540,19 +660,24 @@ def main() -> None:
         default=2758,
         help="Issue number to record in generated evidence metadata.",
     )
+    parser.add_argument(
+        "--generated-at-utc",
+        help="Optional deterministic ISO-8601 generation timestamp for reviewable artifacts.",
+    )
     args = parser.parse_args()
 
     output_dir = REPO_ROOT / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
     repo_head = _git_head()
-    generated_at = datetime.datetime.now(datetime.UTC).isoformat()
+    generated_at = args.generated_at_utc or datetime.datetime.now(datetime.UTC).isoformat()
 
     baselines_to_run = list(BASELINE_FUNCTIONS.keys()) if args.compare_all else [args.baseline]
     command = (
         f"uv run python scripts/benchmark/run_cv_forecast_eval.py --output-dir {args.output_dir}"
         + (f" --baseline {args.baseline}" if not args.compare_all else " --compare-all")
         + f" --issue {args.issue}"
+        + (f" --generated-at-utc {args.generated_at_utc}" if args.generated_at_utc else "")
     )
 
     repro = {
@@ -625,19 +750,23 @@ def _write_comparison_report(
     output_dir: pathlib.Path,
 ) -> None:
     """Write a comparison report across all baselines."""
-    baselines = list(all_results.keys())
+    baselines = sorted(all_results)
 
     comparison_rows: list[dict[str, Any]] = []
     for baseline_name in baselines:
         results = all_results[baseline_name]
         for r in results:
             metrics = r.get("metrics", {})
+            coverage = r.get("metadata_coverage", {})
             comparison_rows.append(
                 {
                     "baseline": baseline_name,
                     "family": r["family"],
                     "label": r["label"],
                     "status": r["status"],
+                    "metadata_presence": coverage.get("metadata_presence", "absent"),
+                    "has_signal_metadata": coverage.get("has_signal_metadata", False),
+                    "has_intent_metadata": coverage.get("has_intent_metadata", False),
                     "evaluable_samples": metrics.get("forecast_evaluable_samples", 0.0),
                     "mean_ade_0.5s": metrics.get("mean_ade_0.5s"),
                     "mean_ade_1s": metrics.get("mean_ade_1s"),
@@ -651,6 +780,10 @@ def _write_comparison_report(
 
     fixture_has_signal = _fixtures_have_signal_metadata(all_results)
     fixture_has_intent = _fixtures_have_intent_metadata(all_results)
+    metadata_summary = _metadata_summary([r for rows in all_results.values() for r in rows])
+    metadata_summary_by_baseline = {
+        baseline_name: _metadata_summary(results) for baseline_name, results in all_results.items()
+    }
     interaction_effect = _summarize_interaction_effect(comparison_rows)
 
     summary_by_baseline: dict[str, dict[str, Any]] = {}
@@ -677,12 +810,13 @@ def _write_comparison_report(
             "fixtures_have_intent_metadata": fixture_has_intent,
             "conclusion": (
                 "Semantic conditioning is meaningful when fixtures carry signal/intent "
-                "metadata. Existing durable fixtures lack this metadata, so the comparison "
-                "shows whether baselines run correctly but does not yet show semantic "
-                "conditioning improving calibration or collision relevance."
+                "metadata. This evidence is diagnostic-only and distinguishes rows "
+                "with metadata versus rows without metadata."
             ),
         },
         "summary_by_baseline": summary_by_baseline,
+        "metadata_rows_summary": metadata_summary,
+        "metadata_summary_by_baseline": metadata_summary_by_baseline,
         "comparison_rows": comparison_rows,
     }
     if interaction_effect is not None:
@@ -719,12 +853,23 @@ def _write_comparison_report(
     if not fixture_has_signal and not fixture_has_intent:
         md_lines.extend(
             [
-                "Existing durable fixtures lack signal and intent metadata. Semantic "
-                "conditioning baselines run correctly but their calibration/collision-relevance "
-                "improvement cannot be measured until fixtures include this metadata.",
+                "This snapshot currently includes both metadata-present and metadata-absent "
+                "rows. Metadata-presence is explicit per row in the table below.",
                 "",
             ]
         )
+
+    md_lines.extend(
+        [
+            "## Metadata Coverage",
+            "",
+            f"- **Rows with metadata:** {metadata_summary['rows_with_metadata']}",
+            f"- **Rows without metadata:** {metadata_summary['rows_without_metadata']}",
+            f"- **Rows with signal metadata:** {metadata_summary['rows_with_signal_metadata']}",
+            f"- **Rows with intent metadata:** {metadata_summary['rows_with_intent_metadata']}",
+            "",
+        ]
+    )
 
     if interaction_effect is not None:
         md_lines.extend(
@@ -758,8 +903,9 @@ def _write_comparison_report(
             "",
             "## Comparison Table",
             "",
-            "| Baseline | Family | Label | Status | Samples | ADE 1s | NLL 1s | Miss Rate 1s |",
-            "|----------|--------|-------|--------|---------|--------|--------|-------------|",
+            "| Baseline | Family | Label | Metadata | Status | Samples | ADE 1s | NLL 1s | "
+            "Miss Rate 1s |",
+            "|----------|--------|-------|----------|--------|---------|--------|--------|-------------|",
         ]
     )
     for row in comparison_rows:
@@ -772,7 +918,7 @@ def _write_comparison_report(
         miss = f"{row['mean_miss_rate_1s']:.2%}" if row["mean_miss_rate_1s"] is not None else "-"
         md_lines.append(
             f"| {row['baseline']} | {row['family']} | {row['label']} "
-            f"| {row['status']} | {row['evaluable_samples']:.0f} "
+            f"| {row['metadata_presence']} | {row['status']} | {row['evaluable_samples']:.0f} "
             f"| {ade} | {nll} | {miss} |"
         )
 
@@ -868,21 +1014,34 @@ def _metric_delta(
 
 def _fixtures_have_signal_metadata(all_results: dict[str, list[dict[str, Any]]]) -> bool:
     """Check whether any evaluated trace has signal metadata on pedestrians."""
-    for ped in _iter_unique_evaluated_pedestrians(all_results):
-        if ped.get("signal_label") is not None:
-            return True
-        ss = ped.get("signal_state")
-        if isinstance(ss, dict) and ss.get("label") is not None:
+    for row in _iter_unique_evaluated_rows(all_results):
+        if row.get("metadata_coverage", {}).get("has_signal_metadata", False):
             return True
     return False
 
 
 def _fixtures_have_intent_metadata(all_results: dict[str, list[dict[str, Any]]]) -> bool:
     """Check whether any evaluated trace has intent metadata on pedestrians."""
-    return any(
-        ped.get("intent_label") is not None
-        for ped in _iter_unique_evaluated_pedestrians(all_results)
-    )
+    for row in _iter_unique_evaluated_rows(all_results):
+        if row.get("metadata_coverage", {}).get("has_intent_metadata", False):
+            return True
+    return False
+
+
+def _iter_unique_evaluated_rows(
+    all_results: dict[str, list[dict[str, Any]]],
+) -> Iterator[dict[str, Any]]:
+    """Yield each unique evaluated trace row once."""
+    checked_paths: set[pathlib.Path] = set()
+    for results in all_results.values():
+        for row in results:
+            if row["status"] != "evaluated":
+                continue
+            path = REPO_ROOT / row["trace_path"]
+            if path in checked_paths:
+                continue
+            checked_paths.add(path)
+            yield row
 
 
 def _iter_unique_evaluated_pedestrians(

@@ -19,6 +19,11 @@ from scripts.dev.check_pr_ci_status import (
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_ACTIVE_LIMIT = 20
+REVIEW_SUMMARY_LIMIT = 4
+COMMENT_SUMMARY_LIMIT = 4
+COMMENT_BODY_LIMIT = 180
+ROUTE_HEALTH_STATUSES = ("healthy", "stale", "blocked", "unknown")
+SCHEMA_VERSION = "pr_queue_snapshot.v1"
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -41,6 +46,21 @@ def _labels(pr: dict[str, Any]) -> list[str]:
     )
 
 
+def _shorten_text(value: Any, *, limit: int) -> str:
+    text = str(value or "")
+    if len(text) <= limit:
+        return text
+    if limit <= 3:
+        return "." * max(limit, 0)
+    return text[: limit - 3].rstrip() + "..."
+
+
+def _author_login(author: Any) -> str:
+    if isinstance(author, dict):
+        return str(author.get("login", "") or author.get("name", "") or "")
+    return ""
+
+
 def _reviews(pr: dict[str, Any]) -> dict[str, int]:
     """Return review-state counts."""
     states: dict[str, int] = {}
@@ -50,6 +70,56 @@ def _reviews(pr: dict[str, Any]) -> dict[str, int]:
         state = str(review.get("state", "UNKNOWN"))
         states[state] = states.get(state, 0) + 1
     return states
+
+
+def _review_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
+    """Return a bounded review snapshot with author/time/body excerpts."""
+    reviews = [review for review in pr.get("reviews", []) or [] if isinstance(review, dict)]
+    by_state: dict[str, int] = {}
+    for review in reviews:
+        state = str(review.get("state", "UNKNOWN"))
+        by_state[state] = by_state.get(state, 0) + 1
+    latest = [
+        {
+            "state": str(review.get("state", "UNKNOWN")),
+            "author": _author_login(review.get("author")),
+            "submitted_at": str(review.get("submittedAt", "")),
+            "body_excerpt": _shorten_text(review.get("body"), limit=COMMENT_BODY_LIMIT),
+        }
+        for review in sorted(
+            reviews,
+            key=lambda review: str(review.get("submittedAt", review.get("createdAt", ""))),
+            reverse=True,
+        )[:REVIEW_SUMMARY_LIMIT]
+    ]
+    return {
+        "total": len(reviews),
+        "by_state": by_state,
+        "latest": latest,
+        "contains_more": len(reviews) > REVIEW_SUMMARY_LIMIT,
+    }
+
+
+def _comment_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
+    """Return a compact comment snapshot with bounded excerpts."""
+    comments = [comment for comment in pr.get("comments", []) or [] if isinstance(comment, dict)]
+    latest = [
+        {
+            "author": _author_login(comment.get("author")),
+            "created_at": str(comment.get("createdAt", "")),
+            "body_excerpt": _shorten_text(comment.get("body"), limit=COMMENT_BODY_LIMIT),
+        }
+        for comment in sorted(
+            comments,
+            key=lambda comment: str(comment.get("createdAt", comment.get("updatedAt", ""))),
+            reverse=True,
+        )[:COMMENT_SUMMARY_LIMIT]
+    ]
+    return {
+        "total": len(comments),
+        "latest": latest,
+        "contains_more": len(comments) > COMMENT_SUMMARY_LIMIT,
+    }
 
 
 def _checks(pr: dict[str, Any]) -> dict[str, Any]:
@@ -83,21 +153,76 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _next_action(*, is_draft: bool, labels: list[str], checks: dict[str, Any]) -> str:
-    """Return a compact next-action hint for the parent orchestrator."""
+def _preflight(
+    *,
+    checks_overall: str,
+    expected_head_sha: str,
+    head_sha: str,
+    is_draft: bool,
+    mergeable: str,
+) -> dict[str, Any]:
+    """Return compact lane preflight status and reasons."""
+    reasons: list[str] = []
     if is_draft:
-        return "review_or_mark_ready_when_local_proof_passes"
+        reasons.append("pr_is_draft")
+    head_sha_matches = None
+    preflight_status = "healthy"
+    if expected_head_sha:
+        if not head_sha:
+            preflight_status = "blocked"
+            reasons.append("missing_head_sha")
+        elif head_sha != expected_head_sha:
+            preflight_status = "stale"
+            reasons.append("head_sha_mismatch")
+            head_sha_matches = False
+        else:
+            head_sha_matches = True
+    if checks_overall == "failure":
+        preflight_status = "blocked"
+        reasons.append("ci_checks_failed")
+    if mergeable == "CONFLICTING":
+        preflight_status = "blocked"
+        reasons.append("mergeable_conflict")
+    if not reasons:
+        reasons.append("ok")
+    return {
+        "status": preflight_status,
+        "reasons": reasons,
+        "expected_head_sha": expected_head_sha,
+        "head_sha": head_sha,
+        "head_sha_matches_expected": head_sha_matches,
+        "checks_overall": checks_overall,
+        "mergeable": mergeable,
+        "route_evidence_only": True,
+    }
+
+
+def _next_action(
+    *, is_draft: bool, labels: list[str], checks: dict[str, Any], preflight: dict[str, Any]
+) -> str:
+    """Return a compact next-action hint for the parent orchestrator."""
+    status = str(preflight.get("status", "unknown"))
+    if status == "stale":
+        return "invalidate_stale_lane"
+    if status == "blocked":
+        return "inspect_blocking_preflight"
     if checks.get("overall") == "failure":
         return "inspect_failing_checks"
     if checks.get("overall") == "pending":
         return "await_ci_or_start_read_only_monitor"
-    if "merge-ready" in labels:
+    if "merge-ready" in labels and not is_draft:
         return "merge_readiness_local_check"
+    if is_draft:
+        return "review_or_mark_ready_when_local_proof_passes"
     return "review_for_merge_ready"
 
 
 def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
     """Return a compact attention category for queue triage."""
+    if next_action == "invalidate_stale_lane":
+        return "stale_attention"
+    if next_action == "inspect_blocking_preflight":
+        return "preflight_attention"
     if is_draft:
         return "draft_ready_or_review"
     if next_action == "inspect_failing_checks":
@@ -113,11 +238,22 @@ def _pr_payload_from_dict(
     pr: dict[str, Any],
     *,
     default_number: int,
+    expected_head_sha: str,
 ) -> dict[str, Any]:
     """Build a compact PR snapshot from already-loaded fields."""
     is_draft = bool(pr.get("isDraft"))
     labels = _labels(pr)
     checks = _checks(pr)
+    head_sha = str(pr.get("headRefOid", ""))
+    mergeable = str(pr.get("mergeable", "unknown"))
+    preflight = _preflight(
+        checks_overall=str(checks.get("overall", "")),
+        expected_head_sha=expected_head_sha,
+        head_sha=head_sha,
+        is_draft=is_draft,
+        mergeable=mergeable,
+    )
+    reviews = _reviews(pr)
     pr_payload = {
         "number": pr.get("number", default_number),
         "status": "ok",
@@ -127,18 +263,42 @@ def _pr_payload_from_dict(
         "url": pr.get("url", ""),
         "labels": labels,
         "head_branch": pr.get("headRefName", ""),
-        "head_sha": pr.get("headRefOid", ""),
-        "mergeable": pr.get("mergeable", "unknown"),
+        "head_sha": head_sha,
+        "mergeable": mergeable,
         "checks": checks,
-        "reviews": _reviews(pr),
+        "reviews": reviews,
+        "review_snapshot": _review_snapshot(pr),
+        "comment_snapshot": _comment_snapshot(pr),
+        "preflight": preflight,
     }
-    next_action = _next_action(is_draft=is_draft, labels=labels, checks=checks)
+    next_action = _next_action(
+        is_draft=is_draft,
+        labels=labels,
+        checks=checks,
+        preflight=preflight,
+    )
     pr_payload["next_action"] = next_action
-    pr_payload["attention"] = _attention(next_action=next_action, is_draft=is_draft, labels=labels)
+    pr_payload["attention"] = _attention(
+        next_action=next_action,
+        is_draft=is_draft,
+        labels=labels,
+    )
     return pr_payload
 
 
-def fetch_pr(number: int, *, repo: str) -> dict[str, Any]:
+def _route_health_overview(prs: list[dict[str, Any]]) -> dict[str, int]:
+    """Summarize route health across PR snapshots."""
+    counts = dict.fromkeys(ROUTE_HEALTH_STATUSES, 0)
+    for pr in prs:
+        preflight = pr.get("preflight", {})
+        status = str(preflight.get("status", "unknown"))
+        if status not in counts:
+            status = "unknown"
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def fetch_pr(number: int, *, repo: str, expected_head_sha: str = "") -> dict[str, Any]:
     """Fetch one PR and return a compact queue snapshot."""
     result = _gh(
         [
@@ -148,7 +308,7 @@ def fetch_pr(number: int, *, repo: str) -> dict[str, Any]:
             "--repo",
             repo,
             "--json",
-            "number,title,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews",
+            "number,title,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
         ]
     )
     if result.returncode != 0:
@@ -161,7 +321,7 @@ def fetch_pr(number: int, *, repo: str) -> dict[str, Any]:
         pr = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         return {"number": number, "status": "error", "error": f"invalid gh JSON: {exc}"}
-    return _pr_payload_from_dict(pr, default_number=number)
+    return _pr_payload_from_dict(pr, default_number=number, expected_head_sha=expected_head_sha)
 
 
 def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
@@ -177,15 +337,16 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             "--limit",
             str(limit),
             "--json",
-            "number,title,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews",
+            "number,title,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
         ]
     )
 
     if result.returncode != 0:
         return {
-            "schema": "pr_queue_snapshot.v1",
+            "schema": SCHEMA_VERSION,
             "repo": repo,
             "mode": "active",
+            "route_health_overview": {"healthy": 0, "stale": 0, "blocked": 0, "unknown": 0},
             "prs": [
                 {
                     "status": "error",
@@ -197,9 +358,10 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
         listed = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         return {
-            "schema": "pr_queue_snapshot.v1",
+            "schema": SCHEMA_VERSION,
             "repo": repo,
             "mode": "active",
+            "route_health_overview": {"healthy": 0, "stale": 0, "blocked": 0, "unknown": 0},
             "prs": [
                 {
                     "status": "error",
@@ -209,9 +371,10 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
         }
     if not isinstance(listed, list):
         return {
-            "schema": "pr_queue_snapshot.v1",
+            "schema": SCHEMA_VERSION,
             "repo": repo,
             "mode": "active",
+            "route_health_overview": {"healthy": 0, "stale": 0, "blocked": 0, "unknown": 0},
             "prs": [
                 {
                     "status": "error",
@@ -220,21 +383,28 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             ],
         }
 
-    prs = [_pr_payload_from_dict(pr, default_number=-1) for pr in listed if isinstance(pr, dict)]
+    prs = [
+        _pr_payload_from_dict(pr, default_number=-1, expected_head_sha="")
+        for pr in listed
+        if isinstance(pr, dict)
+    ]
     return {
-        "schema": "pr_queue_snapshot.v1",
+        "schema": SCHEMA_VERSION,
         "repo": repo,
         "mode": "active",
+        "route_health_overview": _route_health_overview(prs),
         "prs": prs,
     }
 
 
-def snapshot_prs(numbers: list[int], *, repo: str) -> dict[str, Any]:
+def snapshot_prs(numbers: list[int], *, repo: str, expected_head_sha: str = "") -> dict[str, Any]:
     """Return a compact PR queue snapshot."""
+    prs = [fetch_pr(number, repo=repo, expected_head_sha=expected_head_sha) for number in numbers]
     return {
-        "schema": "pr_queue_snapshot.v1",
+        "schema": SCHEMA_VERSION,
         "repo": repo,
-        "prs": [fetch_pr(number, repo=repo) for number in numbers],
+        "route_health_overview": _route_health_overview(prs),
+        "prs": prs,
     }
 
 
@@ -254,6 +424,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=DEFAULT_ACTIVE_LIMIT,
         help="Limit for --active discovery mode.",
     )
+    parser.add_argument(
+        "--expected-head-sha",
+        default="",
+        help="Optional PR head SHA expected for stale-lane invalidation in single-PR mode.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser.parse_args(argv)
 
@@ -265,6 +440,12 @@ def main(argv: list[str] | None = None) -> int:
         print("--active cannot be combined with explicit PR numbers", file=sys.stderr)
         return 1
     numbers = args.prs_option if args.prs_option is not None else args.prs
+    if args.expected_head_sha and not args.active and numbers and len(numbers) != 1:
+        print(
+            "--expected-head-sha requires exactly one PR number; omit it for batch snapshots",
+            file=sys.stderr,
+        )
+        return 1
     try:
         if args.active:
             payload = snapshot_active_prs(repo=args.repo, limit=max(args.limit, 1))
@@ -272,7 +453,9 @@ def main(argv: list[str] | None = None) -> int:
             print("at least one PR number is required", file=sys.stderr)
             return 1
         else:
-            payload = snapshot_prs(numbers, repo=args.repo)
+            payload = snapshot_prs(
+                numbers, repo=args.repo, expected_head_sha=args.expected_head_sha
+            )
     except FileNotFoundError:
         print("gh command not found", file=sys.stderr)
         return 1

@@ -333,6 +333,14 @@ resolving lint or test failures locally before requesting review.
   with that reason. Trace-panel generators, topology-score instrumentation, seed-sufficiency
   analysis, and why-report generation are research-facing examples that need first use or a
   concrete follow-up.
+- For delegated-worker routing, prefer a compact preflight ledger before implementation or review
+  dispatch: `gh auth status`, `scripts/dev/snapshot_pr_queue.py --prs <number> --expected-head-sha <sha> --json`,
+  and `scripts/dev/check_pr_ci_status.py --expected-head-sha <sha>`.
+- Treat `preflight.status == "stale"` lanes as invalid until refreshed.
+- If review/comment data is needed, start from compact `review_snapshot`/`comment_snapshot`/`checks`
+  output rather than raw `gh` payloads.
+- Before finalization, cover format/check, focused tests, changed-file coverage when practical, and a
+  clean worktree check (`git status --short`) as part of the readied proof bundle.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

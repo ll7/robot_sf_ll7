@@ -311,6 +311,22 @@ snapshot reports `ok: false`, stale claims, missing state, or insufficient field
 Worktree rows are capped by default; use `worktree_count` and `worktrees_truncated` to decide
 whether a larger `--worktree-limit` is worth the parent-thread context cost.
 
+For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
+
+- Preflight lanes with `--expected-head-sha <sha>` before dispatch.
+- Reuse `preflight.status` (`healthy` | `stale` | `blocked`) and `next_action` to avoid stale or noisy routes.
+- Invalidate stale-lane routes (refresh snapshot) before reassigning or reviewing.
+- Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
+  full-comment payloads.
+
+```bash
+uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 --json \
+  --expected-head-sha "$PR_HEAD_SHA"
+```
+
+The resulting JSON keeps review/comment/CI payloads compact; review noise is reduced to counts,
+latest author-attributed samples, and bounded body excerpts.
+
 Use `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR handoff when a
 branch adds or edits context notes, evidence bundles, or other proof-heavy docs surfaces. The
 checker is intentionally conservative: it only flags high-confidence issues such as missing
@@ -354,7 +370,8 @@ GitHub or repository reads:
 uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json
 uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json \
   --capsule-dir "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
-uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 2678 2679 --json
+uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 2678 2679 --json \
+  --expected-head-sha "$PR_HEAD_SHA"
 uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" --json --once
 ```
 
@@ -1717,6 +1734,14 @@ phase exits zero.
 5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality (Ruff + advisory ty) → Type Check (advisory) → Run Tests
 6) Update docs/diagrams; run “Generate UML” if classes changed
 7) Open PR with summary, risks, and links to docs/tests
+
+### Final-readiness checklist for scripted tooling work
+- Run `uv run ruff check <touched_files>` and `uv run ruff format <touched_files>` before finalizing.
+- Run focused tests that cover modified paths (for example `uv run pytest tests/dev/test_snapshot_pr_queue.py`).
+- Run changed-file coverage if practical:
+  `uv run python scripts/coverage/check_changed_files_coverage.py --base $BASE_REF --include "scripts/dev/*" --include "tests/dev/*"`.
+- Ensure the worktree is clean for final PR-ready evidence:
+  `git status --short` should be empty, then rerun final proof with `PR_READY_MODE=final`.
 
 ### Per-Test Performance Budget
 

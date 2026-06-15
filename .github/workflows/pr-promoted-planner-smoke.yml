@@ -30,6 +30,21 @@ jobs:
         with:
           version: "0.5.11"
 
+      - name: Cache uv sync package payloads
+        id: cache-uv
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ runner.temp }}/setup-uv-cache/archive-v0
+            ${{ runner.temp }}/setup-uv-cache/wheels-v6
+          key: uv-sync-payloads-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
+      - name: Report uv cache restore state
+        run: |
+          echo "cache-hit=${{ steps.cache-uv.outputs.cache-hit }}"
+          echo "cache-matched-key=${{ steps.cache-uv.outputs.cache-matched-key }}"
+          bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-pre-sync"
+
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -44,6 +59,10 @@ jobs:
         env:
           CI_STEP_TIMEOUT_SECONDS: "1200"
         run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
+
+      - name: Report uv cache state after sync
+        if: always()
+        run: bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-post-sync"
 
       - name: Run promoted planner smoke
         run: |

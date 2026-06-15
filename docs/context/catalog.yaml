@@ -1093,6 +1093,22 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15/ablation_report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15/ablation_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained

@@ -1,0 +1,40 @@
+{
+  "issue": 2837,
+  "schema_version": "HorizonTimestepAblation.v1",
+  "status": "diagnostic-only",
+  "claim_boundary": "analysis_only_not_navigation_evidence: this report compares forecast horizon and output-timestep presets on open-loop trace fixtures. It does not prove navigation value, closed-loop benefit, safety improvement, or benchmark-strength predictor quality.",
+  "generated_at_utc": "2026-06-15T00:00:00+00:00",
+  "provenance": {
+    "command": "uv run python scripts/benchmark/build_horizon_timestep_ablation_report.py --issue 2837 --generated-at-utc 2026-06-15T00:00:00+00:00",
+    "commit": "d042684a",
+    "source": "durable repository trace fixtures"
+  },
+  "coverage": {
+    "horizon_ladder_s": [
+      0.5,
+      1.0,
+      1.6,
+      2.0,
+      3.0
+    ],
+    "dt_ladder_s": [
+      0.1,
+      0.2,
+      0.4,
+      0.5
+    ],
+    "trace_families": [
+      "bottleneck",
+      "corridor_interaction",
+      "crossing_proxy",
+      "goal_directed_crossing",
+      "occluded_emergence",
+      "route_conflict_goal",
+      "signalized_crossing",
+      "waiting_with_intent_change"
+    ],
+    "evaluated_cells": 65,
+    "total_cells": 180,
+    "preset_count": 3
+  }
+}

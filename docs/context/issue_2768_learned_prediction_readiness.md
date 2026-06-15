@@ -29,7 +29,7 @@ linked_policy:
 ## Status: NOT-TRAINING-READY
 
 Learned pedestrian prediction training is **blocked** until every prerequisite in this contract
-is satisfied. The validator stub at
+is satisfied. The validator at
 `scripts/validation/validate_learned_prediction_readiness.py` fails closed when split metadata
 or baseline evidence is missing.
 
@@ -83,6 +83,8 @@ Every trace source used for training must declare an explicit, leakage-free spli
   and how the split prevents it.
 - **split_manifest_path**: path to a committed YAML or JSON manifest that records which
   episode IDs or seed values belong to each split.
+  `ForecastDataset.v1` manifests are valid when `split_policy.leakage_prevention` is
+  explicitly populated as a list.
 
 Splits must sum to 1.0. The test split must never be used for model selection, hyperparameter
 tuning, or early stopping.
@@ -96,6 +98,14 @@ The prediction target horizon must be explicitly defined:
 - **dt_seconds**: time step between predicted positions.
 - **multi_horizon**: whether multiple horizons are trained simultaneously. If true, list each
   horizon.
+
+Machine-checkable readiness fields use this key form:
+
+- horizon_seconds: blocked until a bounded Issue #2837 recommendation is selected.
+- horizon_steps: blocked until a bounded Issue #2837 recommendation is selected.
+- dt_seconds: blocked until a bounded Issue #2837 recommendation is selected.
+- horizon_recommendation: blocked pending Issue #2837.
+- timestep_recommendation: blocked pending Issue #2837.
 
 The horizon definition must be compatible with the downstream planner's
 `predictive_horizon_steps` and `predictive_rollout_dt` configuration.
@@ -183,13 +193,17 @@ Learned prediction training **must not** begin until:
 
 1. At least one trace source exists in the registry with `episode_count > 0` and
    `actor_types` covering the target prediction family.
-2. A committed split manifest exists with explicit `split_strategy`, fractions summing to 1.0,
-   and a named `leakage_prevention` statement.
-3. Deterministic baseline metrics (constant_velocity at minimum) exist on the test split
-   for ADE, FDE, and at least one collision-relevance metric.
-4. The target horizon definition is compatible with the downstream planner configuration.
-5. The validator stub at `scripts/validation/validate_learned_prediction_readiness.py`
-   exits with code 0.
+2. A committed split manifest exists with explicit `split_strategy`, leakage metadata, and
+   no leakage across splits.
+3. Baseline metrics exist for the required target (default: `constant_velocity`) with ADE/FDE on
+   the test split.
+4. Calibration report recommendation is `continue`.
+5. Transferability report contains both oracle and deployable observation tiers.
+6. Closed-loop coupling gate recommendation is `continue`.
+7. Horizon and timestep recommendations are documented with `horizon_seconds`,
+   `horizon_steps`, and `dt_seconds`.
+8. The validator at `scripts/validation/validate_learned_prediction_readiness.py`
+   exits with code 0 and all prerequisite statuses are `passed`.
 
 If any condition is not met, the training block remains active and any attempt to train
 a learned predictor should be classified as `blocked` or `not_benchmark_evidence`.
@@ -212,9 +226,15 @@ The readiness validator at `scripts/validation/validate_learned_prediction_readi
 checks the following fail-closed conditions:
 
 - Trace registry file exists and contains at least one source entry with `episode_count > 0`.
-- Split manifest file exists and contains valid train/validation/test fractions summing to 1.0.
-- Baseline evidence file exists and contains constant_velocity baseline metrics for ADE and FDE.
-- Horizon definition is present and compatible.
+- Split manifest file exists and contains valid train/validation/test fractions or dataset schema
+  leakage metadata.
+- Baseline evidence file exists and contains the named target metrics for ADE and FDE.
+- Calibration report is present and recommends `continue`.
+- Transferability report is present and includes oracle + deployable observation tiers.
+- Closed-loop coupling gate is present and recommends `continue`.
+- Horizon/recommendation fields are present in the readiness doc.
+
+Each prerequisite reports pass/fail/blocked in the validator output.
 
 If any check fails, the validator exits with code 2 and a structured error message.
 

@@ -573,6 +573,8 @@ knowledge, not every transient iteration detail.
   [issue_1720_learned_policy_roadmap.md](issue_1720_learned_policy_roadmap.md)
 * Issue #2768 Learned Prediction Readiness Contract:
   [issue_2768_learned_prediction_readiness.md](issue_2768_learned_prediction_readiness.md)
+* Issue #2864 Forecast-lane synthesis:
+  [issue_2864_forecast_lane_synthesis.md](issue_2864_forecast_lane_synthesis.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:

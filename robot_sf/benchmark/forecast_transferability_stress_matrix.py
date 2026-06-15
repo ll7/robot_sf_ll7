@@ -69,10 +69,10 @@ def build_forecast_transferability_stress_matrix(
             if dimension != "actor_type" and transfer_dimensions.get(dimension) is None
         ]
         report_key = {
-            "predictor_id": str(provenance["predictor_id"]),
-            "predictor_family": str(provenance["predictor_family"]),
-            "scenario_id": str(provenance["scenario_id"]),
-            "observation_tier": str(provenance["observation_tier"]),
+            "predictor_id": str(_required_value(provenance, "predictor_id")),
+            "predictor_family": str(_required_value(provenance, "predictor_family")),
+            "scenario_id": str(_required_value(provenance, "scenario_id")),
+            "observation_tier": str(_required_value(provenance, "observation_tier")),
         }
         for dimension in missing_dimensions:
             limitation_rows.append(
@@ -83,8 +83,9 @@ def build_forecast_transferability_stress_matrix(
                     "reason": "dimension metadata unavailable in ForecastMetrics.v1 report",
                 }
             )
-        for aggregate_row in report.get("aggregate_rows", []):
-            actor_type = str(aggregate_row.get("actor_class", "unknown"))
+        for aggregate_row in report["aggregate_rows"]:
+            actor_type_value = aggregate_row.get("actor_class")
+            actor_type = "unknown" if actor_type_value is None else str(actor_type_value)
             row_dimensions = dict(transfer_dimensions)
             row_dimensions["actor_type"] = actor_type
             row_missing_dimensions = [
@@ -95,24 +96,24 @@ def build_forecast_transferability_stress_matrix(
             rows.append(
                 {
                     **report_key,
-                    "metric": str(aggregate_row["metric"]),
-                    "horizon_s": float(aggregate_row["horizon_s"]),
+                    "metric": str(_required_value(aggregate_row, "metric")),
+                    "horizon_s": float(_required_value(aggregate_row, "horizon_s")),
                     "actor_type": actor_type,
                     "mean_value": aggregate_row.get("value"),
-                    "metric_status": str(aggregate_row["status"]),
-                    "denominator": int(aggregate_row["denominator"]),
+                    "metric_status": str(_required_value(aggregate_row, "status")),
+                    "denominator": int(_required_value(aggregate_row, "denominator")),
                     "transfer_dimensions": {
                         dimension: row_dimensions.get(dimension)
                         for dimension in required_dimensions
                     },
                     "unavailable_dimensions": row_missing_dimensions,
                     "evidence_status": _row_evidence_status(
-                        observation_tier=str(provenance["observation_tier"]),
+                        observation_tier=report_key["observation_tier"],
                         unavailable_dimensions=row_missing_dimensions,
-                        metric_status=str(aggregate_row["status"]),
+                        metric_status=str(_required_value(aggregate_row, "status")),
                     ),
                     "claim_boundary": _row_claim_boundary(
-                        observation_tier=str(provenance["observation_tier"]),
+                        observation_tier=report_key["observation_tier"],
                         unavailable_dimensions=row_missing_dimensions,
                     ),
                 }
@@ -266,22 +267,41 @@ def _empty_report(
 
 
 def _require_forecast_metrics_report(report: dict[str, Any]) -> None:
+    if not isinstance(report, dict):
+        raise ValueError("metric report must be a mapping")
     if report.get("schema_version") != FORECAST_METRICS_SCHEMA_VERSION:
         raise ValueError("metric_reports must use ForecastMetrics.v1")
-    if not isinstance(report.get("provenance"), dict):
+    provenance = report.get("provenance")
+    if not isinstance(provenance, dict):
         raise ValueError("metric report provenance is required")
-    if not isinstance(report.get("aggregate_rows"), list):
+    for key in ("predictor_id", "predictor_family", "scenario_id", "observation_tier"):
+        _required_value(provenance, key)
+    aggregate_rows = report.get("aggregate_rows")
+    if not isinstance(aggregate_rows, list):
         raise ValueError("metric report aggregate_rows must be a list")
+    for index, aggregate_row in enumerate(aggregate_rows):
+        if not isinstance(aggregate_row, dict):
+            raise ValueError(f"metric report aggregate_rows[{index}] must be a mapping")
+        for key in ("metric", "horizon_s", "status", "denominator"):
+            _required_value(aggregate_row, key)
 
 
 def _require_transferability_report(report: dict[str, Any]) -> None:
+    if not isinstance(report, dict):
+        raise ValueError("report must be a mapping")
     if report.get("schema_version") != FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION:
         raise ValueError("report must use ForecastTransferabilityStressMatrix.v1")
 
 
 def _transfer_dimensions(report: dict[str, Any]) -> dict[str, str | None]:
     provenance = report.get("provenance", {})
-    metadata = report.get("transfer_dimensions", {}) or report.get("metadata", {})
+    if not isinstance(provenance, dict):
+        provenance = {}
+    metadata = report.get("transfer_dimensions")
+    if not isinstance(metadata, dict):
+        metadata = report.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
     dimensions: dict[str, str | None] = {}
     for dimension, keys in _METRIC_PROVENANCE_KEYS.items():
         value = _first_present(metadata, keys)
@@ -296,6 +316,12 @@ def _first_present(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:
         if key in payload and payload[key] is not None:
             return payload[key]
     return None
+
+
+def _required_value(payload: dict[str, Any], key: str) -> Any:
+    if key not in payload or payload[key] is None:
+        raise ValueError(f"required metric report field is missing: {key}")
+    return payload[key]
 
 
 def _dimension_coverage(
@@ -343,7 +369,7 @@ def _recommendation(
             "claim_status": "diagnostic-only",
             "reason": "one or more transfer dimensions are unavailable",
         }
-    if any(row["observation_tier"].startswith("oracle") for row in rows):
+    if any(_is_oracle_tier(row["observation_tier"]) for row in rows):
         return {
             "decision": "revise",
             "claim_status": "diagnostic-only",
@@ -370,7 +396,7 @@ def _row_evidence_status(
 ) -> str:
     if unavailable_dimensions or metric_status != "ok":
         return "diagnostic-only"
-    if observation_tier.startswith("oracle"):
+    if _is_oracle_tier(observation_tier):
         return "oracle-only"
     return "benchmark-eligible"
 
@@ -382,9 +408,13 @@ def _row_claim_boundary(
 ) -> str:
     if unavailable_dimensions:
         return "unavailable transfer dimensions prevent benchmark-strength transfer claims"
-    if observation_tier.startswith("oracle"):
+    if _is_oracle_tier(observation_tier):
         return "oracle-state row; not deployable transfer evidence"
     return "deployable observation row; still simulation-only transfer evidence"
+
+
+def _is_oracle_tier(observation_tier: str) -> bool:
+    return observation_tier.strip().lower().startswith("oracle")
 
 
 __all__ = [

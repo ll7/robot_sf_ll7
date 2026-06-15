@@ -6,16 +6,14 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+import pytest
 
 from robot_sf.benchmark.forecast_transferability_stress_matrix import (
     FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION,
     build_forecast_transferability_stress_matrix,
     format_forecast_transferability_stress_markdown,
 )
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def _metric_report(
@@ -99,6 +97,47 @@ def test_transferability_matrix_reports_unavailable_dimensions() -> None:
     assert report["recommendation"]["claim_status"] == "diagnostic-only"
 
 
+def test_transferability_matrix_treats_mixed_case_oracle_as_diagnostic() -> None:
+    """Oracle-tier checks should be case-insensitive."""
+    report = build_forecast_transferability_stress_matrix(
+        [
+            _metric_report(
+                observation_tier="Oracle_Full_State",
+                transfer_dimensions=_complete_transfer_dimensions(),
+            )
+        ],
+        report_id="mixed-case-oracle",
+        generated_at_utc="2026-06-15T00:00:00+00:00",
+    )
+
+    assert report["matrix_rows"][0]["evidence_status"] == "oracle-only"
+    assert report["recommendation"]["claim_status"] == "diagnostic-only"
+
+
+def test_transferability_matrix_rejects_malformed_aggregate_rows() -> None:
+    """Malformed metric reports should fail at the schema boundary."""
+    report = _metric_report(transfer_dimensions=_complete_transfer_dimensions())
+    report["aggregate_rows"] = ["not-a-row"]
+
+    with pytest.raises(ValueError, match=r"aggregate_rows\[0\]"):
+        build_forecast_transferability_stress_matrix(
+            [report],
+            report_id="malformed",
+        )
+
+
+def test_transferability_matrix_rejects_missing_required_aggregate_fields() -> None:
+    """Required aggregate fields should not crash later during row construction."""
+    report = _metric_report(transfer_dimensions=_complete_transfer_dimensions())
+    del report["aggregate_rows"][0]["denominator"]
+
+    with pytest.raises(ValueError, match="denominator"):
+        build_forecast_transferability_stress_matrix(
+            [report],
+            report_id="missing-denominator",
+        )
+
+
 def test_transferability_markdown_includes_limitations() -> None:
     """Markdown should carry the recommendation and unavailable-row caveats."""
     report = build_forecast_transferability_stress_matrix(
@@ -151,3 +190,31 @@ def test_transferability_cli_writes_json_and_markdown(
     assert out_json.exists()
     assert out_md.exists()
     assert json.loads(out_json.read_text(encoding="utf-8"))["report_id"] == "cli-transfer"
+
+
+def test_transferability_cli_reports_malformed_json(tmp_path: Path) -> None:
+    """CLI should return a concise parser error for malformed input JSON."""
+    metric_path = tmp_path / "metrics.json"
+    out_json = tmp_path / "transfer.json"
+    metric_path.write_text("{oops", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(
+                Path(__file__).resolve().parents[2]
+                / "scripts/benchmark/build_forecast_transferability_matrix.py"
+            ),
+            str(metric_path),
+            "--report-id",
+            "bad-json",
+            "--out-json",
+            str(out_json),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "could not parse metric report" in result.stderr

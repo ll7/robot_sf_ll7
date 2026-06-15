@@ -22,7 +22,14 @@ def main() -> None:
     parser.add_argument("--out-md", type=Path)
     args = parser.parse_args()
 
-    metric_reports = [json.loads(path.read_text(encoding="utf-8")) for path in args.metric_report]
+    metric_reports = []
+    for path in args.metric_report:
+        try:
+            metric_reports.append(json.loads(path.read_text(encoding="utf-8")))
+        except OSError as exc:
+            parser.error(f"could not read metric report {path}: {exc}")
+        except json.JSONDecodeError as exc:
+            parser.error(f"could not parse metric report {path}: {exc}")
     report = build_forecast_transferability_stress_matrix(
         metric_reports,
         report_id=args.report_id,

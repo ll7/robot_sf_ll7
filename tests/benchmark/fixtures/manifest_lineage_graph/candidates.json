@@ -1,0 +1,28 @@
+{
+  "candidates": [
+    {
+      "artifact_id": "dissertation_table_1",
+      "artifact_kind": "table",
+      "source_manifest_path": "connected_manifest.json",
+      "claim_boundary": "dissertation-chapter-4"
+    },
+    {
+      "artifact_id": "release_table_1",
+      "artifact_kind": "table",
+      "source_manifest_path": "missing_manifest.json",
+      "claim_boundary": "release-v1.0"
+    },
+    {
+      "artifact_id": "release_figure_1",
+      "artifact_kind": "figure",
+      "source_manifest_path": "ambiguous_manifest.json",
+      "claim_boundary": "release-v1.0"
+    },
+    {
+      "artifact_id": "orphan_artifact",
+      "artifact_kind": "table",
+      "source_manifest_path": "nonexistent_manifest.json",
+      "claim_boundary": "unknown"
+    }
+  ]
+}

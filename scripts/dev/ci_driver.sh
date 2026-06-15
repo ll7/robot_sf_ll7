@@ -237,7 +237,9 @@ run_phase() {
       run_smoke_phase "$event_name" "$github_ref"
       ;;
     artifact-policy)
-      uv run python scripts/tools/check_artifact_root.py
+      # Run without syncing: this cleanup step must not re-enter a hanging
+      # dependency sync if the earlier "uv sync" step failed or was incomplete.
+      uv run --no-sync python scripts/tools/check_artifact_root.py
       ;;
     *)
       require_known_phase "$phase"

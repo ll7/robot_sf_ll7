@@ -9,9 +9,16 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     simulation_trace_export_from_dict,
 )
 from robot_sf.analysis_workbench.trace_failure_predicates import (
+    MATRIX_CLAIM_INELIGIBLE,
+    MATRIX_STATUS_DIAGNOSTIC_ONLY,
+    MATRIX_STATUS_PROPOSED,
+    MATRIX_STATUS_RATE_INTERPRETABLE,
     TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
     aggregate_trace_failure_predicate_tables,
+    build_trace_predicate_denominator_health_report,
     extract_trace_failure_predicates,
+    load_trace_predicate_matrix,
+    matrix_required_fields_for_predicate,
     render_trace_failure_predicate_markdown,
 )
 
@@ -320,3 +327,143 @@ def test_not_available_row_preserved_separately_from_true_zero() -> None:
             "zero_group_reason": "valid_predicate_count_zero",
         }
     ]
+
+
+def _minimal_matrix() -> dict[str, Any]:
+    """Return a minimal trace-predicate benchmark matrix for tests."""
+    return {
+        "schema_version": "trace_predicate_matrix.v1",
+        "name": "test_matrix",
+        "status": MATRIX_STATUS_PROPOSED,
+        "claim_boundary": "Test matrix; not rate evidence.",
+        "matrix": {
+            "scenario_families": ["crossing", "bottleneck", "open_field"],
+            "planners": ["orca", "dwa"],
+            "seeds": [111, 999],
+            "required_trace_fields_by_predicate": {
+                "bottleneck_deadlock": ["planner.event"],
+                "zero_motion_timeout_behavior": ["planner.event"],
+            },
+        },
+    }
+
+
+def test_load_trace_predicate_matrix_rejects_bad_schema(tmp_path: Any) -> None:
+    """Loading a matrix with the wrong schema version should fail closed."""
+    import yaml
+
+    matrix_path = tmp_path / "bad_matrix.yaml"
+    matrix_path.write_text(
+        yaml.dump({"schema_version": "trace_predicate_matrix.v0"}),
+        encoding="utf-8",
+    )
+    try:
+        load_trace_predicate_matrix(matrix_path)
+        raise AssertionError("Expected ValueError for unsupported schema version")
+    except ValueError as exc:
+        assert "Unsupported trace predicate matrix schema version" in str(exc)
+
+
+def test_matrix_required_fields_lookup() -> None:
+    """Required fields for a predicate should come from the matrix."""
+    matrix = _minimal_matrix()
+    assert matrix_required_fields_for_predicate(matrix, "bottleneck_deadlock") == ["planner.event"]
+    assert matrix_required_fields_for_predicate(matrix, "occlusion_triggered_near_miss") == []
+
+
+def test_missing_matrix_marks_diagnostic_only() -> None:
+    """Without a matrix, aggregate payloads must be diagnostic-only and claim-ineligible."""
+    clean = _clean_trace()
+    payload = aggregate_trace_failure_predicate_tables([clean], scenario_family="open_field")
+    assert payload["matrix_metadata"]["status"] == MATRIX_STATUS_DIAGNOSTIC_ONLY
+    assert payload["matrix_metadata"]["rate_interpretation"] == "not_allowed"
+    health = build_trace_predicate_denominator_health_report(payload)
+    assert all(
+        report["claim_eligibility"] == MATRIX_CLAIM_INELIGIBLE
+        for report in health["predicates"].values()
+    )
+
+
+def test_missing_matrix_required_fields_fail_closed() -> None:
+    """A trace missing matrix-required fields should emit not_available rows."""
+    clean = _clean_trace()
+    matrix = _minimal_matrix()
+    payload = aggregate_trace_failure_predicate_tables(
+        [clean], scenario_family="open_field", matrix=matrix
+    )
+    assert payload["matrix_metadata"]["status"] == MATRIX_STATUS_PROPOSED
+    assert payload["matrix_metadata"]["rate_interpretation"] == (
+        "not_allowed_until_matrix_is_promoted"
+    )
+    not_available_rows = [r for r in payload["rows"] if r["validity_status"] == "not_available"]
+    affected_predicates = {r["predicate_id"] for r in not_available_rows}
+    assert "bottleneck_deadlock" in affected_predicates
+    assert "zero_motion_timeout_behavior" in affected_predicates
+    for row in not_available_rows:
+        assert row["predicate_count"] >= 1
+        assert row["severity"] == "not_available"
+
+
+def test_matrix_claim_eligibility_requires_compliance() -> None:
+    """Even with a matrix, missing required fields make the report claim-ineligible."""
+    clean = _clean_trace()
+    matrix = _minimal_matrix()
+    payload = aggregate_trace_failure_predicate_tables(
+        [clean], scenario_family="open_field", matrix=matrix
+    )
+    health = build_trace_predicate_denominator_health_report(payload)
+    deadlock_report = health["predicates"]["bottleneck_deadlock"]
+    assert deadlock_report["unavailable_data_count"] >= 1
+    assert deadlock_report["claim_eligibility"] == MATRIX_CLAIM_INELIGIBLE
+
+
+def test_proposed_matrix_keeps_satisfied_rows_claim_ineligible() -> None:
+    """A proposed matrix is a prerequisite, not evidence that rates may be interpreted."""
+    trace = _clean_trace(planner={"event": "timeout"})
+    matrix = _minimal_matrix()
+    payload = aggregate_trace_failure_predicate_tables(
+        [trace], scenario_family="open_field", matrix=matrix
+    )
+    health = build_trace_predicate_denominator_health_report(payload)
+    assert payload["matrix_metadata"]["status"] == MATRIX_STATUS_PROPOSED
+    assert all(
+        report["claim_eligibility"] == MATRIX_CLAIM_INELIGIBLE
+        for report in health["predicates"].values()
+    )
+
+
+def test_matrix_with_all_required_fields_allows_rate_interpretation() -> None:
+    """A promoted matrix plus satisfied required fields can allow rate interpretation."""
+    trace = _trace(
+        [
+            _frame(0, robot_x=0.0, linear_velocity=0.8, angular_velocity=0.0),
+            _frame(
+                1,
+                robot_x=0.1,
+                linear_velocity=0.8,
+                angular_velocity=0.0,
+                pedestrian_x=0.35,
+            ),
+            _frame(
+                2,
+                robot_x=0.11,
+                linear_velocity=0.2,
+                angular_velocity=1.2,
+                pedestrian_x=0.35,
+            ),
+            _frame(
+                3,
+                robot_x=0.11,
+                angular_velocity=0.0,
+                pedestrian_x=0.35,
+                planner={"event": "bottleneck_deadlock"},
+            ),
+        ]
+    )
+    matrix = _minimal_matrix()
+    matrix["status"] = MATRIX_STATUS_RATE_INTERPRETABLE
+    payload = extract_trace_failure_predicates(trace, scenario_family="bottleneck", matrix=matrix)
+    assert payload["matrix_metadata"]["status"] == MATRIX_STATUS_RATE_INTERPRETABLE
+    predicates = {row["predicate_id"]: row for row in payload["predicates"]}
+    assert predicates["bottleneck_deadlock"]["validity_status"] == "valid"
+    assert predicates["late_evasive_reaction"]["validity_status"] == "valid"

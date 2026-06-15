@@ -7,17 +7,20 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
-if TYPE_CHECKING:
-    from robot_sf.analysis_workbench.simulation_trace_export import (
-        SimulationTraceExport,
-        SimulationTraceFrame,
-    )
+import yaml
+
+from robot_sf.analysis_workbench.simulation_trace_export import (
+    SimulationTraceExport,
+    SimulationTraceFrame,
+)
 
 TRACE_FAILURE_PREDICATE_SCHEMA_VERSION = "trace_failure_predicates.v1"
 TRACE_FAILURE_PREDICATE_SOURCE = "trace_failure_predicates.rule_based.v1"
 TRACE_PREDICATE_DENOMINATOR_HEALTH_SCHEMA_VERSION = "trace_predicate_denominator_health.v1"
+TRACE_PREDICATE_MATRIX_SCHEMA_VERSION = "trace_predicate_matrix.v1"
 
 VALIDITY_STATUS_VALID = "valid"
 VALIDITY_STATUS_UNAVAILABLE_DATA = "not_available"
@@ -38,6 +41,108 @@ TRACE_FAILURE_PREDICATE_IDS = (
     "zero_motion_timeout_behavior",
     "clearance_critical_interaction",
 )
+
+MATRIX_STATUS_DIAGNOSTIC_ONLY = "diagnostic_only"
+MATRIX_STATUS_PROPOSED = "proposed"
+MATRIX_STATUS_RATE_INTERPRETABLE = "rate_interpretable"
+MATRIX_CLAIM_INELIGIBLE = "claim-ineligible"
+MATRIX_CLAIM_ELIGIBLE = "claim-eligible"
+
+
+def load_trace_predicate_matrix(path: str | Path) -> dict[str, Any]:
+    """Load a predeclared trace-predicate benchmark matrix from YAML.
+
+    Returns:
+        Parsed matrix payload.
+
+    Raises:
+        ValueError: if the file is missing or has an unsupported schema version.
+    """
+    matrix_path = Path(path)
+    if not matrix_path.is_file():
+        raise ValueError(f"Trace predicate matrix not found: {matrix_path}")
+    try:
+        payload = yaml.safe_load(matrix_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid trace predicate matrix YAML: {matrix_path}") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"Trace predicate matrix must be a mapping: {matrix_path}")
+    schema = payload.get("schema_version", "")
+    if schema != TRACE_PREDICATE_MATRIX_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported trace predicate matrix schema version: {schema!r}. "
+            f"Expected {TRACE_PREDICATE_MATRIX_SCHEMA_VERSION}."
+        )
+    return payload
+
+
+def matrix_required_fields_for_predicate(matrix: Mapping[str, Any], predicate_id: str) -> list[str]:
+    """Return required trace fields declared in the matrix for a predicate ID."""
+    matrix_spec = matrix.get("matrix", {})
+    if not isinstance(matrix_spec, Mapping):
+        return []
+    fields_by_predicate = matrix_spec.get("required_trace_fields_by_predicate", {})
+    if not isinstance(fields_by_predicate, Mapping):
+        return []
+    fields = fields_by_predicate.get(predicate_id, [])
+    return list(fields) if isinstance(fields, list | tuple) else []
+
+
+def _trace_has_field(trace: SimulationTraceExport, field_path: str) -> bool:
+    """Check whether at least one frame provides a dotted trace field.
+
+    Supports paths such as ``robot.position``, ``pedestrians.position``,
+    ``planner.event``, ``planner.selected_action.angular_velocity``, and
+    ``planner.occlusion_or_visibility``.
+
+    Returns:
+        True when at least one frame contains the field, False otherwise.
+    """
+    parts = field_path.split(".")
+    if not parts:
+        return False
+    for frame in trace.frames:
+        if parts[0] == "robot":
+            container = frame.robot
+        elif parts[0] == "pedestrians":
+            if not frame.pedestrians:
+                continue
+            # For pedestrians, require at least one pedestrian to have the nested field.
+            if len(parts) == 1:
+                return True
+            if any(_nested_has(pedestrian, parts[1:]) for pedestrian in frame.pedestrians):
+                return True
+            continue
+        elif parts[0] == "planner":
+            container = frame.planner
+        else:
+            return False
+        if _nested_has(container, parts[1:]):
+            return True
+    return False
+
+
+def _nested_has(container: Any, path_parts: list[str]) -> bool:
+    """Return whether a nested mapping contains every key in path_parts."""
+    current: Any = container
+    for part in path_parts:
+        if isinstance(current, Mapping) and part in current:
+            current = current[part]
+        else:
+            return False
+    return True
+
+
+def _missing_required_fields(
+    trace: SimulationTraceExport,
+    predicate_id: str,
+    matrix: Mapping[str, Any] | None,
+) -> list[str]:
+    """Return required trace fields declared by the matrix that are absent from the trace."""
+    if matrix is None:
+        return []
+    required = matrix_required_fields_for_predicate(matrix, predicate_id)
+    return [field for field in required if not _trace_has_field(trace, field)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,10 +168,11 @@ class TraceFailurePredicate:
         return asdict(self)
 
 
-def extract_trace_failure_predicates(
+def extract_trace_failure_predicates(  # noqa: PLR0913
     trace: SimulationTraceExport,
     *,
     scenario_family: str | None = None,
+    matrix: Mapping[str, Any] | None = None,
     clearance_threshold_m: float = 0.4,
     near_miss_threshold_m: float = 0.5,
     stationary_displacement_threshold_m: float = 0.05,
@@ -80,12 +186,25 @@ def extract_trace_failure_predicates(
     predicate has partial evidence but required fields are absent, rather than silently treating the
     predicate as false.
 
+    Args:
+        trace: Typed simulation trace export.
+        scenario_family: Optional scenario-family override.
+        matrix: Optional predeclared trace-predicate benchmark matrix. When provided, missing
+            matrix-required trace fields cause ``not_available`` predicate rows.
+        clearance_threshold_m: Distance threshold for clearance-critical interactions.
+        near_miss_threshold_m: Distance threshold for near-miss and evasive predicates.
+        stationary_displacement_threshold_m: Displacement threshold for zero-motion detection.
+        oscillation_min_sign_changes: Minimum angular sign changes for oscillation.
+        evasive_angular_velocity_threshold: Angular velocity threshold for evasive reactions.
+        evasive_linear_drop_threshold_mps: Linear velocity drop threshold for evasive reactions.
+
     Returns:
         ``trace_failure_predicates.v1`` payload with predicate rows and summary counts.
     """
     predicates = _extract_trace_failure_predicate_records(
         trace,
         scenario_family=scenario_family,
+        matrix=matrix,
         clearance_threshold_m=clearance_threshold_m,
         near_miss_threshold_m=near_miss_threshold_m,
         stationary_displacement_threshold_m=stationary_displacement_threshold_m,
@@ -93,16 +212,24 @@ def extract_trace_failure_predicates(
         evasive_angular_velocity_threshold=evasive_angular_velocity_threshold,
         evasive_linear_drop_threshold_mps=evasive_linear_drop_threshold_mps,
     )
-    return _predicates_payload(trace=trace, predicates=predicates)
+    return _predicates_payload(trace=trace, predicates=predicates, matrix=matrix)
 
 
 def aggregate_trace_failure_predicate_tables(
     traces: Iterable[SimulationTraceExport],
     *,
     scenario_family: str | None = None,
+    matrix: Mapping[str, Any] | None = None,
     failed_trace_ids: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """Build denominator-aware aggregate rows across one or more trace predicates.
+
+    Args:
+        traces: Typed simulation trace exports.
+        scenario_family: Optional aggregate scenario-family label.
+        matrix: Optional predeclared trace-predicate benchmark matrix. When absent, outputs are
+            diagnostic-only and claim-ineligible.
+        failed_trace_ids: Trace IDs that failed to load.
 
     Returns:
         Aggregate rows grouped by scenario family, planner, seed, predicate ID,
@@ -132,6 +259,7 @@ def aggregate_trace_failure_predicate_tables(
         extracted_predicates = _extract_trace_failure_predicate_records(
             trace,
             scenario_family=group_family,
+            matrix=matrix,
             clearance_threshold_m=0.4,
             near_miss_threshold_m=0.5,
             stationary_displacement_threshold_m=0.05,
@@ -238,6 +366,7 @@ def aggregate_trace_failure_predicate_tables(
         if trace_status_counts[trace_key].get(VALIDITY_STATUS_VALID, 0) == 0
     ]
 
+    matrix_metadata = _matrix_metadata(matrix, included_traces=included_trace_count)
     return {
         "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
         "table_kind": "aggregate_by_predicate_group",
@@ -247,6 +376,7 @@ def aggregate_trace_failure_predicate_tables(
             "scenario_family_filter": scenario_family,
             "row_count": len(rows),
         },
+        "matrix_metadata": matrix_metadata,
         "rows": rows,
         "zero_predicate_groups": zero_predicate_groups,
         "predicate_denominator_health": {
@@ -304,6 +434,11 @@ def render_trace_failure_predicate_markdown(
         else build_trace_predicate_denominator_health_report(table_payload)
     )
 
+    matrix_metadata = table_payload.get("matrix_metadata")
+    matrix_name = (
+        matrix_metadata.get("matrix_name") if isinstance(matrix_metadata, Mapping) else None
+    )
+    matrix_status = matrix_metadata.get("status") if isinstance(matrix_metadata, Mapping) else None
     lines = [
         "# Trace Failure Predicate Table",
         "",
@@ -315,8 +450,12 @@ def render_trace_failure_predicate_markdown(
         f"- input traces: {summary.get('input_trace_count', 0)}",
         f"- table kind: {table_payload.get('table_kind', 'aggregate_by_predicate_group')}",
         f"- schema version: {table_payload.get('schema_version', TRACE_FAILURE_PREDICATE_SCHEMA_VERSION)}",
-        "",
     ]
+    if matrix_name:
+        lines.append(f"- matrix: {matrix_name}")
+    if matrix_status:
+        lines.append(f"- matrix status: {matrix_status}")
+    lines.append("")
 
     if not table_rows:
         lines.append("No predicate rows were observed in the provided traces.")
@@ -418,6 +557,11 @@ def build_trace_predicate_denominator_health_report(
     failed_trace_count = int(summary.get("failed_trace_count", 0) or 0)
     raw_health = table_payload.get("predicate_denominator_health")
     health_by_predicate = raw_health if isinstance(raw_health, Mapping) else {}
+    matrix_metadata = table_payload.get("matrix_metadata")
+    matrix_present = (
+        isinstance(matrix_metadata, Mapping)
+        and matrix_metadata.get("status") == MATRIX_STATUS_RATE_INTERPRETABLE
+    )
     predicate_reports: dict[str, dict[str, Any]] = {}
 
     for pred_id in TRACE_FAILURE_PREDICATE_IDS:
@@ -438,6 +582,9 @@ def build_trace_predicate_denominator_health_report(
             no_predicate_count=no_predicate_count,
             pipeline_failure_count=pipeline_failure_count,
         )
+        if not matrix_present:
+            claim_eligibility = MATRIX_CLAIM_INELIGIBLE
+            allowed_wording = f"{allowed_wording}; predeclared benchmark matrix is required"
         predicate_reports[pred_id] = {
             "total_denominator_count": total_count,
             "valid_count": valid_count,
@@ -452,6 +599,17 @@ def build_trace_predicate_denominator_health_report(
             "allowed_wording": allowed_wording,
         }
 
+    caveats = [
+        "This report is diagnostic-only and does not convert missing predicate evidence into negative findings.",
+        "`no_predicate_observed` can be expected missingness; it is not evidence that a failure did not occur.",
+        "`not_available` and `pipeline_failure` weaken or block downstream figure/table claims.",
+    ]
+    if not matrix_present:
+        caveats.append(
+            "No predeclared benchmark matrix was provided or the matrix status is not "
+            f"`{MATRIX_STATUS_RATE_INTERPRETABLE}`; this report is claim-ineligible."
+        )
+
     return {
         "schema_version": TRACE_PREDICATE_DENOMINATOR_HEALTH_SCHEMA_VERSION,
         "report_kind": "trace_predicate_denominator_health",
@@ -461,11 +619,7 @@ def build_trace_predicate_denominator_health_report(
             "predicate_family_count": len(TRACE_FAILURE_PREDICATE_IDS),
         },
         "predicates": predicate_reports,
-        "caveats": [
-            "This report is diagnostic-only and does not convert missing predicate evidence into negative findings.",
-            "`no_predicate_observed` can be expected missingness; it is not evidence that a failure did not occur.",
-            "`not_available` and `pipeline_failure` weaken or block downstream figure/table claims.",
-        ],
+        "caveats": caveats,
     }
 
 
@@ -579,12 +733,23 @@ def _ratio(numerator: int, denominator: int) -> float:
 def _predicates_payload(
     trace: SimulationTraceExport,
     predicates: list[TraceFailurePredicate],
+    matrix: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Build the trace predicate payload schema.
 
     Returns:
         Normalized single-trace payload.
     """
+    matrix_metadata = _matrix_metadata(matrix, included_traces=1)
+    caveats = [
+        "Predicates are rule-based trace diagnostics, not benchmark rates or safety claims.",
+        f"`{VALIDITY_STATUS_UNAVAILABLE_DATA}` rows mark partial evidence with missing required fields.",
+    ]
+    if matrix is None:
+        caveats.append(
+            "No predeclared benchmark matrix was provided; this payload is diagnostic-only and "
+            "claim-ineligible."
+        )
     return {
         "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
         "predicate_source": TRACE_FAILURE_PREDICATE_SOURCE,
@@ -595,19 +760,110 @@ def _predicates_payload(
             "planner_id": trace.source.planner_id,
             "episode_id": trace.source.episode_id,
         },
+        "matrix_metadata": matrix_metadata,
         "predicates": [predicate.to_dict() for predicate in predicates],
         "summary": _summary(predicates),
-        "caveats": [
-            "Predicates are rule-based trace diagnostics, not benchmark rates or safety claims.",
-            f"`{VALIDITY_STATUS_UNAVAILABLE_DATA}` rows mark partial evidence with missing required fields.",
-        ],
+        "caveats": caveats,
     }
 
 
-def _extract_trace_failure_predicate_records(
+def _empty_frame(_trace: SimulationTraceExport) -> SimulationTraceFrame:
+    """Return a minimal frame for traces with no frames.
+
+    This is a defensive fallback for missing-field records on empty traces.
+    """
+    return SimulationTraceFrame(
+        step=0,
+        time_s=0.0,
+        robot={},
+        pedestrians=[],
+        planner={},
+    )
+
+
+def _matrix_metadata(matrix: Mapping[str, Any] | None, *, included_traces: int) -> dict[str, Any]:
+    """Build matrix metadata for aggregate payloads.
+
+    Returns:
+        Matrix status payload with claim-boundary wording.
+    """
+    if matrix is None:
+        return {
+            "schema_version": None,
+            "matrix_path": None,
+            "matrix_name": None,
+            "status": MATRIX_STATUS_DIAGNOSTIC_ONLY,
+            "claim_boundary": (
+                "No predeclared benchmark matrix was provided. These rows are diagnostic-only and "
+                "claim-ineligible; do not interpret them as benchmark rates."
+            ),
+            "rate_interpretation": "not_allowed",
+            "included_trace_count": included_traces,
+        }
+    status = str(matrix.get("status") or MATRIX_STATUS_PROPOSED)
+    rate_interpretation = (
+        "allowed_only_when_compliant"
+        if status == MATRIX_STATUS_RATE_INTERPRETABLE
+        else "not_allowed_until_matrix_is_promoted"
+    )
+    return {
+        "schema_version": matrix.get("schema_version"),
+        "matrix_path": matrix.get("_source_path"),
+        "matrix_name": matrix.get("name"),
+        "status": status,
+        "claim_boundary": matrix.get("claim_boundary", ""),
+        "rate_interpretation": rate_interpretation,
+        "included_trace_count": included_traces,
+    }
+
+
+def _unavailable_predicates_for_missing_fields(
+    trace: SimulationTraceExport,
+    matrix: Mapping[str, Any] | None,
+) -> dict[str, list[str]]:
+    """Map predicate IDs to their missing required fields when a matrix is supplied.
+
+    Returns:
+        Mapping from predicate ID to list of missing dotted trace field paths.
+    """
+    unavailable: dict[str, list[str]] = {}
+    for pred_id in TRACE_FAILURE_PREDICATE_IDS:
+        missing = _missing_required_fields(trace, pred_id, matrix)
+        if missing:
+            unavailable[pred_id] = missing
+    return unavailable
+
+
+def _append_not_available_predicates(
+    predicates: list[TraceFailurePredicate],
+    trace: SimulationTraceExport,
+    scenario_family: str,
+    unavailable: dict[str, list[str]],
+) -> None:
+    """Append one not_available predicate per missing-field declaration."""
+    start_frame = trace.frames[0] if trace.frames else _empty_frame(trace)
+    end_frame = trace.frames[-1] if trace.frames else _empty_frame(trace)
+    for pred_id, missing in unavailable.items():
+        predicates.append(
+            _predicate(
+                pred_id,
+                start_frame,
+                end_frame,
+                scenario_family=scenario_family,
+                planner_id=trace.source.planner_id,
+                involved_actors=["robot"],
+                evidence_fields={"missing_fields": missing},
+                severity=VALIDITY_STATUS_UNAVAILABLE_DATA,
+                validity_status=VALIDITY_STATUS_UNAVAILABLE_DATA,
+            )
+        )
+
+
+def _extract_trace_failure_predicate_records(  # noqa: C901, PLR0913
     trace: SimulationTraceExport,
     *,
     scenario_family: str | None,
+    matrix: Mapping[str, Any] | None,
     clearance_threshold_m: float,
     near_miss_threshold_m: float,
     stationary_displacement_threshold_m: float,
@@ -617,49 +873,67 @@ def _extract_trace_failure_predicate_records(
 ) -> list[TraceFailurePredicate]:
     """Extract a typed list of predicates for one trace.
 
+    When ``matrix`` is supplied, any predicate whose required trace fields are absent emits a
+    single ``not_available`` record instead of being silently treated as unobserved.
+
     Returns:
         Predicate records from one trace.
     """
     family = scenario_family or trace.source.scenario_id
     predicates: list[TraceFailurePredicate] = []
-    predicates.extend(
-        _clearance_critical_interactions(
+    unavailable = _unavailable_predicates_for_missing_fields(trace, matrix)
+
+    if unavailable:
+        _append_not_available_predicates(predicates, trace, family, unavailable)
+
+    # When the matrix-level required-field check already emitted an occlusion not_available row,
+    # skip per-frame extraction to avoid duplicate not_available rows.
+    occlusion_guarded = "occlusion_triggered_near_miss" in unavailable
+
+    if "clearance_critical_interaction" not in unavailable:
+        predicates.extend(
+            _clearance_critical_interactions(
+                trace,
+                scenario_family=family,
+                clearance_threshold_m=clearance_threshold_m,
+            )
+        )
+    if "late_evasive_reaction" not in unavailable:
+        late_evasive = _late_evasive_reaction(
             trace,
             scenario_family=family,
-            clearance_threshold_m=clearance_threshold_m,
+            near_miss_threshold_m=near_miss_threshold_m,
+            evasive_angular_velocity_threshold=evasive_angular_velocity_threshold,
+            evasive_linear_drop_threshold_mps=evasive_linear_drop_threshold_mps,
         )
-    )
-    late_evasive = _late_evasive_reaction(
-        trace,
-        scenario_family=family,
-        near_miss_threshold_m=near_miss_threshold_m,
-        evasive_angular_velocity_threshold=evasive_angular_velocity_threshold,
-        evasive_linear_drop_threshold_mps=evasive_linear_drop_threshold_mps,
-    )
-    if late_evasive is not None:
-        predicates.append(late_evasive)
-    oscillation = _oscillatory_local_control(
-        trace,
-        scenario_family=family,
-        min_sign_changes=oscillation_min_sign_changes,
-    )
-    if oscillation is not None:
-        predicates.append(oscillation)
-    zero_motion = _zero_motion_timeout_behavior(
-        trace,
-        scenario_family=family,
-        stationary_displacement_threshold_m=stationary_displacement_threshold_m,
-    )
-    if zero_motion is not None:
-        predicates.append(zero_motion)
-    predicates.extend(_bottleneck_deadlocks(trace, scenario_family=family))
-    occlusion = _occlusion_triggered_near_miss(
-        trace,
-        scenario_family=family,
-        near_miss_threshold_m=near_miss_threshold_m,
-    )
-    if occlusion is not None:
-        predicates.append(occlusion)
+        if late_evasive is not None:
+            predicates.append(late_evasive)
+    if "oscillatory_local_control" not in unavailable:
+        oscillation = _oscillatory_local_control(
+            trace,
+            scenario_family=family,
+            min_sign_changes=oscillation_min_sign_changes,
+        )
+        if oscillation is not None:
+            predicates.append(oscillation)
+    if "zero_motion_timeout_behavior" not in unavailable:
+        zero_motion = _zero_motion_timeout_behavior(
+            trace,
+            scenario_family=family,
+            stationary_displacement_threshold_m=stationary_displacement_threshold_m,
+        )
+        if zero_motion is not None:
+            predicates.append(zero_motion)
+    if "bottleneck_deadlock" not in unavailable:
+        predicates.extend(_bottleneck_deadlocks(trace, scenario_family=family))
+    if not occlusion_guarded:
+        occlusion = _occlusion_triggered_near_miss(
+            trace,
+            scenario_family=family,
+            near_miss_threshold_m=near_miss_threshold_m,
+        )
+        if occlusion is not None:
+            predicates.append(occlusion)
     return predicates
 
 
@@ -1090,9 +1364,15 @@ def _markdown_float(value: Any) -> float:
 
 
 __all__ = [
+    "MATRIX_CLAIM_ELIGIBLE",
+    "MATRIX_CLAIM_INELIGIBLE",
+    "MATRIX_STATUS_DIAGNOSTIC_ONLY",
+    "MATRIX_STATUS_PROPOSED",
+    "MATRIX_STATUS_RATE_INTERPRETABLE",
     "TRACE_FAILURE_PREDICATE_IDS",
     "TRACE_FAILURE_PREDICATE_SCHEMA_VERSION",
     "TRACE_FAILURE_PREDICATE_SOURCE",
+    "TRACE_PREDICATE_MATRIX_SCHEMA_VERSION",
     "VALIDITY_STATUS_NO_PREDICATE_OBSERVED",
     "VALIDITY_STATUS_PIPELINE_FAILURE",
     "VALIDITY_STATUS_UNAVAILABLE_DATA",
@@ -1101,5 +1381,7 @@ __all__ = [
     "aggregate_trace_failure_predicate_tables",
     "build_trace_predicate_denominator_health_report",
     "extract_trace_failure_predicates",
+    "load_trace_predicate_matrix",
+    "matrix_required_fields_for_predicate",
     "render_trace_failure_predicate_markdown",
 ]

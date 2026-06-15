@@ -1212,6 +1212,10 @@ entries:
     status: current
     freshness: evidence
     area: manual_control_trace
+  - path: docs/context/issue_2688_trace_predicate_matrix.md
+    status: current
+    freshness: maintained
+    area: manual_control_trace
   - path: docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/summary.json
     status: evidence
     freshness: evidence

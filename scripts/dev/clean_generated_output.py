@@ -64,13 +64,26 @@ def _remove_path(path: Path) -> None:
         path.unlink(missing_ok=True)
 
 
+def _contains_tracked_children(path: Path, repo_root: Path) -> bool:
+    """Return whether *path* is a directory with tracked children."""
+    if not path.is_dir() or path.is_symlink():
+        return False
+    rel = path.relative_to(repo_root).as_posix()
+    return bool(_git(["ls-files", "--", rel], cwd=repo_root).stdout.strip())
+
+
 def _remove_empty_dirs(root: Path, repo_root: Path) -> None:
     """Remove empty untracked directories left after generated files are removed."""
     if not root.exists() or not root.is_dir():
         return
-    for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+    for dirpath, _, _ in os.walk(root, topdown=False):
         path = Path(dirpath)
-        if filenames or dirnames:
+        if path == repo_root:
+            continue
+        try:
+            if any(path.iterdir()):
+                continue
+        except OSError:
             continue
         rel = path.relative_to(repo_root).as_posix()
         tracked = _git(["ls-files", "--error-unmatch", rel], cwd=repo_root)
@@ -119,6 +132,8 @@ def clean_paths(paths: list[Path], *, cwd: Path) -> int:
         }
         for target in sorted(generated, key=lambda item: len(item.parts), reverse=True):
             if target.exists() and _is_within(target, repo_root):
+                if _contains_tracked_children(target, repo_root):
+                    continue
                 _remove_path(target)
                 cleaned += 1
         _remove_empty_dirs(path, repo_root)

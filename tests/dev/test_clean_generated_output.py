@@ -60,3 +60,43 @@ def test_clean_paths_removes_untracked_output_tree(tmp_path: Path) -> None:
     assert clean_paths([Path("output/coverage")], cwd=repo) == 0
 
     assert not generated_dir.exists()
+
+
+def test_clean_paths_preserves_force_tracked_file_in_ignored_directory(tmp_path: Path) -> None:
+    """Ignored directories may contain force-tracked files that cleanup must preserve."""
+    repo = tmp_path / "repo"
+    ignored_dir = repo / "output" / "reports"
+    ignored_dir.mkdir(parents=True)
+    (ignored_dir / "keep.md").write_text("tracked\n", encoding="utf-8")
+    (ignored_dir / "generated.json").write_text("{}\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("output/reports/\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    _git(repo, "add", ".gitignore")
+    _git(repo, "add", "-f", "output/reports/keep.md")
+    _git(repo, "-c", "user.name=CI", "-c", "user.email=ci@example.com", "commit", "-m", "seed")
+
+    assert clean_paths([Path("output/reports")], cwd=repo) == 0
+
+    assert (ignored_dir / "keep.md").exists()
+    assert not (ignored_dir / "generated.json").exists()
+    assert _git(repo, "status", "--short").stdout.strip() == ""
+
+
+def test_clean_paths_removes_nested_empty_generated_directories(tmp_path: Path) -> None:
+    """Cleanup should remove parent directories that become empty during traversal."""
+    repo = tmp_path / "repo"
+    tracked_dir = repo / "output" / "repos"
+    nested_dir = tracked_dir / "tmp" / "nested"
+    nested_dir.mkdir(parents=True)
+    (tracked_dir / "README.md").write_text("tracked\n", encoding="utf-8")
+    (nested_dir / "generated.json").write_text("{}\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("output/repos/tmp/\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    _git(repo, "add", ".gitignore", "output/repos/README.md")
+    _git(repo, "-c", "user.name=CI", "-c", "user.email=ci@example.com", "commit", "-m", "seed")
+
+    assert clean_paths([Path("output/repos")], cwd=repo) == 0
+
+    assert (tracked_dir / "README.md").exists()
+    assert not (tracked_dir / "tmp").exists()
+    assert _git(repo, "status", "--short").stdout.strip() == ""

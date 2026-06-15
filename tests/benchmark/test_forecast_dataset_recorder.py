@@ -12,6 +12,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
 )
 from robot_sf.benchmark.forecast_dataset_recorder import (
     FORECAST_DATASET_SCHEMA_VERSION,
+    _pedestrian_by_id,
     record_forecast_dataset_from_trace_exports,
     validate_forecast_dataset_manifest,
 )
@@ -176,3 +177,33 @@ def test_recorder_rows_use_trace_source_metadata(tmp_path: Path) -> None:
     assert first_row["seed"] == trace.source.seed
     assert first_row["planner_id"] == trace.source.planner_id
     assert first_row["episode_id"] == trace.source.episode_id
+
+
+def test_recorder_uses_nearest_timestamp_for_irregular_frame_spacing(tmp_path: Path) -> None:
+    """Future labels should align by time instead of assuming constant frame indexes."""
+    payload = load_simulation_trace_export(TRACE_FIXTURES[0]).to_dict()
+    payload["frames"].append(dict(payload["frames"][1]))
+    payload["frames"][1]["step"] = 1
+    payload["frames"][1]["time_s"] = 0.07
+    payload["frames"][1]["pedestrians"][0]["position"] = [7.0, 0.0]
+    payload["frames"][2]["step"] = 2
+    payload["frames"][2]["time_s"] = 0.1
+    payload["frames"][2]["pedestrians"][0]["position"] = [10.0, 0.0]
+    path = tmp_path / "irregular_trace.json"
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = record_forecast_dataset_from_trace_exports(
+        [path],
+        tmp_path,
+        feature_schema=_feature_schema(),
+        horizons_s=[0.1],
+    )
+    first_row = json.loads(result.dataset_path.read_text(encoding="utf-8").splitlines()[0])
+
+    assert first_row["label"]["future_positions_m"] == [[10.0, 0.0]]
+
+
+def test_pedestrian_lookup_does_not_match_missing_ids_to_none_actor_id() -> None:
+    """Missing target ids should not stringify to a false actor-id match."""
+    assert _pedestrian_by_id([{"position": [0.0, 0.0]}], "None") is None
+    assert _pedestrian_by_id([{"id": 0, "position": [0.0, 0.0]}], "0") is not None

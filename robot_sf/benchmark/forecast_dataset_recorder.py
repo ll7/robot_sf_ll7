@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from bisect import bisect_left
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -134,6 +135,7 @@ def _build_dataset_rows(
     for trace in traces:
         trace_dict = _trace_dict_for_adapter(trace)
         dt_s = _trace_dt_s(trace)
+        frame_times = [frame.time_s for frame in trace.frames]
         for frame_index, frame in enumerate(trace.frames):
             try:
                 observed = adapter.adapt_trace(
@@ -154,6 +156,7 @@ def _build_dataset_rows(
                     start_index=frame_index,
                     horizons_s=horizons_s,
                     dt_s=dt_s,
+                    frame_times=frame_times,
                 )
                 if future_positions is None:
                     continue
@@ -314,11 +317,20 @@ def _future_positions(
     start_index: int,
     horizons_s: Sequence[float],
     dt_s: float,
+    frame_times: list[float] | None = None,
 ) -> list[list[float]] | None:
     positions: list[list[float]] = []
+    start_time = trace.frames[start_index].time_s
     for horizon_s in horizons_s:
-        target_index = start_index + round(float(horizon_s) / dt_s)
-        if target_index >= len(trace.frames):
+        if frame_times is None:
+            target_index = start_index + round(float(horizon_s) / dt_s)
+        else:
+            target_index = _nearest_frame_index(
+                frame_times,
+                target_time=start_time + float(horizon_s),
+                tolerance_s=dt_s * 0.5,
+            )
+        if target_index is None or target_index >= len(trace.frames):
             return None
         target = _pedestrian_by_id(trace.frames[target_index].pedestrians, actor_id)
         if target is None:
@@ -327,11 +339,36 @@ def _future_positions(
     return positions
 
 
+def _nearest_frame_index(
+    frame_times: Sequence[float],
+    *,
+    target_time: float,
+    tolerance_s: float,
+) -> int | None:
+    """Return the nearest frame index within tolerance of the target time."""
+    insert_at = bisect_left(frame_times, target_time)
+    candidates = []
+    if insert_at < len(frame_times):
+        candidates.append(insert_at)
+    if insert_at > 0:
+        candidates.append(insert_at - 1)
+    if not candidates:
+        return None
+    nearest = min(candidates, key=lambda index: abs(frame_times[index] - target_time))
+    if abs(frame_times[nearest] - target_time) > tolerance_s:
+        return None
+    return nearest
+
+
 def _pedestrian_by_id(
     pedestrians: Iterable[dict[str, Any]], actor_id: str
 ) -> dict[str, Any] | None:
     for pedestrian in pedestrians:
-        if str(pedestrian.get("id")) == actor_id or str(pedestrian.get("actor_id")) == actor_id:
+        pedestrian_id = pedestrian.get("id")
+        pedestrian_actor_id = pedestrian.get("actor_id")
+        if (pedestrian_id is not None and str(pedestrian_id) == actor_id) or (
+            pedestrian_actor_id is not None and str(pedestrian_actor_id) == actor_id
+        ):
             return pedestrian
     return None
 
@@ -362,17 +399,25 @@ def _validate_horizons(horizons_s: Sequence[float]) -> list[float]:
 
 def _write_jsonl(path: Path, rows: Sequence[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
-        encoding="utf-8",
-    )
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        tmp_path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+            encoding="utf-8",
+        )
+        tmp_path.replace(path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp_path.replace(path)
+    try:
+        tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        tmp_path.replace(path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 __all__ = [

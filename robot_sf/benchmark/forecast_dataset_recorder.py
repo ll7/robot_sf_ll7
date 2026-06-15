@@ -132,6 +132,14 @@ def _build_dataset_rows(
     feature_schema: dict[str, Any],
     horizons_s: list[float],
 ) -> list[dict[str, Any]]:
+    """Build supervised forecast rows from traces using the requested observation adapter.
+
+    Frames without observable actors, missing future labels, or missing future actor states are
+    skipped so emitted rows always contain both model input provenance and complete labels.
+
+    Returns:
+        JSON-serializable supervised forecast rows.
+    """
     rows: list[dict[str, Any]] = []
     for trace in traces:
         trace_dict = _trace_dict_for_adapter(trace)
@@ -147,6 +155,7 @@ def _build_dataset_rows(
                     step_index=frame_index,
                 )
             except ValueError as exc:
+                # Empty observed frames are valid trace states, but not supervised examples.
                 if "actor_ids must be non-empty" in str(exc):
                     continue
                 raise
@@ -160,6 +169,7 @@ def _build_dataset_rows(
                     frame_times=frame_times,
                 )
                 if future_positions is None:
+                    # Drop rows that cannot provide a complete label at every requested horizon.
                     continue
                 rows.append(
                     {
@@ -320,6 +330,11 @@ def _future_positions(
     dt_s: float,
     frame_times: list[float] | None = None,
 ) -> list[list[float]] | None:
+    """Return complete future actor positions or None when any horizon lacks a label.
+
+    When frame timestamps are supplied, targets use nearest-frame lookup within half a nominal
+    step, which keeps labels robust to minor trace timing irregularity without extrapolation.
+    """
     positions: list[list[float]] = []
     start_time = trace.frames[start_index].time_s
     for horizon_s in horizons_s:

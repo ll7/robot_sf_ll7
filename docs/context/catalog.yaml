@@ -605,6 +605,10 @@ entries:
     status: current
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2689_release_evidence_handoff_2026_06_15.md
+    status: current
+    freshness: dated
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_spec.json
     status: evidence
     freshness: evidence

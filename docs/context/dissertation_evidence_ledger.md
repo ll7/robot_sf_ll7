@@ -74,17 +74,33 @@ explicitly blocked from manuscript promotion.
 
 ### 4. Prediction
 
+#### Forecast-lane supported claim boundaries
+
 | Field | Value |
 |---|---|
-| **Claim** | The probabilistic prediction interface is merged and the contract smoke emits native/fail-closed rows for reactive, single-trajectory, multimodal-equal-weight, and multimodal-confidence-weighted rows, but no planner-campaign comparison has been executed. |
+| **Claim** | The forecast lane now has scaffolded support for typed `ForecastBatch.v1` artifacts, observation-tier separation via adapters, probabilistic forecast and calibration metrics, deterministic baseline comparison rows, dataset/split scaffolding, transferability tooling, conformal pilot support, and a closed-loop coupling gate recommendation. |
 | **Artifact status** | current |
 | **Evidence tier** | diagnostic |
-| **Allowed wording** | "The repository has a merged probabilistic prediction interface and a contract-smoke runner that materializes native and fail-closed row shapes for multimodal prediction configurations." |
-| **Caveat** | This is contract evidence only. The runner uses deterministic fixtures, does not execute a planner campaign, and does not measure prediction quality or compare planning performance. |
-| **Source PR/issue** | [#2475](issue_2475_probabilistic_prediction_interface.md), [#2476](issue_2476_multimodal_prediction_benchmark.md), [#2496](issue_2496_multimodal_prediction_smoke.md) |
+| **Allowed wording** | "The repository now supports forecast-lane infrastructure for typed artifact contracts, observation tiers, probabilistic metric pipelines, deterministic baselines, dataset-level provenance, transfer diagnostics, uncertainty pilots, and a closed-loop coupling gate." |
+| **Caveat** | Current evidence is infrastructure and diagnostic in nature: it marks what is implemented and what the next coupling step reports, but it is not yet benchmark- or paper-grade claim support. |
+| **Source PR/issue** | [#2761](https://github.com/ll7/robot_sf_ll7/issues/2761), [#2835](https://github.com/ll7/robot_sf_ll7/issues/2835), [#2836](https://github.com/ll7/robot_sf_ll7/issues/2836), [#2838](https://github.com/ll7/robot_sf_ll7/issues/2838), [#2839](https://github.com/ll7/robot_sf_ll7/issues/2839), [#2840](https://github.com/ll7/robot_sf_ll7/issues/2840), [#2841](https://github.com/ll7/robot_sf_ll7/issues/2841), [#2842](https://github.com/ll7/robot_sf_ll7/issues/2842), [#2843](https://github.com/ll7/robot_sf_ll7/issues/2843), [#2846](https://github.com/ll7/robot_sf_ll7/issues/2846), [#2847](https://github.com/ll7/robot_sf_ll7/issues/2847); local routing: [forecast schema](issue_2836_forecast_batch_schema.md), [prediction lane](../ai/prediction_lane.md), [dependency graph](prediction_lane_dependency_graph.json) |
 | **Dissertation chapter** | Methods, Outlook |
-| **Claim gap** | Requires executed planner campaign with reactive, single-trajectory, and multimodal rows; matched metrics (success, collision, min-ped-distance, time-to-goal); and fail-closed row handling before any benchmark claim. |
-| **Evidence promotion path** | **denominator repair**: an executed planner campaign with matched metrics and fail-closed row handling is required before any benchmark claim. |
+| **Claim gap** | Requires a transfer-aware, same-seed closed-loop campaign that compares forecast-enabled planners to deterministic and baseline modes using calibrated, fail-closed, and same-denominator metrics. |
+| **Evidence promotion path** | **benchmark promotion**: requires executed transfer-aware closed-loop comparison rows with calibrated ADE/FDE/miss-rate and collision/progress metrics. |
+
+#### Forecast-lane unsupported claim boundaries
+
+| Field | Value |
+|---|---|
+| **Claim** | No durable evidence yet shows that forecast integration improves local-navigation safety, route progress, or transfer robustness; current results classify these outcomes as unsupported or mixed. |
+| **Artifact status** | current |
+| **Evidence tier** | diagnostic |
+| **Allowed wording** | "Forecast artifacts and tooling are in place, but forecast-driven gains in safety, progress, or transfer performance are not established." |
+| **Caveat** | Forecast coupling and transfer diagnostics currently show mixed or insufficient evidence (#2843 revise recommendation; mixed baseline-point results in #2781; transferability matrix is not a safety proof). |
+| **Source PR/issue** | [#2761](https://github.com/ll7/robot_sf_ll7/issues/2761), [#2835](https://github.com/ll7/robot_sf_ll7/issues/2835), [#2781](https://github.com/ll7/robot_sf_ll7/issues/2781), [#2843](https://github.com/ll7/robot_sf_ll7/issues/2843), [#2847](https://github.com/ll7/robot_sf_ll7/issues/2847); local routing: [dependency graph](prediction_lane_dependency_graph.json) |
+| **Dissertation chapter** | Discussion, Outlook |
+| **Claim gap** | Requires transfer-aware transferability campaigns with false-positive accounting, non-regression on success/progress, and statistical uncertainty before any safety/progress claim. |
+| **Evidence promotion path** | **transfer-aware closed-loop promotion**: run transfer-focused closed-loop planner campaigns with matched deterministic baselines and explicit safety/progress deltas before promoting this claim. |
 
 ### 5. Pedestrian-Density Stress
 
@@ -130,11 +146,15 @@ explicitly blocked from manuscript promotion.
    describe infrastructure readiness. Do not cite as traffic-signal compliance or planner ranking.
 3. **Observation robustness**: Methods only. Use the observation-level vocabulary to describe
    benchmark contract discipline. Do not cite as perception or sim-to-real validity.
-4. **Prediction**: Methods/Outlook only. Use the merged interface and contract smoke to
-   describe infrastructure readiness. Do not cite as prediction-quality or planner-improvement evidence.
-5. **Pedestrian-density stress**: Methods/Limitations only. Use coverage entropy to describe
+4. **Prediction supported boundary**: Methods, Outlook only. Use the forecast-lane scaffold
+   evidence (artifacts, adapters, metrics, baselines, transferability tooling, conformal pilots,
+   and coupling gates) to describe infrastructure readiness. Do not cite as safety/progress results.
+5. **Prediction unsupported boundary**: Discussion/Outlook only. Do not claim forecast-driven
+   safety, progress, or transfer gains until transfer-aware closed-loop planner evidence is
+   published with explicit false-positive and regression accounting.
+6. **Pedestrian-density stress**: Methods/Limitations only. Use coverage entropy to describe
    scenario curation discipline. Do not cite as runtime stress or planner-ranking evidence.
-6. **Exported tables**: Blocked. Do not use until payload files are recovered or re-exported.
+7. **Exported tables**: Blocked. Do not use until payload files are recovered or re-exported.
 
 ## Claim Boundaries
 

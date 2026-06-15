@@ -5,7 +5,12 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from scripts.dev.snapshot_issue_batch import expand_issue_numbers, main, snapshot_issues
+from scripts.dev.snapshot_issue_batch import (
+    expand_issue_numbers,
+    main,
+    snapshot_claimable_issues,
+    snapshot_issues,
+)
 
 
 def test_expand_issue_numbers_treats_two_values_as_range() -> None:
@@ -105,3 +110,74 @@ def test_snapshot_issues_can_write_context_capsules(tmp_path) -> None:  # type: 
     assert capsule["issue"]["number"] == 2666
     assert capsule["claim"]["claimed"] is True
     assert capsule["files_to_read"] == ["docs/context/INDEX.md"]
+
+
+def test_snapshot_claimable_issues_includes_classification_without_body() -> None:
+    """Claimable discovery should return compact entries without raw body data."""
+    issue_list = [
+        {
+            "number": 2667,
+            "title": "claimable issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2667",
+            "labels": [{"name": "workflow"}],
+            "assignees": [],
+            "body": "secret body that should not appear",
+        },
+        {
+            "number": 2668,
+            "title": "blocked issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2668",
+            "labels": [{"name": "state:blocked"}],
+            "assignees": [],
+            "body": "another secret body that should not appear",
+        },
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+            claim.side_effect = [
+                {"ok": True, "claimed": False, "claim_ref": "agent-claims/issue-2667", "sha": None},
+                {"ok": True, "claimed": False, "claim_ref": "agent-claims/issue-2668", "sha": None},
+            ]
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=2,
+            )
+
+    assert payload["mode"] == "claimable"
+    assert payload["issues"][0]["classification"] == "claimable"
+    assert payload["issues"][0]["body_excerpt"] == ""
+    assert payload["issues"][0]["body_truncated"] is False
+    assert payload["issues"][1]["classification"] == "blocked_label"
+    assert "reason" in payload["issues"][1]
+
+
+def test_main_claimable_mode_can_be_called_without_issue_numbers() -> None:  # type: ignore[no-untyped-def]
+    """CLI should run compact claim discovery when issue numbers are intentionally omitted."""
+    issue_list = [
+        {
+            "number": 2669,
+            "title": "no-arg mode issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2669",
+            "labels": [],
+            "assignees": [],
+        }
+    ]
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+            claim.return_value = {
+                "ok": True,
+                "claimed": False,
+                "claim_ref": "agent-claims/issue-2669",
+                "sha": None,
+            }
+            rc = main(["--claimable", "--json", "--limit", "1"])
+
+    assert rc == 0

@@ -1,0 +1,11 @@
+{
+  "blocked_mode_count": 3,
+  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "false_positive_stopping_avoided": true,
+  "false_positive_unnecessary_slowdown_count": 0,
+  "issue": 2869,
+  "mode_count": 5,
+  "recommendation": "wait",
+  "route_progress_tradeoff": 0.8,
+  "schema_version": "forecast_risk_calibration_filter.diagnostic_comparison.v1"
+}

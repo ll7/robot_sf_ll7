@@ -75,6 +75,7 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 | Issue #2781 | closed | Interaction-aware baseline | Mixed result: likelihood proxy improved while 1s point accuracy worsened. |
 | Issue #2843 | closed | Closed-loop coupling gate | Latest recommendation: `revise` before learned predictor training. |
 | Issue #2759 | closed | Forecast risk scoring | Opt-in diagnostic risk channel for `PolicyStackV1`; default remains off. |
+| Issue #2869 | closed | Forecast risk calibration filter | Diagnostic comparison of five risk modes; `calibration_filtered`, `actor_class_aware`, and `observation_tier_aware` are blocked by Issue #2865. Recommendation: `wait`. |
 | Issue #2727 | closed | Fast dynamic actor fixture | Enables future actor-class forecast denominator work. |
 | Issue #2840 | closed | Probabilistic forecast metrics | Metric surface for deterministic/probabilistic forecast comparison. |
 | Issue #2846 | closed | Fast dynamic actor forecast metrics | Separates pedestrian and fast-agent denominators. |
@@ -120,6 +121,9 @@ Use the smallest command that matches the changed surface:
 - Forecast-risk scoring diagnostic:
   `uv run pytest tests/planner/test_policy_stack_v1.py tests/validation/test_forecast_risk_policy_stack.py`
   and `uv run python scripts/validation/validate_forecast_risk_policy_stack.py --out-dir <dir>`
+- Forecast-risk calibration-filter diagnostic (issue #2869):
+  `uv run pytest tests/validation/test_forecast_risk_calibration_filter.py`
+  and `uv run python scripts/validation/validate_forecast_risk_calibration_filter.py --out-dir <dir>`
 - Closed-loop coupling gate:
   `uv run pytest tests/validation/test_closed_loop_forecast_coupling_gate.py` and
   `uv run python scripts/validation/validate_closed_loop_forecast_coupling_gate.py --out-dir <dir>`

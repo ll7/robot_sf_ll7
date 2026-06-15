@@ -398,6 +398,13 @@ Policy caveats:
   false_positive_suppresses_penalty (penalty suppressed, goal retained with zero unnecessary
   slowdown count).
   claim_boundary=diagnostic_only_not_benchmark_evidence. Not a safety or live benchmark claim.
+- `issue_2869_forecast_risk_calibration_filter_2026-06-15/`: diagnostic-only comparison of
+  five forecast-risk scoring modes (`no_risk`, `raw_risk`, `calibration_filtered`,
+  `actor_class_aware`, `observation_tier_aware`) before trusting planner coupling. Uses the
+  Issue #2865 calibration report to mark `calibration_filtered`, `actor_class_aware`, and
+  `observation_tier_aware` as blocked. Tradeoffs include route-progress reduction and
+  false-positive stopping avoidance. Recommendation: `wait`.
+  claim_boundary=diagnostic_only_not_benchmark_evidence. Not a safety or live benchmark claim.
 - `issue_2866_transferability_matrix_rows/`: tracked bounded-input evidence for the Issue #2866
   transferability matrix follow-up, including generated JSON/Markdown matrix output with explicit
   observation-tier, actor-class, scenario-family, horizon, semantic-metadata, and blocked-cell rows.

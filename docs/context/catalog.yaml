@@ -1408,6 +1408,22 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2843_closed_loop_forecast_coupling_gate_2026-06-15/gate_report.json
     status: evidence
     freshness: evidence

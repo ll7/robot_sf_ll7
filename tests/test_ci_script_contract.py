@@ -401,6 +401,20 @@ def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
     assert 'exec uv run "${cmd[@]}"' in script_text
 
 
+def test_worktree_shared_venv_helper_isolates_linked_worktree_coverage() -> None:
+    """Linked worktrees should not share the default coverage database."""
+    script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+
+    assert 'if [[ -z "${COVERAGE_FILE:-}" && "$git_common_dir" != "$repo_root/.git" ]]' in (
+        script_text
+    )
+    assert "git hash-object --stdin" in script_text
+    assert "cut -c1-12" in script_text
+    assert 'export COVERAGE_FILE="$repo_root/output/coverage/.coverage.${worktree_id}"' in (
+        script_text
+    )
+
+
 def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
     """The shared-venv helper should be shell-valid and document its safety boundary."""
     syntax = subprocess.run(
@@ -425,6 +439,7 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
     assert "PYTHONPATH=$PWD" in help_result.stdout
     assert "UV_PROJECT_ENVIRONMENT" in help_result.stdout
     assert "UV_NO_SYNC=1" in help_result.stdout
+    assert "COVERAGE_FILE" in help_result.stdout
     assert "full local .venv" in help_result.stdout
 
 
@@ -707,6 +722,7 @@ def test_run_tests_parallel_help_does_not_invoke_pytest(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     assert "Usage:" in result.stdout
+    assert "COVERAGE_FILE" in result.stdout
     assert "uv should not be called" not in result.stderr
 
 

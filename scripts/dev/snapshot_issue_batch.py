@@ -13,8 +13,19 @@ from typing import Any
 from scripts.dev.issue_claim import status_issue
 
 BODY_EXCERPT_CHARS = 300
+DEFAULT_CLAIMABLE_LIMIT = 20
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
+UNCLAIMABLE_LABELS = {
+    "blocked",
+    "decision-required",
+    "duplicate",
+    "invalid",
+    "state:blocked",
+    "state:hold",
+    "state:running",
+    "wontfix",
+}
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -51,6 +62,24 @@ def _assignees(issue: dict[str, Any]) -> list[str]:
         for user in issue.get("assignees", [])
         if isinstance(user, dict) and user.get("login")
     )
+
+
+def _issue_classification(
+    *,
+    assignees: list[str],
+    claim: dict[str, Any],
+    labels: list[str],
+) -> tuple[str, str]:
+    """Return a short claimability classification and rationale."""
+    if assignees:
+        return "assigned", "assigned; skip auto-claim"
+    if any(label in UNCLAIMABLE_LABELS for label in labels):
+        return "blocked_label", "label suggests skip in autonomous claim mode"
+    if claim.get("ok") is False:
+        return "claim_unknown", "unable to read claim state"
+    if claim.get("claimed"):
+        return "claimed", "already claimed by another worker"
+    return "claimable", "open, unassigned, and unclaimed"
 
 
 def _body_excerpt(body: Any, *, limit: int) -> tuple[str, bool]:
@@ -96,8 +125,14 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
     except json.JSONDecodeError as exc:
         return {"number": number, "status": "error", "error": f"invalid gh JSON: {exc}"}
     labels = _labels(issue)
-    excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
+    assignees = _assignees(issue)
     claim = status_issue(number, remote=remote)
+    classification, reason = _issue_classification(
+        assignees=assignees,
+        claim=claim,
+        labels=labels,
+    )
+    excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
     return {
         "number": issue.get("number", number),
         "status": "ok",
@@ -105,7 +140,7 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         "state": issue.get("state", ""),
         "url": issue.get("url", ""),
         "labels": labels,
-        "assignees": _assignees(issue),
+        "assignees": assignees,
         "body_excerpt": excerpt,
         "body_truncated": truncated,
         "claim": {
@@ -114,10 +149,121 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
             "claim_ref": claim.get("claim_ref"),
             "sha": claim.get("sha"),
         },
+        "classification": classification,
+        "reason": reason,
         "linked_prs": [],
         "recommended_context_pack": _recommended_context_pack(
             int(issue.get("number", number)), labels, str(issue.get("title", ""))
         ),
+    }
+
+
+def _snapshot_from_issue_list(issue: dict[str, Any], *, remote: str) -> dict[str, Any]:
+    """Build an issue snapshot using preloaded issue fields."""
+    try:
+        number = int(issue.get("number"))
+    except (TypeError, ValueError):
+        return {"status": "error", "error": "invalid issue number in gh list payload"}
+
+    labels = _labels(issue)
+    assignees = _assignees(issue)
+    claim = status_issue(number, remote=remote)
+    classification, reason = _issue_classification(
+        assignees=assignees,
+        claim=claim,
+        labels=labels,
+    )
+    return {
+        "number": number,
+        "status": "ok",
+        "title": issue.get("title", ""),
+        "state": issue.get("state", ""),
+        "url": issue.get("url", ""),
+        "labels": labels,
+        "assignees": assignees,
+        "claim": {
+            "ok": claim.get("ok"),
+            "claimed": claim.get("claimed"),
+            "claim_ref": claim.get("claim_ref"),
+            "sha": claim.get("sha"),
+        },
+        "body_excerpt": "",
+        "body_truncated": False,
+        "classification": classification,
+        "reason": reason,
+        "linked_prs": [],
+    }
+
+
+def snapshot_claimable_issues(
+    *, repo: str, remote: str, body_limit: int, limit: int
+) -> dict[str, Any]:
+    """Return a compact claimable/open issue snapshot."""
+    result = _gh(
+        [
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--limit",
+            str(limit),
+            "--json",
+            "number,title,state,labels,url,assignees",
+        ]
+    )
+    if result.returncode != 0:
+        return {
+            "schema": "issue_batch_snapshot.v1",
+            "repo": repo,
+            "body_excerpt_chars": body_limit,
+            "mode": "claimable",
+            "issues": [
+                {
+                    "status": "error",
+                    "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+                }
+            ],
+        }
+    try:
+        listed = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return {
+            "schema": "issue_batch_snapshot.v1",
+            "repo": repo,
+            "body_excerpt_chars": body_limit,
+            "mode": "claimable",
+            "issues": [
+                {
+                    "status": "error",
+                    "error": f"invalid gh JSON: {exc}",
+                }
+            ],
+        }
+    if not isinstance(listed, list):
+        return {
+            "schema": "issue_batch_snapshot.v1",
+            "repo": repo,
+            "body_excerpt_chars": body_limit,
+            "mode": "claimable",
+            "issues": [
+                {
+                    "status": "error",
+                    "error": "expected gh issue list JSON array",
+                }
+            ],
+        }
+
+    issues = [_snapshot_from_issue_list(issue, remote=remote) for issue in listed]
+    if body_limit <= 0:
+        body_limit = BODY_EXCERPT_CHARS
+    return {
+        "schema": "issue_batch_snapshot.v1",
+        "repo": repo,
+        "body_excerpt_chars": body_limit,
+        "mode": "claimable",
+        "issues": issues,
     }
 
 
@@ -177,11 +323,22 @@ def snapshot_issues(
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "issues", nargs="+", type=int, help="Issue numbers; two values form a range."
+        "issues", nargs="*", type=int, help="Issue numbers; two values form a range."
+    )
+    parser.add_argument(
+        "--claimable",
+        action="store_true",
+        help="Discover bounded open claimable issues without explicit issue numbers.",
     )
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument("--remote", default=DEFAULT_REMOTE)
     parser.add_argument("--body-chars", type=int, default=BODY_EXCERPT_CHARS)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_CLAIMABLE_LIMIT,
+        help="Limit for --claimable discovery mode.",
+    )
     parser.add_argument(
         "--capsule-dir",
         default="",
@@ -199,15 +356,35 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
+    if args.claimable and args.issues:
+        print(
+            "--claimable cannot be combined with explicit issue numbers",
+            file=sys.stderr,
+        )
+        return 1
     numbers = expand_issue_numbers(args.issues, expand_range=not args.no_expand_range)
     try:
-        payload = snapshot_issues(
-            numbers,
-            repo=args.repo,
-            body_limit=max(args.body_chars, 0),
-            remote=args.remote,
-            capsule_dir=args.capsule_dir,
-        )
+        if args.claimable:
+            payload = snapshot_claimable_issues(
+                repo=args.repo,
+                remote=args.remote,
+                body_limit=max(args.body_chars, 0),
+                limit=max(args.limit, 1),
+            )
+        elif args.issues:
+            payload = snapshot_issues(
+                numbers,
+                repo=args.repo,
+                body_limit=max(args.body_chars, 0),
+                remote=args.remote,
+                capsule_dir=args.capsule_dir,
+            )
+        else:
+            print(
+                "at least one issue number is required unless --claimable is used",
+                file=sys.stderr,
+            )
+            return 1
     except FileNotFoundError:
         print("gh or git command not found", file=sys.stderr)
         return 1

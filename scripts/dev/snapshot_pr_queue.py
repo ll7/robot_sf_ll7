@@ -18,6 +18,7 @@ from scripts.dev.check_pr_ci_status import (
 )
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
+DEFAULT_ACTIVE_LIMIT = 20
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -95,6 +96,48 @@ def _next_action(*, is_draft: bool, labels: list[str], checks: dict[str, Any]) -
     return "review_for_merge_ready"
 
 
+def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
+    """Return a compact attention category for queue triage."""
+    if is_draft:
+        return "draft_ready_or_review"
+    if next_action == "inspect_failing_checks":
+        return "ci_attention"
+    if next_action == "await_ci_or_start_read_only_monitor":
+        return "ci_pending"
+    if "merge-ready" in labels:
+        return "merge_attention"
+    return "review_attention"
+
+
+def _pr_payload_from_dict(
+    pr: dict[str, Any],
+    *,
+    default_number: int,
+) -> dict[str, Any]:
+    """Build a compact PR snapshot from already-loaded fields."""
+    is_draft = bool(pr.get("isDraft"))
+    labels = _labels(pr)
+    checks = _checks(pr)
+    pr_payload = {
+        "number": pr.get("number", default_number),
+        "status": "ok",
+        "title": pr.get("title", ""),
+        "state": pr.get("state", ""),
+        "draft": is_draft,
+        "url": pr.get("url", ""),
+        "labels": labels,
+        "head_branch": pr.get("headRefName", ""),
+        "head_sha": pr.get("headRefOid", ""),
+        "mergeable": pr.get("mergeable", "unknown"),
+        "checks": checks,
+        "reviews": _reviews(pr),
+    }
+    next_action = _next_action(is_draft=is_draft, labels=labels, checks=checks)
+    pr_payload["next_action"] = next_action
+    pr_payload["attention"] = _attention(next_action=next_action, is_draft=is_draft, labels=labels)
+    return pr_payload
+
+
 def fetch_pr(number: int, *, repo: str) -> dict[str, Any]:
     """Fetch one PR and return a compact queue snapshot."""
     result = _gh(
@@ -118,23 +161,71 @@ def fetch_pr(number: int, *, repo: str) -> dict[str, Any]:
         pr = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         return {"number": number, "status": "error", "error": f"invalid gh JSON: {exc}"}
-    labels = _labels(pr)
-    checks = _checks(pr)
-    is_draft = bool(pr.get("isDraft"))
+    return _pr_payload_from_dict(pr, default_number=number)
+
+
+def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
+    """Return a compact active PR queue snapshot."""
+    result = _gh(
+        [
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--limit",
+            str(limit),
+            "--json",
+            "number,title,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews",
+        ]
+    )
+
+    if result.returncode != 0:
+        return {
+            "schema": "pr_queue_snapshot.v1",
+            "repo": repo,
+            "mode": "active",
+            "prs": [
+                {
+                    "status": "error",
+                    "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+                }
+            ],
+        }
+    try:
+        listed = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return {
+            "schema": "pr_queue_snapshot.v1",
+            "repo": repo,
+            "mode": "active",
+            "prs": [
+                {
+                    "status": "error",
+                    "error": f"invalid gh JSON: {exc}",
+                }
+            ],
+        }
+    if not isinstance(listed, list):
+        return {
+            "schema": "pr_queue_snapshot.v1",
+            "repo": repo,
+            "mode": "active",
+            "prs": [
+                {
+                    "status": "error",
+                    "error": "expected gh pr list JSON array",
+                }
+            ],
+        }
+
+    prs = [_pr_payload_from_dict(pr, default_number=-1) for pr in listed if isinstance(pr, dict)]
     return {
-        "number": pr.get("number", number),
-        "status": "ok",
-        "title": pr.get("title", ""),
-        "state": pr.get("state", ""),
-        "draft": is_draft,
-        "url": pr.get("url", ""),
-        "labels": labels,
-        "head_branch": pr.get("headRefName", ""),
-        "head_sha": pr.get("headRefOid", ""),
-        "mergeable": pr.get("mergeable", "unknown"),
-        "checks": checks,
-        "reviews": _reviews(pr),
-        "next_action": _next_action(is_draft=is_draft, labels=labels, checks=checks),
+        "schema": "pr_queue_snapshot.v1",
+        "repo": repo,
+        "mode": "active",
+        "prs": prs,
     }
 
 
@@ -150,8 +241,19 @@ def snapshot_prs(numbers: list[int], *, repo: str) -> dict[str, Any]:
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prs", nargs="*", type=int, help="PR numbers to snapshot.")
+    parser.add_argument(
+        "--active",
+        action="store_true",
+        help="Discover bounded open PRs that need queue attention.",
+    )
     parser.add_argument("--prs", dest="prs_option", nargs="+", type=int, help="PR numbers.")
     parser.add_argument("--repo", default=DEFAULT_REPO)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_ACTIVE_LIMIT,
+        help="Limit for --active discovery mode.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser.parse_args(argv)
 
@@ -159,12 +261,18 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
-    numbers = args.prs_option if args.prs_option is not None else args.prs
-    if not numbers:
-        print("at least one PR number is required", file=sys.stderr)
+    if args.active and (args.prs_option is not None or args.prs):
+        print("--active cannot be combined with explicit PR numbers", file=sys.stderr)
         return 1
+    numbers = args.prs_option if args.prs_option is not None else args.prs
     try:
-        payload = snapshot_prs(numbers, repo=args.repo)
+        if args.active:
+            payload = snapshot_active_prs(repo=args.repo, limit=max(args.limit, 1))
+        elif not numbers:
+            print("at least one PR number is required", file=sys.stderr)
+            return 1
+        else:
+            payload = snapshot_prs(numbers, repo=args.repo)
     except FileNotFoundError:
         print("gh command not found", file=sys.stderr)
         return 1

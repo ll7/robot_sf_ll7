@@ -164,11 +164,15 @@ Before each phase, run a delegation checkpoint:
   queue scout, PR blocker reviewer, bounded editor, validation verifier, CI wait monitor, or
   discovery scout.
 - Before broad issue or PR queue review, prefer compact parent-thread snapshots:
-  `uv run python scripts/dev/snapshot_issue_batch.py <first> <last> --json` for issue batches and
-  `uv run python scripts/dev/snapshot_pr_queue.py --prs <pr> [<pr> ...] --json` for PR headline
-  state. Apply `uv run python scripts/dev/pr_loop_policy.py --snapshot <queue.json> --json` for
-  machine-checkable state classification and next-action decisions under a loop budget. Use `--capsule-dir <private-artifact-dir>` when an implementation worker should receive a
-  bounded issue context capsule instead of rediscovering files with broad search.
+  `uv run python scripts/dev/snapshot_issue_batch.py --claimable --limit <n> --json` for a
+  no-arg next-issue queue, `uv run python scripts/dev/snapshot_issue_batch.py <first> <last> --json`
+  for explicit issue batches, `uv run python scripts/dev/snapshot_pr_queue.py --active --limit <n>
+  --json` for the active PR queue, and `uv run python scripts/dev/snapshot_pr_queue.py --prs <pr>
+  [<pr> ...] --json` for explicit PR headline state. Apply
+  `uv run python scripts/dev/pr_loop_policy.py --snapshot <queue.json> --json` for
+  machine-checkable state classification and next-action decisions under a loop budget. Use
+  `--capsule-dir <private-artifact-dir>` when an implementation worker should receive a bounded
+  issue context capsule instead of rediscovering files with broad search.
 - For optional discovery scouts, default to a short hard timeout (120-180s) and require periodic
   evidence in the ledger. If a bounded scout emits no heartbeat within one timeout slice, treat it as
   incomplete and retry with an explicit local timeout + heartbeat plan.
@@ -258,11 +262,13 @@ uv run python scripts/dev/compact_worktree_snapshot.py --filter <issue-or-branch
 uv run python scripts/dev/compact_ci_snapshot.py <pr> [<pr> ...] \
   --expected-head-sha <sha> --json [--include-drift]
 
-# Compact issue batch snapshot with context capsules
+# Compact no-arg next-issue queue and explicit issue batch snapshots
+uv run python scripts/dev/snapshot_issue_batch.py --claimable --limit <n> --json
 uv run python scripts/dev/snapshot_issue_batch.py <first> <last> \
   --json --capsule-dir <artifact-dir>
 
-# Compact PR queue snapshot (headline state, next action)
+# Compact active PR queue and explicit PR headline snapshots
+uv run python scripts/dev/snapshot_pr_queue.py --active --limit <n> --json
 uv run python scripts/dev/snapshot_pr_queue.py --prs <pr> [<pr> ...] --json
 
 # Machine-checkable PR loop policy (state + next action under budget)

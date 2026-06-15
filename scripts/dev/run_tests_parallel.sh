@@ -16,6 +16,7 @@ Wrapper options:
   -h, --help       Show this help message
 
 Environment overrides:
+  COVERAGE_FILE=<path>
   PYTEST_FAST_FAIL=1|0
   PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup
   PYTEST_ORDER_MODE=failed-first|new-first|none

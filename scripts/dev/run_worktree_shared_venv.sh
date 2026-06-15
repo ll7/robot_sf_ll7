@@ -8,6 +8,8 @@ Usage: scripts/dev/run_worktree_shared_venv.sh [options] -- <uv-run-command> [ar
 Run a targeted validation command from the current checkout while reusing a shared virtualenv.
 The helper pins imports to this worktree by prepending PYTHONPATH=$PWD and sets UV_NO_SYNC=1 so
 `uv run` does not silently resync or rewrite the shared environment.
+For linked worktrees, the helper also derives a per-worktree COVERAGE_FILE unless one is already
+set, preventing parallel focused pytest runs from sharing output/coverage/.coverage state.
 
 Options:
   --venv PATH   Shared virtualenv path exported as UV_PROJECT_ENVIRONMENT. Defaults to the main
@@ -79,5 +81,10 @@ fi
 export UV_PROJECT_ENVIRONMENT="$venv_path"
 export UV_NO_SYNC=1
 export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
+
+if [[ -z "${COVERAGE_FILE:-}" && "$git_common_dir" != "$repo_root/.git" ]]; then
+  worktree_id="$(printf '%s' "$repo_root" | git hash-object --stdin | cut -c1-12)"
+  export COVERAGE_FILE="$repo_root/output/coverage/.coverage.${worktree_id}"
+fi
 
 exec uv run "${cmd[@]}"

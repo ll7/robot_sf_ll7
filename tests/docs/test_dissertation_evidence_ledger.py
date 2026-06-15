@@ -194,16 +194,73 @@ class TestDissertationEvidenceLedger:
                     f"Row {i} ({row['area']}) promotion path must mention 'stale artifact refresh'"
                 )
 
-    def test_denominator_repair_promotion_rows(self) -> None:
+    def test_forecast_support_row_present(self) -> None:
+        ledger = _load_ledger()
+        supported = [row for row in ledger["rows"] if row["area"] == "prediction_supported"]
+        unsupported = [row for row in ledger["rows"] if row["area"] == "prediction_unsupported"]
+        assert len(supported) == 1, "Exactly one supported forecast-lane row is required"
+        assert len(unsupported) == 1, "Exactly one unsupported forecast-lane row is required"
+
+    def test_forecast_rows_reference_anchor_issues(self) -> None:
         ledger = _load_ledger()
         for i, row in enumerate(ledger["rows"]):
-            if row["area"] == "prediction":
-                assert row["evidence_promotion_path"] is not None, (
-                    f"Row {i} ({row['area']}) should have a denominator repair path"
+            if row["area"].startswith("prediction_"):
+                assert 2761 in row["source_issues"], (
+                    f"Row {i} ({row.get('area', '?')}) should reference #2761"
                 )
-                assert "denominator repair" in row["evidence_promotion_path"].lower(), (
-                    f"Row {i} ({row['area']}) promotion path must mention 'denominator repair'"
+                assert 2835 in row["source_issues"], (
+                    f"Row {i} ({row.get('area', '?')}) should reference #2835"
                 )
+
+    def test_forecast_supported_row_claim_boundary(self) -> None:
+        ledger = _load_ledger()
+        supported_rows = [row for row in ledger["rows"] if row["area"] == "prediction_supported"]
+        assert supported_rows, "Prediction-supported row missing from ledger"
+        row = supported_rows[0]
+        assert row["artifact_status"] == "current"
+        assert row["evidence_tier"] == "diagnostic"
+        assert row["evidence_promotion_path"] is not None, (
+            "Supported forecast rows need a promotion path"
+        )
+        claim_lower = row["claim"].lower()
+        caveat_lower = row["caveat"].lower()
+        for keyword in [
+            "forecastbatch.v1",
+            "observation-tier",
+            "probabilistic",
+            "baseline",
+            "transferability",
+            "conformal",
+            "closed-loop",
+        ]:
+            assert keyword in claim_lower, (
+                f"Supported forecast claim {row.get('area', '?')} missing '{keyword}'"
+            )
+        assert "not yet benchmark- or paper-grade claim support" in caveat_lower
+
+    def test_forecast_unsupported_row_claim_boundary(self) -> None:
+        ledger = _load_ledger()
+        unsupported_rows = [
+            row for row in ledger["rows"] if row["area"] == "prediction_unsupported"
+        ]
+        assert unsupported_rows, "Prediction-unsupported row missing from ledger"
+        row = unsupported_rows[0]
+        claim_lower = row["claim"].lower()
+        allowed_lower = row["allowed_wording"].lower()
+        caveat_lower = row["caveat"].lower()
+        assert "not support" in claim_lower or "no durable evidence" in claim_lower
+        assert "safety" in allowed_lower, (
+            "Unsupported forecast wording should reference safety boundary"
+        )
+        assert "progress" in allowed_lower, (
+            "Unsupported forecast wording should reference progress boundary"
+        )
+        assert "transfer" in caveat_lower, (
+            "Unsupported forecast caveat should include transfer boundary"
+        )
+        assert row["evidence_promotion_path"] is not None, (
+            "Unsupported forecast row should include a concrete promotion path before claims can be upgraded"
+        )
 
     def test_no_promotion_path_rows(self) -> None:
         ledger = _load_ledger()

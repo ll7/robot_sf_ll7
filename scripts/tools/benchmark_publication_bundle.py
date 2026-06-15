@@ -441,16 +441,21 @@ def _load_dissertation_artifacts(spec_path: Path) -> list[DissertationArtifactSp
             raise ValueError(f"Artifact spec row {index} must be an object")
         try:
 
-            def get_str(key: str) -> str:
+            def get_str(
+                key: str,
+                *,
+                _row: dict[str, Any] = row,
+                _index: int = index,
+            ) -> str:
                 """Return a required artifact spec value without accepting JSON null."""
-                value = row[key]
+                value = _row[key]
                 if value is None:
-                    raise ValueError(f"Artifact spec row {index} field {key!r} cannot be null")
+                    raise ValueError(f"Artifact spec row {_index} field {key!r} cannot be null")
                 return str(value)
 
-            def get_optional_str(key: str) -> str | None:
+            def get_optional_str(key: str, *, _row: dict[str, Any] = row) -> str | None:
                 """Return an optional artifact spec value, treating JSON null as None."""
-                value = row.get(key)
+                value = _row.get(key)
                 if value is None:
                     return None
                 stripped = str(value).strip()
@@ -982,12 +987,16 @@ def _validate_chapter_target(
         acceptable, or a short warning string when the target looks mismatched.
     """
     if chapter_target is None:
+        if justification:
+            return "warning: justification provided but no chapter target is specified"
         return None
     normalized = chapter_target.lower()
     has_allowed_style = any(style in normalized for style in _DIAGNOSTIC_CHAPTER_TARGET_STYLES)
-    if evidence_tier == "diagnostic-only" and not has_allowed_style and not justification:
+    if evidence_tier in {"diagnostic-only", "non-claimable"} and not (
+        has_allowed_style or justification
+    ):
         return (
-            f"warning: diagnostic-only row targets '{chapter_target}'; "
+            f"warning: {evidence_tier} row targets '{chapter_target}'; "
             "expected limitations/methodology/future-work style or explicit justification"
         )
     return "ok"
@@ -1153,7 +1162,7 @@ def _format_claim_matrix_cell(value: object) -> str:
     """
     if value is None:
         return ""
-    return str(value)
+    return str(value).replace("|", r"\|")
 
 
 def _write_claim_matrix_outputs(

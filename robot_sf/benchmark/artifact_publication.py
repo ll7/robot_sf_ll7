@@ -582,6 +582,11 @@ def _build_dissertation_manifest_entry(
         if artifact.chapter_target_justification is not None
         else ""
     )
+    if chapter_target_justification and not chapter_target:
+        raise ValueError(
+            f"Artifact {artifact.artifact_id!r} sets chapter_target_justification "
+            "without chapter_target"
+        )
     if chapter_target_justification:
         entry["chapter_target_justification"] = chapter_target_justification
     return entry

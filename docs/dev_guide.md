@@ -300,8 +300,10 @@ remote GitHub checks were cancelled or failed.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and
-`route_evidence_only: true`. Monitor success is route evidence only; reassess the current PR head
-SHA and normal readiness proof before labeling or merging.
+`route_evidence_only: true`. When the local wall cap expires while checks are still pending, the
+payload also includes `monitor.local_stop_reason: "max_wall_seconds"`. Monitor success is route
+evidence only; reassess the current PR head SHA and normal readiness proof before labeling or
+merging.
 
 For routine goal-autopilot orientation, prefer the compact state snapshot helper before broad parent
 thread reads:

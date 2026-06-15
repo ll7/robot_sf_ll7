@@ -725,6 +725,17 @@ def test_help_includes_worktree_safe_invocation(
     assert "UV_NO_SYNC" in captured.out
 
 
+def test_negative_max_wall_seconds_is_rejected(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """--max-wall-seconds should reject negative local duration caps."""
+    with pytest.raises(SystemExit) as excinfo:
+        main(["42", "--max-wall-seconds", "-1"])
+
+    assert excinfo.value.code == 2
+    assert "value must be non-negative" in capsys.readouterr().err
+
+
 def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
     """python scripts/dev/check_pr_ci_status.py --help should work without PYTHONPATH."""
     import os

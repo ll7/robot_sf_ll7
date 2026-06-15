@@ -282,6 +282,14 @@ def _bounded_sleep_seconds(
     return min(sleep_seconds, remaining_seconds), False
 
 
+def _non_negative_float(value: str) -> float:
+    """Parse a non-negative float for local duration limits."""
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
+    return parsed
+
+
 def _poll_ci_status(
     pr: str,
     *,
@@ -397,7 +405,7 @@ were cancelled or failed.
     )
     parser.add_argument(
         "--max-wall-seconds",
-        type=float,
+        type=_non_negative_float,
         default=None,
         help=(
             "optional local wall-clock cap for bounded polling; pending checks return exit code 2 "

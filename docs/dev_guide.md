@@ -279,7 +279,7 @@ timings from `gh run view` data.
 For routine autopilot CI waits, prefer the compact monitor helper instead of leaving the parent
 thread idle on raw GitHub output. In a fresh linked worktree, run it through the shared-venv
 wrapper so uv reuses the owning checkout's environment and does not create or prompt for a local
-``.venv``:
+`.venv`:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \
@@ -290,9 +290,9 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci
   --json
 ```
 
-The wrapper sets ``UV_PROJECT_ENVIRONMENT`` to the owning checkout's ``.venv`` and ``UV_NO_SYNC=1``,
-so the command works from a worktree that has not run ``uv sync``. The ``--help`` output of
-``scripts/dev/check_pr_ci_status.py`` also prints this invocation for quick agent copy/paste.
+The wrapper sets `UV_PROJECT_ENVIRONMENT` to the owning checkout's `.venv` and `UV_NO_SYNC=1`,
+so the command works from a worktree that has not run `uv sync`. The `--help` output of
+`scripts/dev/check_pr_ci_status.py` also prints this invocation for quick agent copy/paste.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, deadline, and `route_evidence_only: true`. Monitor

@@ -2,7 +2,7 @@
 """Check CI status for a GitHub PR using the gh CLI.
 
 Output is compact and cache-friendly.  Use --json for machine-readable output.
-Run ``--help`` for the worktree-safe invocation used by agent workflows.
+Run `--help` for the worktree-safe invocation used by agent workflows.
 """
 
 from __future__ import annotations

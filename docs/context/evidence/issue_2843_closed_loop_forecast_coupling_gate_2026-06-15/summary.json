@@ -1,0 +1,22 @@
+{
+  "issue": 2843,
+  "claim_boundary": "Diagnostic-only closed-loop forecast coupling gate. Not paper-facing evidence. No learned training involved.",
+  "recommendation": "revise",
+  "inputs": {
+    "forecast_comparison": "docs/context/evidence/issue_2781_interaction_aware_forecast_2026-06-15/comparison_report.json",
+    "gate_readme": "docs/context/evidence/issue_1897_predictive_coupling_gate_2026-05-31/README.md"
+  },
+  "forecast_interaction_effect": {
+    "matched_rows": 3,
+    "evaluable_row_count": 15,
+    "mean_ade_1s_delta_vs_cv": 0.0246,
+    "mean_nll_1s_delta_vs_cv": -0.6717
+  },
+  "closed_loop_gate": {
+    "status": "failed",
+    "reason": "global_success_delta_below_gate",
+    "global_success_delta": 0.0,
+    "hard_success_delta": 0.0,
+    "global_min_distance_delta": 0.0108
+  }
+}

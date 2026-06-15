@@ -5,9 +5,10 @@ show_help() {
   cat <<'EOF'
 Usage: scripts/dev/run_focused_tests.sh [pytest-args...]
 
-Runs a focused pytest command and removes the generated output/coverage tree
-after the test command succeeds. Use this for narrow local validation where the
-coverage report is not the artifact you intend to inspect or keep.
+Runs a focused pytest command and removes generated output/coverage files after
+the test command succeeds, while preserving any tracked files under that tree.
+Use this for narrow local validation where the coverage report is not the
+artifact you intend to inspect or keep.
 
 Examples:
   scripts/dev/run_focused_tests.sh tests/dev/test_issue_claim.py -q
@@ -37,5 +38,5 @@ uv run pytest "$@"
 if [[ "${FOCUSED_TEST_KEEP_COVERAGE:-0}" == "1" ]]; then
   echo "Preserving output/coverage because FOCUSED_TEST_KEEP_COVERAGE=1." >&2
 else
-  rm -rf output/coverage
+  python3 "$SCRIPT_DIR/clean_generated_output.py" output/coverage >/dev/null
 fi

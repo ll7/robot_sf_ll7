@@ -138,6 +138,24 @@ Current promoted all-planners baseline run:
 `prediction_planner` is now part of all-planners campaign presets as an experimental planner.
 For reproducible runs, verify that the configured model id exists and resolves to a valid local checkpoint before launching the campaign.
 
+### Forecast Transferability Stress Matrix
+
+Use the diagnostic transferability matrix builder to summarize existing `ForecastMetrics.v1`
+reports across explicit observation tier, noise, latency, dropout, occlusion, map family, density,
+pedestrian-model family, and actor-type dimensions:
+
+```bash
+uv run python scripts/benchmark/build_forecast_transferability_matrix.py \
+  path/to/forecast_metrics.json \
+  --report-id prediction_transferability_diagnostic \
+  --out-json output/forecast_transferability_matrix.json \
+  --out-md output/forecast_transferability_matrix.md
+```
+
+The builder does not run a benchmark campaign by itself. Missing transfer dimensions are emitted as
+limitation rows, oracle-only rows remain diagnostic-only, and the recommendation field is the claim
+boundary for continue/revise/stop decisions.
+
 Testing-only planners remain opt-in only under the guardrail policy in
 `docs/benchmark_experimental_planners.md` . Issue 596 adds a verified-simple stage gate for any
 future reconsideration, but does not remove the opt-in requirement by itself.

@@ -82,8 +82,8 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 | Issue #1490 | open, blocked | Predictive planner v2 comparison | Do not repeat the old four-way expansion until revised gate evidence exists. |
 | Issue #2866 | closed | Transferability matrix row coverage | Scenario-family/horizon/actor split cells are explicit and blocked metadata cells remain visible. |
 | Issue #2868 | closed | Semantic metadata fixtures | Added metadata-bearing signalized, goal-directed, waiting-intent-change, and route-conflict fixtures for semantic baseline evaluation. |
-| Issue #2865 | open / PR pending | Calibration/reliability comparison | Converts #2868 comparison rows into analysis-only calibration rows; forecast-risk scoring remains gated. |
-| Issue #2837 | open | Horizon and timestep ablation | Analysis-only report for forecast horizon/output-step presets. |
+| Issue #2865 | closed | Calibration/reliability comparison | Converts #2868 comparison rows into analysis-only calibration rows; forecast-risk scoring remains gated with recommendation `wait`. |
+| Issue #2837 | closed | Horizon and timestep ablation | Analysis-only report for forecast horizon/output-step presets. Generated compact ablation bundle in `docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15/`. |
 | Issue #2838 | closed | Observation-level adapters | Required before deployable/oracle observation tiers can be compared safely. |
 | Issue #2839 | closed | Dataset recorder and split manifest | Required before learned predictor training or durable split comparisons. |
 | Issue #2841 | closed | Calibration and reliability | Metric/report surface for probabilistic forecast quality. |
@@ -121,6 +121,9 @@ Use the smallest command that matches the changed surface:
 - Forecast-risk scoring diagnostic:
   `uv run pytest tests/planner/test_policy_stack_v1.py tests/validation/test_forecast_risk_policy_stack.py`
   and `uv run python scripts/validation/validate_forecast_risk_policy_stack.py --out-dir <dir>`
+- Horizon and timestep ablation (issue #2837):
+  `uv run pytest tests/benchmark/test_horizon_timestep_ablation.py`
+  and `uv run python scripts/benchmark/build_horizon_timestep_ablation_report.py --output-dir <dir>`
 - Forecast-risk calibration-filter diagnostic (issue #2869):
   `uv run pytest tests/validation/test_forecast_risk_calibration_filter.py`
   and `uv run python scripts/validation/validate_forecast_risk_calibration_filter.py --out-dir <dir>`

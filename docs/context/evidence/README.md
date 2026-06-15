@@ -408,3 +408,10 @@ Policy caveats:
 - `issue_2866_transferability_matrix_rows/`: tracked bounded-input evidence for the Issue #2866
   transferability matrix follow-up, including generated JSON/Markdown matrix output with explicit
   observation-tier, actor-class, scenario-family, horizon, semantic-metadata, and blocked-cell rows.
+- `issue_2837_horizon_timestep_ablation_2026-06-15/`: analysis-only horizon x output-dt_s ablation
+  for forecast presets. Compares horizon ladder 0.5/1.0/1.6/2.0/3.0 s and dt_s ladder 0.1/0.2/0.4/0.5 s
+  on durable repository trace fixtures. Reports collision relevance, miss rate, NLL, calibration
+  error, runtime, artifact size, and memory proxies where available. Recommends short/medium/long
+  presets with explicit unavailable rows for fixture-limited long horizons.
+  claim_boundary=analysis_only_not_navigation_evidence. Not a safety, closed-loop, benchmark,
+  or paper-facing claim.

@@ -15,6 +15,13 @@ from robot_sf.benchmark.forecast_batch import (
     save_forecast_batch,
     validate_forecast_batch,
 )
+from robot_sf.benchmark.forecast_dataset_recorder import (
+    DEFAULT_FORECAST_DATASET_ID,
+    FORECAST_DATASET_SCHEMA_VERSION,
+    ForecastDatasetRecordResult,
+    record_forecast_dataset_from_trace_exports,
+    validate_forecast_dataset_manifest,
+)
 from robot_sf.benchmark.forecast_metrics import (
     FORECAST_METRICS_SCHEMA_VERSION,
     ForecastMetricRow,
@@ -43,7 +50,9 @@ from robot_sf.benchmark.helper_registry import (
 )
 
 __all__ = [
+    "DEFAULT_FORECAST_DATASET_ID",
     "FORECAST_BATCH_SCHEMA_VERSION",
+    "FORECAST_DATASET_SCHEMA_VERSION",
     "FORECAST_METRICS_SCHEMA_VERSION",
     "ActorForecast",
     "AggregationMetadataError",
@@ -52,6 +61,7 @@ __all__ = [
     "ForecastActorObservation",
     "ForecastBatch",
     "ForecastBatchProvenance",
+    "ForecastDatasetRecordResult",
     "ForecastMetricRow",
     "ForecastObservationAdapter",
     "ForecastObservationBatch",
@@ -67,7 +77,9 @@ __all__ = [
     "load_forecast_batch",
     "load_trained_policy",
     "prepare_classic_env",
+    "record_forecast_dataset_from_trace_exports",
     "run_episodes_with_recording",
     "save_forecast_batch",
     "validate_forecast_batch",
+    "validate_forecast_dataset_manifest",
 ]

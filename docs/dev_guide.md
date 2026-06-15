@@ -1677,10 +1677,12 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Advisory typecheck reviewed. Fix practical findings in touched files and stable contracts, and
   document any meaningful remaining findings in the PR when they affect the change.
 - Docs updated (README in feature folder, diagrams if changed).
-- Feature branch synced with latest `origin/main` before PR creation, then validation scripts run
-  and pass for higher-risk branches. Docs-only and low-risk instruction branches use the cheaper
-  path from `docs/ai/ai-workflow.md` by default when the PR clearly states which checks were
-  skipped.
+- Validation matched to risk per [maintainer_values.md](./maintainer_values.md): runtime, benchmark, metric, schema,
+  model-provenance, and paper-facing changes need executable proof; low-risk docs/instruction
+  changes use diff review, referenced path/link checks, and lightweight automated checks when
+  available. State explicitly in the PR which heavier gates were skipped and why.
+- Feature branch synced with latest `origin/main` before PR creation, then required validation
+  scripts run and pass for the selected risk level.
 - CI green (lint + tests) and PR opened with appropriate links.
 
 ## Templates
@@ -1739,14 +1741,40 @@ The `uvx ty check . --exit-zero` step is advisory: it should report findings wit
 command. Treat findings in touched code and stable contracts as reviewer-actionable even though the
 phase exits zero.
 
+### Proportional validation
+
+Validation depth follows [`docs/maintainer_values.md`](./maintainer_values.md): apply proof in
+proportion to risk. Do not treat the heaviest path as the default for every change.
+
+- **Low-risk docs/instruction changes** use the cheap path by default: inspect the diff, verify
+  changed links or referenced paths, and run lightweight automated checks when they exist
+  (for example, `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` for
+  context-only or proof-heavy docs surfaces).
+- **Runtime, benchmark, metric, schema, model-provenance, and paper-facing changes** need
+  executable proof appropriate to the claim (tests, benchmark runs, schema checks, etc.).
+- **Strong claims escalate the bar even when the touched file is documentation.** A docs-only
+  change that makes a benchmark, metric, schema, model-provenance, or paper-facing claim still
+  needs the corresponding strength of evidence.
+
+If this section conflicts with current maintainer direction or [maintainer_values.md](./maintainer_values.md),
+follow the higher-precedence source and make the smallest doc update needed to remove the drift.
+
 ### TL;DR workflow checklist
-1) Clarify requirements (ask concise, optioned questions)
-2) Draft design doc under `docs/` (link issue, add test plan)
-3) Implement with small, reviewed commits
-4) Add/extend tests in `tests/` or `tests/pygame/`
-5) Run quality gates via tasks: Install Dependencies → Ruff: Format and Fix → Check Code Quality (Ruff + advisory ty) → Type Check (advisory) → Run Tests
-6) Update docs/diagrams; run “Generate UML” if classes changed
-7) Open PR with summary, risks, and links to docs/tests
+
+1) Clarify requirements and pick the validation path by change type (see
+   [Proportional validation](#proportional-validation) above; `docs/maintainer_values.md` is the
+   higher-precedence source).
+2) For non-trivial runtime/benchmark/metric/schema/paper-facing changes, draft a design doc under
+   `docs/` and link the issue; for low-risk docs/instruction changes, skip the design doc unless
+   it clarifies scope.
+3) Implement with small, reviewed commits.
+4) Add/extend tests in `tests/` or `tests/pygame/` when touching runtime behavior.
+5) Run the gates that match the risk: diff/link/path checks and lightweight automated checks for
+   docs/instruction changes; Install Dependencies → Ruff: Format and Fix → Check Code Quality
+   (Ruff + advisory ty) → Type Check (advisory) → Run Tests for runtime and claim-heavy changes.
+6) Update docs/diagrams; run “Generate UML” if classes changed.
+7) Open PR with summary, risks, validation evidence, and links to docs/tests. Explicitly state
+   which gates were skipped when using the cheap docs/instruction path.
 
 ### Final-readiness checklist for scripted tooling work
 - Run `uv run ruff check <touched_files>` and `uv run ruff format <touched_files>` before finalizing.

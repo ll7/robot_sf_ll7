@@ -1,0 +1,24 @@
+{
+  "claim_boundary": "Diagnostic-only closed-loop forecast coupling gate. Not paper-facing evidence. No learned training involved.",
+  "closed_loop_gate": {
+    "global_min_distance_delta": 0.0108,
+    "global_success_delta": 0.0,
+    "hard_success_delta": 0.0,
+    "reason": "global_success_delta_below_gate",
+    "status": "failed"
+  },
+  "diagnostic_notes": "Forecast interaction_aware worsened 1s ADE by 0.0246 m vs CV and improved 1s NLL by 0.6717. Closed-loop gate failed (reason=global_success_delta_below_gate, global_success_delta=0.0). Recommendation: revise forecast coupling before closed-loop claims.",
+  "forecast_interaction_effect": {
+    "conclusion": "Interaction-aware heuristic improved Gaussian likelihood/calibration proxy but worsened point accuracy on matched diagnostic rows; revise before closed-loop coupling claims.",
+    "evaluable_row_count": 15,
+    "matched_rows": 3,
+    "mean_ade_1s_delta_vs_cv": 0.024649574465026126,
+    "mean_nll_1s_delta_vs_cv": -0.6717039148640245
+  },
+  "inputs": {
+    "forecast_comparison": "docs/context/evidence/issue_2781_interaction_aware_forecast_2026-06-15/comparison_report.json",
+    "gate_readme": "docs/context/evidence/issue_1897_predictive_coupling_gate_2026-05-31/README.md"
+  },
+  "issue": 2843,
+  "recommendation": "revise"
+}

@@ -376,3 +376,8 @@ Policy caveats:
   conditioning improves the Gaussian likelihood/calibration proxy while worsening 1s point
   accuracy, so the result is mixed, diagnostic-only, and a revise signal before closed-loop
   coupling. Not benchmark or paper-facing evidence.
+- `issue_2843_closed_loop_forecast_coupling_gate_2026-06-15/`: diagnostic-only closed-loop
+  forecast coupling gate synthesizing #2781 forecast comparison with #1897 closed-loop gate
+  metrics. Recommendation: revise. Forecast interaction_aware worsened 1s ADE by 0.0246 m vs CV
+  while improving NLL by 0.6717; closed-loop gate failed (global_success_delta 0.0). No learned
+  training involved. Not benchmark or paper-facing evidence.

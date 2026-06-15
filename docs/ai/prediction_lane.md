@@ -50,7 +50,7 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 4. Add metric and calibration reports.
    Issues #2840 and #2846 generalize probabilistic forecast metrics and separate actor-class
    denominators. Issue #2837 compares horizon and output timestep tradeoffs, #2841 handles
-   reliability/calibration, and #2842 explores conformal or reachable-set uncertainty.
+   reliability/calibration, and #2842 recorded a conformal/reachable-set uncertainty smoke pilot.
 5. Test planner coupling before training-heavy expansion.
    Issue #2843 defines the closed-loop coupling gate. The latest gate recommendation is `revise`,
    not `continue`, because diagnostic forecast improvement did not translate into a passing
@@ -68,26 +68,26 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 
 | Issue | State on 2026-06-15 | Role | Routing note |
 | --- | --- | --- | --- |
-| #2835 | open | Epic | Parent coordination surface for the lane. |
-| #2836 | closed | Forecast artifact schema | `ForecastBatch.v1`; prerequisite for durable forecast artifacts. |
-| #2774 | closed | Motion-rich fixtures | Diagnostic trace-family expansion beyond corridor fixtures. |
-| #2758 | closed | Semantic baselines | Signal/goal-aware CV variants; diagnostic-only. |
-| #2781 | closed | Interaction-aware baseline | Mixed result: likelihood proxy improved while 1s point accuracy worsened. |
-| #2843 | closed | Closed-loop coupling gate | Latest recommendation: `revise` before learned predictor training. |
-| #2759 | closed | Forecast risk scoring | Opt-in diagnostic risk channel for `PolicyStackV1`; default remains off. |
-| #2727 | closed | Fast dynamic actor fixture | Enables future actor-class forecast denominator work. |
-| #2840 | closed | Probabilistic forecast metrics | Metric surface for deterministic/probabilistic forecast comparison. |
-| #2846 | closed | Fast dynamic actor forecast metrics | Separates pedestrian and fast-agent denominators. |
-| #1490 | open, blocked | Predictive planner v2 comparison | Do not repeat the old four-way expansion until revised gate evidence exists. |
-| #2837 | open | Horizon and timestep ablation | Analysis-only report for forecast horizon/output-step presets. |
-| #2838 | closed | Observation-level adapters | Required before deployable/oracle observation tiers can be compared safely. |
-| #2839 | closed | Dataset recorder and split manifest | Required before learned predictor training or durable split comparisons. |
-| #2841 | closed | Calibration and reliability | Metric/report surface for probabilistic forecast quality. |
-| #2842 | open, running | Conformal/reachable-set pilot | Diagnostic uncertainty pilot; no planner/safety claim by itself. |
-| #2844 | open, blocked | Learned probabilistic graph predictor | Blocked until schema/data/metrics/coupling prerequisites unblock. |
-| #2845 | open, blocked | Transformer/diffusion study | Blocked analysis until lighter prerequisites and bounded data exist. |
-| #2847 | closed | Transferability stress matrix | Should run after observation tier, metrics, and fixture/split surfaces are usable. |
-| #2848 | closed | This routing doc | Keep this map current when lane gates or issue states change materially. |
+| Issue #2835 | open | Epic | Parent coordination surface for the lane. |
+| Issue #2836 | closed | Forecast artifact schema | `ForecastBatch.v1`; prerequisite for durable forecast artifacts. |
+| Issue #2774 | closed | Motion-rich fixtures | Diagnostic trace-family expansion beyond corridor fixtures. |
+| Issue #2758 | closed | Semantic baselines | Signal/goal-aware CV variants; diagnostic-only. |
+| Issue #2781 | closed | Interaction-aware baseline | Mixed result: likelihood proxy improved while 1s point accuracy worsened. |
+| Issue #2843 | closed | Closed-loop coupling gate | Latest recommendation: `revise` before learned predictor training. |
+| Issue #2759 | closed | Forecast risk scoring | Opt-in diagnostic risk channel for `PolicyStackV1`; default remains off. |
+| Issue #2727 | closed | Fast dynamic actor fixture | Enables future actor-class forecast denominator work. |
+| Issue #2840 | closed | Probabilistic forecast metrics | Metric surface for deterministic/probabilistic forecast comparison. |
+| Issue #2846 | closed | Fast dynamic actor forecast metrics | Separates pedestrian and fast-agent denominators. |
+| Issue #1490 | open, blocked | Predictive planner v2 comparison | Do not repeat the old four-way expansion until revised gate evidence exists. |
+| Issue #2837 | open | Horizon and timestep ablation | Analysis-only report for forecast horizon/output-step presets. |
+| Issue #2838 | closed | Observation-level adapters | Required before deployable/oracle observation tiers can be compared safely. |
+| Issue #2839 | closed | Dataset recorder and split manifest | Required before learned predictor training or durable split comparisons. |
+| Issue #2841 | closed | Calibration and reliability | Metric/report surface for probabilistic forecast quality. |
+| Issue #2842 | closed | Conformal/reachable-set pilot | Diagnostic uncertainty smoke input; no planner/safety claim by itself. |
+| Issue #2844 | open, blocked | Learned probabilistic graph predictor | Blocked until schema/data/metrics/coupling prerequisites unblock. |
+| Issue #2845 | open, blocked | Transformer/diffusion study | Blocked analysis until lighter prerequisites and bounded data exist. |
+| Issue #2847 | closed | Transferability stress matrix | Should run after observation tier, metrics, and fixture/split surfaces are usable. |
+| Issue #2848 | closed | This routing doc | Keep this map current when lane gates or issue states change materially. |
 
 ## Gate Conditions
 
@@ -102,6 +102,8 @@ Do not start learned predictor training or heavy-model evaluation unless all of 
   calibration or uncertainty fields when applicable.
 - Closed-loop coupling gate reports `continue` on same-seed evidence with mechanism activation,
   success/progress non-regression, false-positive accounting, and runtime caveats.
+- Calibration report decision is `continue` and transferability matrix includes oracle + deployable rows
+  before learned predictor training.
 
 If any condition is missing, route the follow-up as `blocked`, `diagnostic-only`, or `revise`
 instead of treating it as benchmark evidence.

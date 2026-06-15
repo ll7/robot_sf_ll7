@@ -381,6 +381,11 @@ Policy caveats:
   waiting-with-intent-change, and route-conflict goal cases. The report distinguishes
   metadata-present and metadata-absent rows across cv, signal_aware, goal_aware, semantic, and
   interaction_aware baselines. Not human-realism, closed-loop, benchmark, or paper-facing evidence.
+- `issue_2865_forecast_calibration_report_2026-06-15/`: analysis-only calibration/reliability
+  report converted from the #2868 forecast comparison rows. Covers cv, signal_aware, goal_aware,
+  semantic, and interaction_aware baselines with scenario-family, observation-tier, horizon,
+  semantic-metadata, actor-class availability, miss-rate, failure-taxonomy, and risk-scoring
+  eligibility columns. Decision: wait; claim status: diagnostic-only.
 - `issue_2843_closed_loop_forecast_coupling_gate_2026-06-15/`: diagnostic-only closed-loop
   forecast coupling gate synthesizing #2781 forecast comparison with #1897 closed-loop gate
   metrics. Recommendation: revise. Forecast interaction_aware worsened 1s ADE by 0.0246 m vs CV

@@ -1,0 +1,85 @@
+{
+  "calibration_report": "docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.json",
+  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "diagnostic_weight": 5.0,
+  "issue": 2869,
+  "modes": [
+    {
+      "false_positive": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "forecast_risk_weight": 0.0,
+      "high_risk": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "mode": "no_risk",
+      "reason": "baseline forecast_risk_weight=0",
+      "status": "available",
+      "uses_calibration_filter": false
+    },
+    {
+      "false_positive": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "forecast_risk_weight": 5.0,
+      "high_risk": {
+        "forecast_penalty": 5.0,
+        "progress_proxy": 0.2,
+        "selected_proposal": "risk_dwa",
+        "shield_stop_count": 0,
+        "speed": 0.2
+      },
+      "mode": "raw_risk",
+      "reason": "diagnostic unfiltered forecast risk",
+      "status": "available",
+      "uses_calibration_filter": false
+    },
+    {
+      "false_positive": null,
+      "forecast_risk_weight": 5.0,
+      "high_risk": null,
+      "mode": "calibration_filtered",
+      "reason": "no_rows_risk_scoring_eligible",
+      "status": "blocked",
+      "uses_calibration_filter": true
+    },
+    {
+      "false_positive": null,
+      "forecast_risk_weight": 5.0,
+      "high_risk": null,
+      "mode": "actor_class_aware",
+      "reason": "actor_class_unavailable_in_all_rows",
+      "status": "blocked",
+      "uses_calibration_filter": true
+    },
+    {
+      "false_positive": null,
+      "forecast_risk_weight": 5.0,
+      "high_risk": null,
+      "mode": "observation_tier_aware",
+      "reason": "single_observation_tier: deployable_tracked",
+      "status": "blocked",
+      "uses_calibration_filter": true
+    }
+  ],
+  "recommendation": "wait",
+  "recommendation_rationale": "Calibration filtering cannot gate forecast-risk scoring: the Issue #2865 report contains no risk-scoring-eligible rows. Keep forecast-risk scoring opt-in and diagnostic-only until eligible calibration evidence exists.",
+  "schema_version": "forecast_risk_calibration_filter.diagnostic_comparison.v1",
+  "tradeoffs": {
+    "false_positive_stopping_avoided": true,
+    "false_positive_unnecessary_slowdown_count": 0,
+    "route_progress_tradeoff": 0.8
+  }
+}

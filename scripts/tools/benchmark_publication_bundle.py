@@ -57,6 +57,18 @@ _STRONG_BOUNDARY_HINTS = {
     "verified",
     "reproducible",
 }
+_DIAGNOSTIC_CHAPTER_TARGET_STYLES = {
+    "limitations",
+    "limitation",
+    "methodology",
+    "methods",
+    "future work",
+    "future-work",
+    "future_work",
+    "discussion",
+    "outlook",
+    "n/a",
+}
 
 
 class ClaimMatrixRow(TypedDict):
@@ -71,6 +83,8 @@ class ClaimMatrixRow(TypedDict):
     figure_table_candidate: str
     caveat: str
     validation_status: str
+    chapter_target: str | None
+    chapter_target_status: str | None
 
 
 class ClaimMatrix(TypedDict):
@@ -427,12 +441,25 @@ def _load_dissertation_artifacts(spec_path: Path) -> list[DissertationArtifactSp
             raise ValueError(f"Artifact spec row {index} must be an object")
         try:
 
-            def get_str(key: str) -> str:
+            def get_str(
+                key: str,
+                *,
+                _row: dict[str, Any] = row,
+                _index: int = index,
+            ) -> str:
                 """Return a required artifact spec value without accepting JSON null."""
-                value = row[key]
+                value = _row[key]
                 if value is None:
-                    raise ValueError(f"Artifact spec row {index} field {key!r} cannot be null")
+                    raise ValueError(f"Artifact spec row {_index} field {key!r} cannot be null")
                 return str(value)
+
+            def get_optional_str(key: str, *, _row: dict[str, Any] = row) -> str | None:
+                """Return an optional artifact spec value, treating JSON null as None."""
+                value = _row.get(key)
+                if value is None:
+                    return None
+                stripped = str(value).strip()
+                return stripped if stripped else None
 
             artifacts.append(
                 DissertationArtifactSpec(
@@ -444,6 +471,8 @@ def _load_dissertation_artifacts(spec_path: Path) -> list[DissertationArtifactSp
                     recommended_manuscript_use=get_str("recommended_manuscript_use"),
                     fallback_degraded_summary=get_str("fallback_degraded_summary"),
                     metadata=row.get("metadata") if isinstance(row.get("metadata"), dict) else None,
+                    chapter_target=get_optional_str("chapter_target"),
+                    chapter_target_justification=get_optional_str("chapter_target_justification"),
                 )
             )
         except KeyError as exc:
@@ -912,6 +941,67 @@ def _run_dissertation_bundle(args: argparse.Namespace) -> int:
     return 0
 
 
+def _extract_chapter_target(artifact: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Extract optional chapter target and justification from an artifact.
+
+    Supports the canonical ``chapter_target`` field, the
+    ``dissertation_chapter`` alias used by the dissertation evidence ledger,
+    and an optional nested ``metadata.chapter_target`` fallback.
+
+    Returns:
+        A tuple of (chapter_target, chapter_target_justification).
+    """
+    metadata = artifact.get("metadata") if isinstance(artifact.get("metadata"), dict) else None
+
+    raw_target = artifact.get("chapter_target")
+    if raw_target is None:
+        raw_target = artifact.get("dissertation_chapter")
+    if raw_target is None and metadata is not None:
+        raw_target = metadata.get("chapter_target")
+    chapter_target = str(raw_target).strip() if raw_target is not None else None
+    if chapter_target == "":
+        chapter_target = None
+
+    raw_justification = artifact.get("chapter_target_justification")
+    if raw_justification is None and metadata is not None:
+        raw_justification = metadata.get("chapter_target_justification")
+    justification = str(raw_justification).strip() if raw_justification is not None else None
+    if justification == "":
+        justification = None
+
+    return chapter_target, justification
+
+
+def _validate_chapter_target(
+    evidence_tier: str,
+    chapter_target: str | None,
+    justification: str | None,
+) -> str | None:
+    """Validate that a chapter target is appropriate for the evidence tier.
+
+    Diagnostic-only rows should map primarily to limitations, methodology, or
+    future-work style targets unless explicitly justified.
+
+    Returns:
+        ``None`` when no target is present, ``"ok"`` when the target is
+        acceptable, or a short warning string when the target looks mismatched.
+    """
+    if chapter_target is None:
+        if justification:
+            return "warning: justification provided but no chapter target is specified"
+        return None
+    normalized = chapter_target.lower()
+    has_allowed_style = any(style in normalized for style in _DIAGNOSTIC_CHAPTER_TARGET_STYLES)
+    if evidence_tier in {"diagnostic-only", "non-claimable"} and not (
+        has_allowed_style or justification
+    ):
+        return (
+            f"warning: {evidence_tier} row targets '{chapter_target}'; "
+            "expected limitations/methodology/future-work style or explicit justification"
+        )
+    return "ok"
+
+
 def _get_validation_status(
     artifact_id: str,
     source_path: str,
@@ -1013,6 +1103,11 @@ def _process_dissertation_artifact(
         evidence_claim_boundaries=evidence_claim_boundaries,
     )
 
+    chapter_target, chapter_target_justification = _extract_chapter_target(artifact)
+    chapter_target_status = _validate_chapter_target(
+        evidence_tier, chapter_target, chapter_target_justification
+    )
+
     return ClaimMatrixRow(
         artifact_id=artifact_id,
         source_artifact_path=f"{source_artifact} ({source_path})",
@@ -1023,6 +1118,8 @@ def _process_dissertation_artifact(
         figure_table_candidate=str(artifact.get("caption_draft", "N/A")),
         caveat=caveat,
         validation_status=validation_status,
+        chapter_target=chapter_target,
+        chapter_target_status=chapter_target_status,
     )
 
 
@@ -1057,6 +1154,17 @@ def _collect_claim_matrix_inputs(
     return all_dissertation_artifacts, evidence_claim_boundaries
 
 
+def _format_claim_matrix_cell(value: object) -> str:
+    """Format a claim-matrix value for Markdown.
+
+    Returns:
+        Empty string for missing values, otherwise the string value.
+    """
+    if value is None:
+        return ""
+    return str(value).replace("|", r"\|")
+
+
 def _write_claim_matrix_outputs(
     *,
     claims_rows: list[ClaimMatrixRow],
@@ -1076,12 +1184,21 @@ def _write_claim_matrix_outputs(
     if not claims_rows:
         markdown_lines.append("No claims found to display.")
     else:
-        headers = list(ClaimMatrixRow.__annotations__.keys())
+        all_headers = list(ClaimMatrixRow.__annotations__.keys())
+        has_chapter_target = any(row.get("chapter_target") is not None for row in claims_rows)
+        if not has_chapter_target:
+            headers = [
+                h for h in all_headers if h not in ("chapter_target", "chapter_target_status")
+            ]
+        else:
+            headers = all_headers
         readable_headers = [header.replace("_", " ").title() for header in headers]
         markdown_lines.append("| " + " | ".join(readable_headers) + " |")
         markdown_lines.append("|" + "---|".join(["-" * len(h) for h in readable_headers]) + "|")
         for row in claims_rows:
-            markdown_lines.append("| " + " | ".join([str(row[key]) for key in headers]) + " |")
+            markdown_lines.append(
+                "| " + " | ".join([_format_claim_matrix_cell(row[key]) for key in headers]) + " |"
+            )
 
     markdown_output.parent.mkdir(parents=True, exist_ok=True)
     markdown_output.write_text("\n".join(markdown_lines) + "\n", encoding="utf-8")

@@ -110,6 +110,7 @@ def _make_dissertation_source(source_root: Path) -> Path:
                 "claim_boundary": "Formatted table only; not new benchmark evidence.",
                 "recommended_manuscript_use": "discussion",
                 "fallback_degraded_summary": "Fallback and degraded rows remain visible.",
+                "chapter_target": "Results, Section 4.2",
                 "metadata": {
                     "table_label": "tab:campaign-table",
                     "source_release_tag": "0.0.2",
@@ -123,6 +124,8 @@ def _make_dissertation_source(source_root: Path) -> Path:
                 "claim_boundary": "Diagnostic status distribution only.",
                 "recommended_manuscript_use": "do-not-use",
                 "fallback_degraded_summary": "Do not use as performance evidence.",
+                "chapter_target": "Limitations, Section 5.1",
+                "chapter_target_justification": "Used to contextualize diagnostic limits.",
             },
         ]
     }
@@ -405,6 +408,12 @@ def test_dissertation_bundle_command_creates_artifact_manifest(tmp_path: Path, c
         "table_label": "tab:campaign-table",
         "source_release_tag": "0.0.2",
     }
+    assert table_row["chapter_target"] == "Results, Section 4.2"
+    assert rows["fig_planner_status"]["chapter_target"] == "Limitations, Section 5.1"
+    assert (
+        rows["fig_planner_status"]["chapter_target_justification"]
+        == "Used to contextualize diagnostic limits."
+    )
     assert table_row["sha256"] in checksums_path.read_text(encoding="utf-8")
 
 
@@ -426,6 +435,37 @@ def test_dissertation_bundle_command_rejects_invalid_manuscript_use(tmp_path: Pa
                 str(tmp_path / "dissertation_export"),
                 "--bundle-name",
                 "bad_use",
+                "--artifact-spec",
+                str(spec_path),
+                "--command",
+                "uv run python scripts/tools/compile_benchmark_artifacts.py",
+                "--commit",
+                "abc123",
+            ]
+        )
+
+
+def test_dissertation_bundle_command_rejects_justification_without_chapter_target(
+    tmp_path: Path,
+) -> None:
+    """Chapter-target justifications require a chapter target to justify."""
+    source_root = tmp_path / "publication_candidates"
+    spec_path = _make_dissertation_source(source_root)
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    spec["artifacts"][0].pop("chapter_target")
+    spec["artifacts"][0]["chapter_target_justification"] = "No target is present."
+    spec_path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="without chapter_target"):
+        benchmark_publication_bundle.main(
+            [
+                "dissertation-bundle",
+                "--source-root",
+                str(source_root),
+                "--out-dir",
+                str(tmp_path / "dissertation_export"),
+                "--bundle-name",
+                "missing_target",
                 "--artifact-spec",
                 str(spec_path),
                 "--command",
@@ -1233,3 +1273,292 @@ def test_claim_matrix_missing_checksum_or_source(
     # This test should ideally be in its own fixture setup for clarity.
     # For now, relying on the fixture setup where fig_missing_checksum_bundle1 payload exists.
     # A dedicated test for 'missing payload file' would involve deleting the created payload file.
+
+
+def _make_chapter_target_claims_matrix_fixtures(tmp_path: Path) -> Path:
+    """Create a dissertation bundle with chapter-target metadata for claim-matrix tests."""
+    bundle_root = tmp_path / "diss_bundle_chapter_targets"
+    bundle_root.mkdir(parents=True, exist_ok=True)
+    payload_dir = bundle_root / "payload" / "artifacts"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+
+    _write(payload_dir / "tab_results.md", "| metric | value |\n| --- | --- |\n")
+    _write(payload_dir / "fig_limitations.png", "fake png bytes for limitations\n")
+    _write(payload_dir / "fig_results_unjustified.png", "fake png bytes for unjustified\n")
+    _write(payload_dir / "fig_results_justified.png", "fake png bytes for justified\n")
+    _write(payload_dir / "fig_alias_target.png", "fake png bytes for alias target\n")
+    _write(payload_dir / "fig_metadata_target.png", "fake png bytes for metadata target\n")
+    _write(payload_dir / "tab_no_target.md", "| diagnostic | value |\n| --- | --- |\n")
+
+    table_hash = benchmark_publication_bundle._sha256_file(payload_dir / "tab_results.md")
+    limitations_hash = benchmark_publication_bundle._sha256_file(
+        payload_dir / "fig_limitations.png"
+    )
+    unjustified_hash = benchmark_publication_bundle._sha256_file(
+        payload_dir / "fig_results_unjustified.png"
+    )
+    justified_hash = benchmark_publication_bundle._sha256_file(
+        payload_dir / "fig_results_justified.png"
+    )
+    alias_hash = benchmark_publication_bundle._sha256_file(payload_dir / "fig_alias_target.png")
+    metadata_hash = benchmark_publication_bundle._sha256_file(
+        payload_dir / "fig_metadata_target.png"
+    )
+    no_target_hash = benchmark_publication_bundle._sha256_file(payload_dir / "tab_no_target.md")
+
+    spec = {
+        "schema_version": "dissertation_artifact_bundle.v1",
+        "source_commit": "abc123",
+        "generation_command": "test-command-chapter-targets",
+        "artifacts": [
+            {
+                "artifact_id": "tab_results_chapter_target",
+                "source_path": "src/tables/results.md",
+                "source_artifact": "Results Table",
+                "caption_draft": "Benchmark results table.",
+                "claim_boundary": "benchmark-facing, strong claim",
+                "recommended_manuscript_use": "results",
+                "fallback_degraded_summary": "No degradation.",
+                "sha256": table_hash,
+                "output_path": "artifacts/tab_results.md",
+                "chapter_target": "Results, Section 4.2",
+            },
+            {
+                "artifact_id": "fig_limitations_chapter_target",
+                "source_path": "src/figures/limitations.png",
+                "source_artifact": "Limitations Figure",
+                "caption_draft": "Limitations figure.",
+                "claim_boundary": "diagnostic-only",
+                "recommended_manuscript_use": "discussion",
+                "fallback_degraded_summary": "Diagnostic only.",
+                "sha256": limitations_hash,
+                "output_path": "artifacts/fig_limitations.png",
+                "chapter_target": "Limitations, Section 5.1",
+            },
+            {
+                "artifact_id": "fig_results_unjustified_chapter_target",
+                "source_path": "src/figures/results_unjustified.png",
+                "source_artifact": "Unjustified Results Figure",
+                "caption_draft": "Diagnostic figure wrongly targeted at Results.",
+                "claim_boundary": "diagnostic-only",
+                "recommended_manuscript_use": "discussion",
+                "fallback_degraded_summary": "Diagnostic only.",
+                "sha256": unjustified_hash,
+                "output_path": "artifacts/fig_results_unjustified.png",
+                "chapter_target": "Results, Section 4.3",
+            },
+            {
+                "artifact_id": "fig_results_justified_chapter_target",
+                "source_path": "src/figures/results_justified.png",
+                "source_artifact": "Justified Results Figure",
+                "caption_draft": "Diagnostic figure with explicit Results justification.",
+                "claim_boundary": "diagnostic-only",
+                "recommended_manuscript_use": "discussion",
+                "fallback_degraded_summary": "Diagnostic only.",
+                "sha256": justified_hash,
+                "output_path": "artifacts/fig_results_justified.png",
+                "chapter_target": "Results, Section 4.4",
+                "chapter_target_justification": "Required to illustrate a diagnostic contrast in the Results section.",
+            },
+            {
+                "artifact_id": "fig_alias_chapter_target",
+                "source_path": "src/figures/alias_target.png",
+                "source_artifact": "Alias Target Figure",
+                "caption_draft": "Diagnostic figure using the dissertation_chapter alias.",
+                "claim_boundary": "diagnostic-only",
+                "recommended_manuscript_use": "discussion",
+                "fallback_degraded_summary": "Diagnostic only.",
+                "sha256": alias_hash,
+                "output_path": "artifacts/fig_alias_target.png",
+                "dissertation_chapter": "Methodology, Section 3.2",
+            },
+            {
+                "artifact_id": "fig_metadata_chapter_target",
+                "source_path": "src/figures/metadata_target.png",
+                "source_artifact": "Metadata Target Figure",
+                "caption_draft": "Diagnostic figure using metadata chapter target.",
+                "claim_boundary": "diagnostic-only",
+                "recommended_manuscript_use": "discussion",
+                "fallback_degraded_summary": "Diagnostic only.",
+                "sha256": metadata_hash,
+                "output_path": "artifacts/fig_metadata_target.png",
+                "metadata": {
+                    "chapter_target": "Future Work, Section 6.1",
+                    "chapter_target_justification": "Future-work placement for diagnostic limits.",
+                },
+            },
+            {
+                "artifact_id": "tab_no_chapter_target",
+                "source_path": "src/tables/no_target.md",
+                "source_artifact": "No Target Table",
+                "caption_draft": "Diagnostic table without chapter target.",
+                "claim_boundary": "diagnostic-only",
+                "recommended_manuscript_use": "discussion",
+                "fallback_degraded_summary": "Diagnostic only.",
+                "sha256": no_target_hash,
+                "output_path": "artifacts/tab_no_target.md",
+            },
+        ],
+    }
+    _write(bundle_root / "artifact_manifest.json", json.dumps(spec, indent=2) + "\n")
+    _write(
+        bundle_root / "checksums.sha256",
+        f"{table_hash}  artifacts/tab_results.md\n"
+        f"{limitations_hash}  artifacts/fig_limitations.png\n"
+        f"{unjustified_hash}  artifacts/fig_results_unjustified.png\n"
+        f"{justified_hash}  artifacts/fig_results_justified.png\n"
+        f"{alias_hash}  artifacts/fig_alias_target.png\n"
+        f"{metadata_hash}  artifacts/fig_metadata_target.png\n"
+        f"{no_target_hash}  artifacts/tab_no_target.md\n",
+    )
+    return bundle_root
+
+
+def test_claim_matrix_chapter_target_surfaces(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Chapter targets should appear in JSON and Markdown when present and be absent otherwise."""
+    diss_bundle = _make_chapter_target_claims_matrix_fixtures(tmp_path)
+    json_output_path = tmp_path / "claims_matrix_chapter_targets.json"
+    markdown_output_path = tmp_path / "claims_matrix_chapter_targets.md"
+
+    exit_code = benchmark_publication_bundle.main(
+        [
+            "claim-matrix",
+            "--bundle-dir",
+            str(diss_bundle),
+            "--json-output",
+            str(json_output_path),
+            "--markdown-output",
+            str(markdown_output_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0, captured.err
+
+    json_content = json.loads(json_output_path.read_text(encoding="utf-8"))
+    assert json_content["schema_version"] == "claim_matrix.v1"
+    assert len(json_content["claims"]) == 7
+
+    by_id = {c["artifact_id"]: c for c in json_content["claims"]}
+    results_row = by_id["tab_results_chapter_target"]
+    assert results_row["evidence_tier"] == "paper-grade"
+    assert results_row["chapter_target"] == "Results, Section 4.2"
+    assert results_row["chapter_target_status"] == "ok"
+
+    limitations_row = by_id["fig_limitations_chapter_target"]
+    assert limitations_row["evidence_tier"] == "diagnostic-only"
+    assert limitations_row["chapter_target"] == "Limitations, Section 5.1"
+    assert limitations_row["chapter_target_status"] == "ok"
+
+    no_target_row = by_id["tab_no_chapter_target"]
+    assert no_target_row["chapter_target"] is None
+    assert no_target_row["chapter_target_status"] is None
+
+    alias_row = by_id["fig_alias_chapter_target"]
+    assert alias_row["chapter_target"] == "Methodology, Section 3.2"
+    assert alias_row["chapter_target_status"] == "ok"
+
+    metadata_row = by_id["fig_metadata_chapter_target"]
+    assert metadata_row["chapter_target"] == "Future Work, Section 6.1"
+    assert metadata_row["chapter_target_status"] == "ok"
+
+    markdown_content = markdown_output_path.read_text(encoding="utf-8")
+    assert "# Dissertation Claim Matrix" in markdown_content
+    assert "Chapter Target" in markdown_content
+    assert "Results, Section 4.2" in markdown_content
+    assert "Limitations, Section 5.1" in markdown_content
+    no_target_markdown_row = next(
+        line for line in markdown_content.splitlines() if "tab_no_chapter_target" in line
+    )
+    assert no_target_markdown_row.endswith(" |  |  |")
+
+
+def test_claim_matrix_diagnostic_chapter_target_requires_justification(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Diagnostic-only rows targeting Results should warn unless explicitly justified."""
+    diss_bundle = _make_chapter_target_claims_matrix_fixtures(tmp_path)
+    json_output_path = tmp_path / "claims_matrix_chapter_targets.json"
+    markdown_output_path = tmp_path / "claims_matrix_chapter_targets.md"
+
+    exit_code = benchmark_publication_bundle.main(
+        [
+            "claim-matrix",
+            "--bundle-dir",
+            str(diss_bundle),
+            "--json-output",
+            str(json_output_path),
+            "--markdown-output",
+            str(markdown_output_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0, captured.err
+
+    json_content = json.loads(json_output_path.read_text(encoding="utf-8"))
+    by_id = {c["artifact_id"]: c for c in json_content["claims"]}
+
+    unjustified_row = by_id["fig_results_unjustified_chapter_target"]
+    assert unjustified_row["evidence_tier"] == "diagnostic-only"
+    assert unjustified_row["chapter_target"] == "Results, Section 4.3"
+    assert unjustified_row["chapter_target_status"].startswith("warning:")
+    assert "limitations/methodology/future-work" in unjustified_row["chapter_target_status"]
+
+    justified_row = by_id["fig_results_justified_chapter_target"]
+    assert justified_row["evidence_tier"] == "diagnostic-only"
+    assert justified_row["chapter_target"] == "Results, Section 4.4"
+    assert justified_row["chapter_target_status"] == "ok"
+
+
+def test_claim_matrix_chapter_target_validation_edge_cases() -> None:
+    """Chapter-target validation should flag inconsistent weak rows."""
+    assert (
+        benchmark_publication_bundle._validate_chapter_target(
+            "diagnostic-only",
+            None,
+            "Justification without a target.",
+        )
+        == "warning: justification provided but no chapter target is specified"
+    )
+    assert benchmark_publication_bundle._validate_chapter_target(
+        "non-claimable",
+        "Results, Section 4.5",
+        None,
+    ).startswith("warning: non-claimable row targets")
+    assert benchmark_publication_bundle._format_claim_matrix_cell("a | b") == r"a \| b"
+
+
+def test_claim_matrix_no_chapter_target_remains_stable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Rows without chapter targets should omit chapter-target columns from Markdown."""
+    diss_bundle_1, _ = _make_claims_matrix_fixtures(tmp_path)
+    json_output_path = tmp_path / "claims_matrix_stable.json"
+    markdown_output_path = tmp_path / "claims_matrix_stable.md"
+
+    exit_code = benchmark_publication_bundle.main(
+        [
+            "claim-matrix",
+            "--bundle-dir",
+            str(diss_bundle_1),
+            "--json-output",
+            str(json_output_path),
+            "--markdown-output",
+            str(markdown_output_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0, captured.err
+
+    json_content = json.loads(json_output_path.read_text(encoding="utf-8"))
+    for claim in json_content["claims"]:
+        assert claim["chapter_target"] is None
+        assert claim["chapter_target_status"] is None
+
+    markdown_content = markdown_output_path.read_text(encoding="utf-8")
+    assert "Chapter Target" not in markdown_content
+    assert (
+        "| Artifact Id | Source Artifact Path | Checksum | Evidence Tier | Allowed Wording | Not Claimed Boundary | Figure Table Candidate | Caveat | Validation Status |"
+        in markdown_content
+    )

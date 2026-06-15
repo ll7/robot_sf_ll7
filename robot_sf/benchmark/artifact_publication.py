@@ -91,6 +91,8 @@ class DissertationArtifactSpec:
     recommended_manuscript_use: str
     fallback_degraded_summary: str
     metadata: dict[str, Any] | None = None
+    chapter_target: str | None = None
+    chapter_target_justification: str | None = None
 
 
 @dataclass(frozen=True)
@@ -543,6 +545,53 @@ def _validate_dissertation_artifacts(
     return resolved
 
 
+def _build_dissertation_manifest_entry(
+    artifact: DissertationArtifactSpec,
+    rel_source: Path,
+    payload_path: Path,
+    digest: str,
+    size_bytes: int,
+    commit: str,
+    command: str,
+) -> dict[str, Any]:
+    """Build one artifact manifest entry for a dissertation bundle.
+
+    Returns:
+        JSON-serializable manifest entry for the artifact.
+    """
+    entry: dict[str, Any] = {
+        "artifact_id": artifact.artifact_id,
+        "source_path": rel_source.as_posix(),
+        "source_artifact": artifact.source_artifact,
+        "output_path": payload_path.as_posix(),
+        "size_bytes": size_bytes,
+        "sha256": digest,
+        "source_commit": commit.strip(),
+        "generation_command": command.strip(),
+        "caption_draft": artifact.caption_draft.strip(),
+        "claim_boundary": artifact.claim_boundary.strip(),
+        "recommended_manuscript_use": artifact.recommended_manuscript_use,
+        "fallback_degraded_summary": artifact.fallback_degraded_summary.strip(),
+        "metadata": artifact.metadata or {},
+    }
+    chapter_target = artifact.chapter_target.strip() if artifact.chapter_target is not None else ""
+    if chapter_target:
+        entry["chapter_target"] = chapter_target
+    chapter_target_justification = (
+        artifact.chapter_target_justification.strip()
+        if artifact.chapter_target_justification is not None
+        else ""
+    )
+    if chapter_target_justification and not chapter_target:
+        raise ValueError(
+            f"Artifact {artifact.artifact_id!r} sets chapter_target_justification "
+            "without chapter_target"
+        )
+    if chapter_target_justification:
+        entry["chapter_target_justification"] = chapter_target_justification
+    return entry
+
+
 def export_dissertation_artifact_bundle(
     source_root: Path,
     out_dir: Path,
@@ -605,21 +654,9 @@ def export_dissertation_artifact_bundle(
         total_bytes += size_bytes
         checksums.append(f"{digest}  {payload_path.as_posix()}\n")
         manifest_entries.append(
-            {
-                "artifact_id": artifact.artifact_id,
-                "source_path": rel_source.as_posix(),
-                "source_artifact": artifact.source_artifact,
-                "output_path": payload_path.as_posix(),
-                "size_bytes": size_bytes,
-                "sha256": digest,
-                "source_commit": commit.strip(),
-                "generation_command": command.strip(),
-                "caption_draft": artifact.caption_draft.strip(),
-                "claim_boundary": artifact.claim_boundary.strip(),
-                "recommended_manuscript_use": artifact.recommended_manuscript_use,
-                "fallback_degraded_summary": artifact.fallback_degraded_summary.strip(),
-                "metadata": artifact.metadata or {},
-            }
+            _build_dissertation_manifest_entry(
+                artifact, rel_source, payload_path, digest, size_bytes, commit, command
+            )
         )
 
     manifest_entries = sorted(manifest_entries, key=lambda entry: str(entry["artifact_id"]))

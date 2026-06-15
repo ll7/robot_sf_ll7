@@ -1,0 +1,318 @@
+{
+  "claim_boundary": "Forecast transferability stress rows are benchmark-eligible only when each cell has all required dimensions, non-empty deployable metric denominators, and non-oracle observation tiers.",
+  "dimension_coverage": {
+    "actor_type": {
+      "coverage_status": "partial",
+      "observed_values": [
+        "bicycle",
+        "pedestrian"
+      ],
+      "unavailable_report_count": 1
+    },
+    "density": {
+      "coverage_status": "full",
+      "observed_values": [
+        "low",
+        "medium",
+        "unknown"
+      ],
+      "unavailable_report_count": 0
+    },
+    "dropout": {
+      "coverage_status": "full",
+      "observed_values": [
+        "none",
+        "synthetic_dropout_0.1",
+        "unknown"
+      ],
+      "unavailable_report_count": 0
+    },
+    "latency": {
+      "coverage_status": "full",
+      "observed_values": [
+        "0_steps",
+        "1_step",
+        "unknown"
+      ],
+      "unavailable_report_count": 0
+    },
+    "map_family": {
+      "coverage_status": "partial",
+      "observed_values": [
+        "corridor_fixture",
+        "motion_rich_occluded_emergence"
+      ],
+      "unavailable_report_count": 1
+    },
+    "observation_noise": {
+      "coverage_status": "full",
+      "observed_values": [
+        "none",
+        "tracked_noise_low",
+        "tracked_noise_unknown"
+      ],
+      "unavailable_report_count": 0
+    },
+    "observation_tier": {
+      "coverage_status": "full",
+      "observed_values": [
+        "deployable_tracked",
+        "oracle_full_state"
+      ],
+      "unavailable_report_count": 0
+    },
+    "occlusion": {
+      "coverage_status": "full",
+      "observed_values": [
+        "clear",
+        "occluded_emergence",
+        "unknown"
+      ],
+      "unavailable_report_count": 0
+    },
+    "pedestrian_model_family": {
+      "coverage_status": "full",
+      "observed_values": [
+        "fast_actor_fixture",
+        "social_force",
+        "unknown"
+      ],
+      "unavailable_report_count": 0
+    },
+    "scenario_family": {
+      "coverage_status": "partial",
+      "observed_values": [
+        "corridor_fixture",
+        "motion_rich_occluded_emergence"
+      ],
+      "unavailable_report_count": 1
+    },
+    "semantic_metadata_present": {
+      "coverage_status": "full",
+      "observed_values": [
+        "absent",
+        "present",
+        "unknown"
+      ],
+      "unavailable_report_count": 0
+    }
+  },
+  "generated_at_utc": "2026-06-15T00:00:00+00:00",
+  "limitation_rows": [
+    {
+      "availability_status": "blocked",
+      "dimension": "scenario_family",
+      "observation_tier": "deployable_tracked",
+      "predictor_family": "constant_velocity",
+      "predictor_id": "cv-deployable-unavailable-cell-fixture",
+      "reason": "dimension metadata unavailable in ForecastMetrics.v1 report",
+      "scenario_id": "missing_metadata_fixture"
+    },
+    {
+      "availability_status": "blocked",
+      "dimension": "map_family",
+      "observation_tier": "deployable_tracked",
+      "predictor_family": "constant_velocity",
+      "predictor_id": "cv-deployable-unavailable-cell-fixture",
+      "reason": "dimension metadata unavailable in ForecastMetrics.v1 report",
+      "scenario_id": "missing_metadata_fixture"
+    }
+  ],
+  "matrix_rows": [
+    {
+      "actor_type": "pedestrian",
+      "artifact_input": {
+        "command": "tracked metric fixture for issue #2866 transferability matrix rows",
+        "generated_at_utc": "2026-06-15T00:00:00+00:00",
+        "issue": 2866,
+        "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/metric_oracle_corridor.json"
+      },
+      "claim_boundary": "oracle-state row; not deployable transfer evidence",
+      "denominator": 20,
+      "evidence_status": "diagnostic-only",
+      "horizon_s": 0.5,
+      "mean_value": 0.18,
+      "metric": "mean_ade",
+      "metric_status": "ok",
+      "observation_tier": "oracle_full_state",
+      "predictor_family": "constant_velocity",
+      "predictor_id": "cv-oracle-corridor-fixture",
+      "scenario_id": "classic_corridor_fixture",
+      "transfer_dimensions": {
+        "actor_type": "pedestrian",
+        "density": "low",
+        "dropout": "none",
+        "latency": "0_steps",
+        "map_family": "corridor_fixture",
+        "observation_noise": "none",
+        "observation_tier": "oracle_full_state",
+        "occlusion": "clear",
+        "pedestrian_model_family": "social_force",
+        "scenario_family": "corridor_fixture",
+        "semantic_metadata_present": "absent"
+      },
+      "unavailable_dimensions": []
+    },
+    {
+      "actor_type": "pedestrian",
+      "artifact_input": {
+        "command": "tracked metric fixture for issue #2866 transferability matrix rows",
+        "generated_at_utc": "2026-06-15T00:00:00+00:00",
+        "issue": 2866,
+        "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/metric_oracle_corridor.json"
+      },
+      "claim_boundary": "oracle-state row; not deployable transfer evidence",
+      "denominator": 20,
+      "evidence_status": "diagnostic-only",
+      "horizon_s": 1.0,
+      "mean_value": 0.34,
+      "metric": "mean_ade",
+      "metric_status": "ok",
+      "observation_tier": "oracle_full_state",
+      "predictor_family": "constant_velocity",
+      "predictor_id": "cv-oracle-corridor-fixture",
+      "scenario_id": "classic_corridor_fixture",
+      "transfer_dimensions": {
+        "actor_type": "pedestrian",
+        "density": "low",
+        "dropout": "none",
+        "latency": "0_steps",
+        "map_family": "corridor_fixture",
+        "observation_noise": "none",
+        "observation_tier": "oracle_full_state",
+        "occlusion": "clear",
+        "pedestrian_model_family": "social_force",
+        "scenario_family": "corridor_fixture",
+        "semantic_metadata_present": "absent"
+      },
+      "unavailable_dimensions": []
+    },
+    {
+      "actor_type": "bicycle",
+      "artifact_input": {
+        "command": "tracked metric fixture for issue #2866 transferability matrix rows",
+        "generated_at_utc": "2026-06-15T00:00:00+00:00",
+        "issue": 2866,
+        "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/metric_deployable_motion_rich_bicycle.json"
+      },
+      "claim_boundary": "deployable observation row; still simulation-only transfer evidence",
+      "denominator": 8,
+      "evidence_status": "benchmark-eligible",
+      "horizon_s": 0.5,
+      "mean_value": 0.42,
+      "metric": "mean_ade",
+      "metric_status": "ok",
+      "observation_tier": "deployable_tracked",
+      "predictor_family": "constant_velocity",
+      "predictor_id": "cv-deployable-motion-rich-bicycle-fixture",
+      "scenario_id": "motion_rich_occluded_emergence_fixture",
+      "transfer_dimensions": {
+        "actor_type": "bicycle",
+        "density": "medium",
+        "dropout": "synthetic_dropout_0.1",
+        "latency": "1_step",
+        "map_family": "motion_rich_occluded_emergence",
+        "observation_noise": "tracked_noise_low",
+        "observation_tier": "deployable_tracked",
+        "occlusion": "occluded_emergence",
+        "pedestrian_model_family": "fast_actor_fixture",
+        "scenario_family": "motion_rich_occluded_emergence",
+        "semantic_metadata_present": "present"
+      },
+      "unavailable_dimensions": []
+    },
+    {
+      "actor_type": "bicycle",
+      "artifact_input": {
+        "command": "tracked metric fixture for issue #2866 transferability matrix rows",
+        "generated_at_utc": "2026-06-15T00:00:00+00:00",
+        "issue": 2866,
+        "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/metric_deployable_motion_rich_bicycle.json"
+      },
+      "claim_boundary": "deployable observation row; still simulation-only transfer evidence",
+      "denominator": 8,
+      "evidence_status": "benchmark-eligible",
+      "horizon_s": 1.0,
+      "mean_value": 0.91,
+      "metric": "mean_ade",
+      "metric_status": "ok",
+      "observation_tier": "deployable_tracked",
+      "predictor_family": "constant_velocity",
+      "predictor_id": "cv-deployable-motion-rich-bicycle-fixture",
+      "scenario_id": "motion_rich_occluded_emergence_fixture",
+      "transfer_dimensions": {
+        "actor_type": "bicycle",
+        "density": "medium",
+        "dropout": "synthetic_dropout_0.1",
+        "latency": "1_step",
+        "map_family": "motion_rich_occluded_emergence",
+        "observation_noise": "tracked_noise_low",
+        "observation_tier": "deployable_tracked",
+        "occlusion": "occluded_emergence",
+        "pedestrian_model_family": "fast_actor_fixture",
+        "scenario_family": "motion_rich_occluded_emergence",
+        "semantic_metadata_present": "present"
+      },
+      "unavailable_dimensions": []
+    },
+    {
+      "actor_type": null,
+      "artifact_input": {
+        "command": "tracked unavailable-cell fixture for issue #2866 transferability matrix rows",
+        "generated_at_utc": "2026-06-15T00:00:00+00:00",
+        "issue": 2866,
+        "source": "docs/context/evidence/issue_2866_transferability_matrix_rows/metric_deployable_unavailable_cells.json"
+      },
+      "claim_boundary": "blocked transfer dimensions prevent benchmark-strength transfer claims",
+      "denominator": 0,
+      "evidence_status": "blocked",
+      "horizon_s": 1.0,
+      "mean_value": null,
+      "metric": "mean_ade",
+      "metric_status": "unavailable",
+      "observation_tier": "deployable_tracked",
+      "predictor_family": "constant_velocity",
+      "predictor_id": "cv-deployable-unavailable-cell-fixture",
+      "scenario_id": "missing_metadata_fixture",
+      "transfer_dimensions": {
+        "actor_type": null,
+        "density": "unknown",
+        "dropout": "unknown",
+        "latency": "unknown",
+        "map_family": null,
+        "observation_noise": "tracked_noise_unknown",
+        "observation_tier": "deployable_tracked",
+        "occlusion": "unknown",
+        "pedestrian_model_family": "unknown",
+        "scenario_family": null,
+        "semantic_metadata_present": "unknown"
+      },
+      "unavailable_dimensions": [
+        "scenario_family",
+        "map_family",
+        "actor_type"
+      ]
+    }
+  ],
+  "recommendation": {
+    "claim_status": "blocked",
+    "decision": "stop",
+    "reason": "one or more transfer cells are blocked by unavailable required metadata"
+  },
+  "report_id": "issue_2866_transferability_matrix_rows",
+  "required_dimensions": [
+    "observation_tier",
+    "observation_noise",
+    "latency",
+    "dropout",
+    "occlusion",
+    "scenario_family",
+    "map_family",
+    "density",
+    "pedestrian_model_family",
+    "actor_type",
+    "semantic_metadata_present"
+  ],
+  "schema_version": "ForecastTransferabilityStressMatrix.v1",
+  "source_schema_version": "ForecastMetrics.v1"
+}

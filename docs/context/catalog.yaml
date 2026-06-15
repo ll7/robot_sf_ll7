@@ -1081,6 +1081,18 @@ entries:
     status: current
     freshness: maintained
     area: predictive_planner
+  - path: docs/context/evidence/issue_2866_transferability_matrix_rows/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2866_transferability_matrix_rows/transferability_matrix.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2866_transferability_matrix_rows/transferability_matrix.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained

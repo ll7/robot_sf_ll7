@@ -20,6 +20,10 @@ def main() -> None:
     parser.add_argument("--report-id", required=True)
     parser.add_argument("--out-json", type=Path, required=True)
     parser.add_argument("--out-md", type=Path)
+    parser.add_argument(
+        "--generated-at-utc",
+        help="Optional deterministic ISO-8601 generation timestamp for reviewable artifacts.",
+    )
     args = parser.parse_args()
 
     metric_reports = []
@@ -33,6 +37,7 @@ def main() -> None:
     report = build_forecast_transferability_stress_matrix(
         metric_reports,
         report_id=args.report_id,
+        generated_at_utc=args.generated_at_utc,
     )
     paths = write_forecast_transferability_stress_matrix(
         report,

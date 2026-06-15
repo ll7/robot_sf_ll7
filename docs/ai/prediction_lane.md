@@ -79,6 +79,7 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 | Issue #2840 | closed | Probabilistic forecast metrics | Metric surface for deterministic/probabilistic forecast comparison. |
 | Issue #2846 | closed | Fast dynamic actor forecast metrics | Separates pedestrian and fast-agent denominators. |
 | Issue #1490 | open, blocked | Predictive planner v2 comparison | Do not repeat the old four-way expansion until revised gate evidence exists. |
+| Issue #2866 | open | Transferability matrix row coverage | Follow-up to make scenario-family/horizon/actor split cells explicit and keep blocked metadata cells visible. |
 | Issue #2837 | open | Horizon and timestep ablation | Analysis-only report for forecast horizon/output-step presets. |
 | Issue #2838 | closed | Observation-level adapters | Required before deployable/oracle observation tiers can be compared safely. |
 | Issue #2839 | closed | Dataset recorder and split manifest | Required before learned predictor training or durable split comparisons. |

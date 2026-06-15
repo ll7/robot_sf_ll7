@@ -15,6 +15,12 @@ from robot_sf.benchmark.forecast_batch import (
     save_forecast_batch,
     validate_forecast_batch,
 )
+from robot_sf.benchmark.forecast_calibration_report import (
+    FORECAST_CALIBRATION_REPORT_SCHEMA_VERSION,
+    build_forecast_calibration_report,
+    format_forecast_calibration_markdown,
+    write_forecast_calibration_report,
+)
 from robot_sf.benchmark.forecast_dataset_recorder import (
     DEFAULT_FORECAST_DATASET_ID,
     FORECAST_DATASET_SCHEMA_VERSION,
@@ -60,6 +66,7 @@ __all__ = [
     "DEFAULT_FORECAST_DATASET_ID",
     "DEFAULT_TRANSFER_DIMENSIONS",
     "FORECAST_BATCH_SCHEMA_VERSION",
+    "FORECAST_CALIBRATION_REPORT_SCHEMA_VERSION",
     "FORECAST_DATASET_SCHEMA_VERSION",
     "FORECAST_METRICS_SCHEMA_VERSION",
     "FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION",
@@ -81,8 +88,10 @@ __all__ = [
     "RegressionCheck",
     "TrackedAgentsForecastAdapter",
     "build_constant_velocity_forecast_batch",
+    "build_forecast_calibration_report",
     "build_forecast_transferability_stress_matrix",
     "evaluate_forecast_batch",
+    "format_forecast_calibration_markdown",
     "format_forecast_metrics_markdown",
     "format_forecast_transferability_stress_markdown",
     "load_forecast_batch",
@@ -93,5 +102,6 @@ __all__ = [
     "save_forecast_batch",
     "validate_forecast_batch",
     "validate_forecast_dataset_manifest",
+    "write_forecast_calibration_report",
     "write_forecast_transferability_stress_matrix",
 ]

@@ -156,6 +156,21 @@ The builder does not run a benchmark campaign by itself. Missing transfer dimens
 limitation rows, oracle-only rows remain diagnostic-only, and the recommendation field is the claim
 boundary for continue/revise/stop decisions.
 
+Use the calibration report builder to summarize existing `ForecastMetrics.v1` reliability rows by
+scenario family, horizon, observation tier, and predictor family:
+
+```bash
+uv run python scripts/benchmark/build_forecast_calibration_report.py \
+  path/to/forecast_metrics.json \
+  --report-id prediction_calibration_diagnostic \
+  --out-json output/forecast_calibration_report.json \
+  --out-md output/forecast_calibration_report.md
+```
+
+Deterministic or uncertainty-incomplete rows are reported as calibration-unavailable limitations.
+The recommendation field is analysis-only guidance for continue/revise/wait decisions before any
+planner-risk coupling.
+
 Testing-only planners remain opt-in only under the guardrail policy in
 `docs/benchmark_experimental_planners.md` . Issue 596 adds a verified-simple stage gate for any
 future reconsideration, but does not remove the opt-in requirement by itself.

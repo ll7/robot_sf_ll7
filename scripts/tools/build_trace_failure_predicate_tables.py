@@ -13,16 +13,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import robot_sf.analysis_workbench.trace_failure_predicates as tfp
-from robot_sf.analysis_workbench.simulation_trace_export import load_simulation_trace_export
+from robot_sf.analysis_workbench.simulation_trace_export import (
+    SimulationTraceExport,
+    load_simulation_trace_export,
+)
 
 if TYPE_CHECKING:
-    from robot_sf.analysis_workbench.simulation_trace_export import SimulationTraceExport
+    from collections.abc import Mapping
 
 
 def build_trace_failure_predicate_tables(
     *,
     traces: list[Path],
     scenario_family: str | None = None,
+    matrix: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Build aggregate predicate tables from one or more trace paths."""
     loaded_traces: list[SimulationTraceExport] = []
@@ -35,6 +39,7 @@ def build_trace_failure_predicate_tables(
     payload = tfp.aggregate_trace_failure_predicate_tables(
         loaded_traces,
         scenario_family=scenario_family,
+        matrix=matrix,
         failed_trace_ids=failed_trace_ids,
     )
     return payload, failed_trace_ids
@@ -44,6 +49,7 @@ def write_trace_failure_predicate_tables(
     *,
     traces: list[Path],
     scenario_family: str | None = None,
+    matrix: Mapping[str, Any] | None = None,
     output_json: Path,
     output_markdown: Path,
     output_denominator_health_json: Path | None = None,
@@ -52,6 +58,7 @@ def write_trace_failure_predicate_tables(
     payload, _failed_trace_ids = build_trace_failure_predicate_tables(
         traces=traces,
         scenario_family=scenario_family,
+        matrix=matrix,
     )
     denominator_health_report = tfp.build_trace_predicate_denominator_health_report(payload)
 
@@ -89,6 +96,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--scenario-family", help="Optional aggregate scenario-family label.")
     parser.add_argument(
+        "--matrix",
+        type=Path,
+        help=(
+            "Optional predeclared trace-predicate benchmark matrix YAML. Without it, outputs are "
+            "diagnostic-only and claim-ineligible."
+        ),
+    )
+    parser.add_argument(
         "--json-output",
         type=Path,
         default=Path("trace_failure_predicate_tables.json"),
@@ -112,10 +127,19 @@ def main(argv: list[str] | None = None) -> int:
     """Run the CLI entrypoint."""
     parser = _build_parser()
     args = parser.parse_args(argv)
+    matrix = None
+    if args.matrix is not None:
+        try:
+            matrix = tfp.load_trace_predicate_matrix(args.matrix)
+            matrix["_source_path"] = str(args.matrix)
+        except (OSError, ValueError) as exc:
+            print(f"{exc}", file=sys.stderr)
+            return 1
     try:
         output_paths = write_trace_failure_predicate_tables(
             traces=args.trace,
             scenario_family=args.scenario_family,
+            matrix=matrix,
             output_json=args.json_output,
             output_markdown=args.markdown_output,
             output_denominator_health_json=args.denominator_health_json_output,

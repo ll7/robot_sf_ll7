@@ -1,0 +1,105 @@
+name: issue_2688_trace_predicate_matrix
+contract_kind: trace-predicate-matrix
+issue: 2688
+evidence_tier: proposal
+benchmark_evidence: false
+status: proposed
+schema_version: trace_predicate_matrix.v1
+matrix_version: "0"
+
+claim_boundary: >
+  This file is a predeclared benchmark matrix for trace-failure predicate rate interpretation.
+  It is a prerequisite for rates, not rate evidence itself. It does not establish benchmark
+  results, planner rankings, mechanism frequencies, or safety claims. Any rate or comparison
+  claim requires executable traces that satisfy this matrix, including required trace fields,
+  scenario-family membership, planner inclusion, seed coverage, and fail-closed handling of
+  missing, fallback, degraded, or failed rows.
+
+purpose: >
+  Predeclare the minimal scenario family / planner / seed denominator, required trace fields,
+  and zero-row policy for trace-failure predicate rate interpretation.
+
+related_issues:
+  - issue: 2543
+    role: predicate_contract
+    status: current
+    claim: >
+      Supplies the trace-level failure predicate definitions and fail-closed `not_available`
+      semantics. This matrix names which predicates may enter rate interpretation and which
+      trace fields they require.
+  - issue: 2667
+    role: table_contract
+    status: current
+    claim: >
+      Supplies the denominator-aware aggregate table contract. This matrix makes that table
+      rate-interpretable only when the table inputs match the declared denominator.
+  - issue: 691
+    role: fallback_policy
+    status: policy
+    claim: >
+      Fallback/degraded rows are not successful benchmark outcomes. This matrix excludes them
+      from rate evidence.
+
+matrix:
+  scenario_families:
+    - crossing
+    - bottleneck
+    - open_field
+  planners:
+    - orca
+    - social_force
+    - hybrid_rule_base
+    - dwa
+  seeds: [111, 222, 333]
+  horizon: 500
+  inclusion_rule: >
+    A trace is included in the rate denominator only if its scenario_family, planner_id, and seed
+    all appear in this matrix and its row status is not fallback, degraded, failed, or
+    not_available.
+  exclusion_reasons:
+    - fallback
+    - degraded
+    - failed
+    - row_status_not_available
+  zero_row_policy: explicit_no_predicate_observed
+  required_trace_fields_by_predicate:
+    clearance_critical_interaction:
+      - robot.position
+      - pedestrians.position
+    late_evasive_reaction:
+      - robot.position
+      - pedestrians.position
+      - planner.selected_action.linear_velocity
+      - planner.selected_action.angular_velocity
+    oscillatory_local_control:
+      - planner.selected_action.angular_velocity
+    occlusion_triggered_near_miss:
+      - robot.position
+      - pedestrians.position
+      - planner.occlusion_or_visibility
+    bottleneck_deadlock:
+      - planner.event
+    zero_motion_timeout_behavior:
+      - robot.position
+      - planner.event
+
+fallback_policy:
+  fallback_is_rate_eligible: false
+  degraded_is_rate_eligible: false
+  failed_is_rate_eligible: false
+  not_available_is_rate_eligible: false
+  rule: >
+    Fallback, degraded, failed, and not_available rows are excluded from rate evidence and must be
+    reported as claim-ineligible or wording-weakened.
+
+stop_rule:
+  initial_structure: >
+    Stop at proposal status until a follow-up issue binds this matrix to executable configs,
+    native or eligible adapter planner rows, durable trace exports, and row-status artifacts.
+  promote: >
+    Promote to rate-interpretable evidence only after every required trace field is present on
+    matched rows for the declared seed set, with no fallback, degraded, failed, or not_available
+    rows counted as success evidence.
+  revise: >
+    Revise the matrix if a listed scenario family, planner, or seed cannot be executed under the
+    required trace contract, or if a predicate's required fields change.

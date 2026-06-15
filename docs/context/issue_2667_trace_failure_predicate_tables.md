@@ -69,6 +69,11 @@ paper-facing mechanism frequencies, or safety claims. A future predeclared bench
 include these predicates only after choosing scenario-family and seed denominators up front and
 recording how zero-row trace groups should be represented.
 
+Issue #2688 now predeclares a proposed matrix:
+[issue_2688_trace_predicate_matrix.md](issue_2688_trace_predicate_matrix.md). That matrix is still
+a prerequisite, not rate evidence; table outputs remain claim-ineligible unless a later
+evidence-producing issue promotes or revises the matrix.
+
 ## Validation
 
 ```bash

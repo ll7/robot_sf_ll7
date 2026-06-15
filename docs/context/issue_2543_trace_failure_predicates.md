@@ -76,3 +76,7 @@ These predicates are explicit trace diagnostics and table-preparation fields. Th
 future failure-mode tables by making evidence fields machine-readable, but any denominator-aware
 rates, planner comparisons, or dissertation Results claims require a separate benchmark issue with
 scenario-family denominators and durable execution evidence.
+
+Issue #2688 adds the first proposed predeclared matrix for those future rates:
+[issue_2688_trace_predicate_matrix.md](issue_2688_trace_predicate_matrix.md). The matrix is a
+prerequisite and remains claim-ineligible while its status is `proposed`.

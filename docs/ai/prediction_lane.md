@@ -80,7 +80,8 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 | Issue #2846 | closed | Fast dynamic actor forecast metrics | Separates pedestrian and fast-agent denominators. |
 | Issue #1490 | open, blocked | Predictive planner v2 comparison | Do not repeat the old four-way expansion until revised gate evidence exists. |
 | Issue #2866 | closed | Transferability matrix row coverage | Scenario-family/horizon/actor split cells are explicit and blocked metadata cells remain visible. |
-| Issue #2868 | open / PR pending | Semantic metadata fixtures | Adds metadata-bearing signalized, goal-directed, waiting-intent-change, and route-conflict fixtures for semantic baseline evaluation. |
+| Issue #2868 | closed | Semantic metadata fixtures | Added metadata-bearing signalized, goal-directed, waiting-intent-change, and route-conflict fixtures for semantic baseline evaluation. |
+| Issue #2865 | open / PR pending | Calibration/reliability comparison | Converts #2868 comparison rows into analysis-only calibration rows; forecast-risk scoring remains gated. |
 | Issue #2837 | open | Horizon and timestep ablation | Analysis-only report for forecast horizon/output-step presets. |
 | Issue #2838 | closed | Observation-level adapters | Required before deployable/oracle observation tiers can be compared safely. |
 | Issue #2839 | closed | Dataset recorder and split manifest | Required before learned predictor training or durable split comparisons. |

@@ -1,0 +1,31 @@
+{
+  "issue": 2865,
+  "schema_version": "ForecastCalibrationEvidence.v1",
+  "status": "diagnostic-only",
+  "claim_boundary": "Calibration rows are analysis-only and diagnostic; no navigation, safety, human-realism, paper-facing, or dissertation claim is supported.",
+  "generated_at_utc": "2026-06-15T00:00:00+00:00",
+  "provenance": {
+    "command": "uv run python scripts/benchmark/build_forecast_calibration_from_cv_comparison.py docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15/comparison_report.json --report-id issue_2865_forecast_calibration_report_2026-06-15 --generated-at-utc 2026-06-15T00:00:00+00:00 --out-json docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.json --out-md docs/context/evidence/issue_2865_forecast_calibration_report_2026-06-15/calibration_report.md",
+    "commit": "a392907279b0189fa0dc065467f6d92e350625fa",
+    "source": "docs/context/evidence/issue_2868_semantic_metadata_fixtures_2026-06-15/comparison_report.json"
+  },
+  "coverage": {
+    "baselines": [
+      "cv",
+      "signal_aware",
+      "goal_aware",
+      "semantic",
+      "interaction_aware"
+    ],
+    "reliability_rows": 40,
+    "limitation_rows": 10,
+    "decision": "wait",
+    "claim_status": "diagnostic-only",
+    "risk_scoring_status": "not_eligible_from_this_report",
+    "notes": [
+      "Rows are stratified by scenario family, observation tier, baseline/predictor family, horizon, semantic metadata availability, and actor-class availability.",
+      "Actor class is unavailable in the source comparison rows, so otherwise calibrated rows remain diagnostic-only for forecast-risk scoring.",
+      "Bottleneck and crossing_proxy rows retain zero-denominator limitations."
+    ]
+  }
+}

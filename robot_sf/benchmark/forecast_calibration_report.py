@@ -40,7 +40,7 @@ def build_forecast_calibration_report(
     if not metric_reports:
         return _empty_report(report_id, coverage_target, coverage_tolerance, generated_at_utc)
 
-    groups: dict[tuple[str, float, str, str], list[dict[str, Any]]] = defaultdict(list)
+    groups: dict[tuple[str, float, str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for report in metric_reports:
         _require_forecast_metrics_report(report)
         provenance = report["provenance"]
@@ -52,6 +52,8 @@ def build_forecast_calibration_report(
                     float(_required_value(row, "horizon_s")),
                     str(_required_value(provenance, "observation_tier")),
                     str(_required_value(provenance, "predictor_family")),
+                    _row_actor_class(row),
+                    _semantic_metadata_present(report, row),
                 )
             ].append(row)
 
@@ -104,23 +106,29 @@ def format_forecast_calibration_markdown(report: dict[str, Any]) -> str:
         f"- Reliability rows: {len(report['reliability_rows'])}",
         f"- Limitation rows: {len(report['limitation_rows'])}",
         "",
-        "| scenario_family | horizon_s | observation_tier | predictor_family | coverage | status | sharpness | recommendation |",
-        "| --- | ---: | --- | --- | ---: | --- | ---: | --- |",
+        "| scenario_family | horizon_s | observation_tier | predictor_family | actor_class | semantic_metadata | coverage | miss_rate | status | sharpness | failure_taxonomy | eligibility |",
+        "| --- | ---: | --- | --- | --- | --- | ---: | ---: | --- | ---: | --- | --- |",
     ]
     for row in report["reliability_rows"]:
         coverage = row["empirical_coverage"]
         sharpness = row["sharpness_proxy"]
         lines.append(
             "| {scenario_family} | {horizon_s:g} | {observation_tier} | {predictor_family} | "
-            "{coverage} | {calibration_status} | {sharpness} | {recommendation} |".format(
+            "{actor_class} | {semantic_metadata_present} | {coverage} | {miss_rate} | "
+            "{calibration_status} | {sharpness} | {failure_taxonomy} | "
+            "{risk_scoring_eligibility} |".format(
                 scenario_family=row["scenario_family"],
                 horizon_s=float(row["horizon_s"]),
                 observation_tier=row["observation_tier"],
                 predictor_family=row["predictor_family"],
+                actor_class=row["actor_class"],
+                semantic_metadata_present=row["semantic_metadata_present"],
                 coverage="NA" if coverage is None else f"{float(coverage):.6g}",
+                miss_rate="NA" if row["miss_rate"] is None else f"{float(row['miss_rate']):.6g}",
                 calibration_status=row["calibration_status"],
                 sharpness="NA" if sharpness is None else f"{float(sharpness):.6g}",
-                recommendation=row["recommendation"],
+                failure_taxonomy=row["failure_taxonomy"],
+                risk_scoring_eligibility=row["risk_scoring_eligibility"],
             )
         )
     if report["limitation_rows"]:
@@ -158,19 +166,28 @@ def write_forecast_calibration_report(
 
 def _build_reliability_row(
     *,
-    group_key: tuple[str, float, str, str],
+    group_key: tuple[str, float, str, str, str, str],
     aggregate_rows: list[dict[str, Any]],
     coverage_target: float,
     coverage_tolerance: float,
 ) -> dict[str, Any]:
-    scenario_family, horizon_s, observation_tier, predictor_family = group_key
+    (
+        scenario_family,
+        horizon_s,
+        observation_tier,
+        predictor_family,
+        actor_class,
+        semantic_metadata_present,
+    ) = group_key
     metrics = _metric_rows_by_name(aggregate_rows)
     coverage_rows = metrics.get("coverage", [])
     likelihood_rows = metrics.get("likelihood", [])
     expected_ade_rows = metrics.get("expected_ade", [])
     minade_rows = metrics.get("minade@k", [])
+    miss_rate_rows = metrics.get("miss_rate", [])
     empirical_coverage = _available_weighted_mean(coverage_rows)
     likelihood_value = _available_weighted_mean(likelihood_rows)
+    miss_rate = _available_weighted_mean(miss_rate_rows)
     sharpness_proxy = _available_weighted_mean(expected_ade_rows)
     sharpness_rows = expected_ade_rows
     if sharpness_proxy is None:
@@ -186,14 +203,26 @@ def _build_reliability_row(
         "horizon_s": float(horizon_s),
         "observation_tier": observation_tier,
         "predictor_family": predictor_family,
+        "actor_class": actor_class,
+        "semantic_metadata_present": semantic_metadata_present,
         "empirical_coverage": empirical_coverage,
         "coverage_target": float(coverage_target),
         "coverage_gap": coverage_gap,
         "likelihood": likelihood_value,
+        "miss_rate": miss_rate,
         "sharpness_proxy": sharpness_proxy,
         "calibration_status": calibration_status,
         "denominator": _available_denominator(coverage_rows),
         "recommendation": _row_recommendation(calibration_status),
+        "failure_taxonomy": _failure_taxonomy(
+            calibration_status=calibration_status, miss_rate=miss_rate
+        ),
+        "risk_scoring_eligibility": _risk_scoring_eligibility(
+            calibration_status=calibration_status,
+            denominator=_available_denominator(coverage_rows),
+            actor_class=actor_class,
+            semantic_metadata_present=semantic_metadata_present,
+        ),
         "unavailable_metrics": _unavailable_metrics(
             {
                 "coverage": coverage_rows,
@@ -282,6 +311,26 @@ def _metric_name(row: dict[str, Any]) -> str:
     return metric[5:] if metric.startswith("mean_") else metric
 
 
+def _row_actor_class(row: dict[str, Any]) -> str:
+    value = row.get("actor_class")
+    return "unavailable" if value is None else str(value)
+
+
+def _semantic_metadata_present(report: dict[str, Any], row: dict[str, Any]) -> str:
+    for payload in (row, report.get("transfer_dimensions", {}), report.get("provenance", {})):
+        if not isinstance(payload, dict):
+            continue
+        if (
+            "semantic_metadata_present" in payload
+            and payload["semantic_metadata_present"] is not None
+        ):
+            value = payload["semantic_metadata_present"]
+            if isinstance(value, bool):
+                return "present" if value else "absent"
+            return str(value)
+    return "unknown"
+
+
 def _metric_rows_by_name(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -329,6 +378,36 @@ def _row_recommendation(calibration_status: str) -> str:
     if calibration_status == "unavailable":
         return "wait"
     return "revise"
+
+
+def _failure_taxonomy(*, calibration_status: str, miss_rate: float | None) -> str:
+    if calibration_status == "unavailable":
+        return "unavailable_uncertainty_denominator"
+    if calibration_status == "over_confident_under_coverage":
+        return "under_coverage"
+    if calibration_status == "under_confident_over_coverage":
+        return "over_coverage"
+    if miss_rate is not None and miss_rate > 0.0:
+        return "misses_present_within_tolerance"
+    return "none_observed"
+
+
+def _risk_scoring_eligibility(
+    *,
+    calibration_status: str,
+    denominator: int,
+    actor_class: str,
+    semantic_metadata_present: str,
+) -> str:
+    if denominator <= 0:
+        return "blocked_no_denominator"
+    if actor_class == "unavailable":
+        return "diagnostic_only_actor_class_unavailable"
+    if semantic_metadata_present == "unknown":
+        return "diagnostic_only_semantic_metadata_unknown"
+    if calibration_status != "calibrated_within_tolerance":
+        return "revise_calibration_before_risk_scoring"
+    return "eligible_analysis_only"
 
 
 def _unavailable_metrics(rows: dict[str, list[dict[str, Any]]]) -> list[str]:

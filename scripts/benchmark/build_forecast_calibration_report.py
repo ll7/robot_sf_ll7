@@ -22,6 +22,10 @@ def main() -> None:
     parser.add_argument("--out-md", type=Path)
     parser.add_argument("--coverage-target", type=float, default=0.9)
     parser.add_argument("--coverage-tolerance", type=float, default=0.05)
+    parser.add_argument(
+        "--generated-at-utc",
+        help="Optional deterministic ISO-8601 generation timestamp for reviewable artifacts.",
+    )
     args = parser.parse_args()
 
     metric_reports = []
@@ -38,6 +42,7 @@ def main() -> None:
             report_id=args.report_id,
             coverage_target=args.coverage_target,
             coverage_tolerance=args.coverage_tolerance,
+            generated_at_utc=args.generated_at_utc,
         )
         paths = write_forecast_calibration_report(
             report,

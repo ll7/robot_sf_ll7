@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -15,6 +16,24 @@ from robot_sf.benchmark.forecast_calibration_report import (
     format_forecast_calibration_markdown,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+_COMPARISON_SCRIPT = (
+    REPO_ROOT / "scripts/benchmark/build_forecast_calibration_from_cv_comparison.py"
+)
+
+
+def _load_comparison_script_module():
+    spec = importlib.util.spec_from_file_location(
+        "build_forecast_calibration_from_cv_comparison", _COMPARISON_SCRIPT
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["build_forecast_calibration_from_cv_comparison"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_comparison_mod = _load_comparison_script_module()
+
 
 def _metric_report(
     *,
@@ -24,6 +43,8 @@ def _metric_report(
     expected_status: str = "ok",
     minade: float | None = None,
     denominator: int = 4,
+    actor_class: str | None = "pedestrian",
+    semantic_metadata_present: str | bool = "present",
 ) -> dict[str, object]:
     def row(metric: str, value: float | None, row_status: str = status) -> dict[str, object]:
         return {
@@ -32,9 +53,10 @@ def _metric_report(
             "value": value,
             "status": row_status,
             "denominator": denominator if row_status == "ok" else 0,
-            "actor_class": "pedestrian",
+            "actor_class": actor_class,
             "scenario_id": "classic_crossing_low",
             "observation_tier": "deployable_observation",
+            "semantic_metadata_present": semantic_metadata_present,
             "dt_s": 0.5,
         }
 
@@ -46,6 +68,7 @@ def _metric_report(
             "scenario_id": "classic_crossing_low",
             "scenario_family": "classic_crossing",
             "observation_tier": "deployable_observation",
+            "semantic_metadata_present": semantic_metadata_present,
             "dt_s": 0.5,
             "horizons_s": [1.0],
         },
@@ -72,6 +95,11 @@ def test_calibration_report_classifies_available_calibrated_rows() -> None:
     assert report["limitation_rows"] == []
     assert report["reliability_rows"][0]["calibration_status"] == "calibrated_within_tolerance"
     assert report["recommendation"]["decision"] == "continue"
+    row = report["reliability_rows"][0]
+    assert row["actor_class"] == "pedestrian"
+    assert row["semantic_metadata_present"] == "present"
+    assert row["miss_rate"] is None
+    assert row["risk_scoring_eligibility"] == "eligible_analysis_only"
 
 
 def test_calibration_report_distinguishes_over_and_under_confidence() -> None:
@@ -144,6 +172,70 @@ def test_calibration_report_treats_zero_denominator_as_unavailable() -> None:
     assert "coverage" in row["unavailable_metrics"]
 
 
+def test_calibration_report_marks_missing_actor_class_diagnostic_only() -> None:
+    """Rows without actor class stay visible but are not forecast-risk eligible."""
+    report = build_forecast_calibration_report(
+        [_metric_report(coverage=0.91, actor_class=None)],
+        report_id="missing-actor",
+        generated_at_utc="2026-06-15T00:00:00+00:00",
+    )
+
+    row = report["reliability_rows"][0]
+    assert row["actor_class"] == "unavailable"
+    assert row["risk_scoring_eligibility"] == "diagnostic_only_actor_class_unavailable"
+
+
+def test_comparison_report_converter_preserves_baseline_and_metadata_rows() -> None:
+    """The #2868 comparison shape converts to ForecastMetrics.v1 inputs."""
+    metric_reports = _comparison_mod.forecast_metric_reports_from_comparison(
+        {
+            "comparison_rows": [
+                {
+                    "baseline": "semantic",
+                    "family": "signalized_crossing",
+                    "label": "fixture",
+                    "status": "evaluated",
+                    "metadata_presence": "present",
+                    "evaluable_samples": 7,
+                    "mean_within_95ci_1s": 1.0,
+                    "mean_negative_log_likelihood_1s": 1.5,
+                    "mean_ade_1s": 0.2,
+                    "mean_miss_rate_1s": 0.0,
+                },
+                {
+                    "baseline": "cv",
+                    "family": "bottleneck",
+                    "label": "limited",
+                    "status": "limited_no_pedestrian_motion",
+                    "metadata_presence": "absent",
+                    "evaluable_samples": 0,
+                    "mean_within_95ci_1s": None,
+                    "mean_negative_log_likelihood_1s": None,
+                    "mean_ade_1s": None,
+                    "mean_miss_rate_1s": None,
+                },
+            ]
+        }
+    )
+
+    report = build_forecast_calibration_report(
+        metric_reports,
+        report_id="from-comparison",
+        generated_at_utc="2026-06-15T00:00:00+00:00",
+    )
+
+    assert len(report["reliability_rows"]) == 2
+    semantic = next(
+        row for row in report["reliability_rows"] if row["predictor_family"] == "semantic"
+    )
+    limited = next(row for row in report["reliability_rows"] if row["predictor_family"] == "cv")
+    assert semantic["semantic_metadata_present"] == "present"
+    assert semantic["miss_rate"] == 0.0
+    assert semantic["risk_scoring_eligibility"] == "diagnostic_only_actor_class_unavailable"
+    assert limited["calibration_status"] == "unavailable"
+    assert report["recommendation"]["decision"] == "wait"
+
+
 def test_calibration_report_marks_deterministic_uncertainty_unavailable() -> None:
     """Unavailable uncertainty metrics should remain explicit limitation rows."""
     report = _metric_report(
@@ -199,10 +291,7 @@ def test_calibration_cli_writes_json_and_markdown(tmp_path: Path) -> None:
     result = subprocess.run(
         [
             sys.executable,
-            str(
-                Path(__file__).resolve().parents[2]
-                / "scripts/benchmark/build_forecast_calibration_report.py"
-            ),
+            str(REPO_ROOT / "scripts/benchmark/build_forecast_calibration_report.py"),
             str(metric_path),
             "--report-id",
             "cli-calibration",
@@ -210,6 +299,8 @@ def test_calibration_cli_writes_json_and_markdown(tmp_path: Path) -> None:
             str(out_json),
             "--out-md",
             str(out_md),
+            "--generated-at-utc",
+            "2026-06-15T00:00:00+00:00",
         ],
         check=True,
         capture_output=True,
@@ -220,7 +311,9 @@ def test_calibration_cli_writes_json_and_markdown(tmp_path: Path) -> None:
     assert summary["decision"] == "continue"
     assert out_json.exists()
     assert out_md.exists()
-    assert json.loads(out_json.read_text(encoding="utf-8"))["report_id"] == "cli-calibration"
+    output = json.loads(out_json.read_text(encoding="utf-8"))
+    assert output["report_id"] == "cli-calibration"
+    assert output["generated_at_utc"] == "2026-06-15T00:00:00+00:00"
 
 
 def test_calibration_cli_reports_malformed_json(tmp_path: Path) -> None:
@@ -232,10 +325,7 @@ def test_calibration_cli_reports_malformed_json(tmp_path: Path) -> None:
     result = subprocess.run(
         [
             sys.executable,
-            str(
-                Path(__file__).resolve().parents[2]
-                / "scripts/benchmark/build_forecast_calibration_report.py"
-            ),
+            str(REPO_ROOT / "scripts/benchmark/build_forecast_calibration_report.py"),
             str(metric_path),
             "--report-id",
             "bad-json",
@@ -260,10 +350,7 @@ def test_calibration_cli_reports_builder_errors(tmp_path: Path) -> None:
     result = subprocess.run(
         [
             sys.executable,
-            str(
-                Path(__file__).resolve().parents[2]
-                / "scripts/benchmark/build_forecast_calibration_report.py"
-            ),
+            str(REPO_ROOT / "scripts/benchmark/build_forecast_calibration_report.py"),
             str(metric_path),
             "--report-id",
             "bad-schema",

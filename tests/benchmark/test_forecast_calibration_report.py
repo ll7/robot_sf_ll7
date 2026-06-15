@@ -16,14 +16,22 @@ from robot_sf.benchmark.forecast_calibration_report import (
 )
 
 
-def _metric_report(*, coverage: float | None = 0.9, status: str = "ok") -> dict[str, object]:
+def _metric_report(
+    *,
+    coverage: float | None = 0.9,
+    status: str = "ok",
+    expected_ade: float | None = 0.25,
+    expected_status: str = "ok",
+    minade: float | None = None,
+    denominator: int = 4,
+) -> dict[str, object]:
     def row(metric: str, value: float | None, row_status: str = status) -> dict[str, object]:
         return {
             "metric": metric,
             "horizon_s": 1.0,
             "value": value,
             "status": row_status,
-            "denominator": 4 if row_status == "ok" else 0,
+            "denominator": denominator if row_status == "ok" else 0,
             "actor_class": "pedestrian",
             "scenario_id": "classic_crossing_low",
             "observation_tier": "deployable_observation",
@@ -44,7 +52,8 @@ def _metric_report(*, coverage: float | None = 0.9, status: str = "ok") -> dict[
         "aggregate_rows": [
             row("mean_coverage", coverage),
             row("mean_likelihood", -1.2),
-            row("mean_expected_ade", 0.25),
+            row("mean_expected_ade", expected_ade, expected_status),
+            row("mean_minade@k", minade, "ok" if minade is not None else "unavailable"),
         ],
     }
 
@@ -87,9 +96,47 @@ def test_calibration_report_distinguishes_over_and_under_confidence() -> None:
     assert overconfident["recommendation"]["decision"] == "revise"
 
 
+def test_calibration_report_aggregates_duplicate_family_rows() -> None:
+    """Multiple reports in one scenario-family group should aggregate instead of overwrite."""
+    report = build_forecast_calibration_report(
+        [
+            _metric_report(coverage=0.8, denominator=1),
+            _metric_report(coverage=1.0, denominator=3),
+        ],
+        report_id="family-aggregate",
+        generated_at_utc="2026-06-15T00:00:00+00:00",
+    )
+
+    row = report["reliability_rows"][0]
+    assert row["empirical_coverage"] == 0.95
+    assert row["denominator"] == 4
+
+
+def test_calibration_report_falls_back_to_minade_when_expected_ade_unavailable() -> None:
+    """Sharpness should use minADE@K when expected ADE exists but is unavailable."""
+    report = build_forecast_calibration_report(
+        [
+            _metric_report(
+                expected_ade=None,
+                expected_status="unavailable",
+                minade=0.35,
+            )
+        ],
+        report_id="sharpness-fallback",
+        generated_at_utc="2026-06-15T00:00:00+00:00",
+    )
+
+    assert report["reliability_rows"][0]["sharpness_proxy"] == 0.35
+
+
 def test_calibration_report_marks_deterministic_uncertainty_unavailable() -> None:
     """Unavailable uncertainty metrics should remain explicit limitation rows."""
-    report = _metric_report(coverage=None, status="unavailable")
+    report = _metric_report(
+        coverage=None,
+        status="unavailable",
+        expected_ade=None,
+        expected_status="unavailable",
+    )
     calibration = build_forecast_calibration_report(
         [report],
         report_id="deterministic",

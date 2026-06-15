@@ -164,13 +164,18 @@ def _build_reliability_row(
     coverage_tolerance: float,
 ) -> dict[str, Any]:
     scenario_family, horizon_s, observation_tier, predictor_family = group_key
-    metrics = {_metric_name(row): row for row in aggregate_rows}
-    coverage_row = metrics.get("coverage")
-    likelihood_row = metrics.get("likelihood")
-    sharpness_row = metrics.get("expected_ade") or metrics.get("minade@k")
-    empirical_coverage = _available_value(coverage_row)
-    likelihood_value = _available_value(likelihood_row)
-    sharpness_proxy = _available_value(sharpness_row)
+    metrics = _metric_rows_by_name(aggregate_rows)
+    coverage_rows = metrics.get("coverage", [])
+    likelihood_rows = metrics.get("likelihood", [])
+    expected_ade_rows = metrics.get("expected_ade", [])
+    minade_rows = metrics.get("minade@k", [])
+    empirical_coverage = _available_weighted_mean(coverage_rows)
+    likelihood_value = _available_weighted_mean(likelihood_rows)
+    sharpness_proxy = _available_weighted_mean(expected_ade_rows)
+    sharpness_rows = expected_ade_rows
+    if sharpness_proxy is None:
+        sharpness_proxy = _available_weighted_mean(minade_rows)
+        sharpness_rows = minade_rows
     coverage_gap = None if empirical_coverage is None else empirical_coverage - coverage_target
     calibration_status = _calibration_status(
         coverage_gap=coverage_gap,
@@ -187,13 +192,13 @@ def _build_reliability_row(
         "likelihood": likelihood_value,
         "sharpness_proxy": sharpness_proxy,
         "calibration_status": calibration_status,
-        "denominator": 0 if coverage_row is None else int(coverage_row.get("denominator", 0)),
+        "denominator": _available_denominator(coverage_rows),
         "recommendation": _row_recommendation(calibration_status),
         "unavailable_metrics": _unavailable_metrics(
             {
-                "coverage": coverage_row,
-                "likelihood": likelihood_row,
-                "sharpness_proxy": sharpness_row,
+                "coverage": coverage_rows,
+                "likelihood": likelihood_rows,
+                "sharpness_proxy": sharpness_rows,
             }
         ),
     }
@@ -277,10 +282,40 @@ def _metric_name(row: dict[str, Any]) -> str:
     return metric[5:] if metric.startswith("mean_") else metric
 
 
-def _available_value(row: dict[str, Any] | None) -> float | None:
-    if row is None or row.get("status") != "ok" or row.get("value") is None:
-        return None
-    return float(row["value"])
+def _metric_rows_by_name(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[_metric_name(row)].append(row)
+    return grouped
+
+
+def _available_weighted_mean(rows: list[dict[str, Any]]) -> float | None:
+    weighted_total = 0.0
+    denominator_total = 0
+    unweighted_values = []
+    for row in rows:
+        if row.get("status") != "ok" or row.get("value") is None:
+            continue
+        denominator = int(row.get("denominator", 0))
+        value = float(row["value"])
+        if denominator > 0:
+            weighted_total += value * denominator
+            denominator_total += denominator
+        else:
+            unweighted_values.append(value)
+    if denominator_total > 0:
+        return weighted_total / denominator_total
+    if unweighted_values:
+        return sum(unweighted_values) / len(unweighted_values)
+    return None
+
+
+def _available_denominator(rows: list[dict[str, Any]]) -> int:
+    return sum(
+        int(row.get("denominator", 0))
+        for row in rows
+        if row.get("status") == "ok" and row.get("value") is not None
+    )
 
 
 def _calibration_status(*, coverage_gap: float | None, tolerance: float) -> str:
@@ -301,11 +336,11 @@ def _row_recommendation(calibration_status: str) -> str:
     return "revise"
 
 
-def _unavailable_metrics(rows: dict[str, dict[str, Any] | None]) -> list[str]:
+def _unavailable_metrics(rows: dict[str, list[dict[str, Any]]]) -> list[str]:
     return [
         metric
-        for metric, row in rows.items()
-        if row is None or row.get("status") != "ok" or row.get("value") is None
+        for metric, metric_rows in rows.items()
+        if _available_weighted_mean(metric_rows) is None
     ]
 
 

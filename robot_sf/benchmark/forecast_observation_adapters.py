@@ -55,7 +55,7 @@ def _default_dt_s(trace: dict[str, Any]) -> float:
         return 0.1
     try:
         dt_s = float(frames[1].get("time_s", 0.1)) - float(frames[0].get("time_s", 0.0))
-    except (TypeError, ValueError):
+    except (AttributeError, TypeError, ValueError):
         return 0.1
     return dt_s if dt_s > 0.0 else 0.1
 
@@ -63,6 +63,9 @@ def _default_dt_s(trace: dict[str, Any]) -> float:
 def _stable_state_id(actor_id: object) -> int:
     if isinstance(actor_id, bool):
         raise ValueError("actor id must not be bool")
+    if isinstance(actor_id, (float, np.floating)):
+        digest = hashlib.sha256(str(actor_id).encode("utf-8")).hexdigest()
+        return int(digest[:16], 16) % (2**31)
     try:
         return int(actor_id)
     except (TypeError, ValueError):
@@ -76,17 +79,17 @@ def _actor_id_label(payload: dict[str, Any]) -> str:
 
 
 def _actor_available(payload: dict[str, Any]) -> bool:
+    if payload.get("masked") is True or payload.get("occluded") is True:
+        return False
     for key in ("forecast_available", "visible", "tracked"):
         if key in payload:
             return bool(payload[key])
-    if payload.get("masked") is True or payload.get("occluded") is True:
-        return False
     return True
 
 
 def _missing_reason(payload: dict[str, Any], default: str) -> str:
     reason = payload.get("missing_reason") or payload.get("mask_reason")
-    if reason is None:
+    if not isinstance(reason, str) or not reason.strip():
         reason = default
     return _require_non_empty_str("missing_actor_reasons[]", str(reason))
 

@@ -108,6 +108,112 @@ def test_one_pedestrian_happy_path_records_single_actor_denominator() -> None:
     assert observed.actors[0].state.id == 7
 
 
+def test_malformed_second_frame_uses_default_dt_s() -> None:
+    """Malformed future timing metadata should not block current-frame adaptation."""
+    trace = {
+        "scenario_id": "malformed_timing",
+        "frames": [
+            {
+                "time_s": 0.0,
+                "tracked_agents": [
+                    {"id": 1, "position": [0.0, 0.0], "velocity": [0.0, 0.0]},
+                ],
+            },
+            None,
+        ],
+    }
+
+    observed = TrackedAgentsForecastAdapter().adapt_trace(
+        trace,
+        feature_schema=_feature_schema(),
+    )
+
+    assert observed.provenance.dt_s == 0.1
+
+
+def test_float_actor_ids_do_not_truncate_into_integer_state_ids() -> None:
+    """Float actor ids should be hashed instead of silently truncated by int()."""
+    trace = {
+        "scenario_id": "float_actor_id",
+        "frames": [
+            {
+                "tracked_agents": [
+                    {"id": 1.5, "position": [0.0, 0.0], "velocity": [0.0, 0.0]},
+                ],
+            },
+        ],
+    }
+
+    observed = TrackedAgentsForecastAdapter().adapt_trace(
+        trace,
+        feature_schema=_feature_schema(),
+    )
+
+    assert observed.provenance.actor_ids == ["1.5"]
+    assert observed.actors[0].state.id != 1
+
+
+def test_masked_flag_overrides_visible_tracked_flags() -> None:
+    """Explicit masks should win over conflicting visible/tracked flags."""
+    trace = {
+        "scenario_id": "conflicting_visibility",
+        "frames": [
+            {
+                "tracked_agents": [
+                    {
+                        "id": 1,
+                        "position": [0.0, 0.0],
+                        "velocity": [0.0, 0.0],
+                        "visible": True,
+                        "tracked": True,
+                        "masked": True,
+                        "missing_reason": "masked by detector",
+                    },
+                ],
+            },
+        ],
+    }
+
+    observed = TrackedAgentsForecastAdapter().adapt_trace(
+        trace,
+        feature_schema=_feature_schema(),
+    )
+
+    assert observed.provenance.actor_mask == [False]
+    assert observed.provenance.actor_mask_metadata["missing_actor_reasons"] == {
+        "1": "masked by detector",
+    }
+
+
+def test_blank_missing_reason_falls_back_to_adapter_default() -> None:
+    """Blank source reasons should not crash degraded-observation adaptation."""
+    trace = {
+        "scenario_id": "blank_missing_reason",
+        "frames": [
+            {
+                "tracked_agents": [
+                    {
+                        "id": 1,
+                        "position": [0.0, 0.0],
+                        "velocity": [0.0, 0.0],
+                        "visible": False,
+                        "missing_reason": "   ",
+                    },
+                ],
+            },
+        ],
+    }
+
+    observed = TrackedAgentsForecastAdapter().adapt_trace(
+        trace,
+        feature_schema=_feature_schema(),
+    )
+
+    assert observed.provenance.actor_mask_metadata["missing_actor_reasons"] == {
+        "1": "not present in tracked-agent observation",
+    }
+
+
 def test_constant_velocity_forecast_batch_smoke_for_two_tiers() -> None:
     """Adapted observations should produce valid ForecastBatch artifacts."""
     trace = _trace()

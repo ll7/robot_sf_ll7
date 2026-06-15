@@ -292,7 +292,6 @@ def _metric_rows_by_name(rows: list[dict[str, Any]]) -> dict[str, list[dict[str,
 def _available_weighted_mean(rows: list[dict[str, Any]]) -> float | None:
     weighted_total = 0.0
     denominator_total = 0
-    unweighted_values = []
     for row in rows:
         if row.get("status") != "ok" or row.get("value") is None:
             continue
@@ -301,12 +300,8 @@ def _available_weighted_mean(rows: list[dict[str, Any]]) -> float | None:
         if denominator > 0:
             weighted_total += value * denominator
             denominator_total += denominator
-        else:
-            unweighted_values.append(value)
     if denominator_total > 0:
         return weighted_total / denominator_total
-    if unweighted_values:
-        return sum(unweighted_values) / len(unweighted_values)
     return None
 
 

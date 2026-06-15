@@ -32,17 +32,20 @@ def main() -> None:
             parser.error(f"could not read metric report {path}: {exc}")
         except json.JSONDecodeError as exc:
             parser.error(f"could not parse metric report {path}: {exc}")
-    report = build_forecast_calibration_report(
-        metric_reports,
-        report_id=args.report_id,
-        coverage_target=args.coverage_target,
-        coverage_tolerance=args.coverage_tolerance,
-    )
-    paths = write_forecast_calibration_report(
-        report,
-        json_path=args.out_json,
-        markdown_path=args.out_md,
-    )
+    try:
+        report = build_forecast_calibration_report(
+            metric_reports,
+            report_id=args.report_id,
+            coverage_target=args.coverage_target,
+            coverage_tolerance=args.coverage_tolerance,
+        )
+        paths = write_forecast_calibration_report(
+            report,
+            json_path=args.out_json,
+            markdown_path=args.out_md,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     print(
         json.dumps(
             {

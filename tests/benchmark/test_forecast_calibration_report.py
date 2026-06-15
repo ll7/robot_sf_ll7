@@ -129,6 +129,21 @@ def test_calibration_report_falls_back_to_minade_when_expected_ade_unavailable()
     assert report["reliability_rows"][0]["sharpness_proxy"] == 0.35
 
 
+def test_calibration_report_treats_zero_denominator_as_unavailable() -> None:
+    """Rows with values but no denominator should not become calibration evidence."""
+    report = build_forecast_calibration_report(
+        [_metric_report(coverage=0.9, denominator=0)],
+        report_id="zero-denominator",
+        generated_at_utc="2026-06-15T00:00:00+00:00",
+    )
+
+    row = report["reliability_rows"][0]
+    assert row["empirical_coverage"] is None
+    assert row["denominator"] == 0
+    assert row["calibration_status"] == "unavailable"
+    assert "coverage" in row["unavailable_metrics"]
+
+
 def test_calibration_report_marks_deterministic_uncertainty_unavailable() -> None:
     """Unavailable uncertainty metrics should remain explicit limitation rows."""
     report = _metric_report(
@@ -234,3 +249,32 @@ def test_calibration_cli_reports_malformed_json(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "could not parse metric report" in result.stderr
+
+
+def test_calibration_cli_reports_builder_errors(tmp_path: Path) -> None:
+    """CLI should report schema/build failures without a raw traceback."""
+    metric_path = tmp_path / "metrics.json"
+    out_json = tmp_path / "calibration.json"
+    metric_path.write_text(json.dumps({"schema_version": "wrong"}), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(
+                Path(__file__).resolve().parents[2]
+                / "scripts/benchmark/build_forecast_calibration_report.py"
+            ),
+            str(metric_path),
+            "--report-id",
+            "bad-schema",
+            "--out-json",
+            str(out_json),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "metric_reports must use ForecastMetrics.v1" in result.stderr
+    assert "Traceback" not in result.stderr

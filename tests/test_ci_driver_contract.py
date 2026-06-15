@@ -252,3 +252,27 @@ def test_ci_workflow_jobs_have_explicit_timeout_bounds() -> None:
     assert set(CI_JOB_TIMEOUTS) == set(jobs)
     for job_name, expected_timeout in CI_JOB_TIMEOUTS.items():
         assert jobs[job_name].get("timeout-minutes") == expected_timeout
+
+
+def test_ci_driver_passes_shell_syntax() -> None:
+    """The shared CI driver must be parseable by bash."""
+    result = subprocess.run(
+        ["bash", "-n", str(CI_DRIVER)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=ROOT,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_ci_driver_artifact_policy_uses_no_sync() -> None:
+    """artifact-policy must not re-enter dependency sync after an earlier sync failure.
+
+    If the initial ``uv sync`` step hangs or fails, the always-run artifact-policy
+    cleanup step would otherwise trigger another sync and hang the job.  Using
+    ``uv run --no-sync`` keeps the guard bounded.
+    """
+    driver_text = CI_DRIVER.read_text(encoding="utf-8")
+    assert "uv run --no-sync python scripts/tools/check_artifact_root.py" in driver_text

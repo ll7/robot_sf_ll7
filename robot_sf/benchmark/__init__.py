@@ -36,6 +36,13 @@ from robot_sf.benchmark.forecast_observation_adapters import (
     TrackedAgentsForecastAdapter,
     build_constant_velocity_forecast_batch,
 )
+from robot_sf.benchmark.forecast_transferability_stress_matrix import (
+    DEFAULT_TRANSFER_DIMENSIONS,
+    FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION,
+    build_forecast_transferability_stress_matrix,
+    format_forecast_transferability_stress_markdown,
+    write_forecast_transferability_stress_matrix,
+)
 from robot_sf.benchmark.helper_catalog import (
     load_trained_policy,
     prepare_classic_env,
@@ -51,9 +58,11 @@ from robot_sf.benchmark.helper_registry import (
 
 __all__ = [
     "DEFAULT_FORECAST_DATASET_ID",
+    "DEFAULT_TRANSFER_DIMENSIONS",
     "FORECAST_BATCH_SCHEMA_VERSION",
     "FORECAST_DATASET_SCHEMA_VERSION",
     "FORECAST_METRICS_SCHEMA_VERSION",
+    "FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION",
     "ActorForecast",
     "AggregationMetadataError",
     "CoordinateFrame",
@@ -72,8 +81,10 @@ __all__ = [
     "RegressionCheck",
     "TrackedAgentsForecastAdapter",
     "build_constant_velocity_forecast_batch",
+    "build_forecast_transferability_stress_matrix",
     "evaluate_forecast_batch",
     "format_forecast_metrics_markdown",
+    "format_forecast_transferability_stress_markdown",
     "load_forecast_batch",
     "load_trained_policy",
     "prepare_classic_env",
@@ -82,4 +93,5 @@ __all__ = [
     "save_forecast_batch",
     "validate_forecast_batch",
     "validate_forecast_dataset_manifest",
+    "write_forecast_transferability_stress_matrix",
 ]

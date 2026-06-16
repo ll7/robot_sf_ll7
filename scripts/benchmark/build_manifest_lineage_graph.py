@@ -28,9 +28,18 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from robot_sf.benchmark.manifest_lineage_graph import (  # noqa: E402
+    _parse_generated_at_utc,
     build_manifest_lineage_graph,
     write_manifest_lineage_graph_report,
 )
+
+
+def _cli_generated_at_utc(value: str) -> str:
+    """CLI type wrapper that turns ValueError into argparse-friendly output."""
+    try:
+        return _parse_generated_at_utc(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -60,6 +69,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional output path for the Markdown adjacency report.",
+    )
+    parser.add_argument(
+        "--generated-at-utc",
+        type=_cli_generated_at_utc,
+        default=None,
+        metavar="TIMESTAMP",
+        help=(
+            "Optional ISO-8601 UTC timestamp for the report "
+            "(e.g. 2026-06-15T00:00:00+00:00). Defaults to current UTC time."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -108,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest_paths,
         artifact_candidates=candidates,
         candidate_source_path=candidate_source_path,
+        generated_at_utc=args.generated_at_utc,
     )
 
     written = write_manifest_lineage_graph_report(

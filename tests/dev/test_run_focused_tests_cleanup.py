@@ -48,3 +48,30 @@ def test_focused_tests_preserves_coverage_when_keep_flag_set(helper_repo: Path) 
     assert (helper_repo / "output" / "coverage").exists(), (
         "output/coverage should be preserved when FOCUSED_TEST_KEEP_COVERAGE=1"
     )
+
+
+def test_focused_tests_failure_prints_compact_summary_and_log_path(helper_repo: Path) -> None:
+    """Failing focused tests should not stream raw pytest output into the parent thread."""
+    (helper_repo / "bin" / "uv").write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "set -euo pipefail",
+                "echo '============================= FAILURES ============================='",
+                'for i in $(seq 1 120); do echo "FAILED tests/dev/test_tiny.py::test_$i - boom"; done',
+                "exit 1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (helper_repo / "bin" / "uv").chmod(0o755)
+
+    result = _run_focused(helper_repo)
+
+    assert result.returncode == 1
+    assert "Focused pytest failed: exit 1" in result.stdout
+    assert "Full log:" in result.stdout
+    assert "FAILED tests/dev/test_tiny.py::test_1 - boom" in result.stdout
+    assert "test_120" not in result.stdout
+    assert "more matching lines omitted" in result.stdout

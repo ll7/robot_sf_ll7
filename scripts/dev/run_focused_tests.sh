@@ -5,8 +5,11 @@ show_help() {
   cat <<'EOF'
 Usage: scripts/dev/run_focused_tests.sh [pytest-args...]
 
-Runs a focused pytest command and removes generated output/coverage files after
-the test command succeeds, while preserving any tracked files under that tree.
+Runs a focused pytest command with compact parent-thread output. Full pytest
+stdout/stderr is written to a private agent-run artifact, and failures print only
+the exit code, failing-test hints, bounded excerpts, and log path. The script
+removes generated output/coverage files after the test command succeeds, while
+preserving any tracked files under that tree.
 Use this for narrow local validation where the coverage report is not the
 artifact you intend to inspect or keep.
 
@@ -16,6 +19,8 @@ Examples:
 
 Set FOCUSED_TEST_KEEP_COVERAGE=1 to preserve output/coverage after a successful
 run.
+Set FOCUSED_TEST_FULL_OUTPUT=1 to stream raw pytest output instead of the compact
+artifact-backed mode.
 EOF
 }
 
@@ -33,7 +38,52 @@ if [[ "$#" -eq 0 ]]; then
   exit 2
 fi
 
-uv run pytest "$@"
+if [[ "${FOCUSED_TEST_FULL_OUTPUT:-0}" == "1" ]]; then
+  uv run pytest "$@"
+else
+  common_git_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [[ -n "$common_git_dir" ]]; then
+    log_dir="$common_git_dir/codex-agent-runs/active/focused-tests"
+  else
+    log_dir="output/tmp/focused-tests"
+  fi
+  mkdir -p "$log_dir"
+  log_file="$log_dir/pytest-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
+  set +e
+  uv run pytest "$@" >"$log_file" 2>&1
+  pytest_rc=$?
+  set -e
+  if [[ "$pytest_rc" -ne 0 ]]; then
+    echo "Focused pytest failed: exit $pytest_rc"
+    echo "Full log: $log_file"
+    python3 - "$log_file" <<'PY'
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace")
+lines = text.splitlines()
+interesting = [
+    line
+    for line in lines
+    if re.search(r"(FAILED|ERROR|FAILURES|^\s*__+|::test_|short test summary)", line)
+]
+print("Failure summary:")
+for line in interesting[:40]:
+    print(line[:240])
+if len(interesting) > 40:
+    print(f"... {len(interesting) - 40} more matching lines omitted")
+if not interesting:
+    for line in lines[-40:]:
+        print(line[:240])
+PY
+    exit "$pytest_rc"
+  fi
+  echo "Focused pytest passed. Full log: $log_file"
+fi
 
 if [[ "${FOCUSED_TEST_KEEP_COVERAGE:-0}" == "1" ]]; then
   echo "Preserving output/coverage because FOCUSED_TEST_KEEP_COVERAGE=1." >&2

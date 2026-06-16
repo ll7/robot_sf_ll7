@@ -24,6 +24,8 @@ FAILURE_CONCLUSIONS = {
     "timed_out",
 }
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
+GENERATED_STATUS_PATHS = (".venv", ".opencode", "node_modules", "output/coverage")
+STATUS_LINE_LIMIT = 30
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,48 @@ def _parse_worktree_porcelain(stdout: str) -> list[dict[str, Any]]:
     return rows
 
 
+def _bounded_lines(text: str, *, limit: int) -> tuple[list[str], bool]:
+    """Return non-empty lines capped to a stable limit."""
+    lines = [line for line in text.splitlines() if line.strip()]
+    return lines[:limit], len(lines) > limit
+
+
+def compact_status_snapshot() -> tuple[dict[str, Any], dict[str, Any], str | None]:
+    """Return compact local status that avoids generated untracked trees."""
+    result = _run(["git", "status", "--short", "--branch", "--untracked-files=no"])
+    source = _command_source(result, name="git.status_compact")
+    if result.returncode != 0:
+        return (
+            {
+                "ok": False,
+                "tracked_or_staged_count": 0,
+                "tracked_or_staged": [],
+                "tracked_or_staged_truncated": False,
+                "generated_paths_present": [],
+            },
+            source,
+            (result.stderr or result.stdout).strip() or "git compact status failed",
+        )
+    status_lines = [line for line in result.stdout.splitlines() if line.strip()]
+    tracked_lines = [line for line in status_lines if not line.startswith("##")]
+    lines, truncated = _bounded_lines(result.stdout, limit=STATUS_LINE_LIMIT)
+    generated_paths = [
+        path for path in GENERATED_STATUS_PATHS if _run(["test", "-e", path]).returncode == 0
+    ]
+    return (
+        {
+            "ok": True,
+            "tracked_or_staged_count": len(tracked_lines),
+            "tracked_or_staged": lines,
+            "tracked_or_staged_truncated": truncated,
+            "generated_paths_present": generated_paths,
+            "full_untracked_inventory_omitted": True,
+        },
+        source,
+        None,
+    )
+
+
 def git_snapshot(
     *, include_worktrees: bool, worktree_limit: int
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
@@ -175,6 +219,10 @@ def git_snapshot(
     worktree_count = len(worktrees)
     worktree_limit = max(0, worktree_limit)
     visible_worktrees = worktrees[:worktree_limit] if worktree_limit else []
+    compact_status, status_source, status_error = compact_status_snapshot()
+    sources.append(status_source)
+    if status_error:
+        errors.append(status_error)
 
     return (
         {
@@ -187,10 +235,65 @@ def git_snapshot(
             "worktree_count": worktree_count,
             "worktrees_truncated": worktree_count > len(visible_worktrees),
             "worktrees": visible_worktrees,
+            "compact_status": compact_status,
         },
         sources,
         errors,
     )
+
+
+def controller_checkpoint(
+    *,
+    git: dict[str, Any],
+    claims: list[dict[str, Any]],
+    issues: list[dict[str, Any]],
+    prs: list[dict[str, Any]],
+    errors: list[str],
+) -> dict[str, Any]:
+    """Return a one-screen resume checkpoint for long Codex controller threads."""
+    pr_next_actions = [
+        {
+            "number": pr.get("number"),
+            "state": pr.get("state"),
+            "checks": (pr.get("checks") or {}).get("overall"),
+            "head_sha": pr.get("head_sha"),
+        }
+        for pr in prs
+    ]
+    stale_claims = [
+        claim.get("issue") for claim in claims if claim.get("stale_against_origin_main")
+    ]
+    generated_paths = (git.get("compact_status") or {}).get("generated_paths_present", [])
+    next_action = "continue_from_snapshot"
+    if errors:
+        next_action = "repair_snapshot_errors"
+    elif stale_claims:
+        next_action = "refresh_stale_claims"
+    elif any((pr.get("checks") or {}).get("overall") == "failure" for pr in prs):
+        next_action = "inspect_failing_pr_checks"
+    elif generated_paths:
+        next_action = "use_compact_status_only"
+    return {
+        "route_evidence_only": True,
+        "branch": git.get("branch", ""),
+        "head_sha": git.get("head_sha", ""),
+        "origin_main_sha": git.get("origin_main_sha", ""),
+        "tracked_or_staged_count": (git.get("compact_status") or {}).get(
+            "tracked_or_staged_count", 0
+        ),
+        "generated_paths_present": generated_paths,
+        "claims": [
+            {
+                "issue": claim.get("issue"),
+                "claimed": claim.get("claimed"),
+                "stale": claim.get("stale_against_origin_main"),
+            }
+            for claim in claims
+        ],
+        "issue_numbers": [issue.get("number") for issue in issues],
+        "prs": pr_next_actions,
+        "next_action": next_action,
+    }
 
 
 def claim_snapshot(
@@ -399,6 +502,10 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     sources.extend(pr_sources)
     errors.extend(pr_errors)
 
+    checkpoint = controller_checkpoint(
+        git=git, claims=claims, issues=issues, prs=prs, errors=errors
+    )
+
     return {
         "schema": "autopilot_state_snapshot.v1",
         "ok": not errors,
@@ -414,6 +521,7 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "claims": claims,
         "issues": issues,
         "prs": prs,
+        "controller_checkpoint": checkpoint,
         "errors": errors,
         "sources": sources,
     }

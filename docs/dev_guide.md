@@ -317,10 +317,14 @@ uv run python scripts/dev/autopilot_state_snapshot.py \
 ```
 
 The JSON output includes source commands, branch/head SHA, `origin/main` SHA, linked worktrees,
-claim refs, issue queue rows, explicit PR headline state, and freshness metadata. Use it to seed
-worker prompts and active ledgers; run fresh focused `gh`/`git` checks before claim, push, PR,
-label, merge, or publication decisions. Raw logs and broad CLI output are appropriate when the
-snapshot reports `ok: false`, stale claims, missing state, or insufficient fields.
+claim refs, issue queue rows, explicit PR headline state, compact tracked status, generated-path
+presence, a `controller_checkpoint`, and freshness metadata. Use the checkpoint as the first
+resume artifact after compaction or automatic continuation: it should name the active branch/PR,
+known generated paths, stale claims, check state, and next action without reopening raw logs,
+issue queues, worktree inventories, or skill files. Run fresh focused `gh`/`git` checks before
+claim, push, PR, label, merge, or publication decisions. Raw logs and broad CLI output are
+appropriate when the snapshot reports `ok: false`, stale claims, missing state, or insufficient
+fields.
 Worktree rows are capped by default; use `worktree_count` and `worktrees_truncated` to decide
 whether a larger `--worktree-limit` is worth the parent-thread context cost.
 For remote cleanup and branch-drift triage, use the read-only hygiene snapshot before broad
@@ -402,6 +406,11 @@ Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only
 the compact snapshot, context capsule path, validation command, exit status, and
 short evidence excerpt to the parent Codex thread.
+For implementation-thread validation, prefer `scripts/dev/run_focused_tests.sh`
+for focused pytest targets. It stores the full pytest log under the common
+Git-dir agent-run artifacts and prints only a bounded pass/fail summary by
+default. Use `FOCUSED_TEST_FULL_OUTPUT=1` only when the raw pytest stream itself
+is the thing being debugged.
 
 After delegated worker runs, summarize route efficiency from one or more
 `scripts/dev/routed_worker_manifest.py` outputs without reading raw worker logs:

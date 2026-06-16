@@ -3422,10 +3422,13 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return "native"
 
         if variant not in FORECAST_VARIANT_CHOICES:
-            logger.warning(
+            message = (
                 f"PredictionPlannerAdapter: unsupported forecast_variant {variant!r}; "
                 f"must be one of {FORECAST_VARIANT_CHOICES}"
             )
+            logger.warning(message)
+            if not self._allow_fallback:
+                raise RuntimeError(message)
             return "blocked"
 
         try:
@@ -3453,14 +3456,18 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             )
             if self._allow_fallback:
                 return "degraded"
-            return "blocked"
+            raise RuntimeError(
+                f"PredictionPlannerAdapter: forecast predictor initialization failed for {variant!r}"
+            ) from exc
         except (ImportError, ModuleNotFoundError) as exc:
             logger.warning(
                 f"PredictionPlannerAdapter: forecast predictor unavailable for {variant!r}: {exc}"
             )
             if self._allow_fallback:
                 return "degraded"
-            return "blocked"
+            raise RuntimeError(
+                f"PredictionPlannerAdapter: forecast predictor unavailable for {variant!r}"
+            ) from exc
 
     def get_forecast_variant_execution_mode(self) -> str:
         """Return the forecast variant execution mode.
@@ -3473,6 +3480,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def configure(self, config: SocNavPlannerConfig | None = None) -> None:
         """Replace configuration and refresh forecast-variant runtime state."""
         self.config = config or SocNavPlannerConfig()
+        self._device = self._resolve_device()
+        self._model = None
+        self._load_error = None
+        self._fallback_warned = False
         self._forecast_variant_execution_mode = self._init_forecast_variant()
 
     def bind_obstacle_lines(self, obstacle_lines: Any) -> None:

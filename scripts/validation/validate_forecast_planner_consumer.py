@@ -91,15 +91,18 @@ def _planner_config(variant: str) -> SocNavPlannerConfig:
     )
 
 
-def _consumed_future(adapter: PredictionPlannerAdapter, observation: dict[str, Any]) -> np.ndarray:
+def _consumed_future(
+    adapter: PredictionPlannerAdapter, observation: dict[str, Any]
+) -> tuple[np.ndarray, np.ndarray]:
     """Return the future trajectories consumed by the planner scoring path."""
     state, mask, _robot_pos, _robot_heading = adapter._build_model_input(observation)
-    return adapter._predict_trajectories(state, mask)
+    return adapter._predict_trajectories(state, mask), mask
 
 
 def _min_distance_for_action(
     future_peds: np.ndarray,
     *,
+    mask: np.ndarray,
     linear_velocity: float,
     angular_velocity: float,
     dt_s: float = DT_S,
@@ -120,6 +123,8 @@ def _min_distance_for_action(
             * dt_s
         )
         for ped_index in range(future_peds.shape[0]):
+            if float(mask[ped_index]) <= 0.5:
+                continue
             distance = float(np.linalg.norm(robot - future_peds[ped_index, step_index]))
             min_distance = min(min_distance, distance)
     return min_distance
@@ -149,22 +154,29 @@ def run_smoke(variants: tuple[str, ...] = DEFAULT_VARIANTS) -> dict[str, Any]:
     """Run the forecast planner-consumer smoke and return a JSON-ready report."""
     observation = _make_motion_rich_observation()
     reference_adapter = PredictionPlannerAdapter(_planner_config("none"), allow_fallback=True)
-    reference_future = _consumed_future(reference_adapter, observation)
+    reference_future, reference_mask = _consumed_future(reference_adapter, observation)
+    valid_reference_rows = reference_mask > 0.5
 
     rows: list[VariantSmokeRow] = []
     for variant in variants:
         start = time.perf_counter()
         adapter = PredictionPlannerAdapter(_planner_config(variant), allow_fallback=True)
-        future = _consumed_future(adapter, observation)
+        future, mask = _consumed_future(adapter, observation)
         linear_velocity, angular_velocity = adapter.plan(observation)
         runtime_s = time.perf_counter() - start
         min_distance = _min_distance_for_action(
             future,
+            mask=mask,
             linear_velocity=linear_velocity,
             angular_velocity=angular_velocity,
         )
         stopped = float(linear_velocity) <= STOP_SPEED_MPS
-        prediction_changed = not np.allclose(future, reference_future, atol=1e-6)
+        valid_rows = (mask > 0.5) & valid_reference_rows
+        prediction_changed = not np.allclose(
+            future[valid_rows],
+            reference_future[valid_rows],
+            atol=1e-6,
+        )
         execution_mode = adapter.get_forecast_variant_execution_mode()
         classification = _classify_variant(
             variant=variant,

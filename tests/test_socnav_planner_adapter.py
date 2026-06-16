@@ -585,6 +585,23 @@ def test_prediction_adapter_reconfigures_forecast_variant_runtime_state() -> Non
     assert adapter.get_forecast_variant_execution_mode() == "native"
     assert adapter._baseline_predictor is None
 
+    adapter._model = object()  # type: ignore[assignment]
+    adapter._load_error = RuntimeError("stale")
+    adapter._fallback_warned = True
+    adapter.configure(SocNavPlannerConfig(forecast_variant="none"))
+    assert adapter._model is None
+    assert adapter._load_error is None
+    assert adapter._fallback_warned is False
+
+
+def test_prediction_adapter_invalid_forecast_variant_fails_closed() -> None:
+    """Invalid configured forecast variants should fail closed when fallback is disabled."""
+    with pytest.raises(RuntimeError, match="unsupported forecast_variant"):
+        PredictionPlannerAdapter(
+            SocNavPlannerConfig(forecast_variant="not-a-variant"),
+            allow_fallback=False,
+        )
+
 
 def test_prediction_adapter_baseline_partial_miss_uses_constant_velocity_fallback() -> None:
     """Per-pedestrian forecast misses should not become robot-position futures."""
@@ -594,7 +611,8 @@ def test_prediction_adapter_baseline_partial_miss_uses_constant_velocity_fallbac
             self.mean = mean
 
     class _Prediction:
-        predictions = [_Trajectory(np.empty((0, 2), dtype=np.float32))]
+        def __init__(self) -> None:
+            self.predictions = [_Trajectory(np.empty((0, 2), dtype=np.float32))]
 
     class _PartialPredictor:
         def predict(self, observation):

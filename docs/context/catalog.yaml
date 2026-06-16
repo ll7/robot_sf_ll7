@@ -1097,6 +1097,10 @@ entries:
     status: current
     freshness: maintained
     area: predictive_planner
+  - path: docs/context/issue_2929_forecast_workflow_synthesis.md
+    status: current
+    freshness: maintained
+    area: predictive_planner
   - path: docs/context/issue_2941_native_forecast_replay.md
     status: current
     freshness: evidence

@@ -1,4 +1,4 @@
-# Post-#2883-to-#2893 Forecast and Workflow Synthesis
+# Issue #2929 Post-#2883-to-#2893 Forecast and Workflow Synthesis (2026-06-16)
 
 Issue: [#2929](https://github.com/ll7/robot_sf_ll7/issues/2929)
 

@@ -3412,7 +3412,12 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             Execution mode for the configured forecast variant.
         """
-        variant = str(getattr(self.config, "forecast_variant", "none")).strip()
+        self._baseline_predictor = None
+        configured_variant = getattr(self.config, "forecast_variant", "none")
+        if configured_variant is None:
+            variant = "none"
+        else:
+            variant = str(configured_variant).strip().lower() or "none"
         if variant == "none":
             return "native"
 
@@ -3464,6 +3469,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             One of ``native``, ``degraded``, or ``blocked``.
         """
         return self._forecast_variant_execution_mode
+
+    def configure(self, config: SocNavPlannerConfig | None = None) -> None:
+        """Replace configuration and refresh forecast-variant runtime state."""
+        self.config = config or SocNavPlannerConfig()
+        self._forecast_variant_execution_mode = self._init_forecast_variant()
 
     def bind_obstacle_lines(self, obstacle_lines: Any) -> None:
         """Bind explicit runtime obstacle-line geometry for obstacle-feature inputs."""
@@ -3793,7 +3803,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             logger.warning(f"Baseline predictor failed: {exc}; using constant-velocity fallback")
             return self._constant_velocity_prediction(state, mask)
 
-        future = np.zeros((state.shape[0], steps, 2), dtype=np.float32)
+        future = self._constant_velocity_prediction(state, mask)
         for source_index, trajectory in enumerate(prediction.predictions):
             if source_index >= valid_indices.size:
                 break

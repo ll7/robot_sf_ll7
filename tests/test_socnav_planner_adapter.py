@@ -566,6 +566,59 @@ def test_prediction_adapter_consumes_configured_forecast_variant() -> None:
     assert not np.allclose(forecast_future, cv_future)
 
 
+def test_prediction_adapter_reconfigures_forecast_variant_runtime_state() -> None:
+    """Runtime configuration changes should not keep a stale baseline predictor."""
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(forecast_variant="interaction_aware"),
+        allow_fallback=True,
+    )
+    assert adapter.get_forecast_variant_execution_mode() == "native"
+    assert adapter._baseline_predictor is not None
+
+    adapter.configure(SocNavPlannerConfig(forecast_variant=""))
+    assert adapter.get_forecast_variant_execution_mode() == "native"
+    assert adapter._baseline_predictor is None
+
+    null_variant_config = SocNavPlannerConfig()
+    null_variant_config.forecast_variant = None  # type: ignore[assignment]
+    adapter.configure(null_variant_config)
+    assert adapter.get_forecast_variant_execution_mode() == "native"
+    assert adapter._baseline_predictor is None
+
+
+def test_prediction_adapter_baseline_partial_miss_uses_constant_velocity_fallback() -> None:
+    """Per-pedestrian forecast misses should not become robot-position futures."""
+
+    class _Trajectory:
+        def __init__(self, mean: np.ndarray) -> None:
+            self.mean = mean
+
+    class _Prediction:
+        predictions = [_Trajectory(np.empty((0, 2), dtype=np.float32))]
+
+    class _PartialPredictor:
+        def predict(self, observation):
+            del observation
+            return _Prediction()
+
+    cfg = SocNavPlannerConfig(
+        forecast_variant="interaction_aware",
+        predictive_horizon_steps=3,
+        predictive_rollout_dt=0.5,
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    adapter._baseline_predictor = _PartialPredictor()
+    state = np.array([[1.0, 0.2, 0.4, 0.0]], dtype=np.float32)
+    mask = np.array([1.0], dtype=np.float32)
+
+    future = adapter._predict_with_baseline(state, mask)
+    cv_future = adapter._constant_velocity_prediction(state, mask)
+
+    assert future.shape == (1, 3, 2)
+    assert np.allclose(future, cv_future)
+    assert not np.allclose(future, np.zeros_like(future))
+
+
 def test_prediction_adapter_requires_model_when_fallback_disabled(monkeypatch):
     """Predictive adapter fails fast when checkpoint/model loading fails and fallback is disabled."""
 

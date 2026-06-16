@@ -44,7 +44,6 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional depend
     sf_forces = None  # type: ignore[assignment]
 
 from robot_sf.models import resolve_model_path
-from robot_sf.nav.baseline_probabilistic_predictor import BaselineProbabilisticPredictor
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_FEATURE_SCHEMA,
@@ -3404,7 +3403,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._fallback_warned = False
         self._device = self._resolve_device()
         self._bound_obstacle_lines: list = []
-        self._baseline_predictor: BaselineProbabilisticPredictor | None = None
+        self._baseline_predictor: Any | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
 
     def _init_forecast_variant(self) -> str:
@@ -3425,6 +3424,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return "blocked"
 
         try:
+            from robot_sf.nav.baseline_probabilistic_predictor import (  # noqa: PLC0415
+                BaselineProbabilisticPredictor,
+            )
+
             self._baseline_predictor = BaselineProbabilisticPredictor(
                 variant=variant,
                 horizons_s=tuple(
@@ -3442,6 +3445,13 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         except (TypeError, ValueError) as exc:
             logger.warning(
                 f"PredictionPlannerAdapter: failed to build baseline predictor for {variant!r}: {exc}"
+            )
+            if self._allow_fallback:
+                return "degraded"
+            return "blocked"
+        except (ImportError, ModuleNotFoundError) as exc:
+            logger.warning(
+                f"PredictionPlannerAdapter: forecast predictor unavailable for {variant!r}: {exc}"
             )
             if self._allow_fallback:
                 return "degraded"

@@ -268,6 +268,43 @@ def _format_human(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _terminal_reason(
+    overall: str | None,
+    attempt: int,
+    attempts: int,
+    local_stop: bool,
+) -> str | None:
+    """Classify why a polling loop stopped on this iteration."""
+    if overall is None:
+        return None
+    if overall != "pending":
+        return str(overall)
+    if attempt == attempts:
+        return "attempt_exhausted"
+    if local_stop:
+        return "max_wall_seconds"
+    return None
+
+
+def _guard_head_sha(data: dict[str, Any], expected_head_sha: str) -> bool:
+    """Fail closed when the observed PR head SHA diverges from the expected one.
+
+    Mutates ``data`` in place and returns True if the caller should stop polling.
+    """
+    head_sha = str(data.get("head_sha") or "")
+    if expected_head_sha and not head_sha:
+        data["status"] = "error"
+        data["error"] = "PR head SHA missing while monitoring CI"
+        data["monitor"]["terminal_reason"] = "error"
+        return True
+    if expected_head_sha and head_sha != expected_head_sha:
+        data["status"] = "error"
+        data["error"] = "PR head SHA changed while monitoring CI"
+        data["monitor"]["terminal_reason"] = "error"
+        return True
+    return False
+
+
 def _bounded_sleep_seconds(
     poll_interval: float,
     wall_deadline: float | None,
@@ -323,27 +360,24 @@ def _poll_ci_status(
             deadline_epoch_seconds=deadline_epoch_seconds,
         )
         if data.get("status") == "error":
+            data["monitor"]["terminal_reason"] = "error"
             break
-        head_sha = str(data.get("head_sha") or "")
-        if expected_head_sha and not head_sha:
-            data["status"] = "error"
-            data["error"] = "PR head SHA missing while monitoring CI"
-            break
-        if expected_head_sha and head_sha != expected_head_sha:
-            data["status"] = "error"
-            data["error"] = "PR head SHA changed while monitoring CI"
+        if _guard_head_sha(data, expected_head_sha):
             break
         overall = data.get("checks", {}).get("overall")
         sleep_seconds, local_stop = _bounded_sleep_seconds(poll_interval, wall_deadline)
+        terminal_reason = _terminal_reason(overall, attempt, attempts, local_stop)
         if overall == "pending" and attempt < attempts and local_stop:
             data["monitor"]["local_stop_reason"] = "max_wall_seconds"
+        if terminal_reason:
+            data["monitor"]["terminal_reason"] = terminal_reason
         if attempts > 1:
             if json_output:
                 print(json.dumps(data), flush=True)
             else:
                 print(f"poll attempt {attempt}/{attempts}", flush=True)
                 print(_format_human(data), flush=True)
-        if overall != "pending" or attempt == attempts or local_stop:
+        if terminal_reason:
             break
         time.sleep(sleep_seconds)
     return data

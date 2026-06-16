@@ -84,6 +84,7 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 | Issue #2868 | closed | Semantic metadata fixtures | Added metadata-bearing signalized, goal-directed, waiting-intent-change, and route-conflict fixtures for semantic baseline evaluation. |
 | Issue #2865 | closed | Calibration/reliability comparison | Converts #2868 comparison rows into analysis-only calibration rows; forecast-risk scoring remains gated with recommendation `wait`. |
 | Issue #2837 | closed | Horizon and timestep ablation | Analysis-only report for forecast horizon/output-step presets. Generated compact ablation bundle in `docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15/`. |
+| Issue #2903 | closed | Horizon/timestep denominator health | Analysis-only denominator-health audit for the issue #2837 ablation. Classifies missing cells, verifies 180-cell total, spot-checks reasons, and proposes minimum fixtures for 90% coverage. Bundle in `docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/`. |
 | Issue #2838 | closed | Observation-level adapters | Required before deployable/oracle observation tiers can be compared safely. |
 | Issue #2839 | closed | Dataset recorder and split manifest | Required before learned predictor training or durable split comparisons. |
 | Issue #2841 | closed | Calibration and reliability | Metric/report surface for probabilistic forecast quality. |
@@ -124,6 +125,9 @@ Use the smallest command that matches the changed surface:
 - Horizon and timestep ablation (issue #2837):
   `uv run pytest tests/benchmark/test_horizon_timestep_ablation.py`
   and `uv run python scripts/benchmark/build_horizon_timestep_ablation_report.py --output-dir <dir>`
+- Horizon/timestep denominator health (issue #2903):
+  `uv run pytest tests/benchmark/test_horizon_timestep_denominator.py`
+  and `uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py --output-dir <dir>`
 - Forecast-risk calibration-filter diagnostic (issue #2869):
   `uv run pytest tests/validation/test_forecast_risk_calibration_filter.py`
   and `uv run python scripts/validation/validate_forecast_risk_calibration_filter.py --out-dir <dir>`

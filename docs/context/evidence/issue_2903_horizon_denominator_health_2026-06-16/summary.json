@@ -1,0 +1,22 @@
+{
+  "issue": 2903,
+  "parent_issue": 2837,
+  "schema_version": "HorizonTimestepDenominatorHealth.v1",
+  "status": "diagnostic-only",
+  "claim_boundary": "analysis_only_not_navigation_evidence: this report measures denominator coverage of the horizon x timestep ablation matrix. It does not change forecast defaults, prove navigation value, closed-loop benefit, safety improvement, or benchmark-strength predictor quality.",
+  "forecast_defaults_unchanged": true,
+  "generated_at_utc": "2026-06-16T00:00:00+00:00",
+  "provenance": {
+    "command": "uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py --issue 2903 --parent-issue 2837 --generated-at-utc 2026-06-16T00:00:00+00:00",
+    "commit": "51aa862d",
+    "source": "durable repository trace fixtures via issue_2837 ablation"
+  },
+  "coverage": {
+    "expected_total_cells": 180,
+    "evaluated_cells": 65,
+    "evaluated_fraction": 0.3611111111111111,
+    "category_totals_valid": true,
+    "minimum_fixture_additions": 7,
+    "minimum_coverage_estimate": 0.9111111111111111
+  }
+}

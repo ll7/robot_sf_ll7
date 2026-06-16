@@ -1113,6 +1113,26 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/denominator_report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_2903_horizon_denominator_health.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_1169_carla_live_replay.md
     status: current
     freshness: maintained

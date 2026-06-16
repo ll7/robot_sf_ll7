@@ -14,6 +14,7 @@ from robot_sf.benchmark.pedestrian_forecast import (
     evaluate_forecast,
     goal_aware_cv_baseline,
     interaction_aware_cv_baseline,
+    risk_filtered_cv_baseline,
     semantic_cv_baseline,
     signal_aware_cv_baseline,
 )
@@ -730,3 +731,68 @@ def test_compute_batch_forecast_metrics_with_interaction_aware_baseline() -> Non
 
     assert summary["forecast_evaluable_samples"] > 0
     assert summary["mean_ade_0.5s"] >= 0.0
+
+
+def test_risk_filtered_without_robot_matches_cv() -> None:
+    """Risk-filtered baseline degrades to CV when no robot position is supplied."""
+
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([1.0, 0.0]),
+    )
+    risk_forecast = risk_filtered_cv_baseline(state, horizons_s=(1.0,))
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+
+    assert risk_forecast.predictions[0].metadata["model"] == "risk_filtered_cv"
+    assert risk_forecast.predictions[0].metadata["relevance_status"] == "robot_unavailable"
+    np.testing.assert_allclose(risk_forecast.predictions[0].mean, cv_forecast.predictions[0].mean)
+    np.testing.assert_allclose(
+        risk_forecast.predictions[0].covariance,
+        cv_forecast.predictions[0].covariance,
+    )
+    assert risk_forecast.predictions[0].metadata["std_m"] == pytest.approx(
+        cv_forecast.predictions[0].metadata["std_m"]
+    )
+
+
+def test_risk_filtered_near_robot_stays_relevant() -> None:
+    """A prediction close to the robot is marked collision_relevant."""
+
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([0.5, 0.0]),
+    )
+    robot_position = np.array([0.6, 0.0])
+    forecast = risk_filtered_cv_baseline(
+        state, horizons_s=(1.0,), robot_position=robot_position, risk_distance_m=1.0
+    )
+
+    assert forecast.predictions[0].metadata["relevance_status"] == "collision_relevant"
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+    np.testing.assert_allclose(
+        forecast.predictions[0].covariance,
+        cv_forecast.predictions[0].covariance,
+    )
+    assert forecast.predictions[0].metadata["std_m"] == pytest.approx(
+        cv_forecast.predictions[0].metadata["std_m"]
+    )
+
+
+def test_risk_filtered_far_robot_gets_widened() -> None:
+    """A prediction far from the robot is filtered and covariance is widened."""
+
+    state = PedestrianState(
+        id=1,
+        position=np.array([0.0, 0.0]),
+        velocity=np.array([5.0, 0.0]),
+    )
+    robot_position = np.array([0.0, 0.0])
+    forecast = risk_filtered_cv_baseline(
+        state, horizons_s=(1.0,), robot_position=robot_position, risk_distance_m=1.0
+    )
+
+    assert forecast.predictions[0].metadata["relevance_status"] == "filtered_low_relevance"
+    cv_forecast = constant_velocity_gaussian_baseline(state, horizons_s=(1.0,))
+    assert forecast.predictions[0].metadata["std_m"] > cv_forecast.predictions[0].metadata["std_m"]

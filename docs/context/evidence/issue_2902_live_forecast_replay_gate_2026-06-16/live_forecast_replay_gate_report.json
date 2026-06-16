@@ -1,0 +1,517 @@
+{
+  "baseline_closed_loop_metrics": {
+    "collision": true,
+    "false_positive_stops": 0,
+    "min_distance_m": 0.15620499351813316,
+    "near_miss": 9,
+    "progress_m": 1.9,
+    "reached_goal": null,
+    "runtime_s": 1.9,
+    "stop_yield_timing_s": 0.0,
+    "stop_yield_timing_steps": 0
+  },
+  "claim_boundary": "Diagnostic-only same-seed forecast replay gate. Forecast variants are evaluated open-loop against the recorded trace; closed-loop metrics are the baseline trace metrics and do not vary by variant because no native planner consumes selectable baseline forecasts.",
+  "classification": "diagnostic_only",
+  "issue": 2902,
+  "limitations": [
+    "Closed-loop metrics are invariant across variants because the repository does not yet expose a planner that consumes ProbabilisticPredictor baseline variants.",
+    "Open-loop forecast metrics are computed from a single frame per trace by default.",
+    "Risk-filtered variant uses a deterministic distance-based relevance filter."
+  ],
+  "native_path_eligibility": {
+    "forecast_variant_config_key_present": false,
+    "live_path_available": false,
+    "missing_components": [
+      "no ProbabilisticPredictor implementation registered for baseline forecast variants",
+      "no environment or planner config key for selecting forecast_variant"
+    ],
+    "probabilistic_predictor_implementations": []
+  },
+  "provenance": {
+    "episode_id": "dense_pedestrian_stress_ep0000",
+    "generated_at_utc": "2026-06-16T10:08:46.851992+00:00",
+    "horizons_s": [
+      0.5,
+      1.0
+    ],
+    "planner_id": "hybrid_rule_v0_minimal",
+    "repo_head": "78fed01e",
+    "requested_horizons_s": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "scenario_id": "dense_pedestrian_stress",
+    "seed": 2765,
+    "trace_id": "issue_2765_dense_pedestrian_stress_seed2765_ep0000"
+  },
+  "required_metrics": [
+    "collision",
+    "near_miss",
+    "min_distance",
+    "stop_yield_timing",
+    "progress",
+    "false_positive_stops",
+    "runtime"
+  ],
+  "schema_version": "LiveForecastReplayGate.v1",
+  "status": "diagnostic_only",
+  "variant_results": {
+    "cv": {
+      "actor_count": 3,
+      "forecast_batch_valid": true,
+      "forecast_metrics_error": null,
+      "forecast_metrics_status": "ok",
+      "forecast_metrics_summary": {
+        "active_actor_count": 3,
+        "aggregate_row_count": 20,
+        "metrics": {
+          "mean_ade_0.5s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 1.850371707708594e-17
+          },
+          "mean_ade_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 4.625929269271486e-17
+          },
+          "mean_collision_relevance_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_collision_relevance_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 4.625929269271486e-17
+          },
+          "mean_likelihood_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_likelihood_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 0.0
+          }
+        }
+      }
+    },
+    "interaction_aware": {
+      "actor_count": 3,
+      "forecast_batch_valid": true,
+      "forecast_metrics_error": null,
+      "forecast_metrics_status": "ok",
+      "forecast_metrics_summary": {
+        "active_actor_count": 3,
+        "aggregate_row_count": 20,
+        "metrics": {
+          "mean_ade_0.5s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 0.020633739218787413
+          },
+          "mean_ade_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 0.041267478437575014
+          },
+          "mean_collision_relevance_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_collision_relevance_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 0.041267478437575014
+          },
+          "mean_likelihood_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_likelihood_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 0.0
+          }
+        }
+      }
+    },
+    "none": {
+      "actor_count": 0,
+      "closed_loop_metric_source": "baseline_recorded_trace",
+      "forecast_batch_valid": null,
+      "forecast_metrics_error": null,
+      "forecast_metrics_status": "not_applicable",
+      "forecast_metrics_summary": null
+    },
+    "risk_filtered": {
+      "actor_count": 3,
+      "forecast_batch_valid": true,
+      "forecast_metrics_error": null,
+      "forecast_metrics_status": "ok",
+      "forecast_metrics_summary": {
+        "active_actor_count": 3,
+        "aggregate_row_count": 20,
+        "metrics": {
+          "mean_ade_0.5s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 1.850371707708594e-17
+          },
+          "mean_ade_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 4.625929269271486e-17
+          },
+          "mean_collision_relevance_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_collision_relevance_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 4.625929269271486e-17
+          },
+          "mean_likelihood_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_likelihood_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 0.0
+          }
+        }
+      }
+    },
+    "semantic": {
+      "actor_count": 3,
+      "forecast_batch_valid": true,
+      "forecast_metrics_error": null,
+      "forecast_metrics_status": "ok",
+      "forecast_metrics_summary": {
+        "active_actor_count": 3,
+        "aggregate_row_count": 20,
+        "metrics": {
+          "mean_ade_0.5s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 1.850371707708594e-17
+          },
+          "mean_ade_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 4.625929269271486e-17
+          },
+          "mean_collision_relevance_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_collision_relevance_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 4.625929269271486e-17
+          },
+          "mean_likelihood_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_likelihood_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 0.0
+          }
+        }
+      }
+    }
+  }
+}

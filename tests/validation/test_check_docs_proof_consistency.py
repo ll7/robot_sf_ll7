@@ -14,6 +14,7 @@ from scripts.validation.check_docs_proof_consistency import (
     _context_catalog_diagnostics,
     _context_index_link_diagnostics,
     _context_readme_link_diagnostics,
+    _evidence_catalog_coverage_diagnostics,
     _parse_name_status,
     _selected_files,
 )
@@ -590,3 +591,168 @@ def test_context_catalog_reports_malformed_yaml(tmp_path: Path) -> None:
 
     assert len(diagnostics) == 1
     assert "context catalog is not a valid YAML file" in diagnostics[0].message
+
+
+# ---------------------------------------------------------------------------
+# Evidence catalog coverage checks  (--check-evidence-catalog mode)
+# ---------------------------------------------------------------------------
+
+
+def _make_git_repo(tmp_path: Path) -> Path:
+    """Create a minimal git repo rooted at tmp_path and return it."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "t@t"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    return tmp_path
+
+
+def _git_add_commit(repo_root: Path, *paths: Path) -> None:
+    """Stage and commit the given paths in the tmp git repo."""
+    for p in paths:
+        subprocess.run(
+            ["git", "add", str(p.relative_to(repo_root))],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+        )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_evidence_catalog_reports_uncovered_bundle(tmp_path: Path) -> None:
+    """An evidence bundle with no catalog entry should be reported."""
+    repo_root = _make_git_repo(tmp_path)
+    bundle = repo_root / "docs/context/evidence/issue_999_example"
+    bundle.mkdir(parents=True)
+    summary = bundle / "summary.json"
+    summary.write_text('{"status": "ok"}\n', encoding="utf-8")
+
+    # Catalog exists but has NO entry for the bundle.
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_text(
+        "version: 1\nentries: []\n",
+        encoding="utf-8",
+    )
+    _git_add_commit(repo_root, summary, catalog)
+
+    diagnostics = _evidence_catalog_coverage_diagnostics(repo_root=repo_root)
+
+    assert any("docs/context/evidence/issue_999_example" in d.message for d in diagnostics), (
+        diagnostics
+    )
+
+
+def test_evidence_catalog_passes_when_bundle_is_covered(tmp_path: Path) -> None:
+    """A bundle whose file is cataloged should produce no diagnostic."""
+    repo_root = _make_git_repo(tmp_path)
+    bundle = repo_root / "docs/context/evidence/issue_999_covered"
+    bundle.mkdir(parents=True)
+    summary = bundle / "summary.json"
+    summary.write_text('{"status": "ok"}\n', encoding="utf-8")
+
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_text(
+        "version: 1\nentries:\n"
+        "  - path: docs/context/evidence/issue_999_covered/summary.json\n"
+        "    status: evidence\n"
+        "    freshness: evidence\n",
+        encoding="utf-8",
+    )
+    _git_add_commit(repo_root, summary, catalog)
+
+    diagnostics = _evidence_catalog_coverage_diagnostics(repo_root=repo_root)
+
+    assert diagnostics == [], diagnostics
+
+
+def test_evidence_catalog_reports_uncovered_standalone_file(tmp_path: Path) -> None:
+    """A standalone tracked evidence file with no catalog entry should be reported."""
+    repo_root = _make_git_repo(tmp_path)
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+    standalone = repo_root / "docs/context/evidence/issue_1662_lidar_ppo_smoke_summary.json"
+    standalone.write_text('{"status": "ok"}\n', encoding="utf-8")
+
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_text("version: 1\nentries: []\n", encoding="utf-8")
+    _git_add_commit(repo_root, standalone, catalog)
+
+    diagnostics = _evidence_catalog_coverage_diagnostics(repo_root=repo_root)
+
+    assert any("issue_1662_lidar_ppo_smoke_summary.json" in d.message for d in diagnostics), (
+        diagnostics
+    )
+
+
+def test_evidence_catalog_covered_by_bundle_file_entry(tmp_path: Path) -> None:
+    """A catalog entry for one file in a bundle covers the bundle."""
+    repo_root = _make_git_repo(tmp_path)
+    bundle = repo_root / "docs/context/evidence/issue_999_root_entry"
+    bundle.mkdir(parents=True)
+    f1 = bundle / "a.json"
+    f2 = bundle / "b.json"
+    f1.write_text('{"a": 1}\n', encoding="utf-8")
+    f2.write_text('{"b": 2}\n', encoding="utf-8")
+
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_text(
+        "version: 1\nentries:\n"
+        "  - path: docs/context/evidence/issue_999_root_entry/a.json\n"
+        "    status: evidence\n"
+        "    freshness: evidence\n",
+        encoding="utf-8",
+    )
+    _git_add_commit(repo_root, f1, f2, catalog)
+
+    # Both files are in the same bundle; one entry suffices.
+    diagnostics = _evidence_catalog_coverage_diagnostics(repo_root=repo_root)
+
+    assert diagnostics == [], diagnostics
+
+
+def test_evidence_catalog_empty_evidence_dir_passes(tmp_path: Path) -> None:
+    """An empty evidence directory (no tracked files) should pass cleanly."""
+    repo_root = _make_git_repo(tmp_path)
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_text("version: 1\nentries: []\n", encoding="utf-8")
+    _git_add_commit(repo_root, catalog)
+
+    diagnostics = _evidence_catalog_coverage_diagnostics(repo_root=repo_root)
+
+    assert diagnostics == [], diagnostics
+
+
+def test_evidence_catalog_missing_catalog_file_passes(tmp_path: Path) -> None:
+    """When the catalog does not exist yet, evidence coverage check should not crash."""
+    repo_root = _make_git_repo(tmp_path)
+    bundle = repo_root / "docs/context/evidence/issue_999_no_catalog"
+    bundle.mkdir(parents=True)
+    summary = bundle / "summary.json"
+    summary.write_text('{"status": "ok"}\n', encoding="utf-8")
+    _git_add_commit(repo_root, summary)
+
+    # No catalog file at all.
+    diagnostics = _evidence_catalog_coverage_diagnostics(repo_root=repo_root)
+
+    # Without a catalog, every bundle is uncovered — should still report, not crash.
+    assert any("issue_999_no_catalog" in d.message for d in diagnostics), diagnostics

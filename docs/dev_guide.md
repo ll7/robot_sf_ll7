@@ -363,6 +363,9 @@ checker is intentionally conservative: it only flags high-confidence issues such
 contain absolute local paths, and tracked evidence that links to ignored `output/` artifacts.
 It also validates the curated machine-readable context catalog at `docs/context/catalog.yaml` so
 indexed context entry points keep explicit status and freshness metadata.
+Run `uv run python scripts/validation/check_docs_proof_consistency.py --check-evidence-catalog`
+for the explicit full evidence-catalog hygiene pass; it scans tracked
+`docs/context/evidence/` bundles and reports bundles that have no catalog entry.
 When issue or PR text needs to classify proof strength, use the
 [artifact evidence vocabulary](context/artifact_evidence_vocabulary.md) so local `output/` paths are
 not promoted into durable benchmark or paper-facing claims.

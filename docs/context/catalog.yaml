@@ -1548,3 +1548,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_2943_fast_results_claim_map_v0.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence

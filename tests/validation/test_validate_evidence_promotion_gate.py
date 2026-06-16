@@ -7,7 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = Path("scripts/validation/validate_evidence_promotion_gate.py")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "scripts" / "validation" / "validate_evidence_promotion_gate.py"
 
 
 def run_validator(*args: str) -> subprocess.CompletedProcess[str]:
@@ -87,6 +88,31 @@ def test_evidence_bundle_passes_when_smoke_artifacts_are_present(tmp_path: Path)
     assert payload["missing_artifacts"] == []
 
 
+def test_context_note_matching_is_case_insensitive(tmp_path: Path) -> None:
+    """Context-note evidence matching does not depend on author casing."""
+    note = tmp_path / "note.md"
+    note.write_text(
+        "\n".join(
+            [
+                "# Smoke Evidence",
+                "",
+                "COMMAND: uv run python scripts/validation/example.py",
+                "COMMIT: 2072e083a6554cbc03638f0941e5c5c74317ef6c",
+                "SUMMARY JSON: output/summary.json",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_validator("--context-note", str(note))
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)["validation_result"]
+    assert payload["claimed_tier"] == "smoke"
+    assert payload["transition_valid"] is True
+    assert payload["missing_artifacts"] == []
+
+
 def test_validate_all_emits_diagnostic_only_stuck_results(tmp_path: Path) -> None:
     """Repository-wide validation reports diagnostic-only notes as stuck."""
     note_dir = tmp_path / "docs" / "context"
@@ -107,3 +133,19 @@ def test_validate_all_emits_diagnostic_only_stuck_results(tmp_path: Path) -> Non
             "reason": "diagnostic_only_no_promotion",
         }
     ]
+
+
+def test_validate_all_ignores_non_directory_scan_roots(tmp_path: Path) -> None:
+    """Repository-wide scanning skips placeholder files at expected directory paths."""
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "context").write_text("not a directory", encoding="utf-8")
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    (output_dir / "benchmarks").write_text("not a directory", encoding="utf-8")
+
+    result = run_validator("--root", str(tmp_path))
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["validation_summary"]["total_validated"] == 0

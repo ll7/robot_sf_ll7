@@ -281,7 +281,7 @@ def _check_transition(
             return False, errors
     if claimed == current:
         return True, []
-    if claimed in ALLOWED_TRANSITIONS.get(current, set()):
+    if current.can_promote_to(claimed):
         return True, []
     errors.append(f"Invalid transition: {current.value} -> {claimed.value}")
     return False, errors
@@ -290,7 +290,7 @@ def _check_transition(
 def _scan_context_notes(root: Path) -> list[Path]:
     """Scan for context note files."""
     context_dir = root / "docs" / "context"
-    if not context_dir.exists():
+    if not context_dir.is_dir():
         return []
     return sorted(
         path
@@ -303,17 +303,17 @@ def _scan_evidence_dirs(root: Path) -> list[Path]:
     """Scan for evidence bundle directories."""
     evidence_dirs = []
     context_evidence = root / "docs" / "context" / "evidence"
-    if context_evidence.exists():
+    if context_evidence.is_dir():
         evidence_dirs.extend(d for d in context_evidence.iterdir() if d.is_dir())
     output_evidence = root / "output" / "benchmarks"
-    if output_evidence.exists():
+    if output_evidence.is_dir():
         evidence_dirs.extend(d for d in output_evidence.iterdir() if d.is_dir())
     return evidence_dirs
 
 
 def validate_context_note(note_path: Path, root: Path) -> ValidationResult:
     """Validate a single context note for evidence promotion."""
-    text = _read_text(note_path)
+    text = _read_text(note_path).lower()
     claimed_tier = _detect_tier(text)
 
     if claimed_tier is None:

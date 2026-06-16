@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+import robot_sf.benchmark.live_forecast_replay_gate as live_forecast_replay_gate_module
 from robot_sf.analysis_workbench.simulation_trace_export import SimulationTraceExport
 from robot_sf.benchmark.live_forecast_replay_gate import (
     FORECAST_VARIANTS,
@@ -21,6 +23,7 @@ from robot_sf.benchmark.live_forecast_replay_gate import (
     VALID_RUN_CLASSIFICATIONS,
     LiveForecastReplayGateConfig,
     LiveForecastReplayGateError,
+    _forecast_brake_needed,
     _summarize_forecast_metrics,
     build_variant_forecast_batch,
     check_native_live_path_eligibility,
@@ -29,6 +32,7 @@ from robot_sf.benchmark.live_forecast_replay_gate import (
     format_live_forecast_replay_gate_markdown,
     load_trace_tolerant,
     run_live_forecast_replay_gate,
+    run_variant_closed_loop_replay,
 )
 
 
@@ -62,22 +66,23 @@ class TestConstants:
         )
 
     def test_smoke_variants(self) -> None:
-        """The issue #2944 smoke must include exactly none and cv."""
+        """The issue #2941 default smoke must include exactly none and cv."""
 
         assert SMOKE_FORECAST_VARIANTS == ("none", "cv")
 
     def test_required_metrics(self) -> None:
         """All issue-required metrics must be declared."""
 
-        required_by_issue_2944 = {
+        required_by_issue_2941 = {
             "collision",
             "near_miss",
             "min_distance",
             "stop_yield_timing",
             "progress",
+            "false_positive_stops",
             "runtime",
         }
-        assert required_by_issue_2944.issubset(set(REQUIRED_METRICS))
+        assert required_by_issue_2941.issubset(set(REQUIRED_METRICS))
 
     def test_schema_version_constant(self) -> None:
         """Schema version should be stable."""
@@ -214,34 +219,36 @@ class TestForecastMetricSummary:
 
 
 class TestNativePathEligibility:
-    """Native live path detection should fail closed when components are missing."""
+    """Native live path detection should recognize the new baseline components."""
 
-    def test_live_path_not_available(self) -> None:
-        """The repository currently lacks a native selectable-variant live path."""
-
-        eligibility = check_native_live_path_eligibility()
-        assert eligibility["live_path_available"] is False
-        assert eligibility["missing_components"]
-        assert not eligibility["probabilistic_predictor_implementations"]
-        assert eligibility["forecast_variant_config_key_present"] is False
-
-    def test_missing_components_named(self) -> None:
-        """Missing components should be explicitly listed."""
+    def test_live_path_is_available(self) -> None:
+        """The repository now exposes a selectable-variant baseline live path."""
 
         eligibility = check_native_live_path_eligibility()
-        missing = " ".join(eligibility["missing_components"])
-        assert "ProbabilisticPredictor" in missing
-        assert "forecast_variant" in missing
+        assert eligibility["live_path_available"] is True
+        assert not eligibility["missing_components"]
+        assert eligibility["probabilistic_predictor_implementations"]
+        assert eligibility["forecast_variant_config_key_present"] is True
+
+    def test_predictor_implementation_is_baseline(self) -> None:
+        """The registered predictor should be the baseline implementation."""
+
+        eligibility = check_native_live_path_eligibility()
+        assert (
+            "robot_sf.nav.baseline_probabilistic_predictor.BaselineProbabilisticPredictor"
+            in (eligibility["probabilistic_predictor_implementations"])
+        )
 
 
 class TestRunClassification:
     """Fail-closed classification of gate runs."""
 
-    def test_current_repo_state_is_blocked(self, dense_trace: SimulationTraceExport) -> None:
-        """The current repository lacks the native live path, so runs are blocked."""
+    def test_current_repo_state_is_native(self, dense_trace: SimulationTraceExport) -> None:
+        """The cv forecast now flows into a replay policy and differs from none."""
 
         report = run_live_forecast_replay_gate(dense_trace)
-        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_BLOCKED
+        classification = classify_live_forecast_replay_run(report)
+        assert classification == RUN_CLASSIFICATION_NATIVE
 
     def test_blocked_when_missing_components(self) -> None:
         """Missing native components classify the run as blocked."""
@@ -297,6 +304,27 @@ class TestRunClassification:
             "variant_results": {
                 "none": {"closed_loop_metrics": metrics},
                 "cv": {"closed_loop_metrics": metrics},
+            },
+        }
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_DEGRADED
+
+    def test_replay_policy_only_difference_is_degraded(self) -> None:
+        """Provenance-only replay policy differences should not promote native."""
+
+        report = {
+            "native_path_eligibility": {
+                "live_path_available": True,
+                "missing_components": [],
+            },
+            "variant_results": {
+                "none": {"closed_loop_metrics": {"collision": False, "progress_m": 1.0}},
+                "cv": {
+                    "closed_loop_metrics": {
+                        "collision": False,
+                        "progress_m": 1.0,
+                        "replay_policy": "forecast_brake_replay",
+                    }
+                },
             },
         }
         assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_DEGRADED
@@ -372,9 +400,9 @@ class TestVariantForecastBatch:
         assert {forecast.actor_id for forecast in batch.forecasts} == expected_actor_ids
 
     def test_none_variant_has_no_forecast_batch(self, dense_trace: SimulationTraceExport) -> None:
-        """The none variant is represented by baseline closed-loop metrics."""
+        """The none variant is represented by integrated no-forecast replay metrics."""
 
-        with pytest.raises(LiveForecastReplayGateError, match="recorded closed-loop baseline"):
+        with pytest.raises(LiveForecastReplayGateError, match="integrated no-forecast baseline"):
             build_variant_forecast_batch(dense_trace, "none")
 
     def test_unsupported_variant_raises(self, dense_trace: SimulationTraceExport) -> None:
@@ -461,15 +489,14 @@ class TestBaselineClosedLoopMetrics:
 class TestGateReport:
     """End-to-end gate report classification and formatting."""
 
-    def test_report_classification_is_blocked(self, dense_trace: SimulationTraceExport) -> None:
-        """Without a native live path the smoke must be fail-closed blocked."""
+    def test_report_classification_is_native(self, dense_trace: SimulationTraceExport) -> None:
+        """With the baseline replay path the dense smoke is native."""
 
         report = run_live_forecast_replay_gate(dense_trace)
-        assert report["status"] == RUN_CLASSIFICATION_BLOCKED
-        assert report["classification"] == RUN_CLASSIFICATION_BLOCKED
+        assert report["status"] == RUN_CLASSIFICATION_NATIVE
+        assert report["classification"] == report["status"]
         assert report["classification_reason"]
-        assert "blocked" in report["classification_reason"].lower()
-        assert report["full_matrix_expansion_recommended"] is False
+        assert report["full_matrix_expansion_recommended"] is True
 
     def test_report_includes_smoke_variants(self, dense_trace: SimulationTraceExport) -> None:
         """The default report should include only the smoke variants."""
@@ -479,10 +506,10 @@ class TestGateReport:
         assert report["provenance"]["variants"] == list(SMOKE_FORECAST_VARIANTS)
         assert report["variant_results"]["none"]["forecast_metrics_status"] == "not_applicable"
         assert report["variant_results"]["none"]["closed_loop_metric_source"] == (
-            "baseline_recorded_trace"
+            "no_forecast_replay"
         )
         assert report["variant_results"]["cv"]["closed_loop_metric_source"] == (
-            "baseline_recorded_trace"
+            "forecast_brake_replay"
         )
 
     def test_report_can_run_full_matrix(self, dense_trace: SimulationTraceExport) -> None:
@@ -502,7 +529,7 @@ class TestGateReport:
         assert "Claim Boundary" in markdown
         assert "Classification" in markdown
         assert "Native Path Eligibility" in markdown
-        assert "Baseline Closed-Loop Metrics" in markdown
+        assert "Recorded Trace Closed-Loop Metrics" in markdown
         assert "Variant Results" in markdown
         assert "Limitations" in markdown
         assert str(report["classification"]) in markdown
@@ -556,3 +583,73 @@ class TestGateReport:
                     or f"{key}_s" in metrics
                     or f"{key}_steps" in metrics
                 )
+
+
+class TestForecastBrakeReplay:
+    """Forecast-aware brake replay produces per-variant closed-loop metrics."""
+
+    def test_none_replay_uses_integrated_no_forecast_policy(
+        self, dense_trace: SimulationTraceExport
+    ) -> None:
+        """The none variant should use the same replay surface without forecast braking."""
+
+        config = LiveForecastReplayGateConfig()
+        replay_metrics = run_variant_closed_loop_replay(dense_trace, "none", config)
+        assert replay_metrics["replay_policy"] == "no_forecast_replay"
+        assert replay_metrics["runtime_s"] == pytest.approx(
+            dense_trace.frames[-1].time_s - dense_trace.frames[0].time_s
+        )
+
+    def test_cv_replay_differs_from_none(self, dense_trace: SimulationTraceExport) -> None:
+        """The cv replay should produce closed-loop metrics that differ from none."""
+
+        config = LiveForecastReplayGateConfig()
+        none_metrics = run_variant_closed_loop_replay(dense_trace, "none", config)
+        cv_metrics = run_variant_closed_loop_replay(dense_trace, "cv", config)
+        assert cv_metrics["replay_policy"] == "forecast_brake_replay"
+        assert cv_metrics != none_metrics
+
+    def test_no_brake_cv_replay_matches_none_for_classification(
+        self, dense_trace: SimulationTraceExport, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Classification should not become native from integration mismatch alone."""
+
+        monkeypatch.setattr(
+            live_forecast_replay_gate_module,
+            "_forecast_brake_needed",
+            lambda prediction, robot_position, collision_distance_m: False,
+        )
+        config = LiveForecastReplayGateConfig()
+        none_metrics = run_variant_closed_loop_replay(dense_trace, "none", config)
+        cv_metrics = run_variant_closed_loop_replay(dense_trace, "cv", config)
+        cv_metrics["replay_policy"] = none_metrics["replay_policy"]
+
+        assert cv_metrics == none_metrics
+
+    def test_replay_uses_frame_time_deltas(self, dense_trace: SimulationTraceExport) -> None:
+        """Nonuniform frame times should still produce a finite replay."""
+
+        frames = list(dense_trace.frames)
+        frames[1] = replace(frames[1], time_s=frames[0].time_s + 0.2)
+        trace = replace(dense_trace, frames=frames)
+
+        metrics = run_variant_closed_loop_replay(trace, "cv", LiveForecastReplayGateConfig())
+
+        assert metrics["replay_policy"] == "forecast_brake_replay"
+        assert metrics["runtime_s"] == pytest.approx(
+            trace.frames[-1].time_s - trace.frames[0].time_s
+        )
+
+    def test_forecast_brake_triggers_when_pedestrian_predicted_close(self) -> None:
+        """Brake should trigger when a predicted mean is within the threshold."""
+
+        from robot_sf.nav.predictive_types import ProbabilisticPrediction, TrajectoryDistribution
+
+        mean = np.array([[0.0, 0.0], [0.1, 0.0], [0.2, 0.0]], dtype=np.float32)
+        prediction = ProbabilisticPrediction(
+            predictions=[TrajectoryDistribution(mean=mean, pedestrian_id=0)],
+            prediction_horizon=0.3,
+            prediction_dt=0.1,
+        )
+        assert _forecast_brake_needed(prediction, np.array([0.0, 0.0]), 0.15) is True
+        assert _forecast_brake_needed(prediction, np.array([1.0, 1.0]), 0.15) is False

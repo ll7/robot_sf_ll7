@@ -14,6 +14,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from robot_sf.ped_ego.unicycle_drive import UnicycleDrivePedestrian
 
+from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.gym_env.observation_config import (
     ObservationStackSettings,
     sync_observation_stack_settings,
@@ -179,6 +180,9 @@ class RobotSimulationConfig(BaseSimulationConfig):
     planner_backend: str = field(default="classic")
     planner_classic_config: ClassicPlannerConfig | None = field(default=None)
     navigation_settings: NavigationSettings = field(default_factory=NavigationSettings)
+    # Forecast variant selection for planners that consume ProbabilisticPredictor baselines.
+    # "none" disables baseline forecast consumption and uses the planner's default behavior.
+    forecast_variant: str = field(default="none")
     predictive_foresight_enabled: bool = field(default=False)
     predictive_foresight_model_id: str = field(default="predictive_proxy_selected_v2_full")
     predictive_foresight_checkpoint_path: str | None = field(default=None)
@@ -207,7 +211,16 @@ class RobotSimulationConfig(BaseSimulationConfig):
         self._validate_grid_visualization()
         self._validate_planner_config()
         self._validate_global_sampling()
+        self._validate_forecast_variant()
         self._validate_predictive_foresight()
+
+    def _validate_forecast_variant(self) -> None:
+        """Validate the forecast variant selector when configured."""
+        if self.forecast_variant not in FORECAST_VARIANT_CHOICES:
+            raise ValueError(
+                f"forecast_variant must be one of {list(FORECAST_VARIANT_CHOICES)}; "
+                f"got {self.forecast_variant!r}"
+            )
 
     def _validate_predictive_foresight(self) -> None:
         """Validate predictive foresight numeric parameters when configured."""

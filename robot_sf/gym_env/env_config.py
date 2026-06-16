@@ -19,6 +19,7 @@ telemetry configuration support from `TelemetryConfigMixin`."""
 
 from dataclasses import dataclass, field
 
+from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.gym_env.observation_config import (
     ObservationStackSettings,
     sync_observation_stack_settings,
@@ -77,6 +78,9 @@ class BaseEnvSettings(TelemetryConfigMixin):
     grid_config: GridConfig | None = None
     include_grid_in_observation: bool = False
     show_occupancy_grid: bool = False
+    # Forecast variant selection for planners that consume ProbabilisticPredictor baselines.
+    # "none" disables baseline forecast consumption and uses the planner's default behavior.
+    forecast_variant: str = field(default="none")
 
     def __post_init__(self):
         """Validate required configuration fields and telemetry settings.
@@ -89,6 +93,11 @@ class BaseEnvSettings(TelemetryConfigMixin):
         """
         if not self.sim_config or not self.map_pool:
             raise ValueError("Please make sure all properties are initialized!")
+        if self.forecast_variant not in FORECAST_VARIANT_CHOICES:
+            raise ValueError(
+                f"forecast_variant must be one of {list(FORECAST_VARIANT_CHOICES)}; "
+                f"got {self.forecast_variant!r}"
+            )
         sync_observation_stack_settings(self)
         self._validate_telemetry()
 

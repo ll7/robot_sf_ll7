@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Validate the live same-seed forecast replay gate (issue #2944).
+"""Validate the live same-seed forecast replay gate (issue #2941).
 
 This is a fail-closed smoke gate for the none+cv forecast variants.  It does
 not train models or run expensive campaigns.  It loads a simulation trace
 export, builds ForecastBatch.v1 artifacts for each requested variant, computes
-baseline closed-loop metrics from the trace, and reports a per-run
-classification (native, blocked, degraded, diagnostic_only) that gates whether
-the full forecast variant matrix should be expanded.
+recorded-trace and integrated no-forecast closed-loop metrics, and reports a
+per-run classification (native, blocked, degraded, diagnostic_only) that gates
+whether the full forecast variant matrix should be expanded.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     default_horizons = " ".join(f"{horizon:g}" for horizon in DEFAULT_HORIZONS_S)
     parser = argparse.ArgumentParser(
-        description="Native CV-only closed-loop replay smoke (issue #2944)."
+        description="Native forecast-variant replay smoke (issue #2941)."
     )
     parser.add_argument(
         "--trace",

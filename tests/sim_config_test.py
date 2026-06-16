@@ -42,3 +42,16 @@ def test_robot_factory():
     with pytest.raises(NotImplementedError):
         env_settings.robot_config = "unsupported type"  # type: ignore
         env_settings.robot_factory()
+
+
+def test_forecast_variant_default_and_validation():
+    """forecast_variant should default to none and reject unknown variants."""
+
+    env_settings = EnvSettings()
+    assert env_settings.forecast_variant == "none"
+
+    valid_settings = EnvSettings(forecast_variant="cv")
+    assert valid_settings.forecast_variant == "cv"
+
+    with pytest.raises(ValueError, match="forecast_variant"):
+        EnvSettings(forecast_variant="unknown_variant")

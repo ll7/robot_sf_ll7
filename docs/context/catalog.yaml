@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-15
+updated_at: 2026-06-16
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -1084,6 +1084,26 @@ entries:
   - path: docs/context/issue_2864_forecast_lane_synthesis.md
     status: current
     freshness: maintained
+    area: predictive_planner
+  - path: docs/context/issue_2941_native_forecast_replay.md
+    status: current
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2941_native_forecast_replay_2026-06-16/live_forecast_replay_gate_report.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2941_native_forecast_replay_2026-06-16/live_forecast_replay_gate_report.md
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2941_native_forecast_replay_full_matrix_2026-06-16/live_forecast_replay_gate_report.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2941_native_forecast_replay_full_matrix_2026-06-16/live_forecast_replay_gate_report.md
+    status: evidence
+    freshness: evidence
     area: predictive_planner
   - path: docs/context/evidence/issue_2866_transferability_matrix_rows/summary.json
     status: evidence

@@ -180,6 +180,28 @@ def _now_utc() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _parse_generated_at_utc(value: str) -> str:
+    """Validate a user-supplied ISO-8601 UTC timestamp.
+
+    Returns the original string on success so the report keeps the caller's
+    exact formatting. Raises ValueError with an actionable message on failure.
+    """
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"invalid --generated-at-utc timestamp '{value}'; "
+            "expected an ISO-8601 datetime such as 2026-06-15T00:00:00+00:00"
+        ) from exc
+    if parsed.tzinfo != UTC:
+        raise ValueError(
+            f"invalid --generated-at-utc timestamp '{value}'; "
+            "expected a timezone-aware UTC ISO-8601 datetime such as "
+            "2026-06-15T00:00:00+00:00"
+        )
+    return value
+
+
 def _load_json(path: Path) -> Any:
     """Load a JSON file and return the parsed payload."""
     return json.loads(path.read_text(encoding="utf-8"))
@@ -283,6 +305,7 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0915
     *,
     artifact_candidates: Sequence[Mapping[str, Any]] = (),
     candidate_source_path: Path | None = None,
+    generated_at_utc: str | None = None,
 ) -> ManifestLineageGraph:
     """Build a lineage graph from manifest paths and optional artifact candidates.
 
@@ -292,6 +315,8 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0915
             back to one of the supplied manifest paths.
         candidate_source_path: Optional path to the candidate file, used to
             resolve relative manifest references.
+        generated_at_utc: Optional ISO-8601 UTC timestamp for the report. When
+            omitted, the current wall-clock UTC time is used.
 
     Returns:
         ManifestLineageGraph with nodes, edges, traces, and summary.
@@ -468,9 +493,12 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0915
         )
 
     summary = _build_summary(nodes.values(), edges, traces)
+    timestamp = (
+        _parse_generated_at_utc(generated_at_utc) if generated_at_utc is not None else _now_utc()
+    )
     return ManifestLineageGraph(
         schema_version=SCHEMA_VERSION,
-        generated_at_utc=_now_utc(),
+        generated_at_utc=timestamp,
         nodes=list(nodes.values()),
         edges=edges,
         traces=traces,

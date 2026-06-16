@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.manifest_lineage_graph import (
     LineageStatus,
     build_manifest_lineage_graph,
@@ -287,6 +289,49 @@ def test_cli_runs_without_artifact_candidates_and_with_markdown(tmp_path: Path) 
     assert "No artifact candidates supplied" in md_path.read_text(encoding="utf-8")
 
 
+def test_generated_at_utc_override_in_graph() -> None:
+    """A supplied timestamp is used instead of the current wall-clock time."""
+    manifest_path = FIXTURE_DIR / "connected_manifest.json"
+    fixed_timestamp = "2026-06-15T00:00:00+00:00"
+
+    graph = build_manifest_lineage_graph(
+        [manifest_path],
+        generated_at_utc=fixed_timestamp,
+    )
+
+    assert graph.generated_at_utc == fixed_timestamp
+
+
+def test_generated_at_utc_invalid_raises_actionable_error() -> None:
+    """An invalid timestamp raises a clear, actionable ValueError."""
+    manifest_path = FIXTURE_DIR / "connected_manifest.json"
+
+    invalid_values = [
+        "not-a-timestamp",
+        "2026-06-15T00:00:00",
+        "2026-06-15T02:00:00+02:00",
+    ]
+    for invalid_value in invalid_values:
+        with pytest.raises(ValueError, match="invalid --generated-at-utc timestamp"):
+            build_manifest_lineage_graph(
+                [manifest_path],
+                generated_at_utc=invalid_value,
+            )
+
+
+def test_generated_at_utc_defaults_to_current_utc() -> None:
+    """Omitting the timestamp uses the current wall-clock UTC time."""
+    from datetime import UTC, datetime
+
+    manifest_path = FIXTURE_DIR / "connected_manifest.json"
+    before = datetime.now(UTC)
+    graph = build_manifest_lineage_graph([manifest_path])
+    after = datetime.now(UTC)
+
+    parsed = datetime.fromisoformat(graph.generated_at_utc)
+    assert before <= parsed <= after
+
+
 def test_repo_relative_paths_in_graph(tmp_path: Path) -> None:
     """Manifest paths in the graph are repository-relative."""
     manifest_path = FIXTURE_DIR / "connected_manifest.json"
@@ -295,6 +340,81 @@ def test_repo_relative_paths_in_graph(tmp_path: Path) -> None:
     manifest_node = next(node for node in graph.nodes if node.kind == "manifest")
     assert not Path(manifest_node.path).is_absolute()
     assert manifest_node.path.startswith("tests/benchmark/fixtures/manifest_lineage_graph/")
+
+
+def test_cli_generated_at_utc_override(tmp_path: Path) -> None:
+    """The CLI uses --generated-at-utc in both JSON and Markdown outputs."""
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "benchmark"
+        / "build_manifest_lineage_graph.py"
+    )
+    json_path = tmp_path / "out.json"
+    md_path = tmp_path / "out.md"
+    fixed_timestamp = "2026-06-15T00:00:00+00:00"
+
+    import subprocess
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(FIXTURE_DIR / "connected_manifest.json"),
+            "--out-json",
+            str(json_path),
+            "--out-md",
+            str(md_path),
+            "--generated-at-utc",
+            fixed_timestamp,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    summary = json.loads(result.stdout)
+    assert summary["json_path"] == str(json_path)
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["generated_at_utc"] == fixed_timestamp
+
+    markdown = md_path.read_text(encoding="utf-8")
+    assert f"**Generated at (UTC)**: {fixed_timestamp}" in markdown
+
+
+def test_cli_generated_at_utc_invalid_fails(tmp_path: Path) -> None:
+    """The CLI rejects an invalid --generated-at-utc with an actionable error."""
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "benchmark"
+        / "build_manifest_lineage_graph.py"
+    )
+    json_path = tmp_path / "out.json"
+
+    import subprocess
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(FIXTURE_DIR / "connected_manifest.json"),
+            "--out-json",
+            str(json_path),
+            "--generated-at-utc",
+            "not-a-timestamp",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "invalid --generated-at-utc timestamp" in result.stderr
+    assert "ISO-8601" in result.stderr
 
 
 def test_duplicate_manifest_paths_are_deduplicated() -> None:

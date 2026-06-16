@@ -132,8 +132,6 @@ def _parse_worktree_line(line: str, current: dict[str, str]) -> dict[str, str]:
         current["head_sha"] = value
     elif key == "branch":
         current["branch"] = value.removeprefix("refs/heads/")
-    elif key == "detached":
-        current["detached"] = "true"
     return current
 
 
@@ -274,7 +272,11 @@ def build_snapshot(
     selected = filtered if include_all_worktrees else filtered[:worktree_limit]
     worktrees = [_build_row(row, current_path) for row in selected]
     current_worktree = next(
-        (row.get("path") for row in parsed if Path(row.get("path", "")).resolve() == current_path),
+        (
+            row["path"]
+            for row in parsed
+            if row.get("path") and Path(row["path"]).resolve() == current_path
+        ),
         None,
     )
     issue_counts: dict[str, int] = {}

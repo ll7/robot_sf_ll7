@@ -200,3 +200,38 @@ def test_current_worktree_is_reported_when_truncated(monkeypatch, tmp_path: Path
     assert result.current_worktree == str(current)
     assert result.included_worktrees == 1
     assert result.worktrees_truncated is True
+
+
+def test_current_worktree_ignores_malformed_rows(monkeypatch, tmp_path: Path) -> None:
+    """Do not let rows without paths match the current checkout."""
+    current = tmp_path / "current"
+    current.mkdir()
+
+    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
+        del timeout
+        if args == ["git", "worktree", "list", "--porcelain"]:
+            return _result(
+                "\n".join(
+                    [
+                        "HEAD malformed",
+                        "",
+                        f"worktree {current}",
+                        "HEAD aaa",
+                        "branch refs/heads/current",
+                    ]
+                )
+            )
+        if args == ["git", "status", "--porcelain"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
+            return _result("origin/current\n")
+        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/current"]:
+            return _result("0\t0\n")
+        raise AssertionError(f"unexpected command: {args} cwd={cwd}")
+
+    monkeypatch.chdir(current)
+    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+
+    result = snapshot.build_snapshot()
+
+    assert result.current_worktree == str(current)

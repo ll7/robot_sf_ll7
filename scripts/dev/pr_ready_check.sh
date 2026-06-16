@@ -121,6 +121,7 @@ if [[ "$pr_ready_final" == "1" ]]; then
 fi
 
 uv run python "$SCRIPT_DIR/check_pr_followups.py"
+uv run python "$SCRIPT_DIR/check_fast_results_claim_map.py"
 "$SCRIPT_DIR/ruff_fix_format.sh"
 "$SCRIPT_DIR/run_tests_parallel.sh"
 "$SCRIPT_DIR/check_changed_coverage.sh"

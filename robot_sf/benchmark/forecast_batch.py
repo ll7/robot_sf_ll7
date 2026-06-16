@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field, fields, is_dataclass
+from datetime import datetime
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,20 @@ def _require_non_empty_str(name: str, value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} is required")
     return value.strip()
+
+
+def _require_timestamp(name: str, value: object) -> str:
+    """Return an ISO 8601 timestamp string or raise for invalid values."""
+    text = _require_non_empty_str(name, value)
+    if "T" not in text:
+        raise ValueError(f"{name} must be an ISO 8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an ISO 8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{name} must include timezone information")
+    return text
 
 
 def _require_positive_float(name: str, value: object) -> float:
@@ -158,6 +173,7 @@ class ForecastBatchProvenance:
     actor_mask: list[bool]
     actor_mask_metadata: dict[str, Any]
     feature_schema: dict[str, Any]
+    timestamp: str
     oracle_state: bool = False
     actor_classes: dict[str, str] = field(default_factory=dict)
 
@@ -171,6 +187,7 @@ class ForecastBatchProvenance:
         self.dt_s = _require_positive_float("dt_s", self.dt_s)
         self.horizons_s = _require_float_list("horizons_s", self.horizons_s)
         self.scenario_id = _require_non_empty_str("scenario_id", self.scenario_id)
+        self.timestamp = _require_timestamp("timestamp", self.timestamp)
         if isinstance(self.seed, bool) or not isinstance(self.seed, (int, np.integer)):
             raise ValueError("seed must be an integer")
         self.seed = int(self.seed)
@@ -226,6 +243,7 @@ class ForecastBatchProvenance:
             horizons_s=data.get("horizons_s"),
             scenario_id=data.get("scenario_id", ""),
             seed=data.get("seed", 0),
+            timestamp=data.get("timestamp", ""),
             fallback_status=data.get("fallback_status", ""),
             degraded_status=data.get("degraded_status", ""),
             actor_ids=list(data.get("actor_ids", [])),
@@ -253,6 +271,49 @@ def _array_or_none(name: str, value: object, *, ndim: int) -> np.ndarray | None:
     return array
 
 
+def _normalize_optional_sequence(
+    name: str,
+    value: object,
+    expected_steps: int | None,
+) -> list[dict[str, Any]] | None:
+    """Normalize an optional list of per-horizon metadata objects.
+
+    Returns:
+        List of dicts or None when the optional payload is absent.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)) or len(value) == 0:
+        raise ValueError(f"{name} must be a non-empty list")
+    normalized = [_require_mapping(f"{name}[]", item) for item in value]
+    if expected_steps is not None and len(normalized) != expected_steps:
+        raise ValueError(f"{name} must align with forecast horizons")
+    return normalized
+
+
+def _validate_forecast_payload(forecast: ActorForecast, expected_steps: int) -> None:
+    """Validate that one actor forecast carries a complete aligned payload."""
+    if not any(
+        payload is not None
+        for payload in (
+            forecast.deterministic,
+            forecast.samples,
+            forecast.gaussian,
+            forecast.reachable_set,
+            forecast.occupancy_summary,
+        )
+    ):
+        raise ValueError("forecast payload must include at least one prediction representation")
+    if forecast.deterministic is not None and forecast.deterministic.shape[0] != expected_steps:
+        raise ValueError("deterministic trajectories must align with horizons_s")
+    if forecast.samples is not None and forecast.samples.shape[1] != expected_steps:
+        raise ValueError("sampled trajectories must align with horizons_s")
+    if forecast.gaussian is not None and len(forecast.gaussian) != expected_steps:
+        raise ValueError("gaussian must align with horizons_s")
+    if forecast.reachable_set is not None and len(forecast.reachable_set) != expected_steps:
+        raise ValueError("reachable_set must align with horizons_s")
+
+
 @dataclass
 class ActorForecast:
     """Optional forecast payloads for one actor.
@@ -266,6 +327,8 @@ class ActorForecast:
     deterministic: np.ndarray | None = None
     samples: np.ndarray | None = None
     mode_probabilities: list[float] | None = None
+    gaussian: list[dict[str, Any]] | None = None
+    reachable_set: list[dict[str, Any]] | None = None
     occupancy_summary: dict[str, Any] | None = None
     uncertainty_metadata: dict[str, Any] | None = None
 
@@ -281,8 +344,21 @@ class ActorForecast:
             if np.any(probs < 0.0) or not np.isclose(float(np.sum(probs)), 1.0):
                 raise ValueError("mode_probabilities must be non-negative and sum to 1")
             self.mode_probabilities = [float(value) for value in probs]
-            if self.samples is not None and len(self.mode_probabilities) != self.samples.shape[0]:
+            if self.samples is None:
+                raise ValueError("mode_probabilities require sampled trajectories")
+            if len(self.mode_probabilities) != self.samples.shape[0]:
                 raise ValueError("mode_probabilities must align with samples")
+        expected_steps = None
+        if self.deterministic is not None:
+            expected_steps = self.deterministic.shape[0]
+        elif self.samples is not None:
+            expected_steps = self.samples.shape[1]
+        self.gaussian = _normalize_optional_sequence("gaussian", self.gaussian, expected_steps)
+        self.reachable_set = _normalize_optional_sequence(
+            "reachable_set",
+            self.reachable_set,
+            expected_steps,
+        )
         if self.occupancy_summary is not None:
             self.occupancy_summary = _require_mapping("occupancy_summary", self.occupancy_summary)
         if self.uncertainty_metadata is not None:
@@ -303,6 +379,8 @@ class ActorForecast:
             deterministic=data.get("deterministic"),
             samples=data.get("samples"),
             mode_probabilities=data.get("mode_probabilities"),
+            gaussian=data.get("gaussian"),
+            reachable_set=data.get("reachable_set"),
             occupancy_summary=data.get("occupancy_summary"),
             uncertainty_metadata=data.get("uncertainty_metadata"),
         )
@@ -346,19 +424,15 @@ class ForecastBatch:
             raise ValueError("forecast actor_ids must exactly match actor_mask=True actors")
         expected_steps = len(self.provenance.horizons_s)
         for forecast in self.forecasts:
-            if (
-                forecast.deterministic is not None
-                and forecast.deterministic.shape[0] != expected_steps
-            ):
-                raise ValueError("deterministic trajectories must align with horizons_s")
-            if forecast.samples is not None and forecast.samples.shape[1] != expected_steps:
-                raise ValueError("sampled trajectories must align with horizons_s")
+            _validate_forecast_payload(forecast, expected_steps)
         self.metadata = _require_mapping("metadata", self.metadata)
         if (
             _contains_oracle_key(self.metadata)
             or any(
                 _contains_oracle_key(forecast.occupancy_summary)
                 or _contains_oracle_key(forecast.uncertainty_metadata)
+                or _contains_oracle_key(forecast.gaussian)
+                or _contains_oracle_key(forecast.reachable_set)
                 for forecast in self.forecasts
             )
         ) and not self.provenance.oracle_state:
@@ -387,14 +461,19 @@ def as_dict(value: Any) -> Any:
     """Convert dataclasses and numpy arrays to JSON-compatible values.
 
     Returns:
-        JSON-compatible value.
+        JSON-compatible value. Optional fields that are ``None`` are omitted
+        so that serialized artifacts do not carry explicit null payloads.
     """
     if isinstance(value, np.ndarray):
         return value.tolist()
     if isinstance(value, np.generic):
         return value.item()
     if is_dataclass(value):
-        return {item.name: as_dict(getattr(value, item.name)) for item in fields(value)}
+        return {
+            item.name: as_dict(getattr(value, item.name))
+            for item in fields(value)
+            if getattr(value, item.name) is not None
+        }
     if isinstance(value, dict):
         return {str(key): as_dict(item) for key, item in value.items()}
     if isinstance(value, list | tuple):

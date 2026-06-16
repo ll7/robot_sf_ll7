@@ -39,6 +39,7 @@ def _batch(
             horizons_s=[0.5, 1.0],
             scenario_id=scenario_id,
             seed=1,
+            timestamp="2026-06-15T12:00:00Z",
             fallback_status="native",
             degraded_status="none",
             actor_ids=["actor-1"],
@@ -134,6 +135,7 @@ def test_conformal_pilot_marks_missing_deterministic_scores_as_limitation() -> N
     """Forecasts without deterministic trajectories cannot fit deterministic tubes."""
     no_deterministic = _batch(deterministic=None)
     no_deterministic.forecasts[0].deterministic = None
+    no_deterministic.forecasts[0].occupancy_summary = {"representation": "occupancy_only"}
 
     report = build_forecast_conformal_pilot_report(
         [_case(batch=no_deterministic)],

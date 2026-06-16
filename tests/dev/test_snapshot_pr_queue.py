@@ -221,6 +221,36 @@ def test_snapshot_prs_can_include_bounded_review_threads() -> None:
     assert comment["body_omitted"] is True
 
 
+def test_snapshot_prs_handles_null_review_thread_graphql_fields() -> None:
+    """Null GraphQL response layers should not crash compact snapshots."""
+    pr_payload = {
+        "number": 2695,
+        "title": "null thread PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/2695",
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc995",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+        "reviews": [],
+        "comments": [],
+    }
+    thread_payload = {"data": {"repository": {"pullRequest": None}}}
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.side_effect = [
+            MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=0, stdout=json.dumps(thread_payload), stderr=""),
+        ]
+        payload = snapshot_prs([2695], repo="ll7/robot_sf_ll7", include_review_threads=True)
+
+    snapshot = payload["prs"][0]["review_thread_snapshot"]
+    assert snapshot["status"] == "ok"
+    assert snapshot["total"] == 0
+    assert snapshot["threads"] == []
+
+
 def test_raw_review_comments_artifact_writes_full_payload(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """Raw review comments are opt-in and written to an artifact path."""
     artifact = tmp_path / "raw-review-comments.json"
@@ -239,6 +269,20 @@ def test_raw_review_comments_artifact_writes_full_payload(tmp_path) -> None:  # 
     assert payload["prs"]["2693"]["status"] == "ok"
     assert payload["prs"]["2693"]["contains_raw_diff_hunks"] is True
     assert payload["prs"]["2693"]["comments"][0]["diff_hunk"].startswith("@@")
+
+
+def test_raw_review_comments_artifact_rejects_invalid_repo(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Invalid repo names should write an error artifact without calling gh."""
+    artifact = tmp_path / "raw-review-comments.json"
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        write_raw_review_comments_artifact([2696], repo="robot_sf_ll7", path=artifact)
+
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert payload["prs"]["2696"] == {
+        "status": "error",
+        "error": "repo_owner_missing",
+    }
+    mock_gh.assert_not_called()
 
 
 def test_main_raw_review_artifact_keeps_hunks_out_of_stdout(

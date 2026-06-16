@@ -133,6 +133,11 @@ def _repo_owner_name(repo: str) -> tuple[str, str]:
     return owner, name
 
 
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    """Return *value* when it is a dictionary, otherwise an empty dictionary."""
+    return value if isinstance(value, dict) else {}
+
+
 def _review_thread_snapshot(
     pr_number: int,
     *,
@@ -195,12 +200,10 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         return {"status": "error", "error": f"invalid gh JSON: {exc}"}
-    threads = (
-        payload.get("data", {})
-        .get("repository", {})
-        .get("pullRequest", {})
-        .get("reviewThreads", {})
-    )
+    data = _dict_or_empty(payload.get("data"))
+    repository = _dict_or_empty(data.get("repository"))
+    pull_request = _dict_or_empty(repository.get("pullRequest"))
+    threads = _dict_or_empty(pull_request.get("reviewThreads"))
     nodes = [node for node in threads.get("nodes", []) or [] if isinstance(node, dict)]
     compact_threads: list[dict[str, Any]] = []
     unresolved_count = 0
@@ -556,6 +559,15 @@ def write_raw_review_comments_artifact(
         "repo": repo,
         "prs": {},
     }
+    if not owner or not name:
+        for number in numbers:
+            payload["prs"][str(number)] = {
+                "status": "error",
+                "error": "repo_owner_missing",
+            }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return
     for number in numbers:
         result = _gh(
             [

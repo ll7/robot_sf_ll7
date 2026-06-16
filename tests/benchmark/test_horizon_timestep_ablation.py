@@ -172,7 +172,7 @@ def test_evaluated_cells_have_provenance_and_runtime() -> None:
 
 def test_horizon_longer_than_trace_is_unavailable() -> None:
     """A horizon beyond the resampled trace length is marked unavailable."""
-    candidate = next(c for c in TRACE_CANDIDATES if c["family"] == "signalized_crossing")
+    candidate = next(c for c in TRACE_CANDIDATES if c["family"] == "corridor_interaction")
     cell = _evaluate_ablation_cell(
         candidate,
         horizon_s=3.0,
@@ -182,9 +182,10 @@ def test_horizon_longer_than_trace_is_unavailable() -> None:
     assert "limitation" in cell
 
 
-def test_zero_motion_trace_is_limited_not_error() -> None:
+def test_zero_motion_trace_is_limited_not_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """A trace without pedestrian motion is recorded as a limitation."""
     candidate = next(c for c in TRACE_CANDIDATES if c["family"] == "bottleneck")
+    monkeypatch.setattr(_mod, "_trace_has_motion", lambda steps: False)
     cell = _evaluate_ablation_cell(
         candidate,
         horizon_s=0.5,

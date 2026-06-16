@@ -20,6 +20,7 @@ def _result(stdout: str = "", stderr: str = "", returncode: int = 0):
 
 
 def test_parse_worktree_porcelain_handles_branch_and_detached() -> None:
+    """Parse branch and detached rows from porcelain worktree output."""
     rows = snapshot._parse_worktree_porcelain(
         "\n".join(
             [
@@ -42,6 +43,7 @@ def test_parse_worktree_porcelain_handles_branch_and_detached() -> None:
 
 
 def test_classify_issues_reports_dirty_missing_upstream_and_drift() -> None:
+    """Report all hygiene issue classes represented by one row."""
     assert snapshot._classify_issues(
         branch="feature",
         is_detached=False,
@@ -53,6 +55,7 @@ def test_classify_issues_reports_dirty_missing_upstream_and_drift() -> None:
 
 
 def test_build_snapshot_filters_and_counts(monkeypatch, tmp_path: Path) -> None:
+    """Filter worktrees and aggregate issue counts in the snapshot."""
     main = tmp_path / "main"
     feature = tmp_path / "feature"
     main.mkdir()
@@ -103,6 +106,7 @@ def test_build_snapshot_filters_and_counts(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_repo_status_is_optional(monkeypatch, tmp_path: Path) -> None:
+    """Include current checkout status only when requested."""
     main = tmp_path / "main"
     main.mkdir()
 
@@ -132,6 +136,7 @@ def test_repo_status_is_optional(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_missing_worktree_path_marks_status_failed(monkeypatch, tmp_path: Path) -> None:
+    """Classify missing worktree paths as status failures."""
     main = tmp_path / "main"
     missing = tmp_path / "missing"
     main.mkdir()
@@ -157,6 +162,7 @@ def test_missing_worktree_path_marks_status_failed(monkeypatch, tmp_path: Path) 
 
 
 def test_current_worktree_is_reported_when_truncated(monkeypatch, tmp_path: Path) -> None:
+    """Preserve current worktree identity even when rows are truncated."""
     first = tmp_path / "first"
     current = tmp_path / "current"
     first.mkdir()

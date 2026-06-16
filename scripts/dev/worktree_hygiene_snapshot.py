@@ -104,27 +104,37 @@ def _parse_worktree_porcelain(stdout: str) -> list[dict[str, str]]:
                 worktrees.append(current)
                 current = {}
             continue
-        parts = line.split(" ", 1)
-        if len(parts) != 2:
-            if line == "detached":
-                current["detached"] = "true"
-            continue
-        key, value = parts
-        if key == "worktree":
+
+        new_row = _parse_worktree_line(line, current)
+        if new_row is not current:
             if current:
                 worktrees.append(current)
-            current = {"path": value}
-        elif key == "HEAD":
-            current["head_sha"] = value
-        elif key == "branch":
-            current["branch"] = value.removeprefix("refs/heads/")
-        elif key == "detached":
-            current["detached"] = "true"
+            current = new_row
 
     if current:
         worktrees.append(current)
 
     return worktrees
+
+
+def _parse_worktree_line(line: str, current: dict[str, str]) -> dict[str, str]:
+    """Apply one porcelain line to the current worktree row."""
+    parts = line.split(" ", 1)
+    if len(parts) != 2:
+        if line == "detached":
+            current["detached"] = "true"
+        return current
+
+    key, value = parts
+    if key == "worktree":
+        return {"path": value}
+    if key == "HEAD":
+        current["head_sha"] = value
+    elif key == "branch":
+        current["branch"] = value.removeprefix("refs/heads/")
+    elif key == "detached":
+        current["detached"] = "true"
+    return current
 
 
 def _matches_filters(row: dict[str, str], filters: list[str]) -> bool:

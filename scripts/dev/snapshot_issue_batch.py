@@ -310,7 +310,7 @@ def _next_monthly_review_date(now: datetime | None = None) -> str:
     return f"{year:04d}-{month:02d}-01"
 
 
-def _blocked_external_row(issue: dict[str, Any]) -> dict[str, Any]:
+def _blocked_external_row(issue: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
     """Return one human-review row for a blocked external-asset issue."""
     labels = _labels(issue)
     label_set = set(labels)
@@ -328,7 +328,7 @@ def _blocked_external_row(issue: dict[str, Any]) -> dict[str, Any]:
         "human_action": (
             "Stage or document the required external data/asset/license before agent execution."
         ),
-        "monthly_review_date": _next_monthly_review_date(),
+        "monthly_review_date": _next_monthly_review_date(now),
         "label_recommendation": "; ".join(recommendations) if recommendations else "none",
     }
 
@@ -360,7 +360,7 @@ def _blocked_external_markdown(rows: list[dict[str, Any]]) -> str:
 
 
 def snapshot_blocked_external_issues(
-    *, repo: str, report_path: str = "", limit: int
+    *, repo: str, report_path: str = "", limit: int, now: datetime | None = None
 ) -> dict[str, Any]:
     """Return a compact blocked external-assets report."""
     result = _gh(
@@ -395,7 +395,7 @@ def snapshot_blocked_external_issues(
             listed = []
             errors = [{"status": "error", "error": f"invalid gh JSON: {exc}"}]
         rows = [
-            _blocked_external_row(issue)
+            _blocked_external_row(issue, now=now)
             for issue in listed
             if isinstance(issue, dict) and _is_blocked_external_issue(_labels(issue))
         ]

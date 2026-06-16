@@ -237,6 +237,8 @@ def test_snapshot_claimable_issues_can_include_blocked_external() -> None:
 
 def test_snapshot_blocked_external_issues_writes_human_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """Blocked external report should provide one action and monthly review date per row."""
+    from datetime import UTC, datetime
+
     report_path = tmp_path / "blocked-assets.md"
     issue_list = [
         {
@@ -267,6 +269,7 @@ def test_snapshot_blocked_external_issues_writes_human_report(tmp_path) -> None:
             repo="ll7/robot_sf_ll7",
             report_path=str(report_path),
             limit=10,
+            now=datetime(2026, 6, 15, tzinfo=UTC),
         )
 
     assert payload["schema"] == "blocked_external_assets_report.v1"
@@ -275,7 +278,7 @@ def test_snapshot_blocked_external_issues_writes_human_report(tmp_path) -> None:
     row = payload["rows"][0]
     assert row["number"] == 2415
     assert row["human_action"].count(".") == 1
-    assert row["monthly_review_date"].endswith("-01")
+    assert row["monthly_review_date"] == "2026-07-01"
     assert "add `state:blocked-external-input`" in row["label_recommendation"]
     assert "remove `state:ready`" in row["label_recommendation"]
     assert "#2415 data: stage external asset" in report_path.read_text(encoding="utf-8")

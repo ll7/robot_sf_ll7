@@ -38,6 +38,11 @@ from robot_sf.benchmark.benchmark_claim import (
     build_benchmark_claim,
     write_benchmark_claim,
 )
+from robot_sf.benchmark.benchmark_row_claim import (
+    BenchmarkRowClaimError,
+    validate_all_leaderboards,
+    validate_leaderboard_claims,
+)
 from robot_sf.benchmark.canonical_table_export import (
     TABLE_SPECS as _canonical_table_specs,
 )
@@ -555,6 +560,29 @@ def _handle_claim(args) -> int:
         return 2
     except Exception:  # pragma: no cover - error path
         logging.exception("Unexpected error during benchmark claim generation")
+        return 2
+
+
+def _handle_validate_row_claims(args) -> int:
+    """Validate benchmark row claim sidecar files.
+
+    Returns:
+        Exit code (0 when all checked leaderboards are valid, 2 otherwise).
+    """
+    try:
+        if bool(args.all) == bool(args.sidecar):
+            raise BenchmarkRowClaimError("pass exactly one of --all or --sidecar")
+        if args.all:
+            report = validate_all_leaderboards()
+        else:
+            report = validate_leaderboard_claims(Path(args.sidecar))
+        print(json.dumps(report, indent=2))
+        return 0 if report.get("valid") or report.get("overall_valid") else 2
+    except BenchmarkRowClaimError as exc:
+        print(f"Benchmark row claim error: {exc}", file=sys.stderr)
+        return 2
+    except Exception:  # pragma: no cover - error path
+        logging.exception("Unexpected error during benchmark row claim validation")
         return 2
 
 
@@ -1857,6 +1885,29 @@ def _add_classify_failure_mechanisms_subparser(
     p.set_defaults(cmd="classify-failure-mechanisms")
 
 
+def _add_validate_row_claims_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the validate-row-claims subcommand parser."""
+    p = subparsers.add_parser(
+        "validate-row-claims",
+        help="Validate BenchmarkRowClaim.v1 records in leaderboard sidecar files",
+    )
+    p.add_argument(
+        "--sidecar",
+        type=Path,
+        default=None,
+        help="Path to a single leaderboard .rows.json sidecar file",
+    )
+    p.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="Validate every docs/leaderboards/*.rows.json sidecar",
+    )
+    p.set_defaults(cmd="validate-row-claims")
+
+
 def _add_claim_subparser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -2433,6 +2484,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_stress_coverage_report_subparser(subparsers)
     _add_classify_failure_mechanisms_subparser(subparsers)
     _add_claim_subparser(subparsers)
+    _add_validate_row_claims_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
@@ -2889,6 +2941,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "stress-coverage-report": _handle_stress_coverage_report,
         "classify-failure-mechanisms": _handle_classify_failure_mechanisms,
         "claim": _handle_claim,
+        "validate-row-claims": _handle_validate_row_claims,
         "export-parquet": _handle_export_parquet,
         "seed-variance": _handle_seed_variance,
         "extract-failures": _handle_extract_failures,

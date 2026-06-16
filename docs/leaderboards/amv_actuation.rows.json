@@ -1,0 +1,175 @@
+{
+  "schema_version": "benchmark_row_claim.v1",
+  "leaderboard": "amv_actuation",
+  "rows": [
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "amv_actuation_smoke",
+      "planner_id": "goal",
+      "planner_mode": "native",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 0.0,
+        "collision": 0.2,
+        "near_miss": 1.0,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "runtime_sec": 13.4813
+      },
+      "row_status": "successful_evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "amv_coverage_warn",
+        "synthetic_actuation_not_hardware_amv"
+      ],
+      "artifact_uri": "docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json",
+      "claim_wording": "Executable synthetic diagnostic row; no paper-facing AMV promotion claim.",
+      "evidence_tier": "diagnostic",
+      "claim_boundary": "Synthetic AMV actuation diagnostic only; not platform-class proxy or hardware-calibrated AMV evidence."
+    },
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "amv_actuation_smoke",
+      "planner_id": "orca",
+      "planner_mode": "adapter",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 0.0,
+        "collision": 0.1333,
+        "near_miss": 3.4667,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "runtime_sec": 7.9955
+      },
+      "row_status": "successful_evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "amv_coverage_warn",
+        "synthetic_actuation_not_hardware_amv",
+        "orca_projection_diagnostics_caveated"
+      ],
+      "artifact_uri": "docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json",
+      "claim_wording": "Executable synthetic diagnostic row; ORCA projection diagnostics remain caveated.",
+      "evidence_tier": "diagnostic",
+      "claim_boundary": "Synthetic diagnostic only; adapter projection metadata remains incomplete."
+    },
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "amv_actuation_smoke",
+      "planner_id": "social_force",
+      "planner_mode": "adapter",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 0.0,
+        "collision": 0.2667,
+        "near_miss": 1.0,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "runtime_sec": 6.4261
+      },
+      "row_status": "successful_evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "amv_coverage_warn",
+        "synthetic_actuation_not_hardware_amv",
+        "command_space_and_projection_policy_metadata_unknown"
+      ],
+      "artifact_uri": "docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json",
+      "claim_wording": "Executable synthetic diagnostic row; command-space and projection-policy metadata remain caveated.",
+      "evidence_tier": "diagnostic",
+      "claim_boundary": "Synthetic diagnostic only; SocialForce execution mode metadata remains caveated."
+    },
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "amv_actuation_smoke",
+      "planner_id": "actuation_aware_hybrid_rule_v0",
+      "planner_mode": "native",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "low_progress": "timeout_low_progress: 1",
+        "min_distance": 2.3627,
+        "runtime_sec": 12.0865
+      },
+      "row_status": "successful_evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "amv_coverage_warn",
+        "synthetic_actuation_not_hardware_amv",
+        "low_progress_timeout_remains_a_planner_limitation"
+      ],
+      "artifact_uri": "docs/context/policy_search/reports/2026-05-31_actuation_aware_hybrid_rule_v0_amv_actuation_smoke.md",
+      "claim_wording": "Executable synthetic diagnostic row; no paper-facing AMV promotion claim, and low-progress timeout remains a planner limitation.",
+      "evidence_tier": "diagnostic",
+      "claim_boundary": "Synthetic diagnostic only; timeout means zero task success despite clean command clipping."
+    },
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "amv_actuation_smoke",
+      "planner_id": "hybrid_rule_v3_fast_progress",
+      "planner_mode": "native",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "low_progress": "timeout_low_progress: 1",
+        "min_distance": 2.1571,
+        "runtime_sec": "not_recorded"
+      },
+      "row_status": "completed_smoke_not_benchmark_evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "single_episode_one_scenario_diagnostic",
+        "command_clip_0_2750",
+        "yaw_saturation_0_0000",
+        "both_candidates_timed_out"
+      ],
+      "artifact_uri": "docs/context/evidence/issue_2224_amv_actuation_ranking_2026-06-04/comparison.json",
+      "claim_wording": "Matched smoke row for issue #2224; command clip 0.2750, yaw saturation 0.0000; no planner-ranking claim.",
+      "evidence_tier": "diagnostic",
+      "claim_boundary": "One-episode diagnostic-only row; both compared candidates timed out with zero success."
+    },
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "amv_actuation_smoke",
+      "planner_id": "actuation_aware_hybrid_rule_v0",
+      "planner_mode": "native",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "low_progress": "timeout_low_progress: 1",
+        "min_distance": 2.3627,
+        "runtime_sec": "not_recorded"
+      },
+      "row_status": "completed_smoke_not_benchmark_evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "single_episode_one_scenario_diagnostic",
+        "command_clip_0_1875",
+        "yaw_saturation_0_0000",
+        "both_candidates_timed_out"
+      ],
+      "artifact_uri": "docs/context/evidence/issue_2224_amv_actuation_ranking_2026-06-04/comparison.json",
+      "claim_wording": "Matched smoke row for issue #2224; command clip 0.1875, yaw saturation 0.0000; both compared candidates timed out.",
+      "evidence_tier": "diagnostic",
+      "claim_boundary": "One-episode diagnostic-only row; suggests lower synthetic command clipping but does not establish material ranking change."
+    }
+  ]
+}

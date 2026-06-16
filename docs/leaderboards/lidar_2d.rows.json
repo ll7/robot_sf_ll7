@@ -1,0 +1,33 @@
+{
+  "schema_version": "benchmark_row_claim.v1",
+  "leaderboard": "lidar_2d",
+  "rows": [
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "lidar_2d_training_smoke",
+      "planner_id": "ppo_lidar_mlp_gate_v1",
+      "planner_mode": "native",
+      "seeds": [
+        123
+      ],
+      "metrics": {
+        "success": 0.0,
+        "collision": 0.0,
+        "near_miss": "not_recorded",
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "runtime_sec": 59.7432
+      },
+      "row_status": "completed_smoke_not_benchmark_evidence",
+      "exclusions": [
+        "training_smoke_only",
+        "no_durable_checkpoint_promoted",
+        "zero_success_at_eval_step"
+      ],
+      "artifact_uri": "docs/context/evidence/issue_1662_lidar_ppo_smoke_summary.json",
+      "claim_wording": "Documents fixed LiDAR PPO MLP training/eval plumbing only; no durable checkpoint or promotion claim.",
+      "evidence_tier": "smoke",
+      "claim_boundary": "Training-smoke plumbing only; no deployment adapter, benchmark row, or model promotion claim."
+    }
+  ]
+}

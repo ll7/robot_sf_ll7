@@ -52,36 +52,43 @@ def test_parse_worktree_porcelain_summarizes_linked_worktrees() -> None:
     ]
 
 
-def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(  # noqa: C901
-    monkeypatch,
-) -> None:
+def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(monkeypatch) -> None:
     """A normal snapshot should include compact queue, claim, PR, and worktree state."""
     origin_main_sha = "6e55ea36affa82ea1b3c870c27f0133464295fd0"
+    exact_results = {
+        ("git", "branch", "--show-current"): _result(
+            ["git", "branch", "--show-current"],
+            stdout="issue-2671-compact-state-snapshots\n",
+        ),
+        ("git", "rev-parse", "HEAD"): _result(
+            ["git", "rev-parse", "HEAD"],
+            stdout=f"{origin_main_sha}\n",
+        ),
+        ("git", "rev-parse", "--verify", "origin/main^{commit}"): _result(
+            ["git", "rev-parse", "--verify", "origin/main^{commit}"],
+            stdout=f"{origin_main_sha}\n",
+        ),
+        ("git", "worktree", "list", "--porcelain"): _result(
+            ["git", "worktree", "list", "--porcelain"],
+            stdout=(
+                "worktree /repo/main\n"
+                f"HEAD {origin_main_sha}\n"
+                "branch refs/heads/main\n\n"
+                "worktree /repo/issue-2671\n"
+                f"HEAD {origin_main_sha}\n"
+                "branch refs/heads/issue-2671-compact-state-snapshots\n"
+            ),
+        ),
+        ("git", "status", "--short", "--branch", "--untracked-files=no"): _result(
+            ["git", "status", "--short", "--branch", "--untracked-files=no"],
+            stdout="## issue-2671-compact-state-snapshots...origin/main\n",
+        ),
+    }
 
     def fake_run(command: list[str], *, timeout: int = 30):
         del timeout
-        if command == ["git", "branch", "--show-current"]:
-            return _result(command, stdout="issue-2671-compact-state-snapshots\n")
-        if command == ["git", "rev-parse", "HEAD"]:
-            return _result(command, stdout=f"{origin_main_sha}\n")
-        if command == ["git", "rev-parse", "--verify", "origin/main^{commit}"]:
-            return _result(command, stdout=f"{origin_main_sha}\n")
-        if command == ["git", "worktree", "list", "--porcelain"]:
-            return _result(
-                command,
-                stdout=(
-                    "worktree /repo/main\n"
-                    f"HEAD {origin_main_sha}\n"
-                    "branch refs/heads/main\n\n"
-                    "worktree /repo/issue-2671\n"
-                    f"HEAD {origin_main_sha}\n"
-                    "branch refs/heads/issue-2671-compact-state-snapshots\n"
-                ),
-            )
-        if command == ["git", "status", "--short", "--branch", "--untracked-files=no"]:
-            return _result(command, stdout="## issue-2671-compact-state-snapshots...origin/main\n")
-        if command[:2] == ["test", "-e"]:
-            return _result(command, returncode=1)
+        if result := exact_results.get(tuple(command)):
+            return result
         if command[:3] == ["git", "ls-remote", "--heads"]:
             return _result(
                 command,
@@ -164,21 +171,26 @@ def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(  # noqa: C90
     assert payload["sources"]
 
 
-def test_compact_status_omits_untracked_inventory_and_reports_generated_paths(monkeypatch) -> None:
+def test_compact_status_omits_untracked_inventory_and_reports_generated_paths(
+    monkeypatch, tmp_path
+) -> None:
     """Status snapshots should avoid generated untracked tree dumps."""
+    venv_file = tmp_path / ".venv"
+    opencode_file = tmp_path / ".opencode"
+    node_modules_dir = tmp_path / "node_modules"
+    output_coverage_dir = tmp_path / "output" / "coverage"
+    venv_file.touch()
+    opencode_file.touch()
+    node_modules_dir.mkdir()
+    output_coverage_dir.mkdir(parents=True)
 
     def fake_run(command: list[str], *, timeout: int = 30):
         del timeout
         if command == ["git", "status", "--short", "--branch", "--untracked-files=no"]:
             return _result(command, stdout="## branch...origin/main\n M docs/dev_guide.md\n")
-        if command == ["test", "-e", ".venv"]:
-            return _result(command, returncode=0)
-        if command == ["test", "-e", ".opencode"]:
-            return _result(command, returncode=0)
-        if command[:2] == ["test", "-e"]:
-            return _result(command, returncode=1)
         raise AssertionError(f"unexpected command: {command}")
 
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(snapshot, "_run", fake_run)
 
     status, source, error = snapshot.compact_status_snapshot()
@@ -187,6 +199,7 @@ def test_compact_status_omits_untracked_inventory_and_reports_generated_paths(mo
     assert source["name"] == "git.status_compact"
     assert status["tracked_or_staged_count"] == 1
     assert status["generated_paths_present"] == [".venv", ".opencode"]
+    assert status["tracked_or_staged"] == [" M docs/dev_guide.md"]
     assert status["full_untracked_inventory_omitted"] is True
 
 

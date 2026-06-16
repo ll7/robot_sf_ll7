@@ -13,6 +13,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 FAILURE_CONCLUSIONS = {
@@ -158,10 +159,8 @@ def compact_status_snapshot() -> tuple[dict[str, Any], dict[str, Any], str | Non
         )
     status_lines = [line for line in result.stdout.splitlines() if line.strip()]
     tracked_lines = [line for line in status_lines if not line.startswith("##")]
-    lines, truncated = _bounded_lines(result.stdout, limit=STATUS_LINE_LIMIT)
-    generated_paths = [
-        path for path in GENERATED_STATUS_PATHS if _run(["test", "-e", path]).returncode == 0
-    ]
+    lines, truncated = _bounded_lines("\n".join(tracked_lines), limit=STATUS_LINE_LIMIT)
+    generated_paths = [path for path in GENERATED_STATUS_PATHS if Path(path).is_file()]
     return (
         {
             "ok": True,

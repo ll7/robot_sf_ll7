@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.manifest_lineage_backfill import (
+    FieldBackfillEntry,
     FieldStatus,
     ManifestBackfillPlan,
     analyze_manifest,
@@ -442,3 +443,123 @@ def test_human_readable_output_includes_status_markers(
     )
     captured = capsys.readouterr()
     assert "INFERRED" in captured.out
+
+
+# Structured proxy metadata tests
+
+
+def test_inferred_entry_has_candidate_sources() -> None:
+    """INFERRED entries record the proxy source label in candidate_sources."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"generator_id": "gen-a"},
+    }
+    plan = analyze_manifest(manifest, path="inferred.json")
+
+    gid = next(f for f in plan.fields if f.field_name == "generator_id")
+    assert gid.status == FieldStatus.INFERRED
+    assert gid.candidate_sources == ("metadata.generator_id",)
+    assert gid.conflicting_sources == ()
+    assert gid.blocked_by == ()
+
+
+def test_matching_inferred_entry_records_all_candidate_sources() -> None:
+    """INFERRED entries from matching candidates record every source label."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"generator_id": "gen-a"},
+        "config": {"generator_id": "gen-a"},
+    }
+    plan = analyze_manifest(manifest, path="matching.json")
+
+    gid = next(f for f in plan.fields if f.field_name == "generator_id")
+    assert gid.status == FieldStatus.INFERRED
+    assert set(gid.candidate_sources) == {"metadata.generator_id", "config.generator_id"}
+    assert gid.conflicting_sources == ()
+    assert gid.blocked_by == ()
+
+
+def test_ambiguous_entry_has_conflicting_sources() -> None:
+    """AMBIGUOUS entries from conflicting values record conflicting_sources."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"validator_version": "1.0"},
+        "config": {"validator_version": "2.0"},
+    }
+    plan = analyze_manifest(manifest, path="ambiguous.json")
+
+    vv = next(f for f in plan.fields if f.field_name == "validator_version")
+    assert vv.status == FieldStatus.AMBIGUOUS
+    assert set(vv.conflicting_sources) == {"metadata.validator_version", "config.validator_version"}
+    assert vv.blocked_by == ()
+
+
+def test_ambiguous_valid_and_invalid_entry_has_candidate_and_blocked_sources() -> None:
+    """AMBIGUOUS entries with valid and invalid candidates keep both groups."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"generator_id": "gen-a"},
+        "config": {"generator_id": ""},
+    }
+    plan = analyze_manifest(manifest, path="valid_and_invalid.json")
+
+    gid = next(f for f in plan.fields if f.field_name == "generator_id")
+    assert gid.status == FieldStatus.AMBIGUOUS
+    assert gid.candidate_sources == ("metadata.generator_id",)
+    assert gid.blocked_by == ("config.generator_id",)
+    assert gid.conflicting_sources == ()
+
+
+def test_blocked_entry_has_blocked_by_sources() -> None:
+    """BLOCKED entries record invalid nearby source labels in blocked_by."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"generator_id": ""},
+    }
+    plan = analyze_manifest(manifest, path="blocked.json")
+
+    gid = next(f for f in plan.fields if f.field_name == "generator_id")
+    assert gid.status == FieldStatus.BLOCKED
+    assert gid.blocked_by == ("metadata.generator_id",)
+    assert gid.candidate_sources == ()
+    assert gid.conflicting_sources == ()
+
+
+def test_missing_entry_has_empty_structured_metadata() -> None:
+    """MISSING entries carry no structured proxy metadata."""
+    plan = analyze_manifest({"schema_version": "benchmark_claim.v1"}, path="missing.json")
+
+    src = next(f for f in plan.fields if f.field_name == "source")
+    assert src.status == FieldStatus.MISSING
+    assert src.candidate_sources == ()
+    assert src.conflicting_sources == ()
+    assert src.blocked_by == ()
+
+
+def test_plan_to_dict_serializes_structured_metadata() -> None:
+    """ManifestBackfillPlan.to_dict() includes structured proxy metadata."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"generator_id": "gen-a"},
+        "config": {"generator_id": ""},
+    }
+    plan = analyze_manifest(manifest, path="serial.json")
+    d = plan.to_dict()
+
+    gid = next(f for f in d["fields"] if f["field_name"] == "generator_id")
+    assert gid["candidate_sources"] == ("metadata.generator_id",)
+    assert gid["blocked_by"] == ("config.generator_id",)
+    assert gid["conflicting_sources"] == ()
+
+
+def test_field_backfill_entry_defaults_keep_backward_compatibility() -> None:
+    """FieldBackfillEntry can still be constructed without structured fields."""
+    entry = FieldBackfillEntry(
+        field_name="generator_id",
+        status=FieldStatus.MISSING,
+        reason="legacy reason",
+    )
+    assert entry.candidate_sources == ()
+    assert entry.conflicting_sources == ()
+    assert entry.blocked_by == ()
+    assert entry.reason == "legacy reason"

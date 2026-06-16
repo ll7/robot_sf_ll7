@@ -157,6 +157,9 @@ class FieldBackfillEntry:
     inferred_value: str | dict[str, Any] | None = None
     inferred_from: str | None = None
     reason: str = ""
+    candidate_sources: tuple[str, ...] = ()
+    conflicting_sources: tuple[str, ...] = ()
+    blocked_by: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,6 +250,7 @@ def _classify_field(
             return FieldBackfillEntry(
                 field_name=field_name,
                 status=FieldStatus.BLOCKED,
+                blocked_by=tuple(invalid_labels),
                 reason=(
                     f"nearby field has incompatible value for {field_name}: "
                     f"{', '.join(invalid_labels)}"
@@ -258,13 +262,15 @@ def _classify_field(
             reason=f"no nearby field available to infer {field_name}",
         )
     if invalid_labels:
-        source_labels = [label for label, _ in values] + invalid_labels
+        source_labels = [label for label, _ in values]
         return FieldBackfillEntry(
             field_name=field_name,
             status=FieldStatus.AMBIGUOUS,
+            candidate_sources=tuple(source_labels),
+            blocked_by=tuple(invalid_labels),
             reason=(
                 f"valid and invalid inference candidates for {field_name}: "
-                f"{', '.join(source_labels)}"
+                f"{', '.join(source_labels + invalid_labels)}"
             ),
         )
     if len(values) == 1:
@@ -274,24 +280,27 @@ def _classify_field(
             status=FieldStatus.INFERRED,
             inferred_value=val,
             inferred_from=source_label,
+            candidate_sources=(source_label,),
             reason=f"inferred from {source_label}",
         )
     first_label, first_value = values[0]
+    labels = tuple(label for label, _ in values)
     if all(value == first_value for _, value in values[1:]):
         return FieldBackfillEntry(
             field_name=field_name,
             status=FieldStatus.INFERRED,
             inferred_value=first_value,
             inferred_from=first_label,
-            reason=f"inferred from matching candidates: {', '.join(label for label, _ in values)}",
+            candidate_sources=labels,
+            reason=f"inferred from matching candidates: {', '.join(labels)}",
         )
 
     # Multiple conflicting candidates: ambiguous.
-    source_labels = ", ".join(label for label, _ in values)
     return FieldBackfillEntry(
         field_name=field_name,
         status=FieldStatus.AMBIGUOUS,
-        reason=f"multiple inference candidates: {source_labels}",
+        conflicting_sources=labels,
+        reason=f"multiple inference candidates: {', '.join(labels)}",
     )
 
 

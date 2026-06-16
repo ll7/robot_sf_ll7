@@ -8,6 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark.manifest_lineage_backfill import (
+    FieldBackfillEntry,
+    ManifestBackfillPlan,
+    analyze_manifest,
+)
 from robot_sf.benchmark.manifest_lineage_graph import (
     LineageStatus,
     build_manifest_lineage_graph,
@@ -451,3 +456,163 @@ def test_ambiguous_field_produces_ambiguous_edges() -> None:
     assert len(ambiguous_edges) >= 1
     labels = {edge.source.split("__")[-1] for edge in ambiguous_edges}
     assert "validator_version" in labels
+
+
+def test_graph_edges_derive_from_structured_metadata() -> None:
+    """Proxy edges are driven by structured metadata, not the reason string."""
+    manifest_path = FIXTURE_DIR / "ambiguous_manifest.json"
+    graph = build_manifest_lineage_graph([manifest_path])
+
+    ambiguous_edges = [edge for edge in graph.edges if edge.kind == "ambiguous_between"]
+    assert ambiguous_edges
+    for edge in ambiguous_edges:
+        assert edge.source.startswith("field__")
+        assert edge.target.startswith("proxy__")
+
+
+def test_reason_wording_change_does_not_change_topology(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wording-only reason change leaves graph topology unchanged."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"validator_version": "1.0"},
+        "config": {"validator_version": "2.0"},
+    }
+    plan_original = analyze_manifest(manifest, path="reason_test.json")
+
+    # Build a plan with the same structured metadata but a custom reason.
+    original_vv = next(f for f in plan_original.fields if f.field_name == "validator_version")
+    custom_entry = FieldBackfillEntry(
+        field_name=original_vv.field_name,
+        status=original_vv.status,
+        reason="completely different wording",
+        candidate_sources=original_vv.candidate_sources,
+        conflicting_sources=original_vv.conflicting_sources,
+        blocked_by=original_vv.blocked_by,
+    )
+    custom_plan = ManifestBackfillPlan(
+        path=plan_original.path,
+        validation_errors=plan_original.validation_errors,
+        fields=[
+            custom_entry if f.field_name == "validator_version" else f for f in plan_original.fields
+        ],
+        has_inferred=plan_original.has_inferred,
+        has_ambiguous=plan_original.has_ambiguous,
+        has_blocked=plan_original.has_blocked,
+    )
+
+    manifest_path = tmp_path / "reason_test.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    graph_original = build_manifest_lineage_graph([manifest_path])
+
+    # Align the custom plan path with the real file so node ids match.
+    custom_plan_aligned = ManifestBackfillPlan(
+        path=str(manifest_path),
+        validation_errors=custom_plan.validation_errors,
+        fields=custom_plan.fields,
+        has_inferred=custom_plan.has_inferred,
+        has_ambiguous=custom_plan.has_ambiguous,
+        has_blocked=custom_plan.has_blocked,
+    )
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.manifest_lineage_graph._analyze_manifest_at_path",
+        lambda _path: custom_plan_aligned,
+    )
+    graph_custom = build_manifest_lineage_graph([manifest_path])
+
+    original_edges = _sorted_edge_tuples(graph_original.edges)
+    custom_edges = _sorted_edge_tuples(graph_custom.edges)
+    assert original_edges == custom_edges
+
+
+def test_ambiguous_valid_and_invalid_sources_are_structured_edges(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AMBIGUOUS valid+invalid sources keep both groups in graph edges."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"generator_id": "gen-a"},
+        "config": {"generator_id": ""},
+    }
+    plan = analyze_manifest(manifest, path="valid_invalid_graph.json")
+    gid = next(f for f in plan.fields if f.field_name == "generator_id")
+    custom_entry = FieldBackfillEntry(
+        field_name=gid.field_name,
+        status=gid.status,
+        reason="wording without dotted labels",
+        candidate_sources=gid.candidate_sources,
+        blocked_by=gid.blocked_by,
+    )
+    manifest_path = tmp_path / "valid_invalid_graph.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    custom_plan = ManifestBackfillPlan(
+        path=str(manifest_path),
+        validation_errors=plan.validation_errors,
+        fields=[custom_entry if f.field_name == "generator_id" else f for f in plan.fields],
+        has_inferred=plan.has_inferred,
+        has_ambiguous=plan.has_ambiguous,
+        has_blocked=plan.has_blocked,
+    )
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.manifest_lineage_graph._analyze_manifest_at_path",
+        lambda _path: custom_plan,
+    )
+    graph = build_manifest_lineage_graph([manifest_path])
+
+    ambiguous_edges = [
+        edge
+        for edge in graph.edges
+        if edge.kind == "ambiguous_between" and edge.source.endswith("__generator_id")
+    ]
+    targets = {edge.target for edge in ambiguous_edges}
+    assert any("metadata_generator_id" in target for target in targets)
+    assert any("config_generator_id" in target for target in targets)
+
+
+def test_legacy_reason_fallback_still_produces_edges(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Entries with only a reason string still produce proxy edges via fallback."""
+    manifest = {
+        "schema_version": "benchmark_claim.v1",
+        "metadata": {"validator_version": "1.0"},
+        "config": {"validator_version": "2.0"},
+    }
+    plan = analyze_manifest(manifest, path="legacy_fallback.json")
+    original_vv = next(f for f in plan.fields if f.field_name == "validator_version")
+
+    legacy_entry = FieldBackfillEntry(
+        field_name=original_vv.field_name,
+        status=original_vv.status,
+        reason="multiple inference candidates: metadata.validator_version, config.validator_version",
+    )
+    legacy_plan = ManifestBackfillPlan(
+        path=plan.path,
+        validation_errors=plan.validation_errors,
+        fields=[legacy_entry if f.field_name == "validator_version" else f for f in plan.fields],
+        has_inferred=plan.has_inferred,
+        has_ambiguous=plan.has_ambiguous,
+        has_blocked=plan.has_blocked,
+    )
+
+    manifest_path = tmp_path / "legacy_fallback.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.manifest_lineage_graph._analyze_manifest_at_path",
+        lambda _path: legacy_plan,
+    )
+    graph = build_manifest_lineage_graph([manifest_path])
+    ambiguous_edges = [edge for edge in graph.edges if edge.kind == "ambiguous_between"]
+    targets = {edge.target for edge in ambiguous_edges}
+    assert any("metadata_validator_version" in target for target in targets)
+    assert any("config_validator_version" in target for target in targets)
+
+
+def _sorted_edge_tuples(edges):
+    """Return a sorted tuple representation of edges for comparison."""
+    return tuple(sorted((edge.source, edge.target, edge.kind) for edge in edges))

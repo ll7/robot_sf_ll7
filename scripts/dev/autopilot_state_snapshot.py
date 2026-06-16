@@ -25,7 +25,14 @@ FAILURE_CONCLUSIONS = {
     "timed_out",
 }
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
-GENERATED_STATUS_PATHS = (".venv", ".opencode", "node_modules", "output/coverage")
+GENERATED_STATUS_PATHS = (
+    ".venv",
+    ".opencode",
+    "node_modules",
+    "output",
+    ".pytest_cache",
+    "__pycache__",
+)
 STATUS_LINE_LIMIT = 30
 
 
@@ -141,6 +148,11 @@ def _bounded_lines(text: str, *, limit: int) -> tuple[list[str], bool]:
     return lines[:limit], len(lines) > limit
 
 
+def _generated_paths_present() -> list[str]:
+    """Return known generated roots that exist as files or directories."""
+    return [path for path in GENERATED_STATUS_PATHS if Path(path).exists()]
+
+
 def compact_status_snapshot() -> tuple[dict[str, Any], dict[str, Any], str | None]:
     """Return compact local status that avoids generated untracked trees."""
     result = _run(["git", "status", "--short", "--branch", "--untracked-files=no"])
@@ -160,7 +172,7 @@ def compact_status_snapshot() -> tuple[dict[str, Any], dict[str, Any], str | Non
     status_lines = [line for line in result.stdout.splitlines() if line.strip()]
     tracked_lines = [line for line in status_lines if not line.startswith("##")]
     lines, truncated = _bounded_lines("\n".join(tracked_lines), limit=STATUS_LINE_LIMIT)
-    generated_paths = [path for path in GENERATED_STATUS_PATHS if Path(path).is_file()]
+    generated_paths = _generated_paths_present()
     return (
         {
             "ok": True,

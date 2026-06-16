@@ -341,6 +341,10 @@ resolving lint or test failures locally before requesting review.
   output rather than raw `gh` payloads.
 - Before finalization, cover format/check, focused tests, changed-file coverage when practical, and a
   clean worktree check (`git status --short`) as part of the readied proof bundle.
+- Before broad status or inventory output, use
+  `uv run python scripts/dev/autopilot_state_snapshot.py --include-worktrees` or another compact
+  helper so generated `.venv`, `.opencode`, `node_modules`, and `output` trees are summarized
+  instead of dumped into agent context.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

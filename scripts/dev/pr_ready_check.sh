@@ -47,6 +47,40 @@ worktree_state() {
   fi
 }
 
+print_compact_worktree_status() {
+  local max_lines=30
+  local tracked_status
+  tracked_status=$(git status --short --untracked-files=no)
+  if [[ -n "$tracked_status" ]]; then
+    printf 'Tracked or staged changes:\n' >&2
+    printf '%s\n' "$tracked_status" | head -n "$max_lines" >&2
+    local total_lines
+    total_lines=$(printf '%s\n' "$tracked_status" | wc -l)
+    if (( total_lines > max_lines )); then
+      printf '... truncated (%d more tracked lines)\n' "$((total_lines - max_lines))" >&2
+    fi
+  fi
+  local generated_path
+  local generated_present=()
+  for generated_path in .venv .opencode node_modules output .pytest_cache __pycache__; do
+    if [[ -e "$generated_path" ]]; then
+      generated_present+=("$generated_path")
+    fi
+  done
+  if [[ ${#generated_present[@]} -gt 0 ]]; then
+    printf 'Generated paths present (contents not enumerated):\n' >&2
+    printf '%s\n' "${generated_present[@]}" >&2
+  fi
+  local porcelain_count
+  porcelain_count=$(git status --porcelain --untracked-files=normal | wc -l)
+  if (( porcelain_count > 0 )); then
+    printf 'Full untracked inventory omitted from this message (%d porcelain lines detected).\n' "$porcelain_count" >&2
+    printf 'Run `git status --short --untracked-files=normal` only when a full inventory is needed.\n' >&2
+  elif [[ -z "$tracked_status" && ${#generated_present[@]} -eq 0 ]]; then
+    printf 'No tracked changes or known generated paths detected.\n' >&2
+  fi
+}
+
 pr_ready_mode_lower=$(printf '%s' "$PR_READY_MODE" | tr '[:upper:]' '[:lower:]')
 case "$pr_ready_mode_lower" in
   "")
@@ -71,7 +105,7 @@ esac
 if [[ "$pr_ready_final" == "1" && "$(worktree_state)" != "clean" ]]; then
   printf 'Final PR readiness requires a clean non-ignored worktree before validation.\n' >&2
   printf 'Commit or remove local changes, or run without PR_READY_MODE=final for interim feedback.\n' >&2
-  git status --short --untracked-files=normal >&2
+  print_compact_worktree_status
   exit 2
 fi
 

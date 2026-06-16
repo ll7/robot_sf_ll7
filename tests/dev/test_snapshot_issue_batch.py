@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from scripts.dev.snapshot_issue_batch import (
     expand_issue_numbers,
     main,
+    snapshot_blocked_external_issues,
     snapshot_claimable_issues,
     snapshot_issues,
 )
@@ -155,6 +156,129 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
     assert payload["issues"][0]["body_truncated"] is False
     assert payload["issues"][1]["classification"] == "blocked_label"
     assert "reason" in payload["issues"][1]
+
+
+def test_snapshot_claimable_issues_excludes_blocked_external_by_default() -> None:
+    """Default claim routing should quarantine external-data blockers."""
+    issue_list = [
+        {
+            "number": 2962,
+            "title": "workflow issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2962",
+            "labels": [{"name": "workflow"}],
+            "assignees": [],
+        },
+        {
+            "number": 2415,
+            "title": "data: stage external asset",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2415",
+            "labels": [{"name": "resource:external-data"}, {"name": "state:blocked"}],
+            "assignees": [],
+        },
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+            claim.return_value = {
+                "ok": True,
+                "claimed": False,
+                "claim_ref": "agent-claims/issue",
+                "sha": None,
+            }
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=2,
+            )
+
+    assert [issue["number"] for issue in payload["issues"]] == [2962]
+    assert payload["excluded_counts"] == {"blocked_external": 1}
+    assert payload["include_blocked_external"] is False
+
+
+def test_snapshot_claimable_issues_can_include_blocked_external() -> None:
+    """Explicit routing should expose quarantined external blockers."""
+    issue_list = [
+        {
+            "number": 2415,
+            "title": "data: stage external asset",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2415",
+            "labels": [{"name": "resource:external-data"}, {"name": "state:blocked"}],
+            "assignees": [],
+        }
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+            claim.return_value = {
+                "ok": True,
+                "claimed": False,
+                "claim_ref": "agent-claims/issue-2415",
+                "sha": None,
+            }
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=1,
+                include_blocked_external=True,
+            )
+
+    assert payload["include_blocked_external"] is True
+    assert payload["issues"][0]["classification"] == "blocked_external"
+    assert payload["excluded_counts"] == {"blocked_external": 1}
+
+
+def test_snapshot_blocked_external_issues_writes_human_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Blocked external report should provide one action and monthly review date per row."""
+    report_path = tmp_path / "blocked-assets.md"
+    issue_list = [
+        {
+            "number": 2415,
+            "title": "data: stage external asset",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2415",
+            "labels": [
+                {"name": "resource:external-data"},
+                {"name": "state:blocked"},
+                {"name": "state:ready"},
+            ],
+            "assignees": [],
+        },
+        {
+            "number": 2962,
+            "title": "workflow: executable now",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2962",
+            "labels": [{"name": "resource:external-data"}, {"name": "state:ready"}],
+            "assignees": [],
+        },
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        payload = snapshot_blocked_external_issues(
+            repo="ll7/robot_sf_ll7",
+            report_path=str(report_path),
+            limit=10,
+        )
+
+    assert payload["schema"] == "blocked_external_assets_report.v1"
+    assert payload["recommended_state_label"] == "state:blocked-external-input"
+    assert payload["row_count"] == 1
+    row = payload["rows"][0]
+    assert row["number"] == 2415
+    assert row["human_action"].count(".") == 1
+    assert row["monthly_review_date"].endswith("-01")
+    assert "add `state:blocked-external-input`" in row["label_recommendation"]
+    assert "remove `state:ready`" in row["label_recommendation"]
+    assert "#2415 data: stage external asset" in report_path.read_text(encoding="utf-8")
 
 
 def test_main_claimable_mode_can_be_called_without_issue_numbers() -> None:  # type: ignore[no-untyped-def]

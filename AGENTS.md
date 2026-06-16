@@ -338,6 +338,9 @@ resolving lint or test failures locally before requesting review.
 - For delegated-worker routing, prefer a compact preflight ledger before implementation or review
   dispatch: `gh auth status`, `scripts/dev/snapshot_pr_queue.py --prs <number> --expected-head-sha <sha> --json`,
   and `scripts/dev/check_pr_ci_status.py --expected-head-sha <sha>`.
+- Default claimable issue snapshots should keep blocked external-data issues out of agent routing;
+  use `scripts/dev/snapshot_issue_batch.py --blocked-external-report` for the parked human-action
+  report, or `--include-blocked-external` only when explicitly auditing that queue.
 - Treat `preflight.status == "stale"` lanes as invalid until refreshed.
 - If review/comment data is needed, start from compact `review_snapshot`/`comment_snapshot`/`checks`
   output rather than raw `gh` payloads. For PR review threads, use

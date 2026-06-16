@@ -25,6 +25,14 @@ EXTERNAL_BLOCKER_LABELS = {
     "evidence:blocked",
     "state:blocked",
 }
+PORTFOLIO_CLASSIFICATIONS = {
+    "blocked_external_asset",
+    "diagnostic_only",
+    "executable_now",
+    "needs_human_decision",
+    "paper_critical",
+    "stale_synthesis",
+}
 UNCLAIMABLE_LABELS = {
     "blocked",
     "decision-required",
@@ -359,6 +367,12 @@ def _blocked_external_markdown(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _markdown_cell(value: Any) -> str:
+    """Return a table-safe compact Markdown cell."""
+    value_text = "" if value is None else str(value)
+    return value_text.replace("|", "\\|").replace("\n", " ")
+
+
 def snapshot_blocked_external_issues(
     *, repo: str, report_path: str = "", limit: int, now: datetime | None = None
 ) -> dict[str, Any]:
@@ -419,6 +433,221 @@ def snapshot_blocked_external_issues(
         "recommended_state_label": BLOCKED_EXTERNAL_INPUT_LABEL,
         "rows": rows,
         "row_count": len(rows),
+        "report_path": report_path,
+        "markdown": markdown,
+        "errors": errors,
+    }
+
+
+def _portfolio_owner_type(labels: list[str], classification: str) -> str:
+    """Return the likely next owner type for an active issue portfolio row."""
+    label_set = set(labels)
+    if classification == "blocked_external_asset":
+        return "external data"
+    if classification in {"needs_human_decision", "stale_synthesis"}:
+        return "maintainer"
+    if (
+        "slurm" in label_set
+        or "resource:slurm" in label_set
+        or "training" in label_set
+        or "state:running" in label_set
+    ):
+        return "Slurm"
+    return "agent"
+
+
+def _portfolio_classification(
+    *, labels: list[str], title: str, assignees: list[str], claim: dict[str, Any]
+) -> tuple[str, str]:
+    """Classify one open issue for compact active-portfolio routing."""
+    label_set = set(labels)
+    title_text = title.lower()
+    if _is_blocked_external_issue(labels):
+        return "blocked_external_asset", "external asset, data, license, or staging input required"
+    if (
+        "blocked" in label_set
+        or "decision-required" in label_set
+        or "state:blocked" in label_set
+        or "state:hold" in label_set
+    ):
+        return "needs_human_decision", "maintainer decision label blocks autonomous execution"
+    if "evidence:analysis-only" in label_set or "diagnostic" in title_text:
+        return (
+            "diagnostic_only",
+            "analysis or diagnostic evidence only; do not present as benchmark proof",
+        )
+    if "type:synthesis" in label_set and "state:ready" not in label_set:
+        return "stale_synthesis", "synthesis issue lacks ready-state routing"
+    if "priority: high" in label_set and (
+        "benchmark" in label_set or "research" in label_set or "epic" in label_set
+    ):
+        return "paper_critical", "high-priority benchmark or research surface"
+    if assignees or claim.get("claimed"):
+        return "needs_human_decision", "assigned or already claimed; skip autonomous claim"
+    return "executable_now", "unassigned, unclaimed, and not blocked by labels"
+
+
+def _portfolio_label_recommendation(labels: list[str], classification: str) -> str:
+    """Return label-only recommendations for one portfolio row."""
+    label_set = set(labels)
+    recommendation_rules = {
+        "blocked_external_asset": lambda: [
+            (
+                BLOCKED_EXTERNAL_INPUT_LABEL not in label_set,
+                f"add `{BLOCKED_EXTERNAL_INPUT_LABEL}`",
+            ),
+            ("state:ready" in label_set, "remove `state:ready`"),
+        ],
+        "needs_human_decision": lambda: [
+            ("decision-required" not in label_set, "add `decision-required`"),
+            ("state:ready" in label_set, "remove `state:ready`"),
+        ],
+        "diagnostic_only": lambda: [
+            ("evidence:analysis-only" not in label_set, "add `evidence:analysis-only`")
+        ],
+        "stale_synthesis": lambda: [
+            ("decision-required" not in label_set, "add `decision-required`")
+        ],
+        "paper_critical": lambda: [("paper-critical" not in label_set, "add `paper-critical`")],
+        "executable_now": lambda: [("state:ready" not in label_set, "add `state:ready`")],
+    }
+    rules = recommendation_rules.get(classification, lambda: [])()
+    recommendations = [
+        recommendation for should_recommend, recommendation in rules if should_recommend
+    ]
+    return "; ".join(recommendations) if recommendations else "none"
+
+
+def _portfolio_next_action(classification: str) -> str:
+    """Return one compact next action for a portfolio row."""
+    actions = {
+        "blocked_external_asset": "Park until the required asset, data, license, or staging note exists.",
+        "diagnostic_only": "Keep as diagnostic evidence unless a follow-up benchmark proof issue is opened.",
+        "executable_now": "Agent may claim and execute the issue contract.",
+        "needs_human_decision": "Maintainer should decide, relabel, or split before agent execution.",
+        "paper_critical": "Prioritize for release evidence review and claim-boundary checks.",
+        "stale_synthesis": "Refresh, supersede, or close the synthesis before new implementation work.",
+    }
+    return actions[classification]
+
+
+def _active_portfolio_row(issue: dict[str, Any], *, remote: str) -> dict[str, Any]:
+    """Return one active-portfolio row for an open issue."""
+    number = int(issue.get("number"))
+    labels = _labels(issue)
+    assignees = _assignees(issue)
+    claim_value = status_issue(number, remote=remote)
+    claim = claim_value if isinstance(claim_value, dict) else {}
+    title = "" if issue.get("title") is None else issue.get("title", "")
+    url = "" if issue.get("url") is None else issue.get("url", "")
+    classification, reason = _portfolio_classification(
+        labels=labels,
+        title=str(title),
+        assignees=assignees,
+        claim=claim,
+    )
+    return {
+        "number": number,
+        "title": title,
+        "url": url,
+        "labels": labels,
+        "classification": classification,
+        "reason": reason,
+        "owner_type": _portfolio_owner_type(labels, classification),
+        "next_action": _portfolio_next_action(classification),
+        "label_recommendation": _portfolio_label_recommendation(labels, classification),
+    }
+
+
+def _active_portfolio_markdown(rows: list[dict[str, Any]]) -> str:
+    """Return a compact Markdown portfolio table for maintainer review."""
+    lines = [
+        "# Active Issue Portfolio",
+        "",
+        "| Issue | Classification | Owner | Next action | Label recommendation |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for row in rows:
+        issue = f"#{row['number']} {row['title']}"
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _markdown_cell(issue),
+                    _markdown_cell(row["classification"]),
+                    _markdown_cell(row["owner_type"]),
+                    _markdown_cell(row["next_action"]),
+                    _markdown_cell(row["label_recommendation"]),
+                ]
+            )
+            + " |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def snapshot_active_issue_portfolio(
+    *, repo: str, remote: str, report_path: str = "", limit: int
+) -> dict[str, Any]:
+    """Return a compact active issue portfolio for routing and demotion review."""
+    result = _gh(
+        [
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--limit",
+            str(limit),
+            "--json",
+            "number,title,state,labels,url,assignees",
+        ]
+    )
+    if result.returncode != 0:
+        rows: list[dict[str, Any]] = []
+        errors = [
+            {
+                "status": "error",
+                "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+            }
+        ]
+    else:
+        errors = []
+        try:
+            listed = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            listed = []
+            errors = [{"status": "error", "error": f"invalid gh JSON: {exc}"}]
+        if not errors and not isinstance(listed, list):
+            listed = []
+            errors = [
+                {
+                    "status": "error",
+                    "error": "expected gh issue list JSON array",
+                }
+            ]
+        rows = [
+            _active_portfolio_row(issue, remote=remote)
+            for issue in listed
+            if isinstance(issue, dict) and issue.get("number") is not None
+        ]
+    counts = dict.fromkeys(sorted(PORTFOLIO_CLASSIFICATIONS), 0)
+    for row in rows:
+        classification = str(row.get("classification", ""))
+        if classification in counts:
+            counts[classification] += 1
+    markdown = _active_portfolio_markdown(rows)
+    if report_path:
+        path = pathlib.Path(report_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(markdown, encoding="utf-8")
+    return {
+        "schema": "active_issue_portfolio.v1",
+        "repo": repo,
+        "mode": "active_portfolio",
+        "rows": rows,
+        "row_count": len(rows),
+        "classification_counts": counts,
         "report_path": report_path,
         "markdown": markdown,
         "errors": errors,
@@ -499,6 +728,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Generate a compact blocked external-assets report instead of claim routing.",
     )
     parser.add_argument(
+        "--active-portfolio",
+        action="store_true",
+        help="Generate a compact active issue portfolio with label recommendations.",
+    )
+    parser.add_argument(
         "--report-path",
         default="",
         help="Optional Markdown path for --blocked-external-report.",
@@ -526,9 +760,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point."""
-    args = _parse_args(argv)
+def _validate_args(args: argparse.Namespace) -> int:
+    """Return nonzero after printing a CLI contract error."""
     if args.claimable and args.issues:
         print(
             "--claimable cannot be combined with explicit issue numbers",
@@ -547,36 +780,66 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+    if args.active_portfolio and (args.claimable or args.blocked_external_report or args.issues):
+        print(
+            "--active-portfolio cannot be combined with --claimable, "
+            "--blocked-external-report, or issue numbers",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, Any]:
+    """Build the requested CLI payload after argument validation."""
+    if args.active_portfolio:
+        return snapshot_active_issue_portfolio(
+            repo=args.repo,
+            remote=args.remote,
+            report_path=args.report_path,
+            limit=max(args.limit, 1),
+        )
+    if args.blocked_external_report:
+        return snapshot_blocked_external_issues(
+            repo=args.repo,
+            report_path=args.report_path,
+            limit=max(args.limit, 1),
+        )
+    if args.claimable:
+        return snapshot_claimable_issues(
+            repo=args.repo,
+            remote=args.remote,
+            body_limit=max(args.body_chars, 0),
+            limit=max(args.limit, 1),
+            include_blocked_external=args.include_blocked_external,
+        )
+    return snapshot_issues(
+        numbers,
+        repo=args.repo,
+        body_limit=max(args.body_chars, 0),
+        remote=args.remote,
+        capsule_dir=args.capsule_dir,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point."""
+    args = _parse_args(argv)
+    validation_error = _validate_args(args)
+    if validation_error:
+        return validation_error
     numbers = expand_issue_numbers(args.issues, expand_range=not args.no_expand_range)
     try:
-        if args.blocked_external_report:
-            payload = snapshot_blocked_external_issues(
-                repo=args.repo,
-                report_path=args.report_path,
-                limit=max(args.limit, 1),
-            )
-        elif args.claimable:
-            payload = snapshot_claimable_issues(
-                repo=args.repo,
-                remote=args.remote,
-                body_limit=max(args.body_chars, 0),
-                limit=max(args.limit, 1),
-                include_blocked_external=args.include_blocked_external,
-            )
-        elif args.issues:
-            payload = snapshot_issues(
-                numbers,
-                repo=args.repo,
-                body_limit=max(args.body_chars, 0),
-                remote=args.remote,
-                capsule_dir=args.capsule_dir,
-            )
-        else:
+        if not (
+            args.active_portfolio or args.blocked_external_report or args.claimable or args.issues
+        ):
             print(
-                "at least one issue number is required unless --claimable is used",
+                "at least one issue number is required unless --claimable, "
+                "--blocked-external-report, or --active-portfolio is used",
                 file=sys.stderr,
             )
             return 1
+        payload = _build_payload(args, numbers)
     except FileNotFoundError:
         print("gh or git command not found", file=sys.stderr)
         return 1

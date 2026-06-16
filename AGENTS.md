@@ -341,6 +341,9 @@ resolving lint or test failures locally before requesting review.
 - Default claimable issue snapshots should keep blocked external-data issues out of agent routing;
   use `scripts/dev/snapshot_issue_batch.py --blocked-external-report` for the parked human-action
   report, or `--include-blocked-external` only when explicitly auditing that queue.
+- Use `scripts/dev/snapshot_issue_batch.py --active-portfolio` when reviewing the broader open
+  issue portfolio for executable, human-decision, blocked-external, diagnostic-only, stale
+  synthesis, and paper-critical routing recommendations without applying labels automatically.
 - Treat `preflight.status == "stale"` lanes as invalid until refreshed.
 - If review/comment data is needed, start from compact `review_snapshot`/`comment_snapshot`/`checks`
   output rather than raw `gh` payloads. For PR review threads, use

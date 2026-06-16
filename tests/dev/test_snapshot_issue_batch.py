@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from scripts.dev.snapshot_issue_batch import (
     expand_issue_numbers,
     main,
+    snapshot_active_issue_portfolio,
     snapshot_blocked_external_issues,
     snapshot_claimable_issues,
     snapshot_issues,
@@ -309,6 +310,186 @@ def test_main_rejects_include_blocked_external_without_claimable(capsys) -> None
 
     assert rc == 1
     assert "--include-blocked-external requires --claimable" in capsys.readouterr().err
+
+
+def test_snapshot_active_issue_portfolio_classifies_and_writes_report(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Active portfolio report should classify rows and recommend label changes only."""
+    report_path = tmp_path / "portfolio.md"
+    issue_list = [
+        {
+            "number": 2967,
+            "title": "workflow: generate active issue portfolio",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2967",
+            "labels": [{"name": "workflow"}, {"name": "state:ready"}],
+            "assignees": [],
+        },
+        {
+            "number": 2415,
+            "title": "data: stage external asset",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2415",
+            "labels": [
+                {"name": "resource:external-data"},
+                {"name": "state:blocked"},
+                {"name": "state:ready"},
+            ],
+            "assignees": [],
+        },
+        {
+            "number": 1134,
+            "title": "map: needs decision",
+            "state": "OPEN",
+            "url": "https://github.test/issues/1134",
+            "labels": [{"name": "decision-required"}, {"name": "state:ready"}],
+            "assignees": [],
+        },
+        {
+            "number": 2946,
+            "title": "analysis: diagnostic figure pack",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2946",
+            "labels": [{"name": "research"}],
+            "assignees": [],
+        },
+        {
+            "number": 2910,
+            "title": "epic: validation benchmark",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2910",
+            "labels": [{"name": "type:synthesis"}, {"name": "priority: high"}],
+            "assignees": [],
+        },
+        {
+            "number": 2965,
+            "title": "benchmark: release readiness dashboard",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2965",
+            "labels": [{"name": "benchmark"}, {"name": "priority: high"}, {"name": "state:ready"}],
+            "assignees": [],
+        },
+        {
+            "number": 2845,
+            "title": "prediction: blocked local study",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2845",
+            "labels": [{"name": "state:blocked"}],
+            "assignees": [],
+        },
+        {
+            "number": 2441,
+            "title": "slurm: finalize trace collection",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2441",
+            "labels": [{"name": "resource:slurm"}, {"name": "state:ready"}],
+            "assignees": [],
+        },
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+            claim.return_value = {
+                "ok": True,
+                "claimed": False,
+                "claim_ref": "agent-claims/issue",
+                "sha": None,
+            }
+            payload = snapshot_active_issue_portfolio(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                report_path=str(report_path),
+                limit=10,
+            )
+
+    assert payload["schema"] == "active_issue_portfolio.v1"
+    assert payload["row_count"] == 8
+    rows = {row["number"]: row for row in payload["rows"]}
+    assert rows[2967]["classification"] == "executable_now"
+    assert rows[2967]["owner_type"] == "agent"
+    assert rows[2415]["classification"] == "blocked_external_asset"
+    assert rows[2415]["owner_type"] == "external data"
+    assert rows[2415]["label_recommendation"] == (
+        "add `state:blocked-external-input`; remove `state:ready`"
+    )
+    assert rows[1134]["classification"] == "needs_human_decision"
+    assert rows[1134]["owner_type"] == "maintainer"
+    assert rows[2946]["classification"] == "diagnostic_only"
+    assert rows[2946]["label_recommendation"] == "add `evidence:analysis-only`"
+    assert rows[2910]["classification"] == "stale_synthesis"
+    assert rows[2965]["classification"] == "paper_critical"
+    assert rows[2965]["label_recommendation"] == "add `paper-critical`"
+    assert rows[2845]["classification"] == "needs_human_decision"
+    assert rows[2845]["owner_type"] == "maintainer"
+    assert rows[2441]["classification"] == "executable_now"
+    assert rows[2441]["owner_type"] == "Slurm"
+    assert payload["classification_counts"]["blocked_external_asset"] == 1
+    markdown = report_path.read_text(encoding="utf-8")
+    assert "# Active Issue Portfolio" in markdown
+    assert (
+        "| #2967 workflow: generate active issue portfolio | executable_now | agent |" in markdown
+    )
+
+
+def test_snapshot_active_issue_portfolio_reports_unexpected_json_shape() -> None:
+    """Active portfolio should fail closed when gh returns an unexpected JSON shape."""
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"message": "not an issue list"}),
+            stderr="",
+        )
+        payload = snapshot_active_issue_portfolio(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            limit=10,
+        )
+
+    assert payload["row_count"] == 0
+    assert payload["errors"] == [{"status": "error", "error": "expected gh issue list JSON array"}]
+
+
+def test_snapshot_active_issue_portfolio_preserves_null_optional_fields() -> None:
+    """Explicit null title or URL fields should not leak as literal None strings."""
+    issue_list = [
+        {
+            "number": 3000,
+            "title": None,
+            "state": "OPEN",
+            "url": None,
+            "labels": [],
+            "assignees": [],
+        }
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+            claim.return_value = {
+                "ok": True,
+                "claimed": False,
+                "claim_ref": "agent-claims/issue-3000",
+                "sha": None,
+            }
+            payload = snapshot_active_issue_portfolio(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                limit=1,
+            )
+
+    row = payload["rows"][0]
+    assert row["title"] == ""
+    assert row["url"] == ""
+    assert "None" not in payload["markdown"]
+    assert "#3000 " in payload["markdown"]
+
+
+def test_main_rejects_active_portfolio_with_claimable(capsys) -> None:  # type: ignore[no-untyped-def]
+    """Portfolio mode should be a distinct bounded report mode."""
+    rc = main(["--active-portfolio", "--claimable", "--json"])
+
+    assert rc == 1
+    assert "--active-portfolio cannot be combined" in capsys.readouterr().err
 
 
 def test_main_claimable_mode_can_be_called_without_issue_numbers() -> None:  # type: ignore[no-untyped-def]

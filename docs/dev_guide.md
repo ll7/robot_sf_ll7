@@ -405,6 +405,9 @@ uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json \
 uv run python scripts/dev/snapshot_issue_batch.py --claimable --json
 uv run python scripts/dev/snapshot_issue_batch.py --blocked-external-report \
   --report-path "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/blocked-external-assets.md"
+uv run python scripts/dev/snapshot_issue_batch.py --active-portfolio \
+  --report-path "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/active-issue-portfolio.md" \
+  --json
 uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 2678 2679 --json \
   --expected-head-sha "$PR_HEAD_SHA"
 uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" --json --once
@@ -413,7 +416,9 @@ uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" 
 Default `--claimable` issue snapshots omit issues classified as blocked on external data, assets,
 licenses, or human staging input. Use `--include-blocked-external` only when deliberately auditing
 that parked queue, or `--blocked-external-report` to generate a compact human-action report with
-monthly review dates.
+monthly review dates. Use `--active-portfolio` for a compact non-mutating open-issue portfolio
+that classifies executable, human-decision, blocked-external, diagnostic-only, stale synthesis, and
+paper-critical rows with owner types and label-change recommendations.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

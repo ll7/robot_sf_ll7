@@ -394,6 +394,14 @@ def snapshot_blocked_external_issues(
         except json.JSONDecodeError as exc:
             listed = []
             errors = [{"status": "error", "error": f"invalid gh JSON: {exc}"}]
+        if not errors and not isinstance(listed, list):
+            listed = []
+            errors = [
+                {
+                    "status": "error",
+                    "error": "expected gh issue list JSON array",
+                }
+            ]
         rows = [
             _blocked_external_row(issue, now=now)
             for issue in listed
@@ -524,6 +532,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.claimable and args.issues:
         print(
             "--claimable cannot be combined with explicit issue numbers",
+            file=sys.stderr,
+        )
+        return 1
+    if args.include_blocked_external and not args.claimable:
+        print(
+            "--include-blocked-external requires --claimable",
             file=sys.stderr,
         )
         return 1

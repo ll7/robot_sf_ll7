@@ -277,11 +277,38 @@ def test_snapshot_blocked_external_issues_writes_human_report(tmp_path) -> None:
     assert payload["row_count"] == 1
     row = payload["rows"][0]
     assert row["number"] == 2415
-    assert row["human_action"].count(".") == 1
+    assert row["human_action"] == (
+        "Stage or document the required external data/asset/license before agent execution."
+    )
     assert row["monthly_review_date"] == "2026-07-01"
     assert "add `state:blocked-external-input`" in row["label_recommendation"]
     assert "remove `state:ready`" in row["label_recommendation"]
     assert "#2415 data: stage external asset" in report_path.read_text(encoding="utf-8")
+
+
+def test_snapshot_blocked_external_issues_reports_unexpected_json_shape() -> None:
+    """Blocked external report should fail closed on unexpected gh JSON shape."""
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"message": "not an issue list"}),
+            stderr="",
+        )
+        payload = snapshot_blocked_external_issues(
+            repo="ll7/robot_sf_ll7",
+            limit=10,
+        )
+
+    assert payload["row_count"] == 0
+    assert payload["errors"] == [{"status": "error", "error": "expected gh issue list JSON array"}]
+
+
+def test_main_rejects_include_blocked_external_without_claimable(capsys) -> None:  # type: ignore[no-untyped-def]
+    """CLI should not silently ignore --include-blocked-external outside claimable mode."""
+    rc = main(["--include-blocked-external", "--json"])
+
+    assert rc == 1
+    assert "--include-blocked-external requires --claimable" in capsys.readouterr().err
 
 
 def test_main_claimable_mode_can_be_called_without_issue_numbers() -> None:  # type: ignore[no-untyped-def]

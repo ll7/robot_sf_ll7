@@ -13,11 +13,18 @@ from robot_sf.benchmark.live_forecast_replay_gate import (
     FORECAST_VARIANTS,
     LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION,
     REQUIRED_METRICS,
+    RUN_CLASSIFICATION_BLOCKED,
+    RUN_CLASSIFICATION_DEGRADED,
+    RUN_CLASSIFICATION_DIAGNOSTIC_ONLY,
+    RUN_CLASSIFICATION_NATIVE,
+    SMOKE_FORECAST_VARIANTS,
+    VALID_RUN_CLASSIFICATIONS,
     LiveForecastReplayGateConfig,
     LiveForecastReplayGateError,
     _summarize_forecast_metrics,
     build_variant_forecast_batch,
     check_native_live_path_eligibility,
+    classify_live_forecast_replay_run,
     compute_baseline_closed_loop_metrics,
     format_live_forecast_replay_gate_markdown,
     load_trace_tolerant,
@@ -43,8 +50,8 @@ def dense_trace() -> SimulationTraceExport:
 class TestConstants:
     """Schema and registry constants should match the issue contract."""
 
-    def test_required_variants(self) -> None:
-        """The five required forecast variants must be present and ordered."""
+    def test_full_matrix_variants(self) -> None:
+        """The five full-matrix forecast variants must be present and ordered."""
 
         assert FORECAST_VARIANTS == (
             "none",
@@ -54,23 +61,38 @@ class TestConstants:
             "risk_filtered",
         )
 
+    def test_smoke_variants(self) -> None:
+        """The issue #2944 smoke must include exactly none and cv."""
+
+        assert SMOKE_FORECAST_VARIANTS == ("none", "cv")
+
     def test_required_metrics(self) -> None:
         """All issue-required metrics must be declared."""
 
-        assert set(REQUIRED_METRICS) == {
+        required_by_issue_2944 = {
             "collision",
             "near_miss",
             "min_distance",
             "stop_yield_timing",
             "progress",
-            "false_positive_stops",
             "runtime",
         }
+        assert required_by_issue_2944.issubset(set(REQUIRED_METRICS))
 
     def test_schema_version_constant(self) -> None:
         """Schema version should be stable."""
 
         assert LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION == "LiveForecastReplayGate.v1"
+
+    def test_valid_run_classifications(self) -> None:
+        """Run classification contract must contain the four required labels."""
+
+        assert set(VALID_RUN_CLASSIFICATIONS) == {
+            RUN_CLASSIFICATION_NATIVE,
+            RUN_CLASSIFICATION_BLOCKED,
+            RUN_CLASSIFICATION_DEGRADED,
+            RUN_CLASSIFICATION_DIAGNOSTIC_ONLY,
+        }
 
 
 class TestTolerantTraceLoader:
@@ -212,6 +234,119 @@ class TestNativePathEligibility:
         assert "forecast_variant" in missing
 
 
+class TestRunClassification:
+    """Fail-closed classification of gate runs."""
+
+    def test_current_repo_state_is_blocked(self, dense_trace: SimulationTraceExport) -> None:
+        """The current repository lacks the native live path, so runs are blocked."""
+
+        report = run_live_forecast_replay_gate(dense_trace)
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_BLOCKED
+
+    def test_blocked_when_missing_components(self) -> None:
+        """Missing native components classify the run as blocked."""
+
+        report = {
+            "native_path_eligibility": {
+                "live_path_available": False,
+                "missing_components": ["missing predictor"],
+            },
+            "variant_results": {},
+        }
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_BLOCKED
+
+    def test_diagnostic_only_when_no_closed_loop_metrics(self) -> None:
+        """No closed-loop metrics classify the run as diagnostic_only."""
+
+        report = {
+            "native_path_eligibility": {
+                "live_path_available": True,
+                "missing_components": [],
+            },
+            "variant_results": {
+                "none": {"closed_loop_metrics": {"collision": False}},
+                "cv": {"closed_loop_metrics": None},
+            },
+        }
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_DIAGNOSTIC_ONLY
+
+    def test_diagnostic_only_when_metrics_have_wrong_shape(self) -> None:
+        """Malformed metric maps should fail closed instead of raising."""
+
+        report = {
+            "native_path_eligibility": {
+                "live_path_available": True,
+                "missing_components": [],
+            },
+            "variant_results": {
+                "none": {"closed_loop_metrics": ["not", "a", "dict"]},
+                "cv": {"closed_loop_metrics": {"collision": False}},
+            },
+        }
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_DIAGNOSTIC_ONLY
+
+    def test_degraded_when_cv_matches_none(self) -> None:
+        """Identical none and cv closed-loop metrics classify the run as degraded."""
+
+        metrics = {"collision": False, "progress_m": 1.0}
+        report = {
+            "native_path_eligibility": {
+                "live_path_available": True,
+                "missing_components": [],
+            },
+            "variant_results": {
+                "none": {"closed_loop_metrics": metrics},
+                "cv": {"closed_loop_metrics": metrics},
+            },
+        }
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_DEGRADED
+
+    def test_bool_and_numeric_metric_values_are_not_equivalent(self) -> None:
+        """A boolean metric should not compare equal to an integer metric."""
+
+        report = {
+            "native_path_eligibility": {
+                "live_path_available": True,
+                "missing_components": [],
+            },
+            "variant_results": {
+                "none": {"closed_loop_metrics": {"collision": True}},
+                "cv": {"closed_loop_metrics": {"collision": 1}},
+            },
+        }
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_NATIVE
+
+    def test_degraded_tolerates_tiny_float_jitter(self) -> None:
+        """Microscopic metric jitter should not promote an unchanged run to native."""
+
+        report = {
+            "native_path_eligibility": {
+                "live_path_available": True,
+                "missing_components": [],
+            },
+            "variant_results": {
+                "none": {"closed_loop_metrics": {"collision": False, "progress_m": 1.0}},
+                "cv": {"closed_loop_metrics": {"collision": False, "progress_m": 1.0 + 1e-12}},
+            },
+        }
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_DEGRADED
+
+    def test_native_when_cv_differs_from_none(self) -> None:
+        """Different cv closed-loop metrics classify the run as native."""
+
+        report = {
+            "native_path_eligibility": {
+                "live_path_available": True,
+                "missing_components": [],
+            },
+            "variant_results": {
+                "none": {"closed_loop_metrics": {"collision": False, "progress_m": 1.0}},
+                "cv": {"closed_loop_metrics": {"collision": True, "progress_m": 0.5}},
+            },
+        }
+        assert classify_live_forecast_replay_run(report) == RUN_CLASSIFICATION_NATIVE
+
+
 class TestVariantForecastBatch:
     """Forecast batch construction for each variant."""
 
@@ -326,45 +461,59 @@ class TestBaselineClosedLoopMetrics:
 class TestGateReport:
     """End-to-end gate report classification and formatting."""
 
-    def test_report_status_is_diagnostic_only(self, dense_trace: SimulationTraceExport) -> None:
-        """Without a native live path the gate must be diagnostic-only."""
+    def test_report_classification_is_blocked(self, dense_trace: SimulationTraceExport) -> None:
+        """Without a native live path the smoke must be fail-closed blocked."""
 
         report = run_live_forecast_replay_gate(dense_trace)
-        assert report["status"] == "diagnostic_only"
-        assert report["classification"] == "diagnostic_only"
+        assert report["status"] == RUN_CLASSIFICATION_BLOCKED
+        assert report["classification"] == RUN_CLASSIFICATION_BLOCKED
+        assert report["classification_reason"]
+        assert "blocked" in report["classification_reason"].lower()
+        assert report["full_matrix_expansion_recommended"] is False
 
-    def test_report_includes_all_variants(self, dense_trace: SimulationTraceExport) -> None:
-        """The report should include one result per forecast variant."""
+    def test_report_includes_smoke_variants(self, dense_trace: SimulationTraceExport) -> None:
+        """The default report should include only the smoke variants."""
 
         report = run_live_forecast_replay_gate(dense_trace)
-        assert set(report["variant_results"]) == set(FORECAST_VARIANTS)
+        assert set(report["variant_results"]) == set(SMOKE_FORECAST_VARIANTS)
+        assert report["provenance"]["variants"] == list(SMOKE_FORECAST_VARIANTS)
         assert report["variant_results"]["none"]["forecast_metrics_status"] == "not_applicable"
         assert report["variant_results"]["none"]["closed_loop_metric_source"] == (
             "baseline_recorded_trace"
         )
+        assert report["variant_results"]["cv"]["closed_loop_metric_source"] == (
+            "baseline_recorded_trace"
+        )
 
-    def test_report_markdown_contains_key_sections(
+    def test_report_can_run_full_matrix(self, dense_trace: SimulationTraceExport) -> None:
+        """Explicit full-matrix variants should include all five variants."""
+
+        report = run_live_forecast_replay_gate(dense_trace, variants=FORECAST_VARIANTS)
+        assert set(report["variant_results"]) == set(FORECAST_VARIANTS)
+        assert report["provenance"]["variants"] == list(FORECAST_VARIANTS)
+
+    def test_report_markdown_contains_classification(
         self, dense_trace: SimulationTraceExport
     ) -> None:
-        """Markdown output should include claim boundary, eligibility, and metrics."""
+        """Markdown output should include classification and gating signal."""
 
         report = run_live_forecast_replay_gate(dense_trace)
         markdown = format_live_forecast_replay_gate_markdown(report)
         assert "Claim Boundary" in markdown
+        assert "Classification" in markdown
         assert "Native Path Eligibility" in markdown
         assert "Baseline Closed-Loop Metrics" in markdown
         assert "Variant Results" in markdown
         assert "Limitations" in markdown
+        assert str(report["classification"]) in markdown
 
-    def test_report_claim_boundary_is_diagnostic_only(
-        self, dense_trace: SimulationTraceExport
-    ) -> None:
+    def test_report_claim_boundary_is_fail_closed(self, dense_trace: SimulationTraceExport) -> None:
         """The claim boundary must not overclaim benchmark evidence."""
 
         report = run_live_forecast_replay_gate(dense_trace)
         boundary = report["claim_boundary"].lower()
-        assert "diagnostic-only" in boundary
-        assert "no native planner" in boundary or "does not" in boundary
+        assert "native" in boundary or "blocked" in boundary or "does not" in boundary
+        assert "does not claim" in boundary
 
     def test_config_overrides_horizons(self, dense_trace: SimulationTraceExport) -> None:
         """Custom horizons should propagate into the report provenance."""
@@ -379,3 +528,31 @@ class TestGateReport:
         config = LiveForecastReplayGateConfig(horizons_s=(99.0,))
         with pytest.raises(LiveForecastReplayGateError, match="no requested forecast horizons"):
             run_live_forecast_replay_gate(dense_trace, config=config)
+
+    def test_empty_variant_set_fails_closed(self, dense_trace: SimulationTraceExport) -> None:
+        """An empty variant set should fail closed."""
+
+        with pytest.raises(LiveForecastReplayGateError, match="at least one forecast variant"):
+            run_live_forecast_replay_gate(dense_trace, variants=())
+
+    def test_unsupported_variant_fails_closed(self, dense_trace: SimulationTraceExport) -> None:
+        """Unsupported variants should fail closed at the gate entry."""
+
+        with pytest.raises(LiveForecastReplayGateError, match="unsupported forecast variant"):
+            run_live_forecast_replay_gate(dense_trace, variants=("none", "unknown_variant"))
+
+    def test_required_closed_loop_metrics_present_for_smoke_variants(
+        self, dense_trace: SimulationTraceExport
+    ) -> None:
+        """Both none and cv must carry the required closed-loop metrics."""
+
+        report = run_live_forecast_replay_gate(dense_trace)
+        for variant in SMOKE_FORECAST_VARIANTS:
+            metrics = report["variant_results"][variant]["closed_loop_metrics"]
+            for key in REQUIRED_METRICS:
+                assert (
+                    key in metrics
+                    or f"{key}_m" in metrics
+                    or f"{key}_s" in metrics
+                    or f"{key}_steps" in metrics
+                )

@@ -54,8 +54,12 @@ forecast variant because no native planner consumes the non-`none` variants.
 ```bash
 uv run python scripts/validation/validate_live_forecast_replay_gate.py \
   --trace tests/fixtures/analysis_workbench/simulation_trace_export_v1/dense_pedestrian_stress_episode_0000.json \
+  --full-matrix \
   --output-dir output/live_forecast_replay_gate
 ```
+
+The validation CLI now defaults to the issue #2944 `none` + `cv` smoke. Use
+`--full-matrix` when reproducing the original issue #2902 five-variant evidence.
 
 ## Validation
 

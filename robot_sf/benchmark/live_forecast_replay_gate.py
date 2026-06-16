@@ -1,19 +1,26 @@
-"""Live same-seed forecast replay gate v1 (issue #2902).
+"""Live same-seed forecast replay gate v1 (issues #2902, #2944).
 
 This module implements the smallest valuable executable surface for comparing
 forecast variants on a motion-rich pedestrian fixture with identical seed.
+Issue #2944 narrows the default smoke to the ``none`` and ``cv`` variants and
+adds an explicit per-run classification (``native``, ``blocked``,
+``degraded``, ``diagnostic_only``) so the result can gate expansion to the full
+forecast variant matrix.
+
 Because the repository does not yet expose a planner that consumes the
 ``ProbabilisticPredictor`` protocol with selectable baseline forecast variants,
-the gate is diagnostic-only: it builds ``ForecastBatch.v1`` artifacts for each
-variant, computes open-loop forecast metrics, and records baseline closed-loop
-metrics from the supplied trace.  It fails closed when the native live path is
-missing and documents exactly which proof step is blocked.
+current runs are fail-closed (``blocked`` or ``diagnostic_only``): the smoke
+builds ``ForecastBatch.v1`` artifacts for each variant, computes open-loop
+forecast metrics, and records baseline closed-loop metrics from the supplied
+trace.  It documents exactly which proof step is blocked and never labels a
+fallback path as ``native``.
 """
 
 from __future__ import annotations
 
 import inspect
 import json
+import math
 from dataclasses import dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,7 +59,7 @@ from robot_sf.gym_env.unified_config import EnvSettings
 from robot_sf.nav.predictive_types import ProbabilisticPredictor
 
 LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION = "LiveForecastReplayGate.v1"
-LIVE_FORECAST_REPLAY_GATE_ISSUE = 2902
+LIVE_FORECAST_REPLAY_GATE_ISSUE = 2944
 
 FORECAST_VARIANTS: tuple[str, ...] = (
     "none",
@@ -60,6 +67,11 @@ FORECAST_VARIANTS: tuple[str, ...] = (
     "semantic",
     "interaction_aware",
     "risk_filtered",
+)
+
+SMOKE_FORECAST_VARIANTS: tuple[str, ...] = (
+    "none",
+    "cv",
 )
 
 REQUIRED_METRICS: tuple[str, ...] = (
@@ -70,6 +82,20 @@ REQUIRED_METRICS: tuple[str, ...] = (
     "progress",
     "false_positive_stops",
     "runtime",
+)
+
+# Issue #2944 run classification contract.  The classification is fail-closed:
+# a run is only ``native`` when the cv forecast actually flows into a planner
+# and produces closed-loop metrics that differ from the recorded baseline.
+RUN_CLASSIFICATION_NATIVE = "native"
+RUN_CLASSIFICATION_BLOCKED = "blocked"
+RUN_CLASSIFICATION_DEGRADED = "degraded"
+RUN_CLASSIFICATION_DIAGNOSTIC_ONLY = "diagnostic_only"
+VALID_RUN_CLASSIFICATIONS: tuple[str, ...] = (
+    RUN_CLASSIFICATION_NATIVE,
+    RUN_CLASSIFICATION_BLOCKED,
+    RUN_CLASSIFICATION_DEGRADED,
+    RUN_CLASSIFICATION_DIAGNOSTIC_ONLY,
 )
 
 DEFAULT_HORIZONS_S: tuple[float, float, float] = (0.5, 1.0, 2.0)
@@ -661,10 +687,104 @@ def _available_horizons(
     return tuple(h for h in requested_horizons_s if float(h) <= max_horizon_s + 1e-9)
 
 
+def classify_live_forecast_replay_run(report: dict[str, Any]) -> str:
+    """Classify a gate run as native, blocked, degraded, or diagnostic_only.
+
+    The classification is fail-closed.  A run is ``native`` only when the cv
+    forecast flows into a live planner and produces closed-loop metrics that
+    differ from the recorded ``none`` baseline.  When required components are
+    missing the run is ``blocked``.  When the native path is technically
+    present but the cv variant does not change closed-loop behavior the run is
+    ``degraded``.  When only open-loop forecast diagnostics are available the
+    run is ``diagnostic_only``.
+
+    Args:
+        report: Gate report produced by ``run_live_forecast_replay_gate``.
+
+    Returns:
+        One of ``VALID_RUN_CLASSIFICATIONS``.
+    """
+
+    eligibility = report.get("native_path_eligibility")
+    if eligibility is None:
+        eligibility = {}
+    if not eligibility.get("live_path_available", False):
+        if eligibility.get("missing_components"):
+            return RUN_CLASSIFICATION_BLOCKED
+        return RUN_CLASSIFICATION_DIAGNOSTIC_ONLY
+
+    variant_results = report.get("variant_results", {})
+    none_result = variant_results.get("none", {})
+    cv_result = variant_results.get("cv", {})
+
+    none_closed_loop = none_result.get("closed_loop_metrics")
+    cv_closed_loop = cv_result.get("closed_loop_metrics")
+    if none_closed_loop is None or cv_closed_loop is None:
+        return RUN_CLASSIFICATION_DIAGNOSTIC_ONLY
+    if not isinstance(none_closed_loop, dict) or not isinstance(cv_closed_loop, dict):
+        return RUN_CLASSIFICATION_DIAGNOSTIC_ONLY
+
+    if _closed_loop_metrics_equivalent(none_closed_loop, cv_closed_loop):
+        return RUN_CLASSIFICATION_DEGRADED
+
+    return RUN_CLASSIFICATION_NATIVE
+
+
+def _closed_loop_metrics_equivalent(
+    left: dict[str, Any] | Any,
+    right: dict[str, Any] | Any,
+    *,
+    abs_tol: float = 1e-9,
+) -> bool:
+    """Return whether two closed-loop metric maps are equivalent for classification."""
+
+    if not isinstance(left, dict) or not isinstance(right, dict):
+        return False
+    if left.keys() != right.keys():
+        return False
+    for key, left_value in left.items():
+        right_value = right[key]
+        if isinstance(left_value, bool) or isinstance(right_value, bool):
+            if type(left_value) is not type(right_value) or left_value != right_value:
+                return False
+            continue
+        if isinstance(left_value, int | float) and isinstance(right_value, int | float):
+            if not math.isclose(float(left_value), float(right_value), abs_tol=abs_tol):
+                return False
+            continue
+        if left_value != right_value:
+            return False
+    return True
+
+
+def _classification_reason(classification: str, report: dict[str, Any]) -> str:
+    """Return a human-readable reason for the run classification."""
+
+    if classification == RUN_CLASSIFICATION_BLOCKED:
+        eligibility = report.get("native_path_eligibility")
+        if eligibility is None:
+            eligibility = {}
+        missing = eligibility.get("missing_components", [])
+        if missing:
+            return "native live path blocked: " + "; ".join(missing)
+        return "native live path blocked: eligibility check failed"
+    if classification == RUN_CLASSIFICATION_DEGRADED:
+        return (
+            "native live path components are present but cv closed-loop metrics "
+            "match the none baseline, so cv does not affect planner behavior"
+        )
+    if classification == RUN_CLASSIFICATION_DIAGNOSTIC_ONLY:
+        return "only open-loop forecast diagnostics are available for cv"
+    if classification == RUN_CLASSIFICATION_NATIVE:
+        return "cv forecast produces closed-loop metrics that differ from the none baseline"
+    return f"unknown classification: {classification}"
+
+
 def run_live_forecast_replay_gate(
     trace: SimulationTraceExport,
     *,
     config: LiveForecastReplayGateConfig | None = None,
+    variants: tuple[str, ...] = SMOKE_FORECAST_VARIANTS,
     repo_head: str | None = None,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -673,6 +793,8 @@ def run_live_forecast_replay_gate(
     Args:
         trace: Simulation trace export to replay and evaluate.
         config: Gate configuration.
+        variants: Forecast variants to evaluate.  Defaults to the issue #2944
+            smoke set (``none``, ``cv``).
         repo_head: Optional git HEAD sha for provenance.
         generated_at_utc: Optional deterministic ISO timestamp.
 
@@ -687,6 +809,12 @@ def run_live_forecast_replay_gate(
             "no requested forecast horizons fit within the trace duration"
         )
 
+    if not variants:
+        raise LiveForecastReplayGateError("at least one forecast variant must be requested")
+    for variant in variants:
+        if variant not in FORECAST_VARIANTS:
+            raise LiveForecastReplayGateError(f"unsupported forecast variant: {variant}")
+
     eligibility = check_native_live_path_eligibility()
 
     baseline_metrics = compute_baseline_closed_loop_metrics(
@@ -698,7 +826,7 @@ def run_live_forecast_replay_gate(
     )
 
     variant_results: dict[str, dict[str, Any]] = {}
-    for variant in FORECAST_VARIANTS:
+    for variant in variants:
         if variant == "none":
             variant_results[variant] = {
                 "forecast_batch_valid": None,
@@ -706,6 +834,7 @@ def run_live_forecast_replay_gate(
                 "forecast_metrics_status": "not_applicable",
                 "forecast_metrics_error": None,
                 "forecast_metrics_summary": None,
+                "closed_loop_metrics": dict(baseline_metrics),
                 "closed_loop_metric_source": "baseline_recorded_trace",
             }
             continue
@@ -748,19 +877,21 @@ def run_live_forecast_replay_gate(
             "forecast_metrics_summary": _summarize_forecast_metrics(forecast_report)
             if forecast_report
             else None,
+            "closed_loop_metrics": dict(baseline_metrics),
+            "closed_loop_metric_source": "baseline_recorded_trace",
         }
 
-    return {
+    report: dict[str, Any] = {
         "schema_version": LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION,
         "issue": LIVE_FORECAST_REPLAY_GATE_ISSUE,
         "claim_boundary": (
-            "Diagnostic-only same-seed forecast replay gate. "
-            "Forecast variants are evaluated open-loop against the recorded trace; "
-            "closed-loop metrics are the baseline trace metrics and do not vary by variant "
-            "because no native planner consumes selectable baseline forecasts."
+            "Issue #2944 native CV-only closed-loop replay smoke.  The gate evaluates "
+            "the none and cv forecast variants on the same recorded trace.  Because the "
+            "repository does not yet expose a planner that consumes selectable baseline "
+            "forecast variants, closed-loop metrics are copied from the recorded trace "
+            "and the run is classified fail-closed as blocked, degraded, or "
+            "diagnostic_only.  It does not claim that cv improves safety, success, or runtime."
         ),
-        "status": "diagnostic_only",
-        "classification": "diagnostic_only",
         "provenance": {
             "trace_id": trace.trace_id,
             "scenario_id": trace.source.scenario_id,
@@ -771,18 +902,27 @@ def run_live_forecast_replay_gate(
             "generated_at_utc": generated_at_utc or datetime.now(UTC).isoformat(),
             "requested_horizons_s": list(config.horizons_s),
             "horizons_s": list(feasible_horizons),
+            "variants": list(variants),
         },
         "native_path_eligibility": eligibility,
         "required_metrics": list(REQUIRED_METRICS),
-        "baseline_closed_loop_metrics": baseline_metrics,
+        "baseline_closed_loop_metrics": dict(baseline_metrics),
         "variant_results": variant_results,
         "limitations": [
-            "Closed-loop metrics are invariant across variants because the repository "
-            "does not yet expose a planner that consumes ProbabilisticPredictor baseline variants.",
+            "Closed-loop metrics are copied from the recorded trace for all variants because "
+            "the repository does not yet expose a planner that consumes ProbabilisticPredictor "
+            "baseline variants.",
             "Open-loop forecast metrics are computed from a single frame per trace by default.",
-            "Risk-filtered variant uses a deterministic distance-based relevance filter.",
+            "Full-matrix expansion is gated by the run classification; only native runs "
+            "should expand to the full variant matrix.",
         ],
     }
+    classification = classify_live_forecast_replay_run(report)
+    report["classification"] = classification
+    report["classification_reason"] = _classification_reason(classification, report)
+    report["status"] = classification
+    report["full_matrix_expansion_recommended"] = classification == RUN_CLASSIFICATION_NATIVE
+    return report
 
 
 def _summarize_forecast_metrics(report: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -826,11 +966,18 @@ def format_live_forecast_replay_gate_markdown(report: dict[str, Any]) -> str:
     baseline = report["baseline_closed_loop_metrics"]
 
     lines = [
-        f"# Issue #{report['issue']} Live Same-Seed Forecast Replay Gate",
+        f"# Issue #{report['issue']} Native CV-Only Closed-Loop Replay Smoke",
         "",
         "## Claim Boundary",
         "",
         report["claim_boundary"],
+        "",
+        "## Classification",
+        "",
+        f"- **Classification:** {report.get('classification', 'unknown')}",
+        f"- **Reason:** {report.get('classification_reason', '')}",
+        f"- **Full-matrix expansion recommended:** "
+        f"{report.get('full_matrix_expansion_recommended', False)}",
         "",
         "## Provenance",
         "",
@@ -840,6 +987,7 @@ def format_live_forecast_replay_gate_markdown(report: dict[str, Any]) -> str:
         f"- **Planner:** {provenance['planner_id']}",
         f"- **Repo HEAD:** `{provenance.get('repo_head') or 'unknown'}`",
         f"- **Generated at (UTC):** {provenance['generated_at_utc']}",
+        f"- **Variants:** {provenance.get('variants', [])}",
         "",
         "## Native Path Eligibility",
         "",
@@ -868,13 +1016,16 @@ def format_live_forecast_replay_gate_markdown(report: dict[str, Any]) -> str:
             "",
             "## Variant Results",
             "",
-            "| Variant | Actors | Forecast Metrics |",
-            "|---|---|---|",
+            "| Variant | Actors | Forecast Metrics | Closed-Loop Source |",
+            "|---|---|---|---|",
         ]
     )
     for variant, result in report["variant_results"].items():
         metrics_status = result["forecast_metrics_status"]
-        lines.append(f"| {variant} | {result['actor_count']} | {metrics_status} |")
+        closed_loop_source = result.get("closed_loop_metric_source", "unknown")
+        lines.append(
+            f"| {variant} | {result['actor_count']} | {metrics_status} | {closed_loop_source} |"
+        )
 
     lines.extend(["", "## Limitations"])
     for limitation in report["limitations"]:
@@ -917,10 +1068,17 @@ __all__ = [
     "LIVE_FORECAST_REPLAY_GATE_ISSUE",
     "LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION",
     "REQUIRED_METRICS",
+    "RUN_CLASSIFICATION_BLOCKED",
+    "RUN_CLASSIFICATION_DEGRADED",
+    "RUN_CLASSIFICATION_DIAGNOSTIC_ONLY",
+    "RUN_CLASSIFICATION_NATIVE",
+    "SMOKE_FORECAST_VARIANTS",
+    "VALID_RUN_CLASSIFICATIONS",
     "LiveForecastReplayGateConfig",
     "LiveForecastReplayGateError",
     "build_variant_forecast_batch",
     "check_native_live_path_eligibility",
+    "classify_live_forecast_replay_run",
     "compute_baseline_closed_loop_metrics",
     "format_live_forecast_replay_gate_markdown",
     "load_trace_tolerant",

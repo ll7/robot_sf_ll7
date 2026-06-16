@@ -1,0 +1,36 @@
+{
+  "schema_version": "mechanism_trace.v1",
+  "generated_at_utc": "2026-06-16T17:00:00Z",
+  "rows": [
+    {
+      "mechanism_id": "static_recentering",
+      "activation_step": 42,
+      "input_condition": {
+        "stalled_steps": 15,
+        "min_static_clearance": 0.08
+      },
+      "selected_command": [0.0, 0.5],
+      "command_source": "static_recenter",
+      "risk_score": 0.2,
+      "route_progress_delta": -0.05,
+      "failure_mode": null,
+      "trace_uri": "tests/benchmark/fixtures/mechanism_trace.v1.example.json#static_recentering",
+      "classification": "revise"
+    },
+    {
+      "mechanism_id": "topology_guidance",
+      "activation_step": 105,
+      "input_condition": {
+        "active": true,
+        "selected_hypothesis_id": "corridor_left"
+      },
+      "selected_command": [1.1, -0.1],
+      "command_source": "topology_hypothesis",
+      "risk_score": 0.05,
+      "route_progress_delta": 0.45,
+      "failure_mode": null,
+      "trace_uri": "tests/benchmark/fixtures/mechanism_trace.v1.example.json#topology_guidance",
+      "classification": "revise"
+    }
+  ]
+}

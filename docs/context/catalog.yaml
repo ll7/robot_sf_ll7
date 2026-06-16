@@ -697,6 +697,18 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_release
+  - path: docs/context/issue_2923_mechanism_trace_schema.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
+  - path: robot_sf/benchmark/schemas/mechanism_trace.schema.v1.json
+    status: current
+    freshness: maintained
+    area: benchmark_release
+  - path: tests/benchmark/fixtures/mechanism_trace.v1.example.json
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2430_ammv_trace_annotation.md
     status: current
     freshness: evidence

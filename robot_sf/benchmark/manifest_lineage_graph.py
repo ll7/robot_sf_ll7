@@ -8,6 +8,7 @@ rewrites manifests and marks inferred or ambiguous lineage explicitly.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ from robot_sf.benchmark.manifest_lineage_backfill import (
 from robot_sf.common.artifact_paths import get_repository_root
 
 SCHEMA_VERSION = "manifest_lineage_graph.v1"
+ID_HASH_HEX_LENGTH = 12
 
 
 class LineageStatus:
@@ -150,19 +152,31 @@ def _sanitize_id(value: str) -> str:
     )
 
 
+def _collision_safe_id(value: str) -> str:
+    """Return a sanitized identifier with a deterministic disambiguation suffix.
+
+    Distinct inputs that sanitize to the same base string (for example
+    ``a/b`` and ``a__b``) still receive distinct node IDs because the suffix
+    is computed from the original, unsanitized value.
+    """
+    sanitized = _sanitize_id(value)
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:ID_HASH_HEX_LENGTH]
+    return f"{sanitized}__{digest}"
+
+
 def _manifest_node_id(path: str) -> str:
     """Stable node id for a manifest path."""
-    return f"manifest__{_sanitize_id(path)}"
+    return f"manifest__{_collision_safe_id(path)}"
 
 
 def _field_node_id(manifest_path: str, field_name: str) -> str:
     """Stable node id for a lineage field inside a manifest."""
-    return f"field__{_sanitize_id(manifest_path)}__{field_name}"
+    return f"field__{_collision_safe_id(manifest_path)}__{field_name}"
 
 
 def _proxy_node_id(manifest_path: str, proxy_path: str) -> str:
     """Stable node id for a proxy source path inside a manifest."""
-    return f"proxy__{_sanitize_id(manifest_path)}__{_sanitize_id(proxy_path)}"
+    return f"proxy__{_collision_safe_id(manifest_path)}__{_collision_safe_id(proxy_path)}"
 
 
 def _contract_node_id() -> str:
@@ -172,7 +186,7 @@ def _contract_node_id() -> str:
 
 def _artifact_node_id(artifact_id: str) -> str:
     """Stable node id for an artifact candidate."""
-    return f"artifact__{_sanitize_id(artifact_id)}"
+    return f"artifact__{_collision_safe_id(artifact_id)}"
 
 
 def _now_utc() -> str:
@@ -300,7 +314,189 @@ def _analyze_manifest_at_path(path: Path) -> ManifestBackfillPlan:
     return analyze_manifest(dict(payload), path=rel_path)
 
 
-def build_manifest_lineage_graph(  # noqa: C901, PLR0915
+def _build_contract_node() -> tuple[str, LineageNode]:
+    """Build the shared lineage contract node and return its id plus node."""
+    contract_node_id = _contract_node_id()
+    return contract_node_id, LineageNode(
+        node_id=contract_node_id,
+        kind="validation_contract",
+        label="Manifest Lineage Contract",
+        status=LineageStatus.CONNECTED,
+        payload={"mandatory_fields": list(MANDATORY_LINEAGE_FIELDS)},
+    )
+
+
+def _build_manifest_subgraph(
+    plan: ManifestBackfillPlan,
+    contract_node_id: str,
+    nodes: dict[str, LineageNode],
+    edges: list[LineageEdge],
+) -> None:
+    """Add a manifest node, its field nodes, and proxy edges to the graph."""
+    rel_path = plan.path
+    manifest_node_id = _manifest_node_id(rel_path)
+    nodes[manifest_node_id] = LineageNode(
+        node_id=manifest_node_id,
+        kind="manifest",
+        label=Path(rel_path).name,
+        path=rel_path,
+        status=LineageStatus.CONNECTED,
+        payload={"validation_errors": plan.validation_errors},
+    )
+    edges.append(
+        LineageEdge(
+            source=manifest_node_id,
+            target=contract_node_id,
+            kind="validates_with",
+            reason="manifest is checked against the shared lineage contract",
+        )
+    )
+
+    for entry in plan.fields:
+        field_id = _field_node_id(rel_path, entry.field_name)
+        field_status = _lineage_status_from_entry(entry)
+        nodes[field_id] = LineageNode(
+            node_id=field_id,
+            kind="lineage_field",
+            label=entry.field_name,
+            path=rel_path,
+            status=field_status,
+            payload={"status": entry.status.value},
+        )
+        edges.append(
+            LineageEdge(
+                source=manifest_node_id,
+                target=field_id,
+                kind="has_field",
+                reason=f"manifest contains lineage field {entry.field_name}",
+            )
+        )
+
+        if entry.status == FieldStatus.PRESENT:
+            continue
+
+        if entry.status == FieldStatus.INFERRED and entry.inferred_from is not None:
+            _add_inferred_proxy_edge(nodes, edges, rel_path, field_id, entry)
+            continue
+
+        # Derive proxy-related edges from structured metadata.  Older plans
+        # that only stored a reason string fall back to parsing the reason.
+        edge_kind, proxy_labels = _proxy_edge_kind_and_labels(entry)
+        if not edge_kind:
+            continue
+
+        for label in proxy_labels:
+            proxy_id = _proxy_node_id(rel_path, label)
+            if proxy_id not in nodes:
+                nodes[proxy_id] = LineageNode(
+                    node_id=proxy_id,
+                    kind="proxy_source",
+                    label=label,
+                    path=rel_path,
+                    status=field_status,
+                )
+            edges.append(
+                LineageEdge(
+                    source=field_id,
+                    target=proxy_id,
+                    kind=edge_kind,
+                    reason=entry.reason,
+                )
+            )
+
+
+def _candidate_text(
+    candidate: Mapping[str, Any],
+    key: str,
+    *,
+    default: str = "",
+    fallback_on_blank: bool = False,
+) -> str:
+    """Return stripped candidate text while treating explicit None as missing."""
+    value = candidate.get(key)
+    if value is None:
+        return default
+    text = str(value).strip()
+    if fallback_on_blank and not text:
+        return default
+    return text
+
+
+def _build_artifact_trace(
+    candidate: Mapping[str, Any],
+    path_to_plan: dict[str, ManifestBackfillPlan],
+    repo_root: Path,
+    candidate_source_path: Path | None,
+    nodes: dict[str, LineageNode],
+    edges: list[LineageEdge],
+) -> ArtifactTrace:
+    """Add an artifact candidate node/edge and return its trace record."""
+    artifact_id = _candidate_text(
+        candidate,
+        "artifact_id",
+        default="unnamed_artifact",
+        fallback_on_blank=True,
+    )
+    artifact_kind = _candidate_text(candidate, "artifact_kind", default="artifact")
+    claim_boundary = _candidate_text(candidate, "claim_boundary")
+    manifest_value = _candidate_text(candidate, "source_manifest_path")
+
+    if not manifest_value:
+        trace_status = LineageStatus.INCONCLUSIVE
+        reason = "candidate has no source_manifest_path"
+        field_statuses: dict[str, str] = {}
+        source_manifest_path = ""
+    else:
+        resolved = _resolve_manifest_path(
+            manifest_value, candidate_path=candidate_source_path, repo_root=repo_root
+        )
+        source_manifest_path = _repo_relative(resolved)
+        matching_plan = path_to_plan.get(source_manifest_path)
+        if matching_plan is None:
+            trace_status = LineageStatus.INCONCLUSIVE
+            reason = f"source manifest not found in graph inputs: {source_manifest_path}"
+            field_statuses = {}
+        else:
+            trace_status, reason = _trace_lineage_status(matching_plan.fields)
+            field_statuses = _field_statuses(matching_plan.fields)
+
+    artifact_node_id = _artifact_node_id(artifact_id)
+    if artifact_node_id not in nodes:
+        nodes[artifact_node_id] = LineageNode(
+            node_id=artifact_node_id,
+            kind="artifact_candidate",
+            label=artifact_id,
+            path=source_manifest_path,
+            status=trace_status,
+            payload={
+                "artifact_kind": artifact_kind,
+                "claim_boundary": claim_boundary,
+            },
+        )
+    if source_manifest_path:
+        manifest_node_id = _manifest_node_id(source_manifest_path)
+        if manifest_node_id in nodes:
+            edges.append(
+                LineageEdge(
+                    source=artifact_node_id,
+                    target=manifest_node_id,
+                    kind="traces_to",
+                    reason=f"{artifact_kind} traces to source manifest",
+                )
+            )
+
+    return ArtifactTrace(
+        artifact_id=artifact_id,
+        artifact_kind=artifact_kind,
+        source_manifest_path=source_manifest_path,
+        claim_boundary=claim_boundary,
+        lineage_status=trace_status,
+        reason=reason,
+        field_statuses=field_statuses,
+    )
+
+
+def build_manifest_lineage_graph(
     manifest_paths: Sequence[Path],
     *,
     artifact_candidates: Sequence[Mapping[str, Any]] = (),
@@ -325,154 +521,24 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0915
     edges: list[LineageEdge] = []
     traces: list[ArtifactTrace] = []
 
-    contract_node_id = _contract_node_id()
-    nodes[contract_node_id] = LineageNode(
-        node_id=contract_node_id,
-        kind="validation_contract",
-        label="Manifest Lineage Contract",
-        status=LineageStatus.CONNECTED,
-        payload={"mandatory_fields": list(MANDATORY_LINEAGE_FIELDS)},
-    )
+    contract_node_id, contract_node = _build_contract_node()
+    nodes[contract_node_id] = contract_node
+
+    plans = [_analyze_manifest_at_path(path) for path in _dedupe_paths(manifest_paths)]
+    for plan in plans:
+        _build_manifest_subgraph(plan, contract_node_id, nodes, edges)
 
     repo_root = get_repository_root()
-    rel_manifest_paths = []
-    plans: list[ManifestBackfillPlan] = []
-
-    for path in _dedupe_paths(manifest_paths):
-        plan = _analyze_manifest_at_path(path)
-        plans.append(plan)
-        rel_path = plan.path or _repo_relative(path)
-        rel_manifest_paths.append(rel_path)
-        manifest_node_id = _manifest_node_id(rel_path)
-        nodes[manifest_node_id] = LineageNode(
-            node_id=manifest_node_id,
-            kind="manifest",
-            label=Path(rel_path).name,
-            path=rel_path,
-            status=LineageStatus.CONNECTED,
-            payload={"validation_errors": plan.validation_errors},
-        )
-        edges.append(
-            LineageEdge(
-                source=manifest_node_id,
-                target=contract_node_id,
-                kind="validates_with",
-                reason="manifest is checked against the shared lineage contract",
-            )
-        )
-
-        for entry in plan.fields:
-            field_id = _field_node_id(rel_path, entry.field_name)
-            field_status = _lineage_status_from_entry(entry)
-            nodes[field_id] = LineageNode(
-                node_id=field_id,
-                kind="lineage_field",
-                label=entry.field_name,
-                path=rel_path,
-                status=field_status,
-                payload={"status": entry.status.value},
-            )
-            edges.append(
-                LineageEdge(
-                    source=manifest_node_id,
-                    target=field_id,
-                    kind="has_field",
-                    reason=f"manifest contains lineage field {entry.field_name}",
-                )
-            )
-
-            if entry.status == FieldStatus.PRESENT:
-                continue
-
-            if entry.status == FieldStatus.INFERRED and entry.inferred_from is not None:
-                _add_inferred_proxy_edge(nodes, edges, rel_path, field_id, entry)
-                continue
-
-            # Derive proxy-related edges from structured metadata.  Older plans
-            # that only stored a reason string fall back to parsing the reason.
-            edge_kind, proxy_labels = _proxy_edge_kind_and_labels(entry)
-            if not edge_kind:
-                continue
-
-            for label in proxy_labels:
-                proxy_id = _proxy_node_id(rel_path, label)
-                if proxy_id not in nodes:
-                    nodes[proxy_id] = LineageNode(
-                        node_id=proxy_id,
-                        kind="proxy_source",
-                        label=label,
-                        path=rel_path,
-                        status=field_status,
-                    )
-                edges.append(
-                    LineageEdge(
-                        source=field_id,
-                        target=proxy_id,
-                        kind=edge_kind,
-                        reason=entry.reason,
-                    )
-                )
-
-    # Trace artifact candidates back to manifests.
     path_to_plan = {plan.path: plan for plan in plans}
     for candidate in artifact_candidates:
-        artifact_id = str(candidate.get("artifact_id", "")).strip() or "unnamed_artifact"
-        artifact_kind = str(candidate.get("artifact_kind", "artifact")).strip()
-        claim_boundary = str(candidate.get("claim_boundary", "")).strip()
-        manifest_value = str(candidate.get("source_manifest_path", "")).strip()
-        if not manifest_value:
-            trace_status = LineageStatus.INCONCLUSIVE
-            reason = "candidate has no source_manifest_path"
-            field_statuses: dict[str, str] = {}
-            source_manifest_path = ""
-        else:
-            resolved = _resolve_manifest_path(
-                manifest_value, candidate_path=candidate_source_path, repo_root=repo_root
-            )
-            source_manifest_path = _repo_relative(resolved)
-            matching_plan = path_to_plan.get(source_manifest_path)
-            if matching_plan is None:
-                trace_status = LineageStatus.INCONCLUSIVE
-                reason = f"source manifest not found in graph inputs: {source_manifest_path}"
-                field_statuses = {}
-            else:
-                trace_status, reason = _trace_lineage_status(matching_plan.fields)
-                field_statuses = _field_statuses(matching_plan.fields)
-
-        artifact_node_id = _artifact_node_id(artifact_id)
-        if artifact_node_id not in nodes:
-            nodes[artifact_node_id] = LineageNode(
-                node_id=artifact_node_id,
-                kind="artifact_candidate",
-                label=artifact_id,
-                path=source_manifest_path,
-                status=trace_status,
-                payload={
-                    "artifact_kind": artifact_kind,
-                    "claim_boundary": claim_boundary,
-                },
-            )
-        if source_manifest_path:
-            manifest_node_id = _manifest_node_id(source_manifest_path)
-            if manifest_node_id in nodes:
-                edges.append(
-                    LineageEdge(
-                        source=artifact_node_id,
-                        target=manifest_node_id,
-                        kind="traces_to",
-                        reason=f"{artifact_kind} traces to source manifest",
-                    )
-                )
-
         traces.append(
-            ArtifactTrace(
-                artifact_id=artifact_id,
-                artifact_kind=artifact_kind,
-                source_manifest_path=source_manifest_path,
-                claim_boundary=claim_boundary,
-                lineage_status=trace_status,
-                reason=reason,
-                field_statuses=field_statuses,
+            _build_artifact_trace(
+                candidate,
+                path_to_plan,
+                repo_root,
+                candidate_source_path,
+                nodes,
+                edges,
             )
         )
 

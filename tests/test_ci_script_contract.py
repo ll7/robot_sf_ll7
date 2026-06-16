@@ -175,6 +175,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     script_text = PR_READY_CHECK.read_text(encoding="utf-8")
 
     expected_gates = [
+        'uv run python "$SCRIPT_DIR/check_pr_followups.py"',
         '"$SCRIPT_DIR/ruff_fix_format.sh"',
         '"$SCRIPT_DIR/run_tests_parallel.sh"',
         '"$SCRIPT_DIR/check_changed_coverage.sh"',
@@ -305,6 +306,7 @@ def test_pr_ready_check_help_long() -> None:
     assert "BASE_REF" in result.stdout
     assert "PR_READY_MODE" in result.stdout
     assert "PR_READY_FINAL" in result.stdout
+    assert "PR_READY_PR_BODY_FILE" in result.stdout
 
 
 def test_pr_ready_check_help_short() -> None:
@@ -385,6 +387,7 @@ def test_pr_ready_check_help_does_not_invoke_gates(tmp_path: Path) -> None:
     assert "BASE_REF" in result.stdout
     assert "PR_READY_MODE" in result.stdout
     assert "PR_READY_FINAL" in result.stdout
+    assert "PR_READY_PR_BODY_FILE" in result.stdout
     assert "uv should not be called" not in result.stderr
 
 

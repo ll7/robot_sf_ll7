@@ -29,50 +29,56 @@ python scripts/validation/validate_live_forecast_replay_gate.py \
   --output-dir output/live_forecast_replay_gate_smoke
 ```
 
-## Result
+## Result (Updated by #2941)
 
-- Classification: `blocked`
-- Full-matrix expansion recommended: `false`
-- Required issue #2944 metric surface present for both smoke variants:
-  `collision`, `near_miss`, `min_distance`, `stop_yield_timing`, `progress`,
-  and `runtime`.
-- Closed-loop metric source: `baseline_recorded_trace` for both `none` and
-  `cv`, because `cv` is not yet consumed by a native planner.
+The original #2944 result was `blocked`.  Issue #2941 subsequently added the
+missing components and the gate now reports `native` on the same fixture:
 
-The blocked components are:
+- Classification: `native`
+- Full-matrix expansion recommended: `true`
+- Native path eligibility: `live_path_available=true`, no missing components,
+  `forecast_variant` config key present,
+  `BaselineProbabilisticPredictor` registered.
+- Closed-loop metrics now differ between `none` and `cv`:
+  - `none`: collision `true`, progress `1.9 m`, stop/yield `0 s`
+  - `cv`: collision `false`, progress `0.545 m`, stop/yield `0.4 s`
 
-- no `ProbabilisticPredictor` implementation registered for baseline forecast
-  variants;
-- no environment or planner config key for selecting `forecast_variant`.
+See [`issue_2941_native_forecast_replay.md`](issue_2941_native_forecast_replay.md)
+for the implementation details and current evidence.
 
 ## Claim Boundary
 
-This is a reproducible smoke gate and negative/blocked result, not benchmark
-evidence that CV changes behavior. It should gate the full forecast-variant
-matrix by keeping expansion parked until the native planner/environment path can
-consume selectable forecasts and produce per-variant closed-loop metrics without
-fallback.
+The original #2944 result was a reproducible smoke gate and negative/blocked
+result, not benchmark evidence that CV changes behavior.  After #2941, the gate
+now demonstrates that CV **can influence** closed-loop metrics via a minimal
+forecast-brake replay policy, but it still does not claim that CV improves
+safety, success, or runtime in a production planner stack.
 
 ## Validation
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- python -m ruff check \
+uv run ruff check \
+  robot_sf/gym_env/unified_config.py \
+  robot_sf/nav/baseline_probabilistic_predictor.py \
+  robot_sf/nav/__init__.py \
   robot_sf/benchmark/live_forecast_replay_gate.py \
   scripts/validation/validate_live_forecast_replay_gate.py \
   tests/benchmark/test_live_forecast_replay_gate.py \
-  tests/validation/test_validate_live_forecast_replay_gate.py
+  tests/validation/test_validate_live_forecast_replay_gate.py \
+  tests/nav/test_baseline_probabilistic_predictor.py
 
-scripts/dev/run_worktree_shared_venv.sh -- python -m pytest \
+uv run pytest \
   tests/benchmark/test_live_forecast_replay_gate.py \
   tests/validation/test_validate_live_forecast_replay_gate.py \
+  tests/nav/test_baseline_probabilistic_predictor.py \
   -n auto -x
 ```
 
-Observed focused result: `41 passed`.
+Observed focused result: `56 passed`.
 
 ## Next Step
 
-Proceed to issue #2941 only after a native planner/environment path exposes a
-`forecast_variant` selector and a baseline `ProbabilisticPredictor` implementation
-that can influence closed-loop actions. Until then, full-matrix expansion should
-remain blocked.
+Issue #2941 has implemented the unblocking layer.  The next step is to replace
+the minimal forecast-brake replay with a real planner integration and run a
+proper benchmark campaign to measure whether forecast variants improve
+safety/success/runtime in the full stack.

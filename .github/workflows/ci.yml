@@ -65,6 +65,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
 
+      - name: Free runner disk space
+        run: bash scripts/dev/free_github_runner_space.sh
+
       - name: Sync dependencies (locked)
         env:
           CI_STEP_TIMEOUT_SECONDS: "1200"
@@ -168,6 +171,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
+
+      - name: Free runner disk space
+        run: bash scripts/dev/free_github_runner_space.sh
 
       - name: Sync dependencies (locked)
         env:
@@ -280,6 +286,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
+
+      - name: Free runner disk space
+        run: bash scripts/dev/free_github_runner_space.sh
 
       - name: Sync dependencies (locked)
         env:

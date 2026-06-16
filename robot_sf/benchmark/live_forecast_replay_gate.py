@@ -1,4 +1,4 @@
-"""Live same-seed forecast replay gate v1 (issues #2902, #2944).
+"""Live same-seed forecast replay gate v1 (issues #2902, #2944, #2941).
 
 This module implements the smallest valuable executable surface for comparing
 forecast variants on a motion-rich pedestrian fixture with identical seed.
@@ -7,13 +7,10 @@ adds an explicit per-run classification (``native``, ``blocked``,
 ``degraded``, ``diagnostic_only``) so the result can gate expansion to the full
 forecast variant matrix.
 
-Because the repository does not yet expose a planner that consumes the
-``ProbabilisticPredictor`` protocol with selectable baseline forecast variants,
-current runs are fail-closed (``blocked`` or ``diagnostic_only``): the smoke
-builds ``ForecastBatch.v1`` artifacts for each variant, computes open-loop
-forecast metrics, and records baseline closed-loop metrics from the supplied
-trace.  It documents exactly which proof step is blocked and never labels a
-fallback path as ``native``.
+Issue #2941 adds a minimal ``ProbabilisticPredictor`` baseline implementation
+and a forecast-brake replay policy so non-none variants can influence
+closed-loop metrics.  This is still a smoke proof of forecast coupling, not a
+claim that the variants improve a production planner.
 """
 
 from __future__ import annotations
@@ -55,19 +52,15 @@ from robot_sf.benchmark.pedestrian_forecast import (
     risk_filtered_cv_baseline,
     semantic_cv_baseline,
 )
+from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.gym_env.unified_config import EnvSettings
-from robot_sf.nav.predictive_types import ProbabilisticPredictor
+from robot_sf.nav.baseline_probabilistic_predictor import BaselineProbabilisticPredictor
+from robot_sf.nav.predictive_types import ProbabilisticPrediction, ProbabilisticPredictor
 
 LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION = "LiveForecastReplayGate.v1"
-LIVE_FORECAST_REPLAY_GATE_ISSUE = 2944
+LIVE_FORECAST_REPLAY_GATE_ISSUE = 2941
 
-FORECAST_VARIANTS: tuple[str, ...] = (
-    "none",
-    "cv",
-    "semantic",
-    "interaction_aware",
-    "risk_filtered",
-)
+FORECAST_VARIANTS: tuple[str, ...] = FORECAST_VARIANT_CHOICES
 
 SMOKE_FORECAST_VARIANTS: tuple[str, ...] = (
     "none",
@@ -84,9 +77,9 @@ REQUIRED_METRICS: tuple[str, ...] = (
     "runtime",
 )
 
-# Issue #2944 run classification contract.  The classification is fail-closed:
-# a run is only ``native`` when the cv forecast actually flows into a planner
-# and produces closed-loop metrics that differ from the recorded baseline.
+# Issue #2941 run classification contract.  The classification is fail-closed:
+# a run is only ``native`` when the cv forecast flows into the replay policy and
+# produces closed-loop metrics that differ from the integrated no-forecast baseline.
 RUN_CLASSIFICATION_NATIVE = "native"
 RUN_CLASSIFICATION_BLOCKED = "blocked"
 RUN_CLASSIFICATION_DEGRADED = "degraded"
@@ -386,7 +379,7 @@ def build_variant_forecast_batch(
 
     if variant == "none":
         raise LiveForecastReplayGateError(
-            "none is the recorded closed-loop baseline and has no forecast batch"
+            "none is the integrated no-forecast baseline and has no forecast batch"
         )
     if variant not in FORECAST_VARIANTS:
         raise LiveForecastReplayGateError(f"unsupported forecast variant: {variant}")
@@ -512,6 +505,287 @@ def _goal_position(trace: SimulationTraceExport) -> np.ndarray | None:
     if goal is not None:
         return np.asarray(goal, dtype=float)
     return None
+
+
+def _robot_action_from_frame(frame: SimulationTraceFrame) -> tuple[float, float]:
+    """Extract recorded linear/angular velocities from a trace frame.
+
+    Returns:
+        Tuple of (linear_velocity, angular_velocity).
+    """
+
+    planner = frame.planner if isinstance(frame.planner, dict) else {}
+    selected_action = planner.get("selected_action") if isinstance(planner, dict) else None
+    if isinstance(selected_action, dict):
+        return (
+            float(selected_action.get("linear_velocity", 0.0)),
+            float(selected_action.get("angular_velocity", 0.0)),
+        )
+    return 0.0, 0.0
+
+
+def _build_socnav_observation(
+    robot_position: np.ndarray,
+    robot_heading: float,
+    robot_speed: float,
+    pedestrians: list[dict[str, Any]],
+    dt_s: float,
+    time_s: float,
+) -> dict[str, Any]:
+    """Build a minimal SocNav-structured observation for the baseline predictor.
+
+    Pedestrian velocities are rotated into the ego frame to match the contract
+    expected by :class:`BaselineProbabilisticPredictor`.
+
+    Returns:
+        Observation dict compatible with :class:`ProbabilisticPredictor.predict`.
+    """
+
+    cos_h = np.cos(robot_heading)
+    sin_h = np.sin(robot_heading)
+    world_velocities = np.asarray(
+        [pedestrian.get("velocity", [0.0, 0.0]) for pedestrian in pedestrians], dtype=float
+    )
+    ego_velocities = np.zeros_like(world_velocities)
+    if world_velocities.size > 0:
+        ego_velocities[:, 0] = cos_h * world_velocities[:, 0] + sin_h * world_velocities[:, 1]
+        ego_velocities[:, 1] = -sin_h * world_velocities[:, 0] + cos_h * world_velocities[:, 1]
+
+    positions = np.asarray(
+        [pedestrian.get("position", [0.0, 0.0]) for pedestrian in pedestrians], dtype=np.float32
+    )
+    velocities = np.asarray(ego_velocities, dtype=np.float32)
+    if positions.size == 0:
+        positions = np.zeros((0, 2), dtype=np.float32)
+    if velocities.size == 0:
+        velocities = np.zeros((0, 2), dtype=np.float32)
+
+    return {
+        "robot": {
+            "position": np.asarray(robot_position, dtype=np.float32),
+            "heading": np.array([float(robot_heading)], dtype=np.float32),
+            "speed": np.array([float(robot_speed)], dtype=np.float32),
+            "velocity_xy": np.array(
+                [float(robot_speed) * cos_h, float(robot_speed) * sin_h], dtype=np.float32
+            ),
+            "angular_velocity": np.array([0.0], dtype=np.float32),
+            "radius": np.array([0.3], dtype=np.float32),
+        },
+        "goal": {
+            "current": np.asarray(robot_position, dtype=np.float32),
+            "next": np.asarray(robot_position, dtype=np.float32),
+        },
+        "pedestrians": {
+            "positions": positions,
+            "velocities": velocities,
+            "radius": np.array([0.3], dtype=np.float32),
+            "count": np.array([float(len(pedestrians))], dtype=np.float32),
+        },
+        "map": {"size": np.array([50.0, 50.0], dtype=np.float32)},
+        "sim": {
+            "timestep": np.array([float(dt_s)], dtype=np.float32),
+            "time_s": np.array([float(time_s)], dtype=np.float32),
+        },
+    }
+
+
+def _forecast_brake_needed(
+    prediction: ProbabilisticPrediction,
+    robot_position: np.ndarray,
+    brake_distance_m: float,
+) -> bool:
+    """Return True when any predicted mean comes within ``brake_distance_m``.
+
+    This is the minimal forecast-aware decision used by the replay policy.  It
+    treats the mean forecast as a deterministic signal and ignores covariance so
+    the gate stays cheap and interpretable.
+    """
+
+    robot_pos = np.asarray(robot_position, dtype=float)
+    for distribution in prediction.predictions:
+        mean = np.asarray(distribution.mean, dtype=float)
+        if mean.size == 0:
+            continue
+        distances = np.linalg.norm(mean - robot_pos, axis=1)
+        if np.any(distances < brake_distance_m):
+            return True
+    return False
+
+
+def _variant_brake_needed(
+    predictor: BaselineProbabilisticPredictor | None,
+    observation: dict[str, Any],
+    robot_position: np.ndarray,
+    risk_distance_m: float,
+) -> bool:
+    """Return whether a variant predictor requests braking at the current step."""
+
+    if predictor is None:
+        return False
+    prediction = predictor.predict(observation)
+    return _forecast_brake_needed(prediction, robot_position, risk_distance_m)
+
+
+def _predictor_for_replay_variant(
+    variant: str,
+    config: LiveForecastReplayGateConfig,
+    dt_s: float,
+) -> BaselineProbabilisticPredictor | None:
+    """Return the replay predictor, or None for the no-forecast baseline."""
+
+    if variant == "none":
+        return None
+    return BaselineProbabilisticPredictor(
+        variant=variant,
+        horizons_s=config.horizons_s,
+        dt_s=dt_s,
+        risk_distance_m=config.risk_distance_m,
+    )
+
+
+def _frame_step_dt_s(
+    trace: SimulationTraceExport,
+    step_index: int,
+    fallback_dt_s: float,
+) -> float:
+    """Return the positive frame-to-frame timestep for replay integration."""
+
+    step_dt_s = trace.frames[step_index + 1].time_s - trace.frames[step_index].time_s
+    return step_dt_s if step_dt_s > 0.0 else fallback_dt_s
+
+
+def run_variant_closed_loop_replay(
+    trace: SimulationTraceExport,
+    variant: str,
+    config: LiveForecastReplayGateConfig,
+) -> dict[str, Any]:
+    """Replay the trace with a forecast-aware brake policy for one variant.
+
+    The ``none`` variant uses the same command-integration surface with
+    forecast braking disabled.  Other variants instantiate a
+    :class:`BaselineProbabilisticPredictor`, query it at each step, and override
+    the recorded linear speed with zero when any predicted pedestrian mean comes
+    within ``risk_distance_m`` of the robot.
+
+    The policy is intentionally minimal: it proves the forecast can influence
+    closed-loop metrics without claiming that the brake heuristic is a good
+    planner.
+
+    Returns:
+        Metric dictionary with the required closed-loop keys plus a
+        ``replay_policy`` provenance string.
+    """
+
+    if not trace.frames:
+        metrics = compute_baseline_closed_loop_metrics(
+            trace,
+            collision_distance_m=config.collision_distance_m,
+            near_miss_distance_m=config.near_miss_distance_m,
+            stop_speed_mps=config.stop_speed_mps,
+            progress_goal_proximity_m=config.progress_goal_proximity_m,
+        )
+        metrics["replay_policy"] = "recorded_trace"
+        return metrics
+
+    dt_s = _trace_dt_s(trace)
+    predictor = _predictor_for_replay_variant(variant, config, dt_s)
+
+    initial_robot = trace.frames[0].robot
+    robot_position = np.asarray(initial_robot.get("position", [0.0, 0.0]), dtype=float)
+    robot_heading = float(initial_robot.get("heading", 0.0))
+
+    robot_positions: list[np.ndarray] = [robot_position.copy()]
+    robot_speeds: list[float] = []
+    brake_steps = 0
+    collision = False
+    near_miss_count = 0
+    min_distance = float("inf")
+    false_positive_stops = 0
+
+    for step_index, frame in enumerate(trace.frames):
+        pedestrians = frame.pedestrians
+        recorded_linear, recorded_angular = _robot_action_from_frame(frame)
+
+        observation = _build_socnav_observation(
+            robot_position,
+            robot_heading,
+            recorded_linear,
+            pedestrians,
+            dt_s,
+            frame.time_s,
+        )
+        try:
+            brake = _variant_brake_needed(
+                predictor,
+                observation,
+                robot_position,
+                config.risk_distance_m,
+            )
+        except (ValueError, TypeError):  # pragma: no cover - defensive fallback
+            brake = False
+
+        linear_velocity = 0.0 if brake else recorded_linear
+        angular_velocity = 0.0 if brake else recorded_angular
+
+        # Record metrics for the current step using the current robot position.
+        frame_distances = [
+            float(np.linalg.norm(np.asarray(pedestrian["position"], dtype=float) - robot_position))
+            for pedestrian in pedestrians
+        ]
+        frame_min_distance = min(frame_distances) if frame_distances else float("inf")
+        min_distance = min(min_distance, frame_min_distance)
+
+        if frame_min_distance < config.collision_distance_m:
+            collision = True
+        elif frame_min_distance < config.near_miss_distance_m:
+            near_miss_count += 1
+
+        speed = abs(linear_velocity)
+        robot_speeds.append(speed)
+        is_stopped = speed < config.stop_speed_mps
+        if is_stopped:
+            brake_steps += 1
+            if frame_min_distance > config.near_miss_distance_m:
+                false_positive_stops += 1
+
+        # Integrate forward for the next step, unless this is the last frame.
+        if step_index < len(trace.frames) - 1:
+            step_dt_s = _frame_step_dt_s(trace, step_index, dt_s)
+            robot_heading = float(
+                (robot_heading + angular_velocity * step_dt_s + np.pi) % (2.0 * np.pi) - np.pi
+            )
+            robot_position = robot_position + np.array(
+                [np.cos(robot_heading), np.sin(robot_heading)], dtype=float
+            ) * (linear_velocity * step_dt_s)
+            robot_positions.append(robot_position.copy())
+
+    start_position = robot_positions[0]
+    end_position = robot_positions[-1]
+    displacement = float(np.linalg.norm(end_position - start_position))
+    goal = _goal_position(trace)
+    if goal is not None:
+        goal_distance_start = float(np.linalg.norm(goal - start_position))
+        goal_distance_end = float(np.linalg.norm(goal - end_position))
+        progress = max(0.0, goal_distance_start - goal_distance_end)
+        reached_goal = goal_distance_end <= config.progress_goal_proximity_m
+    else:
+        progress = displacement
+        reached_goal = None
+
+    runtime_s = trace.frames[-1].time_s - trace.frames[0].time_s
+
+    return {
+        "collision": collision,
+        "near_miss": near_miss_count,
+        "min_distance_m": min_distance if np.isfinite(min_distance) else None,
+        "stop_yield_timing_steps": brake_steps,
+        "stop_yield_timing_s": brake_steps * dt_s,
+        "progress_m": progress,
+        "reached_goal": reached_goal,
+        "false_positive_stops": false_positive_stops,
+        "runtime_s": runtime_s,
+        "replay_policy": "no_forecast_replay" if variant == "none" else "forecast_brake_replay",
+    }
 
 
 def compute_baseline_closed_loop_metrics(
@@ -642,7 +916,7 @@ def _predictor_implementations() -> list[str]:
     """
 
     implementations: list[str] = []
-    for module_name in ("robot_sf.nav", "robot_sf.benchmark"):
+    for module_name in ("robot_sf.nav.baseline_probabilistic_predictor",):
         try:
             module = __import__(module_name, fromlist=["ProbabilisticPredictor"])
         except ImportError:
@@ -691,9 +965,9 @@ def classify_live_forecast_replay_run(report: dict[str, Any]) -> str:
     """Classify a gate run as native, blocked, degraded, or diagnostic_only.
 
     The classification is fail-closed.  A run is ``native`` only when the cv
-    forecast flows into a live planner and produces closed-loop metrics that
-    differ from the recorded ``none`` baseline.  When required components are
-    missing the run is ``blocked``.  When the native path is technically
+    forecast flows into the replay policy and produces closed-loop metrics that
+    differ from the integrated no-forecast baseline.  When required components
+    are missing the run is ``blocked``.  When the native path is technically
     present but the cv variant does not change closed-loop behavior the run is
     ``degraded``.  When only open-loop forecast diagnostics are available the
     run is ``diagnostic_only``.
@@ -740,9 +1014,13 @@ def _closed_loop_metrics_equivalent(
 
     if not isinstance(left, dict) or not isinstance(right, dict):
         return False
-    if left.keys() != right.keys():
+    provenance_keys = {"replay_policy"}
+    left_metric_keys = set(left) - provenance_keys
+    right_metric_keys = set(right) - provenance_keys
+    if left_metric_keys != right_metric_keys:
         return False
-    for key, left_value in left.items():
+    for key in left_metric_keys:
+        left_value = left[key]
         right_value = right[key]
         if isinstance(left_value, bool) or isinstance(right_value, bool):
             if type(left_value) is not type(right_value) or left_value != right_value:
@@ -771,13 +1049,103 @@ def _classification_reason(classification: str, report: dict[str, Any]) -> str:
     if classification == RUN_CLASSIFICATION_DEGRADED:
         return (
             "native live path components are present but cv closed-loop metrics "
-            "match the none baseline, so cv does not affect planner behavior"
+            "match the integrated no-forecast baseline, so cv does not affect replay behavior"
         )
     if classification == RUN_CLASSIFICATION_DIAGNOSTIC_ONLY:
         return "only open-loop forecast diagnostics are available for cv"
     if classification == RUN_CLASSIFICATION_NATIVE:
-        return "cv forecast produces closed-loop metrics that differ from the none baseline"
+        return (
+            "cv forecast produces closed-loop metrics that differ from the "
+            "integrated no-forecast baseline"
+        )
     return f"unknown classification: {classification}"
+
+
+def _build_variant_result(
+    trace: SimulationTraceExport,
+    variant: str,
+    config: LiveForecastReplayGateConfig,
+    feasible_horizons: tuple[float, ...],
+    baseline_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the result dict for one forecast variant.
+
+    Args:
+        trace: Source simulation trace export.
+        variant: Forecast variant to evaluate.
+        config: Gate configuration.
+        feasible_horizons: Horizons that fit within the trace duration.
+        baseline_metrics: Recorded closed-loop metrics for fallback.
+
+    Returns:
+        JSON-compatible result dict for the variant.
+    """
+
+    if variant == "none":
+        closed_loop_metrics = run_variant_closed_loop_replay(trace, variant, config)
+        return {
+            "forecast_batch_valid": None,
+            "actor_count": 0,
+            "forecast_metrics_status": "not_applicable",
+            "forecast_metrics_error": None,
+            "forecast_metrics_summary": None,
+            "closed_loop_metrics": closed_loop_metrics,
+            "closed_loop_metric_source": closed_loop_metrics.get(
+                "replay_policy", "no_forecast_replay"
+            ),
+        }
+    batch = build_variant_forecast_batch(
+        trace,
+        variant,
+        horizons_s=feasible_horizons,
+        risk_distance_m=config.risk_distance_m,
+        observation_adapter=config.observation_adapter,
+    )
+    forecast_step = batch.metadata.get("step_index", 0)
+    ground_truth: dict[str, list[list[float]]] = {}
+    for actor_id in _all_pedestrian_actor_ids(trace):
+        positions = _future_ground_truth_positions(
+            trace, actor_id, forecast_step, feasible_horizons
+        )
+        if positions and len(positions) == len(feasible_horizons):
+            ground_truth[actor_id] = [positions[float(h)].tolist() for h in feasible_horizons]
+
+    try:
+        forecast_report = evaluate_forecast_batch(
+            batch,
+            {
+                actor_id: np.asarray(positions, dtype=float)
+                for actor_id, positions in ground_truth.items()
+            },
+        )
+        forecast_status = "ok"
+        forecast_error = None
+    except (ValueError, TypeError, FloatingPointError) as exc:  # pragma: no cover - defensive
+        forecast_report = None
+        forecast_status = "error"
+        forecast_error = str(exc)
+
+    try:
+        closed_loop_metrics = run_variant_closed_loop_replay(trace, variant, config)
+        closed_loop_source = closed_loop_metrics.get("replay_policy", "forecast_brake_replay")
+        replay_error = None
+    except (ValueError, TypeError, FloatingPointError) as exc:  # pragma: no cover - defensive
+        closed_loop_metrics = dict(baseline_metrics)
+        closed_loop_source = "baseline_recorded_trace_fallback"
+        replay_error = str(exc)
+
+    return {
+        "forecast_batch_valid": validate_forecast_batch(batch.to_dict()) is not None,
+        "actor_count": len(batch.forecasts),
+        "forecast_metrics_status": forecast_status,
+        "forecast_metrics_error": forecast_error,
+        "forecast_metrics_summary": _summarize_forecast_metrics(forecast_report)
+        if forecast_report
+        else None,
+        "closed_loop_metrics": closed_loop_metrics,
+        "closed_loop_metric_source": closed_loop_source,
+        "closed_loop_replay_error": replay_error,
+    }
 
 
 def run_live_forecast_replay_gate(
@@ -793,7 +1161,7 @@ def run_live_forecast_replay_gate(
     Args:
         trace: Simulation trace export to replay and evaluate.
         config: Gate configuration.
-        variants: Forecast variants to evaluate.  Defaults to the issue #2944
+        variants: Forecast variants to evaluate.  Defaults to the issue #2941
             smoke set (``none``, ``cv``).
         repo_head: Optional git HEAD sha for provenance.
         generated_at_utc: Optional deterministic ISO timestamp.
@@ -825,72 +1193,28 @@ def run_live_forecast_replay_gate(
         progress_goal_proximity_m=config.progress_goal_proximity_m,
     )
 
-    variant_results: dict[str, dict[str, Any]] = {}
-    for variant in variants:
-        if variant == "none":
-            variant_results[variant] = {
-                "forecast_batch_valid": None,
-                "actor_count": 0,
-                "forecast_metrics_status": "not_applicable",
-                "forecast_metrics_error": None,
-                "forecast_metrics_summary": None,
-                "closed_loop_metrics": dict(baseline_metrics),
-                "closed_loop_metric_source": "baseline_recorded_trace",
-            }
-            continue
-        batch = build_variant_forecast_batch(
+    variant_results = {
+        variant: _build_variant_result(
             trace,
             variant,
-            horizons_s=feasible_horizons,
-            risk_distance_m=config.risk_distance_m,
-            observation_adapter=config.observation_adapter,
+            config,
+            feasible_horizons,
+            baseline_metrics,
         )
-        forecast_step = batch.metadata.get("step_index", 0)
-        ground_truth: dict[str, list[list[float]]] = {}
-        for actor_id in _all_pedestrian_actor_ids(trace):
-            positions = _future_ground_truth_positions(
-                trace, actor_id, forecast_step, feasible_horizons
-            )
-            if positions and len(positions) == len(feasible_horizons):
-                ground_truth[actor_id] = [positions[float(h)].tolist() for h in feasible_horizons]
-
-        try:
-            forecast_report = evaluate_forecast_batch(
-                batch,
-                {
-                    actor_id: np.asarray(positions, dtype=float)
-                    for actor_id, positions in ground_truth.items()
-                },
-            )
-            forecast_status = "ok"
-            forecast_error = None
-        except (ValueError, TypeError, FloatingPointError) as exc:  # pragma: no cover - defensive
-            forecast_report = None
-            forecast_status = "error"
-            forecast_error = str(exc)
-
-        variant_results[variant] = {
-            "forecast_batch_valid": validate_forecast_batch(batch.to_dict()) is not None,
-            "actor_count": len(batch.forecasts),
-            "forecast_metrics_status": forecast_status,
-            "forecast_metrics_error": forecast_error,
-            "forecast_metrics_summary": _summarize_forecast_metrics(forecast_report)
-            if forecast_report
-            else None,
-            "closed_loop_metrics": dict(baseline_metrics),
-            "closed_loop_metric_source": "baseline_recorded_trace",
-        }
+        for variant in variants
+    }
 
     report: dict[str, Any] = {
         "schema_version": LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION,
         "issue": LIVE_FORECAST_REPLAY_GATE_ISSUE,
         "claim_boundary": (
-            "Issue #2944 native CV-only closed-loop replay smoke.  The gate evaluates "
-            "the none and cv forecast variants on the same recorded trace.  Because the "
-            "repository does not yet expose a planner that consumes selectable baseline "
-            "forecast variants, closed-loop metrics are copied from the recorded trace "
-            "and the run is classified fail-closed as blocked, degraded, or "
-            "diagnostic_only.  It does not claim that cv improves safety, success, or runtime."
+            "Issue #2941 native forecast-variant replay.  The gate evaluates the none "
+            "and cv forecast variants on the same recorded trace using a minimal "
+            "forecast-aware brake replay policy.  A BaselineProbabilisticPredictor "
+            "implementation and a forecast_variant config key are now present, so the "
+            "run is classified as native when cv closed-loop metrics differ from the "
+            "integrated no-forecast baseline, and degraded when they match.  It does not claim "
+            "that cv improves safety, success, or runtime in a full planner stack."
         ),
         "provenance": {
             "trace_id": trace.trace_id,
@@ -909,9 +1233,9 @@ def run_live_forecast_replay_gate(
         "baseline_closed_loop_metrics": dict(baseline_metrics),
         "variant_results": variant_results,
         "limitations": [
-            "Closed-loop metrics are copied from the recorded trace for all variants because "
-            "the repository does not yet expose a planner that consumes ProbabilisticPredictor "
-            "baseline variants.",
+            "Non-none variants use a minimal forecast-brake replay policy, not a production "
+            "planner.  The gate proves the forecast can influence closed-loop metrics but "
+            "does not prove benefit in a full planner stack.",
             "Open-loop forecast metrics are computed from a single frame per trace by default.",
             "Full-matrix expansion is gated by the run classification; only native runs "
             "should expand to the full variant matrix.",
@@ -966,7 +1290,7 @@ def format_live_forecast_replay_gate_markdown(report: dict[str, Any]) -> str:
     baseline = report["baseline_closed_loop_metrics"]
 
     lines = [
-        f"# Issue #{report['issue']} Native CV-Only Closed-Loop Replay Smoke",
+        f"# Issue #{report['issue']} Native Forecast-Variant Replay Smoke",
         "",
         "## Claim Boundary",
         "",
@@ -1004,7 +1328,7 @@ def format_live_forecast_replay_gate_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "## Baseline Closed-Loop Metrics (none variant)",
+            "## Recorded Trace Closed-Loop Metrics",
             "",
             f"- **Collision:** {baseline['collision']}",
             f"- **Near miss timesteps:** {baseline['near_miss']}",

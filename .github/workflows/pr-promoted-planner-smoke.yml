@@ -55,6 +55,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core
 
+      - name: Free runner disk space
+        run: bash scripts/dev/free_github_runner_space.sh
+
       - name: Sync dependencies (locked)
         env:
           CI_STEP_TIMEOUT_SECONDS: "1200"

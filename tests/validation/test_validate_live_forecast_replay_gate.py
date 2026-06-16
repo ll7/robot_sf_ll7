@@ -1,4 +1,4 @@
-"""Tests for the live forecast replay gate validation CLI (issue #2944)."""
+"""Tests for the live forecast replay gate validation CLI (issue #2941)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 
 from robot_sf.benchmark.live_forecast_replay_gate import (
     FORECAST_VARIANTS,
-    RUN_CLASSIFICATION_BLOCKED,
+    RUN_CLASSIFICATION_NATIVE,
     SMOKE_FORECAST_VARIANTS,
 )
 from scripts.validation import validate_live_forecast_replay_gate
@@ -66,8 +66,8 @@ def test_cli_default_runs_smoke_variants(capsys: pytest.CaptureFixture[str]) -> 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert set(payload["variant_results"]) == set(SMOKE_FORECAST_VARIANTS)
-    assert payload["classification"] == RUN_CLASSIFICATION_BLOCKED
-    assert payload["full_matrix_expansion_recommended"] is False
+    assert payload["classification"] == RUN_CLASSIFICATION_NATIVE
+    assert payload["full_matrix_expansion_recommended"] is True
 
 
 def test_cli_full_matrix_runs_all_variants(capsys: pytest.CaptureFixture[str]) -> None:
@@ -85,4 +85,4 @@ def test_cli_full_matrix_runs_all_variants(capsys: pytest.CaptureFixture[str]) -
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert set(payload["variant_results"]) == set(FORECAST_VARIANTS)
-    assert payload["classification"] == RUN_CLASSIFICATION_BLOCKED
+    assert payload["classification"] == RUN_CLASSIFICATION_NATIVE

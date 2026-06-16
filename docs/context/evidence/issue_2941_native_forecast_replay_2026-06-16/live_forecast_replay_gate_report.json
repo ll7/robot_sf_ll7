@@ -1,0 +1,212 @@
+{
+  "baseline_closed_loop_metrics": {
+    "collision": true,
+    "false_positive_stops": 0,
+    "min_distance_m": 0.15620499351813316,
+    "near_miss": 9,
+    "progress_m": 1.9,
+    "reached_goal": null,
+    "runtime_s": 1.9,
+    "stop_yield_timing_s": 0.0,
+    "stop_yield_timing_steps": 0
+  },
+  "claim_boundary": "Issue #2941 native forecast-variant replay.  The gate evaluates the none and cv forecast variants on the same recorded trace using a minimal forecast-aware brake replay policy.  A BaselineProbabilisticPredictor implementation and a forecast_variant config key are now present, so the run is classified as native when cv closed-loop metrics differ from the integrated no-forecast baseline, and degraded when they match.  It does not claim that cv improves safety, success, or runtime in a full planner stack.",
+  "classification": "native",
+  "classification_reason": "cv forecast produces closed-loop metrics that differ from the integrated no-forecast baseline",
+  "full_matrix_expansion_recommended": true,
+  "issue": 2941,
+  "limitations": [
+    "Non-none variants use a minimal forecast-brake replay policy, not a production planner.  The gate proves the forecast can influence closed-loop metrics but does not prove benefit in a full planner stack.",
+    "Open-loop forecast metrics are computed from a single frame per trace by default.",
+    "Full-matrix expansion is gated by the run classification; only native runs should expand to the full variant matrix."
+  ],
+  "native_path_eligibility": {
+    "forecast_variant_config_key_present": true,
+    "live_path_available": true,
+    "missing_components": [],
+    "probabilistic_predictor_implementations": [
+      "robot_sf.nav.baseline_probabilistic_predictor.BaselineProbabilisticPredictor"
+    ]
+  },
+  "provenance": {
+    "episode_id": "dense_pedestrian_stress_ep0000",
+    "generated_at_utc": "2026-06-16T00:00:00+00:00",
+    "horizons_s": [
+      0.5,
+      1.0
+    ],
+    "planner_id": "hybrid_rule_v0_minimal",
+    "repo_head": "e52f0323",
+    "requested_horizons_s": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "scenario_id": "dense_pedestrian_stress",
+    "seed": 2765,
+    "trace_id": "issue_2765_dense_pedestrian_stress_seed2765_ep0000",
+    "variants": [
+      "none",
+      "cv"
+    ]
+  },
+  "required_metrics": [
+    "collision",
+    "near_miss",
+    "min_distance",
+    "stop_yield_timing",
+    "progress",
+    "false_positive_stops",
+    "runtime"
+  ],
+  "schema_version": "LiveForecastReplayGate.v1",
+  "status": "native",
+  "variant_results": {
+    "cv": {
+      "actor_count": 3,
+      "closed_loop_metric_source": "forecast_brake_replay",
+      "closed_loop_metrics": {
+        "collision": false,
+        "false_positive_stops": 20,
+        "min_distance_m": 1.5005332385522154,
+        "near_miss": 0,
+        "progress_m": 0.0,
+        "reached_goal": null,
+        "replay_policy": "forecast_brake_replay",
+        "runtime_s": 1.9,
+        "stop_yield_timing_s": 2.0,
+        "stop_yield_timing_steps": 20
+      },
+      "closed_loop_replay_error": null,
+      "forecast_batch_valid": true,
+      "forecast_metrics_error": null,
+      "forecast_metrics_status": "ok",
+      "forecast_metrics_summary": {
+        "active_actor_count": 3,
+        "aggregate_row_count": 20,
+        "metrics": {
+          "mean_ade_0.5s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 1.850371707708594e-17
+          },
+          "mean_ade_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 4.625929269271486e-17
+          },
+          "mean_collision_relevance_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_collision_relevance_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_coverage_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_ade_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_expected_fde_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_fde_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 4.625929269271486e-17
+          },
+          "mean_likelihood_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_likelihood_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minade@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_minfde@k_1s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_0.5s": {
+            "denominator": 0,
+            "status": "unavailable",
+            "value": null
+          },
+          "mean_miss_rate_1s": {
+            "denominator": 3,
+            "status": "ok",
+            "value": 0.0
+          }
+        }
+      }
+    },
+    "none": {
+      "actor_count": 0,
+      "closed_loop_metric_source": "no_forecast_replay",
+      "closed_loop_metrics": {
+        "collision": false,
+        "false_positive_stops": 0,
+        "min_distance_m": 0.9858118481738795,
+        "near_miss": 17,
+        "progress_m": 0.545,
+        "reached_goal": null,
+        "replay_policy": "no_forecast_replay",
+        "runtime_s": 1.9,
+        "stop_yield_timing_s": 0.4,
+        "stop_yield_timing_steps": 4
+      },
+      "forecast_batch_valid": null,
+      "forecast_metrics_error": null,
+      "forecast_metrics_status": "not_applicable",
+      "forecast_metrics_summary": null
+    }
+  }
+}

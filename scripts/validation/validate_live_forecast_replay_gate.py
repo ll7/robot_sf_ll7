@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Validate the live same-seed forecast replay gate (issue #2902).
+"""Validate the live same-seed forecast replay gate (issue #2944).
 
-This is a diagnostic-only gate.  It does not train models or run expensive
-campaigns.  It loads a simulation trace export, builds ForecastBatch.v1
-artifacts for each requested variant, computes baseline closed-loop metrics
-from the trace, and reports whether a native live replay path exists.
+This is a fail-closed smoke gate for the none+cv forecast variants.  It does
+not train models or run expensive campaigns.  It loads a simulation trace
+export, builds ForecastBatch.v1 artifacts for each requested variant, computes
+baseline closed-loop metrics from the trace, and reports a per-run
+classification (native, blocked, degraded, diagnostic_only) that gates whether
+the full forecast variant matrix should be expanded.
 """
 
 from __future__ import annotations
@@ -17,6 +19,8 @@ from typing import Any
 
 from robot_sf.benchmark.live_forecast_replay_gate import (
     DEFAULT_HORIZONS_S,
+    FORECAST_VARIANTS,
+    SMOKE_FORECAST_VARIANTS,
     LiveForecastReplayGateConfig,
     LiveForecastReplayGateError,
     load_trace_tolerant,
@@ -56,7 +60,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     default_horizons = " ".join(f"{horizon:g}" for horizon in DEFAULT_HORIZONS_S)
     parser = argparse.ArgumentParser(
-        description="Live same-seed forecast replay gate (issue #2902)."
+        description="Native CV-only closed-loop replay smoke (issue #2944)."
     )
     parser.add_argument(
         "--trace",
@@ -89,6 +93,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Robot-pedestrian near-miss distance threshold in meters.",
     )
     parser.add_argument(
+        "--full-matrix",
+        action="store_true",
+        help="Evaluate all forecast variants (none, cv, semantic, interaction_aware, risk_filtered).",
+    )
+    parser.add_argument(
         "--generated-at-utc",
         help="Optional deterministic ISO-8601 generation timestamp.",
     )
@@ -105,6 +114,12 @@ def _build_config_from_args(args: argparse.Namespace) -> LiveForecastReplayGateC
     if args.horizon_s:
         kwargs["horizons_s"] = tuple(args.horizon_s)
     return LiveForecastReplayGateConfig(**kwargs)
+
+
+def _variants_from_args(args: argparse.Namespace) -> tuple[str, ...]:
+    """Return the forecast variant set requested by the CLI."""
+
+    return FORECAST_VARIANTS if args.full_matrix else SMOKE_FORECAST_VARIANTS
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,9 +140,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         trace = load_trace_tolerant(args.trace)
         config = _build_config_from_args(args)
+        variants = _variants_from_args(args)
         report = run_live_forecast_replay_gate(
             trace,
             config=config,
+            variants=variants,
             repo_head=_git_head(),
             generated_at_utc=args.generated_at_utc,
         )

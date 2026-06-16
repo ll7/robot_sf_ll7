@@ -504,6 +504,73 @@ def _compute_repulsion(
     return repulsion
 
 
+def risk_filtered_cv_baseline(
+    state: PedestrianState,
+    horizons_s: list[float] | tuple[float, ...] = DEFAULT_FORECAST_HORIZONS_S,
+    *,
+    base_std_m: float = 0.3,
+    velocity_std_rate: float = 0.4,
+    robot_position: np.ndarray | None = None,
+    risk_distance_m: float = 3.0,
+    filter_std_multiplier: float = 2.0,
+) -> PedestrianForecast:
+    """Risk-filtered constant-velocity baseline.
+
+    Generates a plain-CV forecast and then widens uncertainty for predictions
+    whose mean is far from the robot.  When ``robot_position`` is omitted the
+    baseline degrades to plain CV without widening, preserving a deterministic
+    diagnostic-only mode.  The filter is intentionally conservative: it never
+    removes a prediction, only marks low-relevance predictions as filtered and
+    inflates their covariance.
+
+    Returns:
+        Forecast distributions for the requested horizons.
+    """
+
+    cv_forecast = constant_velocity_gaussian_baseline(
+        state,
+        horizons_s=horizons_s,
+        base_std_m=base_std_m,
+        velocity_std_rate=velocity_std_rate,
+    )
+    predictions: list[ForecastDistribution] = []
+
+    for cv_prediction in cv_forecast.predictions:
+        std_m = float(cv_prediction.metadata["std_m"])
+        relevance_status = "robot_unavailable"
+        if robot_position is not None:
+            robot_pos = np.asarray(robot_position, dtype=float)
+            distance = float(np.linalg.norm(cv_prediction.mean - robot_pos))
+            if distance <= risk_distance_m:
+                relevance_status = "collision_relevant"
+            else:
+                relevance_status = "filtered_low_relevance"
+                std_m *= filter_std_multiplier
+
+        if std_m <= 0.0:
+            raise ValueError("forecast standard deviation must be positive")
+
+        predictions.append(
+            ForecastDistribution(
+                horizon_s=cv_prediction.horizon_s,
+                mean=cv_prediction.mean,
+                covariance=np.eye(2, dtype=float) * (std_m**2),
+                metadata={
+                    "model": "risk_filtered_cv",
+                    "std_m": float(std_m),
+                    "is_intent_aware": state.intent is not None,
+                    "is_signal_aware": state.signal_available,
+                    "signal_state": state.signal if state.signal_available else "unknown",
+                    "relevance_status": relevance_status,
+                    "risk_distance_m": float(risk_distance_m),
+                    "filter_std_multiplier": float(filter_std_multiplier),
+                },
+            )
+        )
+
+    return PedestrianForecast(id=state.id, predictions=predictions)
+
+
 BASELINE_FUNCTIONS: dict[str, ForecastBaselineFunction] = {
     "cv": constant_velocity_gaussian_baseline,
     "signal_aware": signal_aware_cv_baseline,

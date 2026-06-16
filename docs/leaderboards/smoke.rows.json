@@ -1,0 +1,84 @@
+{
+  "schema_version": "benchmark_row_claim.v1",
+  "leaderboard": "smoke",
+  "rows": [
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "policy_search:smoke",
+      "planner_id": "orca_residual_guarded_ppo_v0",
+      "planner_mode": "native",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 1.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "low_progress": 0,
+        "min_distance": "not_recorded",
+        "runtime_sec": 16.2991
+      },
+      "row_status": "pass",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_smoke_summary",
+        "single_episode_smoke_not_benchmark_evidence"
+      ],
+      "artifact_uri": "docs/context/evidence/issue_1428_orca_residual_lineage_2026-05-24/orca_residual_guarded_ppo_v0_smoke_summary.json",
+      "claim_wording": "Runtime smoke only; not learned-residual training evidence.",
+      "evidence_tier": "smoke",
+      "claim_boundary": "Single-episode smoke proves the candidate can run; does not establish benchmark ranking or residual-policy generalization."
+    },
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "policy_search:smoke",
+      "planner_id": "ppo_issue791_best_v1",
+      "planner_mode": "native",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 1.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "runtime_sec": "not_recorded"
+      },
+      "row_status": "pass",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_smoke_summary",
+        "tracked_report_does_not_expose_all_metrics"
+      ],
+      "artifact_uri": "docs/context/policy_search/reports/2026-05-05_best_learning_policy.md",
+      "claim_wording": "Smoke proves artifact hydration and runnable learned-policy inference only.",
+      "evidence_tier": "smoke",
+      "claim_boundary": "Does not prove benchmark readiness, generalization, or checkpoint durability."
+    },
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "policy_search:smoke",
+      "planner_id": "hybrid_orca_sampler_v1",
+      "planner_mode": "native",
+      "seeds": [
+        "not_recorded"
+      ],
+      "metrics": {
+        "success": 1.0,
+        "collision": 0.0,
+        "near_miss": 0.0,
+        "low_progress": 0,
+        "min_distance": "not_recorded",
+        "runtime_sec": "not_recorded"
+      },
+      "row_status": "pass",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_smoke_summary",
+        "120_step_horizon_probe_only"
+      ],
+      "artifact_uri": "docs/context/policy_search/reports/2026-05-31_hybrid_orca_sampler_v1_smoke.md",
+      "claim_wording": "Smoke evidence for the 120-step horizon probe only; not candidate promotion.",
+      "evidence_tier": "smoke",
+      "claim_boundary": "Horizon-specific smoke only; no claim about default-horizon behavior or benchmark rank."
+    }
+  ]
+}

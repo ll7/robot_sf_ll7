@@ -1,0 +1,35 @@
+{
+  "schema_version": "benchmark_row_claim.v1",
+  "leaderboard": "nominal_sanity",
+  "rows": [
+    {
+      "schema_version": "benchmark_row_claim.v1",
+      "suite_id": "policy_search:nominal_sanity",
+      "planner_id": "ppo_issue791_best_v1",
+      "planner_mode": "native",
+      "seeds": [
+        111,
+        112,
+        113
+      ],
+      "metrics": {
+        "success": 0.2778,
+        "collision": 0.0,
+        "near_miss": 0.2222,
+        "low_progress": "10/18",
+        "min_distance": 3.7136,
+        "runtime_sec": "not_recorded"
+      },
+      "row_status": "revise",
+      "exclusions": [
+        "low_progress_timeouts_dominate",
+        "intrusive_near_misses_present",
+        "nominal_sanity_is_triage_not_promotion"
+      ],
+      "artifact_uri": "docs/context/policy_search/reports/2026-05-05_ppo_issue791_best_v1_nominal_sanity.md",
+      "claim_wording": "Learned-only nominal-sanity row from that pass, but still limited by low-progress timeouts and intrusive near misses.",
+      "evidence_tier": "diagnostic",
+      "claim_boundary": "Nominal-sanity triage evidence only; does not promote the planner to a paper-facing benchmark result."
+    }
+  ]
+}

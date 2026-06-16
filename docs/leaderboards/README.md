@@ -33,7 +33,37 @@ Every populated row should include these visible fields:
 | `benchmark_track` | Named benchmark, policy-search stage, observation track, or `not_benchmark_evidence`. |
 | `evidence_uri` | Repository-relative tracked evidence path. Do not point at worktree-local `output/`. |
 | `status` | Evidence status such as `pass`, `revise`, `successful_evidence`, `not_available`, `excluded`, or `not_yet_populated`. |
-| `claim_boundary` | One-line statement of what the row can and cannot support. |
+| `claim_boundary` | One-line statement the row supports; sidecars validate it as `claim_wording` and also carry `claim_boundary` caveats. |
+
+## Machine-Readable Row Claims
+
+Each leaderboard page has a sidecar `<page>.rows.json` file containing row-level
+`BenchmarkClaim.v1` profile records (`benchmark_row_claim.v1`) for every populated row. The
+sidecar enforces:
+
+- `suite_id`, `planner_id`, `planner_mode` (`native`/`adapter`/`fallback`/`degraded`/`not_available`)
+- `seeds`, `metrics`, `row_status`, `exclusions`, `artifact_uri`, `claim_wording`,
+  `evidence_tier`, `claim_boundary`
+- `exclusions` is intentionally required; use `"none"` only for rows with complete evidence and
+  no caveats.
+- A fail-closed rule that rejects `output/` artifact URIs and missing tracked artifacts
+- Deterministic wording policy that rejects claims above the row's evidence tier or status
+
+Validate one sidecar:
+
+```bash
+uv run python -m robot_sf.benchmark.cli validate-row-claims \
+  --sidecar docs/leaderboards/smoke.rows.json
+```
+
+Validate every leaderboard sidecar:
+
+```bash
+uv run python -m robot_sf.benchmark.cli validate-row-claims --all
+```
+
+Sidecar files are the source of truth for the row claim contract; the Markdown
+ table is the human-readable rendering.
 
 ## Evidence Rules
 
@@ -47,6 +77,9 @@ Every populated row should include these visible fields:
 - Keep smoke, diagnostic, training-smoke, and synthetic AMV rows separate from paper-facing
   benchmark claims.
 - Prefer `not_yet_populated` over inventing a metric or copying an untracked artifact.
+- Update the matching `<page>.rows.json` sidecar whenever a row is added, removed, or downgraded.
+  The validator will reject Markdown rows that have no corresponding machine-readable claim record,
+  but the sidecar is the enforcement surface.
 
 ## Maintenance
 
@@ -56,3 +89,6 @@ contract above so generated tables retain the same evidence boundary.
 
 Run `uv run python scripts/validation/validate_platform_docs.py` before publishing leaderboard,
 planner-zoo, policy-card, or benchmark-suite catalog updates.
+
+Run `uv run python -m robot_sf.benchmark.cli validate-row-claims --all` to check that every
+leaderboard sidecar still satisfies the `BenchmarkClaim.v1` contract.

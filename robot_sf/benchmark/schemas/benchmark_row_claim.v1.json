@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/benchmark_row_claim.v1.json",
+  "title": "RobotSF Benchmark Row Claim (v1)",
+  "description": "Per-row claim record for a static leaderboard or benchmark summary row.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "suite_id",
+    "planner_id",
+    "planner_mode",
+    "seeds",
+    "metrics",
+    "row_status",
+    "exclusions",
+    "artifact_uri",
+    "claim_wording",
+    "evidence_tier",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Schema version identifier.",
+      "const": "benchmark_row_claim.v1"
+    },
+    "suite_id": {
+      "description": "Suite, stage, or benchmark surface that produced the row.",
+      "type": "string",
+      "minLength": 1
+    },
+    "planner_id": {
+      "description": "Planner, policy, or candidate identifier.",
+      "type": "string",
+      "minLength": 1
+    },
+    "planner_mode": {
+      "description": "Runtime execution mode for this row.",
+      "type": "string",
+      "enum": [
+        "native",
+        "adapter",
+        "fallback",
+        "degraded",
+        "not_available"
+      ]
+    },
+    "seeds": {
+      "description": "Seeds used for the row. Use the explicit not_recorded marker when seeds are unknown and record that as an exclusion.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string",
+            "const": "not_recorded"
+          }
+        ]
+      }
+    },
+    "metrics": {
+      "description": "Named metrics reported for the row. Values may be numbers or 'not_recorded'.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string",
+            "minLength": 1
+          }
+        ]
+      }
+    },
+    "row_status": {
+      "description": "Classification of the row under the fail-closed benchmark policy.",
+      "type": "string",
+      "enum": [
+        "successful_evidence",
+        "accepted_unavailable",
+        "unexpected_failure",
+        "fallback",
+        "degraded",
+        "blocked",
+        "excluded",
+        "revise",
+        "pass",
+        "completed_smoke_not_benchmark_evidence",
+        "not_yet_populated"
+      ]
+    },
+    "exclusions": {
+      "description": "Explicit exclusions, caveats, or missing-denominator reasons for the row. Use \"none\" only when the row has no caveats.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "artifact_uri": {
+      "description": "Repository-relative path to the durable tracked evidence artifact. Must not be a worktree-local output/ path.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!output/)[^/].*$"
+    },
+    "claim_wording": {
+      "description": "Exact wording this row supports. Must not overstate the evidence tier or row status.",
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_tier": {
+      "description": "Highest evidence tier this row is allowed to support.",
+      "type": "string",
+      "enum": [
+        "smoke",
+        "diagnostic",
+        "benchmark",
+        "paper_facing"
+      ]
+    },
+    "claim_boundary": {
+      "description": "Required one-line restatement of what the row cannot claim.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

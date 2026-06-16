@@ -89,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
     # Load candidates after resolving manifest paths so the source path is
     # available for relative manifest resolution.
     candidates: list[dict[str, Any]] = []
+    candidate_source_path: Path | None = None
     if args.artifact_candidates is not None:
         if not args.artifact_candidates.exists():
             raise FileNotFoundError(
@@ -101,12 +102,13 @@ def main(argv: list[str] | None = None) -> int:
             candidates = list(candidate_payload)
         else:
             raise ValueError("artifact candidates file must contain a JSON list or object")
-        # Rebuild graph with candidates now that we know the candidate source path.
-        graph = build_manifest_lineage_graph(
-            manifest_paths,
-            artifact_candidates=candidates,
-            candidate_source_path=args.artifact_candidates,
-        )
+        candidate_source_path = args.artifact_candidates
+
+    graph = build_manifest_lineage_graph(
+        manifest_paths,
+        artifact_candidates=candidates,
+        candidate_source_path=candidate_source_path,
+    )
 
     written = write_manifest_lineage_graph_report(
         graph,

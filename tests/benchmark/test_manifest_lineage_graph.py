@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from robot_sf.benchmark.manifest_lineage_graph import (
@@ -189,7 +190,7 @@ def test_cli_runs_and_writes_outputs(tmp_path: Path) -> None:
 
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             str(script),
             "--manifest",
             str(FIXTURE_DIR / "connected_manifest.json"),
@@ -212,6 +213,78 @@ def test_cli_runs_and_writes_outputs(tmp_path: Path) -> None:
     assert summary["artifact_candidate_count"] == 4
     assert json_path.exists()
     assert md_path.exists()
+
+
+def test_cli_runs_without_artifact_candidates(tmp_path: Path) -> None:
+    """The CLI script works when --artifact-candidates is omitted."""
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "benchmark"
+        / "build_manifest_lineage_graph.py"
+    )
+    json_path = tmp_path / "out.json"
+
+    import subprocess
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(FIXTURE_DIR / "connected_manifest.json"),
+            "--out-json",
+            str(json_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    summary = json.loads(result.stdout)
+    assert summary["manifest_count"] == 1
+    assert summary["artifact_candidate_count"] == 0
+    assert summary["trace_count"] == 0
+    assert json_path.exists()
+    assert summary["markdown_path"] == ""
+
+
+def test_cli_runs_without_artifact_candidates_and_with_markdown(tmp_path: Path) -> None:
+    """The CLI script emits Markdown even without artifact candidates."""
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "benchmark"
+        / "build_manifest_lineage_graph.py"
+    )
+    json_path = tmp_path / "out.json"
+    md_path = tmp_path / "out.md"
+
+    import subprocess
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(FIXTURE_DIR / "connected_manifest.json"),
+            "--out-json",
+            str(json_path),
+            "--out-md",
+            str(md_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    summary = json.loads(result.stdout)
+    assert summary["manifest_count"] == 1
+    assert summary["artifact_candidate_count"] == 0
+    assert summary["trace_count"] == 0
+    assert json_path.exists()
+    assert md_path.exists()
+    assert "No artifact candidates supplied" in md_path.read_text(encoding="utf-8")
 
 
 def test_repo_relative_paths_in_graph(tmp_path: Path) -> None:

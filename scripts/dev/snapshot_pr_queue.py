@@ -7,6 +7,7 @@ import argparse
 import json
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 from scripts.dev.check_pr_ci_status import (
@@ -22,6 +23,8 @@ DEFAULT_ACTIVE_LIMIT = 20
 REVIEW_SUMMARY_LIMIT = 4
 COMMENT_SUMMARY_LIMIT = 4
 COMMENT_BODY_LIMIT = 180
+REVIEW_THREAD_LIMIT = 12
+REVIEW_THREAD_COMMENT_LIMIT = 2
 ROUTE_HEALTH_STATUSES = ("healthy", "stale", "blocked", "unknown")
 SCHEMA_VERSION = "pr_queue_snapshot.v1"
 
@@ -119,6 +122,128 @@ def _comment_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
         "total": len(comments),
         "latest": latest,
         "contains_more": len(comments) > COMMENT_SUMMARY_LIMIT,
+    }
+
+
+def _repo_owner_name(repo: str) -> tuple[str, str]:
+    """Split an owner/name GitHub repository string."""
+    if "/" not in repo:
+        return "", repo
+    owner, name = repo.split("/", 1)
+    return owner, name
+
+
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    """Return *value* when it is a dictionary, otherwise an empty dictionary."""
+    return value if isinstance(value, dict) else {}
+
+
+def _review_thread_snapshot(
+    pr_number: int,
+    *,
+    repo: str,
+) -> dict[str, Any]:
+    """Return compact PR review-thread data without raw diff hunks or full bodies."""
+    owner, name = _repo_owner_name(repo)
+    if not owner or not name:
+        return {"status": "skipped", "reason": "repo_owner_missing"}
+    query = """
+query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
+  repository(owner:$owner,name:$repo){
+    pullRequest(number:$number){
+      reviewThreads(first:$threads){
+        totalCount
+        nodes{
+          id
+          isResolved
+          path
+          line
+          comments(first:$comments){
+            totalCount
+            nodes{
+              author{login}
+              body
+              createdAt
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+    result = _gh(
+        [
+            "api",
+            "graphql",
+            "-f",
+            f"query={query}",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"repo={name}",
+            "-F",
+            f"number={pr_number}",
+            "-F",
+            f"threads={REVIEW_THREAD_LIMIT}",
+            "-F",
+            f"comments={REVIEW_THREAD_COMMENT_LIMIT}",
+        ],
+        timeout=45,
+    )
+    if result.returncode != 0:
+        return {
+            "status": "error",
+            "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+        }
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return {"status": "error", "error": f"invalid gh JSON: {exc}"}
+    data = _dict_or_empty(payload.get("data"))
+    repository = _dict_or_empty(data.get("repository"))
+    pull_request = _dict_or_empty(repository.get("pullRequest"))
+    threads = _dict_or_empty(pull_request.get("reviewThreads"))
+    nodes = [node for node in threads.get("nodes", []) or [] if isinstance(node, dict)]
+    compact_threads: list[dict[str, Any]] = []
+    unresolved_count = 0
+    for node in nodes:
+        resolved = bool(node.get("isResolved"))
+        if not resolved:
+            unresolved_count += 1
+        comments = node.get("comments", {}) if isinstance(node.get("comments"), dict) else {}
+        comment_nodes = [
+            comment for comment in comments.get("nodes", []) or [] if isinstance(comment, dict)
+        ]
+        compact_threads.append(
+            {
+                "id": str(node.get("id", "")),
+                "resolved": resolved,
+                "path": str(node.get("path", "")),
+                "line": node.get("line"),
+                "comments_total": int(comments.get("totalCount", len(comment_nodes)) or 0),
+                "comments": [
+                    {
+                        "author": _author_login(comment.get("author")),
+                        "created_at": str(comment.get("createdAt", "")),
+                        "body_excerpt": _shorten_text(
+                            comment.get("body"), limit=COMMENT_BODY_LIMIT
+                        ),
+                        "body_omitted": len(str(comment.get("body") or "")) > COMMENT_BODY_LIMIT,
+                    }
+                    for comment in comment_nodes
+                ],
+                "diff_hunk_omitted": True,
+            }
+        )
+    total = int(threads.get("totalCount", len(nodes)) or 0)
+    return {
+        "status": "ok",
+        "total": total,
+        "unresolved": unresolved_count,
+        "threads": compact_threads,
+        "contains_more": total > REVIEW_THREAD_LIMIT,
+        "raw_diff_hunks_omitted": True,
     }
 
 
@@ -397,15 +522,82 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
     }
 
 
-def snapshot_prs(numbers: list[int], *, repo: str, expected_head_sha: str = "") -> dict[str, Any]:
+def snapshot_prs(
+    numbers: list[int],
+    *,
+    repo: str,
+    expected_head_sha: str = "",
+    include_review_threads: bool = False,
+) -> dict[str, Any]:
     """Return a compact PR queue snapshot."""
     prs = [fetch_pr(number, repo=repo, expected_head_sha=expected_head_sha) for number in numbers]
+    if include_review_threads:
+        for pr in prs:
+            if pr.get("status") == "ok" and isinstance(pr.get("number"), int):
+                pr["review_thread_snapshot"] = _review_thread_snapshot(
+                    int(pr["number"]),
+                    repo=repo,
+                )
     return {
         "schema": SCHEMA_VERSION,
         "repo": repo,
         "route_health_overview": _route_health_overview(prs),
         "prs": prs,
     }
+
+
+def write_raw_review_comments_artifact(
+    numbers: list[int],
+    *,
+    repo: str,
+    path: Path,
+) -> dict[str, Any]:
+    """Write opt-in raw review-comment payloads, including diff hunks, to an artifact."""
+    owner, name = _repo_owner_name(repo)
+    payload: dict[str, Any] = {
+        "schema": "raw_pr_review_comments.v1",
+        "repo": repo,
+        "prs": {},
+    }
+    if not owner or not name:
+        for number in numbers:
+            payload["prs"][str(number)] = {
+                "status": "error",
+                "error": "repo_owner_missing",
+            }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return payload
+    for number in numbers:
+        result = _gh(
+            [
+                "api",
+                f"repos/{owner}/{name}/pulls/{number}/comments",
+            ],
+            timeout=60,
+        )
+        if result.returncode != 0:
+            payload["prs"][str(number)] = {
+                "status": "error",
+                "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+            }
+            continue
+        try:
+            comments = json.loads(result.stdout or "[]")
+        except json.JSONDecodeError as exc:
+            payload["prs"][str(number)] = {
+                "status": "error",
+                "error": f"invalid gh JSON: {exc}",
+            }
+            continue
+        payload["prs"][str(number)] = {
+            "status": "ok",
+            "comments": comments,
+            "contains_raw_diff_hunks": True,
+        }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -429,6 +621,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default="",
         help="Optional PR head SHA expected for stale-lane invalidation in single-PR mode.",
     )
+    parser.add_argument(
+        "--review-threads",
+        action="store_true",
+        help="Include bounded review-thread excerpts without diff hunks or full bodies.",
+    )
+    parser.add_argument(
+        "--raw-review-comments-artifact",
+        type=Path,
+        help=(
+            "Opt-in path for raw review-comment payloads, including diff_hunk/full bodies; "
+            "artifact is written to disk and never printed to stdout."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser.parse_args(argv)
 
@@ -438,6 +643,15 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if args.active and (args.prs_option is not None or args.prs):
         print("--active cannot be combined with explicit PR numbers", file=sys.stderr)
+        return 1
+    if args.active and args.review_threads:
+        print("--review-threads is only supported with explicit PR numbers", file=sys.stderr)
+        return 1
+    if args.active and args.raw_review_comments_artifact:
+        print(
+            "--raw-review-comments-artifact is only supported with explicit PR numbers",
+            file=sys.stderr,
+        )
         return 1
     numbers = args.prs_option if args.prs_option is not None else args.prs
     if args.expected_head_sha and not args.active and numbers and len(numbers) != 1:
@@ -454,8 +668,23 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         else:
             payload = snapshot_prs(
-                numbers, repo=args.repo, expected_head_sha=args.expected_head_sha
+                numbers,
+                repo=args.repo,
+                expected_head_sha=args.expected_head_sha,
+                include_review_threads=args.review_threads,
             )
+            if args.raw_review_comments_artifact:
+                artifact_payload = write_raw_review_comments_artifact(
+                    numbers,
+                    repo=args.repo,
+                    path=args.raw_review_comments_artifact,
+                )
+                payload["raw_review_comments_artifact"] = str(args.raw_review_comments_artifact)
+                payload["raw_review_comments_artifact_status"] = (
+                    "error"
+                    if any(pr.get("status") == "error" for pr in artifact_payload["prs"].values())
+                    else "ok"
+                )
     except FileNotFoundError:
         print("gh command not found", file=sys.stderr)
         return 1
@@ -463,7 +692,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"snapshot command timed out: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
-    return 1 if any(pr.get("status") == "error" for pr in payload["prs"]) else 0
+    has_pr_errors = any(pr.get("status") == "error" for pr in payload["prs"])
+    has_artifact_errors = payload.get("raw_review_comments_artifact_status") == "error"
+    return 1 if has_pr_errors or has_artifact_errors else 0
 
 
 if __name__ == "__main__":

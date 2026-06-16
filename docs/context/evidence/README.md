@@ -415,3 +415,10 @@ Policy caveats:
   presets with explicit unavailable rows for fixture-limited long horizons.
   claim_boundary=analysis_only_not_navigation_evidence. Not a safety, closed-loop, benchmark,
   or paper-facing claim.
+- `issue_2903_horizon_denominator_health_2026-06-16/`: analysis-only denominator-health audit for
+  the issue #2837 horizon x timestep ablation. Classifies each missing (horizon, dt_s, trace) cell
+  by reason, verifies category totals sum to the expected 180-cell matrix, spot-checks
+  representative missing cells, and proposes minimum fixture additions to reach at least 90%
+  evaluated coverage. Forecast defaults remain unchanged.
+  claim_boundary=analysis_only_not_navigation_evidence. Not a safety, closed-loop, benchmark,
+  or paper-facing claim.

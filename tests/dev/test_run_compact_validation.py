@@ -72,6 +72,26 @@ def test_run_compact_validation_json_summary_for_success(tmp_path: Path, capsys)
     assert Path(payload["summary_path"]).exists()
 
 
+def test_run_compact_validation_marks_truncated_plain_output(tmp_path: Path) -> None:
+    """Large output without failure keywords should still report truncation."""
+    artifact_dir = tmp_path / "artifacts"
+    command = [
+        sys.executable,
+        "-c",
+        "for i in range(30): print(f'plain output line {i}')",
+    ]
+
+    summary = run_compact_validation(command, artifact_dir=artifact_dir, excerpt_lines=3)
+
+    assert summary["exit_code"] == 0
+    assert summary["excerpt_truncated"] is True
+    assert summary["failure_excerpt"] == [
+        "plain output line 27",
+        "plain output line 28",
+        "plain output line 29",
+    ]
+
+
 def test_run_compact_validation_rejects_empty_command() -> None:
     """The library helper should fail loudly for an empty command."""
     try:

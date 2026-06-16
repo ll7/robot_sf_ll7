@@ -50,18 +50,17 @@ def _quote_command(command: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
-def _matching_failure_line_count(text: str) -> int:
-    """Return the number of lines matching the failure summary filter."""
-    return sum(1 for line in text.splitlines() if FAILURE_PATTERNS.search(line))
-
-
-def _failure_lines(text: str, *, limit: int, width: int) -> list[str]:
-    """Extract bounded failure-oriented lines from command output."""
+def _failure_lines(text: str, *, limit: int, width: int) -> tuple[list[str], bool]:
+    """Extract bounded failure-oriented lines and whether output was truncated."""
     lines = text.splitlines()
     interesting = [line for line in lines if FAILURE_PATTERNS.search(line)]
     if not interesting:
-        interesting = lines[-limit:]
-    return [line[:width] for line in interesting[:limit]]
+        excerpt = lines[-limit:]
+        truncated = len(lines) > limit
+    else:
+        excerpt = interesting[:limit]
+        truncated = len(interesting) > limit
+    return [line[:width] for line in excerpt], truncated
 
 
 def _pytest_node_ids(text: str, *, limit: int = 40) -> list[str]:
@@ -97,12 +96,13 @@ def run_compact_validation(
     summary_path = artifact_dir / f"{base}.summary.json"
 
     started = time.monotonic()
-    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+    result = subprocess.run(command, cwd=cwd, capture_output=True, check=False)
     elapsed = time.monotonic() - started
-    combined = result.stdout + result.stderr
+    stdout = result.stdout.decode("utf-8", errors="replace")
+    stderr = result.stderr.decode("utf-8", errors="replace")
+    combined = stdout + stderr
     log_path.write_text(combined, encoding="utf-8", errors="replace")
-    excerpt = _failure_lines(combined, limit=excerpt_lines, width=excerpt_width)
-    matching_lines = _matching_failure_line_count(combined)
+    excerpt, truncated = _failure_lines(combined, limit=excerpt_lines, width=excerpt_width)
     summary: dict[str, Any] = {
         "schema": SCHEMA_VERSION,
         "command": command,
@@ -113,7 +113,7 @@ def run_compact_validation(
         "log_path": str(log_path),
         "summary_path": str(summary_path),
         "excerpt_line_count": len(excerpt),
-        "excerpt_truncated": matching_lines > len(excerpt),
+        "excerpt_truncated": truncated,
         "failing_node_ids": _pytest_node_ids(combined),
         "failure_excerpt": excerpt,
     }

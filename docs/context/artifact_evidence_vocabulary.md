@@ -161,6 +161,10 @@ fall back to a non-learned planner and report that row as learned-policy success
   observation/action review contract, and
   `docs/context/open_issues_training_split_audit_2026-05-30.md` records the current training-lane
   split/provenance pointers that manifests should reference.
+- [Issue #2923 Mechanism Trace v1 Schema](https://github.com/ll7/robot_sf_ll7/issues/2923):
+  `tests/benchmark/fixtures/mechanism_trace.v1.example.json` is a tracked fixture for schema
+  validation, while real mechanism reports still need durable trace inputs before they can support
+  benchmark or paper-facing claims.
 - CARLA runtime qualification issues
   ([#872](https://github.com/ll7/robot_sf_ll7/issues/872),
   [#1111](https://github.com/ll7/robot_sf_ll7/issues/1111),

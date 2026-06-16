@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mechanism_trace.schema.v1.json",
+  "title": "Mechanism Trace v1",
+  "description": "Schema for local-navigation intervention mechanism trace rows",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "rows"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "mechanism_trace.v1"
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "mechanism_id",
+          "activation_step",
+          "input_condition",
+          "selected_command",
+          "command_source",
+          "risk_score",
+          "route_progress_delta",
+          "failure_mode",
+          "trace_uri",
+          "classification"
+        ],
+        "properties": {
+          "mechanism_id": {
+            "type": "string",
+            "enum": [
+              "static_recentering",
+              "topology_guidance",
+              "prediction_risk_gating",
+              "orca_residuals",
+              "signal_state_logic",
+              "amv_actuation_constraints"
+            ]
+          },
+          "activation_step": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "input_condition": {
+            "type": ["object", "string", "boolean", "null"]
+          },
+          "selected_command": {
+            "type": ["array", "null"],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "command_source": {
+            "type": "string"
+          },
+          "risk_score": {
+            "type": ["number", "null"]
+          },
+          "route_progress_delta": {
+            "type": ["number", "null"]
+          },
+          "failure_mode": {
+            "type": ["string", "null"]
+          },
+          "trace_uri": {
+            "type": ["string", "null"]
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "inactive",
+              "active-but-irrelevant",
+              "slice-local",
+              "revise",
+              "stop"
+          ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

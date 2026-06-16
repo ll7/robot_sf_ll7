@@ -341,6 +341,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md)
 
+* Issue #2923 Mechanism Trace v1 Schema:
+
+  [issue_2923_mechanism_trace_schema.md](issue_2923_mechanism_trace_schema.md)
+
 * Issue #2430 AMMV trace annotation decision:
 
   [issue_2430_ammv_trace_annotation.md](issue_2430_ammv_trace_annotation.md)
@@ -802,6 +806,8 @@ knowledge, not every transient iteration detail.
   [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md)
 * Issue #2428 AMMV Mechanism Trace Panels (2026-06-06):
   [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md)
+* Issue #2923 Mechanism Trace v1 Schema (2026-06-16):
+  [issue_2923_mechanism_trace_schema.md](issue_2923_mechanism_trace_schema.md)
 * Issue #2667 Trace Failure Predicate Tables (2026-06-12):
   [issue_2667_trace_failure_predicate_tables.md](issue_2667_trace_failure_predicate_tables.md)
 * Issue #2688 Trace Predicate Benchmark Matrix (2026-06-15):

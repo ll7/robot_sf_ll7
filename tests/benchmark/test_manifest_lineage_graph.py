@@ -118,6 +118,42 @@ def test_orphan_candidate_is_inconclusive() -> None:
     assert trace.lineage_status == LineageStatus.INCONCLUSIVE
 
 
+def test_artifact_candidates_handle_none_and_falsy_values() -> None:
+    """Explicit null values use fallbacks while numeric identifiers stay distinct."""
+    manifest_path = FIXTURE_DIR / "connected_manifest.json"
+    candidates = [
+        {
+            "artifact_id": None,
+            "artifact_kind": None,
+            "source_manifest_path": None,
+            "claim_boundary": None,
+        },
+        {
+            "artifact_id": 0,
+            "artifact_kind": 0,
+            "source_manifest_path": None,
+            "claim_boundary": 0,
+        },
+    ]
+
+    graph = build_manifest_lineage_graph([manifest_path], artifact_candidates=candidates)
+
+    fallback_trace = next(t for t in graph.traces if t.artifact_id == "unnamed_artifact")
+    assert fallback_trace.artifact_kind == "artifact"
+    assert fallback_trace.claim_boundary == ""
+    assert fallback_trace.source_manifest_path == ""
+    assert fallback_trace.lineage_status == LineageStatus.INCONCLUSIVE
+
+    zero_trace = next(t for t in graph.traces if t.artifact_id == "0")
+    assert zero_trace.artifact_kind == "0"
+    assert zero_trace.claim_boundary == "0"
+    assert zero_trace.source_manifest_path == ""
+
+    artifact_labels = {node.label for node in graph.nodes if node.kind == "artifact_candidate"}
+    assert "None" not in artifact_labels
+    assert {"unnamed_artifact", "0"}.issubset(artifact_labels)
+
+
 def test_graph_nodes_include_contract_manifest_and_fields() -> None:
     """The graph contains the validation contract, manifest, and field nodes."""
     manifest_path = FIXTURE_DIR / "connected_manifest.json"
@@ -131,6 +167,38 @@ def test_graph_nodes_include_contract_manifest_and_fields() -> None:
 
     assert any(edge.kind == "validates_with" for edge in graph.edges)
     assert any(edge.kind == "has_field" for edge in graph.edges)
+
+
+def test_graph_keeps_sanitized_path_collisions_distinct(tmp_path: Path) -> None:
+    """Graph construction keeps distinct manifests with colliding sanitized paths separate."""
+    manifest = _load_fixture("connected_manifest.json")
+    nested_path = tmp_path / "x" / "a" / "b.json"
+    flat_path = tmp_path / "x" / "a__b.json"
+    nested_path.parent.mkdir(parents=True)
+    nested_path.write_text(json.dumps(manifest), encoding="utf-8")
+    flat_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    graph = build_manifest_lineage_graph([nested_path, flat_path])
+
+    manifest_ids = sorted(node.node_id for node in graph.nodes if node.kind == "manifest")
+    assert len(manifest_ids) == 2
+    assert manifest_ids[0] != manifest_ids[1]
+    assert all("a__b_json" in node_id for node_id in manifest_ids)
+
+    source_field_ids = sorted(
+        node.node_id
+        for node in graph.nodes
+        if node.kind == "lineage_field" and node.label == "source"
+    )
+    assert len(source_field_ids) == 2
+    assert source_field_ids[0] != source_field_ids[1]
+    assert all(node_id.endswith("__source") for node_id in source_field_ids)
+
+    manifest_to_source_edges = [
+        edge for edge in graph.edges if edge.kind == "has_field" and edge.target in source_field_ids
+    ]
+    assert len(manifest_to_source_edges) == 2
+    assert {edge.source for edge in manifest_to_source_edges} == set(manifest_ids)
 
 
 def test_markdown_report_contains_summary_and_traces() -> None:
@@ -616,3 +684,39 @@ def test_legacy_reason_fallback_still_produces_edges(
 def _sorted_edge_tuples(edges):
     """Return a sorted tuple representation of edges for comparison."""
     return tuple(sorted((edge.source, edge.target, edge.kind) for edge in edges))
+
+
+def test_collision_safe_node_ids_for_distinct_inputs() -> None:
+    """Distinct inputs that sanitize to the same base string get distinct node IDs."""
+    from robot_sf.benchmark.manifest_lineage_graph import (
+        _artifact_node_id,
+        _field_node_id,
+        _manifest_node_id,
+        _proxy_node_id,
+    )
+
+    # These pairs sanitized to the same identifier before the collision-safe
+    # suffix was added (e.g. "a/b" and "a__b" both became "a__b").
+    manifest_a = _manifest_node_id("x/a/b.json")
+    manifest_b = _manifest_node_id("x/a__b.json")
+    assert manifest_a != manifest_b
+    assert "a__b" in manifest_a
+    assert "a__b" in manifest_b
+
+    field_a = _field_node_id("x/a/b.json", "artifact_kind")
+    field_b = _field_node_id("x/a__b.json", "artifact_kind")
+    assert field_a != field_b
+    assert field_a.endswith("__artifact_kind")
+    assert field_b.endswith("__artifact_kind")
+
+    proxy_a = _proxy_node_id("m.json", "a/b")
+    proxy_b = _proxy_node_id("m.json", "a__b")
+    assert proxy_a != proxy_b
+    assert "a__b" in proxy_a
+    assert "a__b" in proxy_b
+
+    artifact_a = _artifact_node_id("a/b")
+    artifact_b = _artifact_node_id("a__b")
+    assert artifact_a != artifact_b
+    assert "a__b" in artifact_a
+    assert "a__b" in artifact_b

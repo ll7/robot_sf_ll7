@@ -63,3 +63,13 @@ string for reader context and legacy fallback.
 This remains reviewability and artifact-quality work only. It hardens graph topology against wording
 changes, but it does not upgrade any manifest, graph row, or artifact candidate into benchmark or
 paper-facing evidence.
+
+## Issue #2905 Node ID Collision Safety 2026-06-16
+
+Issue #2905 refactors the lineage graph builder into smaller typed construction stages and makes
+manifest, lineage-field, proxy-source, and artifact-candidate node IDs collision-safe. Distinct
+inputs that previously sanitized to the same base string (for example ``a/b`` and ``a__b``) now
+receive distinct node IDs through a compact deterministic hash suffix.
+
+The public graph schema is unchanged; only internal ``id`` values differ. Lineage-field node IDs
+keep the field name as the final segment so that adjacency and label lookups remain readable.

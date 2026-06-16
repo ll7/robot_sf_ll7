@@ -20,6 +20,11 @@ Environment variables:
                       Ignored when PR_READY_MODE is set.
   PR_READY_SKIP_PREFLIGHT  Set to "1" to skip the cheap preflight check for
                       test-collection dependencies (duckdb, pyarrow).
+  PR_READY_PR_BODY_FILE  Optional markdown PR body. When set, readiness checks
+                      that deferred work has a linked issue or explicit NA.
+  PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES
+                      Set to "0" to skip open-state verification for linked
+                      follow-up issues when PR_READY_PR_BODY_FILE is set.
 EOF
 }
 
@@ -38,6 +43,8 @@ export GOAL_COVERAGE="${GOAL_COVERAGE:-100}"
 export PR_READY_FINAL="${PR_READY_FINAL:-0}"
 export PR_READY_MODE="${PR_READY_MODE:-}"
 export PR_READY_SKIP_PREFLIGHT="${PR_READY_SKIP_PREFLIGHT:-0}"
+export PR_READY_PR_BODY_FILE="${PR_READY_PR_BODY_FILE:-}"
+export PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES="${PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES:-1}"
 
 worktree_state() {
   if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
@@ -113,6 +120,7 @@ if [[ "$pr_ready_final" == "1" ]]; then
   preflight_check_test_deps
 fi
 
+uv run python "$SCRIPT_DIR/check_pr_followups.py"
 "$SCRIPT_DIR/ruff_fix_format.sh"
 "$SCRIPT_DIR/run_tests_parallel.sh"
 "$SCRIPT_DIR/check_changed_coverage.sh"

@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DEV = REPO_ROOT / "scripts" / "dev"
 
 _POST_PREFLIGHT_SCRIPTS = [
+    "check_pr_followups.py",
     "ruff_fix_format.sh",
     "run_tests_parallel.sh",
     "check_changed_coverage.sh",

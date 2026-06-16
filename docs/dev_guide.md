@@ -416,6 +416,11 @@ for focused pytest targets. It stores the full pytest log under the common
 Git-dir agent-run artifacts and prints only a bounded pass/fail summary by
 default. Use `FOCUSED_TEST_FULL_OUTPUT=1` only when the raw pytest stream itself
 is the thing being debugged.
+For non-pytest gates or commands that may produce large failure logs, use
+`uv run python scripts/dev/run_compact_validation.py -- <command>`. It stores the full log and
+summary JSON under the common Git-dir agent-run artifacts and prints only the
+command, exit code, elapsed time, artifact paths, failing pytest node ids when
+present, and a bounded failure excerpt.
 
 After delegated worker runs, summarize route efficiency from one or more
 `scripts/dev/routed_worker_manifest.py` outputs without reading raw worker logs:

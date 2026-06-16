@@ -213,6 +213,8 @@ Set up dependencies with `uv sync --all-extras` and install hooks via `uv run pr
 
 For shared local + VS Code + Codex workflows, prefer:
 - `scripts/dev/ruff_fix_format.sh`
+- `uv run python scripts/dev/run_compact_validation.py -- <command>` for bounded parent-thread validation output
+  with full logs and summary JSON under the common Git dir
 - `scripts/dev/run_tests_parallel.sh` (uses `pytest -n auto -x --failed-first` by default; supports wrapper flags `--new-first`, `--no-ordering`, `--no-fast-fail`)
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 - `scripts/dev/gh_comment.sh` for multiline `gh` PR/issue comments (stdin or `--body-file`, avoids literal `\n` formatting issues)
@@ -345,6 +347,10 @@ resolving lint or test failures locally before requesting review.
   `--raw-review-comments-artifact "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/.../raw-review-comments.json"`.
 - Before finalization, cover format/check, focused tests, changed-file coverage when practical, and a
   clean worktree check (`git status --short`) as part of the readied proof bundle.
+- For failing validation commands, prefer `uv run python scripts/dev/run_compact_validation.py -- <command>` before
+  pasting raw test, lint, type-check, or docs output into an agent parent thread. The wrapper stores
+  the full log and `summary.json` under the common Git dir and prints only command, exit code,
+  elapsed time, artifact paths, failing pytest node ids when present, and bounded excerpts.
 - Before broad status or inventory output, use
   `uv run python scripts/dev/autopilot_state_snapshot.py --include-worktrees` or another compact
   helper so generated `.venv`, `.opencode`, `node_modules`, and `output` trees are summarized

@@ -585,6 +585,8 @@ knowledge, not every transient iteration detail.
   [issue_2768_learned_prediction_readiness.md](issue_2768_learned_prediction_readiness.md)
 * Issue #2864 Forecast-lane synthesis:
   [issue_2864_forecast_lane_synthesis.md](issue_2864_forecast_lane_synthesis.md)
+* Issue #2929 Post-#2883-to-#2893 forecast/workflow synthesis:
+  [issue_2929_forecast_workflow_synthesis.md](issue_2929_forecast_workflow_synthesis.md)
 * Issue #2902 Live same-seed forecast replay gate:
   [issue_2902_live_forecast_replay_gate.md](issue_2902_live_forecast_replay_gate.md)
 * Issue #2944 Native CV-only closed-loop replay smoke:

@@ -52,3 +52,14 @@ older consumers can continue reading `source`, `generator`, `claim_boundary`, `e
 The shared helper validates field presence and basic types; it does not prove a manifest is
 executable, benchmark-valid, or complete for paper-facing claims. Downstream benchmark claims still
 need executable evidence, denominator review, and fail-closed handling.
+
+## Issue #2906 Backfill Proxy Metadata Update 2026-06-16
+
+Issue #2906 extends manifest-lineage backfill entries with structured proxy metadata:
+`candidate_sources`, `conflicting_sources`, and `blocked_by`. The graph builder uses these fields
+for proxy-source edges instead of parsing human-readable `reason` text, while retaining the reason
+string for reader context and legacy fallback.
+
+This remains reviewability and artifact-quality work only. It hardens graph topology against wording
+changes, but it does not upgrade any manifest, graph row, or artifact candidate into benchmark or
+paper-facing evidence.

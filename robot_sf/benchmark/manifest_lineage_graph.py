@@ -385,28 +385,15 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0915
                 continue
 
             if entry.status == FieldStatus.INFERRED and entry.inferred_from is not None:
-                proxy_id = _proxy_node_id(rel_path, entry.inferred_from)
-                if proxy_id not in nodes:
-                    nodes[proxy_id] = LineageNode(
-                        node_id=proxy_id,
-                        kind="proxy_source",
-                        label=entry.inferred_from,
-                        path=rel_path,
-                        status=LineageStatus.CONNECTED,
-                    )
-                edges.append(
-                    LineageEdge(
-                        source=field_id,
-                        target=proxy_id,
-                        kind="inferred_from",
-                        reason=entry.reason or f"inferred from {entry.inferred_from}",
-                        payload={"inferred_value": entry.inferred_value},
-                    )
-                )
+                _add_inferred_proxy_edge(nodes, edges, rel_path, field_id, entry)
                 continue
 
-            # Missing, ambiguous, or blocked: derive proxy-related edges from reason.
-            proxy_labels = _parse_proxy_labels(entry.reason)
+            # Derive proxy-related edges from structured metadata.  Older plans
+            # that only stored a reason string fall back to parsing the reason.
+            edge_kind, proxy_labels = _proxy_edge_kind_and_labels(entry)
+            if not edge_kind:
+                continue
+
             for label in proxy_labels:
                 proxy_id = _proxy_node_id(rel_path, label)
                 if proxy_id not in nodes:
@@ -417,9 +404,6 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0915
                         path=rel_path,
                         status=field_status,
                     )
-                edge_kind = (
-                    "ambiguous_between" if entry.status == FieldStatus.AMBIGUOUS else "blocked_by"
-                )
                 edges.append(
                     LineageEdge(
                         source=field_id,
@@ -506,11 +490,64 @@ def build_manifest_lineage_graph(  # noqa: C901, PLR0915
     )
 
 
+def _add_inferred_proxy_edge(
+    nodes: dict[str, LineageNode],
+    edges: list[LineageEdge],
+    rel_path: str,
+    field_id: str,
+    entry: FieldBackfillEntry,
+) -> None:
+    """Add an inferred_from edge between a field and its proxy source."""
+    assert entry.inferred_from is not None
+    proxy_id = _proxy_node_id(rel_path, entry.inferred_from)
+    if proxy_id not in nodes:
+        nodes[proxy_id] = LineageNode(
+            node_id=proxy_id,
+            kind="proxy_source",
+            label=entry.inferred_from,
+            path=rel_path,
+            status=LineageStatus.CONNECTED,
+        )
+    edges.append(
+        LineageEdge(
+            source=field_id,
+            target=proxy_id,
+            kind="inferred_from",
+            reason=entry.reason or f"inferred from {entry.inferred_from}",
+            payload={"inferred_value": entry.inferred_value},
+        )
+    )
+
+
+def _proxy_edge_kind_and_labels(entry: FieldBackfillEntry) -> tuple[str, list[str]]:
+    """Return the edge kind and proxy labels for a non-present field entry.
+
+    Uses structured metadata first, and falls back to parsing the reason
+    string only for legacy plans that did not store structured metadata.
+    """
+    if entry.status == FieldStatus.AMBIGUOUS:
+        labels = list(entry.candidate_sources + entry.conflicting_sources + entry.blocked_by)
+        edge_kind = "ambiguous_between"
+    elif entry.status == FieldStatus.BLOCKED:
+        labels = list(entry.blocked_by)
+        edge_kind = "blocked_by"
+    else:
+        return "", []
+
+    if not labels and entry.reason:
+        labels = _parse_proxy_labels(entry.reason)
+    return edge_kind, labels
+
+
 def _parse_proxy_labels(reason: str) -> list[str]:
     """Extract dotted proxy labels from a backfill reason string.
 
-    This is a best-effort parser for human-readable reason strings.  It looks
-    for labels like ``metadata.generator_id`` or ``config.validator_version``.
+    This is a best-effort parser kept only for backward compatibility with
+    older serialized plans that did not store structured proxy metadata.
+    Newly produced ``FieldBackfillEntry`` objects should rely on
+    ``candidate_sources``, ``conflicting_sources``, and ``blocked_by`` instead.
+    It looks for labels like ``metadata.generator_id`` or
+    ``config.validator_version``.
     """
     labels: list[str] = []
     # Split on common separators and punctuation.

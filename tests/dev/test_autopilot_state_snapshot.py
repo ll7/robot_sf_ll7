@@ -52,8 +52,9 @@ def test_parse_worktree_porcelain_summarizes_linked_worktrees() -> None:
     ]
 
 
-def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(monkeypatch) -> None:
+def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(monkeypatch, tmp_path) -> None:
     """A normal snapshot should include compact queue, claim, PR, and worktree state."""
+    monkeypatch.chdir(tmp_path)
     origin_main_sha = "6e55ea36affa82ea1b3c870c27f0133464295fd0"
     exact_results = {
         ("git", "branch", "--show-current"): _result(
@@ -174,15 +175,44 @@ def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(monkeypatch) 
 def test_compact_status_omits_untracked_inventory_and_reports_generated_paths(
     monkeypatch, tmp_path
 ) -> None:
-    """Status snapshots should avoid generated untracked tree dumps."""
-    venv_file = tmp_path / ".venv"
-    opencode_file = tmp_path / ".opencode"
+    """Status snapshots should avoid generated untracked tree dumps and report generated roots."""
+    venv_dir = tmp_path / ".venv"
+    opencode_dir = tmp_path / ".opencode"
     node_modules_dir = tmp_path / "node_modules"
     output_coverage_dir = tmp_path / "output" / "coverage"
-    venv_file.touch()
-    opencode_file.touch()
+    pytest_cache_dir = tmp_path / ".pytest_cache"
+    pycache_dir = tmp_path / "__pycache__"
+    venv_dir.mkdir()
+    opencode_dir.mkdir()
     node_modules_dir.mkdir()
     output_coverage_dir.mkdir(parents=True)
+    pytest_cache_dir.mkdir()
+    pycache_dir.mkdir()
+
+    # Populate generated trees with child files so a directory-aware check still reports roots only.
+    (venv_dir / "bin").mkdir()
+    (venv_dir / "bin" / "python").touch()
+    site_packages_dir = venv_dir / "lib" / "python3.11" / "site-packages"
+    site_packages_dir.mkdir(parents=True)
+    (site_packages_dir / "pkg.py").touch()
+    opencode_node_modules = opencode_dir / "node_modules"
+    opencode_node_modules.mkdir()
+    (opencode_node_modules / "package.json").touch()
+    left_pad_dir = opencode_node_modules / "left-pad"
+    left_pad_dir.mkdir()
+    (left_pad_dir / "index.js").touch()
+    lodash_dir = node_modules_dir / "lodash"
+    lodash_dir.mkdir()
+    (lodash_dir / "index.js").touch()
+    vite_bin_dir = node_modules_dir / "vite" / "bin"
+    vite_bin_dir.mkdir(parents=True)
+    (vite_bin_dir / "vite.js").touch()
+    (output_coverage_dir / "coverage.xml").touch()
+    htmlcov_dir = output_coverage_dir / "htmlcov"
+    htmlcov_dir.mkdir()
+    (htmlcov_dir / "index.html").touch()
+    (pytest_cache_dir / "README.md").touch()
+    (pycache_dir / "module.cpython-313.pyc").touch()
 
     def fake_run(command: list[str], *, timeout: int = 30):
         del timeout
@@ -198,9 +228,19 @@ def test_compact_status_omits_untracked_inventory_and_reports_generated_paths(
     assert error is None
     assert source["name"] == "git.status_compact"
     assert status["tracked_or_staged_count"] == 1
-    assert status["generated_paths_present"] == [".venv", ".opencode"]
+    assert sorted(status["generated_paths_present"]) == sorted(
+        [".venv", ".opencode", "node_modules", "output", ".pytest_cache", "__pycache__"]
+    )
     assert status["tracked_or_staged"] == [" M docs/dev_guide.md"]
     assert status["full_untracked_inventory_omitted"] is True
+    # Child files of generated trees must not leak into the compact status payload.
+    payload_text = json.dumps(status)
+    assert "site-packages/pkg.py" not in payload_text
+    assert "left-pad/index.js" not in payload_text
+    assert "lodash/index.js" not in payload_text
+    assert "vite.js" not in payload_text
+    assert "htmlcov/index.html" not in payload_text
+    assert "module.cpython-313.pyc" not in payload_text
 
 
 def test_claim_snapshot_marks_stale_claim_against_origin_main(monkeypatch) -> None:

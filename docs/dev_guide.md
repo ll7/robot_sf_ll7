@@ -321,7 +321,9 @@ claim refs, issue queue rows, explicit PR headline state, compact tracked status
 presence, a `controller_checkpoint`, and freshness metadata. Use the checkpoint as the first
 resume artifact after compaction or automatic continuation: it should name the active branch/PR,
 known generated paths, stale claims, check state, and next action without reopening raw logs,
-issue queues, worktree inventories, or skill files. Run fresh focused `gh`/`git` checks before
+issue queues, worktree inventories, or skill files. Compact status omits generated untracked trees
+such as `.venv`, `.opencode`, `node_modules`, and `output`, reporting only the generated
+roots that are present. Run fresh focused `gh`/`git` checks before
 claim, push, PR, label, merge, or publication decisions. Raw logs and broad CLI output are
 appropriate when the snapshot reports `ok: false`, stale claims, missing state, or insufficient
 fields.
@@ -1802,6 +1804,8 @@ follow the higher-precedence source and make the smallest doc update needed to r
   `uv run python scripts/coverage/check_changed_files_coverage.py --base $BASE_REF --include "scripts/dev/*" --include "tests/dev/*"`.
 - Ensure the worktree is clean for final PR-ready evidence:
   `git status --short` should be empty, then rerun final proof with `PR_READY_MODE=final`.
+  Before running a broad `git status --short --untracked-files=normal`, use the compact state
+  snapshot helper to see tracked changes and generated roots without dumping generated trees.
 
 ### Per-Test Performance Budget
 

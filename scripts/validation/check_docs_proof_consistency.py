@@ -4,6 +4,24 @@
 This helper is intentionally conservative. It only reports high-confidence
 mechanical problems in changed files relative to a base ref (default:
 ``origin/main``).
+
+Modes
+-----
+Default (no flags):
+  Checks files in the branch diff / worktree edits against ``origin/main``.
+
+``--path <repo-rel-path>``:
+  Checks only the explicitly named file(s).
+
+``--check-evidence-catalog``:
+  Full evidence/catalog check — scans every tracked file under
+  ``docs/context/evidence/`` and reports evidence bundles (immediate
+  subdirectories) or standalone files that have no entry in
+  ``docs/context/catalog.yaml``.  This mode does *not* use the git diff;
+  it is safe to run independently as a standalone hygiene pass.
+  Run with::
+
+      uv run python scripts/validation/check_docs_proof_consistency.py --check-evidence-catalog
 """
 
 from __future__ import annotations
@@ -510,6 +528,100 @@ def _context_catalog_diagnostics(catalog_path: Path, *, repo_root: Path) -> list
     return diagnostics
 
 
+def _tracked_evidence_files(repo_root: Path) -> list[Path]:
+    """Return repository-relative paths for all Git-tracked files under docs/context/evidence/."""
+    proc = subprocess.run(
+        ["git", "ls-files", "--", _EVIDENCE_DIR.as_posix()],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return []
+    return [Path(line.strip()) for line in proc.stdout.splitlines() if line.strip()]
+
+
+def _catalog_paths_from_payload(payload: object) -> set[Path]:
+    """Return the set of valid path values declared in a catalog YAML payload."""
+    catalog_paths: set[Path] = set()
+    if not isinstance(payload, dict):
+        return catalog_paths
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        return catalog_paths
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        p = _catalog_path(entry.get("path"))
+        if p is not None:
+            catalog_paths.add(p)
+    return catalog_paths
+
+
+def _evidence_bundle_key(tracked_path: Path) -> Path:
+    """Return the evidence-bundle group key for a tracked evidence file.
+
+    For files directly inside ``docs/context/evidence/``, the key is the file
+    itself (standalone file).  For files nested inside a subdirectory, the key
+    is the immediate child directory of ``docs/context/evidence/``.
+    """
+    parts = tracked_path.relative_to(_EVIDENCE_DIR).parts
+    return _EVIDENCE_DIR / parts[0] if parts else tracked_path
+
+
+def _evidence_catalog_coverage_diagnostics(
+    *,
+    repo_root: Path,
+    catalog_path: Path = _CONTEXT_CATALOG,
+) -> list[Diagnostic]:
+    """Report evidence bundles or files with no catalog entry in docs/context/catalog.yaml.
+
+    Each immediate subdirectory under ``docs/context/evidence/`` is treated as
+    an *evidence bundle*.  A bundle is considered *covered* when the catalog
+    contains at least one entry whose path is at or below the bundle root.
+    Loose files directly under ``docs/context/evidence/`` are checked
+    individually.  Directories with no tracked files are ignored.
+
+    This function is designed for explicit ``--check-evidence-catalog`` runs
+    and does not modify or interact with the diff-scoped default checks.
+    """
+    full_catalog_path = repo_root / catalog_path
+    catalog_paths: set[Path] = set()
+    if full_catalog_path.exists():
+        try:
+            payload = _load_yaml(full_catalog_path)
+        except yaml.YAMLError:
+            payload = None
+        catalog_paths = _catalog_paths_from_payload(payload)
+
+    tracked = _tracked_evidence_files(repo_root)
+    if not tracked:
+        return []
+
+    # Group tracked files by their evidence bundle key.
+    bundle_keys: set[Path] = set()
+    for tracked_path in tracked:
+        if _is_within_dir(tracked_path, _EVIDENCE_DIR):
+            bundle_keys.add(_evidence_bundle_key(tracked_path))
+
+    diagnostics: list[Diagnostic] = []
+    for bundle_key in sorted(bundle_keys):
+        covered = any(_is_within_dir(p, bundle_key) for p in catalog_paths)
+        if not covered:
+            diagnostics.append(
+                Diagnostic(
+                    path=catalog_path,
+                    message=(
+                        f"tracked evidence has no catalog entry: {bundle_key.as_posix()}"
+                        " — add at least one entry under this path in"
+                        f" {catalog_path.as_posix()}"
+                    ),
+                )
+            )
+    return diagnostics
+
+
 def _validation_phrase_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     """Flag notes that claim no validation ran while also listing executed commands."""
     if not _is_within_dir(path, _TOP_LEVEL_CONTEXT_DIR):
@@ -636,6 +748,16 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Emit diagnostics as JSON instead of human-readable text.",
     )
+    parser.add_argument(
+        "--check-evidence-catalog",
+        action="store_true",
+        dest="check_evidence_catalog",
+        help=(
+            "Run a full evidence/catalog coverage check: scan all tracked files under"
+            f" {_EVIDENCE_DIR.as_posix()} and report evidence bundles with no entry in"
+            f" {_CONTEXT_CATALOG.as_posix()}. Does not use the git diff."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -655,6 +777,25 @@ def main() -> int:
     """Run the docs/proof consistency checker."""
     args = _parse_args()
     repo_root = _repo_root()
+
+    if args.check_evidence_catalog:
+        diagnostics = _evidence_catalog_coverage_diagnostics(repo_root=repo_root)
+        if args.json:
+            payload = [
+                {"path": diagnostic.path.as_posix(), "message": diagnostic.message}
+                for diagnostic in diagnostics
+            ]
+            print(json.dumps(payload, indent=2))
+        elif diagnostics:
+            for diagnostic in diagnostics:
+                print(f"ERROR {diagnostic.path.as_posix()}: {diagnostic.message}")
+        else:
+            print(
+                "OK evidence/catalog coverage check passed:"
+                f" all tracked {_EVIDENCE_DIR.as_posix()} bundles have catalog entries."
+            )
+        return 1 if diagnostics else 0
+
     try:
         changed_files = _selected_files(args, repo_root)
     except ValueError as exc:

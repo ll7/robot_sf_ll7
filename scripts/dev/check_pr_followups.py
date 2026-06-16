@@ -86,6 +86,18 @@ def _extract_section(body: str, heading: str) -> str:
     return ""
 
 
+def _is_continuation_boundary(line: str, *, parent_indent: int, known_labels: set[str]) -> bool:
+    """Return whether *line* starts the next top-level field or section."""
+    stripped = line.strip()
+    indent = len(line) - len(line.lstrip())
+    if indent <= parent_indent and line.lstrip().startswith(("-", "*", "+")):
+        return True
+    clean = _strip_bullet_prefix(stripped)
+    if ":" in clean and _normalize_label(clean.split(":", 1)[0]) in known_labels:
+        return True
+    return stripped.startswith("#")
+
+
 def _value_after_label(section: str, label: str) -> str:
     target = _normalize_label(label)
     lines = section.splitlines()
@@ -106,17 +118,18 @@ def _value_after_label(section: str, label: str) -> str:
         if value:
             return value
         continuation: list[str] = []
+        parent_indent = len(line) - len(line.lstrip())
         for following in lines[index + 1 :]:
             stripped = following.strip()
             if not stripped:
                 continue
-            clean = _strip_bullet_prefix(stripped)
-            if ":" in clean:
-                possible_key = clean.split(":", 1)[0]
-                if _normalize_label(possible_key) in known_labels:
-                    break
-            if stripped.startswith("#"):
+            if _is_continuation_boundary(
+                following,
+                parent_indent=parent_indent,
+                known_labels=known_labels,
+            ):
                 break
+            clean = _strip_bullet_prefix(stripped)
             continuation.append(clean)
         return " ".join(continuation).strip()
     return ""

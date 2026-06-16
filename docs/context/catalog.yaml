@@ -1105,6 +1105,10 @@ entries:
     status: current
     freshness: evidence
     area: predictive_planner
+  - path: docs/context/issue_2960_forecast_planner_consumer.md
+    status: current
+    freshness: evidence
+    area: predictive_planner
   - path: docs/context/evidence/issue_2941_native_forecast_replay_2026-06-16/live_forecast_replay_gate_report.json
     status: evidence
     freshness: evidence
@@ -1118,6 +1122,14 @@ entries:
     freshness: evidence
     area: predictive_planner
   - path: docs/context/evidence/issue_2941_native_forecast_replay_full_matrix_2026-06-16/live_forecast_replay_gate_report.md
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2960_forecast_planner_consumer_2026-06-16/forecast_planner_consumer_smoke.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2960_forecast_planner_consumer_2026-06-16/forecast_planner_consumer_smoke.md
     status: evidence
     freshness: evidence
     area: predictive_planner

@@ -20,6 +20,7 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
+from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.math_utils import wrap_angle_pi, wrap_angle_pi_closed
 
 try:  # pragma: no cover - optional dependency
@@ -235,6 +236,12 @@ class SocNavPlannerConfig:
     predictive_phase_yield_weight: float = 2.0
     predictive_phase_align_weight: float = 0.4
     predictive_phase_recover_weight: float = 1.5
+    # Forecast variant selection for planner-consumed baseline probabilistic prediction.
+    # "none" keeps the planner on its default prediction source.
+    forecast_variant: str = "none"
+    forecast_variant_horizons_s: tuple[float, ...] = (0.5, 1.0, 2.0)
+    forecast_variant_dt_s: float = 0.1
+    forecast_variant_risk_distance_m: float = 3.0
 
 
 class TrivialReferencePlannerAdapter(OccupancyAwarePlannerMixin):
@@ -3378,6 +3385,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
     Reference:
     - `docs/training/predictive_planner_complete_tutorial.md`
+
+    Forecast variant integration (issue #2960):
+    When ``forecast_variant`` is set to a non-``none`` value, this planner builds
+    a :class:`BaselineProbabilisticPredictor` and uses its output as the predicted
+    pedestrian futures scored by the normal sampled-rollout planner.
     """
 
     _EPS = 1e-6
@@ -3391,6 +3403,88 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._fallback_warned = False
         self._device = self._resolve_device()
         self._bound_obstacle_lines: list = []
+        self._baseline_predictor: Any | None = None
+        self._forecast_variant_execution_mode = self._init_forecast_variant()
+
+    def _init_forecast_variant(self) -> str:
+        """Initialize baseline predictor when forecast_variant is configured.
+
+        Returns:
+            Execution mode for the configured forecast variant.
+        """
+        self._baseline_predictor = None
+        configured_variant = getattr(self.config, "forecast_variant", "none")
+        if configured_variant is None:
+            variant = "none"
+        else:
+            variant = str(configured_variant).strip().lower() or "none"
+        if variant == "none":
+            return "native"
+
+        if variant not in FORECAST_VARIANT_CHOICES:
+            message = (
+                f"PredictionPlannerAdapter: unsupported forecast_variant {variant!r}; "
+                f"must be one of {FORECAST_VARIANT_CHOICES}"
+            )
+            logger.warning(message)
+            if not self._allow_fallback:
+                raise RuntimeError(message)
+            return "blocked"
+
+        try:
+            from robot_sf.nav.baseline_probabilistic_predictor import (  # noqa: PLC0415
+                BaselineProbabilisticPredictor,
+            )
+
+            self._baseline_predictor = BaselineProbabilisticPredictor(
+                variant=variant,
+                horizons_s=tuple(
+                    getattr(self.config, "forecast_variant_horizons_s", (0.5, 1.0, 2.0))
+                ),
+                dt_s=float(getattr(self.config, "forecast_variant_dt_s", 0.1)),
+                risk_distance_m=float(
+                    getattr(self.config, "forecast_variant_risk_distance_m", 3.0)
+                ),
+            )
+            logger.info(
+                f"PredictionPlannerAdapter: built BaselineProbabilisticPredictor for variant {variant!r}"
+            )
+            return "native"
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                f"PredictionPlannerAdapter: failed to build baseline predictor for {variant!r}: {exc}"
+            )
+            if self._allow_fallback:
+                return "degraded"
+            raise RuntimeError(
+                f"PredictionPlannerAdapter: forecast predictor initialization failed for {variant!r}"
+            ) from exc
+        except (ImportError, ModuleNotFoundError) as exc:
+            logger.warning(
+                f"PredictionPlannerAdapter: forecast predictor unavailable for {variant!r}: {exc}"
+            )
+            if self._allow_fallback:
+                return "degraded"
+            raise RuntimeError(
+                f"PredictionPlannerAdapter: forecast predictor unavailable for {variant!r}"
+            ) from exc
+
+    def get_forecast_variant_execution_mode(self) -> str:
+        """Return the forecast variant execution mode.
+
+        Returns:
+            One of ``native``, ``degraded``, or ``blocked``.
+        """
+        return self._forecast_variant_execution_mode
+
+    def configure(self, config: SocNavPlannerConfig | None = None) -> None:
+        """Replace configuration and refresh forecast-variant runtime state."""
+        self.config = config or SocNavPlannerConfig()
+        self._device = self._resolve_device()
+        self._model = None
+        self._load_error = None
+        self._fallback_warned = False
+        self._forecast_variant_execution_mode = self._init_forecast_variant()
 
     def bind_obstacle_lines(self, obstacle_lines: Any) -> None:
         """Bind explicit runtime obstacle-line geometry for obstacle-feature inputs."""
@@ -3658,9 +3752,15 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def _predict_trajectories(self, state: np.ndarray, mask: np.ndarray) -> np.ndarray:
         """Predict future pedestrian trajectories in robot frame.
 
+        When ``forecast_variant`` is configured and a baseline predictor is available,
+        this method consumes the baseline forecast instead of the learned model.
+
         Returns:
             np.ndarray: Predicted trajectories ``(N, T, 2)``.
         """
+        if self._baseline_predictor is not None:
+            return self._predict_with_baseline(state, mask)
+
         model = self._ensure_model()
         if model is None:
             return self._constant_velocity_prediction(state, mask)
@@ -3670,6 +3770,63 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             mask_t = torch.from_numpy(mask[None]).to(self._device)
             out = model(state_t, mask_t)
             future = out["future_positions"][0].detach().cpu().numpy().astype(np.float32)
+        return future
+
+    def _predict_with_baseline(self, state: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """Predict using BaselineProbabilisticPredictor when forecast_variant is configured.
+
+        Args:
+            state: Pedestrian state in robot frame with shape ``(N, D)``.
+            mask: Validity mask with shape ``(N,)``.
+
+        Returns:
+            np.ndarray: Predicted trajectories ``(N, T, 2)`` in robot frame.
+        """
+        assert self._baseline_predictor is not None
+        steps = max(1, int(self.config.predictive_horizon_steps))
+        valid_indices = np.flatnonzero(mask > 0.5)
+        if valid_indices.size == 0:
+            return np.zeros((state.shape[0], steps, 2), dtype=np.float32)
+
+        valid_state = state[valid_indices]
+        observation = {
+            "robot": {
+                "position": np.array([0.0, 0.0], dtype=np.float32),
+                "heading": np.array([0.0], dtype=np.float32),
+                "speed": np.array([0.0, 0.0], dtype=np.float32),
+            },
+            "goal": {
+                "current": np.array([1.0, 0.0], dtype=np.float32),
+                "next": np.array([1.0, 0.0], dtype=np.float32),
+            },
+            "pedestrians": {
+                "positions": valid_state[:, :2].astype(np.float32),
+                "velocities": valid_state[:, 2:4].astype(np.float32),
+                "count": np.array([float(valid_indices.size)], dtype=np.float32),
+            },
+            "map": {},
+            "sim": {"time_s": np.array([-1.0], dtype=np.float32)},
+        }
+
+        try:
+            prediction = self._baseline_predictor.predict(observation)
+        except (FloatingPointError, TypeError, ValueError) as exc:
+            logger.warning(f"Baseline predictor failed: {exc}; using constant-velocity fallback")
+            return self._constant_velocity_prediction(state, mask)
+
+        future = self._constant_velocity_prediction(state, mask)
+        for source_index, trajectory in enumerate(prediction.predictions):
+            if source_index >= valid_indices.size:
+                break
+            mean = np.asarray(trajectory.mean, dtype=np.float32)
+            if mean.size == 0:
+                continue
+            target_index = int(valid_indices[source_index])
+            for step_index in range(steps):
+                source_step = min(int(step_index * mean.shape[0] / steps), mean.shape[0] - 1)
+                future[target_index, step_index, :] = mean[source_step]
+
+        future *= mask[:, None, None].astype(np.float32)
         return future
 
     def _predictive_uncertainty_std(

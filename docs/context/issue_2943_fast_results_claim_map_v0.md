@@ -61,7 +61,7 @@ those modes must be labeled a caveat or exclusion, not claim-grade success.
 | `cm-v0.prediction.native_replay` | Forecast-variant closed-loop replay path is native (not fallback) | #2941 (closed; implemented) | `diagnostic` | Minimal brake-heuristic replay policy only; not a production planner | Do not claim cv improves safety/success/runtime; do not remove caveat that replay uses a simple forecast-brake heuristic |
 | `cm-v0.mechanism.trace_schema` | `mechanism_trace.v1` source contract for local-navigation intervention rows | #2923 (closed; implemented) | `schema` | Additional producers needed for `prediction_risk_gating`, `orca_residuals`, `signal_state_logic`, `amv_actuation_constraints` | Do not use `mechanism_trace.v1` rows for benchmark or paper-facing claims until durable trace inputs and producer integrations exist |
 | `cm-v0.benchmark_release.suite_freeze` | Nominal/stress/adversarial/AMV suite freeze for v0.1 release | #2910 epic (open) | `blocked` | Requires ODD coverage (#2911) and row-claim matrix frozen before suite can be marked frozen | Do not claim suite is paper-ready until freeze contract from #2910 is satisfied |
-| `cm-v0.prediction.full_planner_integration` | Forecast variant integrated into a real planner consuming `ProbabilisticPredictor` | None yet (follow-up from #2941) | `blocked` | No production planner currently consumes `forecast_variant` config key | Do not claim forecast variant is benchmark-capable; current replay policy is minimal brake heuristic |
+| `cm-v0.prediction.full_planner_integration` | Forecast variant integrated into a real planner consuming `ProbabilisticPredictor` | #2960 (this PR; smoke implemented) | `smoke` | Single deterministic local-planner fixture only; no full-episode benchmark or scenario-matrix evidence yet | Do not claim forecast variant is benchmark-capable or beneficial; smoke proves planner consumption mechanics only |
 
 ---
 
@@ -135,7 +135,7 @@ This v0 map is intentionally narrow. Extend it when:
 
 1. Issue #2911 lands and `odd_hazard_coverage.v1` is defined -- add a `candidate` ODD coverage row.
 2. Issue #2612 is resolved -- move secondary-table claim from `diagnostic` to `candidate`.
-3. A production planner integration for `forecast_variant` exists -- move `cm-v0.prediction.native_replay` from `diagnostic` to `candidate`.
+3. A full-episode benchmark or scenario-matrix run exercises the planner-consumed `forecast_variant` path -- consider moving `cm-v0.prediction.full_planner_integration` from `smoke` to `candidate`.
 4. The #2910 suite freeze happens -- update `cm-v0.benchmark_release.suite_freeze` from `blocked` to `candidate`.
 
 Do not promote any `blocked` or `do_not_claim` row without named evidence that satisfies the

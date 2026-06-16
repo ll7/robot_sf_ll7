@@ -323,6 +323,16 @@ label, merge, or publication decisions. Raw logs and broad CLI output are approp
 snapshot reports `ok: false`, stale claims, missing state, or insufficient fields.
 Worktree rows are capped by default; use `worktree_count` and `worktrees_truncated` to decide
 whether a larger `--worktree-limit` is worth the parent-thread context cost.
+For remote cleanup and branch-drift triage, use the read-only hygiene snapshot before broad
+`git worktree` output or stale-worktree cleanup:
+
+```bash
+uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --json
+```
+
+The payload reports total and included worktree counts, dirty worktrees, missing upstreams,
+ahead/behind drift, detached heads, and truncation status. Use `--filter <branch-or-path-substring>`
+or `--worktree-limit <n>` when remote hosts have many linked worktrees.
 
 For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
 

@@ -89,6 +89,12 @@ def _extract_section(body: str, heading: str) -> str:
 def _value_after_label(section: str, label: str) -> str:
     target = _normalize_label(label)
     lines = section.splitlines()
+    known_labels = {
+        "deferred work",
+        "issues opened for follow up",
+        "issues opened for followup",
+        "follow up issues",
+    }
     for index, line in enumerate(lines):
         item = _strip_bullet_prefix(line)
         if ":" not in item:
@@ -107,16 +113,11 @@ def _value_after_label(section: str, label: str) -> str:
             clean = _strip_bullet_prefix(stripped)
             if ":" in clean:
                 possible_key = clean.split(":", 1)[0]
-                if _normalize_label(possible_key) in {
-                    "issues opened for follow up",
-                    "issues opened for followup",
-                    "follow up issues",
-                }:
+                if _normalize_label(possible_key) in known_labels:
                     break
             if stripped.startswith("#"):
                 break
             continuation.append(clean)
-            break
         return " ".join(continuation).strip()
     return ""
 
@@ -129,13 +130,17 @@ def _verify_open_issues(issues: tuple[str, ...]) -> tuple[str, ...]:
     errors: list[str] = []
     for issue in issues:
         number = issue.removeprefix("#")
-        result = subprocess.run(
-            ["gh", "issue", "view", number, "--json", "state", "--jq", ".state"],
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                ["gh", "issue", "view", number, "--json", "state", "--jq", ".state"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except FileNotFoundError:
+            errors.append(f"{issue}: unable to verify open state (gh CLI not found)")
+            continue
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
             errors.append(f"{issue}: unable to verify open state ({detail})")

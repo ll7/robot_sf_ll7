@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 from scripts.dev import check_pr_followups
 from scripts.dev.check_pr_followups import analyze_body
 
-SCRIPT = Path("scripts/dev/check_pr_followups.py")
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_pr_followups.py"
 
 
 def _body(*, deferred: str, issues: str = "") -> str:
@@ -84,6 +85,42 @@ def test_analyze_body_rejects_closed_followup_issue(monkeypatch) -> None:
     assert "#2966: state is CLOSED" in report.issue_state_errors[0]
 
 
+def test_analyze_body_rejects_unverifiable_issue_when_gh_is_missing(monkeypatch) -> None:
+    """Open-state verification reports a compact error when gh is unavailable."""
+
+    def fake_run(*args, **kwargs):
+        del args, kwargs
+        raise FileNotFoundError("gh")
+
+    monkeypatch.setattr(check_pr_followups.subprocess, "run", fake_run)
+
+    report = analyze_body(
+        _body(deferred="Run the broader benchmark sweep.", issues="#2966"),
+        source="fixture",
+        require_open_issues=True,
+    )
+
+    assert report.status == "issue_state_error"
+    assert "#2966: unable to verify open state (gh CLI not found)" in report.issue_state_errors
+
+
+def test_analyze_body_collects_multiline_deferred_work() -> None:
+    """Continuation lines belong to the deferred-work value until the next field."""
+    body = """## Follow-Up Issues
+- Deferred work:
+  - Run the broader benchmark sweep.
+  - Promote durable evidence.
+- Issues opened for follow-up: #2966
+"""
+
+    report = analyze_body(body, source="fixture")
+
+    assert report.status == "ok"
+    assert "Run the broader benchmark sweep" in report.deferred_work
+    assert "Promote durable evidence" in report.deferred_work
+    assert report.linked_issues == ("#2966",)
+
+
 def test_cli_reads_github_pull_request_event(tmp_path: Path) -> None:
     """The CLI can read pull_request.body from a GitHub event payload."""
     event_path = tmp_path / "event.json"
@@ -102,7 +139,7 @@ def test_cli_reads_github_pull_request_event(tmp_path: Path) -> None:
     )
 
     result = subprocess.run(
-        ["python", str(SCRIPT), "--github-event-path", str(event_path)],
+        [sys.executable, str(SCRIPT), "--github-event-path", str(event_path)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -120,7 +157,7 @@ def test_cli_fails_for_deferred_work_without_disposition(tmp_path: Path) -> None
     body_path.write_text(_body(deferred="Open the remaining benchmark issues."), encoding="utf-8")
 
     result = subprocess.run(
-        ["python", str(SCRIPT), "--body-file", str(body_path)],
+        [sys.executable, str(SCRIPT), "--body-file", str(body_path)],
         capture_output=True,
         text=True,
         timeout=30,

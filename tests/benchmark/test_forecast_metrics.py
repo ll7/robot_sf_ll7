@@ -29,6 +29,7 @@ def _provenance(**overrides: object) -> ForecastBatchProvenance:
         "horizons_s": [0.5, 1.0],
         "scenario_id": "scenario_a",
         "seed": 11,
+        "timestamp": "2026-06-15T12:00:00Z",
         "fallback_status": "native",
         "degraded_status": "none",
         "actor_ids": ["ped_1", "ped_2"],
@@ -216,7 +217,14 @@ def test_forecast_metrics_explain_missing_final_horizon_payloads() -> None:
     """Unavailable final-horizon metrics should carry a specific reason."""
     batch = ForecastBatch(
         provenance=_provenance(actor_mask=[True, False]),
-        forecasts=[ActorForecast(actor_id="ped_1", deterministic=None, samples=None)],
+        forecasts=[
+            ActorForecast(
+                actor_id="ped_1",
+                deterministic=None,
+                samples=None,
+                occupancy_summary={"representation": "occupancy_only"},
+            )
+        ],
     )
     truth = {"ped_1": [[0.0, 0.0], [1.0, 0.0]]}
 

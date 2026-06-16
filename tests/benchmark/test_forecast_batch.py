@@ -34,6 +34,7 @@ def _provenance(**overrides: object) -> ForecastBatchProvenance:
         "horizons_s": [0.5, 1.0],
         "scenario_id": "crosswalk_001",
         "seed": 7,
+        "timestamp": "2026-06-15T12:00:00Z",
         "fallback_status": "native",
         "degraded_status": "none",
         "actor_ids": ["ped_1", "ped_2"],
@@ -144,6 +145,7 @@ def test_forecast_batch_preserves_positional_oracle_state_argument_order() -> No
             "missing_actor_reasons": {},
         },
         {"name": "socnav_observation_v1", "features": ["position_m", "velocity_mps"]},
+        "2026-06-15T12:00:00Z",
         True,
     )
 

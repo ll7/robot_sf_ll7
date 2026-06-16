@@ -82,6 +82,23 @@ def test_same_trace_adapts_to_oracle_and_tracked_tiers() -> None:
     assert len(tracked.actors) == 2
 
 
+@pytest.mark.parametrize("time_s", [True, float("inf")])
+def test_invalid_time_s_does_not_become_epoch_seconds(time_s: object) -> None:
+    """Invalid frame timing metadata should not be treated as numeric seconds."""
+    trace = _trace()
+    trace["frames"][0]["time_s"] = time_s
+    trace["frames"][0]["timestamp"] = "2026-06-15T12:00:00Z"
+
+    batch = TrackedAgentsForecastAdapter().adapt_trace(
+        trace,
+        feature_schema=_feature_schema(),
+        horizons_s=[0.5, 1.0],
+        expected_actor_ids=["1", "2"],
+    )
+
+    assert batch.provenance.timestamp == "2026-06-15T12:00:00Z"
+
+
 def test_one_pedestrian_happy_path_records_single_actor_denominator() -> None:
     """A single visible actor should remain a valid one-actor forecast denominator."""
     trace = {

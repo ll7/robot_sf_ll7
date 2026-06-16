@@ -38,9 +38,9 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 1. Define and validate the artifact contract.
    `ForecastBatch.v1` is tracked by #2836 and summarized in
    `docs/context/issue_2836_forecast_batch_schema.md`. It records predictor identity,
-   observation tier, coordinate frame, `dt_s`, horizons, scenario id, seed, fallback/degraded
-   status, actor ids, masks, feature schema, optional samples/modes/occupancy, and oracle-state
-   boundaries.
+   observation tier, timestamp, coordinate frame, `dt_s`, horizons, scenario id, seed,
+   fallback/degraded status, actor ids, masks, feature schema, optional deterministic, sampled,
+   Gaussian, occupancy, and reachable/conformal outputs, and oracle-state boundaries.
 2. Build durable motion-rich fixtures and baseline ladder.
    Use #2774 for non-corridor trace fixtures, #2758 for signal/goal-aware baselines, and #2781 for
    interaction-aware comparison. Existing results are diagnostic-only.

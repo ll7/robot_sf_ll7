@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -58,6 +59,27 @@ def _default_dt_s(trace: dict[str, Any]) -> float:
     except (AttributeError, TypeError, ValueError):
         return 0.1
     return dt_s if dt_s > 0.0 else 0.1
+
+
+def _forecast_timestamp(frame_payload: dict[str, Any]) -> str:
+    """Build an ISO 8601 timestamp from frame timing metadata.
+
+    Returns:
+        ISO timestamp string. Falls back to ``1970-01-01T00:00:00Z`` when no
+        timing metadata is present so that artifacts always carry a timestamp.
+    """
+    time_s = frame_payload.get("time_s")
+    if (
+        isinstance(time_s, (int, float))
+        and not isinstance(time_s, bool)
+        and np.isfinite(float(time_s))
+        and time_s >= 0
+    ):
+        return datetime.fromtimestamp(float(time_s), tz=UTC).isoformat()
+    timestamp = frame_payload.get("timestamp") or frame_payload.get("time")
+    if isinstance(timestamp, str) and timestamp.strip():
+        return timestamp.strip()
+    return "1970-01-01T00:00:00Z"
 
 
 def _stable_state_id(actor_id: object) -> int:
@@ -183,6 +205,7 @@ class ForecastObservationAdapter:
                 or "unknown"
             ),
             seed=int(trace.get("seed", trace.get("metadata", {}).get("seed", 0))),
+            timestamp=_forecast_timestamp(frame_payload),
             fallback_status="native",
             degraded_status="degraded_observation" if missing_actor_reasons else "none",
             actor_ids=actor_ids,

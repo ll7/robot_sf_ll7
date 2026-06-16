@@ -1,0 +1,382 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/robot-sf/forecast_batch.schema.v1.json",
+    "title": "RobotSF ForecastBatch (v1)",
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+        "schema_version",
+        "provenance",
+        "forecasts"
+    ],
+    "properties": {
+        "schema_version": {
+            "const": "ForecastBatch.v1"
+        },
+        "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "predictor_id",
+                "predictor_family",
+                "observation_tier",
+                "timestamp",
+                "frame",
+                "dt_s",
+                "horizons_s",
+                "scenario_id",
+                "seed",
+                "fallback_status",
+                "degraded_status",
+                "actor_ids",
+                "actor_mask",
+                "actor_mask_metadata",
+                "feature_schema"
+            ],
+            "properties": {
+                "predictor_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Stable identifier for the predictor that produced this batch."
+                },
+                "predictor_family": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Predictor family such as constant_velocity, learned, or occupancy."
+                },
+                "observation_tier": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Observation level used as predictor input, e.g. tracked_agents or oracle_full_state."
+                },
+                "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 timestamp for the forecast origin."
+                },
+                "frame": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "name",
+                        "units",
+                        "axes"
+                    ],
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Stable frame label such as world or robot."
+                        },
+                        "units": {
+                            "const": "m",
+                            "description": "Position units; ForecastBatch.v1 expects meters."
+                        },
+                        "axes": {
+                            "type": "array",
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "items": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "description": "Ordered axis names for each point coordinate."
+                        },
+                        "origin": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "description": "Optional human-readable origin description."
+                        }
+                    }
+                },
+                "dt_s": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Forecast sampling interval in seconds."
+                },
+                "horizons_s": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                    },
+                    "description": "Strictly increasing forecast horizons in seconds."
+                },
+                "scenario_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Scenario identifier for grouping comparable forecasts."
+                },
+                "seed": {
+                    "type": "integer",
+                    "description": "Random seed used to generate the scenario or predictor state."
+                },
+                "fallback_status": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Fallback mode for this forecast, e.g. native or fallback."
+                },
+                "degraded_status": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Degraded mode for this forecast, e.g. none or degraded_observation."
+                },
+                "actor_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "description": "Ordered list of actor identifiers in the forecast denominator."
+                },
+                "actor_mask": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "boolean"
+                    },
+                    "description": "Boolean mask aligned with actor_ids; true means a payload is expected."
+                },
+                "actor_mask_metadata": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "description": "Semantics and reasons for missing actor payloads."
+                },
+                "feature_schema": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "description": "Input feature schema consumed by the predictor."
+                },
+                "oracle_state": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "True only when the artifact explicitly carries oracle-state fields."
+                },
+                "actor_classes": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "description": "Optional actor-class labels keyed by actor id."
+                }
+            }
+        },
+        "forecasts": {
+            "type": "array",
+            "description": "Per-actor forecast payloads. Must match actor_mask=true actors exactly.",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "actor_id"
+                ],
+                "anyOf": [
+                    {
+                        "required": [
+                            "deterministic"
+                        ]
+                    },
+                    {
+                        "required": [
+                            "samples"
+                        ]
+                    },
+                    {
+                        "required": [
+                            "gaussian"
+                        ]
+                    },
+                    {
+                        "required": [
+                            "reachable_set"
+                        ]
+                    },
+                    {
+                        "required": [
+                            "occupancy_summary"
+                        ]
+                    }
+                ],
+                "properties": {
+                    "actor_id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "deterministic": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "items": {
+                                "type": "number"
+                            }
+                        },
+                        "description": "Deterministic point forecast with shape (T, 2).",
+                        "minItems": 1
+                    },
+                    "samples": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "array",
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "items": {
+                                    "type": "number"
+                                }
+                            }
+                        },
+                        "description": "Sampled trajectories with shape (K, T, 2).",
+                        "minItems": 1
+                    },
+                    "mode_probabilities": {
+                        "type": "array",
+                        "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                        },
+                        "description": "Mode probabilities aligned with samples; must sum to 1.",
+                        "minItems": 1
+                    },
+                    "gaussian": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                                "mean",
+                                "cov"
+                            ],
+                            "properties": {
+                                "mean": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 2,
+                                    "items": {
+                                        "type": "number"
+                                    },
+                                    "description": "Gaussian mean [x, y] for this horizon."
+                                },
+                                "cov": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 2,
+                                    "items": {
+                                        "type": "array",
+                                        "minItems": 2,
+                                        "maxItems": 2,
+                                        "items": {
+                                            "type": "number"
+                                        }
+                                    },
+                                    "description": "2x2 Gaussian covariance matrix."
+                                }
+                            }
+                        },
+                        "description": "Per-horizon Gaussian parameter forecast.",
+                        "minItems": 1
+                    },
+                    "reachable_set": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                                "center",
+                                "set_type"
+                            ],
+                            "properties": {
+                                "center": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 2,
+                                    "items": {
+                                        "type": "number"
+                                    },
+                                    "description": "Set center [x, y] for this horizon."
+                                },
+                                "radius_m": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "description": "Circular set radius in meters."
+                                },
+                                "semi_axes_m": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 2,
+                                    "items": {
+                                        "type": "number",
+                                        "minimum": 0
+                                    },
+                                    "description": "Ellipse semi-axis lengths in meters."
+                                },
+                                "set_type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "conformal_tube",
+                                        "reachable_set",
+                                        "confidence_ellipse"
+                                    ],
+                                    "description": "Kind of geometric uncertainty set."
+                                }
+                            },
+                            "allOf": [
+                                {
+                                    "if": {
+                                        "properties": {
+                                            "set_type": {
+                                                "const": "conformal_tube"
+                                            }
+                                        }
+                                    },
+                                    "then": {
+                                        "required": [
+                                            "radius_m"
+                                        ]
+                                    }
+                                },
+                                {
+                                    "if": {
+                                        "properties": {
+                                            "set_type": {
+                                                "const": "confidence_ellipse"
+                                            }
+                                        }
+                                    },
+                                    "then": {
+                                        "required": [
+                                            "semi_axes_m"
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "description": "Per-horizon reachable or conformal set forecast.",
+                        "minItems": 1
+                    },
+                    "occupancy_summary": {
+                        "type": "object",
+                        "description": "Occupancy grid or aggregated occupancy metadata.",
+                        "minProperties": 1
+                    },
+                    "uncertainty_metadata": {
+                        "type": "object",
+                        "description": "Predictor-specific uncertainty metadata."
+                    }
+                }
+            }
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Optional batch-level metadata."
+        }
+    }
+}

@@ -342,7 +342,7 @@ resolving lint or test failures locally before requesting review.
   `scripts/dev/snapshot_pr_queue.py --prs <number> --review-threads --json`; it emits bounded
   comment excerpts, label names, and omits raw `diff_hunk` payloads. Fetch full review-comment
   bodies or hunks only with an explicit artifact path such as
-  `--raw-review-comments-artifact .git/codex-agent-runs/.../raw-review-comments.json`.
+  `--raw-review-comments-artifact "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/.../raw-review-comments.json"`.
 - Before finalization, cover format/check, focused tests, changed-file coverage when practical, and a
   clean worktree check (`git status --short`) as part of the readied proof bundle.
 - Before broad status or inventory output, use

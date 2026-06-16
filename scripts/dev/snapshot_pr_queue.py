@@ -551,7 +551,7 @@ def write_raw_review_comments_artifact(
     *,
     repo: str,
     path: Path,
-) -> None:
+) -> dict[str, Any]:
     """Write opt-in raw review-comment payloads, including diff hunks, to an artifact."""
     owner, name = _repo_owner_name(repo)
     payload: dict[str, Any] = {
@@ -567,7 +567,7 @@ def write_raw_review_comments_artifact(
             }
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        return
+        return payload
     for number in numbers:
         result = _gh(
             [
@@ -597,6 +597,7 @@ def write_raw_review_comments_artifact(
         }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -673,12 +674,17 @@ def main(argv: list[str] | None = None) -> int:
                 include_review_threads=args.review_threads,
             )
             if args.raw_review_comments_artifact:
-                write_raw_review_comments_artifact(
+                artifact_payload = write_raw_review_comments_artifact(
                     numbers,
                     repo=args.repo,
                     path=args.raw_review_comments_artifact,
                 )
                 payload["raw_review_comments_artifact"] = str(args.raw_review_comments_artifact)
+                payload["raw_review_comments_artifact_status"] = (
+                    "error"
+                    if any(pr.get("status") == "error" for pr in artifact_payload["prs"].values())
+                    else "ok"
+                )
     except FileNotFoundError:
         print("gh command not found", file=sys.stderr)
         return 1
@@ -686,7 +692,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"snapshot command timed out: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
-    return 1 if any(pr.get("status") == "error" for pr in payload["prs"]) else 0
+    has_pr_errors = any(pr.get("status") == "error" for pr in payload["prs"])
+    has_artifact_errors = payload.get("raw_review_comments_artifact_status") == "error"
+    return 1 if has_pr_errors or has_artifact_errors else 0
 
 
 if __name__ == "__main__":

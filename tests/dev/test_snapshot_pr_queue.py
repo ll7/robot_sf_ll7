@@ -263,9 +263,10 @@ def test_raw_review_comments_artifact_writes_full_payload(tmp_path) -> None:  # 
     ]
     with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(raw_comments), stderr="")
-        write_raw_review_comments_artifact([2693], repo="ll7/robot_sf_ll7", path=artifact)
+        result = write_raw_review_comments_artifact([2693], repo="ll7/robot_sf_ll7", path=artifact)
 
     payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert result == payload
     assert payload["prs"]["2693"]["status"] == "ok"
     assert payload["prs"]["2693"]["contains_raw_diff_hunks"] is True
     assert payload["prs"]["2693"]["comments"][0]["diff_hunk"].startswith("@@")
@@ -275,9 +276,10 @@ def test_raw_review_comments_artifact_rejects_invalid_repo(tmp_path) -> None:  #
     """Invalid repo names should write an error artifact without calling gh."""
     artifact = tmp_path / "raw-review-comments.json"
     with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
-        write_raw_review_comments_artifact([2696], repo="robot_sf_ll7", path=artifact)
+        result = write_raw_review_comments_artifact([2696], repo="robot_sf_ll7", path=artifact)
 
     payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert result == payload
     assert payload["prs"]["2696"] == {
         "status": "error",
         "error": "repo_owner_missing",
@@ -326,6 +328,49 @@ def test_main_raw_review_artifact_keeps_hunks_out_of_stdout(
     assert str(artifact) in stdout
     assert "@@ raw hunk" not in stdout
     assert "@@ raw hunk" in artifact.read_text(encoding="utf-8")
+
+
+def test_main_raw_review_artifact_failure_sets_nonzero_exit(
+    tmp_path,
+    capsys,
+) -> None:  # type: ignore[no-untyped-def]
+    """Raw artifact failures should fail automation instead of only writing artifact errors."""
+    artifact = tmp_path / "raw-review-comments.json"
+    pr_payload = {
+        "number": 2697,
+        "title": "artifact failure PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/2697",
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc997",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.side_effect = [
+            MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=1, stdout="", stderr="not found"),
+        ]
+        rc = main(
+            [
+                "--prs",
+                "2697",
+                "--raw-review-comments-artifact",
+                str(artifact),
+                "--json",
+            ]
+        )
+
+    stdout = capsys.readouterr().out
+    output_payload = json.loads(stdout)
+    artifact_payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert rc == 1
+    assert output_payload["raw_review_comments_artifact_status"] == "error"
+    assert artifact_payload["prs"]["2697"] == {"status": "error", "error": "not found"}
 
 
 def test_main_requires_pr_number(capsys) -> None:  # type: ignore[no-untyped-def]

@@ -10,6 +10,7 @@ from scripts.dev.snapshot_pr_queue import (
     main,
     snapshot_active_prs,
     snapshot_prs,
+    write_raw_review_comments_artifact,
 )
 
 
@@ -157,6 +158,132 @@ def test_main_includes_compact_comment_review_evidence() -> None:
     assert pr["review_snapshot"]["latest"][0]["state"] == "COMMENTED"
 
 
+def test_snapshot_prs_can_include_bounded_review_threads() -> None:
+    """Review-thread mode should omit diff hunks and bound comment bodies."""
+    long_body = "review body " * 40
+    pr_payload = {
+        "number": 2692,
+        "title": "threaded PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/2692",
+        "labels": [{"name": "priority: high"}],
+        "headRefName": "feature",
+        "headRefOid": "abc999",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+        "reviews": [],
+        "comments": [],
+    }
+    thread_payload = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "totalCount": 1,
+                        "nodes": [
+                            {
+                                "id": "thread-1",
+                                "isResolved": False,
+                                "path": "scripts/dev/example.py",
+                                "line": 42,
+                                "comments": {
+                                    "totalCount": 1,
+                                    "nodes": [
+                                        {
+                                            "author": {"login": "reviewer"},
+                                            "body": long_body,
+                                            "createdAt": "2026-06-01T00:00:00Z",
+                                        }
+                                    ],
+                                },
+                            }
+                        ],
+                    }
+                }
+            }
+        }
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.side_effect = [
+            MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=0, stdout=json.dumps(thread_payload), stderr=""),
+        ]
+        payload = snapshot_prs([2692], repo="ll7/robot_sf_ll7", include_review_threads=True)
+
+    snapshot = payload["prs"][0]["review_thread_snapshot"]
+    thread = snapshot["threads"][0]
+    comment = thread["comments"][0]
+    assert snapshot["status"] == "ok"
+    assert snapshot["unresolved"] == 1
+    assert thread["diff_hunk_omitted"] is True
+    assert len(comment["body_excerpt"]) <= COMMENT_BODY_LIMIT
+    assert comment["body_omitted"] is True
+
+
+def test_raw_review_comments_artifact_writes_full_payload(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Raw review comments are opt-in and written to an artifact path."""
+    artifact = tmp_path / "raw-review-comments.json"
+    raw_comments = [
+        {
+            "id": 1,
+            "body": "full body",
+            "diff_hunk": "@@ -1 +1 @@\n-old\n+new",
+        }
+    ]
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(raw_comments), stderr="")
+        write_raw_review_comments_artifact([2693], repo="ll7/robot_sf_ll7", path=artifact)
+
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert payload["prs"]["2693"]["status"] == "ok"
+    assert payload["prs"]["2693"]["contains_raw_diff_hunks"] is True
+    assert payload["prs"]["2693"]["comments"][0]["diff_hunk"].startswith("@@")
+
+
+def test_main_raw_review_artifact_keeps_hunks_out_of_stdout(
+    tmp_path,
+    capsys,
+) -> None:  # type: ignore[no-untyped-def]
+    """The CLI should report only the artifact path, not raw diff hunks."""
+    artifact = tmp_path / "raw-review-comments.json"
+    pr_payload = {
+        "number": 2694,
+        "title": "artifact PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/2694",
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc444",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [],
+        "reviews": [],
+        "comments": [],
+    }
+    raw_comments = [{"id": 1, "body": "full body", "diff_hunk": "@@ raw hunk"}]
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.side_effect = [
+            MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=0, stdout=json.dumps(raw_comments), stderr=""),
+        ]
+        rc = main(
+            [
+                "--prs",
+                "2694",
+                "--raw-review-comments-artifact",
+                str(artifact),
+                "--json",
+            ]
+        )
+
+    stdout = capsys.readouterr().out
+    assert rc == 0
+    assert str(artifact) in stdout
+    assert "@@ raw hunk" not in stdout
+    assert "@@ raw hunk" in artifact.read_text(encoding="utf-8")
+
+
 def test_main_requires_pr_number(capsys) -> None:  # type: ignore[no-untyped-def]
     """CLI should fail compactly when no PRs are provided."""
     rc = main(["--json"])
@@ -169,6 +296,13 @@ def test_main_rejects_expected_head_sha_for_batch(capsys) -> None:  # type: igno
     rc = main(["--prs", "1", "2", "--expected-head-sha", "abc123", "--json"])
     assert rc == 1
     assert "--expected-head-sha requires exactly one PR" in capsys.readouterr().err
+
+
+def test_main_rejects_active_review_thread_mode(capsys) -> None:  # type: ignore[no-untyped-def]
+    """Review-thread mode should stay explicit instead of broad active discovery."""
+    rc = main(["--active", "--review-threads", "--json"])
+    assert rc == 1
+    assert "--review-threads is only supported" in capsys.readouterr().err
 
 
 def test_main_active_mode_discovers_open_prs() -> None:

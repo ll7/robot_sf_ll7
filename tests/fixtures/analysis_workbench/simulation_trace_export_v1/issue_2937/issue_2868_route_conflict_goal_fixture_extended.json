@@ -1,0 +1,1341 @@
+{
+  "schema_version": "simulation_trace_export.v1",
+  "trace_id": "issue_2868_route_conflict_goal_0000_issue_2937_extended",
+  "source": {
+    "scenario_id": "issue_2868_route_conflict_goal",
+    "seed": 2868,
+    "planner_id": "hybrid_rule_v0_minimal",
+    "episode_id": "issue_2868_route_conflict_goal_episode_0000",
+    "generated_by": "unit fixture for semantic metadata test extended for issue #2937 denominator health"
+  },
+  "evidence_boundary": "analysis_workbench_only",
+  "coordinate_frame": "world",
+  "units": {
+    "position": "m",
+    "heading": "rad",
+    "time": "s",
+    "velocity": "m/s"
+  },
+  "frames": [
+    {
+      "step": 0,
+      "time_s": 0.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            2.0,
+            -0.4
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 1,
+      "time_s": 0.1,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.95,
+            -0.38
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 2,
+      "time_s": 0.2,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.9,
+            -0.36
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 3,
+      "time_s": 0.3,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.85,
+            -0.34
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 4,
+      "time_s": 0.4,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.8,
+            -0.32
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 5,
+      "time_s": 0.5,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.75,
+            -0.3
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 6,
+      "time_s": 0.6,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.7,
+            -0.28
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 7,
+      "time_s": 0.7,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.65,
+            -0.26
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 8,
+      "time_s": 0.8,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.6,
+            -0.24
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 9,
+      "time_s": 0.9,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.55,
+            -0.22
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 10,
+      "time_s": 1.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.5,
+            -0.2
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 11,
+      "time_s": 1.1,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.45,
+            -0.18
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 12,
+      "time_s": 1.2,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.4,
+            -0.16
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 13,
+      "time_s": 1.3,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.35,
+            -0.14
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 14,
+      "time_s": 1.4,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.3,
+            -0.12
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 15,
+      "time_s": 1.5,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.25,
+            -0.1
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 16,
+      "time_s": 1.6,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.2,
+            -0.08
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 17,
+      "time_s": 1.7,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.15,
+            -0.06
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 18,
+      "time_s": 1.8,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.1,
+            -0.04
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 19,
+      "time_s": 1.9,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.05,
+            -0.02
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 20,
+      "time_s": 2.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            1.0,
+            0.0
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 21,
+      "time_s": 2.1,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.95,
+            0.02
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 22,
+      "time_s": 2.2,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.9,
+            0.04
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 23,
+      "time_s": 2.3,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.85,
+            0.06
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 24,
+      "time_s": 2.4,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.8,
+            0.08
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 25,
+      "time_s": 2.5,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.75,
+            0.1
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 26,
+      "time_s": 2.6,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.7,
+            0.12
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 27,
+      "time_s": 2.7,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.65,
+            0.14
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 28,
+      "time_s": 2.8,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.6,
+            0.16
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 29,
+      "time_s": 2.9,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.55,
+            0.18
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 30,
+      "time_s": 3.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.5,
+            0.2
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 31,
+      "time_s": 3.1,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.45,
+            0.22
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    },
+    {
+      "step": 32,
+      "time_s": 3.2,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 4101,
+          "position": [
+            0.4,
+            0.24
+          ],
+          "velocity": [
+            -0.5,
+            0.2
+          ],
+          "intent_label": "crossing",
+          "goal_label": "robot_route_conflict",
+          "signal_state": {
+            "available": false
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.15,
+          "angular_velocity": 0.0
+        },
+        "event": "route_conflict"
+      }
+    }
+  ]
+}

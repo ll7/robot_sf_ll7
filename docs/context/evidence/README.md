@@ -422,3 +422,10 @@ Policy caveats:
   evaluated coverage. Forecast defaults remain unchanged.
   claim_boundary=analysis_only_not_navigation_evidence. Not a safety, closed-loop, benchmark,
   or paper-facing claim.
+- `issue_2937_horizon_denominator_health_2026-06-16/`: analysis-only denominator-health fixture
+  repair for the issue #2837 horizon x timestep ablation. Repairs the seven issue #2903 fixture
+  gaps, regenerates the 180-cell audit at 164 evaluated cells (91.1%), and leaves only the
+  intentionally short corridor-interaction fixtures as remaining blockers. Forecast defaults
+  remain unchanged.
+  claim_boundary=analysis_only_not_navigation_evidence. Not a safety, closed-loop, benchmark,
+  or paper-facing claim.

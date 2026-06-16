@@ -1,0 +1,1341 @@
+{
+  "schema_version": "simulation_trace_export.v1",
+  "trace_id": "issue_2868_goal_directed_crossing_0000_issue_2937_extended",
+  "source": {
+    "scenario_id": "issue_2868_goal_directed_crossing",
+    "seed": 2868,
+    "planner_id": "hybrid_rule_v0_minimal",
+    "episode_id": "issue_2868_goal_directed_crossing_episode_0000",
+    "generated_by": "unit fixture for semantic metadata test extended for issue #2937 denominator health"
+  },
+  "evidence_boundary": "analysis_workbench_only",
+  "coordinate_frame": "world",
+  "units": {
+    "position": "m",
+    "heading": "rad",
+    "time": "s",
+    "velocity": "m/s"
+  },
+  "frames": [
+    {
+      "step": 0,
+      "time_s": 0.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            2.0,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "approach"
+      }
+    },
+    {
+      "step": 1,
+      "time_s": 0.1,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.94,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "approach"
+      }
+    },
+    {
+      "step": 2,
+      "time_s": 0.2,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.88,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 3,
+      "time_s": 0.3,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.82,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 4,
+      "time_s": 0.4,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.76,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 5,
+      "time_s": 0.5,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.7,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 6,
+      "time_s": 0.6,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.64,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 7,
+      "time_s": 0.7,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.58,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 8,
+      "time_s": 0.8,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.52,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 9,
+      "time_s": 0.9,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.46,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 10,
+      "time_s": 1.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.4,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 11,
+      "time_s": 1.1,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.34,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 12,
+      "time_s": 1.2,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.28,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 13,
+      "time_s": 1.3,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.22,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 14,
+      "time_s": 1.4,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.16,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 15,
+      "time_s": 1.5,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.1,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 16,
+      "time_s": 1.6,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            1.04,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 17,
+      "time_s": 1.7,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.98,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 18,
+      "time_s": 1.8,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.92,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 19,
+      "time_s": 1.9,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.86,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 20,
+      "time_s": 2.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.8,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 21,
+      "time_s": 2.1,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.74,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 22,
+      "time_s": 2.2,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.68,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 23,
+      "time_s": 2.3,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.62,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 24,
+      "time_s": 2.4,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.56,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 25,
+      "time_s": 2.5,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.5,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 26,
+      "time_s": 2.6,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.44,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 27,
+      "time_s": 2.7,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.38,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 28,
+      "time_s": 2.8,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.32,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 29,
+      "time_s": 2.9,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.26,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 30,
+      "time_s": 3.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.2,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 31,
+      "time_s": 3.1,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.14,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    },
+    {
+      "step": 32,
+      "time_s": 3.2,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": 2001,
+          "position": [
+            0.08,
+            1.0
+          ],
+          "velocity": [
+            -0.6,
+            0.0
+          ],
+          "intent_label": "crossing",
+          "signal_state": {
+            "available": true,
+            "label": "green"
+          }
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "crossing"
+      }
+    }
+  ]
+}

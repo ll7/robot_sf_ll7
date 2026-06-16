@@ -38,7 +38,7 @@ _compute_fixture_proposal = _mod._compute_fixture_proposal
 
 def test_category_totals_sum_to_expected_matrix_size() -> None:
     """The category totals must sum to horizon_count * dt_count * trace_count."""
-    report = build_denominator_report(parent_issue=2837, issue=2903)
+    report = build_denominator_report(parent_issue=2837, issue=2937)
     expected_total = len(HORIZON_LADDER_S) * len(DT_LADDER_S) * len(TRACE_CANDIDATES)
     assert report["expected_total_cells"] == expected_total
     assert report["category_totals_valid"] is True
@@ -60,15 +60,15 @@ def test_missingness_categories_include_required_reasons() -> None:
 
 def test_forecast_defaults_unchanged_flag_is_true() -> None:
     """The report explicitly states forecast defaults are unchanged."""
-    report = build_denominator_report(parent_issue=2837, issue=2903)
+    report = build_denominator_report(parent_issue=2837, issue=2937)
     assert report["forecast_defaults_unchanged"] is True
 
 
 def test_spot_checks_cover_representative_reasons() -> None:
     """At least one missing cell is spot-checked per observed reason."""
-    report = build_denominator_report(parent_issue=2837, issue=2903)
-    # The current durable fixture set is expected to have trace-too-short and
-    # no-pedestrian-motion cells.  If those change, this test documents it.
+    report = build_denominator_report(parent_issue=2837, issue=2937)
+    # After issue #2937, only the intentionally short corridor-interaction
+    # traces should remain missing from the durable fixture set.
     observed_missing = {
         cat for cat, count in report["category_totals"].items() if cat != "evaluated" and count > 0
     }
@@ -81,7 +81,7 @@ def test_spot_checks_cover_representative_reasons() -> None:
 
 def test_matrix_coverage_rows_match_ladder() -> None:
     """The matrix coverage section contains one row per horizon x dt cell."""
-    report = build_denominator_report(parent_issue=2837, issue=2903)
+    report = build_denominator_report(parent_issue=2837, issue=2937)
     expected_keys = {(h, d) for h in HORIZON_LADDER_S for d in DT_LADDER_S}
     actual_keys = {(row["horizon_s"], row["dt_s"]) for row in report["matrix_coverage"]}
     assert actual_keys == expected_keys
@@ -92,12 +92,27 @@ def test_matrix_coverage_rows_match_ladder() -> None:
 
 
 def test_fixture_proposal_targets_at_least_ninety_percent() -> None:
-    """The fixture proposal aims at the 90% coverage target."""
-    report = build_denominator_report(parent_issue=2837, issue=2903)
+    """The fixture proposal aims at the 90% coverage target.
+
+    After issue #2937 the seven proposed fixture gaps are repaired, so the
+    minimum set estimate can legitimately be zero when the durable fixture set
+    already exceeds 90%.  The corridor-interaction fixtures remain short and
+    are still reported as extension candidates.
+    """
+    report = build_denominator_report(parent_issue=2837, issue=2937)
     proposal = report["fixture_proposal"]
     assert proposal["coverage_target_fraction"] == pytest.approx(COVERAGE_TARGET_FRACTION)
+    assert report["category_totals"]["evaluated"] >= 162
+    assert (
+        report["category_totals"]["evaluated"] / report["expected_total_cells"]
+        >= COVERAGE_TARGET_FRACTION
+    )
     assert proposal["minimum_coverage_estimate"] >= COVERAGE_TARGET_FRACTION
-    assert proposal["minimum_fixture_additions"] > 0
+    assert proposal["minimum_fixture_additions"] == 0
+    assert report["category_totals"]["no_pedestrian_motion"] == 0
+    assert report["category_totals"]["metadata_missing"] == 0
+    assert report["category_totals"]["actor_class_missing"] == 0
+    assert report["category_totals"]["observation_tier_missing"] == 0
     assert "corridor_interaction/ammv_social_force" in proposal["short_fixtures"]
     assert "corridor_interaction/default_social_force" in proposal["short_fixtures"]
     assert all(
@@ -119,7 +134,7 @@ def test_classify_missingness_maps_known_statuses() -> None:
 
 def test_fixture_proposal_counts_are_consistent() -> None:
     """The proposal's current + estimated cells matches the estimated coverage."""
-    report = build_denominator_report(parent_issue=2837, issue=2903)
+    report = build_denominator_report(parent_issue=2837, issue=2937)
     proposal = report["fixture_proposal"]
     total = report["expected_total_cells"]
     estimated_evaluated = (
@@ -131,7 +146,7 @@ def test_fixture_proposal_counts_are_consistent() -> None:
 
 def test_per_family_missingness_sums_match_total() -> None:
     """Each per-family row sums to the number of cells for that family."""
-    report = build_denominator_report(parent_issue=2837, issue=2903)
+    report = build_denominator_report(parent_issue=2837, issue=2937)
     for row in report["per_family_missingness"]:
         missing_sum = sum(row["missing_by_reason"].values())
         assert row["evaluated_cells"] + missing_sum == row["total_cells"]

@@ -587,6 +587,8 @@ knowledge, not every transient iteration detail.
   [issue_2944_native_cv_closed_loop_smoke.md](issue_2944_native_cv_closed_loop_smoke.md)
 * Issue #2941 Native forecast-variant replay:
   [issue_2941_native_forecast_replay.md](issue_2941_native_forecast_replay.md)
+* Issue #2937 Horizon/timestep denominator-health fixture repair:
+  [issue_2937_horizon_denominator_health.md](issue_2937_horizon_denominator_health.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:

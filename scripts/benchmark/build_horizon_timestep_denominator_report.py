@@ -10,7 +10,7 @@ matrix.  It does not change forecast defaults or claim navigation benefit.
 Usage::
 
     uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py \
-        --output-dir docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16
+        --output-dir docs/context/evidence/issue_2937_horizon_denominator_health_2026-06-16
 """
 
 from __future__ import annotations
@@ -445,10 +445,11 @@ def _generate_markdown(report: dict[str, Any]) -> str:
             "",
             "This report is a denominator-health audit for the horizon x timestep ablation.  "
             "Forecast defaults are explicitly not changed by this report alone.  "
-            "The missing cells are dominated by short traces and by traces without pedestrian "
-            "motion; no metadata, actor-class, or observation-tier gaps were observed in the "
-            "current durable fixture set.  The proposed fixture additions are planning estimates "
-            "and must be validated by actually generating or extending the relevant traces.",
+            "After the issue #2937 fixture repairs, remaining missing cells are concentrated in "
+            "short corridor_interaction traces; no no-motion, metadata, actor-class, or "
+            "observation-tier gaps were observed in the current durable fixture set.  "
+            "The proposed fixture additions are planning estimates and must be validated by "
+            "actually generating or extending the relevant traces.",
         ]
     )
     return "\n".join(lines)
@@ -456,7 +457,7 @@ def _generate_markdown(report: dict[str, Any]) -> str:
 
 def build_denominator_report(
     parent_issue: int = 2837,
-    issue: int = 2903,
+    issue: int = 2937,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     """Build the denominator-health report from the durable ablation fixtures."""
@@ -525,13 +526,13 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="docs/context/evidence/issue_2903_horizon_denominator_health_2026-06-16",
+        default="docs/context/evidence/issue_2937_horizon_denominator_health_2026-06-16",
         help="Output directory for evidence artifacts.",
     )
     parser.add_argument(
         "--issue",
         type=int,
-        default=2903,
+        default=2937,
         help="Issue number to record in generated evidence metadata.",
     )
     parser.add_argument(

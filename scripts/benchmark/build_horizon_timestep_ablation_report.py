@@ -66,7 +66,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
     {
         "family": "crossing_proxy",
         "label": "synthetic_crossing_proxy_orca",
-        "path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/crossing_proxy_motion_rich_fixture.json",
         "scenario_id": "crossing_proxy",
         "planner_id": "orca",
         "seed": 111,
@@ -74,7 +74,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
     {
         "family": "bottleneck",
         "label": "minimal_fixture",
-        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/bottleneck_motion_rich_fixture.json",
         "scenario_id": "classic_bottleneck_medium",
         "planner_id": "hybrid_rule_v0_minimal",
         "seed": 111,
@@ -82,7 +82,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
     {
         "family": "occluded_emergence",
         "label": "deterministic_occluded_emergence",
-        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/occluded_emergence_episode_extended.json",
         "scenario_id": "issue_2756_occluded_emergence",
         "planner_id": "hybrid_rule_v0_minimal",
         "seed": 111,
@@ -90,7 +90,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
     {
         "family": "signalized_crossing",
         "label": "signalized_crossing_semantic_metadata",
-        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/issue_2868_signalized_crossing_fixture_extended.json",
         "scenario_id": "issue_2868_signalized_crossing",
         "planner_id": "hybrid_rule_v0_minimal",
         "seed": 2868,
@@ -98,7 +98,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
     {
         "family": "goal_directed_crossing",
         "label": "goal_directed_crossing_fixture",
-        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/issue_2868_goal_directed_crossing_fixture_extended.json",
         "scenario_id": "issue_2868_goal_directed_crossing",
         "planner_id": "hybrid_rule_v0_minimal",
         "seed": 2868,
@@ -106,7 +106,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
     {
         "family": "waiting_with_intent_change",
         "label": "waiting_intent_change_fixture",
-        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_waiting_intent_change_fixture_0000.json",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/issue_2868_waiting_intent_change_fixture_extended.json",
         "scenario_id": "issue_2868_waiting_intent_change",
         "planner_id": "hybrid_rule_v0_minimal",
         "seed": 2868,
@@ -114,7 +114,7 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
     {
         "family": "route_conflict_goal",
         "label": "route_conflict_goal_fixture",
-        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json",
+        "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/issue_2868_route_conflict_goal_fixture_extended.json",
         "scenario_id": "issue_2868_route_conflict_goal",
         "planner_id": "hybrid_rule_v0_minimal",
         "seed": 2868,
@@ -123,10 +123,6 @@ TRACE_CANDIDATES: list[dict[str, Any]] = [
 
 MISSING_FAMILIES: list[dict[str, str]] = [
     {"family": "dense_pedestrian_interaction", "reason": "no durable trace fixture available"},
-    {
-        "family": "bottleneck_with_motion",
-        "reason": "existing bottleneck fixture has zero pedestrian velocity",
-    },
 ]
 
 

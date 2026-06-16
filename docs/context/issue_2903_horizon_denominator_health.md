@@ -1,5 +1,9 @@
 # Issue #2903: Prediction - Repair Horizon/Timestep Denominator Coverage 2026-06-16
 
+> **Status: Historical / superseded by [Issue #2937](issue_2937_horizon_denominator_health.md).**
+> The fixture gaps identified here were repaired in Issue #2937; use the Issue #2937
+> evidence for current denominator-health coverage.
+
 ## Summary
 
 This note records the denominator-health audit for the horizon x timestep

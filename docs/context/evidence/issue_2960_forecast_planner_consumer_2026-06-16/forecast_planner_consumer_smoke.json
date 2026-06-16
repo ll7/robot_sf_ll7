@@ -1,0 +1,103 @@
+{
+  "claim_boundary": "Smoke evidence that forecast_variant can feed a real PredictionPlannerAdapter consumer. This is not nominal or benchmark evidence and does not claim any forecast variant improves safety, success, or runtime.",
+  "fixture": {
+    "dt_s": 0.5,
+    "same_seed_across_variants": true,
+    "scenario": "deterministic_motion_rich_socnav_smoke",
+    "seed": 2960
+  },
+  "issue": 2960,
+  "limitations": [
+    "Single deterministic SocNav observation; not a statistically powered benchmark.",
+    "Planner actions are local one-step commands, not full episode success evidence.",
+    "Rows classify planner-consumption mechanics, not forecast quality or navigation benefit."
+  ],
+  "required_metrics": [
+    "collision",
+    "near_miss",
+    "min_distance_m",
+    "stop_yield_timing_steps",
+    "progress_m",
+    "false_positive_stops",
+    "runtime_s"
+  ],
+  "result_classification": "smoke",
+  "schema_version": "ForecastPlannerConsumerSmoke.v1",
+  "variant_results": [
+    {
+      "angular_velocity": -1.0,
+      "classification": "native",
+      "collision": false,
+      "execution_mode": "native",
+      "false_positive_stops": 0,
+      "linear_velocity": 2.25,
+      "min_distance_m": 0.556658923625946,
+      "near_miss": true,
+      "prediction_changed_vs_none": false,
+      "progress_m": 1.125,
+      "runtime_s": 0.007005249033682048,
+      "stop_yield_timing_steps": 0,
+      "variant": "none"
+    },
+    {
+      "angular_velocity": -1.0,
+      "classification": "degraded",
+      "collision": false,
+      "execution_mode": "native",
+      "false_positive_stops": 0,
+      "linear_velocity": 2.25,
+      "min_distance_m": 0.556658923625946,
+      "near_miss": true,
+      "prediction_changed_vs_none": false,
+      "progress_m": 1.125,
+      "runtime_s": 0.007927500002551824,
+      "stop_yield_timing_steps": 0,
+      "variant": "cv"
+    },
+    {
+      "angular_velocity": -1.0,
+      "classification": "degraded",
+      "collision": false,
+      "execution_mode": "native",
+      "false_positive_stops": 0,
+      "linear_velocity": 2.25,
+      "min_distance_m": 0.556658923625946,
+      "near_miss": true,
+      "prediction_changed_vs_none": false,
+      "progress_m": 1.125,
+      "runtime_s": 0.007727300049737096,
+      "stop_yield_timing_steps": 0,
+      "variant": "semantic"
+    },
+    {
+      "angular_velocity": -1.0,
+      "classification": "native",
+      "collision": false,
+      "execution_mode": "native",
+      "false_positive_stops": 0,
+      "linear_velocity": 2.25,
+      "min_distance_m": 0.5116963386535645,
+      "near_miss": true,
+      "prediction_changed_vs_none": true,
+      "progress_m": 1.125,
+      "runtime_s": 0.008203879988286644,
+      "stop_yield_timing_steps": 0,
+      "variant": "interaction_aware"
+    },
+    {
+      "angular_velocity": -1.0,
+      "classification": "degraded",
+      "collision": false,
+      "execution_mode": "native",
+      "false_positive_stops": 0,
+      "linear_velocity": 2.25,
+      "min_distance_m": 0.556658923625946,
+      "near_miss": true,
+      "prediction_changed_vs_none": false,
+      "progress_m": 1.125,
+      "runtime_s": 0.007845579006243497,
+      "stop_yield_timing_steps": 0,
+      "variant": "risk_filtered"
+    }
+  ]
+}

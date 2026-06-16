@@ -539,6 +539,33 @@ def test_prediction_adapter_fallback_when_model_missing(monkeypatch):
     assert np.isfinite(w)
 
 
+def test_prediction_adapter_consumes_configured_forecast_variant() -> None:
+    """Configured forecast variants should feed planner-consumed pedestrian futures."""
+    cfg = SocNavPlannerConfig(
+        forecast_variant="interaction_aware",
+        forecast_variant_horizons_s=(0.5, 1.0, 1.5),
+        forecast_variant_dt_s=0.5,
+        predictive_horizon_steps=3,
+        predictive_rollout_dt=0.5,
+    )
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    state = np.array(
+        [
+            [0.5, 0.0, 0.4, 0.0],
+            [0.7, 0.0, 0.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    mask = np.array([1.0, 1.0], dtype=np.float32)
+
+    forecast_future = adapter._predict_trajectories(state, mask)
+    cv_future = adapter._constant_velocity_prediction(state, mask)
+
+    assert adapter.get_forecast_variant_execution_mode() == "native"
+    assert forecast_future.shape == cv_future.shape == (2, 3, 2)
+    assert not np.allclose(forecast_future, cv_future)
+
+
 def test_prediction_adapter_requires_model_when_fallback_disabled(monkeypatch):
     """Predictive adapter fails fast when checkpoint/model loading fails and fallback is disabled."""
 

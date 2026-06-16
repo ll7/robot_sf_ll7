@@ -591,6 +591,8 @@ knowledge, not every transient iteration detail.
   [issue_2944_native_cv_closed_loop_smoke.md](issue_2944_native_cv_closed_loop_smoke.md)
 * Issue #2941 Native forecast-variant replay:
   [issue_2941_native_forecast_replay.md](issue_2941_native_forecast_replay.md)
+* Issue #2960 Forecast planner consumer smoke:
+  [issue_2960_forecast_planner_consumer.md](issue_2960_forecast_planner_consumer.md)
 * Issue #2937 Horizon/timestep denominator-health fixture repair:
   [issue_2937_horizon_denominator_health.md](issue_2937_horizon_denominator_health.md)
 * Issue #2943 Fast-Results Milestone / Claim Map v0 (2026-06-16):

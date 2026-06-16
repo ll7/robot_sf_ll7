@@ -736,6 +736,68 @@ def test_negative_max_wall_seconds_is_rejected(
     assert "value must be non-negative" in capsys.readouterr().err
 
 
+def _fake_gh_bin(tmp_path: Path) -> Path:
+    """Write an executable fake ``gh`` binary that serves scripted PR view responses."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_gh = bin_dir / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "state_path = os.environ['FAKE_GH_STATE']\n"
+        "with open(state_path, encoding='utf-8') as f:\n"
+        "    state = json.load(f)\n"
+        "idx = state['calls']\n"
+        "if idx >= len(state['responses']):\n"
+        "    print(f'No response for call {idx}', file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+        "resp = state['responses'][idx]\n"
+        "state['calls'] = idx + 1\n"
+        "with open(state_path, 'w', encoding='utf-8') as f:\n"
+        "    json.dump(state, f)\n"
+        "print(json.dumps(resp))\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    fake_gh_bat = bin_dir / "gh.bat"
+    fake_gh_bat.write_text(
+        '@echo off\r\npython "%~dp0gh" %*\r\n',
+        encoding="utf-8",
+    )
+    return bin_dir
+
+
+def _run_script(
+    tmp_path: Path,
+    args: list[str],
+    responses: list[dict[str, object]],
+) -> subprocess.CompletedProcess[str]:
+    """Invoke the CI watcher via subprocess with a fake ``gh`` on PATH."""
+    import os
+
+    script = str(
+        Path(__file__).resolve().parent.parent.parent / "scripts" / "dev" / "check_pr_ci_status.py"
+    )
+    state_path = tmp_path / "fake_gh_state.json"
+    state_path.write_text(
+        json.dumps({"calls": 0, "responses": responses}),
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["FAKE_GH_STATE"] = str(state_path)
+    env["PATH"] = str(_fake_gh_bin(tmp_path)) + os.pathsep + env.get("PATH", "")
+    return subprocess.run(
+        [sys.executable, script, *args],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+        env=env,
+    )
+
+
 def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
     """python scripts/dev/check_pr_ci_status.py --help should work without PYTHONPATH."""
     import os
@@ -757,3 +819,87 @@ def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
     assert "run_worktree_shared_venv.sh" in result.stdout
     assert "--expected-head-sha" in result.stdout
     assert "--max-wall-seconds" in result.stdout
+
+
+def test_smoke_completed_ci_exits_cleanly_with_monitor_metadata(
+    tmp_path: Path,
+) -> None:
+    """A completed CI status should exit 0 and include explicit monitor metadata."""
+    response: dict[str, object] = {
+        "number": 21,
+        "title": "smoke success",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "smoke-success",
+        "headRefOid": "deadbeef",
+        "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+        "reviews": [],
+    }
+
+    result = _run_script(
+        tmp_path,
+        [
+            "21",
+            "--json",
+            "--expected-head-sha",
+            "deadbeef",
+            "--poll-attempts",
+            "3",
+            "--poll-interval",
+            "0.0",
+        ],
+        [response],
+    )
+
+    assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload["status"] == "ok"
+    assert payload["checks"]["overall"] == "success"
+    assert payload["monitor"]["expected_head_sha"] == "deadbeef"
+    assert payload["monitor"]["head_sha_matches_expected"] is True
+    assert payload["monitor"]["route_evidence_only"] is True
+    assert payload["monitor"]["terminal_reason"] == "success"
+
+
+def test_smoke_attempt_exhaustion_reports_bounded_pending_reason(
+    tmp_path: Path,
+) -> None:
+    """Exhausting bounded poll attempts while pending should report a terminal reason."""
+    response: dict[str, object] = {
+        "number": 22,
+        "title": "smoke pending",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "smoke-pending",
+        "headRefOid": "cafebabe",
+        "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
+        "reviews": [],
+    }
+
+    result = _run_script(
+        tmp_path,
+        [
+            "22",
+            "--json",
+            "--expected-head-sha",
+            "cafebabe",
+            "--poll-attempts",
+            "3",
+            "--poll-interval",
+            "0.0",
+        ],
+        [response, response, response],
+    )
+
+    assert result.returncode == 2, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    lines = result.stdout.strip().splitlines()
+    assert len(lines) == 3
+    final = json.loads(lines[-1])
+    assert final["status"] == "ok"
+    assert final["checks"]["overall"] == "pending"
+    assert final["monitor"]["expected_head_sha"] == "cafebabe"
+    assert final["monitor"]["head_sha_matches_expected"] is True
+    assert final["monitor"]["route_evidence_only"] is True
+    assert final["monitor"]["terminal_reason"] == "attempt_exhausted"
+    assert final["monitor"]["poll_attempt"] == 3
+    assert final["monitor"]["poll_attempts"] == 3

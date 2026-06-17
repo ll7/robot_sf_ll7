@@ -11,6 +11,8 @@ from robot_sf.benchmark.mechanism_trace import (
     SCHEMA_VERSION,
     MechanismTraceValidationError,
     classify_mechanism_trace_row,
+    emit_orca_residual_row,
+    emit_orca_residual_rows,
     emit_static_recentering_row,
     emit_topology_guidance_row,
     generate_mechanism_trace_report,
@@ -331,3 +333,99 @@ def test_emit_topology_guidance_row() -> None:
     assert row["activation_step"] == 12
     assert row["classification"] == "revise"
     assert row["input_condition"]["selected_hypothesis_id"] == "route_2"
+
+
+def test_emit_orca_residual_row() -> None:
+    """emit_orca_residual_row should emit residual rows with residual diagnostics."""
+    decision_active = {
+        "selected_command": [0.7, -0.2],
+        "selected_source": "prior_residual",
+        "selected_score": 0.31,
+        "action_adaptation": {
+            "mode": "prior_residual",
+            "raw_residual_action": [0.25, -0.3],
+            "bounded_residual_action": [0.2, -0.25],
+            "residual_bounds": {
+                "linear": 0.2,
+                "angular": 0.3,
+            },
+            "residual_clipped": True,
+        },
+        "intervened": True,
+        "intervention_reason": "bounded_prior_residual_improved_short_horizon_safety",
+    }
+    row = emit_orca_residual_row(9, decision_active, progress_delta=0.12)
+    validate_mechanism_trace_payload(
+        {
+            "schema_version": SCHEMA_VERSION,
+            "generated_at_utc": "2026-06-16T17:00:00Z",
+            "rows": [row],
+        }
+    )
+    assert row["mechanism_id"] == "orca_residuals"
+    assert row["activation_step"] == 9
+    assert row["command_source"] == "prior_residual_safe"
+    assert row["selected_command"] == [0.7, -0.2]
+    assert row["input_condition"]["original_command_source"] == "prior_residual"
+    assert row["input_condition"]["residual_norm"] == pytest.approx((0.25**2 + (-0.3) ** 2) ** 0.5)
+    assert row["failure_mode"] == "bounded_prior_residual_improved_short_horizon_safety"
+    assert row["classification"] == "slice-local"
+
+    row_inactive = emit_orca_residual_row(
+        10,
+        {
+            "selected_source": "dynamic_window",
+            "selected_command": [1.0, 0.0],
+        },
+    )
+    assert row_inactive["mechanism_id"] == "orca_residuals"
+    assert row_inactive["classification"] == "inactive"
+    assert row_inactive["selected_command"] == [1.0, 0.0]
+
+    row_revise = emit_orca_residual_row(
+        11,
+        {
+            "selected_source": "prior_residual_safe",
+            "selected_command": [0.4, 0.1],
+            "action_adaptation": {
+                "mode": "prior_residual",
+                "raw_residual_action": [0.1, 0.0],
+                "bounded_residual_action": [0.1, 0.0],
+                "residual_bounds": {
+                    "linear": 0.2,
+                    "angular": 0.3,
+                },
+            },
+            "selected_score": 0.22,
+        },
+        progress_delta=1.0,
+    )
+    assert row_revise["classification"] == "revise"
+
+
+def test_emit_orca_residual_rows_from_fixture() -> None:
+    """Emit ORCA residual rows from a durable tracked planner-decision fixture."""
+    fixture_path = (
+        Path(__file__).parent / "fixtures" / "orca_residuals_planner_decision_trace.v1.json"
+    )
+    with fixture_path.open("r", encoding="utf-8") as f:
+        planner_trace = json.load(f)
+
+    rows = emit_orca_residual_rows(planner_trace, trace_uri=str(fixture_path))
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at_utc": "2026-06-16T17:00:00Z",
+        "rows": rows,
+    }
+    validate_mechanism_trace_payload(payload)
+    report = generate_mechanism_trace_report(payload)
+
+    assert len(rows) == 4
+    assert rows[0]["mechanism_id"] == "orca_residuals"
+    assert rows[0]["classification"] == "slice-local"
+    assert rows[0]["command_source"] == "prior_residual_safe"
+    assert rows[2]["classification"] == "revise"
+    assert rows[3]["classification"] == "inactive"
+    assert report["summary"]["counts"]["revise"] == 1
+    assert report["summary"]["counts"]["slice-local"] == 2
+    assert report["summary"]["counts"]["inactive"] == 1

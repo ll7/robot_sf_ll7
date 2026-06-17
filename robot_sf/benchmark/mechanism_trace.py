@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +108,11 @@ def classify_mechanism_trace_row(row: dict[str, Any]) -> str:  # noqa: C901
             "topology_route",
         }:
             return "active-but-irrelevant"
+        if mechanism_id == "orca_residuals" and cmd_src not in {
+            "prior_residual",
+            "prior_residual_safe",
+        }:
+            return "active-but-irrelevant"
 
     # Check revise vs slice-local
     progress_delta = row.get("route_progress_delta")
@@ -153,6 +159,152 @@ def generate_mechanism_trace_report(payload: dict[str, Any]) -> dict[str, Any]:
         },
         "rows": classified_rows,
     }
+
+
+def emit_orca_residual_row(
+    step: int,
+    last_decision: Mapping[str, Any],
+    progress_delta: float | None = None,
+    trace_uri: str | None = None,
+) -> dict[str, Any]:
+    """Convert an ORCA residual planning decision into a mechanism trace row.
+
+    Args:
+        step: Simulation step index
+        last_decision: Planner step decision diagnostics
+        progress_delta: Progress change compared to previous step
+        trace_uri: Path to simulation trace file
+
+    Returns:
+        Formatted mechanism trace row dict
+    """
+    action_adaptation = last_decision.get("action_adaptation")
+    if not isinstance(action_adaptation, Mapping):
+        fallback_state = last_decision.get("fallback_controller_state")
+        if isinstance(fallback_state, Mapping):
+            action_adaptation = fallback_state.get("action_adaptation")
+    adaptation = action_adaptation if isinstance(action_adaptation, Mapping) else {}
+    adaptation_mode = str(adaptation.get("mode", "")).strip()
+    is_prior_residual = adaptation_mode == "prior_residual"
+
+    selected_cmd = last_decision.get("selected_command")
+    if isinstance(selected_cmd, list | tuple):
+        selected_command_values = [
+            float(value) for value in selected_cmd[:2] if isinstance(value, int | float)
+        ]
+        selected_command = selected_command_values if len(selected_command_values) >= 2 else None
+    else:
+        selected_command = None
+
+    raw_residual = adaptation.get("raw_residual_action", [])
+    bounded_residual = adaptation.get("bounded_residual_action", [])
+    raw_residual_floats = (
+        [float(value) for value in raw_residual[:2] if isinstance(value, int | float)]
+        if isinstance(raw_residual, list | tuple)
+        else []
+    )
+    bounded_residual_floats = (
+        [float(value) for value in bounded_residual[:2] if isinstance(value, int | float)]
+        if isinstance(bounded_residual, list | tuple)
+        else []
+    )
+
+    residual_norm = None
+    if len(raw_residual_floats) >= 2:
+        residual_norm = float((raw_residual_floats[0] ** 2 + raw_residual_floats[1] ** 2) ** 0.5)
+
+    original_command_source = str(last_decision.get("selected_source", "unknown"))
+    original_command_source = (
+        "unknown" if original_command_source == "None" else original_command_source
+    )
+
+    input_condition = (
+        {
+            "adaptation_mode": adaptation_mode,
+            "original_command_source": original_command_source,
+            "raw_residual": raw_residual_floats,
+            "bounded_residual": bounded_residual_floats,
+            "residual_norm": residual_norm,
+            "residual_clipped": bool(adaptation.get("residual_clipped", False)),
+            "residual_bounds": adaptation.get("residual_bounds"),
+        }
+        if is_prior_residual
+        else None
+    )
+
+    command_source = "prior_residual_safe" if is_prior_residual else original_command_source
+
+    selected_score = last_decision.get("selected_score")
+    risk_score = (
+        float(selected_score)
+        if is_prior_residual and isinstance(selected_score, int | float)
+        else None
+    )
+
+    row = {
+        "mechanism_id": "orca_residuals",
+        "activation_step": step,
+        "input_condition": input_condition,
+        "selected_command": selected_command,
+        "command_source": command_source,
+        "risk_score": risk_score,
+        "route_progress_delta": progress_delta,
+        "failure_mode": None,
+        "trace_uri": trace_uri,
+        "classification": "inactive",
+    }
+    if is_prior_residual and bool(last_decision.get("intervened", False)):
+        reason = last_decision.get("intervention_reason")
+        row["failure_mode"] = str(reason) if reason is not None else "residual_intervention_active"
+    class_input = dict(row)
+    class_input.pop("classification", None)
+    row["classification"] = classify_mechanism_trace_row(class_input)
+    return row
+
+
+def emit_orca_residual_rows(
+    planner_decision_trace: list[dict[str, Any]],
+    *,
+    trace_uri: str | None = None,
+) -> list[dict[str, Any]]:
+    """Build ORCA residual mechanism rows from a planner decision trace.
+
+    Args:
+        planner_decision_trace: Planner decision trace records.
+        trace_uri: Optional trace URI attached to emitted rows.
+
+    Returns:
+        List of mechanism trace rows.
+    """
+    rows: list[dict[str, Any]] = []
+    previous_progress = None
+    for entry in planner_decision_trace:
+        if not isinstance(entry, Mapping):
+            continue
+        route_progress = entry.get("route_progress_from_start_m")
+        if isinstance(route_progress, int | float):
+            route_progress_float = float(route_progress)
+            progress_delta = (
+                route_progress_float - previous_progress
+                if isinstance(previous_progress, float)
+                else None
+            )
+            previous_progress = route_progress_float
+        else:
+            progress_delta = None
+            previous_progress = None
+
+        step = entry.get("step", len(rows))
+        activation_step = int(step) if isinstance(step, int | float) else len(rows)
+        rows.append(
+            emit_orca_residual_row(
+                activation_step,
+                last_decision=entry,
+                progress_delta=progress_delta,
+                trace_uri=trace_uri,
+            )
+        )
+    return rows
 
 
 def emit_static_recentering_row(

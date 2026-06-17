@@ -1,0 +1,349 @@
+{
+  "generated_at": "2026-06-17T06:42:11.563809+00:00",
+  "candidate": "orca_residual_guarded_ppo_progress_v1",
+  "stage": "smoke",
+  "algo": "guarded_ppo",
+  "candidate_registry": "/tmp/luttkule/issue1475-orca-residual-bc-12913/results/issue1475_materialized_candidate/candidate_registry.yaml",
+  "candidate_config_path": "/tmp/luttkule/issue1475-orca-residual-bc-12913/results/issue1475_materialized_candidate/candidates/orca_residual_guarded_ppo_progress_v1.yaml",
+  "scenario_matrix": "/home/luttkule/git/robot_sf_ll7.worktrees/slurm-submit-20260616-origin-main/configs/scenarios/single/planner_sanity_simple.yaml",
+  "seed_manifest": null,
+  "scenario_filter": null,
+  "benchmark_profile": "experimental",
+  "synthetic_actuation_profile": null,
+  "git_hash": "dcb14927f08277d123d9666ad91b8d6abbc4fe9d",
+  "summary": {
+    "episodes": 1,
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "termination_reason_counts": {
+      "max_steps": 1
+    },
+    "failure_mode_counts": {
+      "timeout_low_progress": 1
+    },
+    "scenario_exclusions": {
+      "count": 0,
+      "by_status": {},
+      "by_reason": {},
+      "records": []
+    },
+    "evidence_adjusted": {
+      "episodes": 1,
+      "excluded_episodes": 0,
+      "success_rate": 0.0,
+      "collision_rate": 0.0,
+      "near_miss_rate": 0.0
+    },
+    "scenario_family": {
+      "nominal": {
+        "episodes": 1,
+        "success_rate": 0.0,
+        "collision_rate": 0.0,
+        "near_miss_rate": 0.0
+      }
+    },
+    "mean_min_distance": null,
+    "mean_avg_speed": 0.8040840406822607,
+    "synthetic_actuation": {
+      "command_clip_fraction_mean": null,
+      "yaw_rate_saturation_fraction_mean": null,
+      "signed_braking_peak_m_s2_mean": null
+    },
+    "runtime_sec": 10.998495885636657
+  },
+  "batch_summary": {
+    "total_jobs": 1,
+    "workers": 1,
+    "parallel_execution": false,
+    "batch_runtime_sec": 9.238270247820765,
+    "written": 1,
+    "successful_jobs": 1,
+    "failed_jobs": 0,
+    "skipped_jobs": 0,
+    "failures": [],
+    "out_path": "/tmp/luttkule/issue1475-orca-residual-bc-12913/results/policy_search/orca_residual_guarded_ppo_progress_v1/smoke/issue1475_smoke/smoke__orca_residual_guarded_ppo_progress_v1.jsonl",
+    "algorithm_readiness": {
+      "name": "guarded_ppo",
+      "tier": "experimental",
+      "profile": "experimental"
+    },
+    "algorithm_metadata_contract": {
+      "algorithm": "guarded_ppo",
+      "status": "ok",
+      "canonical_algorithm": "guarded_ppo",
+      "baseline_category": "learning",
+      "policy_semantics": "guarded_policy_network_inference",
+      "observation_spec": {
+        "default_mode": "sensor_fusion_state",
+        "supported_modes": [
+          "sensor_fusion_state",
+          "socnav_state"
+        ],
+        "inputs": [
+          "robot_state",
+          "goal",
+          "lidar_rays",
+          "history",
+          "safety_guard"
+        ],
+        "notes": "Guarded PPO uses sensor-fusion policy inputs plus a local safety guard by default; materialized BC checkpoints may request SocNav structured inputs.",
+        "active_mode": "socnav_state",
+        "observation_level": "tracked_agents_no_noise",
+        "override_applied": true
+      },
+      "observation_level": {
+        "key": "tracked_agents_no_noise",
+        "display_name": "Perfect tracked agents",
+        "perception_assumption": "perfect_tracking_without_noise",
+        "active_observation_mode": "socnav_state",
+        "compatible_observation_modes": [
+          "socnav_state",
+          "headed_socnav_state",
+          "gst_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "tracked_agents"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "none",
+        "interpretation": "benchmark_metadata_not_sensor_certification"
+      },
+      "planner_kinematics": {
+        "robot_kinematics": "differential_drive",
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": true,
+        "supports_adapter_commands": true,
+        "execution_mode": "mixed",
+        "adapter_name": "guarded_ppo_action_to_unicycle",
+        "adapter_active": true,
+        "scenario_kinematics": [
+          "differential_drive"
+        ]
+      },
+      "planner_contract": {
+        "planner_id": "guarded_ppo",
+        "observation_contract": {
+          "mode": "sensor_fusion_state",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "supported_modes": [
+            "sensor_fusion_state",
+            "socnav_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "lidar_rays",
+            "history",
+            "safety_guard"
+          ],
+          "frame": "world",
+          "normalization": "raw",
+          "pedestrian_ordering": "distance_ascending",
+          "missing_value": null,
+          "notes": "Guarded PPO uses sensor-fusion policy inputs plus a local safety guard by default; materialized BC checkpoints may request SocNav structured inputs."
+        },
+        "action_contract": {
+          "command_space": "mixed_vw_or_vxy",
+          "output_keys": [
+            "v",
+            "omega",
+            "vx",
+            "vy"
+          ],
+          "frame": "robot",
+          "normalization": "raw",
+          "units": "mps_radps",
+          "scaling": "none",
+          "compatible_robot_kinematics": [
+            "differential_drive"
+          ],
+          "active_robot_kinematics": "differential_drive",
+          "bounds": {},
+          "notes": ""
+        },
+        "reset_contract": "seeded_reset",
+        "scenario_requirements": [],
+        "compatibility_scope": "metadata_only",
+        "notes": "Compatibility metadata only; not a benchmark quality claim."
+      },
+      "adapter_impact": {
+        "requested": false,
+        "native_steps": 0,
+        "adapted_steps": 0,
+        "status": "disabled"
+      },
+      "kinematics_feasibility": {
+        "commands_evaluated": 80,
+        "infeasible_native_count": 0,
+        "projected_count": 0,
+        "projection_rate": 0.0,
+        "infeasible_rate": 0.0,
+        "mean_abs_delta_linear": 0.0,
+        "mean_abs_delta_angular": 0.0,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "learned_policy_contract": {
+        "status": "not_applicable"
+      },
+      "algorithm_metadata_contract": {
+        "algorithm": "guarded_ppo",
+        "status": "ok",
+        "canonical_algorithm": "guarded_ppo",
+        "baseline_category": "learning",
+        "policy_semantics": "guarded_policy_network_inference",
+        "observation_spec": {
+          "default_mode": "sensor_fusion_state",
+          "supported_modes": [
+            "sensor_fusion_state",
+            "socnav_state"
+          ],
+          "inputs": [
+            "robot_state",
+            "goal",
+            "lidar_rays",
+            "history",
+            "safety_guard"
+          ],
+          "notes": "Guarded PPO uses sensor-fusion policy inputs plus a local safety guard by default; materialized BC checkpoints may request SocNav structured inputs.",
+          "active_mode": "socnav_state",
+          "observation_level": "tracked_agents_no_noise",
+          "override_applied": true
+        },
+        "observation_level": {
+          "key": "tracked_agents_no_noise",
+          "display_name": "Perfect tracked agents",
+          "perception_assumption": "perfect_tracking_without_noise",
+          "active_observation_mode": "socnav_state",
+          "compatible_observation_modes": [
+            "socnav_state",
+            "headed_socnav_state",
+            "gst_human_state"
+          ],
+          "required_inputs": [
+            "robot_state",
+            "goal",
+            "tracked_agents"
+          ],
+          "noise_policy": "none",
+          "occlusion_policy": "none",
+          "interpretation": "benchmark_metadata_not_sensor_certification"
+        },
+        "planner_kinematics": {
+          "robot_kinematics": "differential_drive",
+          "planner_command_space": "unicycle_vw",
+          "supports_native_commands": true,
+          "supports_adapter_commands": true,
+          "execution_mode": "mixed",
+          "adapter_name": "guarded_ppo_action_to_unicycle",
+          "adapter_active": true,
+          "scenario_kinematics": [
+            "differential_drive"
+          ]
+        },
+        "planner_contract": {
+          "planner_id": "guarded_ppo",
+          "observation_contract": {
+            "mode": "sensor_fusion_state",
+            "active_mode": "socnav_state",
+            "observation_level": "tracked_agents_no_noise",
+            "perception_assumption": "perfect_tracking_without_noise",
+            "supported_modes": [
+              "sensor_fusion_state",
+              "socnav_state"
+            ],
+            "required_inputs": [
+              "robot_state",
+              "goal",
+              "lidar_rays",
+              "history",
+              "safety_guard"
+            ],
+            "frame": "world",
+            "normalization": "raw",
+            "pedestrian_ordering": "distance_ascending",
+            "missing_value": null,
+            "notes": "Guarded PPO uses sensor-fusion policy inputs plus a local safety guard by default; materialized BC checkpoints may request SocNav structured inputs."
+          },
+          "action_contract": {
+            "command_space": "mixed_vw_or_vxy",
+            "output_keys": [
+              "v",
+              "omega",
+              "vx",
+              "vy"
+            ],
+            "frame": "robot",
+            "normalization": "raw",
+            "units": "mps_radps",
+            "scaling": "none",
+            "compatible_robot_kinematics": [
+              "differential_drive"
+            ],
+            "active_robot_kinematics": "differential_drive",
+            "bounds": {},
+            "notes": ""
+          },
+          "reset_contract": "seeded_reset",
+          "scenario_requirements": [],
+          "compatibility_scope": "metadata_only",
+          "notes": "Compatibility metadata only; not a benchmark quality claim."
+        },
+        "adapter_impact": {
+          "requested": false,
+          "native_steps": 0,
+          "adapted_steps": 0,
+          "status": "disabled"
+        },
+        "kinematics_feasibility": {
+          "commands_evaluated": 80,
+          "infeasible_native_count": 0,
+          "projected_count": 0,
+          "projection_rate": 0.0,
+          "infeasible_rate": 0.0,
+          "mean_abs_delta_linear": 0.0,
+          "mean_abs_delta_angular": 0.0,
+          "max_abs_delta_linear": 0.0,
+          "max_abs_delta_angular": 0.0
+        }
+      }
+    },
+    "observation_noise": {
+      "enabled": false,
+      "profile": "none",
+      "seed": null,
+      "pose_noise_std_m": 0.0,
+      "heading_noise_std_rad": 0.0,
+      "lidar_dropout_prob": 0.0,
+      "lidar_dropout_value": 0.0,
+      "pedestrian_false_negative_prob": 0.0,
+      "pedestrian_false_positive_prob": 0.0,
+      "pedestrian_false_positive_radius_m": 4.0,
+      "pedestrian_false_positive_radius": 0.35,
+      "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+    },
+    "observation_noise_hash": "c71dd80adab5",
+    "observation_level": "tracked_agents_no_noise",
+    "synthetic_actuation_profile": null,
+    "latency_stress_profile": null,
+    "latency_stress_metrics": null,
+    "benchmark_availability": {
+      "execution_mode": "mixed",
+      "readiness_status": "adapter",
+      "availability_status": "available",
+      "benchmark_success": true,
+      "availability_reason": null
+    }
+  },
+  "decision": "pass",
+  "jsonl_path": "/tmp/luttkule/issue1475-orca-residual-bc-12913/results/policy_search/orca_residual_guarded_ppo_progress_v1/smoke/issue1475_smoke/smoke__orca_residual_guarded_ppo_progress_v1.jsonl",
+  "family_runs": {}
+}

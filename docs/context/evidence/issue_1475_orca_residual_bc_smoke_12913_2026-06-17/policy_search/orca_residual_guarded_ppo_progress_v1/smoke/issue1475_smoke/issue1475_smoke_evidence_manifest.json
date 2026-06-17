@@ -1,0 +1,20 @@
+{
+  "orca_residual_bc_smoke": {
+    "artifact_pointer_status": null,
+    "collision_rate": 0.0,
+    "fallback_degraded_status": null,
+    "finalizer_classification": "missing_required_smoke_evidence",
+    "guard_veto_rate": null,
+    "issue": 1475,
+    "missing_required_fields": [
+      "residual_clipping_rate",
+      "guard_veto_rate",
+      "fallback_degraded_status",
+      "artifact_pointer_status"
+    ],
+    "nominal_escalation_allowed": false,
+    "residual_clipping_rate": null,
+    "success_rate": 0.0,
+    "summary_path": "/tmp/luttkule/issue1475-orca-residual-bc-12913/results/policy_search/orca_residual_guarded_ppo_progress_v1/smoke/issue1475_smoke/summary.json"
+  }
+}

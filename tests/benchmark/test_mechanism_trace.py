@@ -413,6 +413,31 @@ def test_emit_orca_residual_row() -> None:
     )
     assert row_revise["classification"] == "revise"
 
+    row_nested_fallback = emit_orca_residual_row(
+        12,
+        {
+            "selected_source": "dynamic_window",
+            "selected_command": [0.9, -0.2],
+            "fallback_controller_state": {
+                "action_adaptation": {
+                    "mode": "prior_residual",
+                    "raw_residual_action": [0.2, -0.05],
+                    "bounded_residual_action": [0.2, -0.05],
+                    "residual_bounds": {
+                        "linear": 0.2,
+                        "angular": 0.3,
+                    },
+                }
+            },
+        },
+        progress_delta=0.2,
+    )
+    assert row_nested_fallback["command_source"] == "prior_residual_safe"
+    assert row_nested_fallback["input_condition"]["residual_norm"] == pytest.approx(
+        (0.2**2 + (-0.05) ** 2) ** 0.5
+    )
+    assert row_nested_fallback["classification"] == "slice-local"
+
 
 def test_emit_orca_residual_rows_from_fixture() -> None:
     """Emit ORCA residual rows from a durable tracked planner-decision fixture."""

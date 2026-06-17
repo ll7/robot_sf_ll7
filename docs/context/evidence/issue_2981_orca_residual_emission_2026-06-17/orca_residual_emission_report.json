@@ -1,0 +1,16 @@
+{
+  "claim_boundary": "diagnostic_only",
+  "classification_counts": {
+    "inactive": 1,
+    "revise": 1,
+    "slice-local": 2
+  },
+  "command": "uv run python scripts/tools/emit_orca_residual_mechanism_trace.py --planner-decision-trace docs/context/evidence/issue_2981_orca_residual_emission_2026-06-17/orca_residuals_planner_decision_trace.v1.json --output docs/context/evidence/issue_2981_orca_residual_emission_2026-06-17/orca_residual_mechanism_trace.jsonl --format jsonl --trace-uri docs/context/evidence/issue_2981_orca_residual_emission_2026-06-17/orca_residuals_planner_decision_trace.v1.json --report docs/context/evidence/issue_2981_orca_residual_emission_2026-06-17/orca_residual_emission_report.json",
+  "generated_at_utc": "2026-06-17T06:09:13Z",
+  "issue": 2981,
+  "planner_decision_trace": "docs/context/evidence/issue_2981_orca_residual_emission_2026-06-17/orca_residuals_planner_decision_trace.v1.json",
+  "rows_count": 4,
+  "rows_path": "docs/context/evidence/issue_2981_orca_residual_emission_2026-06-17/orca_residual_mechanism_trace.jsonl",
+  "schema_version": "orca_residual_mechanism_trace_emission.v1",
+  "source_commit": "e2b1600f458b"
+}

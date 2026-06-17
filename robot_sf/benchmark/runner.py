@@ -1027,8 +1027,14 @@ def _maybe_encode_video(
     except RuntimeError:
         # Budget enforcement: bubble up to runner to record a failure
         raise
-    except (TypeError, ValueError, OSError):  # pragma: no cover - defensive path
-        pass
+    except (TypeError, ValueError, OSError) as exc:  # pragma: no cover - defensive path
+        logger.opt(exception=exc).warning(
+            "Synthetic video encoding failure for episode_id={} scenario_id={} renderer={}; "
+            "continuing benchmark run.",
+            episode_id,
+            scenario_id,
+            video_renderer,
+        )
 
 
 def _simulate_episode_with_policy(
@@ -1495,6 +1501,11 @@ def _run_batch_sequential(
                 except Exception:  # pragma: no cover - progress best-effort
                     pass
         except Exception as e:  # pragma: no cover - error path
+            logger.exception(
+                "Benchmark batch job failed in serial execution: scenario_id={} seed={}",
+                sc.get("id", "unknown"),
+                seed,
+            )
             failures.append(
                 {
                     "scenario_id": sc.get("id", "unknown"),
@@ -1547,6 +1558,11 @@ def _run_batch_parallel(  # noqa: C901
                     except Exception:  # pragma: no cover
                         pass
             except Exception as e:  # pragma: no cover
+                logger.exception(
+                    "Benchmark batch job failed in parallel execution: scenario_id={} seed={}",
+                    sc.get("id", "unknown"),
+                    seed,
+                )
                 failures.append(
                     {
                         "scenario_id": sc.get("id", "unknown"),
@@ -1568,6 +1584,11 @@ def _run_batch_parallel(  # noqa: C901
             _write_validated_record(out_path, schema, results_by_idx[idx])
             wrote += 1
         except Exception as e:  # pragma: no cover - write/validate path
+            logger.exception(
+                "Benchmark batch write/validation failed for scenario_id={} seed={}",
+                results_by_idx[idx].get("scenario", {}).get("id", "unknown"),
+                results_by_idx[idx].get("seed", -1),
+            )
             failures.append(
                 {
                     "scenario_id": results_by_idx[idx].get("scenario", {}).get("id", "unknown"),

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import yaml
+from loguru import logger
 
 from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.map_runner import (
@@ -3582,6 +3583,55 @@ def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
         "record-s1",
         "record-s2",
     }
+
+
+def test_run_map_batch_worker_failure_logs_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Worker failures should emit a warning before fail-closed summary returns."""
+    scenarios = [
+        {"name": "s1", "metadata": {"supported": True}},
+        {"name": "s2", "metadata": {"supported": True}},
+    ]
+    out_path = tmp_path / "episodes.jsonl"
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda _: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        ThreadPoolExecutor,
+    )
+
+    def fake_run(job):
+        """Force map worker errors for the parallel failure test."""
+        scenario, _seed, _ = job
+        raise RuntimeError(f"forced map failure: {scenario['name']}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
+
+    captured: list = []
+
+    def capture_message(message):
+        """Collect warning messages for this failure test."""
+        captured.append(message)
+
+    handle = logger.add(capture_message, level="WARNING")
+    try:
+        result = run_map_batch(
+            scenarios,
+            out_path,
+            schema_path=tmp_path / "schema.json",
+            workers=2,
+            resume=False,
+        )
+    finally:
+        logger.remove(handle)
+
+    assert result["written"] == 0
+    assert result["failed_jobs"] == 2
+    assert any(
+        "Map batch worker failed in parallel execution" in msg.record["message"] for msg in captured
+    )
 
 
 def test_run_map_batch_filters_and_validation(

@@ -5416,6 +5416,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     _write_validated_to_handle(handle, schema, rec)
                     wrote += 1
                 except Exception as exc:  # pragma: no cover - error path
+                    logger.exception(
+                        "Map batch worker failed in serial execution: scenario={} seed={}",
+                        scenario.get("name", "unknown"),
+                        seed,
+                    )
                     failures.append(
                         {
                             "scenario_id": scenario.get("name", "unknown"),
@@ -5447,6 +5452,11 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
                     results_by_idx[idx] = rec
                 except Exception as exc:  # pragma: no cover
+                    logger.exception(
+                        "Map batch worker failed in parallel execution: scenario={} seed={}",
+                        scenario.get("name", "unknown"),
+                        seed,
+                    )
                     failures.append(
                         {
                             "scenario_id": scenario.get("name", "unknown"),
@@ -5462,6 +5472,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     wrote += 1
                 except Exception as exc:  # pragma: no cover - write/validate path
                     rec = results_by_idx[idx]
+                    logger.exception(
+                        (
+                            "Map batch write/validation failed for scenario={} seed={}; "
+                            "preserving fail-closed batch status."
+                        ),
+                        rec.get("scenario_id") or rec.get("scenario", {}).get("name", "unknown"),
+                        rec.get("seed", -1),
+                    )
                     failures.append(
                         {
                             "scenario_id": rec.get("scenario_id")

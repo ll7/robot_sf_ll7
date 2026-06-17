@@ -1059,15 +1059,15 @@ class _TrainingEnvFactory:
     """Picklable callable that builds one PPO training environment."""
 
     seed: int | None
-    scenario: Mapping[str, Any] | None
-    scenario_definitions: Sequence[Mapping[str, Any]] | None
+    scenario: dict[str, Any] | None
+    scenario_definitions: tuple[dict[str, Any], ...] | None
     scenario_path: Path
     exclude_scenarios: tuple[str, ...]
     suite_name: str
     algorithm_name: str
-    env_overrides: Mapping[str, object]
-    env_factory_kwargs: Mapping[str, object]
-    scenario_sampling: Mapping[str, object]
+    env_overrides: dict[str, object]
+    env_factory_kwargs: dict[str, object]
+    scenario_sampling: dict[str, object]
 
     def _build_config(self, scenario_def: Mapping[str, Any]):
         """Build an environment config for one scenario definition."""
@@ -1151,8 +1151,12 @@ def _make_training_env(  # noqa: PLR0913
     """Create a picklable training environment factory (seeded when provided)."""
     return _TrainingEnvFactory(
         seed=seed,
-        scenario=scenario,
-        scenario_definitions=scenario_definitions,
+        scenario=dict(scenario) if scenario is not None else None,
+        scenario_definitions=(
+            tuple(dict(scenario_def) for scenario_def in scenario_definitions)
+            if scenario_definitions is not None
+            else None
+        ),
         scenario_path=scenario_path,
         exclude_scenarios=tuple(str(name) for name in exclude_scenarios),
         suite_name=suite_name,

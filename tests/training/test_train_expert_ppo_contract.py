@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 def test_make_training_env_factory_is_pickleable_for_spawn(tmp_path: Path) -> None:
     """SubprocVecEnv spawn mode requires environment callables to be pickleable."""
-    factory = train_ppo._make_training_env(
+    single_scenario_factory = train_ppo._make_training_env(
         123,
         scenario={"id": "spawn-smoke"},
         scenario_definitions=None,
@@ -36,11 +36,26 @@ def test_make_training_env_factory_is_pickleable_for_spawn(tmp_path: Path) -> No
         env_factory_kwargs={},
         scenario_sampling={},
     )
+    switching_factory = train_ppo._make_training_env(
+        456,
+        scenario=None,
+        scenario_definitions=({"id": "spawn-a"}, {"id": "spawn-b"}),
+        scenario_path=tmp_path / "scenarios.yaml",
+        exclude_scenarios=("skip-me",),
+        suite_name="ppo_imitation",
+        algorithm_name="pickle_contract",
+        env_overrides={},
+        env_factory_kwargs={},
+        scenario_sampling={"strategy": "round_robin"},
+    )
 
-    restored = pickle.loads(pickle.dumps(factory))
+    restored_single = pickle.loads(pickle.dumps(single_scenario_factory))
+    restored_switching = pickle.loads(pickle.dumps(switching_factory))
 
-    assert type(restored) is type(factory)
-    assert restored.seed == 123
+    assert type(restored_single) is type(single_scenario_factory)
+    assert restored_single.seed == 123
+    assert type(restored_switching) is type(switching_factory)
+    assert restored_switching.seed == 456
 
 
 def test_warn_frequency_episodes_deprecated_warns_once(monkeypatch) -> None:

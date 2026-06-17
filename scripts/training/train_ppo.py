@@ -1054,6 +1054,87 @@ def _resolve_resume_checkpoint(
     return None
 
 
+@dataclass(frozen=True)
+class _TrainingEnvFactory:
+    """Picklable callable that builds one PPO training environment."""
+
+    seed: int | None
+    scenario: dict[str, Any] | None
+    scenario_definitions: tuple[dict[str, Any], ...] | None
+    scenario_path: Path
+    exclude_scenarios: tuple[str, ...]
+    suite_name: str
+    algorithm_name: str
+    env_overrides: dict[str, object]
+    env_factory_kwargs: dict[str, object]
+    scenario_sampling: dict[str, object]
+
+    def _build_config(self, scenario_def: Mapping[str, Any]):
+        """Build an environment config for one scenario definition."""
+        env_config = build_robot_config_from_scenario(
+            scenario_def,
+            scenario_path=self.scenario_path,
+        )
+        _apply_env_overrides(env_config, self.env_overrides)
+        return env_config
+
+    def __call__(self) -> Any:
+        """Build one training environment instance."""
+        if self.scenario is not None:
+            env_config = self._build_config(self.scenario)
+            scenario_id = scenario_id_from_definition(self.scenario, index=0)
+            return make_robot_env(
+                config=env_config,
+                seed=self.seed,
+                suite_name=self.suite_name,
+                scenario_name=scenario_id,
+                algorithm_name=self.algorithm_name,
+                **self.env_factory_kwargs,
+            )
+        if self.scenario_definitions is None:
+            raise ValueError("scenario_definitions required when scenario is None.")
+
+        sampler = ScenarioSampler(
+            self.scenario_definitions,
+            include_scenarios=tuple(
+                str(name)
+                for name in self.scenario_sampling.get(  # type: ignore[union-attr]
+                    "include_scenarios",
+                    (),
+                )
+            ),
+            exclude_scenarios=self.exclude_scenarios
+            + tuple(
+                str(name)
+                for name in self.scenario_sampling.get(  # type: ignore[union-attr]
+                    "exclude_scenarios",
+                    (),
+                )
+            ),
+            weights=(
+                {
+                    str(key): float(value)
+                    for key, value in dict(
+                        self.scenario_sampling.get("weights", {})  # type: ignore[union-attr]
+                    ).items()
+                }
+                if isinstance(self.scenario_sampling.get("weights"), Mapping)
+                else None
+            ),
+            seed=self.seed,
+            strategy=str(self.scenario_sampling.get("strategy", "random")),  # type: ignore[union-attr]
+        )
+        return ScenarioSwitchingEnv(
+            scenario_sampler=sampler,
+            scenario_path=self.scenario_path,
+            config_builder=self._build_config,
+            suite_name=self.suite_name,
+            algorithm_name=self.algorithm_name,
+            env_factory_kwargs=self.env_factory_kwargs,
+            seed=self.seed,
+        )
+
+
 def _make_training_env(  # noqa: PLR0913
     seed: int | None,
     *,
@@ -1067,72 +1148,23 @@ def _make_training_env(  # noqa: PLR0913
     env_factory_kwargs: Mapping[str, object],
     scenario_sampling: Mapping[str, object],
 ) -> Callable[[], Any]:
-    """Create a training environment factory (seeded when provided)."""
-
-    def _factory() -> Any:
-        """Build one training environment instance.
-
-        Returns:
-            Robot training environment or scenario-switching wrapper.
-        """
-
-        def _build_config(scenario_def: Mapping[str, Any]):
-            """Build an environment config for one scenario definition.
-
-            Returns:
-                Robot environment config with training overrides applied.
-            """
-            env_config = build_robot_config_from_scenario(scenario_def, scenario_path=scenario_path)
-            _apply_env_overrides(env_config, env_overrides)
-            return env_config
-
-        if scenario is not None:
-            env_config = _build_config(scenario)
-            scenario_id = scenario_id_from_definition(scenario, index=0)
-            return make_robot_env(
-                config=env_config,
-                seed=seed,
-                suite_name=suite_name,
-                scenario_name=scenario_id,
-                algorithm_name=algorithm_name,
-                **env_factory_kwargs,
-            )
-        if scenario_definitions is None:
-            raise ValueError("scenario_definitions required when scenario is None.")
-
-        sampler = ScenarioSampler(
-            scenario_definitions,
-            include_scenarios=tuple(
-                str(name)
-                for name in scenario_sampling.get("include_scenarios", ())  # type: ignore[union-attr]
-            ),
-            exclude_scenarios=tuple(exclude_scenarios)
-            + tuple(
-                str(name)
-                for name in scenario_sampling.get("exclude_scenarios", ())  # type: ignore[union-attr]
-            ),
-            weights=(
-                {
-                    str(key): float(value)
-                    for key, value in dict(scenario_sampling.get("weights", {})).items()  # type: ignore[union-attr]
-                }
-                if isinstance(scenario_sampling.get("weights"), Mapping)
-                else None
-            ),
-            seed=seed,
-            strategy=str(scenario_sampling.get("strategy", "random")),  # type: ignore[union-attr]
-        )
-        return ScenarioSwitchingEnv(
-            scenario_sampler=sampler,
-            scenario_path=scenario_path,
-            config_builder=_build_config,
-            suite_name=suite_name,
-            algorithm_name=algorithm_name,
-            env_factory_kwargs=env_factory_kwargs,
-            seed=seed,
-        )
-
-    return _factory
+    """Create a picklable training environment factory (seeded when provided)."""
+    return _TrainingEnvFactory(
+        seed=seed,
+        scenario=dict(scenario) if scenario is not None else None,
+        scenario_definitions=(
+            tuple(dict(scenario_def) for scenario_def in scenario_definitions)
+            if scenario_definitions is not None
+            else None
+        ),
+        scenario_path=scenario_path,
+        exclude_scenarios=tuple(str(name) for name in exclude_scenarios),
+        suite_name=suite_name,
+        algorithm_name=algorithm_name,
+        env_overrides=dict(env_overrides),
+        env_factory_kwargs=dict(env_factory_kwargs),
+        scenario_sampling=dict(scenario_sampling),
+    )
 
 
 _FEATURE_EXTRACTOR_REGISTRY: dict[str, type] = {

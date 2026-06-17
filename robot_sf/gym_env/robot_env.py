@@ -96,10 +96,10 @@ def _temporary_global_reset_seed(seed: int | None):
 # Helper to compute a stable, short hash for env_config
 # Placed near imports for reuse and clarity
 def _stable_config_hash(cfg: EnvSettings) -> str:
-    """TODO docstring. Document this function.
+    """Build a stable short hash of the environment settings.
 
     Args:
-        cfg: TODO docstring.
+        cfg: Environment settings to serialize for identity.
 
     Returns:
         16-character hexadecimal hash string representing the configuration.

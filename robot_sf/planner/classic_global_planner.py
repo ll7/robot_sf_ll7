@@ -21,6 +21,7 @@ Example:
 from __future__ import annotations
 
 import copy
+import inspect
 import math
 import random
 from dataclasses import dataclass
@@ -31,7 +32,7 @@ import numpy as np
 from loguru import logger
 from matplotlib import colors as mcolors
 from matplotlib.ticker import FuncFormatter
-from python_motion_planning.common import TYPES, Grid, Visualizer
+from python_motion_planning.common import TYPES, Grid
 from python_motion_planning.path_planner import AStar, ThetaStar
 from shapely.affinity import scale
 from shapely.geometry import Polygon, box
@@ -40,6 +41,15 @@ from shapely.validation import explain_validity
 
 from robot_sf.common import ensure_interactive_backend
 from robot_sf.planner.theta_star_v2 import HighPerformanceThetaStar
+
+try:
+    from python_motion_planning.common import Visualizer
+except ImportError:
+    from python_motion_planning.common.visualizer import Visualizer2D as Visualizer
+
+_PLOT_GRID_MAP_SUPPORTS_ALPHA_3D = "alpha_3d" in inspect.signature(
+    Visualizer.plot_grid_map
+).parameters
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
@@ -132,13 +142,21 @@ class ClassicPlanVisualizer(Visualizer):
     ) -> None:
         """Plot grid cells and relabel axes in meters when scaling is known."""
         resolved_alpha = alpha_3d if alpha_3d is not None else self._DEFAULT_ALPHA_3D
-        super().plot_grid_map(
-            grid_map,
-            equal=equal,
-            alpha_3d=resolved_alpha,
-            show_esdf=show_esdf,
-            alpha_esdf=alpha_esdf,
-        )
+        if _PLOT_GRID_MAP_SUPPORTS_ALPHA_3D:
+            super().plot_grid_map(
+                grid_map,
+                equal=equal,
+                alpha_3d=resolved_alpha,
+                show_esdf=show_esdf,
+                alpha_esdf=alpha_esdf,
+            )
+        else:
+            super().plot_grid_map(
+                grid_map,
+                equal=equal,
+                show_esdf=show_esdf,
+                alpha_esdf=alpha_esdf,
+            )
         self._set_world_axis_formatters(grid_map, meters_per_cell)
 
 
@@ -249,6 +267,11 @@ def map_definition_to_motion_planning_grid(
     grid = Grid(bounds=[[0, width_cells], [0, height_cells]])
     grid.cells_per_meter = cfg.cells_per_meter
     grid.meters_per_cell = cfg.meters_per_cell
+    if not hasattr(grid.type_map, "array") and hasattr(grid.type_map, "data"):
+        try:
+            grid.type_map.array = grid.type_map.data
+        except AttributeError:
+            pass
 
     if cfg.add_boundary_obstacles:
         grid.fill_boundary_with_obstacles()
@@ -308,7 +331,9 @@ def count_obstacle_cells(grid: Grid) -> int:
 def _grid_type_map_array(grid: Grid) -> np.ndarray:
     """Return the concrete cell-type array from a python_motion_planning grid."""
     type_map = grid.type_map
-    raw_array = getattr(type_map, "array", type_map)
+    raw_array = getattr(type_map, "array", None)
+    if raw_array is None:
+        raw_array = getattr(type_map, "data", type_map)
     return np.asarray(raw_array)
 
 

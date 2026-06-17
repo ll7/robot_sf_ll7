@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/odd_hazard_coverage.v1.json",
+  "title": "RobotSF ODD Hazard Coverage Matrix (v1)",
+  "description": "Static coverage matrix mapping ODD conditions and hazard classes to scenario families, metrics, planners, and evidence tiers. Gaps are explicit; no benchmark success claim is implied.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "claim_boundary",
+    "odd_contract_ref",
+    "coverage_rows",
+    "known_gaps",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Schema version identifier.",
+      "const": "odd_hazard_coverage.v1"
+    },
+    "id": {
+      "description": "Stable identifier for this coverage matrix.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$"
+    },
+    "claim_boundary": {
+      "description": "One-line conservative interpretation boundary for the whole matrix.",
+      "type": "string",
+      "minLength": 1
+    },
+    "odd_contract_ref": {
+      "description": "ODD contract that bounds every row in this matrix.",
+      "$ref": "#/$defs/contract_ref"
+    },
+    "hazard_traceability_ref": {
+      "description": "Optional hazard traceability mapping used to validate hazard classes.",
+      "$ref": "#/$defs/contract_ref"
+    },
+    "coverage_rows": {
+      "description": "Coverage rows, one per ODD condition x hazard class x scenario family combination.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/coverage_row"
+      }
+    },
+    "known_gaps": {
+      "description": "Machine-readable register of deliberately uncovered or blocked ODD/hazard rows.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gap_row"
+      }
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    }
+  },
+  "$defs": {
+    "contract_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "contract_id"
+      ],
+      "properties": {
+        "source": {
+          "description": "Repository-relative path to the referenced contract file.",
+          "type": "string",
+          "minLength": 1
+        },
+        "contract_id": {
+          "description": "Contract identifier inside the referenced file.",
+          "type": "string",
+          "minLength": 1
+        },
+        "required_for_benchmark_claim": {
+          "description": "Whether the referenced contract must be valid before any benchmark claim can be made.",
+          "type": "boolean"
+        }
+      }
+    },
+    "coverage_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "odd_condition",
+        "hazard_class",
+        "scenario_family",
+        "metrics",
+        "included_planners",
+        "evidence_tier",
+        "status"
+      ],
+      "properties": {
+        "odd_condition": {
+          "description": "ODD condition or claim identifier from the referenced ODD contract.",
+          "type": "string",
+          "minLength": 1
+        },
+        "hazard_class": {
+          "description": "Hazard class identifier, preferably from a hazard_traceability.v1 mapping.",
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario_family": {
+          "description": "Scenario family that is intended to exercise the hazard class.",
+          "type": "string",
+          "minLength": 1
+        },
+        "metrics": {
+          "description": "Metrics that would be needed to claim coverage for this row.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "included_planners": {
+          "description": "Planners included in checked-in benchmark configs that exercise this scenario family.",
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "evidence_tier": {
+          "description": "Highest evidence tier this row is allowed to support.",
+          "type": "string",
+          "enum": [
+            "schema",
+            "diagnostic",
+            "candidate",
+            "nominal_benchmark",
+            "paper_ready"
+          ]
+        },
+        "status": {
+          "description": "Coverage status. Only 'covered' supports a checked-in-config coverage statement; all other statuses are caveats or gaps.",
+          "type": "string",
+          "enum": [
+            "covered",
+            "weakly_covered",
+            "blocked",
+            "absent"
+          ]
+        },
+        "gap_reason": {
+          "description": "Required when status is not 'covered'; explains why the row is not fully covered.",
+          "type": "string",
+          "minLength": 1
+        },
+        "source_configs": {
+          "description": "Checked-in config paths that justify the row content.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "description": "Optional free-form annotation.",
+          "type": "string"
+        }
+      }
+    },
+    "gap_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gap_id",
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "gap_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "affected_hazard_classes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "affected_scenario_families": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "absent",
+            "blocked"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tracking_issue": {
+          "description": "Optional GitHub issue or document tracking when this gap will be addressed.",
+          "type": "string"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_issue",
+        "authored_by",
+        "source_files",
+        "notes"
+      ],
+      "properties": {
+        "source_issue": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authored_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

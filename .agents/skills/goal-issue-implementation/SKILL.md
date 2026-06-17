@@ -72,6 +72,13 @@ Record at start:
 - Stop condition: queue exhausted, time budget reached, ambiguous issue contract, environment/auth blocker,
   validation dead-end, user stop.
 - Exclusions: benchmarks blocked by environment, blocked/decision-required issues, external-only work.
+- Instruction precedence: current maintainer direction and `docs/maintainer_values.md` override stale
+  workflow prose. Treat Project #5 ordering as advisory when it conflicts with fresh maintainer
+  direction or evidence; record the override and defer Project metadata cleanup when quota or API
+  limits make it impractical.
+- Autonomy default: for bounded workflow cleanup, proceed without routine confirmation when
+  assumptions, uncertainty, evidence grade, and follow-up risks are labeled in the issue, PR, or
+  handoff.
 
 Do not ask for extra confirmation after this preflight.
 
@@ -382,7 +389,11 @@ Route remaining issues by their blocker:
 4. Make the successful claim visible in the issue/project surfaces: move the issue to `In progress`
    or `state:running`, assign the actor when practical, and add a concise issue comment with the
    claim ref, machine/thread, planned branch, and stale-claim cleanup condition.
-5. Create or update the active delegation ledger described in
+5. Use detached latest-main checkouts only for read-only discovery, duplicate checks, and GitHub
+   issue creation or update work. Before editing docs or code, running PR validation, pushing, or
+   publishing, create or switch to a branch/worktree so the proof bundle has a durable branch
+   context.
+6. Create or update the active delegation ledger described in
    `.agents/skills/goal-autopilot/SKILL.md` with the claim ref/status, issue, branch/worktree,
    owned files or modules, route/run IDs, validation plan, cleanup status, and next action. Update
    it after every delegated worker start/completion/failure, before any CI wait or compaction-prone

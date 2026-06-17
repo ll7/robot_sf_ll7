@@ -34,6 +34,32 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 Host tools and optional machine capabilities that are not installed by `uv` are tracked in
 [`docs/dev_runtime_requirements.md`](dev_runtime_requirements.md).
 
+### Instruction precedence and proportional readiness
+
+Use the maintainer hierarchy and readiness matrix in `AGENTS.md` before older workflow prose or
+tool-specific compatibility pointers. In short: active maintainer direction wins over stale
+instructions, `docs/maintainer_values.md` defines the hard contracts, and Project #5 scores are
+advisory when fresh evidence or maintainer direction conflicts with them.
+
+Routine workflow cleanup can proceed without extra confirmation when it is bounded and the PR or
+handoff clearly labels assumptions, uncertainty, evidence grade, and any deferred follow-up issue.
+Use a detached checkout at latest `origin/main` only for read-only discovery, duplicate checks, and
+issue creation or update work. Create or switch to a branch/worktree before editing docs or code,
+running validation for a PR, pushing, or publishing.
+
+Docs-only and instruction-only changes normally use the cheap validation path: inspect the diff,
+verify changed links or paths where practical, and run available lightweight checks. Skill or AI
+workflow edits should also run the relevant skill and sync checks, for example:
+
+```bash
+uv run python scripts/dev/check_skills.py --preflight <skill-name>
+uv run python scripts/tools/sync_ai_config.py --check
+```
+
+Escalate to `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` when the change touches scripts,
+schemas, generated indexes, routing behavior, automation, runtime behavior, benchmark/metric/schema
+semantics, model provenance, or paper-facing claims.
+
 ### Claim-map validation
 
 The fast-results claim map is an executable issue queue, not only a context note. Before changing

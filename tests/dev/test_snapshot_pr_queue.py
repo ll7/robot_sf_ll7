@@ -85,8 +85,44 @@ def test_snapshot_prs_pending_next_action() -> None:
 
     pr = payload["prs"][0]
     assert pr["checks"]["overall"] == "pending"
+    assert pr["checks"]["pending"] == [
+        {"name": "ci", "status": "in_progress", "conclusion": "pending", "details_url": ""}
+    ]
     assert pr["next_action"] == "await_ci_or_start_read_only_monitor"
     assert payload["route_health_overview"]["healthy"] == 1
+
+
+def test_snapshot_prs_details_url_none_falls_back_without_none_string() -> None:
+    """Explicit null detailsUrl should not become the literal string None."""
+    pr_payload = {
+        "number": 2682,
+        "title": "pending PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "def457",
+        "mergeable": "UNKNOWN",
+        "statusCheckRollup": [
+            {
+                "name": "ci",
+                "status": "completed",
+                "conclusion": "failure",
+                "detailsUrl": None,
+                "targetUrl": "",
+            }
+        ],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([2682], repo="ll7/robot_sf_ll7")
+
+    pr = payload["prs"][0]
+    assert pr["checks"]["failed"] == [
+        {"name": "ci", "status": "completed", "conclusion": "failure", "details_url": ""}
+    ]
 
 
 def test_snapshot_prs_stale_if_head_sha_mismatch() -> None:

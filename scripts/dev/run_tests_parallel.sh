@@ -16,6 +16,8 @@ Wrapper options:
   -h, --help       Show this help message
 
 Environment overrides:
+  ROBOT_SF_PYTEST_COVERAGE=1
+    Explicit opt-in for coverage output when running this wrapper.
   COVERAGE_FILE=<path>
   PYTEST_FAST_FAIL=1|0
   PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup
@@ -106,6 +108,14 @@ fi
 echo "Resolved pytest-xdist workers: $worker_spec" >&2
 
 cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
+
+coverage_requested="${ROBOT_SF_PYTEST_COVERAGE:-}"
+if [[ "${CI:-}" == "true" ]] || [[ "$coverage_requested" == "1" ]] || \
+  [[ "$coverage_requested" == [Tt][Rr][Uu][Ee] ]] || \
+  [[ "$coverage_requested" == [Yy][Ee][Ss] ]] || \
+  [[ "$coverage_requested" == [Oo][Nn] ]]; then
+  cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")
+fi
 
 if [[ "$fast_fail" == "1" ]]; then
   cmd+=("-x")

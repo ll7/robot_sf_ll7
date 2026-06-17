@@ -82,6 +82,22 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup" in script_text
 
 
+def test_pytest_coverage_is_explicit_opt_in() -> None:
+    """Default pytest runs should stay fast while the wrapper preserves coverage opt-in."""
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    addopts = pyproject["tool"]["pytest"]["ini_options"]["addopts"]
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+    pr_ready_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert "--cov=robot_sf" not in addopts
+    assert "--cov-report=html" not in addopts
+    assert "--cov-report=json" not in addopts
+    assert "ROBOT_SF_PYTEST_COVERAGE" in script_text
+    assert "${coverage_requested,,}" not in script_text
+    assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in script_text
+    assert 'ROBOT_SF_PYTEST_COVERAGE=1 "$SCRIPT_DIR/run_tests_parallel.sh"' in pr_ready_text
+
+
 def test_run_tests_parallel_validates_dist_mode_before_resolving_workers() -> None:
     """Invalid dist mode must fail before resolve_pytest_workers.py is invoked."""
 

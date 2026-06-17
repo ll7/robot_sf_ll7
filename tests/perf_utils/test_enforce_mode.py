@@ -12,6 +12,7 @@ in a temp directory to keep runtime minimal.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -23,9 +24,9 @@ import pytest
 @pytest.mark.timeout(10)
 def test_enforce_mode_escalates():
     """Verify enforce mode converts soft breaches into failures."""
-    # Create a small test file under repo root so root conftest is loaded.
+    # Create a small test file under tests/ so tests/conftest.py is loaded.
     repo_root = Path(__file__).resolve().parents[2]
-    target_dir = repo_root / "output" / "tmp" / "enforce_tmp"
+    target_dir = Path(__file__).resolve().parent / f"_tmp_enforce_{os.getpid()}"
     target_dir.mkdir(parents=True, exist_ok=True)
     test_file = target_dir / "test_sleep_enforce.py"
     test_file.write_text(
@@ -69,5 +70,9 @@ def test_enforce_mode_escalates():
     finally:
         try:
             test_file.unlink(missing_ok=True)  # type: ignore[arg-type]
+        except Exception:
+            pass
+        try:
+            shutil.rmtree(target_dir, ignore_errors=True)
         except Exception:
             pass

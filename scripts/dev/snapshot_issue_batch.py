@@ -11,7 +11,7 @@ import sys
 from datetime import UTC, datetime
 from typing import Any
 
-from scripts.dev.issue_claim import status_issue
+from scripts.dev.issue_claim import short_claim_ref, status_issue
 
 BODY_EXCERPT_CHARS = 300
 DEFAULT_CLAIMABLE_LIMIT = 20
@@ -101,6 +101,89 @@ def _issue_classification(
     return "claimable", "open, unassigned, and unclaimed"
 
 
+def _claim_payload(claim: dict[str, Any]) -> dict[str, Any]:
+    """Return the stable claim subset exposed in issue snapshots."""
+    return {
+        "ok": claim.get("ok"),
+        "claimed": claim.get("claimed"),
+        "claim_ref": claim.get("claim_ref"),
+        "sha": claim.get("sha"),
+    }
+
+
+def _claim_status_payload(
+    issue_number: int,
+    *,
+    remote: str,
+    ok: bool,
+    claimed: bool | None,
+    sha: str | None,
+    error: str = "",
+    command: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return an issue-claim status payload matching ``status_issue`` shape."""
+    payload: dict[str, Any] = {
+        "schema": "issue_claim.v1",
+        "action": "status",
+        "ok": ok,
+        "claimed": claimed,
+        "issue": issue_number,
+        "remote": remote,
+        "claim_ref": short_claim_ref(issue_number),
+        "sha": sha,
+        "command": command or [],
+    }
+    if error:
+        payload["error"] = error
+    return payload
+
+
+def _batch_claim_statuses(issue_numbers: list[int], *, remote: str) -> dict[int, dict[str, Any]]:
+    """Fetch all issue-claim refs once and return status payloads for each issue."""
+    unique_numbers = sorted(set(issue_numbers))
+    if not unique_numbers:
+        return {}
+
+    command = ["git", "ls-remote", "--heads", remote, "refs/heads/agent-claims/issue-*"]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout).strip()
+        return {
+            number: _claim_status_payload(
+                number,
+                remote=remote,
+                ok=False,
+                claimed=None,
+                sha=None,
+                error=error,
+                command=command,
+            )
+            for number in unique_numbers
+        }
+
+    claimed_refs: dict[int, str] = {}
+    ref_prefix = "refs/heads/agent-claims/issue-"
+    for line in (result.stdout or "").strip().splitlines():
+        parts = line.split()
+        if len(parts) < 2 or not parts[1].startswith(ref_prefix):
+            continue
+        issue_text = parts[1].removeprefix(ref_prefix)
+        if issue_text.isdigit():
+            claimed_refs[int(issue_text)] = parts[0]
+
+    return {
+        number: _claim_status_payload(
+            number,
+            remote=remote,
+            ok=True,
+            claimed=number in claimed_refs,
+            sha=claimed_refs.get(number),
+            command=command,
+        )
+        for number in unique_numbers
+    }
+
+
 def _is_blocked_external_issue(labels: list[str]) -> bool:
     """Return whether labels describe an issue blocked on external assets or input."""
     label_set = set(labels)
@@ -170,12 +253,7 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         "assignees": assignees,
         "body_excerpt": excerpt,
         "body_truncated": truncated,
-        "claim": {
-            "ok": claim.get("ok"),
-            "claimed": claim.get("claimed"),
-            "claim_ref": claim.get("claim_ref"),
-            "sha": claim.get("sha"),
-        },
+        "claim": _claim_payload(claim),
         "classification": classification,
         "reason": reason,
         "linked_prs": [],
@@ -185,7 +263,9 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
     }
 
 
-def _snapshot_from_issue_list(issue: dict[str, Any], *, remote: str) -> dict[str, Any]:
+def _snapshot_from_issue_list(
+    issue: dict[str, Any], *, remote: str, claim_statuses: dict[int, dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Build an issue snapshot using preloaded issue fields."""
     try:
         number = int(issue.get("number"))
@@ -194,7 +274,20 @@ def _snapshot_from_issue_list(issue: dict[str, Any], *, remote: str) -> dict[str
 
     labels = _labels(issue)
     assignees = _assignees(issue)
-    claim = status_issue(number, remote=remote)
+    claim = (
+        claim_statuses.get(number)
+        if claim_statuses is not None
+        else status_issue(number, remote=remote)
+    )
+    if not isinstance(claim, dict):
+        claim = _claim_status_payload(
+            number,
+            remote=remote,
+            ok=False,
+            claimed=None,
+            sha=None,
+            error="claim status unavailable",
+        )
     classification, reason = _issue_classification(
         assignees=assignees,
         claim=claim,
@@ -208,12 +301,7 @@ def _snapshot_from_issue_list(issue: dict[str, Any], *, remote: str) -> dict[str
         "url": issue.get("url", ""),
         "labels": labels,
         "assignees": assignees,
-        "claim": {
-            "ok": claim.get("ok"),
-            "claimed": claim.get("claimed"),
-            "claim_ref": claim.get("claim_ref"),
-            "sha": claim.get("sha"),
-        },
+        "claim": _claim_payload(claim),
         "body_excerpt": "",
         "body_truncated": False,
         "classification": classification,
@@ -287,7 +375,16 @@ def snapshot_claimable_issues(
             ],
         }
 
-    snapshots = [_snapshot_from_issue_list(issue, remote=remote) for issue in listed]
+    issue_numbers = [
+        int(issue["number"])
+        for issue in listed
+        if isinstance(issue, dict) and str(issue.get("number", "")).isdigit()
+    ]
+    claim_statuses = _batch_claim_statuses(issue_numbers, remote=remote)
+    snapshots = [
+        _snapshot_from_issue_list(issue, remote=remote, claim_statuses=claim_statuses)
+        for issue in listed
+    ]
     issues = [
         issue
         for issue in snapshots
@@ -482,6 +579,8 @@ def _portfolio_classification(
         "benchmark" in label_set or "research" in label_set or "epic" in label_set
     ):
         return "paper_critical", "high-priority benchmark or research surface"
+    if claim.get("ok") is False:
+        return "needs_human_decision", "unable to read claim state; skip autonomous claim"
     if assignees or claim.get("claimed"):
         return "needs_human_decision", "assigned or already claimed; skip autonomous claim"
     return "executable_now", "unassigned, unclaimed, and not blocked by labels"
@@ -531,13 +630,30 @@ def _portfolio_next_action(classification: str) -> str:
     return actions[classification]
 
 
-def _active_portfolio_row(issue: dict[str, Any], *, remote: str) -> dict[str, Any]:
+def _active_portfolio_row(
+    issue: dict[str, Any], *, remote: str, claim_statuses: dict[int, dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Return one active-portfolio row for an open issue."""
     number = int(issue.get("number"))
     labels = _labels(issue)
     assignees = _assignees(issue)
-    claim_value = status_issue(number, remote=remote)
-    claim = claim_value if isinstance(claim_value, dict) else {}
+    claim_value = (
+        claim_statuses.get(number)
+        if claim_statuses is not None
+        else status_issue(number, remote=remote)
+    )
+    claim = (
+        claim_value
+        if isinstance(claim_value, dict)
+        else _claim_status_payload(
+            number,
+            remote=remote,
+            ok=False,
+            claimed=None,
+            sha=None,
+            error="claim status unavailable",
+        )
+    )
     title = "" if issue.get("title") is None else issue.get("title", "")
     url = "" if issue.get("url") is None else issue.get("url", "")
     classification, reason = _portfolio_classification(
@@ -626,8 +742,14 @@ def snapshot_active_issue_portfolio(
                     "error": "expected gh issue list JSON array",
                 }
             ]
+        issue_numbers = [
+            int(issue["number"])
+            for issue in listed
+            if isinstance(issue, dict) and str(issue.get("number", "")).isdigit()
+        ]
+        claim_statuses = _batch_claim_statuses(issue_numbers, remote=remote)
         rows = [
-            _active_portfolio_row(issue, remote=remote)
+            _active_portfolio_row(issue, remote=remote, claim_statuses=claim_statuses)
             for issue in listed
             if isinstance(issue, dict) and issue.get("number") is not None
         ]

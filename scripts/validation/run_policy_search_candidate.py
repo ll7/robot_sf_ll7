@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import time
 from collections.abc import Mapping
@@ -338,9 +339,10 @@ def _as_optional_float(value: Any) -> float | None:
     try:
         if value is None or value == "":
             return None
-        return float(value)
+        converted = float(value)
     except (TypeError, ValueError):
         return None
+    return converted if math.isfinite(converted) else None
 
 
 def _mean(values: list[float]) -> float | None:
@@ -509,6 +511,17 @@ def _attach_orca_residual_smoke_evidence(
         and fallback_degraded_status == "clear"
         and artifact_pointer_status not in {"missing", "not_available"},
     }
+
+
+def _refresh_orca_residual_smoke_evidence(summary_payload: dict[str, Any]) -> None:
+    """Refresh ORCA-residual evidence after any summary rebuild path."""
+    rows = summary_payload.get("records")
+    _attach_orca_residual_smoke_evidence(
+        summary_payload["summary"],
+        rows if isinstance(rows, list) else [],
+        Path(str(summary_payload["jsonl_path"])),
+        missing_jsonl=not Path(str(summary_payload["jsonl_path"])).exists(),
+    )
 
 
 def _git_hash() -> str | None:
@@ -727,6 +740,17 @@ def _apply_stage_exclusions(
     updated["records"] = annotated
     updated["summary"] = summarize_policy_search_records(annotated)
     return updated
+
+
+def _finalize_summary_payload(
+    *,
+    stage_cfg: Mapping[str, Any],
+    summary_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply late summary rebuilds and refresh required smoke evidence fields."""
+    finalized = _apply_stage_exclusions(stage_cfg=stage_cfg, summary_payload=summary_payload)
+    _refresh_orca_residual_smoke_evidence(finalized)
+    return finalized
 
 
 def _run_stage_eval(  # noqa: PLR0913
@@ -1278,7 +1302,7 @@ def main() -> int:
             synthetic_actuation_profile=synthetic_actuation_profile,
         )
 
-    summary_payload = _apply_stage_exclusions(
+    summary_payload = _finalize_summary_payload(
         stage_cfg=stage_cfg,
         summary_payload=summary_payload,
     )

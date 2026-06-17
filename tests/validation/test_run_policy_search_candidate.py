@@ -573,8 +573,8 @@ def test_run_stage_eval_records_missing_jsonl_as_fail_closed(
     assert summary["stage_artifact_status"]["reason"] == "missing_jsonl"
     assert summary["preflight"]["compatibility_status"] == "incompatible"
     assert summary["benchmark_availability"]["status"] == "not_available"
-    assert "residual_clipping_rate" in summary
-    assert "guard_veto_rate" in summary
+    assert summary["residual_clipping_rate"] is None
+    assert summary["guard_veto_rate"] is None
     assert summary["fallback_degraded_status"] == "not_available"
     assert summary["artifact_pointer_status"] == "not_available"
     smoke_evidence = summary["orca_residual_smoke_evidence"]
@@ -639,6 +639,34 @@ def test_run_stage_eval_records_orca_residual_smoke_evidence(
     assert smoke_evidence["residual_clipping_source"] == (
         "algorithm_metadata.residual_clipping_stats"
     )
+
+
+def test_orca_residual_smoke_evidence_treats_non_finite_rates_as_missing() -> None:
+    """Non-finite rate values should not satisfy required smoke evidence."""
+    summary: dict[str, object] = {}
+    rows = [
+        {
+            "scenario_id": "planner_sanity_simple",
+            "metrics": {
+                "residual_clipping_rate": "nan",
+                "shield_intervention_rate": "inf",
+            },
+        }
+    ]
+
+    candidate_runner._attach_orca_residual_smoke_evidence(
+        summary,
+        rows,
+        Path("smoke.jsonl"),
+        missing_jsonl=False,
+    )
+
+    assert summary["residual_clipping_rate"] is None
+    assert summary["guard_veto_rate"] is None
+    assert summary["orca_residual_smoke_evidence"]["missing_required_fields"] == [
+        "residual_clipping_rate",
+        "guard_veto_rate",
+    ]
 
 
 def test_run_stage_eval_passes_candidate_observation_override(

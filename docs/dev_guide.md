@@ -1020,22 +1020,25 @@ uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 
 → Consider documenting the edge case in code comments and archiving the test, rather than spending hours debugging environmental setup issues.
 
-### Coverage workflow (automatic collection)
+### Coverage workflow (explicit opt-in)
 
-**Coverage collection is enabled by default** — no extra commands needed! When you run tests, coverage data is automatically collected and reported.
+Coverage collection is no longer enabled by default. Run tests normally for fast execution,
+and enable coverage explicitly when needed.
 
 The test harness sets the ``ROBOT_SF_ARTIFACT_ROOT`` environment variable so that
 example scripts and helpers write into a temporary directory instead of the
 repository tree. This keeps the canonical ``output/`` hierarchy clean while
-preserving the examples' default behavior for normal runs. To opt-in manually,
-export the same variable before invoking scripts.
+preserving normal example behavior.
 
 Try to increase the test coverage over time by adding tests when touching code. See the must-have checklist below for guidance.
 
 #### Quick start
 ```bash
-# Run tests (coverage collected automatically)
+# Run tests (no coverage by default)
 uv run pytest tests
+
+# Run tests with coverage (CI and explicit opt-in local runs)
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 
 # Run a focused local check and discard generated coverage output after success
 scripts/dev/run_focused_tests.sh tests/test_force_flags.py -q
@@ -1079,16 +1082,23 @@ TOTAL                                   10605    876  91.73%
 Configured in `pyproject.toml`:
 - `[tool.coverage.run]` — collection settings (source, omit patterns, parallel support)
 - `[tool.coverage.report]` — report formatting (precision, exclusions)
-- `[tool.pytest.ini_options]` — automatic pytest integration
+- `scripts/dev/run_tests_parallel.sh` — explicit pytest coverage opt-in for local wrapper and CI
+  runs
 
-No changes needed for normal development — defaults are production-ready.
+No changes needed for normal development — default pytest runs skip coverage output for faster
+feedback, while CI and explicit wrapper opt-in still generate reports.
 
 #### Advanced usage
 ```bash
-# Run with parallel workers (coverage merges automatically)
+# Run with parallel workers (faster local feedback)
 uv run pytest tests -n auto
 
+# Run with parallel workers and explicit coverage collection
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
+
 # Run specific test file with coverage
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests/test_gym_env.py -v
+# Run specific test file without coverage
 uv run pytest tests/test_gym_env.py -v
 
 # View coverage data programmatically

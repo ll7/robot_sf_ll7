@@ -106,6 +106,10 @@ def _normalize_record(record: dict[str, Any]) -> dict[str, Any]:
     normalized.pop("timestamps", None)
     normalized.pop("wall_time_sec", None)
     normalized.pop("timing", None)
+    if isinstance(normalized.get("provenance"), dict):
+        provenance = dict(normalized["provenance"])
+        provenance.pop("run_id", None)
+        normalized["provenance"] = provenance
     return normalized
 
 

@@ -455,9 +455,6 @@ show_contexts = false
 [tool.pytest.ini_options]
 addopts = [
     "--import-mode=importlib",
-    "--cov=robot_sf",
-    "--cov-report=html",
-    "--cov-report=json",
     "--durations=10",
 ]
 testpaths = ["tests", "fast-pysf/tests"]

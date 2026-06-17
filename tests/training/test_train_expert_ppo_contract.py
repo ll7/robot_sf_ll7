@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import pickle
 import subprocess
 import sys
 from typing import TYPE_CHECKING
@@ -19,6 +20,27 @@ from scripts.training import train_ppo
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def test_make_training_env_factory_is_pickleable_for_spawn(tmp_path: Path) -> None:
+    """SubprocVecEnv spawn mode requires environment callables to be pickleable."""
+    factory = train_ppo._make_training_env(
+        123,
+        scenario={"id": "spawn-smoke"},
+        scenario_definitions=None,
+        scenario_path=tmp_path / "scenarios.yaml",
+        exclude_scenarios=(),
+        suite_name="ppo_imitation",
+        algorithm_name="pickle_contract",
+        env_overrides={},
+        env_factory_kwargs={},
+        scenario_sampling={},
+    )
+
+    restored = pickle.loads(pickle.dumps(factory))
+
+    assert type(restored) is type(factory)
+    assert restored.seed == 123
 
 
 def test_warn_frequency_episodes_deprecated_warns_once(monkeypatch) -> None:

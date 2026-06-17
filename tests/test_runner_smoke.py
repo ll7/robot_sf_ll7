@@ -106,6 +106,10 @@ def _normalize_episode_record(record: dict[str, object]) -> dict[str, object]:
     normalized.pop("timestamps", None)
     normalized.pop("wall_time_sec", None)
     normalized.pop("timing", None)
+    if "provenance" in normalized and isinstance(normalized["provenance"], dict):
+        prov = dict(normalized["provenance"])
+        prov.pop("run_id", None)
+        normalized["provenance"] = prov
     return normalized
 
 
@@ -166,3 +170,50 @@ def test_run_batch_repeated_runs_produce_stable_metrics(tmp_path: Path) -> None:
 
     # Then verify semantic equality (ignoring runtime metadata)
     assert _normalize_episode_record(rec1) == _normalize_episode_record(rec2)
+
+
+def test_run_batch_provenance_fields_present(tmp_path: Path) -> None:
+    """Validate that provenance fields are generated correctly on a run_batch run."""
+    scenario = {
+        "id": "repro-sample",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 1,
+    }
+    out = tmp_path / "provenance_run.jsonl"
+    run_batch(
+        [scenario],
+        out_path=out,
+        schema_path=SCHEMA_PATH,
+        base_seed=123,
+        horizon=5,
+        dt=0.1,
+        record_forces=False,
+        append=False,
+        workers=1,
+        resume=False,
+    )
+    raw = out.read_text(encoding="utf-8").splitlines()[0]
+    rec = json.loads(raw)
+
+    assert "provenance" in rec
+    prov = rec["provenance"]
+    assert "protocol_version" in prov
+    assert "commit_hash" in prov
+    assert prov["base_seed"] == 123
+    assert "run_id" in prov
+    assert len(prov["run_id"]) > 0
+    assert "python_version" in prov
+    assert "invocation" in prov
+    config_identity = prov["config_identity"]
+    assert config_identity["schema_path"] == str(SCHEMA_PATH)
+    assert config_identity["algo"] == "simple_policy"
+    assert config_identity["algo_config_path"] is None
+    assert config_identity["scenario_count"] == 1
+    assert isinstance(config_identity["scenario_matrix_hash"], str)
+    assert len(config_identity["scenario_matrix_hash"]) == 16

@@ -94,6 +94,11 @@ records simulator-backed denominator/exclusion evidence for `red_required_stop`,
 `unavailable_no_claim`, and `proxy_only_denominator_excluded` rows; it proves runtime denominator
 plumbing, not traffic-light realism or planner-ranking performance.
 
+Recent GitHub payload audit: [issue_2909_github_payload_overfetch_audit.md](issue_2909_github_payload_overfetch_audit.md)
+records the workflow-helper field audit for `scripts/dev/` GitHub calls. Current finding: helper
+payloads are mostly required or intentionally opt-in; repeated issue-claim checks are the main
+future optimization candidate.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

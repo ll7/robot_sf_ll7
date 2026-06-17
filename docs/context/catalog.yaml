@@ -701,6 +701,18 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_2981_orca_residual_emission.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2981_orca_residual_emission_2026-06-17/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2981_orca_residual_emission_2026-06-17/orca_residual_emission_report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
   - path: robot_sf/benchmark/schemas/mechanism_trace.schema.v1.json
     status: current
     freshness: maintained

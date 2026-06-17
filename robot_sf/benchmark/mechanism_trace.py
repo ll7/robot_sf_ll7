@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,19 @@ def validate_mechanism_trace_payload(payload: dict[str, Any]) -> dict[str, Any]:
             raise MechanismTraceValidationError(
                 f"Row {index} classification must be one of {expected_states}, got {classification!r}"
             )
+
+    generated_at_utc = payload.get("generated_at_utc")
+    if isinstance(generated_at_utc, str):
+        try:
+            datetime.fromisoformat(generated_at_utc.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise MechanismTraceValidationError(
+                "generated_at_utc must be a valid ISO 8601 datetime"
+            ) from e
+    else:
+        raise MechanismTraceValidationError(
+            "generated_at_utc must be a string in ISO 8601 datetime format"
+        )
 
     return payload
 

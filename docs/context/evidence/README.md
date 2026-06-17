@@ -186,6 +186,9 @@ Policy caveats:
 - `issue_2428_mechanism_trace_panels_2026-06-06/`: compact diagnostic-only AMMV/default Social
   Force trace-panel bundle proving the #2405 single-row export path can feed the trajectory-panel
   renderer and preserve reviewable PNG/PDF/checksum artifacts.
+- `issue_2981_orca_residual_emission_2026-06-17/`: compact diagnostic-only ORCA residual
+  mechanism-trace emission proof from tracked planner-decision fixture input through the scripted
+  `mechanism_trace.v1` row emitter.
 - `issue_2430_ammv_trace_annotation_2026-06-06/`: compact frame-level parity decision showing the
   Issue #2428 selected default/AMMV trace pair is telemetry-rich but frame-identical, so it is not
   behavioral-difference evidence.

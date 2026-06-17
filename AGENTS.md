@@ -27,6 +27,34 @@ documentation, and process in proportion to risk:
   conflict with the user's current priority, follow the current priority, call out the conflict, and
   propose or make the smallest doc update needed to remove the drift.
 
+When instruction surfaces conflict, use this precedence order:
+
+1. Current maintainer direction in the active issue, PR, or thread.
+2. `docs/maintainer_values.md`.
+3. `AGENTS.md`.
+4. `.agents/README.md`, `.agents/PLANS.md`, and repo-local skill docs under `.agents/skills/`.
+5. `docs/dev_guide.md`, context notes, and tool-specific compatibility pointers.
+
+If this order resolves a recurring workflow conflict, make the conflict visible where practical:
+update the active issue/PR, patch the stale instruction, or open a bounded follow-up issue. Routine
+workflow cleanup should proceed autonomously when the scope is bounded; label assumptions,
+uncertainty, and evidence grade instead of pausing for confirmation. Treat Project #5 ordering and
+scores as advisory when they conflict with fresh maintainer direction or newly observed evidence;
+record the override and update Project metadata later when quota and API limits allow.
+
+Use validation proportional to the file/change type, with claim strength as an escalation override:
+
+| Change class | Minimum proof | Full `pr_ready_check` required when |
+| --- | --- | --- |
+| Docs-only or instruction-only | Inspect diff; verify changed links or paths where practical; run available lightweight markdown, index, or sync checks. | The text changes generated indexes, compatibility surfaces, or makes evidence-sensitive claims. |
+| Workflow/tooling docs or skills | Cheap docs proof plus relevant skill/schema/sync checks such as `uv run python scripts/dev/check_skills.py --preflight <skill>` or `uv run python scripts/tools/sync_ai_config.py --check`. | Scripts, schemas, generated indexes, routing behavior, or automation behavior changes. |
+| Runtime code | Focused tests for changed behavior plus lint/format gates. | The change is user-facing, cross-module, release-facing, or affects shared execution paths. |
+| Benchmark, metric, schema, model-provenance | Executable proof on the intended contract with provenance and fallback/degraded exclusions. | Almost always; skip only for explicit diagnostic-only docs with no semantic change. |
+| Paper-facing or public claims | Reproducible evidence matching the claim boundary, caveats, uncertainty, and artifact provenance. | Always before treating the claim as established. |
+
+Claim strength overrides the nominal row: a docs or workflow edit that asserts a benchmark, metric,
+schema, model-provenance, or paper-facing result must use the stronger proof tier for that claim.
+
 ## Agent Context Stack
 Treat the following files as the repository-native context stack for Agent-style agents:
 

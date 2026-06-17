@@ -345,6 +345,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2923_mechanism_trace_schema.md](issue_2923_mechanism_trace_schema.md)
 
+* Issue #2976 Mechanism Trace ORCA Residual Producer:
+
+  [issue_2976_mechanism_trace_orca_residuals.md](issue_2976_mechanism_trace_orca_residuals.md)
+
 * Issue #2430 AMMV trace annotation decision:
 
   [issue_2430_ammv_trace_annotation.md](issue_2430_ammv_trace_annotation.md)

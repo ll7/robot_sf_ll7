@@ -34,6 +34,19 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 Host tools and optional machine capabilities that are not installed by `uv` are tracked in
 [`docs/dev_runtime_requirements.md`](dev_runtime_requirements.md).
 
+### Claim-map validation
+
+The fast-results claim map is an executable issue queue, not only a context note. Before changing
+`docs/context/issue_2943_fast_results_claim_map_v0.md`, run:
+
+```bash
+uv run python scripts/dev/check_fast_results_claim_map.py --json
+```
+
+This check is also part of `scripts/dev/pr_ready_check.sh`. It verifies that each priority row has
+a status, p0 rows have exactly one owner issue and one next command or artifact, and completed rows
+point at durable evidence instead of worktree-local `output/`.
+
 ### Fresh linked-worktree bootstrap
 
 When creating a new linked worktree, prefer a sibling container next to the main checkout rather

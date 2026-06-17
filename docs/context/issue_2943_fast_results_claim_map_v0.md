@@ -69,30 +69,30 @@ those modes must be labeled a caveat or exclusion, not claim-grade success.
 
 ### p0_now -- No blocking gates; work can start or land immediately
 
-| Item | Issue | Rationale | Evidence requirement |
-|---|---|---|---|
-| Resolve `seed_episode_rows collision=0.0` conflict | #2612 | Blocks secondary-table paper claims; ready label; narrowly scoped | Clarify core table semantics and confirm which field is authoritative |
-| Define `odd_hazard_coverage.v1` schema and gap matrix | #2911 | Required by #2910 suite freeze; open/ready; actionable scope | Schema definition + gap list for cyclist, signalized crossings, occlusion, stairs, dense crowds, narrow-lane conflicts, AMV actuation, sensor latency |
-| Wire additional `mechanism_trace.v1` producers | #2923 follow-up | Schema is live; `prediction_risk_gating`, `orca_residuals` are highest-value next emitters | Passing contract tests and at least one durable trace input |
+| Item | Owner issue | Status | Next command or artifact | Evidence gate | Durable evidence |
+|---|---|---|---|---|---|
+| Resolve `seed_episode_rows collision=0.0` conflict | #2612 | ready | Artifact: updated release 0.0.2 table-semantics context note and authoritative collision-field decision | Clarify core table semantics and confirm which field is authoritative | Missing until #2612 closes |
+| Define `odd_hazard_coverage.v1` schema and gap matrix | #2911 | ready | Artifact: `odd_hazard_coverage.v1` schema plus JSON/Markdown gap matrix | Schema definition checked against cyclist, signalized crossing, occlusion, stairs, dense crowd, narrow-lane conflict, AMV actuation, and sensor-latency scenario families | Missing until #2911 closes |
+| Wire first additional `mechanism_trace.v1` producer | #2976 | ready | Artifact: schema-valid `mechanism_trace.v1` producer payload from durable input or tracked fixture | Passing contract tests and at least one durable trace input for `prediction_risk_gating` or `orca_residuals` | Missing until #2976 closes |
 
 ### p1_after_gate -- Gated on a named p0 precondition
 
-| Item | Issue | Gate condition | Why gated |
-|---|---|---|---|
-| ODD/AMV suite freeze for v0.1 | #2910 | p0: #2911 schema and gap matrix accepted | Suite cannot be marked frozen without hazard coverage matrix |
-| Secondary-table paper promotion | (release 0.0.2 work) | p0: #2612 collision-field conflict resolved | Secondary table semantics are ambiguous until #2612 is closed |
-| Forecast variant benchmark campaign | (follow-up from #2941) | p0: production planner integration; durable episode manifest | Current replay is minimal heuristic; not benchmark-candidate until real planner integration exists |
-| `mechanism_trace.v1` mechanism reports | (follow-up from #2923) | p0: durable trace inputs and at least `prediction_risk_gating` emitter live | Schema-only rows are not report-ready |
+| Item | Owner issue | Status | Next command or artifact | Evidence gate | Durable evidence |
+|---|---|---|---|---|---|
+| ODD/AMV suite freeze for v0.1 | #2910 | blocked | Artifact: suite-freeze release note and frozen scenario-family list | p0: #2911 schema and gap matrix accepted | Missing until #2911 closes |
+| Secondary-table paper promotion | #2612 | blocked | Artifact: paper-promotion note or release-table addendum | p0: #2612 collision-field conflict resolved | Missing until #2612 closes |
+| Forecast variant benchmark campaign | #2966 | blocked | Artifact: planner-consumed forecast slice report | p0: production planner integration and durable episode manifest accepted | Missing until #2966 unblocks and lands |
+| `mechanism_trace.v1` mechanism reports | #2976 | blocked | Artifact: mechanism report over durable producer payloads | p0: durable trace inputs and at least `prediction_risk_gating` emitter live | Missing until #2976 closes |
 
 ### parked_blocked -- Explicitly blocked; do not route until gate is named and unblocked
 
-| Item | Blocker | Caveat |
-|---|---|---|
-| CARLA replay transfer evidence | CARLA parity unproven; `sensor_perception_replay` unavailable in current diagnostics (#2158, #2276) | Block until native/aligned fixture semantics are closed |
-| AMV calibrated-actuation paper claim | Runtime/provenance fields missing; yaw, angular acceleration, latency, update rate remain synthetic or unavailable (#2230, #2259) | Do not promote until hardware-calibrated or accepted proxy-source fields are resolved |
-| SocNavBench planner rows | SocNavBench control pipeline not currently available (#2397, #1584) | Rows must be labeled `not_available` / `accepted_unavailable_only`; not benchmark evidence |
-| Full benchmark claim matrix for #2910 release | Requires #2911 + #2612 + suite freeze; depends on p0 items above | Block until all three prerequisites land |
-| Forecast variant safety/success claims | Minimal replay heuristic, single-fixture evidence (#2941) | Evidence is mechanism-trace quality only; not a production-planner or benchmark-candidate result |
+| Item | Owner issue | Status | Next command or artifact | Evidence gate | Durable evidence |
+|---|---|---|---|---|---|
+| CARLA replay transfer evidence | #2158 | do-not-claim | Artifact: CARLA transfer eligibility note | CARLA parity proven and `sensor_perception_replay` available with native/aligned fixture semantics | Not available under current diagnostics; see #2158 and #2276 |
+| AMV calibrated-actuation paper claim | #2230 | do-not-claim | Artifact: calibrated-actuation provenance note | Runtime/provenance fields for yaw, angular acceleration, latency, and update rate are hardware-calibrated or accepted proxy-source fields | Not available; see #2230 and #2259 |
+| SocNavBench planner rows | #2397 | do-not-claim | Artifact: SocNavBench unavailable-row note | SocNavBench control pipeline available natively or explicitly accepted as unavailable-only | Not available; rows must stay `not_available` / `accepted_unavailable_only` |
+| Full benchmark claim matrix for #2910 release | #2910 | blocked | Artifact: v0.1 benchmark claim matrix | #2911, #2612, and suite-freeze prerequisites all landed | Missing until p0 prerequisites land |
+| Forecast variant safety/success claims | #2966 | do-not-claim | Artifact: forecast safety/success benchmark report | Planner-consumed forecast benchmark run with comparator, scenario matrix, and durable manifest | Not available; #2941 remains mechanism-trace quality only |
 
 ---
 
@@ -121,6 +121,8 @@ This note is a tracked synthesis document. It does not create or depend on local
 ```bash
 # Check that linked context-note paths resolve
 grep -RiIn "issue_2943_fast_results_claim_map_v0" docs/context/
+# Check executable priority-queue fields
+uv run python scripts/dev/check_fast_results_claim_map.py --json
 # Proof-consistency diff
 BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
 # No trailing whitespace

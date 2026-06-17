@@ -1586,7 +1586,7 @@ def _run_batch_parallel(  # noqa: C901
         except Exception as e:  # pragma: no cover - write/validate path
             logger.exception(
                 "Benchmark batch write/validation failed for scenario_id={} seed={}",
-                results_by_idx[idx].get("scenario", {}).get("id", "unknown"),
+                results_by_idx[idx].get("scenario_id", "unknown"),
                 results_by_idx[idx].get("seed", -1),
             )
             failures.append(

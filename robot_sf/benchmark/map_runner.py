@@ -5418,7 +5418,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 except Exception as exc:  # pragma: no cover - error path
                     logger.exception(
                         "Map batch worker failed in serial execution: scenario={} seed={}",
-                        scenario.get("name", "unknown"),
+                        _scenario_id(scenario),
                         seed,
                     )
                     failures.append(
@@ -5454,7 +5454,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 except Exception as exc:  # pragma: no cover
                     logger.exception(
                         "Map batch worker failed in parallel execution: scenario={} seed={}",
-                        scenario.get("name", "unknown"),
+                        _scenario_id(scenario),
                         seed,
                     )
                     failures.append(
@@ -5477,7 +5477,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             "Map batch write/validation failed for scenario={} seed={}; "
                             "preserving fail-closed batch status."
                         ),
-                        rec.get("scenario_id") or rec.get("scenario", {}).get("name", "unknown"),
+                        rec.get("scenario_id", "unknown"),
                         rec.get("seed", -1),
                     )
                     failures.append(

@@ -184,7 +184,10 @@ def emit_orca_residual_row(
         if isinstance(fallback_state, Mapping):
             action_adaptation = fallback_state.get("action_adaptation")
     adaptation = action_adaptation if isinstance(action_adaptation, Mapping) else {}
-    adaptation_mode = str(adaptation.get("mode", "")).strip()
+    adaptation_mode_value = adaptation.get("mode")
+    adaptation_mode = (
+        str(adaptation_mode_value).strip() if adaptation_mode_value is not None else ""
+    )
     is_prior_residual = adaptation_mode == "prior_residual"
 
     selected_cmd = last_decision.get("selected_command")
@@ -213,7 +216,10 @@ def emit_orca_residual_row(
     if len(raw_residual_floats) >= 2:
         residual_norm = float((raw_residual_floats[0] ** 2 + raw_residual_floats[1] ** 2) ** 0.5)
 
-    original_command_source = str(last_decision.get("selected_source", "unknown"))
+    original_source_value = last_decision.get("selected_source")
+    original_command_source = (
+        str(original_source_value) if original_source_value is not None else "unknown"
+    )
     original_command_source = (
         "unknown" if original_command_source == "None" else original_command_source
     )

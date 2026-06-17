@@ -382,6 +382,17 @@ def test_emit_orca_residual_row() -> None:
     assert row_inactive["classification"] == "inactive"
     assert row_inactive["selected_command"] == [1.0, 0.0]
 
+    row_explicit_none = emit_orca_residual_row(
+        10,
+        {
+            "selected_source": None,
+            "selected_command": [1.0, 0.0],
+            "action_adaptation": {"mode": None},
+        },
+    )
+    assert row_explicit_none["classification"] == "inactive"
+    assert row_explicit_none["command_source"] == "unknown"
+
     row_revise = emit_orca_residual_row(
         11,
         {

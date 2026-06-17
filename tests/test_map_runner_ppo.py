@@ -223,6 +223,7 @@ class _DummyGuardedPPOAdapter:
     """Test double for guarded PPO arbitration."""
 
     instances: ClassVar[list[_DummyGuardedPPOAdapter]] = []
+    residual_clipped: ClassVar[bool] = False
 
     def __init__(self, config=None, *, fallback_adapter=None, prior_adapter=None):
         self.config = config
@@ -233,6 +234,22 @@ class _DummyGuardedPPOAdapter:
         self.reset_seeds = []
         self.closed = False
         self.__class__.instances.append(self)
+
+    def choose_command_decision(self, obs, ppo_command):
+        """Return a structured guard decision with residual adaptation metadata."""
+        self.last_command = (obs, ppo_command)
+        return map_runner.ShieldDecision(
+            proposed_action=(float(ppo_command[0]), float(ppo_command[1])),
+            filtered_action=(0.1, -0.2),
+            decision_label="fallback_safe",
+            intervention_reason="test_guard_decision",
+            fallback_controller_state={
+                "action_adaptation": {
+                    "mode": "prior_residual",
+                    "residual_clipped": bool(self.__class__.residual_clipped),
+                }
+            },
+        )
 
     def choose_command(self, obs, ppo_command):
         """Return a fallback command while recording arbitration inputs.
@@ -259,6 +276,7 @@ class _DummyGuardedPPOAdapter:
 def test_build_policy_guarded_ppo_arbitrates_and_tracks_guard_stats(monkeypatch):
     """Guarded PPO should route PPO output through the guard and record intervention counts."""
     _DummyGuardedPPOAdapter.instances = []
+    monkeypatch.setattr(_DummyGuardedPPOAdapter, "residual_clipped", True)
     monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
     monkeypatch.setattr(map_runner, "GuardedPPOAdapter", _DummyGuardedPPOAdapter)
     monkeypatch.setattr(map_runner, "build_guarded_ppo_fallback", lambda cfg: object())
@@ -276,6 +294,10 @@ def test_build_policy_guarded_ppo_arbitrates_and_tracks_guard_stats(monkeypatch)
     guard_stats = meta.get("guard_stats")
     assert isinstance(guard_stats, dict)
     assert guard_stats["fallback_safe"] == 1
+    residual_stats = meta.get("residual_clipping_stats")
+    assert isinstance(residual_stats, dict)
+    assert residual_stats["decision_count"] == 1
+    assert residual_stats["clipped_count"] == 1
 
     guard = _DummyGuardedPPOAdapter.instances[-1]
     env = object()

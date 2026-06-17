@@ -771,6 +771,58 @@ def _attach_result_provenance(
     summary["result_provenance"] = result_provenance
 
 
+def _combined_result_provenance(
+    family_runs: Mapping[str, Any],
+    jsonl_path: Path,
+) -> dict[str, Any] | None:
+    """Combine per-override result provenance into a final aggregate summary."""
+    sources: dict[str, Any] = {}
+    for tag, run in sorted(family_runs.items()):
+        if not isinstance(run, Mapping):
+            continue
+        summary = run.get("summary")
+        if not isinstance(summary, Mapping):
+            continue
+        provenance = summary.get("result_provenance")
+        if isinstance(provenance, Mapping):
+            sources[str(tag)] = dict(provenance)
+    if not sources:
+        return None
+    artifact_statuses = {
+        str(source.get("artifact_pointer_status", "unknown")) for source in sources.values()
+    }
+    return {
+        "schema_version": "policy-search-combined-result-provenance.v1",
+        "jsonl_path": str(jsonl_path),
+        "artifact_pointer_status": (
+            "local_jsonl_present"
+            if artifact_statuses == {"local_jsonl_present"}
+            else "+".join(sorted(artifact_statuses))
+        ),
+        "source_count": len(sources),
+        "sources": sources,
+    }
+
+
+def _build_combined_summary_payload(
+    *,
+    combined_records: list[dict[str, Any]],
+    combined_jsonl: Path,
+    family_runs: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the final summary payload for scenario/config override batches."""
+    _write_records(combined_jsonl, combined_records)
+    combined_summary = summarize_policy_search_records(combined_records)
+    combined_provenance = _combined_result_provenance(family_runs, combined_jsonl)
+    if combined_provenance is not None:
+        combined_summary["result_provenance"] = combined_provenance
+    return {
+        "records": combined_records,
+        "summary": combined_summary,
+        "jsonl_path": str(combined_jsonl),
+    }
+
+
 def _run_stage_eval(  # noqa: PLR0913
     *,
     scenarios_or_path: Path | list[dict[str, Any]],
@@ -1301,13 +1353,11 @@ def main() -> int:
             family_runs[tag] = {key: value for key, value in run.items() if key != "records"}
             combined_records.extend(run["records"])
         combined_jsonl = output_dir / f"{args.stage}__{args.candidate}__combined.jsonl"
-        _write_records(combined_jsonl, combined_records)
-        combined_summary = summarize_policy_search_records(combined_records)
-        summary_payload = {
-            "records": combined_records,
-            "summary": combined_summary,
-            "jsonl_path": str(combined_jsonl),
-        }
+        summary_payload = _build_combined_summary_payload(
+            combined_records=combined_records,
+            combined_jsonl=combined_jsonl,
+            family_runs=family_runs,
+        )
     else:
         summary_payload = _run_stage_eval(
             scenarios_or_path=scenarios_or_path,

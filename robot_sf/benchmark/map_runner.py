@@ -5284,7 +5284,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             algo_config_path=algo_config_path,
             benchmark_profile=benchmark_profile,
             suite_key=suite_key,
-            total_jobs=0,
+            total_jobs=len(jobs),
             written=0,
             artifact_pointer_status="not_available",
         )
@@ -5587,9 +5587,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         summary["benchmark_track"] = benchmark_track
     if track_schema_version is not None:
         summary["track_schema_version"] = track_schema_version
-    artifact_pointer_status = (
-        "local_jsonl_present" if wrote > 0 and out_path.exists() else "not_available"
-    )
+    artifact_pointer_status = "local_jsonl_present" if out_path.exists() else "not_available"
     summary["provenance"] = _map_result_provenance(
         schema_path=schema_path,
         scenario_path=scenario_path,

@@ -708,6 +708,34 @@ def test_orca_residual_smoke_evidence_treats_non_finite_rates_as_missing() -> No
     ]
 
 
+def test_combined_result_provenance_preserves_override_sources(tmp_path: Path) -> None:
+    """Override-combined summaries should retain per-run result provenance."""
+    jsonl_path = tmp_path / "combined.jsonl"
+    family_runs = {
+        "base": {
+            "summary": {"result_provenance": _sample_result_provenance("local_jsonl_present")}
+        },
+        "override": {
+            "summary": {
+                "result_provenance": {
+                    **_sample_result_provenance("not_available"),
+                    "run_id": "run-override",
+                }
+            }
+        },
+    }
+
+    provenance = candidate_runner._combined_result_provenance(family_runs, jsonl_path)
+
+    assert provenance is not None
+    assert provenance["jsonl_path"] == str(jsonl_path)
+    assert provenance["schema_version"] == "policy-search-combined-result-provenance.v1"
+    assert provenance["artifact_pointer_status"] == "local_jsonl_present+not_available"
+    assert provenance["source_count"] == 2
+    assert provenance["sources"]["base"]["run_id"] == "run-123"
+    assert provenance["sources"]["override"]["run_id"] == "run-override"
+
+
 def test_run_stage_eval_passes_candidate_observation_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

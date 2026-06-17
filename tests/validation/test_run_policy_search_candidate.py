@@ -25,6 +25,31 @@ from scripts.validation.run_policy_search_candidate import (
 )
 
 
+def _sample_result_provenance(artifact_pointer_status: str) -> dict[str, object]:
+    """Return representative map-runner result provenance for stage-summary tests."""
+    return {
+        "protocol_version": "0.1.0",
+        "commit_hash": "abc123",
+        "run_id": "run-123",
+        "python_version": "3.13.0",
+        "artifact_pointer_status": artifact_pointer_status,
+        "config_identity": {
+            "schema_path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+            "scenario_path": ".",
+            "scenario_count": 1,
+            "scenario_matrix_hash": "hash",
+            "algo": "orca_residual_guarded_ppo",
+            "algo_config_path": "smoke__cand_algo.yaml",
+            "benchmark_profile": "experimental",
+        },
+        "seed_identity": {
+            "suite_key": "default",
+            "total_jobs": 1,
+            "written": 1,
+        },
+    }
+
+
 def test_deep_merge_recurses_without_mutating_inputs() -> None:
     """Nested config overrides should merge without mutating the base mapping."""
     base = {"a": {"b": 1, "c": 2}, "d": 3}
@@ -548,6 +573,7 @@ def test_run_stage_eval_records_missing_jsonl_as_fail_closed(
                 "status": "not_available",
                 "reason": "planner_prerequisite_unavailable",
             },
+            "provenance": _sample_result_provenance("not_available"),
         }
 
     monkeypatch.setattr(candidate_runner, "run_map_batch", fake_run_map_batch)
@@ -577,6 +603,10 @@ def test_run_stage_eval_records_missing_jsonl_as_fail_closed(
     assert summary["guard_veto_rate"] is None
     assert summary["fallback_degraded_status"] == "not_available"
     assert summary["artifact_pointer_status"] == "not_available"
+    result_provenance = summary["result_provenance"]
+    assert result_provenance["artifact_pointer_status"] == "not_available"
+    assert result_provenance["jsonl_path"] == str(jsonl_path)
+    assert result_provenance["config_identity"]["algo"] == "orca_residual_guarded_ppo"
     smoke_evidence = summary["orca_residual_smoke_evidence"]
     assert smoke_evidence["missing_required_fields"] == [
         "residual_clipping_rate",
@@ -612,7 +642,12 @@ def test_run_stage_eval_records_orca_residual_smoke_evidence(
             + "\n",
             encoding="utf-8",
         )
-        return {"written": 1, "successful_jobs": 1, "failed_jobs": 0}
+        return {
+            "written": 1,
+            "successful_jobs": 1,
+            "failed_jobs": 0,
+            "provenance": _sample_result_provenance("local_jsonl_present"),
+        }
 
     monkeypatch.setattr(candidate_runner, "run_map_batch", fake_run_map_batch)
 
@@ -633,6 +668,10 @@ def test_run_stage_eval_records_orca_residual_smoke_evidence(
     assert summary["guard_veto_rate"] == pytest.approx(0.25)
     assert summary["fallback_degraded_status"] == "clear"
     assert summary["artifact_pointer_status"] == "local_jsonl_present"
+    result_provenance = summary["result_provenance"]
+    assert result_provenance["artifact_pointer_status"] == "local_jsonl_present"
+    assert result_provenance["jsonl_path"] == str(result["jsonl_path"])
+    assert result_provenance["seed_identity"]["written"] == 1
     smoke_evidence = summary["orca_residual_smoke_evidence"]
     assert smoke_evidence["missing_required_fields"] == []
     assert smoke_evidence["nominal_escalation_allowed"] is True

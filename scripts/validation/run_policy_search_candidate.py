@@ -753,6 +753,24 @@ def _finalize_summary_payload(
     return finalized
 
 
+def _attach_result_provenance(
+    summary: dict[str, Any],
+    batch_summary: Mapping[str, Any],
+    jsonl_path: Path,
+) -> None:
+    """Attach map-runner result provenance to a public smoke summary when available."""
+    provenance = batch_summary.get("provenance")
+    if not isinstance(provenance, Mapping):
+        return
+    result_provenance = dict(provenance)
+    result_provenance["artifact_pointer_status"] = summary.get(
+        "artifact_pointer_status",
+        result_provenance.get("artifact_pointer_status", "unknown"),
+    )
+    result_provenance["jsonl_path"] = str(jsonl_path)
+    summary["result_provenance"] = result_provenance
+
+
 def _run_stage_eval(  # noqa: PLR0913
     *,
     scenarios_or_path: Path | list[dict[str, Any]],
@@ -824,6 +842,8 @@ def _run_stage_eval(  # noqa: PLR0913
         jsonl_path,
         missing_jsonl=missing_jsonl,
     )
+    if isinstance(batch_summary, Mapping):
+        _attach_result_provenance(summary, batch_summary, jsonl_path)
     summary["runtime_sec"] = float(max(time.perf_counter() - started, 0.0))
     return {
         "records": rows,

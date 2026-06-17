@@ -6,9 +6,12 @@ Runs a single tiny episode and validates JSON record against schema.
 from __future__ import annotations
 
 import json
+import shlex
+import sys
 from typing import TYPE_CHECKING
 
 import numpy as np
+import pytest
 
 from robot_sf.benchmark import runner as runner_mod
 from robot_sf.benchmark.runner import run_batch, run_episode, validate_and_write
@@ -172,7 +175,9 @@ def test_run_batch_repeated_runs_produce_stable_metrics(tmp_path: Path) -> None:
     assert _normalize_episode_record(rec1) == _normalize_episode_record(rec2)
 
 
-def test_run_batch_provenance_fields_present(tmp_path: Path) -> None:
+def test_run_batch_provenance_fields_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Validate that provenance fields are generated correctly on a run_batch run."""
     scenario = {
         "id": "repro-sample",
@@ -186,6 +191,8 @@ def test_run_batch_provenance_fields_present(tmp_path: Path) -> None:
         "repeats": 1,
     }
     out = tmp_path / "provenance_run.jsonl"
+    invocation = ["runner smoke", "--label", "value with spaces"]
+    monkeypatch.setattr(sys, "argv", invocation)
     run_batch(
         [scenario],
         out_path=out,
@@ -209,7 +216,7 @@ def test_run_batch_provenance_fields_present(tmp_path: Path) -> None:
     assert "run_id" in prov
     assert len(prov["run_id"]) > 0
     assert "python_version" in prov
-    assert "invocation" in prov
+    assert prov["invocation"] == shlex.join(invocation)
     config_identity = prov["config_identity"]
     assert config_identity["schema_path"] == str(SCHEMA_PATH)
     assert config_identity["algo"] == "simple_policy"

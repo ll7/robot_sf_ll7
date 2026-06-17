@@ -18,6 +18,7 @@ import json
 import multiprocessing as mp
 import os
 import platform
+import shlex
 import sys
 import time
 import uuid
@@ -1901,7 +1902,7 @@ def run_batch(  # noqa: PLR0913
         },
     }
     if hasattr(sys, "argv") and sys.argv:
-        provenance["invocation"] = " ".join(sys.argv)
+        provenance["invocation"] = shlex.join(sys.argv)
 
     fixed_params = _setup_fixed_params(
         out_path,

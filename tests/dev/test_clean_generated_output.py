@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 from scripts.dev.clean_generated_output import clean_paths
+
+SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "clean_generated_output.py"
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -99,4 +102,41 @@ def test_clean_paths_removes_nested_empty_generated_directories(tmp_path: Path) 
 
     assert (tracked_dir / "README.md").exists()
     assert not (tracked_dir / "tmp").exists()
+    assert _git(repo, "status", "--short").stdout.strip() == ""
+
+
+def test_cli_preserves_tracked_output_evidence_and_cleans_generated_files(
+    tmp_path: Path,
+) -> None:
+    """The real cleanup CLI should not delete tracked evidence under output/."""
+    repo = tmp_path / "repo"
+    evidence_dir = repo / "output" / "evidence"
+    scratch_dir = repo / "output" / "scratch"
+    evidence_dir.mkdir(parents=True)
+    scratch_dir.mkdir(parents=True)
+    tracked_evidence = evidence_dir / "summary.json"
+    ignored_generated = evidence_dir / "run.log"
+    untracked_generated = scratch_dir / "scratch.txt"
+    tracked_evidence.write_text('{"claim": "preserved"}\n', encoding="utf-8")
+    ignored_generated.write_text("local log\n", encoding="utf-8")
+    untracked_generated.write_text("temporary\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("output/evidence/*.log\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    _git(repo, "add", ".gitignore", "output/evidence/summary.json")
+    _git(repo, "-c", "user.name=CI", "-c", "user.email=ci@example.com", "commit", "-m", "seed")
+
+    # Run the trusted local CLI through the active test interpreter in a temp repo.
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), "output"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.startswith("cleaned_generated_paths=")
+    assert tracked_evidence.read_text(encoding="utf-8") == '{"claim": "preserved"}\n'
+    assert not ignored_generated.exists()
+    assert not untracked_generated.exists()
+    assert not scratch_dir.exists()
     assert _git(repo, "status", "--short").stdout.strip() == ""

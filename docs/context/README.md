@@ -345,6 +345,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2923_mechanism_trace_schema.md](issue_2923_mechanism_trace_schema.md)
 
+* Issue #2976 Mechanism Trace ORCA Residual Producer:
+
+  [issue_2976_mechanism_trace_orca_residuals.md](issue_2976_mechanism_trace_orca_residuals.md)
+
 * Issue #2430 AMMV trace annotation decision:
 
   [issue_2430_ammv_trace_annotation.md](issue_2430_ammv_trace_annotation.md)
@@ -599,6 +603,8 @@ knowledge, not every transient iteration detail.
   [issue_2937_horizon_denominator_health.md](issue_2937_horizon_denominator_health.md)
 * Issue #2943 Fast-Results Milestone / Claim Map v0 (2026-06-16):
   [issue_2943_fast_results_claim_map_v0.md](issue_2943_fast_results_claim_map_v0.md)
+* Issue #2911 ODD Hazard Coverage Matrix v1 evidence (2026-06-17):
+  [coverage_matrix.md](evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.md)
 * Issue #1239 human-model transfer robustness:
   [issue_1239_human_model_transfer.md](issue_1239_human_model_transfer.md)
 * Issue #1255 open-issue dependency graph:

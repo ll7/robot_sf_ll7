@@ -1,6 +1,6 @@
 # Release Readiness Dashboard
 
-Generated (UTC): 2026-06-17T04:42:16.759864Z
+Generated (UTC): 2026-06-17T05:04:38.615568Z
 Schema: release-readiness-dashboard.v1
 
 ## Claim Boundaries
@@ -23,21 +23,19 @@ Schema: release-readiness-dashboard.v1
 - cm-v0.prediction.native_replay: Forecast-variant closed-loop replay path is native (not fallback) (diagnostic)
 
 ## Blocked Claims
-- cm-v0.benchmark_release.odd_coverage: ODD/hazard-scenario coverage matrix for v0.1 release (blockers: 2911)
-- cm-v0.benchmark_release.suite_freeze: Nominal/stress/adversarial/AMV suite freeze for v0.1 release (blockers: 2910, 2911)
+- cm-v0.benchmark_release.odd_coverage: ODD/hazard-scenario coverage matrix for v0.1 release (blockers: blocked by source gate)
+- cm-v0.benchmark_release.suite_freeze: Nominal/stress/adversarial/AMV suite freeze for v0.1 release (blockers: 2910)
 
 ## Missing Hazard Coverage
-- cm-v0.benchmark_release.odd_coverage: ODD schema odd_hazard_coverage.v1 not yet defined
-- cm-v0.benchmark_release.suite_freeze: Requires ODD coverage (#2911) and row-claim matrix frozen before suite can be marked frozen
+- cm-v0.benchmark_release.odd_coverage: odd_hazard_coverage.v1 schema and JSON/Markdown matrix exist, but all represented rows remain config-only/weakly-covered and several hazard families remain blocked or absent
 
 ## Missing Durable Artifact Pointers
 - None
 
 ## Next Executable Issue per Blocked/Incomplete Requirement
 - Secondary-table paper promotion (p1_after_gate): 2612
-- ODD/AMV suite freeze for v0.1 (p1_after_gate): 2911
+- ODD/AMV suite freeze for v0.1 (p1_after_gate): 2910
 - Forecast variant benchmark campaign (p1_after_gate): 2966
-- mechanism_trace.v1 mechanism reports (p1_after_gate): 2976
 - Full benchmark claim matrix for #2910 release (parked_blocked): 2612
 - CARLA replay transfer evidence (parked_blocked): 2158
 - AMV calibrated-actuation paper claim (parked_blocked): 2230

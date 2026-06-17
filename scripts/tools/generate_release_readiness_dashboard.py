@@ -377,11 +377,19 @@ def build_next_executable_requirements(
             for issue in row.get("blocked_by_issues", [])
             if (issue_snapshot.is_open(issue) if issue_snapshot else True)
         ]
-        next_issue = blocker_candidates[0] if blocker_candidates else row["owner_issue"] or None
+        owner_issue = row["owner_issue"] or None
+        if (
+            issue_snapshot is not None
+            and owner_issue is not None
+            and not issue_snapshot.is_open(owner_issue)
+            and not blocker_candidates
+        ):
+            continue
+        next_issue = blocker_candidates[0] if blocker_candidates else owner_issue
         next_items.append(
             {
                 "requirement": row["requirement"],
-                "owner_issue": row["owner_issue"] or None,
+                "owner_issue": owner_issue,
                 "status": status,
                 "section": row["section"],
                 "next_executable_issue": next_issue,

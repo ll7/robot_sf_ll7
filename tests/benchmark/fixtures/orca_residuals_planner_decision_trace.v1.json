@@ -1,0 +1,65 @@
+[
+  {
+    "step": 101,
+    "selected_source": "prior_residual",
+    "selected_command": [1.0, -0.1],
+    "selected_score": 0.31,
+    "route_progress_from_start_m": 0.0,
+    "action_adaptation": {
+      "mode": "prior_residual",
+      "raw_residual_action": [0.25, -0.04],
+      "bounded_residual_action": [0.2, -0.04],
+      "residual_bounds": {
+        "linear": 0.2,
+        "angular": 0.3
+      },
+      "residual_clipped": true
+    },
+    "intervened": true,
+    "intervention_reason": "bounded_prior_residual_improved_short_horizon_safety"
+  },
+  {
+    "step": 102,
+    "selected_source": "prior_residual",
+    "selected_command": [0.75, -0.05],
+    "selected_score": 0.28,
+    "route_progress_from_start_m": 0.15,
+    "action_adaptation": {
+      "mode": "prior_residual",
+      "raw_residual_action": [0.2, 0.05],
+      "bounded_residual_action": [0.2, 0.05],
+      "residual_bounds": {
+        "linear": 0.2,
+        "angular": 0.3
+      },
+      "residual_clipped": false
+    }
+  },
+  {
+    "step": 103,
+    "selected_source": "prior_residual",
+    "selected_command": [0.6, 0.01],
+    "selected_score": 0.22,
+    "route_progress_from_start_m": 1.0,
+    "action_adaptation": {
+      "mode": "prior_residual",
+      "raw_residual_action": [0.12, -0.12],
+      "bounded_residual_action": [0.12, -0.12],
+      "residual_bounds": {
+        "linear": 0.2,
+        "angular": 0.3
+      },
+      "residual_clipped": false
+    }
+  },
+  {
+    "step": 104,
+    "selected_source": "dynamic_window",
+    "selected_command": [1.2, 0.0],
+    "selected_score": 0.95,
+    "route_progress_from_start_m": 1.7,
+    "action_adaptation": {
+      "mode": "guard_selected_command"
+    }
+  }
+]

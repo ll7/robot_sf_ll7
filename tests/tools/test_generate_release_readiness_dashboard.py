@@ -233,6 +233,36 @@ def test_next_executable_uses_open_blockers(tmp_path: Path, monkeypatch) -> None
     assert requirements[1]["next_executable_issue"] == "5003"
 
 
+def test_next_executable_skips_closed_owner_with_no_open_blockers() -> None:
+    """Closed owner issues are no longer executable next steps."""
+
+    rows = [
+        {
+            "requirement": "Already merged producer",
+            "owner_issue": "2976",
+            "status": "blocked",
+            "next_command_or_artifact": "Artifact: mechanism report",
+            "blocked_by_issues": ["2976"],
+            "section": "p1_after_gate",
+        },
+        {
+            "requirement": "Still open follow-up",
+            "owner_issue": "2910",
+            "status": "blocked",
+            "next_command_or_artifact": "Artifact: suite freeze",
+            "blocked_by_issues": [],
+            "section": "p1_after_gate",
+        },
+    ]
+
+    requirements = cli.build_next_executable_requirements(
+        rows, cli.SourceIssueStatus({"2976": "closed", "2910": "open"})
+    )
+
+    assert [item["requirement"] for item in requirements] == ["Still open follow-up"]
+    assert requirements[0]["next_executable_issue"] == "2910"
+
+
 def test_inline_cleanup_preserves_identifier_underscores() -> None:
     """Markdown cleanup must not corrupt schema and claim identifiers."""
 

@@ -4,20 +4,18 @@
       "blocked_by_issues": [
         "2911"
       ],
-      "blocked_dependency": "ODD schema odd_hazard_coverage.v1 not yet defined",
-      "blocked_dependency_issues": [
-        "2911"
-      ],
-      "dependency_gate_blocked": false,
-      "do_not_claim_boundary": "Do not claim gap coverage is closed until schema is checked against scenario family list",
-      "evidence_tier": "candidate",
+      "blocked_dependency": "odd_hazard_coverage.v1 schema and JSON/Markdown matrix exist, but all represented rows remain config-only/weakly-covered and several hazard families remain blocked or absent",
+      "blocked_dependency_issues": [],
+      "dependency_gate_blocked": true,
+      "do_not_claim_boundary": "Do not claim gap coverage is closed; use the Issue #2911 matrix to name uncovered and weakly-covered rows",
+      "evidence_tier": "schema",
       "id": "cm-v0.benchmark_release.odd_coverage",
       "provenance": [
         "docs/context/issue_2943_fast_results_claim_map_v0.md"
       ],
-      "raw_evidence_tier": "schema -> candidate",
+      "raw_evidence_tier": "schema",
       "required_issue_hints": {
-        "2911": "open"
+        "2911": "closed"
       },
       "required_issues": [
         "2911"
@@ -30,10 +28,9 @@
         "2910",
         "2911"
       ],
-      "blocked_dependency": "Requires ODD coverage (#2911) and row-claim matrix frozen before suite can be marked frozen",
+      "blocked_dependency": "Requires Issue #2911 coverage-matrix findings and row-claim matrix to be reconciled before suite can be marked frozen",
       "blocked_dependency_issues": [
-        "2910",
-        "2911"
+        "2910"
       ],
       "dependency_gate_blocked": false,
       "do_not_claim_boundary": "Do not claim suite is paper-ready until freeze contract from #2910 is satisfied",
@@ -125,25 +122,16 @@
       "status": "diagnostic_only"
     }
   ],
-  "generated_at_utc": "2026-06-17T04:42:16.759864Z",
+  "generated_at_utc": "2026-06-17T05:04:38.615568Z",
   "missing_durable_artifact_pointers": [],
   "missing_hazard_coverage": [
     {
       "claim_id": "cm-v0.benchmark_release.odd_coverage",
-      "missing": "ODD schema odd_hazard_coverage.v1 not yet defined",
+      "missing": "odd_hazard_coverage.v1 schema and JSON/Markdown matrix exist, but all represented rows remain config-only/weakly-covered and several hazard families remain blocked or absent",
       "provenance": [
         "docs/context/issue_2943_fast_results_claim_map_v0.md"
       ],
       "requirement": "ODD/hazard-scenario coverage matrix for v0.1 release",
-      "status": "blocked"
-    },
-    {
-      "claim_id": "cm-v0.benchmark_release.suite_freeze",
-      "missing": "Requires ODD coverage (#2911) and row-claim matrix frozen before suite can be marked frozen",
-      "provenance": [
-        "docs/context/issue_2943_fast_results_claim_map_v0.md"
-      ],
-      "requirement": "Nominal/stress/adversarial/AMV suite freeze for v0.1 release",
       "status": "blocked"
     }
   ],
@@ -160,11 +148,9 @@
       "status": "blocked"
     },
     {
-      "blocked_by_issues": [
-        "2911"
-      ],
+      "blocked_by_issues": [],
       "next_command_or_artifact": "Artifact: suite-freeze release note and frozen scenario-family list",
-      "next_executable_issue": "2911",
+      "next_executable_issue": "2910",
       "owner_issue": "2910",
       "requirement": "ODD/AMV suite freeze for v0.1",
       "section": "p1_after_gate",
@@ -183,20 +169,8 @@
     },
     {
       "blocked_by_issues": [
-        "2976"
-      ],
-      "next_command_or_artifact": "Artifact: mechanism report over durable producer payloads",
-      "next_executable_issue": "2976",
-      "owner_issue": "2976",
-      "requirement": "mechanism_trace.v1 mechanism reports",
-      "section": "p1_after_gate",
-      "status": "blocked"
-    },
-    {
-      "blocked_by_issues": [
         "2612",
-        "2910",
-        "2911"
+        "2910"
       ],
       "next_command_or_artifact": "Artifact: v0.1 benchmark claim matrix",
       "next_executable_issue": "2612",
@@ -254,7 +228,7 @@
     "catalog": "docs/context/catalog.yaml",
     "claim_map": "docs/context/issue_2943_fast_results_claim_map_v0.md",
     "handoff": "docs/context/issue_2689_release_evidence_handoff_2026_06_15.md",
-    "issue_snapshot": "issue-2965-live-issues.json",
+    "issue_snapshot": "issue-2965-live-issues-after-merges.json",
     "script": "scripts/tools/generate_release_readiness_dashboard.py"
   },
   "ready_claims": [
@@ -330,7 +304,7 @@
   ],
   "schema_version": "release-readiness-dashboard.v1",
   "source_status": {
-    "catalog_entry_count": 389,
+    "catalog_entry_count": 391,
     "claim_map_contains_in_catalog": true,
     "handoff_contains_in_catalog": true
   },

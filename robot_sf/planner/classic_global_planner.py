@@ -47,9 +47,9 @@ try:
 except ImportError:
     from python_motion_planning.common.visualizer import Visualizer2D as Visualizer
 
-_PLOT_GRID_MAP_SUPPORTS_ALPHA_3D = "alpha_3d" in inspect.signature(
-    Visualizer.plot_grid_map
-).parameters
+_PLOT_GRID_MAP_SUPPORTS_ALPHA_3D = (
+    "alpha_3d" in inspect.signature(Visualizer.plot_grid_map).parameters
+)
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition

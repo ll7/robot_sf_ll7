@@ -407,7 +407,11 @@ def build_next_executable_requirements(
     return next_items
 
 
-def collect_missing_hazard_coverage(claim_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def collect_missing_hazard_coverage(
+    claim_rows: list[dict[str, Any]],
+    *,
+    claim_map_path: Path = DEFAULT_CLAIM_MAP_PATH,
+) -> list[dict[str, Any]]:
     """Collect likely ODD/HAZARD coverage gaps from claim rows."""
     missing: list[dict[str, Any]] = []
     for row in claim_rows:
@@ -422,7 +426,7 @@ def collect_missing_hazard_coverage(claim_rows: list[dict[str, Any]]) -> list[di
                 "requirement": row.get("requirement", ""),
                 "status": row.get("status", ""),
                 "missing": row.get("blocked_dependency", ""),
-                "provenance": [str(DEFAULT_CLAIM_MAP_PATH)],
+                "provenance": [_safe_relative(claim_map_path)],
             }
         )
     return missing
@@ -448,12 +452,12 @@ def _collect_artifact_refs(text: str) -> set[str]:
     refs: set[str] = set()
 
     for match in re.finditer(r"\]\(([^)]+)\)", text):
-        token = match.group(1).strip()
-        if token and "http" not in token and token.endswith(tuple(FILE_EXTENSIONS)):
-            refs.add(token.split("#")[0].split("?")[0])
+        token = _normalize_local_ref(match.group(1))
+        if token and token.endswith(tuple(FILE_EXTENSIONS)):
+            refs.add(token)
 
     for match in re.finditer(r"`([^`]+)`", text):
-        token = match.group(1).strip()
+        token = _normalize_local_ref(match.group(1))
         if not token or token.startswith("http") or " " in token:
             continue
         if "/" not in token:
@@ -464,8 +468,18 @@ def _collect_artifact_refs(text: str) -> set[str]:
     return refs
 
 
+def _normalize_local_ref(raw: str) -> str:
+    """Normalize a local Markdown reference before path classification."""
+
+    token = raw.strip()
+    if not token or token.startswith(("http://", "https://", "mailto:")):
+        return ""
+    return token.split("#", maxsplit=1)[0].split("?", maxsplit=1)[0]
+
+
 def collect_missing_artifacts(
     handoff_text: str,
+    handoff_path: Path,
     catalog_path: Path,
     repo_root: Path,
     *,
@@ -477,30 +491,32 @@ def collect_missing_artifacts(
 
     for path_text in sorted(_collect_artifact_refs(handoff_text)):
         candidate = repo_root / path_text
-        if not candidate.exists():
-            key = (path_text, "issue_2689_release_evidence_handoff_2026_06_15.md")
+        if not candidate.is_file():
+            source = _safe_relative(handoff_path)
+            key = (path_text, source)
             if key not in seen:
                 seen.add(key)
                 missing.append(
                     {
                         "path": path_text,
-                        "source": "docs/context/issue_2689_release_evidence_handoff_2026_06_15.md",
-                        "reason": "missing local artifact path",
+                        "source": source,
+                        "reason": "local artifact path is missing or not a file",
                     }
                 )
 
     if include_catalog:
         for path_text in _load_catalog_paths(catalog_path):
             candidate = repo_root / path_text
-            if not candidate.exists():
-                key = (path_text, "docs/context/catalog.yaml")
+            if not candidate.is_file():
+                source = _safe_relative(catalog_path)
+                key = (path_text, source)
                 if key not in seen:
                     seen.add(key)
                     missing.append(
                         {
                             "path": path_text,
-                            "source": "docs/context/catalog.yaml",
-                            "reason": "catalog entry path missing from repository",
+                            "source": source,
+                            "reason": "catalog entry path is missing or not a file",
                         }
                     )
 
@@ -651,9 +667,10 @@ def generate_release_readiness_dashboard(
     next_executable = build_next_executable_requirements(queue_rows, issue_status)
 
     all_claim_rows = ready_claims + diagnostic_only_claims + blocked_claims
-    missing_hazard = collect_missing_hazard_coverage(all_claim_rows)
+    missing_hazard = collect_missing_hazard_coverage(all_claim_rows, claim_map_path=claim_map_path)
     missing_artifacts = collect_missing_artifacts(
         handoff_text=handoff_text,
+        handoff_path=handoff_path,
         catalog_path=catalog_path,
         repo_root=get_repository_root(),
     )

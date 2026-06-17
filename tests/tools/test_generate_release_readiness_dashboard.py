@@ -100,6 +100,8 @@ def test_cli_generates_json_and_markdown_outputs_and_includes_hazard_gap(
 # Handoff fixture
 
 [one](docs/context/issue_existing.md)
+[query](docs/context/query_target.json?download=1)
+[anchor](docs/context/anchored.md#section)
 `report.md`
 `missing/path/to/artifact.json`
 """,
@@ -108,6 +110,9 @@ def test_cli_generates_json_and_markdown_outputs_and_includes_hazard_gap(
     existing = repo_root / "docs" / "context" / "issue_existing.md"
     existing.parent.mkdir(parents=True, exist_ok=True)
     existing.write_text("ok", encoding="utf-8")
+    (repo_root / "docs" / "context" / "query_target.json").write_text("{}", encoding="utf-8")
+    (repo_root / "docs" / "context" / "anchored.md").write_text("ok", encoding="utf-8")
+    (repo_root / "docs" / "context" / "directory_artifact.json").mkdir()
 
     catalog_path = repo_root / "docs" / "context" / "catalog.yaml"
     _write_yaml(
@@ -116,6 +121,7 @@ def test_cli_generates_json_and_markdown_outputs_and_includes_hazard_gap(
 version: 1
 entries:
   - path: docs/context/issue_existing.md
+  - path: docs/context/directory_artifact.json
   - path: docs/context/missing_catalog.json
 """,
     )
@@ -165,6 +171,19 @@ entries:
     )
     assert not any(
         item["path"] == "report.md" for item in payload["missing_durable_artifact_pointers"]
+    )
+    assert not any(
+        item["path"] == "docs/context/query_target.json"
+        for item in payload["missing_durable_artifact_pointers"]
+    )
+    assert not any(
+        item["path"] == "docs/context/anchored.md"
+        for item in payload["missing_durable_artifact_pointers"]
+    )
+    assert any(
+        item["path"] == "docs/context/directory_artifact.json"
+        and item["reason"] == "catalog entry path is missing or not a file"
+        for item in payload["missing_durable_artifact_pointers"]
     )
     assert any(
         item["path"] == "docs/context/missing_catalog.json"

@@ -41,8 +41,7 @@ def test_fast_pysf_backend_missing_dependency_is_skipped(monkeypatch: pytest.Mon
     assert "dummy" in loaded_registry.list_backends()
     assert loaded_registry.select_best_backend() == "dummy"
     assert any(
-        "fast-pysf backend is unavailable/skipped" in str(message)
-        for message, _args in warnings
+        "fast-pysf backend is unavailable/skipped" in str(message) for message, _args in warnings
     )
 
 

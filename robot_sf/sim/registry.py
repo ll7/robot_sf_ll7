@@ -32,7 +32,9 @@ def _is_fast_pysf_dependency_error(error: ImportError) -> bool:
     missing = getattr(error, "name", None)
     if not isinstance(missing, str):
         return False
-    return any(missing == path or missing.startswith(f"{path}.") for path in _FAST_PYSF_IMPORT_PATHS)
+    return any(
+        missing == path or missing.startswith(f"{path}.") for path in _FAST_PYSF_IMPORT_PATHS
+    )
 
 
 def register_backend(key: str, factory: SimulatorFactory, *, override: bool = False) -> None:

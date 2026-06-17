@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import json
 import math
+import platform
+import shlex
+import sys
 import time
+import uuid
 from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
@@ -4968,6 +4972,48 @@ def _merge_runtime_algorithm_contract(  # noqa: C901
     return base_contract
 
 
+def _map_result_provenance(  # noqa: PLR0913
+    *,
+    schema_path: str | Path,
+    scenario_path: Path,
+    scenarios: list[dict[str, Any]],
+    algo: str,
+    algo_config_path: str | None,
+    benchmark_profile: str,
+    suite_key: str,
+    total_jobs: int,
+    written: int,
+    artifact_pointer_status: str,
+) -> dict[str, Any]:
+    """Return self-describing provenance for map-runner summary artifacts."""
+    from robot_sf.benchmark.release_protocol import BENCHMARK_PROTOCOL_VERSION  # noqa: PLC0415
+
+    provenance: dict[str, Any] = {
+        "protocol_version": BENCHMARK_PROTOCOL_VERSION,
+        "commit_hash": _git_hash_fallback(),
+        "run_id": uuid.uuid4().hex,
+        "python_version": platform.python_version(),
+        "artifact_pointer_status": artifact_pointer_status,
+        "config_identity": {
+            "schema_path": str(schema_path),
+            "scenario_path": str(scenario_path),
+            "scenario_count": len(scenarios),
+            "scenario_matrix_hash": _config_hash(scenarios),
+            "algo": str(algo),
+            "algo_config_path": str(algo_config_path) if algo_config_path is not None else None,
+            "benchmark_profile": str(benchmark_profile),
+        },
+        "seed_identity": {
+            "suite_key": suite_key,
+            "total_jobs": int(total_jobs),
+            "written": int(written),
+        },
+    }
+    if hasattr(sys, "argv") and sys.argv:
+        provenance["invocation"] = shlex.join(sys.argv)
+    return provenance
+
+
 def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
@@ -5230,6 +5276,18 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             summary["benchmark_track"] = benchmark_track
         if track_schema_version is not None:
             summary["track_schema_version"] = track_schema_version
+        summary["provenance"] = _map_result_provenance(
+            schema_path=schema_path,
+            scenario_path=scenario_path,
+            scenarios=filtered,
+            algo=algo,
+            algo_config_path=algo_config_path,
+            benchmark_profile=benchmark_profile,
+            suite_key=suite_key,
+            total_jobs=len(jobs),
+            written=0,
+            artifact_pointer_status="not_available",
+        )
         summary["benchmark_availability"] = availability_payload(summary)
         return summary
 
@@ -5529,6 +5587,19 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         summary["benchmark_track"] = benchmark_track
     if track_schema_version is not None:
         summary["track_schema_version"] = track_schema_version
+    artifact_pointer_status = "local_jsonl_present" if out_path.exists() else "not_available"
+    summary["provenance"] = _map_result_provenance(
+        schema_path=schema_path,
+        scenario_path=scenario_path,
+        scenarios=filtered,
+        algo=algo,
+        algo_config_path=algo_config_path,
+        benchmark_profile=benchmark_profile,
+        suite_key=suite_key,
+        total_jobs=total_jobs,
+        written=wrote,
+        artifact_pointer_status=artifact_pointer_status,
+    )
     summary["benchmark_availability"] = availability_payload(summary)
     return summary
 

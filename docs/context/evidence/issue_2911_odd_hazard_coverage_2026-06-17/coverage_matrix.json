@@ -163,10 +163,11 @@
       "status": "weakly_covered"
     }
   ],
-  "generated_at_utc": "2026-06-17T04:14:29.508965+00:00",
+  "generated_at_utc": "2026-06-17T05:44:00.194026+00:00",
   "generation": {
+    "base_commit": "f7e62cdf8c9a",
     "command": "uv run python scripts/tools/generate_odd_hazard_coverage_matrix.py --config configs/benchmarks/odd_hazard_coverage.v1.yaml --out-json docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json --out-md docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.md --repo-root .",
-    "commit": "d7656d7f8494"
+    "tree_state": "dirty"
   },
   "hazard_traceability_ref": {
     "contract_id": "low_speed_public_space_hazards_v1",

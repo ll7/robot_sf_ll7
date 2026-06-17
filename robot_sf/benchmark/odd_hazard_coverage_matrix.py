@@ -262,6 +262,8 @@ def generate_json_report(
     reference_errors = validate_matrix_references(matrix, repo_root=repo_root)
     status_counts = _status_counts(matrix.coverage_rows)
     gap_status_counts = _gap_status_counts(matrix.known_gaps)
+    generation = _generation_provenance(repo_root=repo_root)
+    generation["command"] = command
     return {
         "schema_version": ODD_HAZARD_COVERAGE_SCHEMA_VERSION,
         "matrix_id": matrix.id,
@@ -282,10 +284,7 @@ def generate_json_report(
         "coverage_rows": [_coverage_row_to_dict(row) for row in matrix.coverage_rows],
         "known_gaps": [_gap_row_to_dict(row) for row in matrix.known_gaps],
         "provenance": asdict(matrix.provenance),
-        "generation": {
-            "command": command,
-            "commit": _git_commit(),
-        },
+        "generation": generation,
     }
 
 
@@ -300,6 +299,8 @@ def generate_markdown_report(
     reference_errors = validate_matrix_references(matrix, repo_root=repo_root)
     status_counts = _status_counts(matrix.coverage_rows)
     gap_status_counts = _gap_status_counts(matrix.known_gaps)
+    generation = _generation_provenance(repo_root=repo_root)
+    generation["command"] = command
 
     lines: list[str] = [
         "# ODD Hazard Coverage Matrix",
@@ -307,7 +308,8 @@ def generate_markdown_report(
         f"- Matrix id: `{matrix.id}`",
         f"- Generated at: {_utc_now()}",
         f"- Generation command: `{command or 'not recorded'}`",
-        f"- Generation commit: `{_git_commit()}`",
+        f"- Source/base commit: `{generation['base_commit']}`",
+        f"- Worktree state: `{generation['tree_state']}`",
         "",
         "## Claim Boundary",
         "",
@@ -584,18 +586,42 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _git_commit() -> str:
+def _git_commit(*, repo_root: Path) -> str:
     """Return the current Git commit, or ``unknown`` outside Git."""
 
     try:
         return subprocess.check_output(
-            ["git", "rev-parse", "--short=12", "HEAD"],
+            ["git", "-C", str(repo_root), "rev-parse", "--short=12", "HEAD"],
             text=True,
             stderr=subprocess.DEVNULL,
             timeout=5,
         ).strip()
     except (OSError, subprocess.SubprocessError):
         return "unknown"
+
+
+def _git_tree_state(*, repo_root: Path) -> str:
+    """Return the current git tree state, or ``unknown`` outside Git."""
+
+    try:
+        status = subprocess.check_output(
+            ["git", "-C", str(repo_root), "status", "--short", "--untracked-files=no"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+        return "dirty" if status.strip() else "clean"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def _generation_provenance(*, repo_root: Path) -> dict[str, str]:
+    """Return explicit generation provenance metadata."""
+
+    return {
+        "base_commit": _git_commit(repo_root=repo_root),
+        "tree_state": _git_tree_state(repo_root=repo_root),
+    }
 
 
 def _json_pointer(path_elems: Iterable[Any]) -> str:

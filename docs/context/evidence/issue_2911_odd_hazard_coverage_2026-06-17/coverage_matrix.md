@@ -1,9 +1,10 @@
 # ODD Hazard Coverage Matrix
 
 - Matrix id: `issue_2911_low_speed_public_space_v1`
-- Generated at: 2026-06-17T04:14:29.519494+00:00
+- Generated at: 2026-06-17T05:44:00.217919+00:00
 - Generation command: `uv run python scripts/tools/generate_odd_hazard_coverage_matrix.py --config configs/benchmarks/odd_hazard_coverage.v1.yaml --out-json docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json --out-md docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.md --repo-root .`
-- Generation commit: `d7656d7f8494`
+- Source/base commit: `f7e62cdf8c9a`
+- Worktree state: `dirty`
 
 ## Claim Boundary
 

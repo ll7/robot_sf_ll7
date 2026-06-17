@@ -1568,6 +1568,14 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2965_release_readiness_dashboard/release_readiness_dashboard.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2965_release_readiness_dashboard/release_readiness_dashboard.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json
     status: evidence
     freshness: evidence

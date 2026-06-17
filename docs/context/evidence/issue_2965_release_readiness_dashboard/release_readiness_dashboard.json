@@ -1,0 +1,316 @@
+{
+  "blocked_claims": [
+    {
+      "blocked_by_issues": [
+        "2911"
+      ],
+      "blocked_dependency": "odd_hazard_coverage.v1 schema and JSON/Markdown matrix exist, but all represented rows remain config-only/weakly-covered and several hazard families remain blocked or absent",
+      "blocked_dependency_issues": [],
+      "dependency_gate_blocked": true,
+      "do_not_claim_boundary": "Do not claim gap coverage is closed; use the Issue #2911 matrix to name uncovered and weakly-covered rows",
+      "evidence_tier": "schema",
+      "id": "cm-v0.benchmark_release.odd_coverage",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "raw_evidence_tier": "schema",
+      "required_issue_hints": {
+        "2911": "closed"
+      },
+      "required_issues": [
+        "2911"
+      ],
+      "requirement": "ODD/hazard-scenario coverage matrix for v0.1 release",
+      "status": "blocked"
+    },
+    {
+      "blocked_by_issues": [
+        "2910",
+        "2911"
+      ],
+      "blocked_dependency": "Requires Issue #2911 coverage-matrix findings and row-claim matrix to be reconciled before suite can be marked frozen",
+      "blocked_dependency_issues": [
+        "2910"
+      ],
+      "dependency_gate_blocked": false,
+      "do_not_claim_boundary": "Do not claim suite is paper-ready until freeze contract from #2910 is satisfied",
+      "evidence_tier": "blocked",
+      "id": "cm-v0.benchmark_release.suite_freeze",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "raw_evidence_tier": "blocked",
+      "required_issue_hints": {},
+      "required_issues": [
+        "2910"
+      ],
+      "requirement": "Nominal/stress/adversarial/AMV suite freeze for v0.1 release",
+      "status": "blocked"
+    }
+  ],
+  "diagnostic_only_caveat": "Diagnostic-only rows are allowed for local execution diagnostics and must not be promoted as benchmark/paper evidence.",
+  "diagnostic_only_claims": [
+    {
+      "blocked_by_issues": [
+        "2612"
+      ],
+      "blocked_dependency": "seed_episode_rows collision=0.0 conflicts with authoritative campaign_table.csv; must be resolved before any secondary-table paper claim",
+      "blocked_dependency_issues": [
+        "2612"
+      ],
+      "dependency_gate_blocked": false,
+      "do_not_claim_boundary": "Do not cite secondary table in paper until collision-field conflict in #2612 is resolved",
+      "evidence_tier": "diagnostic",
+      "id": "cm-v0.benchmark_release.seed_table_semantics",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "raw_evidence_tier": "diagnostic",
+      "required_issue_hints": {
+        "2612": "open"
+      },
+      "required_issues": [
+        "2612"
+      ],
+      "requirement": "Release 0.0.2 secondary-report table semantics clarified",
+      "status": "diagnostic_only"
+    },
+    {
+      "blocked_by_issues": [
+        "2937"
+      ],
+      "blocked_dependency": "None; 164/180 cells (91.1%) evaluated; corridor_interaction fixtures remain trace_too_short",
+      "blocked_dependency_issues": [],
+      "dependency_gate_blocked": false,
+      "do_not_claim_boundary": "Do not promote to forecast benchmark evidence; this audit does not prove navigation benefit or safety improvement",
+      "evidence_tier": "diagnostic",
+      "id": "cm-v0.prediction.denominator_health",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "raw_evidence_tier": "diagnostic",
+      "required_issue_hints": {
+        "2937": "closed"
+      },
+      "required_issues": [
+        "2937"
+      ],
+      "requirement": "Horizon x timestep denominator-coverage audit",
+      "status": "diagnostic_only"
+    },
+    {
+      "blocked_by_issues": [
+        "2941"
+      ],
+      "blocked_dependency": "Minimal brake-heuristic replay policy only; not a production planner",
+      "blocked_dependency_issues": [],
+      "dependency_gate_blocked": false,
+      "do_not_claim_boundary": "Do not claim cv improves safety/success/runtime; do not remove caveat that replay uses a simple forecast-brake heuristic",
+      "evidence_tier": "diagnostic",
+      "id": "cm-v0.prediction.native_replay",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "raw_evidence_tier": "diagnostic",
+      "required_issue_hints": {
+        "2941": "closed"
+      },
+      "required_issues": [
+        "2941"
+      ],
+      "requirement": "Forecast-variant closed-loop replay path is native (not fallback)",
+      "status": "diagnostic_only"
+    }
+  ],
+  "generated_at_utc": "2026-06-17T05:14:44.964221Z",
+  "missing_durable_artifact_pointers": [],
+  "missing_hazard_coverage": [
+    {
+      "claim_id": "cm-v0.benchmark_release.odd_coverage",
+      "missing": "odd_hazard_coverage.v1 schema and JSON/Markdown matrix exist, but all represented rows remain config-only/weakly-covered and several hazard families remain blocked or absent",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "requirement": "ODD/hazard-scenario coverage matrix for v0.1 release",
+      "status": "blocked"
+    }
+  ],
+  "next_executable_requirements": [
+    {
+      "blocked_by_issues": [
+        "2612"
+      ],
+      "next_command_or_artifact": "Artifact: paper-promotion note or release-table addendum",
+      "next_executable_issue": "2612",
+      "owner_issue": "2612",
+      "requirement": "Secondary-table paper promotion",
+      "section": "p1_after_gate",
+      "status": "blocked"
+    },
+    {
+      "blocked_by_issues": [],
+      "next_command_or_artifact": "Artifact: suite-freeze release note and frozen scenario-family list",
+      "next_executable_issue": "2910",
+      "owner_issue": "2910",
+      "requirement": "ODD/AMV suite freeze for v0.1",
+      "section": "p1_after_gate",
+      "status": "blocked"
+    },
+    {
+      "blocked_by_issues": [
+        "2966"
+      ],
+      "next_command_or_artifact": "Artifact: planner-consumed forecast slice report",
+      "next_executable_issue": "2966",
+      "owner_issue": "2966",
+      "requirement": "Forecast variant benchmark campaign",
+      "section": "p1_after_gate",
+      "status": "blocked"
+    },
+    {
+      "blocked_by_issues": [
+        "2612",
+        "2910"
+      ],
+      "next_command_or_artifact": "Artifact: v0.1 benchmark claim matrix",
+      "next_executable_issue": "2612",
+      "owner_issue": "2910",
+      "requirement": "Full benchmark claim matrix for #2910 release",
+      "section": "parked_blocked",
+      "status": "blocked"
+    },
+    {
+      "blocked_by_issues": [
+        "2158",
+        "2276"
+      ],
+      "next_command_or_artifact": "Artifact: CARLA transfer eligibility note",
+      "next_executable_issue": "2158",
+      "owner_issue": "2158",
+      "requirement": "CARLA replay transfer evidence",
+      "section": "parked_blocked",
+      "status": "do-not-claim"
+    },
+    {
+      "blocked_by_issues": [
+        "2230",
+        "2259"
+      ],
+      "next_command_or_artifact": "Artifact: calibrated-actuation provenance note",
+      "next_executable_issue": "2230",
+      "owner_issue": "2230",
+      "requirement": "AMV calibrated-actuation paper claim",
+      "section": "parked_blocked",
+      "status": "do-not-claim"
+    },
+    {
+      "blocked_by_issues": [],
+      "next_command_or_artifact": "Artifact: SocNavBench unavailable-row note",
+      "next_executable_issue": "2397",
+      "owner_issue": "2397",
+      "requirement": "SocNavBench planner rows",
+      "section": "parked_blocked",
+      "status": "do-not-claim"
+    },
+    {
+      "blocked_by_issues": [
+        "2941"
+      ],
+      "next_command_or_artifact": "Artifact: forecast safety/success benchmark report",
+      "next_executable_issue": "2941",
+      "owner_issue": "2966",
+      "requirement": "Forecast variant safety/success claims",
+      "section": "parked_blocked",
+      "status": "do-not-claim"
+    }
+  ],
+  "provenance": {
+    "catalog": "docs/context/catalog.yaml",
+    "claim_map": "docs/context/issue_2943_fast_results_claim_map_v0.md",
+    "handoff": "docs/context/issue_2689_release_evidence_handoff_2026_06_15.md",
+    "issue_snapshot": "issue-2965-live-issues-after-merges.json",
+    "script": "scripts/tools/generate_release_readiness_dashboard.py"
+  },
+  "ready_claims": [
+    {
+      "blocked_by_issues": [
+        "2912"
+      ],
+      "blocked_dependency": "None; schema and validator are live",
+      "blocked_dependency_issues": [],
+      "dependency_gate_blocked": false,
+      "do_not_claim_boundary": "Do not add fallback/degraded planner rows with row_status: successful_evidence",
+      "evidence_tier": "schema",
+      "id": "cm-v0.benchmark_release.row_claim_enforcement",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "raw_evidence_tier": "schema",
+      "required_issue_hints": {
+        "2912": "closed"
+      },
+      "required_issues": [
+        "2912"
+      ],
+      "requirement": "benchmark_row_claim.v1 row-level enforcement on leaderboard sidecars",
+      "status": "ready"
+    },
+    {
+      "blocked_by_issues": [
+        "2923"
+      ],
+      "blocked_dependency": "Additional producers needed for prediction_risk_gating, orca_residuals, signal_state_logic, amv_actuation_constraints",
+      "blocked_dependency_issues": [],
+      "dependency_gate_blocked": false,
+      "do_not_claim_boundary": "Do not use mechanism_trace.v1 rows for benchmark or paper-facing claims until durable trace inputs and producer integrations exist",
+      "evidence_tier": "schema",
+      "id": "cm-v0.mechanism.trace_schema",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "raw_evidence_tier": "schema",
+      "required_issue_hints": {
+        "2923": "closed"
+      },
+      "required_issues": [
+        "2923"
+      ],
+      "requirement": "mechanism_trace.v1 source contract for local-navigation intervention rows",
+      "status": "ready"
+    },
+    {
+      "blocked_by_issues": [
+        "2960"
+      ],
+      "blocked_dependency": "Single deterministic local-planner fixture only; no full-episode benchmark or scenario-matrix evidence yet",
+      "blocked_dependency_issues": [],
+      "dependency_gate_blocked": false,
+      "do_not_claim_boundary": "Do not claim forecast variant is benchmark-capable or beneficial; smoke proves planner consumption mechanics only",
+      "evidence_tier": "smoke",
+      "id": "cm-v0.prediction.full_planner_integration",
+      "provenance": [
+        "docs/context/issue_2943_fast_results_claim_map_v0.md"
+      ],
+      "raw_evidence_tier": "smoke",
+      "required_issue_hints": {
+        "2960": "closed"
+      },
+      "required_issues": [
+        "2960"
+      ],
+      "requirement": "Forecast variant integrated into a real planner consuming ProbabilisticPredictor",
+      "status": "ready"
+    }
+  ],
+  "schema_version": "release-readiness-dashboard.v1",
+  "source_status": {
+    "catalog_entry_count": 391,
+    "claim_map_contains_in_catalog": true,
+    "handoff_contains_in_catalog": true
+  },
+  "sources": {
+    "catalog": "docs/context/catalog.yaml",
+    "claim_map": "docs/context/issue_2943_fast_results_claim_map_v0.md",
+    "handoff": "docs/context/issue_2689_release_evidence_handoff_2026_06_15.md"
+  }
+}

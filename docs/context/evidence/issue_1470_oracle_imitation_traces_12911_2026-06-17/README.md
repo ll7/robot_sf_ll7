@@ -1,4 +1,4 @@
-# Issue #1470 Oracle Imitation Trace Closeout
+# Issue 1470 Oracle Imitation Trace Closeout
 
 This bundle promotes the retrieved Slurm evidence for job `12911`, submitted from
 `robot_sf_ll7@dcb14927f08277d123d9666ad91b8d6abbc4fe9d`, into a small tracked

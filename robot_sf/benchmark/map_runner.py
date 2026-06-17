@@ -2126,6 +2126,11 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             "stop_best_effort": 0,
             "goal_reached": 0,
         }
+        meta["residual_clipping_stats"] = {
+            "schema_version": "orca-residual-clipping-stats.v1",
+            "decision_count": 0,
+            "clipped_count": 0,
+        }
         meta["safety_shield_contract"] = shield_contract_metadata(
             shield_name="GuardedPPOAdapter",
             prediction_source="short_horizon_rollout",
@@ -2182,6 +2187,23 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             shield_stats = meta.get("shield_stats")
             if isinstance(shield_stats, dict):
                 update_shield_stats(shield_stats, shield_decision)
+            residual_stats = meta.get("residual_clipping_stats")
+            if isinstance(residual_stats, dict):
+                decision_metadata = shield_decision.to_metadata()
+                fallback_state = decision_metadata.get("fallback_controller_state")
+                action_adaptation = (
+                    fallback_state.get("action_adaptation")
+                    if isinstance(fallback_state, dict)
+                    else None
+                )
+                if isinstance(action_adaptation, dict):
+                    residual_stats["decision_count"] = (
+                        int(residual_stats.get("decision_count", 0)) + 1
+                    )
+                    if bool(action_adaptation.get("residual_clipped", False)):
+                        residual_stats["clipped_count"] = (
+                            int(residual_stats.get("clipped_count", 0)) + 1
+                        )
             _update_adapter_impact_metrics(
                 meta,
                 conversion_mode,

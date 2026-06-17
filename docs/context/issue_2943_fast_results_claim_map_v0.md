@@ -54,13 +54,13 @@ those modes must be labeled a caveat or exclusion, not claim-grade success.
 
 | ID | Target table / surface | Required issue(s) | Evidence tier | Blocked dependency | Do-not-claim boundary |
 |---|---|---|---|---|---|
-| `cm-v0.benchmark_release.odd_coverage` | ODD/hazard-scenario coverage matrix for v0.1 release | #2911 (open/ready) | `schema` -> `candidate` | ODD schema `odd_hazard_coverage.v1` not yet defined | Do not claim gap coverage is closed until schema is checked against scenario family list |
+| `cm-v0.benchmark_release.odd_coverage` | ODD/hazard-scenario coverage matrix for v0.1 release | Issue #2911 (implemented in this PR) | `schema` | `odd_hazard_coverage.v1` schema and JSON/Markdown matrix exist, but all represented rows remain config-only/weakly-covered and several hazard families remain blocked or absent | Do not claim gap coverage is closed; use the Issue #2911 matrix to name uncovered and weakly-covered rows |
 | `cm-v0.benchmark_release.seed_table_semantics` | Release 0.0.2 secondary-report table semantics clarified | #2612 (open/ready) | `diagnostic` | `seed_episode_rows collision=0.0` conflicts with authoritative `campaign_table.csv`; must be resolved before any secondary-table paper claim | Do not cite secondary table in paper until collision-field conflict in #2612 is resolved |
 | `cm-v0.benchmark_release.row_claim_enforcement` | `benchmark_row_claim.v1` row-level enforcement on leaderboard sidecars | #2912 (closed; implemented) | `schema` | None; schema and validator are live | Do not add `fallback`/`degraded` planner rows with `row_status: successful_evidence` |
 | `cm-v0.prediction.denominator_health` | Horizon x timestep denominator-coverage audit | #2937 (closed; implemented) | `diagnostic` | None; 164/180 cells (91.1%) evaluated; `corridor_interaction` fixtures remain `trace_too_short` | Do not promote to forecast benchmark evidence; this audit does not prove navigation benefit or safety improvement |
 | `cm-v0.prediction.native_replay` | Forecast-variant closed-loop replay path is native (not fallback) | #2941 (closed; implemented) | `diagnostic` | Minimal brake-heuristic replay policy only; not a production planner | Do not claim cv improves safety/success/runtime; do not remove caveat that replay uses a simple forecast-brake heuristic |
 | `cm-v0.mechanism.trace_schema` | `mechanism_trace.v1` source contract for local-navigation intervention rows | #2923 (closed; implemented) | `schema` | Additional producers needed for `prediction_risk_gating`, `orca_residuals`, `signal_state_logic`, `amv_actuation_constraints` | Do not use `mechanism_trace.v1` rows for benchmark or paper-facing claims until durable trace inputs and producer integrations exist |
-| `cm-v0.benchmark_release.suite_freeze` | Nominal/stress/adversarial/AMV suite freeze for v0.1 release | #2910 epic (open) | `blocked` | Requires ODD coverage (#2911) and row-claim matrix frozen before suite can be marked frozen | Do not claim suite is paper-ready until freeze contract from #2910 is satisfied |
+| `cm-v0.benchmark_release.suite_freeze` | Nominal/stress/adversarial/AMV suite freeze for v0.1 release | #2910 epic (open) | `blocked` | Requires Issue #2911 coverage-matrix findings and row-claim matrix to be reconciled before suite can be marked frozen | Do not claim suite is paper-ready until freeze contract from #2910 is satisfied |
 | `cm-v0.prediction.full_planner_integration` | Forecast variant integrated into a real planner consuming `ProbabilisticPredictor` | #2960 (this PR; smoke implemented) | `smoke` | Single deterministic local-planner fixture only; no full-episode benchmark or scenario-matrix evidence yet | Do not claim forecast variant is benchmark-capable or beneficial; smoke proves planner consumption mechanics only |
 
 ---
@@ -72,14 +72,14 @@ those modes must be labeled a caveat or exclusion, not claim-grade success.
 | Item | Owner issue | Status | Next command or artifact | Evidence gate | Durable evidence |
 |---|---|---|---|---|---|
 | Resolve `seed_episode_rows collision=0.0` conflict | #2612 | ready | Artifact: updated release 0.0.2 table-semantics context note and authoritative collision-field decision | Clarify core table semantics and confirm which field is authoritative | Missing until #2612 closes |
-| Define `odd_hazard_coverage.v1` schema and gap matrix | #2911 | ready | Artifact: `odd_hazard_coverage.v1` schema plus JSON/Markdown gap matrix | Schema definition checked against cyclist, signalized crossing, occlusion, stairs, dense crowd, narrow-lane conflict, AMV actuation, and sensor-latency scenario families | Missing until #2911 closes |
+| Define `odd_hazard_coverage.v1` schema and gap matrix | Issue #2911 | completed | Artifact: `docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.{json,md}` | Schema definition checked against cyclist, signalized crossing, occlusion, stairs, dense crowd, narrow-lane conflict, AMV actuation, and sensor-latency scenario families | Present as schema/proposal evidence; not benchmark execution evidence |
 | Wire first additional `mechanism_trace.v1` producer | #2976 | ready | Artifact: schema-valid `mechanism_trace.v1` producer payload from durable input or tracked fixture | Passing contract tests and at least one durable trace input for `prediction_risk_gating` or `orca_residuals` | Missing until #2976 closes |
 
 ### p1_after_gate -- Gated on a named p0 precondition
 
 | Item | Owner issue | Status | Next command or artifact | Evidence gate | Durable evidence |
 |---|---|---|---|---|---|
-| ODD/AMV suite freeze for v0.1 | #2910 | blocked | Artifact: suite-freeze release note and frozen scenario-family list | p0: #2911 schema and gap matrix accepted | Missing until #2911 closes |
+| ODD/AMV suite freeze for v0.1 | #2910 | blocked | Artifact: suite-freeze release note and frozen scenario-family list | p0: Issue #2911 schema and gap matrix accepted, then suite freeze reconciles remaining blocked/absent hazards | Missing until suite-freeze decision lands |
 | Secondary-table paper promotion | #2612 | blocked | Artifact: paper-promotion note or release-table addendum | p0: #2612 collision-field conflict resolved | Missing until #2612 closes |
 | Forecast variant benchmark campaign | #2966 | blocked | Artifact: planner-consumed forecast slice report | p0: production planner integration and durable episode manifest accepted | Missing until #2966 unblocks and lands |
 | `mechanism_trace.v1` mechanism reports | #2976 | blocked | Artifact: mechanism report over durable producer payloads | p0: durable trace inputs and at least `prediction_risk_gating` emitter live | Missing until #2976 closes |
@@ -135,7 +135,7 @@ git diff --check
 
 This v0 map is intentionally narrow. Extend it when:
 
-1. Issue #2911 lands and `odd_hazard_coverage.v1` is defined -- add a `candidate` ODD coverage row.
+1. Issue #2911 lands and `odd_hazard_coverage.v1` is defined -- refresh this map with the accepted coverage artifact and keep uncovered rows out of benchmark claims.
 2. Issue #2612 is resolved -- move secondary-table claim from `diagnostic` to `candidate`.
 3. A full-episode benchmark or scenario-matrix run exercises the planner-consumed `forecast_variant` path -- consider moving `cm-v0.prediction.full_planner_integration` from `smoke` to `candidate`.
 4. The #2910 suite freeze happens -- update `cm-v0.benchmark_release.suite_freeze` from `blocked` to `candidate`.

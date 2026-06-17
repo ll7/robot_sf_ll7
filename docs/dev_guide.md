@@ -449,6 +449,7 @@ uv run python scripts/dev/snapshot_issue_batch.py --active-portfolio \
   --json
 uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 2678 2679 --json \
   --expected-head-sha "$PR_HEAD_SHA"
+uv run python scripts/dev/pr_babysitter_snapshot.py 2679 --expected-head-sha "$SHA" --json
 uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" --json --once
 ```
 

@@ -105,8 +105,8 @@ Avoid loops:
      and private artifacts instead of broad `rg -n .` or full file reads,
    - classify findings as fixable now, deferred, or blocker.
 
-Before choosing the next action for any PR, consult the compact snapshot and apply the
-machine-checkable state policy:
+Before choosing the next action for any PR, consult the compact snapshot. For ordinary review-loop
+triage, apply the machine-checkable state policy:
 
 ```bash
 uv run python scripts/dev/pr_loop_policy.py --snapshot <queue-snapshot.json> --json
@@ -115,6 +115,16 @@ uv run python scripts/dev/pr_loop_policy.py --snapshot <queue-snapshot.json> --j
 The policy classifies each PR into `pending_ci`, `failed_ci`, `missing_artifacts`,
 `stale_worktree`, `ready_to_merge`, or `no_action` and recommends one bounded action
 under the loop budget. Use the policy decision to avoid ad-hoc state inspection.
+
+For PR babysitting or handoff, prefer the conservative one-shot babysitter snapshot:
+
+```bash
+uv run python scripts/dev/pr_babysitter_snapshot.py <pr-number> --expected-head-sha <sha> --json
+```
+
+Use it when the next question is whether to wait, diagnose failed CI, process review feedback, stop
+because the PR closed or went stale, or perform a final merge-readiness review. The babysitter
+helper is route evidence only and does not perform GitHub-visible writes.
 
 4. Fix actionable items on writable branches; commit and push.
 5. Validate per required tier.

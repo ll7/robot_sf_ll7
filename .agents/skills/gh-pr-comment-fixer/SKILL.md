@@ -15,6 +15,16 @@ output_schema: skill_run_summary.v1
 
 Use this on a writable PR branch when actionable review feedback exists.
 
+If you only need to detect whether review feedback, CI failure, stale head state, or mergeability
+needs attention, start with the read-only babysitter snapshot instead:
+
+```bash
+uv run python scripts/dev/pr_babysitter_snapshot.py <pr-number> --expected-head-sha <sha> --json
+```
+
+Use this skill after that snapshot recommends `process_review_comment` or when the user explicitly
+asks to fix known review comments.
+
 ## Scope
 
 - Fetch PR context for current branch.

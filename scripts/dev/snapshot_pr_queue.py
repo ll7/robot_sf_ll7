@@ -253,14 +253,31 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
     conclusions: dict[str, int] = {}
     statuses: dict[str, int] = {}
     names: set[str] = set()
+    failed: list[dict[str, str]] = []
+    pending: list[dict[str, str]] = []
     for check in rollup:
         if not isinstance(check, dict):
             continue
         conclusion = _rollup_conclusion(check)
         status = _rollup_status(check)
+        details_url = check.get("detailsUrl")
+        if details_url is None:
+            details_url = check.get("targetUrl")
+        if details_url is None:
+            details_url = ""
+        detail = {
+            "name": _rollup_name(check),
+            "status": status,
+            "conclusion": conclusion,
+            "details_url": str(details_url),
+        }
         conclusions[conclusion] = conclusions.get(conclusion, 0) + 1
         statuses[status] = statuses.get(status, 0) + 1
-        names.add(_rollup_name(check))
+        names.add(detail["name"])
+        if conclusion in FAILURE_CONCLUSIONS:
+            failed.append(detail)
+        elif status in PENDING_STATUSES:
+            pending.append(detail)
     failure_count = sum(conclusions.get(conclusion, 0) for conclusion in FAILURE_CONCLUSIONS)
     pending_count = sum(statuses.get(status, 0) for status in PENDING_STATUSES)
     if failure_count:
@@ -275,6 +292,8 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
         "by_conclusion": conclusions,
         "by_status": statuses,
         "names": sorted(names),
+        "failed": failed,
+        "pending": pending,
     }
 
 

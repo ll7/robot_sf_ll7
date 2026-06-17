@@ -36,16 +36,16 @@ class BaseSimulationEnv(Env, ABC):
         video_fps: float | None = None,
         **kwargs,
     ):
-        """TODO docstring. Document this function.
+        """Initialize shared simulation environment state and invoke subclass setup.
 
         Args:
-            config: TODO docstring.
-            debug: TODO docstring.
-            recording_enabled: TODO docstring.
-            record_video: TODO docstring.
-            video_path: TODO docstring.
-            video_fps: TODO docstring.
-            kwargs: TODO docstring.
+            config: Base simulation configuration used by all environment instances.
+            debug: Whether debugging hooks and extra logging are enabled.
+            recording_enabled: Whether simulation state snapshots are recorded.
+            record_video: Whether visual frames are captured for playback/output.
+            video_path: Optional target path for video output when recording is enabled.
+            video_fps: Optional frame rate override used by video output.
+            kwargs: Extra configuration options consumed by concrete environment classes.
         """
         super().__init__()
         self.config = config
@@ -134,11 +134,11 @@ class SingleAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, **kwargs):
-        """TODO docstring. Document this function.
+        """Initialize single-agent state fields before shared base initialization.
 
         Args:
-            config: TODO docstring.
-            kwargs: TODO docstring.
+            config: Base simulation configuration.
+            kwargs: Extra base-environment settings forwarded to ``BaseSimulationEnv``.
         """
         self.state = None
         self.simulator = None
@@ -174,12 +174,12 @@ class MultiAgentEnv(BaseSimulationEnv, ABC):
     """
 
     def __init__(self, config: BaseSimulationConfig, num_agents: int, **kwargs):
-        """TODO docstring. Document this function.
+        """Initialize shared multi-agent state and defer setup to the base environment.
 
         Args:
-            config: TODO docstring.
-            num_agents: TODO docstring.
-            kwargs: TODO docstring.
+            config: Base simulation configuration.
+            num_agents: Fixed number of agents managed by this environment.
+            kwargs: Extra base-environment settings forwarded to ``BaseSimulationEnv``.
         """
         super().__init__(config, **kwargs)
         self.num_agents = num_agents

@@ -5,6 +5,7 @@ Provides register/get/list helpers and registers the default "fast-pysf" backend
 
 from __future__ import annotations
 
+import importlib
 import os
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,19 @@ _BACKEND_PERFORMANCE_ORDER = {
     "dummy": 100,
 }
 _DEFAULT_PERFORMANCE_SCORE = 1000
+_FAST_PYSF_IMPORT_PATHS = {
+    "robot_sf.sim.backends.fast_pysf_backend",
+    "robot_sf.sim.fast_pysf_backend",
+    "pysocialforce",
+}
+
+
+def _is_fast_pysf_dependency_error(error: ImportError) -> bool:
+    """Return whether an import error belongs to optional fast-pysf requirements."""
+    missing = getattr(error, "name", None)
+    if not isinstance(missing, str):
+        return False
+    return any(missing == path or missing.startswith(f"{path}.") for path in _FAST_PYSF_IMPORT_PATHS)
 
 
 def register_backend(key: str, factory: SimulatorFactory, *, override: bool = False) -> None:
@@ -116,14 +130,29 @@ def select_best_backend(preferred: str | None = None) -> str:
     return best
 
 
+def _register_optional_fast_pysf_backend() -> None:
+    """Register the default fast-pysf backend when optional dependencies exist."""
+    try:
+        fast_pysf_backend = importlib.import_module(
+            "robot_sf.sim.backends.fast_pysf_backend",
+        )
+        fast_pysf_factory = fast_pysf_backend.fast_pysf_factory
+        register_backend("fast-pysf", fast_pysf_factory, override=True)
+    except (ValueError, KeyError) as error:
+        logger.warning("Failed to register default fast-pysf backend: {}", error)
+    except ImportError as error:
+        if _is_fast_pysf_dependency_error(error):
+            logger.warning(
+                "fast-pysf backend is unavailable/skipped: dependency '{}' is missing.",
+                getattr(error, "name", "unknown"),
+            )
+            return
+        raise
+
+
 # Default backend registration (fast-pysf)
 # Register default backends on import
-try:
-    from robot_sf.sim.backends.fast_pysf_backend import fast_pysf_factory
-
-    register_backend("fast-pysf", fast_pysf_factory, override=True)
-except (ValueError, KeyError) as _e:  # pragma: no cover - defensive
-    logger.warning("Failed to register default fast-pysf backend: {}", _e)
+_register_optional_fast_pysf_backend()
 
 try:
     from robot_sf.sim.backends.dummy_backend import dummy_factory

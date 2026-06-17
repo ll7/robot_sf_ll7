@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
+import shlex
 from pathlib import Path
 
 import jsonschema
 import pytest
 
+from robot_sf.benchmark import odd_hazard_coverage_matrix as matrix_module
 from robot_sf.benchmark.odd_hazard_coverage_matrix import (
     ODD_HAZARD_COVERAGE_SCHEMA_VERSION,
     OddHazardCoverageValidationError,
@@ -16,6 +19,7 @@ from robot_sf.benchmark.odd_hazard_coverage_matrix import (
     load_odd_hazard_coverage_schema,
     validate_matrix_references,
 )
+from scripts.tools.generate_odd_hazard_coverage_matrix import _build_command
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_PATH = REPO_ROOT / "configs/benchmarks/odd_hazard_coverage.v1.yaml"
@@ -145,7 +149,75 @@ def test_generated_json_report_is_machine_readable() -> None:
     assert report["summary"]["known_gap_count"] == 8
     assert "weakly_covered" in report["summary"]["status_counts"]
     assert report["generation"]["command"] == "test-cmd"
-    assert report["generation"]["commit"] != "unknown"
+    assert report["generation"]["base_commit"] != "unknown"
+    assert report["generation"]["tree_state"] in {"clean", "dirty", "unknown"}
+    assert "commit" not in report["generation"]
+
+
+def test_generated_json_report_marks_dirty_worktree_explicitly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """JSON generation metadata should capture explicit source commit and tree state."""
+
+    matrix = load_odd_hazard_coverage_matrix(FIXTURE_PATH)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.odd_hazard_coverage_matrix._git_commit",
+        lambda *, repo_root: "basecommit",
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.odd_hazard_coverage_matrix._git_tree_state",
+        lambda *, repo_root: "dirty",
+    )
+
+    report = generate_json_report(matrix, repo_root=REPO_ROOT, command="test-cmd")
+
+    assert report["generation"]["base_commit"] == "basecommit"
+    assert report["generation"]["tree_state"] == "dirty"
+    assert "commit" not in report["generation"]
+
+
+def test_git_tree_state_ignores_untracked_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tree-state provenance should not depend on unrelated untracked local files."""
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_check_output(cmd: list[str], **_: object) -> str:
+        captured["cmd"] = cmd
+        return ""
+
+    monkeypatch.setattr(matrix_module.subprocess, "check_output", fake_check_output)
+
+    assert matrix_module._git_tree_state(repo_root=REPO_ROOT) == "clean"
+    assert "--untracked-files=no" in captured["cmd"]
+
+
+def test_build_command_is_shell_safe() -> None:
+    """Generated command string should quote arguments with shell metacharacters safely."""
+
+    args = argparse.Namespace(
+        config=Path("/tmp/config dir/odd hazard coverage.yaml"),
+        out_json=Path("/tmp/output dir/coverage matrix.json"),
+        out_md=Path("/tmp/output dir/coverage matrix.md"),
+        repo_root=Path("/tmp/repo root"),
+    )
+
+    command = _build_command(args)
+    parts = shlex.split(command)
+
+    assert parts == [
+        "uv",
+        "run",
+        "python",
+        "scripts/tools/generate_odd_hazard_coverage_matrix.py",
+        "--config",
+        "/tmp/config dir/odd hazard coverage.yaml",
+        "--out-json",
+        "/tmp/output dir/coverage matrix.json",
+        "--out-md",
+        "/tmp/output dir/coverage matrix.md",
+        "--repo-root",
+        "/tmp/repo root",
+    ]
 
 
 def test_generated_markdown_report_has_claim_boundary_first() -> None:
@@ -163,3 +235,5 @@ def test_generated_markdown_report_has_claim_boundary_first() -> None:
     assert "blocked" in report
     assert "absent" in report
     assert "must not be described as covered" in report
+    assert "Source/base commit" in report
+    assert "Worktree state" in report

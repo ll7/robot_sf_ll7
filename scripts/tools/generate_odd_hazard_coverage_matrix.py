@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,12 +28,21 @@ if TYPE_CHECKING:
 def _build_command(args: argparse.Namespace) -> str:
     """Return a reproducible command string for provenance."""
 
-    return (
-        "uv run python scripts/tools/generate_odd_hazard_coverage_matrix.py "
-        f"--config {args.config.as_posix()} "
-        f"--out-json {args.out_json.as_posix()} "
-        f"--out-md {args.out_md.as_posix()} "
-        f"--repo-root {args.repo_root.as_posix()}"
+    return shlex.join(
+        [
+            "uv",
+            "run",
+            "python",
+            "scripts/tools/generate_odd_hazard_coverage_matrix.py",
+            "--config",
+            str(args.config),
+            "--out-json",
+            str(args.out_json),
+            "--out-md",
+            str(args.out_md),
+            "--repo-root",
+            str(args.repo_root),
+        ]
     )
 
 

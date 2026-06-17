@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import importlib
 import importlib.metadata
+import importlib.util as importlib_util
 import json
 import os
 import platform
@@ -23,6 +23,7 @@ CRITICAL_BINARIES = ("git", "uv")
 OPTIONAL_BINARIES = ("ffmpeg", "gh", "docker", "jq")
 OPTIONAL_IMPORTS = ("gymnasium", "pygame", "matplotlib", "numpy")
 OPTIONAL_ENV_VARS = ("MPLBACKEND", "SDL_VIDEODRIVER", "DISPLAY")
+DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -107,7 +108,7 @@ def _check_optional_import(name: str) -> DoctorCheck:
     Returns:
         DoctorCheck: Optional import availability check result.
     """
-    spec = importlib.util.find_spec(name)
+    spec = importlib_util.find_spec(name)
     return DoctorCheck(
         name=f"import:{name}",
         status="ok" if spec else "missing_optional",
@@ -129,19 +130,29 @@ def _check_environment_variables() -> DoctorCheck:
     )
 
 
-def _check_git_worktree() -> DoctorCheck:
+def _resolve_workspace_path(path: Path, workspace_root: Path) -> Path:
+    """Resolve a path relative to the workspace root when it is not absolute.
+
+    Returns:
+        Path: Absolute path for the requested workspace-relative path.
+    """
+    return path if path.is_absolute() else workspace_root / path
+
+
+def _check_git_worktree(workspace_root: Path) -> DoctorCheck:
     """Report local machine context and git checkout state.
 
     Returns:
         DoctorCheck: Workspace state report.
     """
-    local_machine = Path("local.machine.md")
-    git_dir = Path(".git")
+    local_machine = workspace_root / "local.machine.md"
+    git_dir = workspace_root / ".git"
     return DoctorCheck(
         name="workspace",
         status="ok",
         details={
             "cwd": str(Path.cwd().resolve()),
+            "workspace_root": str(workspace_root),
             "has_git_dir": git_dir.exists(),
             "local_machine_context": str(local_machine.resolve())
             if local_machine.exists()
@@ -210,12 +221,17 @@ def collect_doctor_report(
     *,
     artifact_root: Path = Path("output"),
     run_env_smoke: bool = True,
+    workspace_root: Path | None = None,
 ) -> dict[str, Any]:
     """Collect local runtime diagnostics for issue reports and setup triage.
 
     Returns:
         dict[str, Any]: JSON-serializable doctor report.
     """
+    resolved_workspace_root = (
+        DEFAULT_WORKSPACE_ROOT if workspace_root is None else workspace_root.resolve()
+    )
+    resolved_artifact_root = _resolve_workspace_path(artifact_root, resolved_workspace_root)
     checks: list[DoctorCheck] = [
         _check_python_version(),
         _check_package_source(),
@@ -223,8 +239,8 @@ def collect_doctor_report(
         *[_check_binary(name, required=False) for name in OPTIONAL_BINARIES],
         *[_check_optional_import(name) for name in OPTIONAL_IMPORTS],
         _check_environment_variables(),
-        _check_git_worktree(),
-        _check_artifact_root(artifact_root),
+        _check_git_worktree(resolved_workspace_root),
+        _check_artifact_root(resolved_artifact_root),
     ]
     if run_env_smoke:
         checks.append(_run_env_smoke())

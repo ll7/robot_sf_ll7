@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from robot_sf.benchmark import doctor
 from robot_sf.benchmark.cli import cli_main
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _check_by_name(payload: dict[str, object]) -> dict[str, dict[str, object]]:
@@ -49,14 +46,14 @@ def test_doctor_collect_report_marks_missing_optional_import(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Missing optional imports should warn instead of failing the command."""
-    real_find_spec = doctor.importlib.util.find_spec
+    real_find_spec = doctor.importlib_util.find_spec
 
     def _fake_find_spec(name: str):
         if name == "pygame":
             return None
         return real_find_spec(name)
 
-    monkeypatch.setattr(doctor.importlib.util, "find_spec", _fake_find_spec)
+    monkeypatch.setattr(doctor.importlib_util, "find_spec", _fake_find_spec)
 
     payload = doctor.collect_doctor_report(
         artifact_root=tmp_path / "artifacts",
@@ -91,3 +88,30 @@ def test_doctor_collect_report_fails_on_missing_required_binary(
     assert payload["status"] == "failed"
     assert checks["binary:git"]["status"] == "failed"
     assert doctor.doctor_exit_code(payload) == 1
+
+
+def test_doctor_workspace_probe_uses_explicit_workspace_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Workspace checks should not depend on the caller's current directory."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / ".git").write_text("gitdir: ../.git/worktrees/example\n", encoding="utf-8")
+    (workspace / "local.machine.md").write_text("allow_slurm_submission: false\n", encoding="utf-8")
+    other_cwd = tmp_path / "other"
+    other_cwd.mkdir()
+    monkeypatch.chdir(other_cwd)
+
+    payload = doctor.collect_doctor_report(
+        artifact_root=Path("artifacts"),
+        run_env_smoke=False,
+        workspace_root=workspace,
+    )
+
+    checks = _check_by_name(payload)
+    workspace_check = checks["workspace"]
+    artifact_check = checks["artifact_root"]
+    assert workspace_check["details"]["workspace_root"] == str(workspace.resolve())
+    assert workspace_check["details"]["local_machine_readable"] is True
+    assert str(artifact_check["details"]["path"]).startswith(str(workspace.resolve()))

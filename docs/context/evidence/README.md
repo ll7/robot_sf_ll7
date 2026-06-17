@@ -98,6 +98,14 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_1470_oracle_imitation_traces_12911_2026-06-17/`: tracked closeout evidence
+  for Slurm job `12911` on #1470/#2441. The bundle includes the small six-row oracle
+  imitation trace JSONL and manifest. It is trace-collection evidence only, not final
+  imitation training or planner promotion evidence.
+- `issue_1475_orca_residual_bc_smoke_12913_2026-06-17/`: tracked failed-closed
+  smoke evidence for Slurm job `12913` on #1475. The smoke reached finalization but
+  blocked nominal escalation because required residual/guard/artifact evidence fields
+  were missing and the single episode timed out with low progress.
 - `issue_2767_benchmark_table_candidates/`: draft-only benchmark-results table candidates generated
   from tracked claim/evidence inputs. The bundle is a synthesis review surface only; stale,
   diagnostic, unavailable, fallback, degraded, proxy-only, and missing-denominator evidence remains

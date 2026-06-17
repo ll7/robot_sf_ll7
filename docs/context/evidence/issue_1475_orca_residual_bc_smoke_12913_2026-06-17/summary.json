@@ -1,0 +1,44 @@
+{
+  "schema_version": "robot-sf-slurm-evidence-summary.v1",
+  "issue": 1475,
+  "bundle": "issue_1475_orca_residual_bc_smoke_12913_2026-06-17",
+  "created_at": "2026-06-17T00:00:00+02:00",
+  "slurm_job_id": "12913",
+  "source_repository": "robot_sf_ll7",
+  "source_commit": "dcb14927f08277d123d9666ad91b8d6abbc4fe9d",
+  "private_ops_label": "issue1475-orca-residual-bc",
+  "candidate": "orca_residual_guarded_ppo_progress_v1",
+  "stage": "smoke",
+  "benchmark_profile": "experimental",
+  "status": "failed_closed",
+  "classification": "missing_required_smoke_evidence",
+  "metrics": {
+    "episodes": 1,
+    "success_rate": 0.0,
+    "collision_rate": 0.0,
+    "near_miss_rate": 0.0,
+    "termination_reason_counts": {
+      "max_steps": 1
+    },
+    "failure_mode_counts": {
+      "timeout_low_progress": 1
+    },
+    "mean_avg_speed": 0.8040840406822607,
+    "runtime_sec": 10.998495885636657
+  },
+  "required_smoke_evidence": {
+    "residual_clipping_rate": null,
+    "guard_veto_rate": null,
+    "fallback_degraded_status": null,
+    "artifact_pointer_status": null,
+    "missing_required_fields": [
+      "residual_clipping_rate",
+      "guard_veto_rate",
+      "fallback_degraded_status",
+      "artifact_pointer_status"
+    ]
+  },
+  "nominal_escalation_allowed": false,
+  "claim_boundary": "Failed-closed smoke evidence only. This is not ORCA residual BC readiness evidence and must not be used to justify nominal or larger Slurm reruns.",
+  "next_action": "Patch the ORCA residual BC smoke runner/finalizer so the required residual clipping, guard veto, fallback/degraded, and artifact pointer fields are emitted and tested; then rerun a single smoke job before any nominal escalation."
+}

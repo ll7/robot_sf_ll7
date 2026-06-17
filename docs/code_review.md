@@ -19,6 +19,34 @@ Check these in order:
 
 Reject changes that only add code or docs without task-appropriate proof.
 
+## Intended Design Alignment
+
+Before treating CI or targeted tests as sufficient, compare the PR against the linked issue,
+design note, PR body, changed behavior, tests, docs, and stated claims.
+
+Reviewers should explicitly classify the result:
+
+- `aligned`: implementation behavior, tests, docs, and claims satisfy the intended design or issue
+  contract.
+- `intentionally narrowed`: the PR solves a useful subset, names the narrowed scope, and links
+  follow-up issues for real deferred work.
+- `blocked`: required contract, public-claim, benchmark, schema, metric, or runtime-safety work is
+  missing and must be fixed before merge.
+- `handoff-only`: remaining information is transient state, CI waiting, cleanup context, or local
+  reviewer notes with no durable action.
+
+Create a follow-up issue only for deferred work that is actionable outside the current PR. A good
+follow-up issue names:
+
+- the residual risk or deferred behavior,
+- why it should not block the current PR,
+- the acceptance condition or stop rule,
+- the expected validation or proof tier,
+- links back to the PR, issue contract, design note, or evidence that revealed it.
+
+Do not use generic backlog notes as substitutes for blockers or for follow-up issues with a clear
+acceptance condition.
+
 ## Benchmark-Credibility Review
 
 For benchmark-facing changes, explicitly verify:

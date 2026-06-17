@@ -95,6 +95,9 @@ Avoid loops:
      `.agents/skills/goal-autopilot/SKILL.md` with the PR, head SHA, route/run IDs, validation
      plan/status, review/CI state, cleanup status, and next action,
    - run `implementation-verification` for contract alignment,
+   - perform an intended-design alignment check before readiness decisions:
+     compare the linked issue, design note, PR body, changed behavior, tests, docs, and claims;
+     record whether any narrowing was intentional, documented, and still sufficient for the PR,
    - require artifact-first delegated review and validate in order: `result.json`, `RESULT.md`,
      `diffstat.txt`, and `validation.json`, inspect route evidence first, then run targeted local checks
      before raw logs,
@@ -132,6 +135,30 @@ under the loop budget. Use the policy decision to avoid ad-hoc state inspection.
 10. Update the active ledger before any CI wait or final handoff. Route completion is not task
    completion until the main agent has verified proof, GitHub state, and cleanup.
 
+## Intended Design And Follow-Up Gate
+
+Before applying `merge-ready`, reviewers must explicitly answer:
+
+- What was the intended design or issue contract?
+- Does the implementation behavior match that intent, including tests, docs, and PR claims?
+- If the PR intentionally narrowed scope, is the narrowed scope named in the PR or issue and still
+  useful on its own?
+- Are remaining gaps current-PR blockers, bounded follow-up issues, or handoff-only notes?
+
+Create a follow-up issue when deferred work is real, actionable, and outside the current PR's safe
+scope. A good follow-up issue names:
+
+- the residual risk or deferred behavior,
+- why it should not block the current PR,
+- the acceptance condition or stop rule,
+- the expected validation or proof tier,
+- links back to the PR, issue contract, design note, or evidence that revealed it.
+
+Block the PR instead of creating a follow-up when the missing work is required for the linked issue
+contract, public claim, benchmark interpretation, schema/metric correctness, or safe runtime
+behavior. Use a handoff note instead of an issue when the item is only transient state, CI waiting,
+local cleanup, or reviewer context with no durable action.
+
 ## Proof and Validation
 
 Apply minimum tier by change surface:
@@ -142,7 +169,8 @@ Apply minimum tier by change surface:
 - Tier 3: campaign-level statistical claims or paper-facing evidence.
 
 `merge-ready` conditions:
-- linked issue contract satisfied or intentionally narrowed with follow-up issues,
+- linked issue contract and intended design satisfied, or intentionally narrowed with explicit
+  rationale and linked follow-up issues,
 - scope matches contract and tests and CI proof are current for reviewed SHA,
 - unresolved review threads closed via GitHub review-thread resolution,
 - artifacts from `output/` are durably represented or explicitly excluded,

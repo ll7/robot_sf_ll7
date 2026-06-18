@@ -31,9 +31,12 @@ runs:
 
     - name: System packages for headless
       shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
+      env:
+        CI_STEP_TIMEOUT_SECONDS: "1200"
+      run: >
+        bash scripts/dev/ci_step_timer.sh "System packages for headless"
+        bash scripts/dev/ci_install_headless_packages.sh
+        libglib2.0-0 libgl1 fonts-dejavu-core jq
 
     - name: Free runner disk space
       shell: bash

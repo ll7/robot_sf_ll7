@@ -60,9 +60,10 @@ def test_social_compliance_metric_contract_is_diagnostic_not_claim_grade() -> No
 
     assert "simulation-only diagnostic proxies" in contract["claim_boundary"]
     assert "do not establish real-world" in contract["claim_boundary"]
-    assert "SNQI weights and headline score definitions are unchanged" in contract[
-        "report_surfaces"
-    ]["snqi_relationship"]
+    assert (
+        "SNQI weights and headline score definitions are unchanged"
+        in contract["report_surfaces"]["snqi_relationship"]
+    )
     assert set(contract["missing_data_policy"]["status_values"]) == {
         "available",
         "unavailable",

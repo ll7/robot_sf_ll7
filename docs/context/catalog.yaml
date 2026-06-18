@@ -1580,6 +1580,10 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_3058_research_engine_gap_audit.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2965_release_readiness_dashboard/release_readiness_dashboard.json
     status: evidence
     freshness: evidence

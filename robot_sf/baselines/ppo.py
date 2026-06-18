@@ -41,7 +41,11 @@ try:  # Lazy import; not required for type-check only
 except ImportError:  # pragma: no cover - envs without SB3 installed
     PPO = None  # type: ignore
 
-from robot_sf.baselines.interface import Observation
+from robot_sf.baselines.interface import (
+    Observation,
+    is_observation_mapping,
+    observation_from_mapping,
+)
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
@@ -259,11 +263,11 @@ class PPOPlanner:
         Returns:
             Action dict in either velocity or unicycle format.
         """
-        if isinstance(obs, dict) and self._uses_dict_observation():
+        if is_observation_mapping(obs) and self._uses_dict_observation():
             return self._step_dict_obs(obs)
 
-        if isinstance(obs, dict):
-            obs = Observation(**obs)  # type: ignore[arg-type]
+        if is_observation_mapping(obs):
+            obs = observation_from_mapping(obs)
         assert isinstance(obs, Observation)
 
         # Try model predict

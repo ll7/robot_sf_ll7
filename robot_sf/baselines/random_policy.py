@@ -13,7 +13,11 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.baselines.interface import Observation
+from robot_sf.baselines.interface import (
+    Observation,
+    is_observation_mapping,
+    observation_from_mapping,
+)
 
 
 @dataclass
@@ -91,8 +95,8 @@ class RandomPlanner:
         Returns:
             Action dict in configured action space.
         """
-        if isinstance(obs, dict):
-            obs = Observation(**obs)  # type: ignore[arg-type]
+        if is_observation_mapping(obs):
+            obs = observation_from_mapping(obs)
 
         if self.config.mode == "velocity":
             # Sample vx, vy uniformly in a disk scaled to v_max

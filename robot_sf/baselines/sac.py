@@ -14,7 +14,11 @@ try:
 except ImportError:  # pragma: no cover - runtime-only dependency
     SAC = None  # type: ignore
 
-from robot_sf.baselines.interface import Observation
+from robot_sf.baselines.interface import (
+    Observation,
+    is_observation_mapping,
+    observation_from_mapping,
+)
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.models import resolve_model_path
@@ -158,10 +162,10 @@ class SACPlanner:
         Returns:
             dict[str, float]: SAC action in the configured output space.
         """
-        if isinstance(obs, dict) and self._uses_dict_observation():
+        if is_observation_mapping(obs) and self._uses_dict_observation():
             return self._step_dict_obs(obs)
-        if isinstance(obs, dict):
-            obs = Observation(**obs)  # type: ignore[arg-type]
+        if is_observation_mapping(obs):
+            obs = observation_from_mapping(obs)
         if not isinstance(obs, Observation):
             raise TypeError(f"Expected Observation or dict input, got {type(obs).__name__}")
         try:

@@ -19,6 +19,7 @@ from robot_sf.gym_env.env_util import (
     init_spaces,
     prepare_pedestrian_actions,
 )
+from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.unified_config import MultiRobotConfig
 from robot_sf.render.lidar_visual import render_lidar
@@ -190,40 +191,18 @@ class MultiRobotEnv(MultiAgentEnv):
         any_terminated = any(terms)
         return obs_dict, total_reward, any_terminated, False, {"agents": masked_metas_tuple}
 
-    @staticmethod
-    def _resolve_current_map_id(config, map_def) -> str | None:
-        """Resolve the active map id from configuration and map definition.
-
-        Returns:
-            Optional map identifier from map pool by object identity or config.
-        """
-        try:
-            for map_id, candidate in config.map_pool.map_defs.items():
-                if candidate is map_def:
-                    return map_id
-        except (AttributeError, TypeError):
-            pass
-        return getattr(config, "map_id", None)
-
     def _build_reset_info(self, *, map_def, seed: int | None) -> dict[str, Any]:
         """Build stable reset metadata for multi-robot environments.
 
         Returns:
             Reset metadata dictionary with map and timing fields.
         """
-        sim_time = float(self.config.sim_config.sim_time_in_secs)
-        time_per_step = float(self.config.sim_config.time_per_step_in_secs)
-        max_sim_steps = getattr(self.config.sim_config, "max_sim_steps", None)
-        if max_sim_steps is None:
-            max_sim_steps = int(sim_time / time_per_step)
-        return {
-            "map_id": self._resolve_current_map_id(self.config, map_def),
-            "sim_time_in_secs": sim_time,
-            "time_per_step_in_secs": time_per_step,
-            "max_sim_steps": int(max_sim_steps),
-            "num_robots": self.num_agents,
-            "seed": seed,
-        }
+        return build_reset_metadata(
+            self.config,
+            map_def=map_def,
+            seed=seed,
+            extra={"num_robots": self.num_agents},
+        )
 
     def reset(
         self,

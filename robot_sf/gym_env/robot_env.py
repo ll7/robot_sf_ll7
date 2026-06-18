@@ -37,6 +37,7 @@ from robot_sf.gym_env.env_util import (
     prepare_pedestrian_actions,
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
 from robot_sf.nav.obstacle import Obstacle
@@ -353,24 +354,6 @@ def _coerce_finite_float(value: Any) -> float | None:
     return result
 
 
-def _resolve_current_map_id(env_config: EnvSettings, map_def) -> str | None:
-    """Resolve the active map id from configuration and map definition.
-
-    Prefer the active ``map_def`` instance when it can be matched to the configured
-    map pool, then fall back to an explicit configured map id.
-
-    Returns:
-        Optional map identifier resolved from config or map pool.
-    """
-    try:
-        for map_id, candidate in env_config.map_pool.map_defs.items():
-            if candidate is map_def:
-                return map_id
-    except (AttributeError, TypeError):
-        pass
-    return getattr(env_config, "map_id", None)
-
-
 def _build_reset_info(
     env_config: EnvSettings, *, map_def, applied_seed: int | None
 ) -> dict[str, Any]:
@@ -380,13 +363,7 @@ def _build_reset_info(
     downstream debugging and reproducibility.
     """
 
-    return {
-        "map_id": _resolve_current_map_id(env_config, map_def),
-        "sim_time_in_secs": float(env_config.sim_config.sim_time_in_secs),
-        "time_per_step_in_secs": float(env_config.sim_config.time_per_step_in_secs),
-        "max_sim_steps": int(env_config.sim_config.max_sim_steps),
-        "seed": applied_seed,
-    }
+    return build_reset_metadata(env_config, map_def=map_def, seed=applied_seed)
 
 
 def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:

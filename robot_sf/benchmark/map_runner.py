@@ -51,6 +51,7 @@ from robot_sf.benchmark.map_runner_actions import (
 )
 from robot_sf.benchmark.map_runner_actions import stack_ped_positions as _stack_ped_positions
 from robot_sf.benchmark.map_runner_actions import vel_and_acc as _vel_and_acc
+from robot_sf.benchmark.map_runner_batch_runner import execute_map_jobs as _execute_map_jobs
 from robot_sf.benchmark.map_runner_batch_summary import (
     WorkerMetadataBridgeUpdate as _WorkerMetadataBridgeUpdate,  # noqa: F401 - compatibility export.
 )
@@ -3780,114 +3781,26 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     }
 
     total_jobs = len(jobs)
-    wrote = 0
-    failures: list[dict[str, Any]] = []
-    adapter_native_steps = 0
-    adapter_adapted_steps = 0
-    adapter_samples_seen = False
-    runtime_algorithm_contract: dict[str, Any] | None = None
-    feasibility_totals = {
-        "commands_evaluated": 0,
-        "infeasible_native_count": 0,
-        "projected_count": 0,
-        "sum_abs_delta_linear": 0.0,
-        "sum_abs_delta_angular": 0.0,
-        "max_abs_delta_linear": 0.0,
-        "max_abs_delta_angular": 0.0,
-    }
-    batch_started = time.perf_counter()
-    if workers <= 1:
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with out_path.open("a", encoding="utf-8") as handle:
-            for scenario, seed in jobs:
-                try:
-                    rec = _run_map_job_worker((scenario, seed, fixed_params))
-                    bridge_update = _apply_worker_metadata_bridge(
-                        rec,
-                        feasibility_totals=feasibility_totals,
-                        runtime_algorithm_contract=runtime_algorithm_contract,
-                    )
-                    adapter_samples_seen = (
-                        adapter_samples_seen or bridge_update.adapter_requested_seen
-                    )
-                    adapter_native_steps += bridge_update.adapter_native_steps
-                    adapter_adapted_steps += bridge_update.adapter_adapted_steps
-                    runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
-                    _write_validated_to_handle(handle, schema, rec)
-                    wrote += 1
-                except Exception as exc:  # pragma: no cover - error path
-                    logger.exception(
-                        "Map batch worker failed in serial execution: scenario={} seed={}",
-                        _scenario_id(scenario),
-                        seed,
-                    )
-                    failures.append(
-                        {
-                            "scenario_id": scenario.get("name", "unknown"),
-                            "seed": seed,
-                            "error": repr(exc),
-                        }
-                    )
-    else:
-        results_by_idx: dict[int, dict[str, Any]] = {}
-        with ProcessPoolExecutor(max_workers=int(workers)) as ex:
-            future_to_job: dict[Any, tuple[int, dict[str, Any], int]] = {}
-            for idx, (scenario, seed) in enumerate(jobs, start=1):
-                fut = ex.submit(_run_map_job_worker, (scenario, seed, fixed_params))
-                future_to_job[fut] = (idx, scenario, seed)
-            for fut in as_completed(future_to_job):
-                idx, scenario, seed = future_to_job[fut]
-                try:
-                    rec = fut.result()
-                    bridge_update = _apply_worker_metadata_bridge(
-                        rec,
-                        feasibility_totals=feasibility_totals,
-                        runtime_algorithm_contract=runtime_algorithm_contract,
-                    )
-                    adapter_samples_seen = (
-                        adapter_samples_seen or bridge_update.adapter_requested_seen
-                    )
-                    adapter_native_steps += bridge_update.adapter_native_steps
-                    adapter_adapted_steps += bridge_update.adapter_adapted_steps
-                    runtime_algorithm_contract = bridge_update.runtime_algorithm_contract
-                    results_by_idx[idx] = rec
-                except Exception as exc:  # pragma: no cover
-                    logger.exception(
-                        "Map batch worker failed in parallel execution: scenario={} seed={}",
-                        _scenario_id(scenario),
-                        seed,
-                    )
-                    failures.append(
-                        {
-                            "scenario_id": scenario.get("name", "unknown"),
-                            "seed": seed,
-                            "error": repr(exc),
-                        }
-                    )
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with out_path.open("a", encoding="utf-8") as handle:
-            for idx in sorted(results_by_idx):
-                try:
-                    _write_validated_to_handle(handle, schema, results_by_idx[idx])
-                    wrote += 1
-                except Exception as exc:  # pragma: no cover - write/validate path
-                    rec = results_by_idx[idx]
-                    logger.exception(
-                        (
-                            "Map batch write/validation failed for scenario={} seed={}; "
-                            "preserving fail-closed batch status."
-                        ),
-                        rec.get("scenario_id", "unknown"),
-                        rec.get("seed", -1),
-                    )
-                    failures.append(
-                        {
-                            "scenario_id": rec.get("scenario_id")
-                            or rec.get("scenario", {}).get("name", "unknown"),
-                            "seed": rec.get("seed", -1),
-                            "error": repr(exc),
-                        }
-                    )
+    batch_execution = _execute_map_jobs(
+        jobs=jobs,
+        fixed_params=fixed_params,
+        out_path=out_path,
+        schema=schema,
+        workers=workers,
+        run_map_job=_run_map_job_worker,
+        write_validated_to_handle=_write_validated_to_handle,
+        apply_worker_metadata_bridge=_apply_worker_metadata_bridge,
+        scenario_id=_scenario_id,
+        executor_cls=ProcessPoolExecutor,
+        as_completed_fn=as_completed,
+    )
+    wrote = batch_execution.wrote
+    failures = batch_execution.failures
+    adapter_native_steps = batch_execution.adapter_native_steps
+    adapter_adapted_steps = batch_execution.adapter_adapted_steps
+    adapter_samples_seen = batch_execution.adapter_samples_seen
+    runtime_algorithm_contract = batch_execution.runtime_algorithm_contract
+    feasibility_totals = batch_execution.feasibility_totals
 
     impact_contract = algo_contract.get("adapter_impact")
     if (
@@ -3972,7 +3885,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "total_jobs": total_jobs,
         "workers": int(workers),
         "parallel_execution": bool(workers > 1),
-        "batch_runtime_sec": float(max(time.perf_counter() - batch_started, 0.0)),
+        "batch_runtime_sec": batch_execution.batch_runtime_sec,
         "written": wrote,
         "successful_jobs": wrote,
         "failed_jobs": len(failures),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -43,18 +44,29 @@ def attach_planner_reset(policy: Callable[..., Any], adapter: Any) -> None:
     reset = getattr(adapter, "reset", None)
     if not callable(reset):
         return
+    try:
+        reset_accepts_seed = _callable_accepts_seed(reset)
+    except (TypeError, ValueError):
+        reset_accepts_seed = True
 
     def _planner_reset(seed: int | None = None) -> None:
         """Reset an adapter, using seed-aware reset when supported."""
-        if seed is None:
+        if seed is None or not reset_accepts_seed:
             reset()
             return
-        try:
-            reset(seed=seed)
-        except TypeError:
-            reset()
+        reset(seed=seed)
 
     policy._planner_reset = _planner_reset
+
+
+def _callable_accepts_seed(func: Callable[..., Any]) -> bool:
+    """Return whether a callable can bind a ``seed=...`` keyword argument."""
+    signature = inspect.signature(func)
+    try:
+        signature.bind(seed=0)
+    except TypeError:
+        return False
+    return True
 
 
 def finalize_feasibility_metadata(meta: dict[str, Any]) -> None:

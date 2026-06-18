@@ -100,6 +100,9 @@ records the workflow-helper field audit for `scripts/dev/` GitHub calls. Current
 payloads are mostly required or intentionally opt-in; repeated issue-claim checks are the main
 future optimization candidate.
 
+Recent closed-issue state-label cleanup: [issue_3098_closed_state_label_hygiene.md](issue_3098_closed_state_label_hygiene.md)
+records the 2026-06-18 REST-backed removal of stale live `state:*` labels from closed issues.
+
 Recent research-engine gap audit: [issue_3058_research_engine_gap_audit.md](issue_3058_research_engine_gap_audit.md)
 records live issue/card/artifact mismatches before new empirical campaigns start. It routes
 existing conflicts to card correction, label cleanup, follow-up validation policy, or fail-closed

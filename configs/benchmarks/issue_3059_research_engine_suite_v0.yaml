@@ -1,0 +1,334 @@
+name: issue_3059_research_engine_suite_v0
+contract_kind: benchmark-suite-proposal
+issue: 3059
+evidence_tier: proposal
+benchmark_evidence: false
+status: proposed
+
+registry_id: research_engine_scenario_suite_v0
+schema_version: research_engine_scenario_suite.v0
+suite_version: "0"
+claim_boundary: >
+  This file defines a compact proposed scenario suite for Robot SF research-engine runs. It is
+  launch infrastructure only: it does not establish benchmark results, planner rankings,
+  social-validity claims, paper-facing claims, or evidence that any listed planner or scenario
+  family improves navigation. Every family below requires later executable rows with native or
+  explicitly eligible adapter status before it can support benchmark-strength evidence.
+
+purpose: >
+  Provide a 5-7 family v0 scenario contract that can anchor seed-sufficiency, behavior-model,
+  reporting, and robustness follow-up issues without weakening the repository's fail-closed
+  benchmark policy.
+
+related_issues:
+  - issue: 3057
+    role: parent_epic
+    status: open
+    claim: >
+      Supplies the research-engine roadmap. This suite does not complete the roadmap or prove any
+      roadmap claim.
+  - issue: 3058
+    role: gap_audit
+    status: closed_prerequisite
+    claim: >
+      Identified the research-engine gaps that this suite structures. Closing #3058 does not make
+      this proposal executable evidence.
+  - issue: 3061
+    role: social_metric_contract
+    status: merged_prerequisite
+    claim: >
+      Supplies diagnostic social-compliance metric definitions. This suite references those
+      metrics as optional diagnostics and does not promote them to benchmark-strength claims.
+  - issue: 3077
+    role: seed_sufficiency_follow_up
+    status: blocked_until_result_store
+    claim: >
+      Should consume this suite after the result-store and experiment-state protocols make row
+      status and durable provenance queryable.
+
+seed_policy:
+  mode: fixed-escalation-sets
+  frozen_before_execution: true
+  pilot_set:
+    name: S5
+    seeds: [111, 112, 113, 114, 115]
+    use: >
+      First executable smoke or diagnostic pass. It may identify invalid rows, missing trace
+      fields, or family-level contract gaps, but must not support planner ranking claims alone.
+  escalation_sets:
+    - name: S10
+      seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
+      gate: >
+        Use only after S5 rows have native or explicitly eligible adapter execution, durable row
+        status, and no post-hoc endpoint changes.
+    - name: S20
+      seeds:
+        - 111
+        - 112
+        - 113
+        - 114
+        - 115
+        - 116
+        - 117
+        - 118
+        - 119
+        - 120
+        - 121
+        - 122
+        - 123
+        - 124
+        - 125
+        - 126
+        - 127
+        - 128
+        - 129
+        - 130
+      gate: >
+        Use only when S10 uncertainty remains decision-relevant and the frozen report contract
+        still needs additional seed evidence.
+  stop_rules:
+    - stop
+    - diagnostic_only
+    - escalate_to_s10
+    - escalate_to_s20
+
+suite_schema:
+  required_family_fields:
+    - family_id
+    - research_question
+    - scenario_ids
+    - scenario_contract
+    - planner_compatibility
+    - required_metrics
+    - row_status_policy
+    - claim_boundary
+  row_status_values:
+    native: Native or explicitly eligible execution row.
+    diagnostic_only: Useful diagnostic row that is excluded from benchmark-strength claims.
+    fallback: Fallback execution; visible caveat, never success evidence.
+    degraded: Degraded execution; visible caveat, never success evidence.
+    unavailable: Required dependency, artifact, or contract is unavailable.
+    failed: Execution failed.
+
+scenario_families:
+  - family_id: frame_consistency_sanity
+    research_question: >
+      Do planners preserve basic goal-direction and frame handling before social or topology
+      stressors are introduced?
+    scenario_ids:
+      - empty_map_8_directions_east
+      - empty_map_8_directions_north
+      - goal_behind_robot
+    scenario_contract:
+      status: contract_available
+      source_paths:
+        - configs/scenarios/archetypes/issue_596_frame_consistency.yaml
+      contract_gap: null
+    planner_compatibility:
+      native_required: true
+      allowed_modes: [native]
+      excluded_modes: [fallback, degraded, unavailable]
+    required_metrics:
+      - success_rate
+      - path_efficiency
+      - heading_error
+      - timeout_rate
+    row_status_policy: >
+      Rows with invalid frame metadata, missing route endpoints, fallback, degraded, or unavailable
+      planner modes are excluded from suite-strengthening evidence.
+    claim_boundary: >
+      May only serve as a sanity gate for frame/goal consistency. It does not establish social
+      navigation, robustness, or planner superiority.
+
+  - family_id: static_obstacle_detour
+    research_question: >
+      Do planners route around simple static obstacles without relying on hidden fallback behavior?
+    scenario_ids:
+      - single_obstacle_circle
+      - line_wall_detour
+      - narrow_passage
+    scenario_contract:
+      status: contract_available
+      source_paths:
+        - configs/scenarios/archetypes/issue_596_static_obstacles.yaml
+      contract_gap: null
+    planner_compatibility:
+      native_required: true
+      allowed_modes: [native]
+      excluded_modes: [fallback, degraded, unavailable]
+    required_metrics:
+      - success_rate
+      - collision_rate
+      - minimum_clearance_m
+      - path_efficiency
+    row_status_policy: >
+      Obstacle-collision, fallback, degraded, failed, or unavailable rows remain visible as
+      limitations and cannot be counted as successful evidence.
+    claim_boundary: >
+      May only test static-obstacle detour behavior under checked-in scenario contracts. It does
+      not establish performance on dynamic pedestrians.
+
+  - family_id: topology_and_local_minima
+    research_question: >
+      Do planners avoid topology traps and local minima while preserving route-progress evidence?
+    scenario_ids:
+      - symmetry_ambiguous_choice
+      - corner_90_turn
+      - u_trap_local_minimum
+    scenario_contract:
+      status: contract_available
+      source_paths:
+        - configs/scenarios/archetypes/issue_596_robustness.yaml
+        - configs/scenarios/archetypes/issue_596_topology.yaml
+      contract_gap: >
+        Follow-up execution should verify that row outputs include route-progress or local-minimum
+        diagnostics before interpreting mechanism deltas.
+    planner_compatibility:
+      native_required: true
+      allowed_modes: [native, diagnostic_only]
+      excluded_modes: [fallback, degraded, unavailable]
+    required_metrics:
+      - success_rate
+      - timeout_rate
+      - progress_per_step
+      - route_progress_ratio
+    row_status_policy: >
+      Diagnostic-only topology rows may guide revisions, but fallback/degraded rows remain
+      exclusions and cannot support benchmark-strength topology claims.
+    claim_boundary: >
+      May only classify route-progress or local-minimum behavior when required diagnostics are
+      emitted. It does not establish mechanism transfer.
+
+  - family_id: paired_pedestrian_interactions
+    research_question: >
+      Do planners handle single-pedestrian crossing, head-on, and overtaking interactions under
+      identical seed and row-status rules?
+    scenario_ids:
+      - single_ped_crossing_orthogonal
+      - head_on_interaction
+      - overtaking_interaction
+    scenario_contract:
+      status: contract_available
+      source_paths:
+        - configs/scenarios/archetypes/issue_596_dynamic.yaml
+      contract_gap: null
+    planner_compatibility:
+      native_required: true
+      allowed_modes: [native, diagnostic_only]
+      excluded_modes: [fallback, degraded, unavailable]
+    required_metrics:
+      - success_rate
+      - collision_rate
+      - near_miss_rate
+      - minimum_clearance_m
+      - metrics.social_compliance
+    row_status_policy: >
+      Missing pedestrian traces, missing social-compliance inputs, fallback, degraded, failed, or
+      unavailable rows are limitations, not successful interaction evidence.
+    claim_boundary: >
+      May only diagnose simple paired interaction behavior. It does not prove human realism or
+      broad social-navigation validity.
+
+  - family_id: crowd_flow_and_density
+    research_question: >
+      Do planners preserve progress and pedestrian-flow diagnostics as density and crowd geometry
+      increase?
+    scenario_ids:
+      - classic_bottleneck_low
+      - classic_group_crossing_high
+      - dense_pedestrian_stress
+    scenario_contract:
+      status: contract_available
+      source_paths:
+        - configs/scenarios/archetypes/classic_bottleneck.yaml
+        - configs/scenarios/archetypes/classic_group_crossing.yaml
+        - configs/scenarios/single/dense_pedestrian_stress.yaml
+      contract_gap: >
+        Follow-up execution should verify consistent density metadata and denominator reporting
+        before comparing flow disruption across rows.
+    planner_compatibility:
+      native_required: true
+      allowed_modes: [native, diagnostic_only]
+      excluded_modes: [fallback, degraded, unavailable]
+    required_metrics:
+      - success_rate
+      - collision_rate
+      - pedestrian_deviation
+      - flow_disruption
+      - distributional_inconvenience
+    row_status_policy: >
+      Rows without pedestrian-denominator metadata or durable row-status provenance are
+      diagnostic-only until the result-store contract records those fields. Fallback, degraded,
+      failed, or unavailable rows remain limitations rather than successful crowd-flow evidence.
+    claim_boundary: >
+      May only support diagnostic crowd-flow comparisons. It does not establish real-world crowd
+      comfort or fairness.
+
+  - family_id: social_protocol_francis
+    research_question: >
+      Do planners respond consistently to Francis-style social protocol scenarios such as waiting,
+      joining, and narrow hallway interactions?
+    scenario_ids:
+      - francis2023_intersection_wait
+      - francis2023_join_group
+      - francis2023_narrow_hallway
+    scenario_contract:
+      status: contract_available
+      source_paths:
+        - configs/scenarios/single/francis2023_intersection_wait.yaml
+        - configs/scenarios/single/francis2023_join_group.yaml
+        - configs/scenarios/single/francis2023_narrow_hallway.yaml
+      contract_gap: >
+        Follow-up execution should classify whether each row is native, adapter-backed,
+        diagnostic-only, or unavailable before treating it as benchmark evidence.
+    planner_compatibility:
+      native_required: false
+      allowed_modes: [native, diagnostic_only]
+      excluded_modes: [fallback, degraded, unavailable]
+    required_metrics:
+      - success_rate
+      - collision_rate
+      - wait_time_s
+      - comfort_exposure
+      - legibility_progress
+    row_status_policy: >
+      Adapter-backed or social-protocol rows are diagnostic-only unless a follow-up preflight
+      proves they satisfy the benchmark contract without fallback or degraded execution.
+    claim_boundary: >
+      May only structure social-protocol diagnostics. It does not establish calibrated social
+      compliance, human intent handling, or publication-ready social-navigation evidence.
+
+fallback_policy:
+  fallback_is_success: false
+  degraded_is_success: false
+  unavailable_is_success: false
+  failed_is_success: false
+  diagnostic_only_is_benchmark_success: false
+  rule: >
+    Fallback, degraded, unavailable, failed, partial, and missing-provenance rows must remain
+    visible in row-status accounting and excluded from benchmark-strength or suite-strengthening
+    evidence unless a later issue explicitly measures that unavailable mode.
+
+publication_boundary:
+  diagnostic_use: >
+    The suite may route local smoke, row-status, report-generation, and seed-sufficiency work as
+    diagnostic infrastructure.
+  benchmark_candidate_use: >
+    A family becomes benchmark-candidate evidence only after native or explicitly eligible adapter
+    rows run under the frozen seed policy with durable row status, required metrics, and no
+    fallback/degraded rows counted as success.
+  non_claim_use: >
+    This proposal must not be cited as planner ranking, paper-facing result, real-world social
+    validity, or human-comfort evidence.
+
+stop_rule:
+  initial_structure: >
+    Stop at proposal status until follow-up issues bind this manifest to executable configs,
+    result-store rows, and durable provenance.
+  promote: >
+    Promote one family at a time only after every required metric and row-status field is present
+    for the declared seed set and endpoint definitions remain frozen.
+  revise: >
+    Revise the suite if a listed scenario cannot satisfy its contract, if row-status provenance is
+    missing, if required social-compliance metrics are unavailable, or if the selected family
+    overlaps materially with an existing suite without adding research-engine coverage.

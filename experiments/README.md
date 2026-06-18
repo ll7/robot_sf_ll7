@@ -51,6 +51,9 @@ For legacy `experiment-record.v1` cards, use `status: proposal` for non-actionab
 still contain placeholder commands or expected artifacts. `planned` is treated as actionable by the
 validator, so required durable artifacts must have concrete `durable_reference` values and command
 or artifact paths must not contain placeholder tokens such as `<campaign-id>`.
+For `experiment-record.v2` cards, `state: idea` and `state: proposal` are the equivalent
+non-actionable proposal states; move the card to an implementation or execution state only after
+placeholder commands and durable artifact references are resolved.
 
 ### Control-plane dry-run report
 

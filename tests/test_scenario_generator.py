@@ -30,8 +30,12 @@ import pytest
 from robot_sf.benchmark.scenario_generator import (
     AREA_HEIGHT,
     AREA_WIDTH,
+    SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION,
+    SCENARIO_INITIAL_DIFFICULTY_SCHEMA_VERSION,
     GeneratedScenario,
+    estimate_initial_difficulty,
     generate_scenario,
+    normalize_generation_parameters,
 )
 
 BASE_PARAMS = {
@@ -56,6 +60,174 @@ def test_determinism_same_seed():
     assert a.obstacles == b.obstacles
     assert a.groups == b.groups
     assert a.metadata["n_agents"] == b.metadata["n_agents"]
+
+
+def test_normalize_generation_parameters_strict_profile_rejects_unknown_keys() -> None:
+    """Unknown keys should raise only when passed in the dedicated generation_profile envelope."""
+
+    strict_profile = {
+        "id": "strict",
+        "generation_profile": {
+            "density": "low",
+            "flow": "uni",
+            "obstacle": "open",
+            "groups": 0.0,
+            "speed_var": "low",
+            "goal_topology": "point",
+            "robot_context": "embedded",
+            "repeats": 1,
+            "unexpected": "bad",
+        },
+    }
+    with pytest.raises(ValueError, match="Unsupported generation parameter"):
+        normalize_generation_parameters(strict_profile)
+
+    relaxed = {
+        "id": "relaxed",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 1,
+        "unexpected": "bad",
+    }
+    normalized = normalize_generation_parameters(relaxed)
+    assert normalized["density"] == "low"
+    assert "unexpected" not in normalized
+
+
+def test_normalize_generation_parameters_accepts_wrapped_generation_profile() -> None:
+    """Emitted metadata.generation_profile should round-trip through parameter normalization."""
+
+    normalized = normalize_generation_parameters(
+        {
+            "generation_profile": {
+                "schema_version": SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION,
+                "seed_signature": "seed=17",
+                "parameters": {
+                    "density": "high",
+                    "flow": "cross",
+                    "obstacle": "maze",
+                    "groups": 0.4,
+                    "speed_var": "high",
+                    "goal_topology": "swap",
+                    "robot_context": "ahead",
+                    "repeats": 1,
+                },
+            }
+        }
+    )
+
+    assert normalized["density"] == "high"
+    assert normalized["flow"] == "cross"
+    assert normalized["groups"] == pytest.approx(0.4)
+
+
+def test_normalize_generation_parameters_treats_none_as_missing_without_collapsing_falsy() -> None:
+    """Explicit nulls should use defaults, while valid falsy values remain explicit."""
+
+    normalized = normalize_generation_parameters(
+        {
+            "density": None,
+            "flow": None,
+            "groups": 0,
+        }
+    )
+
+    assert normalized["density"] == "med"
+    assert normalized["flow"] == "uni"
+    assert normalized["groups"] == pytest.approx(0.0)
+
+    with pytest.raises(ValueError, match="Unsupported density"):
+        normalize_generation_parameters({"density": ""})
+
+
+def test_normalize_generation_parameters_accepts_legacy_medium_density() -> None:
+    """Existing benchmark matrix rows may spell medium density as ``medium``."""
+
+    normalized = normalize_generation_parameters({"density": "medium"})
+
+    assert normalized["density"] == "med"
+
+
+def test_normalize_generation_parameters_accepts_legacy_medium_speed_variation() -> None:
+    """Existing demo matrices may spell the higher speed-variation branch as ``med``."""
+
+    normalized = normalize_generation_parameters({"speed_var": "med"})
+
+    assert normalized["speed_var"] == "high"
+
+
+@pytest.mark.parametrize(("raw_flow", "canonical"), [("crossing", "cross"), ("head_on", "bi")])
+def test_normalize_generation_parameters_accepts_legacy_flow_names(
+    raw_flow: str,
+    canonical: str,
+) -> None:
+    """Atlas and demo fixtures may use descriptive flow names."""
+
+    normalized = normalize_generation_parameters({"flow": raw_flow})
+
+    assert normalized["flow"] == canonical
+
+
+def test_generate_scenario_metadata_records_reproducible_generation_profile_and_initial_difficulty() -> (
+    None
+):
+    """Generated scenario metadata should include normalized profile and difficulty inputs."""
+
+    scenario = generate_scenario(
+        {
+            "id": "metadata_case",
+            "density": "med",
+            "flow": "bi",
+            "obstacle": "maze",
+            "groups": 0.2,
+            "speed_var": "high",
+            "goal_topology": "swap",
+            "robot_context": "ahead",
+            "repeats": 1,
+        },
+        seed=17,
+    )
+
+    profile = scenario.metadata["generation_profile"]
+    assert profile["schema_version"] == SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION
+    assert profile["seed"] == 17
+    assert profile["seed_signature"] == "seed=17"
+    assert profile["parameters"] == normalize_generation_parameters(
+        {
+            "id": "metadata_case",
+            "density": "med",
+            "flow": "bi",
+            "obstacle": "maze",
+            "groups": 0.2,
+            "speed_var": "high",
+            "goal_topology": "swap",
+            "robot_context": "ahead",
+            "repeats": 1,
+        }
+    )
+    difficulty = scenario.metadata["initial_difficulty"]
+    assert difficulty["schema_version"] == SCENARIO_INITIAL_DIFFICULTY_SCHEMA_VERSION
+    assert (
+        difficulty["score"]
+        == estimate_initial_difficulty(
+            {
+                "id": "metadata_case",
+                "density": "med",
+                "flow": "bi",
+                "obstacle": "maze",
+                "groups": 0.2,
+                "speed_var": "high",
+                "goal_topology": "swap",
+                "robot_context": "ahead",
+                "repeats": 1,
+            }
+        )["score"]
+    )
 
 
 def test_variation_different_seed():
@@ -327,9 +499,9 @@ def test_metamorphic_obstacle_independence():
         )
         # Group assignments must be identical
         assert other.groups == ref.groups, f"groups differ between open and {obs_kind}"
-        # Metadata must agree except for obstacle and id
+        # Metadata must agree except for obstacle, id, generation_profile, and initial_difficulty.
         for k in ref.metadata:
-            if k in ("obstacle", "id"):
+            if k in ("obstacle", "id", "generation_profile", "initial_difficulty"):
                 continue
             assert other.metadata[k] == ref.metadata[k], (
                 f"metadata key '{k}' differs between open and {obs_kind}"

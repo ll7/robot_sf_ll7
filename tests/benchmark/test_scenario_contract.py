@@ -11,10 +11,12 @@ import pytest
 
 from robot_sf.benchmark.scenario_contract import (
     CONTRACT_SCHEMA_VERSION,
+    SCENARIO_GENERATION_PROFILE_EXTENSION,
     ScenarioContractValidationError,
     load_scenario_contract_schema,
     load_scenario_contracts,
     scenario_contract_from_dict,
+    scenario_generation_profile_extension,
     validate_scenario_contract_references,
 )
 
@@ -107,3 +109,16 @@ def test_fixture_contract_resolves_existing_scenario_surface() -> None:
         "scenario_ref.scenario_name 'missing_station_platform_case' was not found in "
         "configs/scenarios/sets/station_platform_candidate_pack_issue736.yaml",
     ]
+
+
+def test_generation_profile_extension_prefers_extensions_field_when_present() -> None:
+    """Generation profile extension should return empty by default and map values when declared."""
+
+    contract = load_scenario_contracts(FIXTURE_PATH)[0]
+    assert scenario_generation_profile_extension(contract) == {}
+
+    contract_with_extension = replace(
+        contract,
+        extensions={SCENARIO_GENERATION_PROFILE_EXTENSION: {"x": 2}, "foo": {"bar": 1}},
+    )
+    assert scenario_generation_profile_extension(contract_with_extension) == {"x": 2}

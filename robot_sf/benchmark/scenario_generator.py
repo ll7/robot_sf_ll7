@@ -36,6 +36,7 @@ Notes:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -49,6 +50,221 @@ except ImportError:  # pragma: no cover - allow import failure during docs build
 
 AREA_WIDTH = 10.0
 AREA_HEIGHT = 6.0
+
+SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION = "scenario_generation_params.v1"
+SCENARIO_INITIAL_DIFFICULTY_SCHEMA_VERSION = "scenario_initial_difficulty.v1"
+
+GENERATION_PARAMETER_DEFAULTS = {
+    "density": "med",
+    "flow": "uni",
+    "obstacle": "open",
+    "groups": 0.0,
+    "speed_var": "low",
+    "goal_topology": "point",
+    "robot_context": "embedded",
+    "repeats": 1,
+}
+
+_KNOWN_GENERATION_PARAM_KEYS = frozenset(
+    {
+        "density",
+        "flow",
+        "obstacle",
+        "groups",
+        "speed_var",
+        "goal_topology",
+        "robot_context",
+        "repeats",
+        "id",
+        "preset",
+    }
+)
+_DENSITY_OPTIONS = ("low", "med", "high")
+_DENSITY_ALIASES = {"medium": "med"}
+_FLOW_OPTIONS = ("uni", "bi", "cross", "merge")
+_FLOW_ALIASES = {
+    "unidirectional": "uni",
+    "bidirectional": "bi",
+    "head_on": "bi",
+    "head-on": "bi",
+    "crossing": "cross",
+    "bidirectional_crossing": "cross",
+}
+_OBSTACLE_OPTIONS = ("open", "bottleneck", "maze")
+_SPEED_VARIATION_OPTIONS = ("low", "high")
+_SPEED_VARIATION_ALIASES = {"med": "high", "medium": "high"}
+_GOAL_TOPOLOGY_OPTIONS = ("point", "swap", "circulate")
+_ROBOT_CONTEXT_OPTIONS = ("ahead", "behind", "embedded")
+
+_DIFFICULTY_WEIGHT = {
+    "density": {"low": 0.18, "med": 0.42, "high": 0.72},
+    "flow": {"uni": 0.14, "bi": 0.20, "cross": 0.30, "merge": 0.24},
+    "obstacle": {"open": 0.00, "bottleneck": 0.10, "maze": 0.14},
+    "speed_var": {"low": 0.00, "high": 0.06},
+    "goal_topology": {"point": 0.00, "swap": 0.04, "circulate": 0.07},
+}
+
+
+def normalize_generation_parameters(  # noqa: C901, PLR0912
+    raw: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Normalize and validate generation inputs.
+
+    Returns:
+        Deterministic generation parameters with only supported keys.
+
+    Raises:
+        ValueError: for unknown keys, invalid scalars, unsupported enums, or empty strings.
+    """
+
+    if raw is None:
+        return dict(GENERATION_PARAMETER_DEFAULTS)
+    if not isinstance(raw, Mapping):
+        raise ValueError("Generation parameters must be provided as a mapping.")
+
+    generation_profile = raw.get("generation_profile")
+    strict_profile = isinstance(generation_profile, Mapping)
+    if strict_profile and "parameters" in generation_profile:
+        schema_version = generation_profile.get("schema_version")
+        if schema_version != SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION:
+            raise ValueError(
+                "generation_profile.schema_version must equal "
+                f"{SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION}"
+            )
+        parameters = generation_profile.get("parameters")
+        if not isinstance(parameters, Mapping):
+            raise ValueError("generation_profile.parameters must be a mapping.")
+        source: Mapping[str, Any] = parameters
+    else:
+        source = generation_profile if strict_profile else raw
+
+    payload: dict[str, Any] = dict(GENERATION_PARAMETER_DEFAULTS)
+    for key, value in source.items():
+        if key in _KNOWN_GENERATION_PARAM_KEYS:
+            if value is None:
+                value = GENERATION_PARAMETER_DEFAULTS.get(key)
+            payload[key] = value
+            continue
+        if strict_profile:
+            raise ValueError(f"Unsupported generation parameter: {key}")
+
+    density = _DENSITY_ALIASES.get(str(payload["density"]).strip(), str(payload["density"]).strip())
+    if density not in _DENSITY_OPTIONS:
+        raise ValueError(
+            f"Unsupported density '{payload['density']}', expected one of {_DENSITY_OPTIONS}"
+        )
+    flow = _FLOW_ALIASES.get(str(payload["flow"]).strip(), str(payload["flow"]).strip())
+    if flow not in _FLOW_OPTIONS:
+        raise ValueError(f"Unsupported flow '{payload['flow']}', expected one of {_FLOW_OPTIONS}")
+    obstacle = str(payload["obstacle"]).strip()
+    if obstacle not in _OBSTACLE_OPTIONS:
+        raise ValueError(
+            f"Unsupported obstacle '{payload['obstacle']}', expected one of {_OBSTACLE_OPTIONS}"
+        )
+    speed_var = _SPEED_VARIATION_ALIASES.get(
+        str(payload["speed_var"]).strip(),
+        str(payload["speed_var"]).strip(),
+    )
+    if speed_var not in _SPEED_VARIATION_OPTIONS:
+        raise ValueError(
+            f"Unsupported speed_var '{payload['speed_var']}', expected one of {_SPEED_VARIATION_OPTIONS}"
+        )
+    goal_topology = str(payload["goal_topology"]).strip()
+    if goal_topology not in _GOAL_TOPOLOGY_OPTIONS:
+        raise ValueError(
+            f"Unsupported goal_topology '{payload['goal_topology']}', expected one of {_GOAL_TOPOLOGY_OPTIONS}"
+        )
+    robot_context = str(payload["robot_context"]).strip()
+    if robot_context not in _ROBOT_CONTEXT_OPTIONS:
+        raise ValueError(
+            f"Unsupported robot_context '{payload['robot_context']}', expected one of {_ROBOT_CONTEXT_OPTIONS}"
+        )
+
+    try:
+        repeats = int(payload["repeats"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"repeats must be a non-negative integer: {payload['repeats']}") from exc
+    if repeats < 1:
+        raise ValueError(f"repeats must be >= 1: {payload['repeats']}")
+
+    group_value = float(payload["groups"])
+    if group_value < 0 or group_value > 1:
+        raise ValueError(f"groups must be between 0.0 and 1.0 inclusive: {payload['groups']}")
+    preset = payload.get("preset")
+    if preset is not None and (not isinstance(preset, str) or not preset.strip()):
+        raise ValueError("preset must be an optional non-empty string when provided")
+    scenario_id = payload.get("id")
+    if scenario_id is not None and (not isinstance(scenario_id, str) or not scenario_id.strip()):
+        raise ValueError("id must be an optional non-empty string when provided")
+
+    return {
+        "id": scenario_id,
+        "density": density,
+        "flow": flow,
+        "obstacle": obstacle,
+        "groups": group_value,
+        "speed_var": speed_var,
+        "goal_topology": goal_topology,
+        "robot_context": robot_context,
+        "repeats": repeats,
+        **({"preset": str(preset).strip()} if isinstance(preset, str) else {}),
+    }
+
+
+def resolve_agent_count(params: Mapping[str, Any] | None = None) -> int:
+    """Return deterministic agent count from generation parameters."""
+
+    normalized = normalize_generation_parameters(params or {})
+    return _select_counts(normalized)
+
+
+def estimate_initial_difficulty(
+    params: Mapping[str, Any] | None = None,
+    *,
+    n_agents: int | None = None,
+) -> dict[str, Any]:
+    """Build an initial scenario difficulty estimate used in draft metadata.
+
+    Returns:
+        Small deterministic difficulty metadata payload.
+    """
+
+    normalized = normalize_generation_parameters(dict(params or {}))
+    if n_agents is None:
+        n_agents = resolve_agent_count(normalized)
+    if not isinstance(n_agents, int) or n_agents < 0:
+        raise ValueError(f"n_agents must be a non-negative int: {n_agents}")
+    crowding = n_agents / (AREA_WIDTH * AREA_HEIGHT)
+
+    components = {
+        "density": _DIFFICULTY_WEIGHT["density"][normalized["density"]],
+        "flow": _DIFFICULTY_WEIGHT["flow"][normalized["flow"]],
+        "obstacle": _DIFFICULTY_WEIGHT["obstacle"][normalized["obstacle"]],
+        "speed_var": _DIFFICULTY_WEIGHT["speed_var"][normalized["speed_var"]],
+        "goal_topology": _DIFFICULTY_WEIGHT["goal_topology"][normalized["goal_topology"]],
+        "groups": max(0.0, min(0.30, float(normalized["groups"]) * 0.30)),
+        "crowding": max(0.0, min(0.30, crowding / 20.0)),
+    }
+    score = sum(components.values())
+    score = min(score, 1.0)
+    score = max(score, 0.0)
+
+    if score < 0.35:
+        band = "low"
+    elif score < 0.70:
+        band = "medium"
+    else:
+        band = "high"
+
+    return {
+        "schema_version": SCENARIO_INITIAL_DIFFICULTY_SCHEMA_VERSION,
+        "score": round(score, 3),
+        "band": band,
+        "components": components,
+        "n_agents": n_agents,
+        "area": AREA_WIDTH * AREA_HEIGHT,
+    }
+
 
 _DENSITY_COUNTS = {"low": 10, "med": 25, "high": 40}
 
@@ -200,12 +416,13 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
     GeneratedScenario
         Object containing generated state, map definition, and robot configuration.
     """
+    normalized = normalize_generation_parameters(params)
     # Special preset for testing/validation: guaranteed contact at t=0
     # Places one pedestrian exactly at the default robot start (0.3, 3.0)
     # with goal equal to its position (no desired motion). This ensures
     # min distance < D_COLL at the first timestep, exercising the collision
     # counting pipeline end-to-end.
-    preset = str(params.get("preset", "")).strip().lower()
+    preset = str(normalized.get("preset", "")).strip().lower()
     if preset == "collision_sanity":
         n = 1
         pos = np.array([[0.3, 3.0]], dtype=float)
@@ -217,10 +434,18 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
         obstacles: list[tuple[float, float, float, float]] = []
         groups: list[int] = [-1]
         metadata = {
-            **params,
+            **normalized,
             "n_agents": n,
             "area": AREA_WIDTH * AREA_HEIGHT,
             "seed": seed,
+            "group_count": 0,
+            "generation_profile": {
+                "schema_version": SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION,
+                "seed": seed,
+                "seed_signature": f"seed={seed}",
+                "parameters": dict(normalized),
+            },
+            "initial_difficulty": estimate_initial_difficulty(normalized, n_agents=n),
         }
         simulator = None if pysf is None else pysf.Simulator(state=state, obstacles=None)  # type: ignore[arg-type]
         return GeneratedScenario(
@@ -232,10 +457,12 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
         )
 
     rng = np.random.default_rng(seed)
-    n = _select_counts(params)
+    n = _select_counts(normalized)
     pos = _sample_positions(rng, n)
-    goals = _assign_goals(params.get("flow", "uni"), params.get("goal_topology", "point"), pos)
-    speed_std = _speed_variation(params.get("speed_var", "low"))
+    goals = _assign_goals(
+        normalized.get("flow", "uni"), normalized.get("goal_topology", "point"), pos
+    )
+    speed_std = _speed_variation(normalized.get("speed_var", "low"))
     # Desired speeds around 1.3 m/s with variation
     desired_speeds = rng.normal(loc=1.3, scale=speed_std, size=n)
     desired_speeds = np.clip(desired_speeds, 0.2, 2.0)
@@ -246,17 +473,24 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
     state[:, 4:6] = goals
     state[:, 6] = 1.0  # tau placeholder
 
-    obstacles = _build_obstacles(params.get("obstacle", "open"))
-    groups = _assign_groups(rng, n, float(params.get("groups", 0.0)))
+    obstacles = _build_obstacles(normalized.get("obstacle", "open"))
+    groups = _assign_groups(rng, n, float(normalized.get("groups", 0.0)))
 
     # Attach group influence via metadata; downstream can use groups list
     metadata = {
-        **params,
+        **normalized,
         "n_agents": n,
         "area": AREA_WIDTH * AREA_HEIGHT,
         "seed": seed,
         "speed_std": speed_std,
         "group_count": len({g for g in groups if g >= 0}),
+        "generation_profile": {
+            "schema_version": SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION,
+            "seed": seed,
+            "seed_signature": f"seed={seed}",
+            "parameters": dict(normalized),
+        },
+        "initial_difficulty": estimate_initial_difficulty(normalized),
     }
 
     if pysf is None:
@@ -276,4 +510,12 @@ def generate_scenario(params: dict[str, Any], seed: int) -> GeneratedScenario:
     )
 
 
-__all__ = ["GeneratedScenario", "generate_scenario"]
+__all__ = [
+    "SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION",
+    "SCENARIO_INITIAL_DIFFICULTY_SCHEMA_VERSION",
+    "GeneratedScenario",
+    "estimate_initial_difficulty",
+    "generate_scenario",
+    "normalize_generation_parameters",
+    "resolve_agent_count",
+]

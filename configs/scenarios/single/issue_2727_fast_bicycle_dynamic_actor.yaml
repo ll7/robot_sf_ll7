@@ -37,6 +37,34 @@ scenarios:
   metadata:
     purpose: Deterministic fast-bicycle crossing fixture for trace-compatible dynamic-obstacle diagnostics.
     behavior: fast_bicycle_crossing
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: "2727"
+      parameters:
+        id: issue_2727_fast_bicycle_crossing
+        density: low
+        flow: cross
+        obstacle: open
+        groups: 0.0
+        speed_var: high
+        goal_topology: point
+        robot_context: embedded
+        repeats: 1
+        preset: manual_fast_bicycle_proxy
+    initial_difficulty:
+      schema_version: scenario_initial_difficulty.v1
+      score: 0.541
+      band: medium
+      components:
+        density: 0.18
+        flow: 0.3
+        obstacle: 0.0
+        speed_var: 0.06
+        goal_topology: 0.0
+        groups: 0.0
+        crowding: 0.0008333333333333333
+      n_agents: 1
+      area: 60.0
     authoring:
       status: draft
       template: francis2023-single-pedestrian-fast-bicycle-proxy
@@ -89,6 +117,34 @@ scenarios:
   metadata:
     purpose: Deterministic fast-bicycle overtaking fixture for trace-compatible dynamic-obstacle diagnostics.
     behavior: fast_bicycle_overtaking
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: "2728"
+      parameters:
+        id: issue_2727_fast_bicycle_overtaking
+        density: low
+        flow: merge
+        obstacle: open
+        groups: 0.0
+        speed_var: high
+        goal_topology: point
+        robot_context: behind
+        repeats: 1
+        preset: manual_fast_bicycle_proxy
+    initial_difficulty:
+      schema_version: scenario_initial_difficulty.v1
+      score: 0.481
+      band: medium
+      components:
+        density: 0.18
+        flow: 0.24
+        obstacle: 0.0
+        speed_var: 0.06
+        goal_topology: 0.0
+        groups: 0.0
+        crowding: 0.0008333333333333333
+      n_agents: 1
+      area: 60.0
     authoring:
       status: draft
       template: francis2023-single-pedestrian-fast-bicycle-proxy
@@ -141,6 +197,34 @@ scenarios:
   metadata:
     purpose: Deterministic fast-bicycle parallel-lane fixture for trace-compatible dynamic-obstacle diagnostics.
     behavior: fast_bicycle_parallel_lane
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: "2729"
+      parameters:
+        id: issue_2727_fast_bicycle_parallel_lane
+        density: low
+        flow: uni
+        obstacle: open
+        groups: 0.0
+        speed_var: high
+        goal_topology: point
+        robot_context: embedded
+        repeats: 1
+        preset: manual_fast_bicycle_proxy
+    initial_difficulty:
+      schema_version: scenario_initial_difficulty.v1
+      score: 0.381
+      band: medium
+      components:
+        density: 0.18
+        flow: 0.14
+        obstacle: 0.0
+        speed_var: 0.06
+        goal_topology: 0.0
+        groups: 0.0
+        crowding: 0.0008333333333333333
+      n_agents: 1
+      area: 60.0
     authoring:
       status: draft
       template: francis2023-single-pedestrian-fast-bicycle-proxy

@@ -37,6 +37,34 @@ scenarios:
   metadata:
     purpose: Minimal fast-moving cyclist-like VRU fixture for diagnostic smoke testing.
     behavior: fast_vru_crossing
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: 2526,2527
+      parameters:
+        id: issue_2526_cyclist_vru_smoke
+        density: low
+        flow: cross
+        obstacle: open
+        groups: 0.0
+        speed_var: high
+        goal_topology: point
+        robot_context: embedded
+        repeats: 1
+        preset: manual_cyclist_like_vru_proxy
+    initial_difficulty:
+      schema_version: scenario_initial_difficulty.v1
+      score: 0.541
+      band: medium
+      components:
+        density: 0.18
+        flow: 0.3
+        obstacle: 0.0
+        speed_var: 0.06
+        goal_topology: 0.0
+        groups: 0.0
+        crowding: 0.0008333333333333333
+      n_agents: 1
+      area: 60.0
     authoring:
       status: draft
       template: francis2023-single-pedestrian-vru-proxy

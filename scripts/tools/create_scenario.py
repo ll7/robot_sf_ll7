@@ -34,6 +34,48 @@ def _build_parser() -> argparse.ArgumentParser:
         default="#1891",
         help="Issue or provenance label to store in metadata.authoring.source_issue.",
     )
+    parser.add_argument(
+        "--density",
+        choices=("low", "med", "high"),
+        default="med",
+        help="Scenario-generation density level.",
+    )
+    parser.add_argument(
+        "--flow",
+        choices=("uni", "bi", "cross", "merge"),
+        default="uni",
+        help="Scenario-generation flow mode.",
+    )
+    parser.add_argument(
+        "--obstacle",
+        choices=("open", "bottleneck", "maze"),
+        default="open",
+        help="Scenario-generation obstacle profile.",
+    )
+    parser.add_argument(
+        "--groups",
+        type=float,
+        default=0.0,
+        help="Scenario-generation grouped-agent fraction [0.0,1.0].",
+    )
+    parser.add_argument(
+        "--speed-var",
+        choices=("low", "high"),
+        default="low",
+        help="Scenario-generation speed variation setting.",
+    )
+    parser.add_argument(
+        "--goal-topology",
+        choices=("point", "swap", "circulate"),
+        default="point",
+        help="Scenario-generation goal topology.",
+    )
+    parser.add_argument(
+        "--robot-context",
+        choices=("ahead", "behind", "embedded"),
+        default="embedded",
+        help="Scenario-generation robot context.",
+    )
     add_common_seed_argument(parser)
     parser.add_argument(
         "--overwrite",
@@ -63,6 +105,15 @@ def main(argv: list[str] | None = None) -> int:
         name=args.name,
         seeds=parse_seed_args(args.seeds),
         source_issue=args.source_issue,
+        generation_profile={
+            "density": args.density,
+            "flow": args.flow,
+            "obstacle": args.obstacle,
+            "groups": args.groups,
+            "speed_var": args.speed_var,
+            "goal_topology": args.goal_topology,
+            "robot_context": args.robot_context,
+        },
     )
     write_scenario_yaml(args.output, payload, overwrite=args.overwrite)
     if args.skip_validation:

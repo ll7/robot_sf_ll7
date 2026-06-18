@@ -139,6 +139,19 @@ def _scenario_family(row: Mapping[str, Any]) -> str:
     return "unknown"
 
 
+def _initial_difficulty(metadata: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Extract initial difficulty metadata from scenario payload metadata.
+
+    Returns:
+        Mapping keys copied from metadata.initial_difficulty or an empty mapping.
+    """
+
+    if metadata is None:
+        return {}
+    raw = metadata.get("initial_difficulty")
+    return dict(raw) if isinstance(raw, Mapping) else {}
+
+
 def _normalized_ranks(
     values_by_key: Mapping[str, float],
     *,
@@ -308,10 +321,12 @@ def _preview_metadata_lookup(  # noqa: C901
             metadata = scenario.get("metadata")
             if not isinstance(metadata, dict):
                 metadata = {}
+            difficulty = _initial_difficulty(metadata)
             simulation_config = scenario.get("simulation_config")
             if not isinstance(simulation_config, dict):
                 simulation_config = {}
-            route_warning = None
+
+            route_warning: dict[str, Any] | None = None
             for key in _scenario_keys(scenario):
                 route_warning = warning_index.get(key)
                 if route_warning is not None:
@@ -344,6 +359,10 @@ def _preview_metadata_lookup(  # noqa: C901
                     if isinstance(route_warning, dict)
                     else None
                 ),
+                "initial_difficulty_band": difficulty.get("band"),
+                "initial_difficulty_score": _safe_float(difficulty.get("score")),
+                "initial_difficulty_schema_version": difficulty.get("schema_version"),
+                "initial_difficulty_components": difficulty.get("components"),
             }
             for key in _scenario_keys(scenario):
                 lookup[key] = row
@@ -755,6 +774,10 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
             "route_clearance_warning": bool(metadata.get("route_clearance_warning", False)),
             "route_clearance_scope": metadata.get("route_clearance_scope"),
             "min_clearance_margin_m": _safe_float(metadata.get("min_clearance_margin_m")),
+            "initial_difficulty_band": metadata.get("initial_difficulty_band"),
+            "initial_difficulty_score": _safe_float(metadata.get("initial_difficulty_score")),
+            "initial_difficulty_schema_version": metadata.get("initial_difficulty_schema_version"),
+            "initial_difficulty_components": metadata.get("initial_difficulty_components"),
         }
         normalized_rows.append(normalized)
         scenario_groups[scenario_id].append(normalized)
@@ -827,6 +850,10 @@ def build_scenario_difficulty_analysis(  # noqa: C901, PLR0912, PLR0915
             "route_clearance_warning": bool(template.get("route_clearance_warning", False)),
             "route_clearance_scope": template.get("route_clearance_scope"),
             "min_clearance_margin_m": _safe_float(template.get("min_clearance_margin_m")),
+            "initial_difficulty_band": template.get("initial_difficulty_band"),
+            "initial_difficulty_score": _safe_float(template.get("initial_difficulty_score")),
+            "initial_difficulty_schema_version": template.get("initial_difficulty_schema_version"),
+            "initial_difficulty_components": template.get("initial_difficulty_components"),
         }
         consensus_rows.append(consensus_row)
 

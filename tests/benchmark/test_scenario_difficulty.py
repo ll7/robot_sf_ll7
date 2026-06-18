@@ -490,6 +490,35 @@ def test_preview_metadata_lookup_handles_truncation_and_missing_dicts() -> None:
     assert lookup["case_a"]["ped_density"] is None
 
 
+def test_preview_metadata_lookup_includes_initial_difficulty_fields() -> None:
+    """Initial difficulty metadata in preview payload should pass into normalized rows."""
+
+    lookup, truncated = _preview_metadata_lookup(
+        {
+            "truncated": False,
+            "scenarios": [
+                {
+                    "name": "case_b",
+                    "metadata": {
+                        "initial_difficulty": {
+                            "band": "medium",
+                            "score": 0.64,
+                            "schema_version": "scenario_initial_difficulty.v1",
+                            "components": {"flow": 0.2},
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    assert truncated is False
+    assert lookup["case_b"]["initial_difficulty_band"] == "medium"
+    assert lookup["case_b"]["initial_difficulty_score"] == pytest.approx(0.64)
+    assert lookup["case_b"]["initial_difficulty_schema_version"] == "scenario_initial_difficulty.v1"
+    assert lookup["case_b"]["initial_difficulty_components"] == {"flow": 0.2}
+
+
 def test_planner_quality_and_selection_helpers_cover_sparse_inputs() -> None:
     """Planner helper summaries should stay well-defined for sparse rows and fallback selections."""
     quality_rows = _planner_quality_rows(

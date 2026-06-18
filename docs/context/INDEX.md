@@ -108,6 +108,12 @@ records live issue/card/artifact mismatches before new empirical campaigns start
 existing conflicts to card correction, label cleanup, follow-up validation policy, or fail-closed
 terminal state without upgrading any benchmark or paper-facing claim.
 
+Recent behavior-model variant preflight: [issue_3064_behavior_variants_inventory.md](issue_3064_behavior_variants_inventory.md)
+records the fail-closed inventory for native Social Force, AMMV-aware Social Force, and
+Social-Navigation-PyEnvs adapter-backed behavior variants. Current status is one
+`benchmark_valid_candidate`, one `diagnostic_only`, and four `not_available` rows; diagnostic and
+unavailable rows are not benchmark-success evidence.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

@@ -136,6 +136,10 @@ knowledge, not every transient iteration detail.
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #2232 planner mechanism transfer benchmark protocol:
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
+* Issue #3064 behavior-variant inventory:
+  [issue_3064_behavior_variants_inventory.md](issue_3064_behavior_variants_inventory.md)
+  records the fail-closed classification of native Social Force, AMMV-aware Social Force, and
+  Social-Navigation-PyEnvs adapter-backed behavior variants for benchmark selection.
 * Active research-lane scientific states:
   [research_lane_states.md](research_lane_states.md)
 * Issue #2571 Active Research Queue:

@@ -1,0 +1,189 @@
+{
+  "claim_boundary": "Preflight/inventory evidence only. Rows marked diagnostic_only, not_available, fallback, or degraded must not be counted as benchmark-success evidence.",
+  "generated_at": "2026-06-18T22:55:00Z",
+  "git_head": "df907a0e77ba8d0fda38081cc58d5e403459e10d",
+  "issue": 3064,
+  "rows": [
+    {
+      "availability_status": "available",
+      "benchmark_success": true,
+      "benchmark_validity": "benchmark_valid_candidate",
+      "dependencies": [],
+      "display_name": "Native Robot SF Social Force",
+      "execution_mode": "adapter",
+      "family": "native",
+      "reason": "required repository paths and runtime prerequisites are present",
+      "required_paths": [
+        {
+          "exists": true,
+          "path": "robot_sf/baselines/social_force.py"
+        },
+        {
+          "exists": true,
+          "path": "robot_sf/planner/socnav.py"
+        },
+        {
+          "exists": true,
+          "path": "configs/baselines/social_force_default.yaml"
+        }
+      ],
+      "row_status": "benchmark_valid_candidate",
+      "variant_id": "social_force"
+    },
+    {
+      "availability_status": "available",
+      "benchmark_success": false,
+      "benchmark_validity": "diagnostic_only",
+      "dependencies": [],
+      "display_name": "AMMV-aware Robot SF Social Force",
+      "execution_mode": "adapter",
+      "family": "native_diagnostic",
+      "reason": "existing same-seed adapter-mode evidence found no default-vs-AMMV frame or episode metric delta; use as diagnostic mechanism evidence until a behavioral-difference execution path is proven",
+      "required_paths": [
+        {
+          "exists": true,
+          "path": "robot_sf/baselines/social_force.py"
+        },
+        {
+          "exists": true,
+          "path": "configs/baselines/social_force_ammv_aware.yaml"
+        }
+      ],
+      "row_status": "diagnostic_only",
+      "same_seed_evidence_summary": {
+        "all_available": true,
+        "behavioral_delta_found": false,
+        "evidence": [
+          {
+            "candidate_pairs_compared": 3,
+            "decision": "no_non_identical_default_vs_ammv_pair_found_in_local_seed_111_113_adapter_slice",
+            "max_per_frame_abs_delta": 0.0,
+            "non_identical_pairs_found": 0,
+            "path": "docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/summary.json",
+            "schema_version": "issue_2432_ammv_trace_selection.v1",
+            "status": "available"
+          },
+          {
+            "candidate_pairs_compared": 15,
+            "decision": "no_default_vs_ammv_frame_or_episode_metric_delta_found_in_compact_classic_multi_scenario_adapter_slice",
+            "max_per_frame_abs_delta": 0.0,
+            "non_identical_pairs_found": 0,
+            "path": "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/summary.json",
+            "schema_version": "issue_2434_ammv_scenario_sweep.v2",
+            "status": "available"
+          }
+        ]
+      },
+      "variant_id": "ammv_social_force"
+    },
+    {
+      "availability_status": "not_available",
+      "benchmark_success": false,
+      "benchmark_validity": "not_available",
+      "dependencies": [
+        {
+          "dependency": "Social-Navigation-PyEnvs checkout",
+          "path": "<local-artifact-root>/repos/Social-Navigation-PyEnvs",
+          "status": "missing"
+        }
+      ],
+      "display_name": "Social-Navigation-PyEnvs ORCA",
+      "execution_mode": "adapter",
+      "family": "external_adapter",
+      "reason": "missing or incompatible runtime prerequisites",
+      "required_paths": [
+        {
+          "exists": true,
+          "path": "robot_sf/planner/social_navigation_pyenvs_orca.py"
+        }
+      ],
+      "row_status": "unavailable/excluded",
+      "variant_id": "social_navigation_pyenvs_orca"
+    },
+    {
+      "availability_status": "not_available",
+      "benchmark_success": false,
+      "benchmark_validity": "not_available",
+      "dependencies": [
+        {
+          "dependency": "Social-Navigation-PyEnvs checkout",
+          "path": "<local-artifact-root>/repos/Social-Navigation-PyEnvs",
+          "status": "missing"
+        },
+        {
+          "dependency": "python package",
+          "expected_version": "0.2.3",
+          "package": "socialforce",
+          "status": "missing"
+        }
+      ],
+      "display_name": "Social-Navigation-PyEnvs SocialForce",
+      "execution_mode": "adapter",
+      "family": "external_adapter",
+      "reason": "missing or incompatible runtime prerequisites",
+      "required_paths": [
+        {
+          "exists": true,
+          "path": "robot_sf/planner/social_navigation_pyenvs_force_model.py"
+        }
+      ],
+      "row_status": "unavailable/excluded",
+      "variant_id": "social_navigation_pyenvs_socialforce"
+    },
+    {
+      "availability_status": "not_available",
+      "benchmark_success": false,
+      "benchmark_validity": "not_available",
+      "dependencies": [
+        {
+          "dependency": "Social-Navigation-PyEnvs checkout",
+          "path": "<local-artifact-root>/repos/Social-Navigation-PyEnvs",
+          "status": "missing"
+        }
+      ],
+      "display_name": "Social-Navigation-PyEnvs SFM Helbing",
+      "execution_mode": "adapter",
+      "family": "external_adapter",
+      "reason": "missing or incompatible runtime prerequisites",
+      "required_paths": [
+        {
+          "exists": true,
+          "path": "robot_sf/planner/social_navigation_pyenvs_force_model.py"
+        }
+      ],
+      "row_status": "unavailable/excluded",
+      "variant_id": "social_navigation_pyenvs_sfm_helbing"
+    },
+    {
+      "availability_status": "not_available",
+      "benchmark_success": false,
+      "benchmark_validity": "not_available",
+      "dependencies": [
+        {
+          "dependency": "Social-Navigation-PyEnvs checkout",
+          "path": "<local-artifact-root>/repos/Social-Navigation-PyEnvs",
+          "status": "missing"
+        }
+      ],
+      "display_name": "Social-Navigation-PyEnvs HSFM New Guo",
+      "execution_mode": "adapter",
+      "family": "external_adapter",
+      "reason": "missing or incompatible runtime prerequisites",
+      "required_paths": [
+        {
+          "exists": true,
+          "path": "robot_sf/planner/social_navigation_pyenvs_hsfm.py"
+        }
+      ],
+      "row_status": "unavailable/excluded",
+      "variant_id": "social_navigation_pyenvs_hsfm_new_guo"
+    }
+  ],
+  "schema_version": "issue_3064_behavior_variant_preflight.v1",
+  "social_navigation_pyenvs_root": "<local-artifact-root>/repos/Social-Navigation-PyEnvs",
+  "status_counts": {
+    "benchmark_valid_candidate": 1,
+    "diagnostic_only": 1,
+    "not_available": 4
+  }
+}

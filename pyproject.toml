@@ -37,13 +37,6 @@ dependencies = [
     "toml>=0.10.2",
     "shimmy>=1.0.0,<2.0.0",
     "moviepy>=2.0.0",
-    # Development tools
-    "pytest>=8.3.3",
-    "pytest-cov>=6.0.0",
-    "scalene>=1.5.48",
-    "ruff==0.15.12",
-    "pre-commit>=4.1.0",
-    "setuptools>=70.0.0",
     "pysocialforce",
     "jsonschema>=4.23.0",
     "shapely>=2.1.2",
@@ -478,6 +471,13 @@ markers = [
 
 [dependency-groups]
 dev = [
+    # Development tools
+    "pytest>=8.3.3",
+    "pytest-cov>=6.0.0",
+    "scalene>=1.5.48",
+    "ruff==0.15.12",
+    "pre-commit>=4.1.0",
+    "setuptools>=70.0.0",
     "pylint>=3.3.4",
     "pytest-xdist>=3.6.1",
 ]

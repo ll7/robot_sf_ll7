@@ -106,7 +106,7 @@ def test_run_compact_validation_emits_summary_on_timeout(tmp_path: Path, capsys)
             "--artifact-dir",
             str(artifact_dir),
             "--timeout-seconds",
-            "0.1",
+            "1.0",
             "--",
             *command,
         ]
@@ -117,21 +117,49 @@ def test_run_compact_validation_emits_summary_on_timeout(tmp_path: Path, capsys)
     logs = list(artifact_dir.glob("*.log"))
     assert rc == 124
     assert "Exit code: 124" in stdout
-    assert "Timed out: 0.1 seconds" in stdout
+    assert "Timed out: 1.0 seconds" in stdout
     assert len(summaries) == 1
     assert len(logs) == 1
     log_text = logs[0].read_text(encoding="utf-8")
     assert "before timeout" in log_text
-    assert "Command timed out after 0.1 seconds." in log_text
+    assert "Command timed out after 1 seconds." in log_text
     summary = json.loads(summaries[0].read_text(encoding="utf-8"))
     assert summary["schema"] == "compact_validation_summary.v2"
     assert summary["exit_code"] == 124
     assert summary["timed_out"] is True
-    assert summary["timeout_seconds"] == 0.1
-    assert summary["timeout_message"] == "Command timed out after 0.1 seconds."
-    assert summary["cleanup_status"] == "direct_process_killed_and_waited"
+    assert summary["timeout_seconds"] == 1.0
+    assert summary["timeout_message"] == "Command timed out after 1 seconds."
+    assert summary["cleanup_status"] == "process_group_terminated_and_waited"
     assert "before timeout" in summary["failure_excerpt"]
-    assert "Command timed out after 0.1 seconds." in summary["failure_excerpt"]
+    assert "Command timed out after 1 seconds." in summary["failure_excerpt"]
+
+
+def test_run_compact_validation_timeout_handles_descendant_output_handles(tmp_path: Path) -> None:
+    """Grandchildren inheriting stdout should not prevent timeout summary emission."""
+    artifact_dir = tmp_path / "artifacts"
+    command = [
+        sys.executable,
+        "-c",
+        "\n".join(
+            [
+                "import subprocess, sys, time",
+                "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)'])",
+                "print('spawned descendant', flush=True)",
+                "time.sleep(5)",
+            ]
+        ),
+    ]
+
+    summary = run_compact_validation(
+        command,
+        artifact_dir=artifact_dir,
+        timeout_seconds=1.0,
+    )
+
+    assert summary["exit_code"] == 124
+    assert summary["timed_out"] is True
+    assert summary["cleanup_status"] == "process_group_terminated_and_waited"
+    assert "spawned descendant" in "\n".join(summary["failure_excerpt"])
 
 
 def test_run_compact_validation_rejects_non_positive_timeout() -> None:

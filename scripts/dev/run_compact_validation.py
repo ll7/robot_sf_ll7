@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -51,13 +52,29 @@ def _quote_command(command: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
-def _decode_output(output: bytes | str | None) -> str:
-    """Decode subprocess output that may be bytes, text, or absent."""
-    if output is None:
-        return ""
-    if isinstance(output, bytes):
-        return output.decode("utf-8", errors="replace")
-    return output
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> str:
+    """Terminate a timed-out process and descendants started in its process group."""
+    cleanup_status = "process_group_terminated_and_waited"
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return cleanup_status
+    except OSError:
+        process.terminate()
+        cleanup_status = "direct_process_terminated_and_waited"
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        cleanup_status = cleanup_status.replace("terminated", "killed")
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            process.kill()
+            cleanup_status = "direct_process_killed_and_waited"
+        process.wait()
+    return cleanup_status
 
 
 def _failure_lines(text: str, *, limit: int, width: int) -> tuple[list[str], bool]:
@@ -111,27 +128,30 @@ def run_compact_validation(
     timeout_message = ""
     cleanup_status = "not_needed"
     try:
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            capture_output=True,
-            check=False,
-            timeout=timeout_seconds,
-        )
-        returncode = result.returncode
-        stdout = _decode_output(result.stdout)
-        stderr = _decode_output(result.stderr)
+        with log_path.open("wb") as log_file:
+            process = subprocess.Popen(
+                command,
+                cwd=cwd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            try:
+                returncode = process.wait(timeout=timeout_seconds)
+            except subprocess.TimeoutExpired as exc:
+                timed_out = True
+                returncode = TIMEOUT_EXIT_CODE
+                cleanup_status = _terminate_process_group(process)
+                timeout_message = f"Command timed out after {exc.timeout:g} seconds."
+                log_file.write(f"\n{timeout_message}\n".encode("utf-8", errors="replace"))
     except subprocess.TimeoutExpired as exc:
         timed_out = True
         returncode = TIMEOUT_EXIT_CODE
-        cleanup_status = "direct_process_killed_and_waited"
-        stdout = _decode_output(exc.stdout)
-        stderr = _decode_output(exc.stderr)
+        cleanup_status = "timeout_without_process_handle"
         timeout_message = f"Command timed out after {exc.timeout:g} seconds."
-        stderr = f"{stderr.rstrip()}\n{timeout_message}\n" if stderr else f"{timeout_message}\n"
+        log_path.write_text(f"{timeout_message}\n", encoding="utf-8", errors="replace")
     elapsed = time.monotonic() - started
-    combined = stdout + stderr
-    log_path.write_text(combined, encoding="utf-8", errors="replace")
+    combined = log_path.read_text(encoding="utf-8", errors="replace")
     excerpt, truncated = _failure_lines(combined, limit=excerpt_lines, width=excerpt_width)
     summary: dict[str, Any] = {
         "schema": SCHEMA_VERSION,

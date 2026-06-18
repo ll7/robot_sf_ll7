@@ -376,7 +376,9 @@ def _resolve_current_map_id(env_config: EnvSettings, map_def) -> str | None:
     return None
 
 
-def _build_reset_info(env_config: EnvSettings, *, map_def, applied_seed: int | None) -> dict[str, Any]:
+def _build_reset_info(
+    env_config: EnvSettings, *, map_def, applied_seed: int | None
+) -> dict[str, Any]:
     """Return a stable, non-placeholder reset metadata payload.
 
     The payload intentionally keeps only lightweight, serializable fields useful for

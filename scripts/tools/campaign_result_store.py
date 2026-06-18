@@ -122,6 +122,7 @@ def _validate_episode_parquet(parquet_path: Path) -> list[str]:
     try:
         episodes = pd.read_parquet(parquet_path)
     except Exception as exc:
+        # Pandas may surface engine-specific exceptions for corrupt or unsupported Parquet files.
         return [f"episodes.parquet could not be read: {exc}"]
     missing = [field for field in REQUIRED_EPISODE_FIELDS if field not in episodes.columns]
     if missing:

@@ -521,9 +521,15 @@ def _load_yaml_mapping(path: Path, errors: list[str], *, display: str) -> Mappin
 
 def _load_issue_state_snapshot(
     path: Path,
+    errors: list[str] | None = None,
 ) -> tuple[dict[int, str], dict[int, list[str]]]:
     """Load a compact issue state snapshot for offline drift checks."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        if errors is not None:
+            errors.append(f"{path}: cannot read issue-state JSON: {exc}")
+        return {}, {}
     if isinstance(payload, Mapping):
         rows = payload.get("issues", payload.get("items", payload))
     else:
@@ -544,14 +550,19 @@ def _load_issue_state_snapshot(
             states[number] = row["state"]
         label_values = row.get("labels")
         if isinstance(label_values, list):
-            parsed_labels: list[str] = []
-            for label in label_values:
-                value = label.get("name") if isinstance(label, Mapping) else label
-                if value is None:
-                    continue
-                parsed_labels.append(str(value))
-            labels[number] = parsed_labels
+            labels[number] = _parse_issue_label_names(label_values)
     return states, labels
+
+
+def _parse_issue_label_names(label_values: Iterable[Any]) -> list[str]:
+    """Return label names from GitHub issue snapshot rows."""
+    parsed_labels: list[str] = []
+    for label in label_values:
+        value = label.get("name") if isinstance(label, Mapping) else label
+        if value is None:
+            continue
+        parsed_labels.append(str(value))
+    return parsed_labels
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -581,7 +592,9 @@ def main(argv: list[str] | None = None) -> int:
         issue_states: dict[int, str] = {}
         issue_labels: dict[int, list[str]] = {}
         if args.issue_state_json is not None:
-            issue_states, issue_labels = _load_issue_state_snapshot(args.issue_state_json)
+            issue_states, issue_labels = _load_issue_state_snapshot(
+                args.issue_state_json, errors=errors
+            )
         report = build_control_plane_report(
             args.registry,
             issue_states=issue_states,

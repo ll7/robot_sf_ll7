@@ -8,6 +8,7 @@ from textwrap import dedent
 from scripts.tools.validate_experiment_registry import (
     _load_issue_state_snapshot,
     build_control_plane_report,
+    main,
     validate_registry,
 )
 
@@ -358,3 +359,31 @@ def test_issue_state_snapshot_filters_missing_label_names(tmp_path: Path) -> Non
 
     assert states == {1475: "OPEN"}
     assert labels == {1475: ["state:running", "type:analysis"]}
+
+
+def test_issue_state_snapshot_errors_are_reported_by_cli(tmp_path: Path) -> None:
+    """Invalid issue-state snapshots should fail closed instead of crashing."""
+    registry = tmp_path / "registry.yaml"
+    report = tmp_path / "report.json"
+    issue_state = tmp_path / "issue_state.json"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records: []
+        """,
+    )
+    issue_state.write_text("{not json", encoding="utf-8")
+
+    exit_code = main(
+        [
+            str(registry),
+            "--issue-state-json",
+            str(issue_state),
+            "--control-plane-report-json",
+            str(report),
+        ]
+    )
+
+    assert exit_code == 1
+    assert report.is_file()

@@ -322,13 +322,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--issue", type=int, required=True, help="GitHub issue number.")
     parser.add_argument("--job-id", required=True, help="SLURM job id or external run id.")
     parser.add_argument("--job-state", required=True, help="Observed SLURM job state.")
-    parser.add_argument(
+    artifact_source = parser.add_mutually_exclusive_group()
+    artifact_source.add_argument(
         "--expected-artifact",
         action="append",
         default=[],
         help="Required artifact path, relative to repo root unless absolute. May be repeated.",
     )
-    parser.add_argument(
+    artifact_source.add_argument(
         "--control-plane-run-root",
         type=Path,
         help=(

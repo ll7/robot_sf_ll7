@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 from scripts.tools import slurm_job_finalize
 
 if TYPE_CHECKING:
@@ -191,6 +193,31 @@ def test_cli_returns_nonzero_for_missing_artifacts(tmp_path: Path) -> None:
     assert exit_code == 1
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["classification"] == "missing_artifacts"
+
+
+def test_cli_rejects_ambiguous_artifact_sources(tmp_path: Path) -> None:
+    """Callers should choose manual artifacts or the control-plane run root, not both."""
+    output = tmp_path / "ambiguous.json"
+
+    with pytest.raises(SystemExit):
+        slurm_job_finalize.main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--issue",
+                "3075",
+                "--job-id",
+                "132",
+                "--job-state",
+                "COMPLETED",
+                "--expected-artifact",
+                "output/slurm/job-132/summary.json",
+                "--control-plane-run-root",
+                "output/slurm/job-132",
+                "--output",
+                str(output),
+            ]
+        )
 
 
 def test_control_plane_contract_requires_full_run_artifact_set(tmp_path: Path) -> None:

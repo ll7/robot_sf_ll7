@@ -63,6 +63,8 @@ The issue-state snapshot is a compact JSON list or object with `number`, `state`
 The report detects closed issues with nonterminal cards, closed blockers with blocked cards,
 state-label disagreement, missing config/input paths, pending artifact aliases, and expected
 artifacts that still need durable references.
+This v2 control-plane guidance is part of the #3057 research-control-plane work and is exercised by
+`tests/tools/test_validate_experiment_registry.py`.
 
 Use `paper_relevance: exploratory` for local pilots and early research runs. Use
 `paper_relevance: paper_facing` only when every local `output/` artifact listed in `outputs` or

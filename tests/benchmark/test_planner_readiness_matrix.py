@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).parents[2]
@@ -39,8 +41,23 @@ def _assert_tracked_source_file(path_str: str, *, label: str) -> None:
     """Require matrix source references to resolve to checked-in files."""
     path = Path(path_str)
     assert not path.is_absolute(), f"{label}: {path_str}"
+    assert ".." not in path.parts, f"{label}: {path_str}"
     assert not path.parts or path.parts[0] != "output", f"{label}: {path_str}"
     assert (REPO_ROOT / path).is_file(), f"{label}: {path_str}"
+
+
+def _assert_validation_command(command: str, *, label: str) -> None:
+    """Require matrix validation commands to point at checked-in pytest targets."""
+    parts = shlex.split(command)
+    assert parts[:3] == ["uv", "run", "pytest"], f"{label}: {command}"
+    assert len(parts) >= 4, f"{label}: {command}"
+    for target in parts[3:]:
+        if target.startswith("-"):
+            continue
+        target_path = Path(target.split("::", maxsplit=1)[0])
+        assert not target_path.is_absolute(), f"{label}: {command}"
+        assert ".." not in target_path.parts, f"{label}: {command}"
+        assert (REPO_ROOT / target_path).exists(), f"{label}: {command}"
 
 
 def _load_matrix() -> dict[str, Any]:
@@ -60,7 +77,7 @@ def test_planner_readiness_matrix_covers_issue_3060_families() -> None:
     assert matrix["schema_version"] == "planner-readiness-matrix.v1"
     assert matrix["issue"] == 3060
     assert REQUIRED_FAMILIES <= families
-    assert {"goal", "random", "social_force", "orca", "ppo", "risk_dwa"} <= planner_ids
+    assert {"goal", "random", "social_force", "orca", "hrvo", "ppo", "risk_dwa"} <= planner_ids
     assert {"hybrid_rule_local_planner", "hybrid_portfolio"} <= planner_ids
 
 
@@ -93,3 +110,20 @@ def test_planner_readiness_matrix_source_paths_exist_and_avoid_output_dependenci
     for row in matrix["rows"]:
         for path in row["source_paths"]:
             _assert_tracked_source_file(path, label=row["planner_id"])
+
+
+def test_planner_readiness_matrix_source_path_guard_rejects_traversal() -> None:
+    """Source references should not escape the repository-relative path contract."""
+    with pytest.raises(AssertionError, match=r"\.\./pyproject.toml"):
+        _assert_tracked_source_file("../pyproject.toml", label="escape")
+
+    with pytest.raises(AssertionError, match=r"configs/\.\./pyproject.toml"):
+        _assert_tracked_source_file("configs/../pyproject.toml", label="escape")
+
+
+def test_planner_readiness_matrix_validation_commands_reference_existing_pytest_targets() -> None:
+    """Validation commands should stay attached to checked-in pytest targets."""
+    matrix = _load_matrix()
+
+    for row in matrix["rows"]:
+        _assert_validation_command(row["validation_command"], label=row["planner_id"])

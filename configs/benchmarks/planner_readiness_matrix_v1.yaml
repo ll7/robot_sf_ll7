@@ -107,6 +107,26 @@ rows:
     reason: ORCA is baseline-ready when the vendored RVO2 dependency is available; fallback rows remain exclusions.
     validation_command: uv run pytest tests/benchmark/test_algorithm_metadata_contract.py
 
+  - planner_id: hrvo
+    family: reciprocal_avoidance
+    representative_entrypoint: configs/algos/hrvo_camera_ready.yaml
+    tier: experimental
+    requires_explicit_opt_in: true
+    execution_mode: adapter
+    readiness_status: degraded
+    availability_status: available
+    row_status: degraded
+    counts_as_success_evidence: false
+    artifact_dependency: external_pointer
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - robot_sf/planner/socnav.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/algos/hrvo_camera_ready.yaml
+      - tests/benchmark/test_algorithm_metadata_contract.py
+    reason: Local HRVO is implemented for controlled experimental comparisons, but remains testing-only and not headline-ready.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_metadata_contract.py
+
   - planner_id: ppo
     family: ppo
     representative_entrypoint: configs/baselines/ppo_15m_grid_socnav.yaml

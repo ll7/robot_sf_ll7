@@ -260,7 +260,14 @@ def test_multi_robot_env_step_reset_render_and_step_agents(monkeypatch) -> None:
         reset_obs, reset_info = env.reset(seed=13)
         assert OBS_DRIVE_STATE in reset_obs
         assert OBS_RAYS in reset_obs
-        assert reset_info == {}
+        assert reset_info == {
+            "map_id": "uni_campus_big",
+            "sim_time_in_secs": 5.0,
+            "time_per_step_in_secs": 0.1,
+            "max_sim_steps": 50,
+            "num_robots": 2,
+            "seed": 13,
+        }
         assert env.applied_seed == 13
 
         env.render()

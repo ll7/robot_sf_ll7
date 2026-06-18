@@ -24,7 +24,11 @@ try:
 except ImportError:  # pragma: no cover - envs without PyTorch
     torch = None  # type: ignore[assignment]
 
-from robot_sf.baselines.interface import Observation
+from robot_sf.baselines.interface import (
+    Observation,
+    is_observation_mapping,
+    observation_from_mapping,
+)
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
 from robot_sf.common.math_utils import wrap_angle_pi
@@ -204,8 +208,8 @@ class DrlVoPlanner:
         Returns:
             Action dictionary in the configured action space.
         """
-        if isinstance(obs, dict):
-            obs = Observation(**obs)  # type: ignore[arg-type]
+        if is_observation_mapping(obs):
+            obs = observation_from_mapping(obs)
         if not isinstance(obs, Observation):
             raise TypeError(f"Unsupported observation type: {type(obs)}")
 

@@ -16,7 +16,11 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.baselines.interface import Observation
+from robot_sf.baselines.interface import (
+    Observation,
+    is_observation_mapping,
+    observation_from_mapping,
+)
 
 
 @dataclass
@@ -132,8 +136,8 @@ class DRMPCPlanner:
         Returns:
             A dictionary action in either velocity or unicycle format.
         """
-        if isinstance(obs, dict):
-            obs = Observation(**obs)  # type: ignore[arg-type]
+        if is_observation_mapping(obs):
+            obs = observation_from_mapping(obs)
 
         if self._policy is None:
             self._policy = self._build_policy()

@@ -27,7 +27,11 @@ from pysocialforce.config import (
 )
 from pysocialforce.config import SocialForceConfig as PySFSocialForceConfig
 
-from robot_sf.baselines.interface import Observation
+from robot_sf.baselines.interface import (
+    Observation,
+    is_observation_mapping,
+    observation_from_mapping,
+)
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 if TYPE_CHECKING:
@@ -256,8 +260,8 @@ class SocialForcePlanner(BasePolicy):
         Returns:
             Action dict in configured action space.
         """
-        if isinstance(obs, dict):
-            obs = Observation(**obs)  # type: ignore[arg-type]
+        if is_observation_mapping(obs):
+            obs = observation_from_mapping(obs)
         assert isinstance(obs, Observation)
 
         robot_pos = np.asarray(obs.robot["position"], dtype=float)

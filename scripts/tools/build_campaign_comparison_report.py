@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from collections import Counter
+import sys
 from itertools import combinations
 from pathlib import Path
 from typing import Any
@@ -76,7 +76,7 @@ def _available_metrics(frame: pd.DataFrame) -> list[str]:
     for metric in METRIC_COLUMNS:
         if metric not in frame.columns:
             continue
-        if any(_finite_float(value) is not None for value in frame[metric].tolist()):
+        if frame[metric].map(_finite_float).notna().any():
             metrics.append(metric)
     return metrics
 
@@ -120,8 +120,8 @@ def _metric_summary(values: list[Any]) -> dict[str, Any]:
 
 def _status_counts(rows: pd.DataFrame) -> dict[str, int]:
     """Count row statuses in a stable order."""
-    counts = Counter(str(value) for value in rows["row_status"].tolist())
-    return {status: counts[status] for status in sorted(counts)}
+    counts = rows["row_status"].astype(str).value_counts().to_dict()
+    return {status: int(counts[status]) for status in sorted(counts)}
 
 
 def _summarize_groups(
@@ -266,6 +266,18 @@ def _statistical_hooks(
     return hooks
 
 
+def _report_result_store_label(result_store: Path, input_label: str | None) -> str:
+    """Return a report-safe result-store label."""
+    if input_label:
+        return "transient_local_result_store"
+    if not result_store.is_absolute():
+        return result_store.as_posix()
+    try:
+        return result_store.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return "absolute_result_store_path_redacted"
+
+
 def build_report(
     result_store: Path,
     *,
@@ -291,9 +303,7 @@ def build_report(
             "before benchmark or paper-facing claims"
         ),
         "input": {
-            "result_store": (
-                "transient_local_result_store" if input_label else result_store.as_posix()
-            ),
+            "result_store": _report_result_store_label(result_store, input_label),
             "durable_input_label": input_label,
             "study_id": summary.get("study_id"),
             "source_commit": summary.get("source_commit"),
@@ -426,11 +436,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--min-sample",
-        type=int,
+        type=_positive_int,
         default=10,
         help="Minimum per-planner denominator before pairwise hooks pass the sample gate.",
     )
     return parser.parse_args(argv)
+
+
+def _positive_int(value: str) -> int:
+    """Parse a positive integer for argparse."""
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--min-sample must be a positive integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("--min-sample must be a positive integer")
+    return parsed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -443,7 +464,7 @@ def main(argv: list[str] | None = None) -> int:
             min_sample=args.min_sample,
         )
     except ValueError as exc:
-        print(str(exc))
+        print(str(exc), file=sys.stderr)
         return 1
     _write_outputs(payload, output_json=args.output_json, output_md=args.output_md)
     return 0

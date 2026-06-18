@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
+
+import pytest
 
 from scripts.tools.build_campaign_comparison_report import (
     build_markdown,
@@ -44,6 +45,7 @@ def test_build_report_surfaces_uncertainty_denominators_and_caveats(tmp_path: Pa
         payload["input"]["durable_input_label"]
         == "tests/fixtures/campaign_result_store/issue_3063_episode_rows.json"
     )
+    assert payload["input"]["result_store"] == "transient_local_result_store"
     assert payload["row_status"]["benchmark_valid_episode_count"] == 2
     assert payload["row_status"]["excluded_or_limited_episode_count"] == 2
     caveats = {row["row_status"]: row["interpretation"] for row in payload["row_status"]["caveats"]}
@@ -74,32 +76,29 @@ def test_build_markdown_includes_visual_summaries_and_statistical_hooks(tmp_path
 
 def test_main_writes_json_and_markdown_outputs(
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     """CLI should write both report artifacts from a valid result store."""
     result_store = tmp_path / "result-store"
     _write_fixture_store(result_store)
     output_json = tmp_path / "report.json"
     output_md = tmp_path / "report.md"
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "build_campaign_comparison_report.py",
-            "--result-store",
-            str(result_store),
-            "--output-json",
-            str(output_json),
-            "--output-md",
-            str(output_md),
-            "--input-label",
-            "tests/fixtures/campaign_result_store/issue_3063_episode_rows.json",
-            "--min-sample",
-            "1",
-        ],
+    assert (
+        main(
+            [
+                "--result-store",
+                str(result_store),
+                "--output-json",
+                str(output_json),
+                "--output-md",
+                str(output_md),
+                "--input-label",
+                "tests/fixtures/campaign_result_store/issue_3063_episode_rows.json",
+                "--min-sample",
+                "1",
+            ]
+        )
+        == 0
     )
-
-    assert main() == 0
 
     payload = json.loads(output_json.read_text(encoding="utf-8"))
     assert payload["input"]["study_id"] == "issue-3063-fixture"
@@ -110,22 +109,56 @@ def test_main_writes_json_and_markdown_outputs(
     assert "Campaign Comparison Report" in output_md.read_text(encoding="utf-8")
 
 
-def test_main_fails_closed_for_incomplete_result_store(tmp_path: Path, monkeypatch) -> None:
+def test_main_fails_closed_for_incomplete_result_store(tmp_path: Path) -> None:
     """Invalid result-store inputs should not produce ad hoc reports."""
     incomplete = tmp_path / "incomplete"
     incomplete.mkdir()
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "build_campaign_comparison_report.py",
-            "--result-store",
-            str(incomplete),
-            "--output-json",
-            str(tmp_path / "report.json"),
-            "--output-md",
-            str(tmp_path / "report.md"),
-        ],
+    output_json = tmp_path / "report.json"
+    output_md = tmp_path / "report.md"
+
+    assert (
+        main(
+            [
+                "--result-store",
+                str(incomplete),
+                "--output-json",
+                str(output_json),
+                "--output-md",
+                str(output_md),
+            ]
+        )
+        == 1
     )
 
-    assert main() == 1
+    assert not output_json.exists()
+    assert not output_md.exists()
+
+
+def test_main_rejects_non_positive_min_sample(tmp_path: Path) -> None:
+    """Pairwise hook sample gates should reject nonsensical thresholds."""
+    result_store = tmp_path / "result-store"
+    _write_fixture_store(result_store)
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--result-store",
+                str(result_store),
+                "--output-json",
+                str(tmp_path / "report.json"),
+                "--output-md",
+                str(tmp_path / "report.md"),
+                "--min-sample",
+                "0",
+            ]
+        )
+
+
+def test_build_report_redacts_external_absolute_result_store_path(tmp_path: Path) -> None:
+    """Reports should not persist host-specific absolute paths."""
+    result_store = tmp_path / "result-store"
+    _write_fixture_store(result_store)
+
+    payload = build_report(result_store, min_sample=1)
+
+    assert payload["input"]["result_store"] == "absolute_result_store_path_redacted"

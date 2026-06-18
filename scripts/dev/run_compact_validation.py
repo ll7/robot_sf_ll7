@@ -15,9 +15,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "compact_validation_summary.v1"
+SCHEMA_VERSION = "compact_validation_summary.v2"
 DEFAULT_EXCERPT_LINES = 40
 DEFAULT_EXCERPT_WIDTH = 240
+TIMEOUT_EXIT_CODE = 124
 
 FAILURE_PATTERNS = re.compile(
     r"(FAILED|ERROR|FAILURES|Traceback|AssertionError|Exception|short test summary|"
@@ -48,6 +49,15 @@ def _now_slug() -> str:
 def _quote_command(command: list[str]) -> str:
     """Return a shell-readable representation of *command*."""
     return " ".join(shlex.quote(part) for part in command)
+
+
+def _decode_output(output: bytes | str | None) -> str:
+    """Decode subprocess output that may be bytes, text, or absent."""
+    if output is None:
+        return ""
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return output
 
 
 def _failure_lines(text: str, *, limit: int, width: int) -> tuple[list[str], bool]:
@@ -84,6 +94,7 @@ def run_compact_validation(
     excerpt_lines: int = DEFAULT_EXCERPT_LINES,
     excerpt_width: int = DEFAULT_EXCERPT_WIDTH,
     cwd: Path | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Run *command*, save full output, and return a compact summary payload."""
     if not command:
@@ -96,10 +107,29 @@ def run_compact_validation(
     summary_path = artifact_dir / f"{base}.summary.json"
 
     started = time.monotonic()
-    result = subprocess.run(command, cwd=cwd, capture_output=True, check=False)
+    timed_out = False
+    timeout_message = ""
+    cleanup_status = "not_needed"
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
+        returncode = result.returncode
+        stdout = _decode_output(result.stdout)
+        stderr = _decode_output(result.stderr)
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        returncode = TIMEOUT_EXIT_CODE
+        cleanup_status = "direct_process_killed_and_waited"
+        stdout = _decode_output(exc.stdout)
+        stderr = _decode_output(exc.stderr)
+        timeout_message = f"Command timed out after {exc.timeout:g} seconds."
+        stderr = f"{stderr.rstrip()}\n{timeout_message}\n" if stderr else f"{timeout_message}\n"
     elapsed = time.monotonic() - started
-    stdout = result.stdout.decode("utf-8", errors="replace")
-    stderr = result.stderr.decode("utf-8", errors="replace")
     combined = stdout + stderr
     log_path.write_text(combined, encoding="utf-8", errors="replace")
     excerpt, truncated = _failure_lines(combined, limit=excerpt_lines, width=excerpt_width)
@@ -108,8 +138,12 @@ def run_compact_validation(
         "command": command,
         "command_display": _quote_command(command),
         "cwd": str(cwd),
-        "exit_code": result.returncode,
+        "exit_code": returncode,
         "elapsed_seconds": round(elapsed, 3),
+        "timed_out": timed_out,
+        "timeout_seconds": timeout_seconds,
+        "timeout_message": timeout_message,
+        "cleanup_status": cleanup_status,
         "log_path": str(log_path),
         "summary_path": str(summary_path),
         "excerpt_line_count": len(excerpt),
@@ -141,6 +175,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=DEFAULT_EXCERPT_WIDTH,
         help="Maximum characters per excerpt line.",
     )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=None,
+        help="Abort the wrapped command after this many seconds and emit a timeout summary.",
+    )
     parser.add_argument("--json", action="store_true", help="Print the compact summary as JSON.")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Command to run after --.")
     args = parser.parse_args(argv)
@@ -152,6 +192,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         parser.error("--excerpt-lines must be positive")
     if args.excerpt_width < 20:
         parser.error("--excerpt-width must be at least 20")
+    if args.timeout_seconds is not None and args.timeout_seconds <= 0:
+        parser.error("--timeout-seconds must be positive")
     return args
 
 
@@ -160,6 +202,8 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
     print(f"Command: {summary['command_display']}")
     print(f"Exit code: {summary['exit_code']}")
     print(f"Elapsed seconds: {summary['elapsed_seconds']}")
+    if summary.get("timed_out"):
+        print(f"Timed out: {summary['timeout_seconds']} seconds")
     print(f"Full log: {summary['log_path']}")
     print(f"Summary JSON: {summary['summary_path']}")
     if summary["failing_node_ids"]:
@@ -181,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         artifact_dir=args.artifact_dir,
         excerpt_lines=args.excerpt_lines,
         excerpt_width=args.excerpt_width,
+        timeout_seconds=args.timeout_seconds,
     )
     if args.json:
         print(json.dumps(summary, indent=2, sort_keys=True))

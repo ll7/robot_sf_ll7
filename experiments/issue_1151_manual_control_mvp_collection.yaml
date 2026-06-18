@@ -35,7 +35,8 @@ expected_artifacts:
     path: output/manual_control/issue1151_mvp_sessions/bc_samples.jsonl
 evidence_grade: observed
 paper_relevance: exploratory
-status: blocked_on_issue_1219
+status: completed
 notes: >
-  #1151 remains a parent epic. This record tracks the future collection
-  protocol, while #1219 owns the executable runner.
+  #1151 is closed. Child issue #1219 is also closed with PR #1228 merged (local
+  Pygame runner surfaces in place), so this card no longer remains blocked on the
+  original child implementation dependency.

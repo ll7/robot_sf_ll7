@@ -45,3 +45,6 @@ status: blocked_on_slurm
 notes: >
   Nominal escalation is disallowed until the smoke result records success, collision, residual
   clipping, guard veto/fallback rate, fallback/degraded status, and durable artifact pointer status.
+  2026-06-17 live state confirms lineage validation succeeded (`status: valid`) and that
+  host-side submission is blocked by missing Slurm tooling (`sbatch` unavailable), so this
+  experiment remains blocked on execution.

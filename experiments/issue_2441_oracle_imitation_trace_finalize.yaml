@@ -1,0 +1,44 @@
+schema_version: experiment-record.v1
+experiment_id: issue_2441_oracle_imitation_trace_finalize
+issue: 2441
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/2441
+question: >
+  Can #1470's oracle-imitation trace collection be submitted and finalized on
+  Slurm with durable artifact handoff for downstream dataset materialization?
+hypothesis: >
+  Running the #2441 submission and finalization lane should produce a durable
+  trace-collection bundle without changing the split/leakage contract from
+  #1397.
+config:
+  - configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+  - docs/context/issue_1397_oracle_imitation_launch_packet.md
+  - docs/context/policy_search/contracts/oracle_imitation_dataset_split.md
+command: |
+  uv run python scripts/validation/validate_oracle_imitation_launch_packet.py \
+    --config configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml \
+    --json
+  # On a Slurm-capable worker: submit the #1470 collection path, run the
+  # corresponding finalizer for durable artifact handoff, then record the artifact
+  # bundle for downstream materialization.
+inputs:
+  - path: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+  - path: docs/context/issue_1397_oracle_imitation_launch_packet.md
+  - path: docs/context/policy_search/contracts/oracle_imitation_dataset_split.md
+outputs:
+  - path: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/
+    durable_reference: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/
+    evidence_role: durable trace handoff bundle
+expected_artifacts:
+  - name: trace_collection_bundle
+    path: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/
+    durable_reference_required: true
+  - name: artifact_checksum_manifest
+    path: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/SHA256SUMS
+    durable_reference_required: true
+evidence_grade: observed
+paper_relevance: exploratory
+status: blocked_on_slurm
+notes: >
+  #2441 tracks the still-open submission/finalization lane for #1470. Merged PR
+  #2989 is the current evidence handoff path; downstream dataset materialization
+  and split-leakage promotion remain outside this card.

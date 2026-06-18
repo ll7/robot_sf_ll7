@@ -45,8 +45,10 @@ expected_artifacts:
     durable_reference_required: true
 evidence_grade: observed
 paper_relevance: paper_candidate
-status: in_progress_slurm
+status: closed
 notes: >
-  Issue #1108 is execution-gated on Auxme/SLURM and durable artifact promotion.
-  Local output paths are not paper evidence until replaced by W&B, registry, or
-  release pointers.
+  #1108 is closed and was classified by #1961 as `rerun_required`. The preserved
+  rescue chain recorded durable references only for a partial artifact set:
+  docs/context/issue_1961_bc_warm_start_recoverability.md and
+  docs/context/evidence/issue_1977_bc_warm_start_cancelled_2026-06-02/artifact_manifest.md.
+  The issue explicitly says this trail is not a valid base for fresh training.

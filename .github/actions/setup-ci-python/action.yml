@@ -35,7 +35,7 @@ runs:
         CI_STEP_TIMEOUT_SECONDS: "1200"
       run: >
         bash scripts/dev/ci_step_timer.sh "System packages for headless"
-        bash -lc
+        bash -c
         'sudo apt-get update && sudo apt-get install -y --no-install-recommends libglib2.0-0 libgl1 fonts-dejavu-core jq'
 
     - name: Free runner disk space

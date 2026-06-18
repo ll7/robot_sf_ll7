@@ -44,6 +44,15 @@ superseded
 stopped_by_gate
 ```
 
+Derived GitHub state labels:
+
+| Record state | Derived issue label |
+| --- | --- |
+| `idea`, `protocol_frozen`, `implementation_ready`, `preflight_passed` | `state:ready` |
+| `submitted`, `running`, `finalized`, `evidence_promoted`, `claim_reviewed` | `state:running` |
+| `blocked_external`, `invalid_execution`, `negative_result`, `null_result`, `superseded`, `stopped_by_gate` | `state:blocked` |
+| `released` | remove `state:*` labels |
+
 Closed GitHub issues are historical truth unless a new follow-up issue is opened. Stale cards
 should be corrected or superseded through a PR rather than silently treated as active work.
 Local `output/` paths and `:pending` artifact aliases are not durable evidence.
@@ -61,8 +70,9 @@ uv run python scripts/tools/validate_experiment_registry.py \
 
 The issue-state snapshot is a compact JSON list or object with `number`, `state`, and `labels`.
 The report detects closed issues with nonterminal cards, closed blockers with blocked cards,
-state-label disagreement, missing config/input paths, pending artifact aliases, and expected
-artifacts that still need durable references.
+dry-run derived `state:*` label updates, missing config/input paths, pending artifact aliases, and
+expected artifacts that still need durable references. It reports `labels_to_add` and
+`labels_to_remove` but never mutates GitHub.
 This v2 control-plane guidance is part of the #3057 research-control-plane work and is exercised by
 `tests/tools/test_validate_experiment_registry.py`.
 

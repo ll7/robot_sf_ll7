@@ -40,6 +40,8 @@ def _scenario_inventory() -> set[str]:
     inventory: set[str] = set()
     for path in SCENARIO_ROOT.rglob("*.yaml"):
         data = _load_yaml(path)
+        if isinstance(data, dict) and isinstance(data.get("name"), str):
+            inventory.add(data["name"])
         scenarios = data.get("scenarios", []) if isinstance(data, dict) else data
         if not isinstance(scenarios, list):
             continue

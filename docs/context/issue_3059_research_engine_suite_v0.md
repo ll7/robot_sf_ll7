@@ -3,6 +3,13 @@
 Issue: [#3059](https://github.com/ll7/robot_sf_ll7/issues/3059)
 Status: proposal manifest; not benchmark evidence.
 
+Artifacts:
+- Manifest:
+  [`configs/benchmarks/issue_3059_research_engine_suite_v0.yaml`](../../configs/benchmarks/issue_3059_research_engine_suite_v0.yaml)
+- Contract test:
+  [`tests/benchmark/test_issue_3059_research_engine_suite.py`](../../tests/benchmark/test_issue_3059_research_engine_suite.py)
+- Catalog entry: [`docs/context/catalog.yaml`](catalog.yaml)
+
 ## Purpose
 
 `configs/benchmarks/issue_3059_research_engine_suite_v0.yaml` defines a compact six-family

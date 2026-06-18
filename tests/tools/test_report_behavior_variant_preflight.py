@@ -103,3 +103,25 @@ def test_render_markdown_separates_diagnostic_and_unavailable_rows(tmp_path: Pat
     assert "`diagnostic_only`" in text
     assert "`not_available`" in text
     assert "must not be counted as benchmark-success evidence" in text
+
+
+def test_null_ammv_result_is_treated_as_missing_result_payload(tmp_path: Path) -> None:
+    """Evidence summaries with a null result block should not crash report generation."""
+    _minimal_repo(tmp_path)
+    first_evidence = tmp_path / report.AMMV_EVIDENCE[0]
+    first_evidence.write_text('{"schema_version": "test", "result": null}\n', encoding="utf-8")
+
+    payload = report.build_report(repo_root=tmp_path)
+
+    ammv_summary = _row(payload, "ammv_social_force")["same_seed_evidence_summary"]
+    assert ammv_summary["all_available"] is True
+    assert ammv_summary["behavioral_delta_found"] is False
+
+
+def test_invalid_source_date_epoch_falls_back_to_current_time(monkeypatch) -> None:
+    """Malformed SOURCE_DATE_EPOCH values should not crash the CLI."""
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "")
+
+    generated_at = report._generated_at()
+
+    assert generated_at.endswith("Z")

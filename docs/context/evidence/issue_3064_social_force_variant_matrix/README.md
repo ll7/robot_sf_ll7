@@ -1,7 +1,7 @@
 # Issue #3064 Behavior Variant Preflight
 
 - Generated at: `2026-06-18T22:55:00Z`
-- Git head: `df907a0e77ba8d0fda38081cc58d5e403459e10d`
+- Git head: `736de7781d1ccdf214866a3ea9c48612a7994bff`
 - Social-Navigation-PyEnvs root: `<local-artifact-root>/repos/Social-Navigation-PyEnvs`
 - Claim boundary: Preflight/inventory evidence only. Rows marked diagnostic_only, not_available, fallback, or degraded must not be counted as benchmark-success evidence.
 

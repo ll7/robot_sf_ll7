@@ -127,7 +127,10 @@ def _git_head(repo_root: Path) -> str:
 def _generated_at() -> str:
     epoch = os.environ.get("SOURCE_DATE_EPOCH")
     if epoch is not None:
-        return datetime.fromtimestamp(int(epoch), UTC).isoformat().replace("+00:00", "Z")
+        try:
+            return datetime.fromtimestamp(int(epoch), UTC).isoformat().replace("+00:00", "Z")
+        except ValueError:
+            pass
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
@@ -185,7 +188,7 @@ def _load_ammv_result(repo_root: Path, evidence_paths: tuple[Path, ...]) -> dict
             loaded.append({"path": path.as_posix(), "status": "missing"})
             continue
         payload = json.loads(full_path.read_text(encoding="utf-8"))
-        result = payload.get("result", {})
+        result = payload.get("result") or {}
         loaded.append(
             {
                 "path": path.as_posix(),

@@ -1,7 +1,7 @@
 {
   "claim_boundary": "Preflight/inventory evidence only. Rows marked diagnostic_only, not_available, fallback, or degraded must not be counted as benchmark-success evidence.",
   "generated_at": "2026-06-18T22:55:00Z",
-  "git_head": "df907a0e77ba8d0fda38081cc58d5e403459e10d",
+  "git_head": "736de7781d1ccdf214866a3ea9c48612a7994bff",
   "issue": 3064,
   "rows": [
     {

@@ -59,6 +59,8 @@ TERMINAL_STATES = {
 VALID_RECORD_STATES = ACTIVE_STATES | TERMINAL_STATES
 LEGACY_TERMINAL_STATUSES = TERMINAL_STATES | {"completed", "released", "closed"}
 RUNNING_LABEL = "state:running"
+PROPOSAL_RECORD_STATES = {"idea", "proposal"}
+ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z0-9][A-Za-z0-9_.:/-]*>")
 
 
 def validate_registry(registry_path: Path) -> list[str]:
@@ -191,6 +193,7 @@ def _validate_record(
             _validate_paper_facing_artifact(artifact, display_path, errors)
         for artifact in _iter_artifact_items(record.get("expected_artifacts")):
             _validate_paper_facing_artifact(artifact, display_path, errors)
+    _validate_actionable_artifact_policy(record, display_path, errors)
 
 
 def _validate_paper_facing_artifact(
@@ -208,6 +211,45 @@ def _validate_paper_facing_artifact(
             f"{display_path}: paper-facing record references local-only output/ artifact "
             f"without durable_reference: {artifact_path}"
         )
+
+
+def _validate_actionable_artifact_policy(
+    record: Mapping[str, Any],
+    display_path: str,
+    errors: list[str],
+) -> None:
+    """Reject actionable records that still point at unresolved artifact placeholders."""
+    if not _is_actionable_record(record):
+        return
+
+    for artifact in _iter_artifact_items(record.get("outputs")):
+        _validate_actionable_required_durable_reference(artifact, display_path, errors)
+    for artifact in _iter_artifact_items(record.get("expected_artifacts")):
+        _validate_actionable_required_durable_reference(artifact, display_path, errors)
+
+    for field_name, value in _iter_actionable_placeholder_values(record):
+        if _has_unresolved_artifact_placeholder(value):
+            errors.append(
+                f"{display_path}: actionable record contains unresolved placeholder in "
+                f"{field_name}: {value}"
+            )
+
+
+def _validate_actionable_required_durable_reference(
+    artifact: Mapping[str, Any],
+    display_path: str,
+    errors: list[str],
+) -> None:
+    """Reject required durable artifacts that do not name the durable reference."""
+    if artifact.get("durable_reference_required") is not True:
+        return
+    if not _is_missing(artifact.get("durable_reference")):
+        return
+    artifact_name = artifact.get("name") or artifact.get("path") or "<unnamed>"
+    errors.append(
+        f"{display_path}: actionable record requires durable_reference for artifact "
+        f"{artifact_name}"
+    )
 
 
 def _control_plane_findings_for_record(
@@ -383,6 +425,16 @@ def _is_terminal_record_state(record: Mapping[str, Any]) -> bool:
     return state in LEGACY_TERMINAL_STATUSES
 
 
+def _is_actionable_record(record: Mapping[str, Any]) -> bool:
+    """Return whether a record claims it is ready for concrete execution or evidence use."""
+    state = _record_state(record)
+    if _is_terminal_record_state(record):
+        return False
+    if _looks_blocked(state):
+        return False
+    return state not in PROPOSAL_RECORD_STATES
+
+
 def _looks_blocked(state: str) -> bool:
     """Return whether a state/status token is a blocked nonterminal."""
     return "blocked" in state
@@ -427,6 +479,29 @@ def _iter_config_paths(record: Mapping[str, Any]) -> Iterable[Path]:
             yield Path(raw_path)
 
 
+def _iter_actionable_placeholder_values(record: Mapping[str, Any]) -> Iterable[tuple[str, str]]:
+    """Yield command and artifact path values that must be concrete for actionable records."""
+    command = record.get("command")
+    if isinstance(command, str):
+        yield "command", command
+    for field_name in ("config", "inputs", "outputs", "expected_artifacts"):
+        for path in _iter_path_strings(record.get(field_name)):
+            yield field_name, path
+
+
+def _iter_path_strings(value: Any) -> Iterable[str]:
+    """Yield path strings from scalar, list, and mapping path fields."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, Mapping):
+        path = value.get("path")
+        if isinstance(path, str):
+            yield path
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_path_strings(child)
+
+
 def _skip_path_existence_check(path: str) -> bool:
     """Return whether a path is intentionally not checked as repo-local input."""
     return (
@@ -451,6 +526,11 @@ def _iter_string_values(value: Any) -> Iterable[str]:
 def _is_pending_artifact_alias(value: str) -> bool:
     """Return whether a string looks like an unresolved artifact alias."""
     return "wandb-artifact://" in value and (":pending" in value or "/pending/" in value)
+
+
+def _has_unresolved_artifact_placeholder(value: str) -> bool:
+    """Return whether a command or path still contains a placeholder artifact token."""
+    return bool(ANGLE_PLACEHOLDER_RE.search(value)) or _is_pending_artifact_alias(value)
 
 
 def _is_closed_issue_state(value: str | None) -> bool:

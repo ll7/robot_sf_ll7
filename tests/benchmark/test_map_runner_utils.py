@@ -4197,6 +4197,69 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
     assert record["algorithm_metadata"]["benchmark_track"]["benchmark_track"] == "lidar"
 
 
+def test_run_map_job_worker_normalizes_optional_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit None worker params should use defaults without replacing valid falsy values."""
+    captured: list[dict[str, object]] = []
+
+    def _fake_run_map_episode(_scenario, _seed, **kwargs):
+        """Capture worker-normalized keyword arguments."""
+        captured.append(dict(kwargs))
+        return {"episode_id": f"captured-{len(captured)}"}
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_episode", _fake_run_map_episode)
+
+    _run_map_job_worker(
+        (
+            {"name": "none-defaults"},
+            1,
+            {
+                "scenario_path": "configs/scenarios/demo.yaml",
+                "algo": None,
+                "record_forces": None,
+                "ped_impact_radius_m": None,
+                "ped_impact_window_steps": None,
+            },
+        )
+    )
+    _run_map_job_worker(
+        (
+            {"name": "falsy-values"},
+            2,
+            {
+                "scenario_path": "configs/scenarios/demo.yaml",
+                "algo": "",
+                "record_forces": False,
+                "ped_impact_radius_m": 0.0,
+                "ped_impact_window_steps": 0,
+            },
+        )
+    )
+
+    assert captured[0]["algo"] == "goal"
+    assert captured[0]["record_forces"] is True
+    assert captured[0]["ped_impact_radius_m"] == 2.0
+    assert captured[0]["ped_impact_window_steps"] == 5
+    assert captured[1]["algo"] == ""
+    assert captured[1]["record_forces"] is False
+    assert captured[1]["ped_impact_radius_m"] == 0.0
+    assert captured[1]["ped_impact_window_steps"] == 0
+
+
+def test_run_map_job_worker_requires_scenario_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing serialized scenario paths should fail with an actionable error."""
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._run_map_episode",
+        lambda *_args, **_kwargs: {"episode_id": "unused"},
+    )
+
+    with pytest.raises(ValueError, match="scenario_path is required"):
+        _run_map_job_worker(({"name": "missing-path"}, 1, {"scenario_path": None}))
+
+
 def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

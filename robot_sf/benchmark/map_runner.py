@@ -123,6 +123,7 @@ from robot_sf.benchmark.map_runner_trace import (
     _single_pedestrian_vru_metadata,
     _trace_pedestrians,
 )
+from robot_sf.benchmark.map_runner_worker import execute_map_job as _execute_map_job
 from robot_sf.benchmark.metrics import (
     EpisodeData,
     compute_all_metrics,
@@ -3415,32 +3416,7 @@ def _run_map_job_worker(
     Returns:
         dict[str, Any]: Episode record returned by ``_run_map_episode``.
     """
-    scenario, seed, params = job
-    return _run_map_episode(
-        scenario,
-        seed,
-        horizon=params.get("horizon"),
-        dt=params.get("dt"),
-        record_forces=bool(params.get("record_forces", True)),
-        snqi_weights=params.get("snqi_weights"),
-        snqi_baseline=params.get("snqi_baseline"),
-        algo=str(params.get("algo", "goal")),
-        algo_config=params.get("algo_config"),
-        algo_config_path=params.get("algo_config_path"),
-        scenario_path=Path(params.get("scenario_path")),
-        adapter_impact_eval=bool(params.get("adapter_impact_eval", False)),
-        experimental_ped_impact=bool(params.get("experimental_ped_impact", False)),
-        ped_impact_radius_m=float(params.get("ped_impact_radius_m", 2.0)),
-        ped_impact_window_steps=int(params.get("ped_impact_window_steps", 5)),
-        observation_mode=params.get("observation_mode"),
-        observation_level=params.get("observation_level"),
-        benchmark_track=params.get("benchmark_track"),
-        track_schema_version=params.get("track_schema_version"),
-        observation_noise=params.get("observation_noise"),
-        synthetic_actuation_profile=params.get("synthetic_actuation_profile"),
-        latency_stress_profile=params.get("latency_stress_profile"),
-        record_simulation_step_trace=bool(params.get("record_simulation_step_trace", False)),
-    )
+    return _execute_map_job(job, run_map_episode=_run_map_episode)
 
 
 def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915

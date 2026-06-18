@@ -1,4 +1,4 @@
-# Issue #3061 Social-Compliance Metric Contract
+# Issue #3061 Social-Compliance Metric Contract (2026-06-18)
 
 Issue: [#3061](https://github.com/ll7/robot_sf_ll7/issues/3061)
 

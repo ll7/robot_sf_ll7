@@ -195,29 +195,15 @@ class MultiRobotEnv(MultiAgentEnv):
         """Resolve the active map id from configuration and map definition.
 
         Returns:
-            Optional map identifier from config or map pool by object identity.
+            Optional map identifier from map pool by object identity or config.
         """
-        configured_id = getattr(config, "map_id", None)
-        if configured_id:
-            return configured_id
         try:
             for map_id, candidate in config.map_pool.map_defs.items():
                 if candidate is map_def:
                     return map_id
         except (AttributeError, TypeError):
             pass
-        return None
-
-    def _resolve_num_robots(self) -> int:
-        """Resolve the effective number of robots managed by this environment.
-
-        Returns:
-            The resolved robot count.
-        """
-        configured_num = getattr(self.config, "num_robots", None)
-        if configured_num is not None:
-            return int(configured_num)
-        return len(self._state_bindings)
+        return getattr(config, "map_id", None)
 
     def _build_reset_info(self, *, map_def, seed: int | None) -> dict[str, Any]:
         """Build stable reset metadata for multi-robot environments.
@@ -230,7 +216,7 @@ class MultiRobotEnv(MultiAgentEnv):
             "sim_time_in_secs": float(self.config.sim_config.sim_time_in_secs),
             "time_per_step_in_secs": float(self.config.sim_config.time_per_step_in_secs),
             "max_sim_steps": int(self.config.sim_config.max_sim_steps),
-            "num_robots": self._resolve_num_robots(),
+            "num_robots": self.num_agents,
             "seed": seed,
         }
 

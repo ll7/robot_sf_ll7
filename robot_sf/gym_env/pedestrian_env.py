@@ -87,18 +87,15 @@ def _resolve_map_id(config, map_def) -> str | None:
     """Resolve a configured map id from the configuration and map definition.
 
     Returns:
-        Optional map identifier resolved from the configured map id or map pool.
+        Optional map identifier resolved from the map pool or configured map id.
     """
-    configured = getattr(config, "map_id", None)
-    if configured:
-        return configured
     try:
         for map_id, candidate in config.map_pool.map_defs.items():
             if candidate is map_def:
                 return map_id
     except (AttributeError, TypeError):
         pass
-    return None
+    return getattr(config, "map_id", None)
 
 
 def _build_reset_info(config, *, map_def, seed: int | None = None) -> dict[str, Any]:

@@ -356,24 +356,19 @@ def _coerce_finite_float(value: Any) -> float | None:
 def _resolve_current_map_id(env_config: EnvSettings, map_def) -> str | None:
     """Resolve the active map id from configuration and map definition.
 
-    When callers set ``map_id`` explicitly we return it directly; otherwise infer the
-    id by searching the configured map pool for the active ``map_def`` instance.
+    Prefer the active ``map_def`` instance when it can be matched to the configured
+    map pool, then fall back to an explicit configured map id.
 
     Returns:
         Optional map identifier resolved from config or map pool.
     """
-
-    configured_id = getattr(env_config, "map_id", None)
-    if configured_id:
-        return configured_id
-
     try:
         for map_id, candidate in env_config.map_pool.map_defs.items():
             if candidate is map_def:
                 return map_id
     except (AttributeError, TypeError):
         pass
-    return None
+    return getattr(env_config, "map_id", None)
 
 
 def _build_reset_info(

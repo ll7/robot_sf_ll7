@@ -149,6 +149,10 @@ def test_image_factory_smoke_path_keeps_gymnasium_tuple_shape():
         assert len(result) == 2
         reset_info = result[1]
         assert isinstance(reset_info, Mapping)
+        _assert_contract_metadata_keys(
+            reset_info,
+            {"map_id", "sim_time_in_secs", "time_per_step_in_secs", "max_sim_steps", "seed"},
+        )
 
         action = env.action_space.sample()
         step_result = env.step(action)

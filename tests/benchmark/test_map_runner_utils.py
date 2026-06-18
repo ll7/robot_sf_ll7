@@ -17,6 +17,7 @@ from loguru import logger
 from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.map_runner import (
     _apply_planner_selector_v2_context,
+    _attach_planner_reset,
     _build_policy,
     _build_socnav_config,
     _command_action_payload,
@@ -842,6 +843,49 @@ def test_build_policy_hrvo_reset_hook_tolerates_adapters_without_seed(
 
     policy._planner_reset(seed=7)
     assert reset_calls == ["reset"]
+
+
+def test_attach_planner_reset_tolerates_adapter_reset_without_seed() -> None:
+    """Direct reset hook wiring should support adapters without seed kwargs."""
+    reset_calls: list[str] = []
+
+    class _Adapter:
+        """Adapter reset double without seed support."""
+
+        def reset(self) -> None:
+            """Record unseeded reset fallback."""
+            reset_calls.append("reset")
+
+    def policy(_obs: dict[str, object]) -> tuple[float, float]:
+        """Minimal policy callable for reset-hook attachment."""
+        return 0.0, 0.0
+
+    _attach_planner_reset(policy, _Adapter())
+
+    policy._planner_reset(seed=7)
+
+    assert reset_calls == ["reset"]
+
+
+def test_attach_planner_reset_propagates_internal_type_error() -> None:
+    """Seed-aware reset hooks should not hide TypeErrors raised inside reset."""
+
+    class _Adapter:
+        """Adapter reset double that accepts seed but fails internally."""
+
+        def reset(self, *, seed: int | None = None) -> None:
+            """Raise an internal TypeError unrelated to seed binding."""
+            del seed
+            raise TypeError("internal reset failure")
+
+    def policy(_obs: dict[str, object]) -> tuple[float, float]:
+        """Minimal policy callable for reset-hook attachment."""
+        return 0.0, 0.0
+
+    _attach_planner_reset(policy, _Adapter())
+
+    with pytest.raises(TypeError, match="internal reset failure"):
+        policy._planner_reset(seed=7)
 
 
 def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(

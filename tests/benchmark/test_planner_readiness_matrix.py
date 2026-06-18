@@ -35,6 +35,14 @@ REQUIRED_FIELDS = {
 SUCCESS_STATUSES = {"successful_evidence"}
 
 
+def _assert_tracked_source_file(path_str: str, *, label: str) -> None:
+    """Require matrix source references to resolve to checked-in files."""
+    path = Path(path_str)
+    assert not path.is_absolute(), f"{label}: {path_str}"
+    assert not path.parts or path.parts[0] != "output", f"{label}: {path_str}"
+    assert (REPO_ROOT / path).is_file(), f"{label}: {path_str}"
+
+
 def _load_matrix() -> dict[str, Any]:
     """Load the checked-in readiness matrix."""
     payload = yaml.safe_load(MATRIX_PATH.read_text(encoding="utf-8"))
@@ -80,10 +88,8 @@ def test_planner_readiness_matrix_source_paths_exist_and_avoid_output_dependenci
     matrix = _load_matrix()
 
     for path in matrix["policy_sources"]:
-        assert not path.startswith("output/")
-        assert (REPO_ROOT / path).exists(), path
+        _assert_tracked_source_file(path, label="policy_sources")
 
     for row in matrix["rows"]:
         for path in row["source_paths"]:
-            assert not path.startswith("output/")
-            assert (REPO_ROOT / path).exists(), f"{row['planner_id']}: {path}"
+            _assert_tracked_source_file(path, label=row["planner_id"])

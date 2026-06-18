@@ -33,6 +33,22 @@ def _first_float(value: Any, default: float = 0.0) -> float:
     return default
 
 
+def _metadata_bool(value: Any, *, default: bool = False) -> bool:
+    """Return a conservative boolean for JSON/YAML metadata flags."""
+    if isinstance(value, bool | np.bool_):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off", ""}:
+            return False
+        return default
+    if isinstance(value, int | np.integer):
+        return bool(value)
+    return default
+
+
 def _observation_heading(obs: Any, *, default: float = 0.0) -> float:
     """Extract robot heading from structured or flat observations.
 
@@ -334,12 +350,14 @@ def _signal_state_trace_payload(signal_state: Any, intent_phase: str) -> dict[st
         "conflict_zone_id": str(signal_state.get("conflict_zone_id") or "unknown_conflict_zone"),
         "phase": str(matching_phase.get("phase") or "unknown"),
         "intent_phase": intent_phase,
-        "robot_right_of_way": bool(matching_phase.get("robot_right_of_way", False)),
-        "pedestrian_right_of_way": bool(matching_phase.get("pedestrian_right_of_way", False)),
+        "robot_right_of_way": _metadata_bool(matching_phase.get("robot_right_of_way", False)),
+        "pedestrian_right_of_way": _metadata_bool(
+            matching_phase.get("pedestrian_right_of_way", False)
+        ),
         "legality_state": str(matching_phase.get("legality_state") or "unknown"),
-        "planner_observable": bool(signal_state.get("planner_observable", False)),
+        "planner_observable": _metadata_bool(signal_state.get("planner_observable", False)),
         "observation_mode": str(signal_state.get("observation_mode") or "trace_metadata_only"),
-        "benchmark_evidence": bool(signal_state.get("benchmark_evidence", False)),
+        "benchmark_evidence": _metadata_bool(signal_state.get("benchmark_evidence", False)),
         "claim_boundary": str(
             signal_state.get("claim_boundary")
             or "Proxy signal-state metadata only; not benchmark evidence."
@@ -405,8 +423,8 @@ def _signal_state_promotion_contract(signal_state: Any) -> dict[str, Any]:
     schema_version = str(signal_state.get("schema_version") or "")
     status = str(signal_state.get("status") or "")
     observation_mode = str(signal_state.get("observation_mode") or "")
-    planner_observable = bool(signal_state.get("planner_observable", False))
-    benchmark_evidence = bool(signal_state.get("benchmark_evidence", False))
+    planner_observable = _metadata_bool(signal_state.get("planner_observable", False))
+    benchmark_evidence = _metadata_bool(signal_state.get("benchmark_evidence", False))
     is_observable = (
         schema_version == _SIGNAL_STATE_OBSERVABLE_SCHEMA
         and status == _SIGNAL_STATE_OBSERVABLE_STATUS
@@ -663,11 +681,11 @@ def _intent_conditioned_behavior_summary(
                 "conflict_zone_id": str(
                     signal_state.get("conflict_zone_id") or "unknown_conflict_zone"
                 ),
-                "planner_observable": bool(signal_state.get("planner_observable", False)),
+                "planner_observable": _metadata_bool(signal_state.get("planner_observable", False)),
                 "observation_mode": str(
                     signal_state.get("observation_mode") or "trace_metadata_only"
                 ),
-                "benchmark_evidence": bool(signal_state.get("benchmark_evidence", False)),
+                "benchmark_evidence": _metadata_bool(signal_state.get("benchmark_evidence", False)),
                 "claim_boundary": "proxy_diagnostic",
             }
         )
@@ -740,7 +758,7 @@ def _vru_diagnostic_summary(
     }
 
 
-def _command_action_payload(command: Any) -> dict[str, float]:
+def _command_action_payload(command: Any) -> dict[str, Any]:
     """Normalize planner commands to trace-export selected_action fields.
 
     Returns:
@@ -749,6 +767,12 @@ def _command_action_payload(command: Any) -> dict[str, float]:
 
     if isinstance(command, np.ndarray):
         command = command.tolist()
+    if isinstance(command, dict) and command.get("command_kind") == "holonomic_vxy_world":
+        return {
+            "command_kind": "holonomic_vxy_world",
+            "vx": _first_float(command.get("vx")),
+            "vy": _first_float(command.get("vy")),
+        }
     if isinstance(command, (list, tuple)) and len(command) >= 2:
         return {
             "linear_velocity": _first_float(command[0]),

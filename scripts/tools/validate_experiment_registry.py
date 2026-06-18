@@ -58,6 +58,25 @@ TERMINAL_STATES = {
 }
 VALID_RECORD_STATES = ACTIVE_STATES | TERMINAL_STATES
 LEGACY_TERMINAL_STATUSES = TERMINAL_STATES | {"completed", "released", "closed"}
+STATE_LABELS = {"state:ready", "state:running", "state:blocked"}
+STATE_TO_LABEL = {
+    "idea": "state:ready",
+    "protocol_frozen": "state:ready",
+    "implementation_ready": "state:ready",
+    "preflight_passed": "state:ready",
+    "submitted": "state:running",
+    "running": "state:running",
+    "finalized": "state:running",
+    "evidence_promoted": "state:running",
+    "claim_reviewed": "state:running",
+    "released": None,
+    "blocked_external": "state:blocked",
+    "invalid_execution": "state:blocked",
+    "negative_result": "state:blocked",
+    "null_result": "state:blocked",
+    "superseded": "state:blocked",
+    "stopped_by_gate": "state:blocked",
+}
 RUNNING_LABEL = "state:running"
 PROPOSAL_RECORD_STATES = {"idea", "proposal"}
 ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z0-9][A-Za-z0-9_.:/-]*>")
@@ -137,6 +156,9 @@ def build_control_plane_report(
         "registry": registry_path.as_posix(),
         "finding_count": len(findings),
         "findings": findings,
+        "derived_update_count": sum(
+            1 for finding in findings if finding.get("kind") == "derived_issue_label_update"
+        ),
     }
 
 
@@ -316,13 +338,22 @@ def _issue_state_findings(
                 )
             )
     labels = set(issue_labels.get(issue, ())) if issue is not None else set()
-    if RUNNING_LABEL in labels and record_state not in {"running", "submitted"}:
+    if record_state not in STATE_TO_LABEL:
+        return findings
+    expected_label = STATE_TO_LABEL[record_state]
+    current_state_labels = labels & STATE_LABELS
+    if (
+        issue is not None
+        and issue in issue_labels
+        and current_state_labels != _label_set(expected_label)
+    ):
         findings.append(
-            _finding(
-                "label_record_state_disagreement",
+            _derived_label_update(
                 display_path,
                 issue,
-                f"live label {RUNNING_LABEL!r} disagrees with record state {record_state!r}",
+                record_state=record_state,
+                current_labels=sorted(current_state_labels),
+                expected_label=expected_label,
             )
         )
     return findings
@@ -404,6 +435,36 @@ def _finding(kind: str, record: str, issue: int | None, message: str) -> dict[st
         "issue": issue,
         "message": message,
     }
+
+
+def _derived_label_update(
+    record: str,
+    issue: int,
+    *,
+    record_state: str,
+    current_labels: list[str],
+    expected_label: str | None,
+) -> dict[str, Any]:
+    """Return a dry-run label update derived from the authoritative card state."""
+    expected_labels = sorted(_label_set(expected_label))
+    labels_to_add = sorted(set(expected_labels) - set(current_labels))
+    labels_to_remove = sorted(set(current_labels) - set(expected_labels))
+    message = (
+        f"issue #{issue} state labels {current_labels} should derive from "
+        f"record state {record_state!r} as {expected_labels}"
+    )
+    finding = _finding("derived_issue_label_update", record, issue, message)
+    finding["expected_state_label"] = expected_label
+    finding["current_state_labels"] = current_labels
+    finding["labels_to_add"] = labels_to_add
+    finding["labels_to_remove"] = labels_to_remove
+    finding["dry_run_only"] = True
+    return finding
+
+
+def _label_set(label: str | None) -> set[str]:
+    """Return the normalized singleton label set used for state-label comparisons."""
+    return {label} if label else set()
 
 
 def _record_state(record: Mapping[str, Any]) -> str:

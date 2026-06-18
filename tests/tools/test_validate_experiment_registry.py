@@ -103,6 +103,126 @@ def test_validator_rejects_paper_facing_local_only_outputs(tmp_path: Path) -> No
     ) in errors
 
 
+def test_validator_allows_explicit_non_actionable_missing_durable_references(
+    tmp_path: Path,
+) -> None:
+    """Blocked or proposal-only records may declare future durable artifacts."""
+    registry = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - blocked.yaml
+          - proposal.yaml
+        """,
+    )
+    _write_yaml(
+        registry.parent / "blocked.yaml",
+        """
+        schema_version: experiment-record.v1
+        experiment_id: blocked-artifacts
+        issue: 1475
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/1475
+        question: Is this blocked until external execution exists?
+        hypothesis: The card is not actionable while blocked.
+        config: configs/<config-id>.yaml
+        command: uv run python scripts/example.py --output output/<campaign-id>
+        inputs:
+          - path: data/<input-id>.json
+        outputs:
+          - path: output/blocked/<campaign-id>
+        expected_artifacts:
+          - name: report
+            path: output/blocked/<campaign-id>/report.json
+            durable_reference_required: true
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        status: blocked_on_slurm
+        """,
+    )
+    _write_yaml(
+        registry.parent / "proposal.yaml",
+        """
+        schema_version: experiment-record.v1
+        experiment_id: proposal-artifacts
+        issue: 2135
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/2135
+        question: Is this still only a proposal?
+        hypothesis: Proposal cards may describe future artifacts.
+        config: configs/example.yaml
+        command: uv run python scripts/example.py --output output/<campaign-id>
+        inputs:
+          - path: configs/example.yaml
+        outputs:
+          - path: output/proposal/<campaign-id>
+        expected_artifacts:
+          - name: report
+            path: output/proposal/<campaign-id>/report.json
+            durable_reference_required: true
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        status: proposal
+        """,
+    )
+
+    assert validate_registry(registry) == []
+
+
+def test_validator_rejects_actionable_missing_durable_references_and_placeholders(
+    tmp_path: Path,
+) -> None:
+    """Actionable cards should not contain placeholder outputs or missing durable refs."""
+    registry = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - planned.yaml
+        """,
+    )
+    _write_yaml(
+        registry.parent / "planned.yaml",
+        """
+        schema_version: experiment-record.v1
+        experiment_id: planned-placeholders
+        issue: 2135
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/2135
+        question: Is this actionable?
+        hypothesis: Planned cards should name concrete artifact paths.
+        config: configs/<config-id>.yaml
+        command: |
+          uv run python scripts/example.py \\
+            --campaign-root <existing-campaign-report-root>
+        inputs:
+          - path: data/<input-id>.json
+        outputs:
+          - path: output/analysis/<campaign-id>
+        expected_artifacts:
+          - name: report
+            path: output/analysis/<campaign-id>/report.json
+            durable_reference_required: true
+          - name: pending_alias
+            path: wandb-artifact://pending/issue-2135/report:latest
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        status: planned
+        """,
+    )
+
+    errors = validate_registry(registry)
+
+    assert (
+        "planned.yaml: actionable record requires durable_reference for artifact report"
+    ) in errors
+    assert any("unresolved placeholder in command" in error for error in errors)
+    assert any("configs/<config-id>.yaml" in error for error in errors)
+    assert any("data/<input-id>.json" in error for error in errors)
+    assert any("output/analysis/<campaign-id>" in error for error in errors)
+    assert any("wandb-artifact://pending/issue-2135/report:latest" in error for error in errors)
+
+
 def test_validator_accepts_experiment_record_v2_state(tmp_path: Path) -> None:
     """New records may use the v2 authoritative state field instead of legacy status."""
     registry = tmp_path / "experiments" / "registry.yaml"
@@ -183,6 +303,51 @@ def test_validator_rejects_unknown_experiment_record_v2_state(tmp_path: Path) ->
     errors = validate_registry(registry)
 
     assert "bad.yaml: state must be one of" in errors[0]
+
+
+def test_validator_rejects_active_v2_missing_durable_reference(tmp_path: Path) -> None:
+    """Active v2 states must not declare required artifacts without durable references."""
+    registry = tmp_path / "experiments" / "registry.yaml"
+    record = registry.parent / "active.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - active.yaml
+        """,
+    )
+    _write_yaml(
+        record,
+        """
+        schema_version: experiment-record.v2
+        experiment_id: active-artifacts
+        issue: 3073
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/3073
+        question: Is this active?
+        hypothesis: Active cards need concrete durable artifact references.
+        config:
+          - experiments/registry.yaml
+        command: uv run true
+        inputs:
+          - path: experiments/registry.yaml
+        outputs:
+          - path: output/experiments/active
+        expected_artifacts:
+          - name: report
+            path: output/experiments/active/report.json
+            durable_reference_required: true
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        state: implementation_ready
+        """,
+    )
+
+    errors = validate_registry(registry)
+
+    assert (
+        "active.yaml: actionable record requires durable_reference for artifact report"
+    ) in errors
 
 
 def test_control_plane_report_detects_research_state_drift(tmp_path: Path) -> None:

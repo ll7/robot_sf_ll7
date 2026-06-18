@@ -34,7 +34,7 @@ expected_artifacts:
     durable_reference_required: true
 evidence_grade: proposal
 paper_relevance: exploratory
-status: planned
+status: proposal
 notes: >
   This card is follow-through from the merged #2135 analyzer. It records the next durable-use path
   for existing campaign bundles; it does not run analysis or claim seed sufficiency by itself.

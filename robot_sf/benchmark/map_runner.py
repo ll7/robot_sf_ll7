@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -84,6 +83,7 @@ from robot_sf.benchmark.map_runner_identity import (
 )
 from robot_sf.benchmark.map_runner_identity import select_seeds as _select_seeds
 from robot_sf.benchmark.map_runner_identity import suite_key as _suite_key
+from robot_sf.benchmark.map_runner_jsonl import write_validated_to_handle as _write_jsonl_record
 from robot_sf.benchmark.map_runner_metrics import (
     floor_collision_metrics_from_flags as _floor_collision_metrics_from_flags,
 )
@@ -140,7 +140,7 @@ from robot_sf.benchmark.observation_noise import (
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
-from robot_sf.benchmark.schema_validator import load_schema, validate_episode
+from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationController,
     SyntheticActuationProfile,
@@ -163,7 +163,6 @@ from robot_sf.benchmark.utils import (
     attach_track_metadata,
     index_existing,
     normalize_track_field,
-    validate_episode_success_integrity,
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -3401,11 +3400,7 @@ def _write_validated_to_handle(
     record: dict[str, Any],
 ) -> None:
     """Validate one episode record and append it to an open JSONL handle."""
-    violations = validate_episode_success_integrity(record)
-    if violations:
-        raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
-    validate_episode(record, schema)
-    handle.write(json.dumps(record, sort_keys=True) + "\n")
+    _write_jsonl_record(handle, schema, record)
 
 
 def _run_map_job_worker(

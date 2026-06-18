@@ -31,7 +31,7 @@ expected_artifacts:
     path: output/adversarial/issue1236_optimizer_sampler_pilot/best/
 evidence_grade: observed
 paper_relevance: exploratory
-status: planned
+status: closed
 notes: >
   This pilot is explicitly not paper-facing until repeated-seed evidence and
   durable replay bundles exist.

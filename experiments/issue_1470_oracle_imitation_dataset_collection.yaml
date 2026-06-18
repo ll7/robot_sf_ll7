@@ -48,9 +48,11 @@ expected_artifacts:
     durable_reference_required: true
 evidence_grade: proposal
 paper_relevance: exploratory
-status: blocked_on_slurm
+status: blocked_on_issue_2441
 notes: >
-  This card is a launch packet only. Issue #1470 remains blocked until a SLURM-capable worker,
-  exact collection commit, and durable dataset destination are recorded. Generated worktree-local
-  output is not benchmark or training evidence until the manifest, checksums, split/leakage proof,
-  and artifact pointers exist.
+  This card remains the launch packet for #1470. Execution/finalization for the
+  corresponding trace-collection and evidence handoff is now actively tracked by
+  issue #2441 (status OPEN). PR #2989 references
+  `docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/`,
+  which contains durable trace-collection evidence; downstream dataset materialization
+  remains out of scope for this card.

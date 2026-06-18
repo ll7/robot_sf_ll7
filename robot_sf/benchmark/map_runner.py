@@ -71,16 +71,16 @@ from robot_sf.benchmark.map_runner_env import build_env_config as _build_env_con
 from robot_sf.benchmark.map_runner_env import (
     validate_sensor_fusion_adapter_config as _validate_sensor_fusion_adapter_config,
 )
-from robot_sf.benchmark.map_runner_identity import compute_map_episode_id as _compute_map_episode_id
-from robot_sf.benchmark.map_runner_identity import resolve_seed_list as _resolve_seed_list
 from robot_sf.benchmark.map_runner_identity import (
-    scenario_identity_payload as _scenario_identity_payload,
+    _compute_map_episode_id,
+    _resolve_seed_list,
+    _scenario_family,  # noqa: F401 - compatibility re-export for tests.
+    _scenario_id,
+    _scenario_identity_payload,
+    _scenario_with_episode_seed_defaults,
+    _select_seeds,
+    _suite_key,
 )
-from robot_sf.benchmark.map_runner_identity import (
-    scenario_with_episode_seed_defaults as _scenario_with_episode_seed_defaults,
-)
-from robot_sf.benchmark.map_runner_identity import select_seeds as _select_seeds
-from robot_sf.benchmark.map_runner_identity import suite_key as _suite_key
 from robot_sf.benchmark.map_runner_jsonl import write_validated_to_handle as _write_jsonl_record
 from robot_sf.benchmark.map_runner_metrics import (
     floor_collision_metrics_from_flags as _floor_collision_metrics_from_flags,
@@ -119,7 +119,6 @@ from robot_sf.benchmark.map_runner_trace import (
     _fast_bicycle_actor_summary,
     _intent_conditioned_behavior_summary,
     _observation_heading,
-    _scenario_id,
     _signal_state_for_metric_metadata,  # noqa: F401 - compatibility re-export for tests.
     _signal_state_promotion_contract,  # noqa: F401 - compatibility re-export for tests.
     _signal_state_proxy_wrapper,  # noqa: F401 - compatibility re-export for tests.
@@ -489,7 +488,6 @@ class _ExternalMPCAdapter:
 _parse_algo_config = _policy_resolution._parse_algo_config
 _deep_merge_config = _policy_resolution._deep_merge_config
 _resolve_config_path = _policy_resolution._resolve_config_path
-_scenario_family = _policy_resolution._scenario_family
 _is_policy_search_candidate_manifest = _policy_resolution._is_policy_search_candidate_manifest
 _load_base_candidate_config = _policy_resolution._load_base_candidate_config
 _scenario_algo_override_runtime = _policy_resolution._scenario_algo_override_runtime

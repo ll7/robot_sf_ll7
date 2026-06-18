@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 import yaml
 
+from robot_sf.benchmark.map_runner_policy_resolution import _scenario_family
+from robot_sf.benchmark.map_runner_trace import _scenario_id
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
@@ -17,7 +19,7 @@ from robot_sf.benchmark.observation_noise import (
 from robot_sf.benchmark.utils import _config_hash
 
 
-def resolve_seed_list(path: Path) -> dict[str, list[int]]:
+def _resolve_seed_list(path: Path) -> dict[str, list[int]]:
     """Load named benchmark seed lists from YAML.
 
     Returns:
@@ -31,7 +33,7 @@ def resolve_seed_list(path: Path) -> dict[str, list[int]]:
     return {str(k): [int(s) for s in v] for k, v in data.items() if isinstance(v, list)}
 
 
-def suite_key(scenario_path: Path) -> str:
+def _suite_key(scenario_path: Path) -> str:
     """Infer the seed-suite key from a scenario config filename.
 
     Returns:
@@ -45,7 +47,7 @@ def suite_key(scenario_path: Path) -> str:
     return "default"
 
 
-def select_seeds(
+def _select_seeds(
     scenario: dict[str, Any],
     *,
     suite_seeds: dict[str, list[int]],
@@ -66,7 +68,7 @@ def select_seeds(
     return [0]
 
 
-def scenario_identity_payload(  # noqa: PLR0913
+def _scenario_identity_payload(  # noqa: PLR0913
     scenario: dict[str, Any],
     *,
     algo: str,
@@ -123,7 +125,7 @@ def scenario_identity_payload(  # noqa: PLR0913
     return payload
 
 
-def compute_map_episode_id(identity_payload: dict[str, Any], seed: int) -> str:
+def _compute_map_episode_id(identity_payload: dict[str, Any], seed: int) -> str:
     """Return a map-runner episode id scoped to algorithm + run dimensions.
 
     The default benchmark ``compute_episode_id`` uses ``<scenario_id>--<seed>``.
@@ -139,7 +141,7 @@ def compute_map_episode_id(identity_payload: dict[str, Any], seed: int) -> str:
     return f"{scenario_id}--{seed}--{identity_hash}"
 
 
-def scenario_with_episode_seed_defaults(
+def _scenario_with_episode_seed_defaults(
     scenario: dict[str, Any],
     *,
     seed: int,
@@ -155,3 +157,13 @@ def scenario_with_episode_seed_defaults(
     if isinstance(sim_config, dict) and sim_config.get("route_spawn_seed") is None:
         sim_config["route_spawn_seed"] = int(seed)
     return updated
+
+
+resolve_seed_list = _resolve_seed_list
+suite_key = _suite_key
+select_seeds = _select_seeds
+scenario_identity_payload = _scenario_identity_payload
+compute_map_episode_id = _compute_map_episode_id
+scenario_with_episode_seed_defaults = _scenario_with_episode_seed_defaults
+scenario_id = _scenario_id
+scenario_family = _scenario_family

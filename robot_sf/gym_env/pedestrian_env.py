@@ -25,6 +25,7 @@ from robot_sf.gym_env.env_util import (
     init_ped_spaces,
     prepare_pedestrian_actions,
 )
+from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import simple_ped_reward
 from robot_sf.gym_env.robot_env import _build_step_info
 from robot_sf.gym_env.unified_config import (
@@ -81,6 +82,12 @@ def _reward_function_name(reward_func: Callable[..., object]) -> str:
     if isinstance(reward_func, partial):
         return _reward_function_name(reward_func.func)
     return getattr(reward_func, "__name__", type(reward_func).__name__)
+
+
+def _build_reset_info(config, *, map_def, seed: int | None = None) -> dict[str, Any]:
+    """Return stable reset metadata for pedestrian environments."""
+
+    return build_reset_metadata(config, map_def=map_def, seed=seed)
 
 
 class PedestrianEnv(SingleAgentEnv):
@@ -444,7 +451,11 @@ class PedestrianEnv(SingleAgentEnv):
             self.save_recording()
 
         # Preserve legacy info payload shape.
-        return obs_ped, {"info": "test"}
+        return obs_ped, _build_reset_info(
+            self.config,
+            map_def=self.map_def,
+            seed=getattr(self, "applied_seed", None),
+        )
 
     def render(self, **kwargs):
         """Render the environment."""

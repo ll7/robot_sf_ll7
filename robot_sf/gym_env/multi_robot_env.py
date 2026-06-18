@@ -19,6 +19,7 @@ from robot_sf.gym_env.env_util import (
     init_spaces,
     prepare_pedestrian_actions,
 )
+from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.unified_config import MultiRobotConfig
 from robot_sf.render.lidar_visual import render_lidar
@@ -190,6 +191,19 @@ class MultiRobotEnv(MultiAgentEnv):
         any_terminated = any(terms)
         return obs_dict, total_reward, any_terminated, False, {"agents": masked_metas_tuple}
 
+    def _build_reset_info(self, *, map_def, seed: int | None) -> dict[str, Any]:
+        """Build stable reset metadata for multi-robot environments.
+
+        Returns:
+            Reset metadata dictionary with map and timing fields.
+        """
+        return build_reset_metadata(
+            self.config,
+            map_def=map_def,
+            seed=seed,
+            extra={"num_robots": self.num_agents},
+        )
+
     def reset(
         self,
         *,
@@ -209,7 +223,10 @@ class MultiRobotEnv(MultiAgentEnv):
             OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
             OBS_RAYS: np.array([o[OBS_RAYS] for o in obs]),
         }
-        return obs_dict, {}
+        return obs_dict, self._build_reset_info(
+            map_def=self.map_def,
+            seed=getattr(self, "applied_seed", None),
+        )
 
     def render(self, **kwargs) -> None:
         """Render the environment for each robot view."""

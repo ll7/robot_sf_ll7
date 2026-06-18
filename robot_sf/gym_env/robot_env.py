@@ -37,6 +37,7 @@ from robot_sf.gym_env.env_util import (
     prepare_pedestrian_actions,
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
+from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
 from robot_sf.nav.obstacle import Obstacle
@@ -351,6 +352,18 @@ def _coerce_finite_float(value: Any) -> float | None:
     if not np.isfinite(result):
         return None
     return result
+
+
+def _build_reset_info(
+    env_config: EnvSettings, *, map_def, applied_seed: int | None
+) -> dict[str, Any]:
+    """Return a stable, non-placeholder reset metadata payload.
+
+    The payload intentionally keeps only lightweight, serializable fields useful for
+    downstream debugging and reproducibility.
+    """
+
+    return build_reset_metadata(env_config, map_def=map_def, seed=applied_seed)
 
 
 def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:
@@ -1004,8 +1017,11 @@ class RobotEnv(BaseEnv):
                     # Legacy pickle recording
                     self.save_recording()
 
-            # info is necessary for the gym environment, but useless at the moment
-            info = {"info": "test"}
+            info = _build_reset_info(
+                self.config,
+                map_def=self.map_def,
+                applied_seed=self.applied_seed,
+            )
             # Reset telemetry timing on new episode
             self._last_wall_time = time.perf_counter()
             self._frame_idx = 0

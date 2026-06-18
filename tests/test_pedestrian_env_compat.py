@@ -159,7 +159,13 @@ def test_pedestrian_env_records_and_resets(tmp_path, monkeypatch) -> None:
     env = PedestrianEnv(robot_model=None, recording_enabled=True)
     try:
         _obs, info = env.reset()
-        assert "info" in info
+        assert set(info.keys()) >= {
+            "map_id",
+            "sim_time_in_secs",
+            "time_per_step_in_secs",
+            "max_sim_steps",
+            "seed",
+        }
 
         action = env.action_space.sample()
         _obs, _reward, _terminated, _truncated, step_info = env.step(action)

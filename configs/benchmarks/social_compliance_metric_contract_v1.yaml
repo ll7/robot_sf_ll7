@@ -1,0 +1,153 @@
+schema_version: social-compliance-metric-contract.v1
+issue: 3061
+status: diagnostic_contract
+claim_boundary: >
+  These metrics are simulation-only diagnostic proxies for robot influence and social-compliance
+  analysis. They may support exploratory benchmark reports after fixture validation, but they do
+  not establish real-world pedestrian comfort, fairness, legibility, or social-validity claims.
+linked_policy:
+  - docs/context/issue_691_benchmark_fallback_policy.md
+  - docs/context/artifact_evidence_vocabulary.md
+  - docs/context/issue_1085_pedestrian_impact_metrics.md
+report_surfaces:
+  episode_metrics_namespace: metrics.social_compliance
+  aggregate_table_group: social_compliance
+  snqi_relationship: >
+    SNQI weights and headline score definitions are unchanged. These fields are side-channel
+    diagnostics until a later calibration issue promotes any component into a composite score.
+missing_data_policy:
+  status_values:
+    - available
+    - unavailable
+    - not_applicable
+  rule: >
+    Emit per-metric support counts and a status. Aggregates must exclude unavailable samples from
+    numeric reducers while reporting support denominators beside every mean, median, percentile, or
+    distributional statistic.
+aggregation_defaults:
+  per_episode_reducers:
+    - mean
+    - median
+    - p95
+    - max
+  campaign_reducers:
+    - mean
+    - median
+    - bootstrap_ci95
+  group_by:
+    - planner
+    - scenario_family
+    - seed
+required_metric_families:
+  - pedestrian_deviation
+  - flow_disruption
+  - comfort_exposure
+  - legibility_progress
+  - distributional_inconvenience
+metrics:
+  - id: pedestrian_deviation_mean_m
+    family: pedestrian_deviation
+    direction: lower_is_better
+    units: meters
+    denominator: tracked_pedestrian_steps_with_baseline
+    claim_class: diagnostic_proxy
+    required_signals:
+      - pedestrian_position_xy
+      - reference_pedestrian_position_xy
+      - timestep_seconds
+    definition: >
+      Mean Euclidean displacement between each pedestrian trajectory under the evaluated robot
+      policy and the same pedestrian's reference or counterfactual trajectory at matched timesteps.
+    aggregation:
+      per_episode: mean over matched pedestrian-step distances
+      campaign: mean, median, p95, and support counts across episodes
+    missing_data_behavior: unavailable without a matched reference trajectory for the pedestrian
+    fixture_expectation:
+      sample_distances_m: [0.0, 0.2, 0.4]
+      expected_mean_m: 0.2
+
+  - id: flow_disruption_delay_s
+    family: flow_disruption
+    direction: lower_is_better
+    units: seconds
+    denominator: pedestrians_with_reference_arrival
+    claim_class: diagnostic_proxy
+    required_signals:
+      - pedestrian_goal_reached_time_s
+      - reference_pedestrian_goal_reached_time_s
+    definition: >
+      Non-negative delay in pedestrian goal-arrival time relative to the matched reference
+      trajectory, clipped at zero so faster-than-reference arrivals do not cancel delays elsewhere.
+    aggregation:
+      per_episode: mean and p95 over pedestrians with matched reference arrivals
+      campaign: mean, median, p95, and support counts across episodes
+    missing_data_behavior: unavailable for pedestrians without observed and reference arrival times
+    fixture_expectation:
+      arrival_time_s: [12.0, 9.0, 18.0]
+      reference_arrival_time_s: [10.0, 10.0, 15.0]
+      expected_mean_delay_s: 1.6666666667
+
+  - id: comfort_exposure_person_s
+    family: comfort_exposure
+    direction: lower_is_better
+    units: person_seconds
+    denominator: pedestrian_steps
+    claim_class: diagnostic_proxy
+    required_signals:
+      - robot_position_xy
+      - pedestrian_position_xy
+      - timestep_seconds
+      - comfort_radius_m
+    definition: >
+      Integrated pedestrian exposure time inside the configured robot comfort radius, summed as
+      person-seconds per episode.
+    aggregation:
+      per_episode: sum over exposed pedestrian timesteps
+      campaign: mean, median, p95, and support counts across episodes
+    missing_data_behavior: unavailable when positions, timestep, or comfort radius are missing
+    fixture_expectation:
+      exposed_steps: [true, false, true, true]
+      timestep_seconds: 0.5
+      expected_person_s: 1.5
+
+  - id: legibility_progress_deficit_m
+    family: legibility_progress
+    direction: lower_is_better
+    units: meters
+    denominator: robot_steps_before_terminal
+    claim_class: diagnostic_proxy
+    required_signals:
+      - robot_goal_distance_m
+      - reference_goal_distance_m
+      - timestep_seconds
+    definition: >
+      Mean positive deficit in robot progress toward its goal relative to a reference progress
+      profile. This distinguishes socially conservative hesitation from outright failure without
+      treating hesitation as a human-legibility claim.
+    aggregation:
+      per_episode: mean over robot steps
+      campaign: mean, median, p95, and support counts across episodes
+    missing_data_behavior: unavailable without a reference progress profile
+    fixture_expectation:
+      goal_distance_m: [5.0, 4.5, 4.2]
+      reference_goal_distance_m: [5.0, 4.0, 3.7]
+      expected_mean_deficit_m: 0.3333333333
+
+  - id: distributional_inconvenience_p90_p50_gap
+    family: distributional_inconvenience
+    direction: lower_is_better
+    units: seconds
+    denominator: pedestrians_with_delay_samples
+    claim_class: diagnostic_proxy
+    required_signals:
+      - per_pedestrian_delay_s
+    definition: >
+      Difference between the p90 and p50 per-pedestrian delay values for an episode or campaign
+      group. This reports concentration of inconvenience instead of hiding it in the mean.
+    aggregation:
+      per_episode: p90(delay_s) - p50(delay_s)
+      campaign: mean and bootstrap CI over episode-level gaps, plus pooled diagnostic gap when noted
+    missing_data_behavior: unavailable with fewer than two pedestrian delay samples
+    fixture_expectation:
+      per_pedestrian_delay_s: [0.0, 1.0, 4.0, 9.0, 16.0]
+      expected_gap_s: 9.2

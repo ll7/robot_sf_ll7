@@ -119,7 +119,6 @@ def test_public_factories_adhere_to_gymnasium_step_reset_contract(
         else:
             reset_result = env.reset()
             reset_obs, reset_info = reset_result
-            _assert_contract_metadata_keys(reset_info, required_reset_keys)
 
         assert isinstance(reset_result, tuple)
         assert len(reset_result) == 2

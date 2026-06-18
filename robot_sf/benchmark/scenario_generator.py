@@ -141,6 +141,8 @@ def normalize_generation_parameters(  # noqa: C901, PLR0912
     payload: dict[str, Any] = dict(GENERATION_PARAMETER_DEFAULTS)
     for key, value in source.items():
         if key in _KNOWN_GENERATION_PARAM_KEYS:
+            if value is None:
+                value = GENERATION_PARAMETER_DEFAULTS.get(key)
             payload[key] = value
             continue
         if strict_profile:

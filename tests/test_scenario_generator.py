@@ -126,6 +126,25 @@ def test_normalize_generation_parameters_accepts_wrapped_generation_profile() ->
     assert normalized["groups"] == pytest.approx(0.4)
 
 
+def test_normalize_generation_parameters_treats_none_as_missing_without_collapsing_falsy() -> None:
+    """Explicit nulls should use defaults, while valid falsy values remain explicit."""
+
+    normalized = normalize_generation_parameters(
+        {
+            "density": None,
+            "flow": None,
+            "groups": 0,
+        }
+    )
+
+    assert normalized["density"] == "med"
+    assert normalized["flow"] == "uni"
+    assert normalized["groups"] == pytest.approx(0.0)
+
+    with pytest.raises(ValueError, match="Unsupported density"):
+        normalize_generation_parameters({"density": ""})
+
+
 def test_normalize_generation_parameters_accepts_legacy_medium_density() -> None:
     """Existing benchmark matrix rows may spell medium density as ``medium``."""
 

@@ -104,6 +104,7 @@ jobs:
         uses: ./.github/actions/setup-ci-python
 
       - name: Validation smoke tests
+        id: smoke_tests
         run: scripts/dev/ci_driver.sh smoke
 
       - name: Upload map verification manifest
@@ -161,7 +162,9 @@ jobs:
           path: output/benchmarks/reproducibility_check.json
 
       - name: Enforce artifact root policy
-        if: always()
+        if: >-
+          ${{ always() && (steps.smoke_tests.outcome == 'success' ||
+          steps.smoke_tests.outcome == 'failure') }}
         env:
           CI_STEP_TIMEOUT_SECONDS: "300"
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy

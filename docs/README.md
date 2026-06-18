@@ -58,6 +58,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
   - [Ready-to-Use Workflows](#ready-to-use-workflows)
 - [📚 Documentation Index](#-documentation-index)
   - [Getting Started](#getting-started)
+  - [Architecture Decision Records](#architecture-decision-records)
   - [Benchmarking \& Metrics](#benchmarking--metrics)
   - [Tooling](#tooling)
   - [Architecture \& Refactoring](#architecture--refactoring)
@@ -187,6 +188,11 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
 * **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
 * **[Issue #845 Slurm Utilization Probe](./context/issue_845_slurm_utilization_probe.md)** - Collect `sstat`/`sacct`/`seff` evidence for low CPU-utilization investigations without launching new jobs
+
+### Architecture Decision Records
+
+* **[ADR Index](./adr/README.md)** - Lightweight process and index for durable architecture and long-lived contract/process decisions
+* **[ADR Template](./adr/template.md)** - Copy-ready format for source-backed ADRs (status, context, alternatives, impacts)
 
 ### Benchmarking & Metrics
 

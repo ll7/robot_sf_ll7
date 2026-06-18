@@ -1,0 +1,56 @@
+name: Set up CI Python environment
+description: Shared post-checkout Robot SF CI setup for Python, uv caches, system packages, and artifacts.
+
+inputs:
+  python-version:
+    description: Python version passed to actions/setup-python.
+    default: "3.12"
+  uv-version:
+    description: uv version passed to astral-sh/setup-uv.
+    default: "0.5.11"
+  migrate-artifacts:
+    description: Run the legacy artifact migration step after dependency sync.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      with:
+        version: ${{ inputs.uv-version }}
+
+    - name: Report uv cache state before sync
+      shell: bash
+      run: bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-pre-sync"
+
+    - name: Set up Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: System packages for headless
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends ffmpeg libglib2.0-0 libgl1 fonts-dejavu-core jq
+
+    - name: Free runner disk space
+      shell: bash
+      run: bash scripts/dev/free_github_runner_space.sh
+
+    - name: Sync dependencies (locked)
+      shell: bash
+      env:
+        CI_STEP_TIMEOUT_SECONDS: "1200"
+      run: bash scripts/dev/ci_step_timer.sh "Sync dependencies (locked)" uv sync --all-extras --frozen
+
+    - name: Report uv cache state after sync
+      if: always()
+      shell: bash
+      run: bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-post-sync"
+
+    - name: Migrate legacy artifacts into canonical root
+      if: ${{ inputs.migrate-artifacts == 'true' }}
+      shell: bash
+      run: bash scripts/dev/ci_step_timer.sh "Migrate legacy artifacts into canonical root" uv run python scripts/tools/migrate_artifacts.py

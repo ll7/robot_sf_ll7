@@ -8,9 +8,42 @@ import numpy as np
 import pytest
 
 from robot_sf.baselines import get_baseline
-from robot_sf.baselines.interface import ActionContract, ObservationContract, PlannerMetadata
+from robot_sf.baselines.interface import (
+    ActionContract,
+    ObservationContract,
+    PlannerMetadata,
+    observation_from_mapping,
+)
 from robot_sf.baselines.social_force import Observation
 from robot_sf.benchmark.algorithm_metadata import planner_contract_for_algorithm
+
+
+class TestObservationConversion:
+    """Tests for the shared dict-to-Observation conversion boundary."""
+
+    def test_observation_from_mapping_uses_obstacles_default(self) -> None:
+        """Dict payloads without obstacles should use the Observation default."""
+        obs = observation_from_mapping(
+            {
+                "dt": 0.1,
+                "robot": {"position": [0.0, 0.0]},
+                "agents": [{"position": [1.0, 0.0]}],
+            },
+        )
+
+        assert obs.obstacles == []
+
+    def test_observation_from_mapping_rejects_unexpected_keys(self) -> None:
+        """Unexpected keys should still fail like Observation(**payload)."""
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            observation_from_mapping(
+                {
+                    "dt": 0.1,
+                    "robot": {"position": [0.0, 0.0]},
+                    "agents": [],
+                    "unexpected": True,
+                },
+            )
 
 
 class TestPlannerInterfaceCompliance:

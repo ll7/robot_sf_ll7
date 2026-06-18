@@ -25,6 +25,31 @@ from scripts.validation.run_policy_search_candidate import (
 )
 
 
+def _sample_result_provenance(artifact_pointer_status: str) -> dict[str, object]:
+    """Return representative map-runner result provenance for stage-summary tests."""
+    return {
+        "protocol_version": "0.1.0",
+        "commit_hash": "abc123",
+        "run_id": "run-123",
+        "python_version": "3.13.0",
+        "artifact_pointer_status": artifact_pointer_status,
+        "config_identity": {
+            "schema_path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+            "scenario_path": ".",
+            "scenario_count": 1,
+            "scenario_matrix_hash": "hash",
+            "algo": "orca_residual_guarded_ppo",
+            "algo_config_path": "smoke__cand_algo.yaml",
+            "benchmark_profile": "experimental",
+        },
+        "seed_identity": {
+            "suite_key": "default",
+            "total_jobs": 1,
+            "written": 1,
+        },
+    }
+
+
 def test_deep_merge_recurses_without_mutating_inputs() -> None:
     """Nested config overrides should merge without mutating the base mapping."""
     base = {"a": {"b": 1, "c": 2}, "d": 3}
@@ -548,6 +573,7 @@ def test_run_stage_eval_records_missing_jsonl_as_fail_closed(
                 "status": "not_available",
                 "reason": "planner_prerequisite_unavailable",
             },
+            "provenance": _sample_result_provenance("not_available"),
         }
 
     monkeypatch.setattr(candidate_runner, "run_map_batch", fake_run_map_batch)
@@ -573,7 +599,141 @@ def test_run_stage_eval_records_missing_jsonl_as_fail_closed(
     assert summary["stage_artifact_status"]["reason"] == "missing_jsonl"
     assert summary["preflight"]["compatibility_status"] == "incompatible"
     assert summary["benchmark_availability"]["status"] == "not_available"
+    assert summary["residual_clipping_rate"] is None
+    assert summary["guard_veto_rate"] is None
+    assert summary["fallback_degraded_status"] == "not_available"
+    assert summary["artifact_pointer_status"] == "not_available"
+    result_provenance = summary["result_provenance"]
+    assert result_provenance["artifact_pointer_status"] == "not_available"
+    assert result_provenance["jsonl_path"] == str(jsonl_path)
+    assert result_provenance["config_identity"]["algo"] == "orca_residual_guarded_ppo"
+    smoke_evidence = summary["orca_residual_smoke_evidence"]
+    assert smoke_evidence["missing_required_fields"] == [
+        "residual_clipping_rate",
+        "guard_veto_rate",
+    ]
+    assert smoke_evidence["nominal_escalation_allowed"] is False
     assert decide_stage_status("smoke", {}, summary) == "revise"
+
+
+def test_run_stage_eval_records_orca_residual_smoke_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Smoke summaries should expose ORCA-residual evidence fields for finalizers."""
+
+    def fake_run_map_batch(*args: object, **kwargs: object) -> dict[str, object]:
+        jsonl_path = Path(args[1])
+        jsonl_path.write_text(
+            "\n".join(
+                [
+                    (
+                        '{"scenario_id":"planner_sanity_simple","seed":111,'
+                        '"termination_reason":"success",'
+                        '"metrics":{"success":1.0,"shield_intervention_rate":0.25},'
+                        '"algorithm_metadata":{'
+                        '"status":"ok",'
+                        '"residual_clipping_stats":{"decision_count":4,"clipped_count":1},'
+                        '"shield_stats":{"decision_count":4,"intervention_count":1}'
+                        "}}"
+                    )
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "written": 1,
+            "successful_jobs": 1,
+            "failed_jobs": 0,
+            "provenance": _sample_result_provenance("local_jsonl_present"),
+        }
+
+    monkeypatch.setattr(candidate_runner, "run_map_batch", fake_run_map_batch)
+
+    result = candidate_runner._run_stage_eval(
+        scenarios_or_path=[{"name": "planner_sanity_simple", "map_file": "unused.svg"}],
+        algo="orca_residual_guarded_ppo",
+        algo_cfg={"model_path": "/tmp/model.zip"},
+        out_dir=tmp_path,
+        tag="smoke__cand",
+        horizon=1,
+        dt=0.1,
+        workers=1,
+        benchmark_profile="experimental",
+    )
+
+    summary = result["summary"]
+    assert summary["residual_clipping_rate"] == pytest.approx(0.25)
+    assert summary["guard_veto_rate"] == pytest.approx(0.25)
+    assert summary["fallback_degraded_status"] == "clear"
+    assert summary["artifact_pointer_status"] == "local_jsonl_present"
+    result_provenance = summary["result_provenance"]
+    assert result_provenance["artifact_pointer_status"] == "local_jsonl_present"
+    assert result_provenance["jsonl_path"] == str(result["jsonl_path"])
+    assert result_provenance["seed_identity"]["written"] == 1
+    smoke_evidence = summary["orca_residual_smoke_evidence"]
+    assert smoke_evidence["missing_required_fields"] == []
+    assert smoke_evidence["nominal_escalation_allowed"] is True
+    assert smoke_evidence["residual_clipping_source"] == (
+        "algorithm_metadata.residual_clipping_stats"
+    )
+
+
+def test_orca_residual_smoke_evidence_treats_non_finite_rates_as_missing() -> None:
+    """Non-finite rate values should not satisfy required smoke evidence."""
+    summary: dict[str, object] = {}
+    rows = [
+        {
+            "scenario_id": "planner_sanity_simple",
+            "metrics": {
+                "residual_clipping_rate": "nan",
+                "shield_intervention_rate": "inf",
+            },
+        }
+    ]
+
+    candidate_runner._attach_orca_residual_smoke_evidence(
+        summary,
+        rows,
+        Path("smoke.jsonl"),
+        missing_jsonl=False,
+    )
+
+    assert summary["residual_clipping_rate"] is None
+    assert summary["guard_veto_rate"] is None
+    assert summary["orca_residual_smoke_evidence"]["missing_required_fields"] == [
+        "residual_clipping_rate",
+        "guard_veto_rate",
+    ]
+
+
+def test_combined_result_provenance_preserves_override_sources(tmp_path: Path) -> None:
+    """Override-combined summaries should retain per-run result provenance."""
+    jsonl_path = tmp_path / "combined.jsonl"
+    family_runs = {
+        "base": {
+            "summary": {"result_provenance": _sample_result_provenance("local_jsonl_present")}
+        },
+        "override": {
+            "summary": {
+                "result_provenance": {
+                    **_sample_result_provenance("not_available"),
+                    "run_id": "run-override",
+                }
+            }
+        },
+    }
+
+    provenance = candidate_runner._combined_result_provenance(family_runs, jsonl_path)
+
+    assert provenance is not None
+    assert provenance["jsonl_path"] == str(jsonl_path)
+    assert provenance["schema_version"] == "policy-search-combined-result-provenance.v1"
+    assert provenance["artifact_pointer_status"] == "local_jsonl_present+not_available"
+    assert provenance["source_count"] == 2
+    assert provenance["sources"]["base"]["run_id"] == "run-123"
+    assert provenance["sources"]["override"]["run_id"] == "run-override"
 
 
 def test_run_stage_eval_passes_candidate_observation_override(

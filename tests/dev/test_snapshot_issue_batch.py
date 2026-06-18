@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from scripts.dev.snapshot_issue_batch import (
+    _batch_claim_statuses,
     expand_issue_numbers,
     main,
     snapshot_active_issue_portfolio,
@@ -13,6 +15,16 @@ from scripts.dev.snapshot_issue_batch import (
     snapshot_claimable_issues,
     snapshot_issues,
 )
+
+
+def _claim_status(number: int, *, claimed: bool = False, ok: bool = True, sha: str | None = None):
+    """Return a compact claim status payload for snapshot tests."""
+    return {
+        "ok": ok,
+        "claimed": claimed if ok else None,
+        "claim_ref": f"agent-claims/issue-{number}",
+        "sha": sha if claimed else None,
+    }
 
 
 def test_expand_issue_numbers_treats_two_values_as_range() -> None:
@@ -139,11 +151,11 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
 
     with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
-        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
-            claim.side_effect = [
-                {"ok": True, "claimed": False, "claim_ref": "agent-claims/issue-2667", "sha": None},
-                {"ok": True, "claimed": False, "claim_ref": "agent-claims/issue-2668", "sha": None},
-            ]
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {
+                2667: _claim_status(2667),
+                2668: _claim_status(2668),
+            }
             payload = snapshot_claimable_issues(
                 repo="ll7/robot_sf_ll7",
                 remote="origin",
@@ -157,6 +169,100 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
     assert payload["issues"][0]["body_truncated"] is False
     assert payload["issues"][1]["classification"] == "blocked_label"
     assert "reason" in payload["issues"][1]
+    claim.assert_called_once_with([2667, 2668], remote="origin")
+
+
+def test_snapshot_claimable_issues_uses_one_batch_claim_lookup() -> None:
+    """Claimable snapshots should not shell out once per listed issue."""
+    issue_list = [
+        {
+            "number": 2667,
+            "title": "claimable issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2667",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2668,
+            "title": "claimed issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2668",
+            "labels": [],
+            "assignees": [],
+        },
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as per_issue_claim:
+            with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as batch_claim:
+                batch_claim.return_value = {
+                    2667: _claim_status(2667),
+                    2668: _claim_status(2668, claimed=True, sha="abc123"),
+                }
+                payload = snapshot_claimable_issues(
+                    repo="ll7/robot_sf_ll7",
+                    remote="origin",
+                    body_limit=150,
+                    limit=2,
+                )
+
+    per_issue_claim.assert_not_called()
+    batch_claim.assert_called_once_with([2667, 2668], remote="origin")
+    assert [issue["classification"] for issue in payload["issues"]] == ["claimable", "claimed"]
+    assert payload["issues"][1]["claim"] == {
+        "ok": True,
+        "claimed": True,
+        "claim_ref": "agent-claims/issue-2668",
+        "sha": "abc123",
+    }
+
+
+def test_batch_claim_statuses_parses_claim_refs_once() -> None:
+    """Batch claim lookup should parse matching remote refs and synthesize unclaimed rows."""
+    stdout = (
+        "abc123\trefs/heads/agent-claims/issue-2668\n"
+        "def456\trefs/heads/agent-claims/issue-not-a-number\n"
+    )
+
+    with patch("scripts.dev.snapshot_issue_batch.subprocess.run") as run:
+        run.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=stdout,
+            stderr="",
+        )
+        statuses = _batch_claim_statuses([2667, 2668], remote="origin")
+
+    run.assert_called_once_with(
+        ["git", "ls-remote", "--heads", "origin", "refs/heads/agent-claims/issue-*"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert statuses[2667]["claimed"] is False
+    assert statuses[2667]["sha"] is None
+    assert statuses[2668]["claimed"] is True
+    assert statuses[2668]["sha"] == "abc123"
+
+
+def test_batch_claim_status_failure_fails_closed() -> None:
+    """Batch lookup failures should not falsely mark listed issues unclaimed."""
+    with patch("scripts.dev.snapshot_issue_batch.subprocess.run") as run:
+        run.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=128,
+            stdout="",
+            stderr="network unavailable",
+        )
+        statuses = _batch_claim_statuses([2667, 2668], remote="origin")
+
+    assert statuses[2667]["ok"] is False
+    assert statuses[2667]["claimed"] is None
+    assert statuses[2667]["error"] == "network unavailable"
+    assert statuses[2668]["ok"] is False
+    assert statuses[2668]["claimed"] is None
 
 
 def test_snapshot_claimable_issues_excludes_blocked_external_by_default() -> None:
@@ -182,12 +288,10 @@ def test_snapshot_claimable_issues_excludes_blocked_external_by_default() -> Non
 
     with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
-        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
             claim.return_value = {
-                "ok": True,
-                "claimed": False,
-                "claim_ref": "agent-claims/issue",
-                "sha": None,
+                2962: _claim_status(2962),
+                2415: _claim_status(2415),
             }
             payload = snapshot_claimable_issues(
                 repo="ll7/robot_sf_ll7",
@@ -216,13 +320,8 @@ def test_snapshot_claimable_issues_can_include_blocked_external() -> None:
 
     with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
-        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
-            claim.return_value = {
-                "ok": True,
-                "claimed": False,
-                "claim_ref": "agent-claims/issue-2415",
-                "sha": None,
-            }
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {2415: _claim_status(2415)}
             payload = snapshot_claimable_issues(
                 repo="ll7/robot_sf_ll7",
                 remote="origin",
@@ -388,12 +487,9 @@ def test_snapshot_active_issue_portfolio_classifies_and_writes_report(tmp_path) 
 
     with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
-        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
             claim.return_value = {
-                "ok": True,
-                "claimed": False,
-                "claim_ref": "agent-claims/issue",
-                "sha": None,
+                int(issue["number"]): _claim_status(int(issue["number"])) for issue in issue_list
             }
             payload = snapshot_active_issue_portfolio(
                 repo="ll7/robot_sf_ll7",
@@ -424,6 +520,7 @@ def test_snapshot_active_issue_portfolio_classifies_and_writes_report(tmp_path) 
     assert rows[2441]["classification"] == "executable_now"
     assert rows[2441]["owner_type"] == "Slurm"
     assert payload["classification_counts"]["blocked_external_asset"] == 1
+    claim.assert_called_once_with([2967, 2415, 1134, 2946, 2910, 2965, 2845, 2441], remote="origin")
     markdown = report_path.read_text(encoding="utf-8")
     assert "# Active Issue Portfolio" in markdown
     assert (
@@ -449,6 +546,64 @@ def test_snapshot_active_issue_portfolio_reports_unexpected_json_shape() -> None
     assert payload["errors"] == [{"status": "error", "error": "expected gh issue list JSON array"}]
 
 
+def test_snapshot_active_issue_portfolio_fails_closed_on_claim_lookup_error() -> None:
+    """Portfolio rows should avoid executable_now when claim state cannot be read."""
+    issue_list = [
+        {
+            "number": 3001,
+            "title": "workflow issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/3001",
+            "labels": [{"name": "workflow"}],
+            "assignees": [],
+        }
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {3001: _claim_status(3001, ok=False)}
+            payload = snapshot_active_issue_portfolio(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                limit=1,
+            )
+
+    row = payload["rows"][0]
+    assert row["classification"] == "needs_human_decision"
+    assert row["reason"] == "unable to read claim state; skip autonomous claim"
+    assert row["owner_type"] == "maintainer"
+
+
+def test_snapshot_active_issue_portfolio_fails_closed_on_malformed_claim_status() -> None:
+    """Malformed batched claim values should not classify rows as executable."""
+    issue_list = [
+        {
+            "number": 3002,
+            "title": "workflow issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/3002",
+            "labels": [{"name": "workflow"}],
+            "assignees": [],
+        }
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {3002: None}
+            payload = snapshot_active_issue_portfolio(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                limit=1,
+            )
+
+    row = payload["rows"][0]
+    assert row["classification"] == "needs_human_decision"
+    assert row["reason"] == "unable to read claim state; skip autonomous claim"
+    assert row["owner_type"] == "maintainer"
+
+
 def test_snapshot_active_issue_portfolio_preserves_null_optional_fields() -> None:
     """Explicit null title or URL fields should not leak as literal None strings."""
     issue_list = [
@@ -464,13 +619,8 @@ def test_snapshot_active_issue_portfolio_preserves_null_optional_fields() -> Non
 
     with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
-        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
-            claim.return_value = {
-                "ok": True,
-                "claimed": False,
-                "claim_ref": "agent-claims/issue-3000",
-                "sha": None,
-            }
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {3000: _claim_status(3000)}
             payload = snapshot_active_issue_portfolio(
                 repo="ll7/robot_sf_ll7",
                 remote="origin",
@@ -506,13 +656,8 @@ def test_main_claimable_mode_can_be_called_without_issue_numbers() -> None:  # t
     ]
     with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
-        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
-            claim.return_value = {
-                "ok": True,
-                "claimed": False,
-                "claim_ref": "agent-claims/issue-2669",
-                "sha": None,
-            }
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {2669: _claim_status(2669)}
             rc = main(["--claimable", "--json", "--limit", "1"])
 
     assert rc == 0

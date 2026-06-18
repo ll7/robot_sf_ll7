@@ -82,6 +82,11 @@ def _write_predictive_dataset_fixture(
     )
 
 
+def _pipeline_test_output_root(tmp_path: Path) -> str:
+    """Return a per-test predictive pipeline output root safe for xdist workers."""
+    return str(tmp_path / "predictive_pipeline_output")
+
+
 def _make_ego_pipeline_run_stub(invoked: list[list[str]]):
     """Return a pipeline stage stub that materializes ego-conditioned dataset artifacts."""
     ego_schema_json = _predictive_feature_schema_json(
@@ -268,11 +273,12 @@ def test_dataset_npz_diagnostics_counts_empty_rows(tmp_path: Path) -> None:
 def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_path: Path) -> None:
     """Pipeline should pass ego-conditioning to both base and hardcase collectors when enabled."""
     config_path = tmp_path / "predictive.yaml"
+    output_root = _pipeline_test_output_root(tmp_path)
     config_path.write_text(
         yaml.safe_dump(
             {
                 "experiment": {"run_id": "predictive_ego_smoke"},
-                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "output": {"root": output_root},
                 "scenarios": {
                     "scenario_matrix": "scenarios.yaml",
                     "hard_seed_manifest": "hard.yaml",
@@ -328,8 +334,9 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
         yaml.safe_load(config_path.read_text(encoding="utf-8")),
         run_id="predictive_promotion_smoke",
         base_dir=config_path.parent,
-        output_base_dir=pipeline._REPO_ROOT,
+        output_base_dir=Path.cwd().resolve(),
     )
+    assert resolved_paths.root.is_relative_to(tmp_path)
     code = pipeline.main()
     assert code == 0
     collector_cmds = [
@@ -351,12 +358,13 @@ def test_pipeline_passes_obstacle_model_family_to_collectors_and_training(
 ) -> None:
     """Obstacle-feature pipeline configs should thread model family through all stages."""
     config_path = tmp_path / "predictive_obstacle.yaml"
+    output_root = _pipeline_test_output_root(tmp_path)
     config_path.write_text(
         yaml.safe_dump(
             {
                 "experiment": {"run_id": "predictive_obstacle_smoke"},
                 "model_family": PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
-                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "output": {"root": output_root},
                 "scenarios": {
                     "scenario_matrix": "scenarios.yaml",
                     "hard_seed_manifest": "hard.yaml",
@@ -684,12 +692,13 @@ def test_pipeline_rejects_mismatched_collection_model_families(
 ) -> None:
     """Base and hardcase datasets must share the same predictive feature schema."""
     config_path = tmp_path / "predictive_bad_schema.yaml"
+    output_root = _pipeline_test_output_root(tmp_path)
     config_path.write_text(
         yaml.safe_dump(
             {
                 "experiment": {"run_id": "predictive_bad_schema"},
                 "model_family": PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
-                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "output": {"root": output_root},
                 "scenarios": {
                     "scenario_matrix": "scenarios.yaml",
                     "hard_seed_manifest": "hard.yaml",
@@ -734,11 +743,12 @@ def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
 ) -> None:
     """Pipeline should reuse one resolved model id and mark all_ok false on promotion failure."""
     config_path = tmp_path / "predictive.yaml"
+    output_root = _pipeline_test_output_root(tmp_path)
     config_path.write_text(
         yaml.safe_dump(
             {
                 "experiment": {"run_id": "predictive_promotion_smoke"},
-                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "output": {"root": output_root},
                 "scenarios": {
                     "scenario_matrix": "scenarios.yaml",
                     "hard_seed_manifest": "hard.yaml",
@@ -839,7 +849,7 @@ def test_pipeline_uses_resolved_model_id_and_fails_when_promotion_fails(
         yaml.safe_load(config_path.read_text(encoding="utf-8")),
         run_id="predictive_promotion_smoke",
         base_dir=config_path.parent,
-        output_base_dir=pipeline._REPO_ROOT,
+        output_base_dir=Path.cwd().resolve(),
     )
     code = pipeline.main()
     assert code == 2
@@ -859,11 +869,12 @@ def test_pipeline_uses_committed_base_seed_manifest_without_generating(
 ) -> None:
     """Pipeline should reuse a configured base seed manifest and record it as pre-existing."""
     config_path = tmp_path / "predictive_existing_manifest.yaml"
+    output_root = _pipeline_test_output_root(tmp_path)
     config_path.write_text(
         yaml.safe_dump(
             {
                 "experiment": {"run_id": "predictive_existing_manifest"},
-                "output": {"root": "output/tmp/predictive_planner/pipeline"},
+                "output": {"root": output_root},
                 "scenarios": {
                     "scenario_matrix": "scenarios.yaml",
                     "hard_seed_manifest": "hard.yaml",
@@ -964,7 +975,7 @@ def test_pipeline_uses_committed_base_seed_manifest_without_generating(
         yaml.safe_load(config_path.read_text(encoding="utf-8")),
         run_id="predictive_existing_manifest",
         base_dir=config_path.parent,
-        output_base_dir=pipeline._REPO_ROOT,
+        output_base_dir=Path.cwd().resolve(),
     )
 
     assert pipeline.main() == 0

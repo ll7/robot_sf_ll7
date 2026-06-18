@@ -21,6 +21,7 @@ Example:
 from __future__ import annotations
 
 import copy
+import inspect
 import math
 import random
 from dataclasses import dataclass
@@ -31,7 +32,7 @@ import numpy as np
 from loguru import logger
 from matplotlib import colors as mcolors
 from matplotlib.ticker import FuncFormatter
-from python_motion_planning.common import TYPES, Grid, Visualizer
+from python_motion_planning.common import TYPES, Grid
 from python_motion_planning.path_planner import AStar, ThetaStar
 from shapely.affinity import scale
 from shapely.geometry import Polygon, box
@@ -40,6 +41,22 @@ from shapely.validation import explain_validity
 
 from robot_sf.common import ensure_interactive_backend
 from robot_sf.planner.theta_star_v2 import HighPerformanceThetaStar
+
+try:
+    from python_motion_planning.common import Visualizer
+except ImportError:
+    from python_motion_planning.common.visualizer import Visualizer2D as Visualizer
+
+
+def _plot_grid_map_supports_alpha_3d() -> bool:
+    """Return whether the installed visualizer accepts the legacy alpha_3d argument."""
+    try:
+        return "alpha_3d" in inspect.signature(Visualizer.plot_grid_map).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+_PLOT_GRID_MAP_SUPPORTS_ALPHA_3D = _plot_grid_map_supports_alpha_3d()
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
@@ -132,13 +149,21 @@ class ClassicPlanVisualizer(Visualizer):
     ) -> None:
         """Plot grid cells and relabel axes in meters when scaling is known."""
         resolved_alpha = alpha_3d if alpha_3d is not None else self._DEFAULT_ALPHA_3D
-        super().plot_grid_map(
-            grid_map,
-            equal=equal,
-            alpha_3d=resolved_alpha,
-            show_esdf=show_esdf,
-            alpha_esdf=alpha_esdf,
-        )
+        if _PLOT_GRID_MAP_SUPPORTS_ALPHA_3D:
+            super().plot_grid_map(
+                grid_map,
+                equal=equal,
+                alpha_3d=resolved_alpha,
+                show_esdf=show_esdf,
+                alpha_esdf=alpha_esdf,
+            )
+        else:
+            super().plot_grid_map(
+                grid_map,
+                equal=equal,
+                show_esdf=show_esdf,
+                alpha_esdf=alpha_esdf,
+            )
         self._set_world_axis_formatters(grid_map, meters_per_cell)
 
 
@@ -249,6 +274,7 @@ def map_definition_to_motion_planning_grid(
     grid = Grid(bounds=[[0, width_cells], [0, height_cells]])
     grid.cells_per_meter = cfg.cells_per_meter
     grid.meters_per_cell = cfg.meters_per_cell
+    _ensure_type_map_array_alias(grid)
 
     if cfg.add_boundary_obstacles:
         grid.fill_boundary_with_obstacles()
@@ -308,8 +334,24 @@ def count_obstacle_cells(grid: Grid) -> int:
 def _grid_type_map_array(grid: Grid) -> np.ndarray:
     """Return the concrete cell-type array from a python_motion_planning grid."""
     type_map = grid.type_map
-    raw_array = getattr(type_map, "array", type_map)
+    raw_array = getattr(type_map, "array", None)
+    if raw_array is None:
+        raw_array = getattr(type_map, "data", type_map)
     return np.asarray(raw_array)
+
+
+def _ensure_type_map_array_alias(grid: Grid) -> None:
+    """Expose the stable type-map data under the older array attribute when needed."""
+    type_map = grid.type_map
+    if hasattr(type_map, "array") or not hasattr(type_map, "data"):
+        return
+    try:
+        type_map.array = type_map.data
+    except AttributeError as exc:
+        raise TypeError(
+            "Installed python-motion-planning GridTypeMap exposes data but cannot provide "
+            "the legacy array alias required by planner algorithms."
+        ) from exc
 
 
 def _sanitize_visualization_output_path(output_path: Path | str) -> Path:

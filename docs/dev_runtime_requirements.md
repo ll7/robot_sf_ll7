@@ -18,6 +18,17 @@ Use strict mode when you want CI-parity recommendations to fail fast:
 scripts/dev/check_runtime_requirements.sh --strict
 ```
 
+For pasteable setup diagnostics in issue reports, run:
+
+```bash
+uv run robot_sf_bench doctor
+```
+
+The doctor command reports Python/package source details, required and optional host tools,
+headless rendering environment variables, artifact-root writability, and a minimal reset/step
+environment smoke. It is read-only apart from temporary probe files and reports missing optional
+tools as warnings instead of attempting automatic repair.
+
 ## Core Tools
 
 These are expected for normal development:

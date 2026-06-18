@@ -124,11 +124,10 @@ class UnicycleDrivePedestrian:
 
     @property
     def observation_space(self) -> spaces.Box:
-        """TODO docstring. Document this function.
-
+        """Action-independent observation bounds for the unicycle pedestrian.
 
         Returns:
-            TODO docstring.
+            spaces.Box: 2D continuous box for speed and steering-angle constraints.
         """
         high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
         low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
@@ -136,11 +135,10 @@ class UnicycleDrivePedestrian:
 
     @property
     def action_space(self) -> spaces.Box:
-        """TODO docstring. Document this function.
-
+        """Action bounds accepted by the unicycle pedestrian.
 
         Returns:
-            TODO docstring.
+            spaces.Box: 2D continuous box with acceleration and steering limits.
         """
         high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
         low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
@@ -148,58 +146,43 @@ class UnicycleDrivePedestrian:
 
     @property
     def pos(self) -> Vec2D:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Current 2D position of the pedestrian in world coordinates."""
         return self.state.pose[0]
 
     @property
     def pose(self) -> PedPose:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Current pose as ``((x, y), heading)``."""
         return self.state.pose
 
     @property
     def current_speed(self) -> PolarVec2D:
-        """TODO docstring. Document this function.
-
-
-        Returns:
-            TODO docstring.
-        """
+        """Current speed (m/s) and travel direction."""
         return self.state.current_speed
 
     def apply_action(self, action: UnicycleAction, d_t: float):
-        """TODO docstring. Document this function.
+        """Integrate one control command for the configured time step.
 
         Args:
-            action: TODO docstring.
-            d_t: TODO docstring.
+            action: Unicycle control tuple ``(acceleration, steering)``.
+            d_t: Integration duration in seconds.
         """
         self.movement.move(self.state, action, d_t)
 
     def reset_state(self, new_pose: PedPose):
-        """TODO docstring. Document this function.
+        """Reset internal state to a pose and zero speed.
 
         Args:
-            new_pose: TODO docstring.
+            new_pose: New pedestrian pose used to reinitialize state.
         """
         self.state = UnicycleDriveState(new_pose, 0)
 
     def parse_action(self, action: np.ndarray) -> UnicycleAction:
-        """TODO docstring. Document this function.
+        """Convert a 2-element action array to the unicycle action tuple.
 
         Args:
-            action: TODO docstring.
+            action: Array-like with ``[acceleration, steering]``.
 
         Returns:
-            TODO docstring.
+            UnicycleAction: Parsed acceleration and steering command tuple.
         """
         return (action[0], action[1])

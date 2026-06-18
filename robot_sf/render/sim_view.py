@@ -1,4 +1,8 @@
-"""TODO docstring. Document this module."""
+"""PyGame simulation renderer for RobotSF.
+
+This module renders simulator states to a pygame surface, handles playback
+interactions, and optionally records image sequences for visualization artifacts.
+"""
 
 import os
 import sys
@@ -762,7 +766,7 @@ class SimulationView:
             pygame.display.update()
 
     def _resize_window(self):
-        """TODO docstring. Document this function."""
+        """Recreate the render surface using current window dimensions."""
         logger.debug("Resizing the window.")
         old_surface = self.screen
         if self._use_display:
@@ -958,7 +962,7 @@ class SimulationView:
 
     def _draw_obstacles(self):
         # Iterate over each obstacle in the list of obstacles
-        """TODO docstring. Document this function."""
+        """Draw obstacle polygons from the loaded map."""
         for obstacle in self.map_def.obstacles:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [(self._scale_tuple((x, y))) for x, y in obstacle.vertices_np]
@@ -967,7 +971,7 @@ class SimulationView:
 
     def _draw_spawn_zones(self):
         # Iterate over each spawn_zone in the list of spawn_zones
-        """TODO docstring. Document this function."""
+        """Draw pedestrian spawn zones as filled polygons."""
         for spawn_zone in self.map_def.ped_spawn_zones:
             # Scale and offset the vertices of the zones
             vertices_np = np.array(spawn_zone)
@@ -977,7 +981,7 @@ class SimulationView:
 
     def _draw_goal_zones(self):
         # Iterate over each goal_zone in the list of goal_zones
-        """TODO docstring. Document this function."""
+        """Draw pedestrian goal zones as filled polygons."""
         for goal_zone in self.map_def.ped_goal_zones:
             # Scale and offset the vertices of the goal zones
             vertices_np = np.array(goal_zone)
@@ -1269,11 +1273,11 @@ class SimulationView:
         self.screen.blit(text, (x, y))
 
     def _add_text(self, timestep: int, state: VisualizableSimState):
-        """TODO docstring. Document this function.
+        """Render diagnostic overlay text for the current frame.
 
         Args:
-            timestep: TODO docstring.
-            state: TODO docstring.
+            timestep: Simulation step index shown in the overlay.
+            state: Current visualizable state used to build display lines.
         """
         info_lines = self._get_display_info_lines(state)
         text_lines = self._build_text_lines(timestep, state, info_lines)

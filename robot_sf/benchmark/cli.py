@@ -52,6 +52,7 @@ from robot_sf.benchmark.canonical_table_export import (
 from robot_sf.benchmark.canonical_table_export import load_rows_json as _load_canonical_rows_json
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
+from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.failure_mechanism_classifier import (
     classify_failure_mechanisms_from_jsonl,
@@ -1044,6 +1045,20 @@ def _handle_plot_scenarios(args) -> int:
         return 2
 
 
+def _handle_doctor(args: argparse.Namespace) -> int:
+    """Run local runtime diagnostics and print JSON output.
+
+    Returns:
+        int: Doctor command exit code.
+    """
+    report = collect_doctor_report(
+        artifact_root=args.artifact_root,
+        run_env_smoke=not args.skip_env_smoke,
+    )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return doctor_exit_code(report)
+
+
 def _handle_list_scenarios(args) -> int:
     """List scenarios from a matrix.
 
@@ -1741,6 +1756,29 @@ def _add_planner_inclusion_subparser(
     p.add_argument("--max-collision-rate", type=float, default=0.0)
     p.add_argument("--max-runtime-sec", type=float, default=60.0)
     p.set_defaults(cmd="planner-inclusion-check")
+
+
+def _add_doctor_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the local runtime doctor subcommand parser."""
+    p = subparsers.add_parser(
+        "doctor",
+        help="Report local runtime diagnostics for setup and issue triage",
+    )
+    p.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=Path("output"),
+        help="Artifact root to probe for temporary write access (default: output)",
+    )
+    p.add_argument(
+        "--skip-env-smoke",
+        action="store_true",
+        default=False,
+        help="Skip the minimal reset/step environment smoke check",
+    )
+    p.set_defaults(cmd="doctor")
 
 
 def _add_summary_subparser(
@@ -2499,6 +2537,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
     _add_plot_scenarios_subparser(subparsers)
     _add_list_subparser(subparsers)
     _add_planner_inclusion_subparser(subparsers)
+    _add_doctor_subparser(subparsers)
     snqi_parser = subparsers.add_parser(
         "snqi",
         help="SNQI weight tooling (optimize / recompute)",
@@ -2954,6 +2993,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "plot-distributions": _handle_plot_distributions,
         "plot-planner-tradeoff": _handle_plot_planner_tradeoff,
         "plot-scenarios": _handle_plot_scenarios,
+        "doctor": _handle_doctor,
     }
     handler = handlers.get(args.cmd)
     if handler is None:

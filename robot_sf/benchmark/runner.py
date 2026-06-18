@@ -18,7 +18,10 @@ import json
 import multiprocessing as mp
 import os
 import platform
+import shlex
+import sys
 import time
+import uuid
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import (
@@ -1024,8 +1027,14 @@ def _maybe_encode_video(
     except RuntimeError:
         # Budget enforcement: bubble up to runner to record a failure
         raise
-    except (TypeError, ValueError, OSError):  # pragma: no cover - defensive path
-        pass
+    except (TypeError, ValueError, OSError) as exc:  # pragma: no cover - defensive path
+        logger.opt(exception=exc).warning(
+            "Synthetic video encoding failure for episode_id={} scenario_id={} renderer={}; "
+            "continuing benchmark run.",
+            episode_id,
+            scenario_id,
+            video_renderer,
+        )
 
 
 def _simulate_episode_with_policy(
@@ -1171,6 +1180,7 @@ def _build_episode_record(
     ts_start: str,
     termination_reason: str,
     outcome: dict[str, bool],
+    provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble a JSON-serializable episode record.
 
@@ -1217,6 +1227,8 @@ def _build_episode_record(
         "outcome": outcome,
         "integrity": {"contradictions": contradictions},
     }
+    if provenance is not None:
+        record["provenance"] = provenance
     algo_value = scenario_params.get("algo")
     if algo_value is not None:
         record["algo"] = algo_value
@@ -1248,6 +1260,7 @@ def run_episode(  # noqa: PLR0913
     experimental_ped_impact: bool = False,
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
+    provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a single episode and return a metrics record dict.
 
@@ -1349,6 +1362,7 @@ def run_episode(  # noqa: PLR0913
         ts_start,
         termination_reason,
         outcome,
+        provenance=provenance,
     )
 
     steps_taken = max(0, len(robot_pos_traj) - 1)
@@ -1445,6 +1459,7 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
         experimental_ped_impact=bool(params.get("experimental_ped_impact", False)),
         ped_impact_radius_m=float(params.get("ped_impact_radius_m", 2.0)),
         ped_impact_window_steps=int(params.get("ped_impact_window_steps", 5)),
+        provenance=params.get("provenance"),
     )
 
 
@@ -1486,6 +1501,11 @@ def _run_batch_sequential(
                 except Exception:  # pragma: no cover - progress best-effort
                     pass
         except Exception as e:  # pragma: no cover - error path
+            logger.exception(
+                "Benchmark batch job failed in serial execution: scenario_id={} seed={}",
+                sc.get("id", "unknown"),
+                seed,
+            )
             failures.append(
                 {
                     "scenario_id": sc.get("id", "unknown"),
@@ -1538,6 +1558,11 @@ def _run_batch_parallel(  # noqa: C901
                     except Exception:  # pragma: no cover
                         pass
             except Exception as e:  # pragma: no cover
+                logger.exception(
+                    "Benchmark batch job failed in parallel execution: scenario_id={} seed={}",
+                    sc.get("id", "unknown"),
+                    seed,
+                )
                 failures.append(
                     {
                         "scenario_id": sc.get("id", "unknown"),
@@ -1559,6 +1584,11 @@ def _run_batch_parallel(  # noqa: C901
             _write_validated_record(out_path, schema, results_by_idx[idx])
             wrote += 1
         except Exception as e:  # pragma: no cover - write/validate path
+            logger.exception(
+                "Benchmark batch write/validation failed for scenario_id={} seed={}",
+                results_by_idx[idx].get("scenario_id", "unknown"),
+                results_by_idx[idx].get("seed", -1),
+            )
             failures.append(
                 {
                     "scenario_id": results_by_idx[idx].get("scenario", {}).get("id", "unknown"),
@@ -1614,6 +1644,7 @@ def _setup_fixed_params(  # noqa: PLR0913
     experimental_ped_impact: bool = False,
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
+    provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Set up the fixed parameters dict for job execution.
 
@@ -1635,6 +1666,7 @@ def _setup_fixed_params(  # noqa: PLR0913
         "experimental_ped_impact": bool(experimental_ped_impact),
         "ped_impact_radius_m": float(ped_impact_radius_m),
         "ped_impact_window_steps": int(ped_impact_window_steps),
+        "provenance": provenance,
     }
 
 
@@ -1874,6 +1906,25 @@ def run_batch(  # noqa: PLR0913
     jobs = _expand_jobs(scenarios, base_seed=base_seed, repeats_override=repeats_override)
 
     # Set up fixed parameters
+    from robot_sf.benchmark.release_protocol import BENCHMARK_PROTOCOL_VERSION  # noqa: PLC0415
+
+    provenance = {
+        "protocol_version": BENCHMARK_PROTOCOL_VERSION,
+        "commit_hash": _git_hash_fallback(),
+        "base_seed": base_seed,
+        "run_id": uuid.uuid4().hex,
+        "python_version": platform.python_version(),
+        "config_identity": {
+            "schema_path": str(schema_path),
+            "algo": str(algo),
+            "algo_config_path": str(algo_config_path) if algo_config_path is not None else None,
+            "scenario_count": len(scenarios),
+            "scenario_matrix_hash": _config_hash(scenarios),
+        },
+    }
+    if hasattr(sys, "argv") and sys.argv:
+        provenance["invocation"] = shlex.join(sys.argv)
+
     fixed_params = _setup_fixed_params(
         out_path,
         horizon,
@@ -1888,6 +1939,7 @@ def run_batch(  # noqa: PLR0913
         experimental_ped_impact,
         ped_impact_radius_m,
         ped_impact_window_steps,
+        provenance=provenance,
     )
 
     # Filter jobs for resume

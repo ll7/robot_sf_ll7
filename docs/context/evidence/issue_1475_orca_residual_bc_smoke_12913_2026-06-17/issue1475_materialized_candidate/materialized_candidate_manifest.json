@@ -1,0 +1,10 @@
+{
+  "candidate": "orca_residual_guarded_ppo_progress_v1",
+  "generated_at": "2026-06-17T06:41:57.484260+00:00",
+  "policy_model_id": "issue_1428_orca_residual_bc_progress_v1_policy_smoke",
+  "policy_model_path": "/tmp/luttkule/issue1475-orca-residual-bc-12913/results/benchmarks/expert_policies/issue_1428_orca_residual_bc_progress_v1_policy_smoke.zip",
+  "runtime_candidate_config": "/tmp/luttkule/issue1475-orca-residual-bc-12913/results/issue1475_materialized_candidate/candidates/orca_residual_guarded_ppo_progress_v1.yaml",
+  "runtime_registry": "/tmp/luttkule/issue1475-orca-residual-bc-12913/results/issue1475_materialized_candidate/candidate_registry.yaml",
+  "schema_version": "orca-residual-materialized-candidate.v1",
+  "source_candidate_config": "/home/luttkule/git/robot_sf_ll7.worktrees/slurm-submit-20260616-origin-main/configs/policy_search/candidates/orca_residual_guarded_ppo_progress_v1.yaml"
+}

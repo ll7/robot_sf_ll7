@@ -8,7 +8,19 @@ SocialForce, PPO, Random, and future baselines.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, TypeGuard, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+
+class ObservationKwargs(TypedDict, total=False):
+    """Keyword payload accepted by the planner-facing Observation constructor."""
+
+    dt: float
+    robot: dict[str, Any]
+    agents: list[dict[str, Any]]
+    obstacles: list[Any]
 
 
 @dataclass
@@ -24,6 +36,28 @@ class Observation:
     robot: dict[str, Any]
     agents: list[dict[str, Any]]
     obstacles: list[Any] = field(default_factory=list)
+
+
+def observation_from_mapping(obs: Mapping[str, Any]) -> Observation:
+    """Build an Observation from a dict-like benchmark payload.
+
+    Missing optional obstacles use the dataclass default, while missing required keys
+    or unexpected keys still raise TypeError.
+
+    Returns:
+        Observation: A planner-facing observation container.
+    """
+    payload = obs if isinstance(obs, dict) else dict(obs)
+    return Observation(**cast("ObservationKwargs", payload))
+
+
+def is_observation_mapping(obs: Observation | dict[str, Any]) -> TypeGuard[dict[str, Any]]:
+    """Return whether an observation payload is a mutable mapping input.
+
+    Returns:
+        bool: True when the payload should be converted through ``observation_from_mapping``.
+    """
+    return isinstance(obs, dict)
 
 
 @dataclass(frozen=True)

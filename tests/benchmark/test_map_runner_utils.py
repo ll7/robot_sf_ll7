@@ -12,12 +12,16 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import yaml
+from loguru import logger
 
 from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.map_runner import (
+    _accumulate_batch_metadata,
     _apply_planner_selector_v2_context,
+    _attach_planner_reset,
     _build_policy,
     _build_socnav_config,
+    _command_action_payload,
     _default_robot_command_space,
     _extract_ppo_pedestrians,
     _finalize_feasibility_metadata,
@@ -82,6 +86,23 @@ class _KinematicsStub:
         """Return empty kinematics diagnostics for the stub."""
         del command, projected
         return {}
+
+
+def test_command_action_payload_preserves_structured_holonomic_trace_fields() -> None:
+    """Structured holonomic commands should keep x/y velocity in trace selected_action."""
+    payload = _command_action_payload(
+        {
+            "command_kind": "holonomic_vxy_world",
+            "vx": 0.6,
+            "vy": -0.2,
+        }
+    )
+
+    assert payload == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.6),
+        "vy": pytest.approx(-0.2),
+    }
 
 
 def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:
@@ -823,6 +844,49 @@ def test_build_policy_hrvo_reset_hook_tolerates_adapters_without_seed(
 
     policy._planner_reset(seed=7)
     assert reset_calls == ["reset"]
+
+
+def test_attach_planner_reset_tolerates_adapter_reset_without_seed() -> None:
+    """Direct reset hook wiring should support adapters without seed kwargs."""
+    reset_calls: list[str] = []
+
+    class _Adapter:
+        """Adapter reset double without seed support."""
+
+        def reset(self) -> None:
+            """Record unseeded reset fallback."""
+            reset_calls.append("reset")
+
+    def policy(_obs: dict[str, object]) -> tuple[float, float]:
+        """Minimal policy callable for reset-hook attachment."""
+        return 0.0, 0.0
+
+    _attach_planner_reset(policy, _Adapter())
+
+    policy._planner_reset(seed=7)
+
+    assert reset_calls == ["reset"]
+
+
+def test_attach_planner_reset_propagates_internal_type_error() -> None:
+    """Seed-aware reset hooks should not hide TypeErrors raised inside reset."""
+
+    class _Adapter:
+        """Adapter reset double that accepts seed but fails internally."""
+
+        def reset(self, *, seed: int | None = None) -> None:
+            """Raise an internal TypeError unrelated to seed binding."""
+            del seed
+            raise TypeError("internal reset failure")
+
+    def policy(_obs: dict[str, object]) -> tuple[float, float]:
+        """Minimal policy callable for reset-hook attachment."""
+        return 0.0, 0.0
+
+    _attach_planner_reset(policy, _Adapter())
+
+    with pytest.raises(TypeError, match="internal reset failure"):
+        policy._planner_reset(seed=7)
 
 
 def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(
@@ -3584,6 +3648,55 @@ def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
     }
 
 
+def test_run_map_batch_worker_failure_logs_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Worker failures should emit a warning before fail-closed summary returns."""
+    scenarios = [
+        {"name": "s1", "metadata": {"supported": True}},
+        {"name": "s2", "metadata": {"supported": True}},
+    ]
+    out_path = tmp_path / "episodes.jsonl"
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda _: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        ThreadPoolExecutor,
+    )
+
+    def fake_run(job):
+        """Force map worker errors for the parallel failure test."""
+        scenario, _seed, _ = job
+        raise RuntimeError(f"forced map failure: {scenario['name']}")
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
+
+    captured: list = []
+
+    def capture_message(message):
+        """Collect warning messages for this failure test."""
+        captured.append(message)
+
+    handle = logger.add(capture_message, level="WARNING")
+    try:
+        result = run_map_batch(
+            scenarios,
+            out_path,
+            schema_path=tmp_path / "schema.json",
+            workers=2,
+            resume=False,
+        )
+    finally:
+        logger.remove(handle)
+
+    assert result["written"] == 0
+    assert result["failed_jobs"] == 2
+    assert any(
+        "Map batch worker failed in parallel execution" in msg.record["message"] for msg in captured
+    )
+
+
 def test_run_map_batch_filters_and_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -3975,6 +4088,52 @@ def test_run_map_batch_parallel_preserves_runtime_metadata_bridge(
     assert meta["kinematics_feasibility"]["mean_abs_delta_linear"] == pytest.approx(0.2)
 
 
+def test_accumulate_batch_metadata_preserves_falsy_optional_values() -> None:
+    """Falsy numeric feasibility metadata should not be replaced by fallback values."""
+    feasibility_totals = {
+        "commands_evaluated": 0.0,
+        "infeasible_native_count": 0.0,
+        "projected_count": 0.0,
+        "sum_abs_delta_linear": 1.25,
+        "sum_abs_delta_angular": 2.5,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0,
+    }
+    rec = {
+        "algorithm_metadata": {
+            "adapter_impact": {
+                "requested": True,
+                "native_steps": 0,
+                "adapted_steps": 0,
+            },
+            "kinematics_feasibility": {
+                "commands_evaluated": 4,
+                "infeasible_native_count": 0,
+                "projected_count": 0,
+                "mean_abs_delta_linear": 0.0,
+                "mean_abs_delta_angular": None,
+                "max_abs_delta_linear": 0.0,
+                "max_abs_delta_angular": None,
+            },
+        }
+    }
+
+    requested, native_steps, adapted_steps = _accumulate_batch_metadata(
+        rec,
+        feasibility_totals=feasibility_totals,
+    )
+
+    assert requested is True
+    assert native_steps == 0
+    assert adapted_steps == 0
+    assert feasibility_totals["commands_evaluated"] == 4
+    assert feasibility_totals["projected_count"] == 0
+    assert feasibility_totals["sum_abs_delta_linear"] == pytest.approx(1.25)
+    assert feasibility_totals["sum_abs_delta_angular"] == pytest.approx(2.5)
+    assert feasibility_totals["max_abs_delta_linear"] == 0.0
+    assert feasibility_totals["max_abs_delta_angular"] == 0.0
+
+
 def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyPatch) -> None:
     """Serialized map jobs should forward benchmark metadata fields into episode execution."""
     captured: dict[str, object] = {}
@@ -4036,6 +4195,69 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
     assert captured["track_schema_version"] == "track-v1"
     assert captured["record_simulation_step_trace"] is True
     assert record["algorithm_metadata"]["benchmark_track"]["benchmark_track"] == "lidar"
+
+
+def test_run_map_job_worker_normalizes_optional_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit None worker params should use defaults without replacing valid falsy values."""
+    captured: list[dict[str, object]] = []
+
+    def _fake_run_map_episode(_scenario, _seed, **kwargs):
+        """Capture worker-normalized keyword arguments."""
+        captured.append(dict(kwargs))
+        return {"episode_id": f"captured-{len(captured)}"}
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_episode", _fake_run_map_episode)
+
+    _run_map_job_worker(
+        (
+            {"name": "none-defaults"},
+            1,
+            {
+                "scenario_path": "configs/scenarios/demo.yaml",
+                "algo": None,
+                "record_forces": None,
+                "ped_impact_radius_m": None,
+                "ped_impact_window_steps": None,
+            },
+        )
+    )
+    _run_map_job_worker(
+        (
+            {"name": "falsy-values"},
+            2,
+            {
+                "scenario_path": "configs/scenarios/demo.yaml",
+                "algo": "",
+                "record_forces": False,
+                "ped_impact_radius_m": 0.0,
+                "ped_impact_window_steps": 0,
+            },
+        )
+    )
+
+    assert captured[0]["algo"] == "goal"
+    assert captured[0]["record_forces"] is True
+    assert captured[0]["ped_impact_radius_m"] == 2.0
+    assert captured[0]["ped_impact_window_steps"] == 5
+    assert captured[1]["algo"] == ""
+    assert captured[1]["record_forces"] is False
+    assert captured[1]["ped_impact_radius_m"] == 0.0
+    assert captured[1]["ped_impact_window_steps"] == 0
+
+
+def test_run_map_job_worker_requires_scenario_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing serialized scenario paths should fail with an actionable error."""
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._run_map_episode",
+        lambda *_args, **_kwargs: {"episode_id": "unused"},
+    )
+
+    with pytest.raises(ValueError, match="scenario_path is required"):
+        _run_map_job_worker(({"name": "missing-path"}, 1, {"scenario_path": None}))
 
 
 def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(

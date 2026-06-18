@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import time
 from collections.abc import Mapping
@@ -333,6 +334,196 @@ def decide_stage_status(stage_name: str, stage_cfg: dict[str, Any], summary: dic
     return "pass"
 
 
+def _as_optional_float(value: Any) -> float | None:
+    """Coerce numeric evidence values while preserving missing/invalid values."""
+    try:
+        if value is None or value == "":
+            return None
+        converted = float(value)
+    except (TypeError, ValueError):
+        return None
+    return converted if math.isfinite(converted) else None
+
+
+def _mean(values: list[float]) -> float | None:
+    """Return the arithmetic mean for non-empty float lists."""
+    return sum(values) / len(values) if values else None
+
+
+def _row_residual_clipping_rate(row: Mapping[str, Any]) -> tuple[float | None, str]:
+    """Return residual clipping rate evidence for one policy-search row."""
+    metrics = row.get("metrics")
+    if isinstance(metrics, Mapping):
+        metric_rate = _as_optional_float(metrics.get("residual_clipping_rate"))
+        if metric_rate is not None:
+            return metric_rate, "metrics.residual_clipping_rate"
+
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        return None, "missing_algorithm_metadata"
+    stats = metadata.get("residual_clipping_stats")
+    if isinstance(stats, Mapping):
+        decisions = _as_optional_float(stats.get("decision_count"))
+        clipped = _as_optional_float(stats.get("clipped_count"))
+        if decisions is not None and decisions > 0.0 and clipped is not None:
+            return clipped / decisions, "algorithm_metadata.residual_clipping_stats"
+
+    shield_stats = metadata.get("shield_stats")
+    last_decision = shield_stats.get("last_decision") if isinstance(shield_stats, Mapping) else None
+    fallback_state = (
+        last_decision.get("fallback_controller_state")
+        if isinstance(last_decision, Mapping)
+        else None
+    )
+    action_adaptation = (
+        fallback_state.get("action_adaptation") if isinstance(fallback_state, Mapping) else None
+    )
+    if isinstance(action_adaptation, Mapping) and "residual_clipped" in action_adaptation:
+        return (
+            1.0 if bool(action_adaptation.get("residual_clipped")) else 0.0,
+            "algorithm_metadata.shield_stats.last_decision.action_adaptation",
+        )
+    return None, "missing_residual_clipping_evidence"
+
+
+def _row_guard_veto_rate(row: Mapping[str, Any]) -> tuple[float | None, str]:
+    """Return guard veto/intervention rate evidence for one policy-search row."""
+    metrics = row.get("metrics")
+    if isinstance(metrics, Mapping):
+        for key in ("guard_veto_rate", "shield_intervention_rate", "shield_override_rate"):
+            value = _as_optional_float(metrics.get(key))
+            if value is not None:
+                return value, f"metrics.{key}"
+    metadata = row.get("algorithm_metadata")
+    shield_stats = metadata.get("shield_stats") if isinstance(metadata, Mapping) else None
+    if isinstance(shield_stats, Mapping):
+        decisions = _as_optional_float(shield_stats.get("decision_count"))
+        interventions = _as_optional_float(shield_stats.get("intervention_count"))
+        if decisions is not None and decisions > 0.0 and interventions is not None:
+            return interventions / decisions, "algorithm_metadata.shield_stats"
+    return None, "missing_guard_veto_evidence"
+
+
+def _row_is_fallback_or_degraded(row: Mapping[str, Any]) -> bool:
+    """Return whether row metadata reports fallback/degraded execution."""
+    status_values: list[str] = []
+    for key in ("fallback_degraded_status", "status"):
+        value = row.get(key)
+        if isinstance(value, str):
+            status_values.append(value.lower())
+    metadata = row.get("algorithm_metadata")
+    if isinstance(metadata, Mapping):
+        for key in ("fallback_degraded_status", "status"):
+            value = metadata.get(key)
+            if isinstance(value, str):
+                status_values.append(value.lower())
+        adapter_impact = metadata.get("adapter_impact")
+        if isinstance(adapter_impact, Mapping):
+            value = adapter_impact.get("status")
+            if isinstance(value, str):
+                status_values.append(value.lower())
+    return any("fallback" in value or "degraded" in value for value in status_values)
+
+
+def _artifact_pointer_status(
+    summary: Mapping[str, Any],
+    jsonl_path: Path,
+    *,
+    missing_jsonl: bool,
+    rows: list[Mapping[str, Any]],
+) -> str:
+    """Classify whether the smoke stage recorded a usable artifact pointer."""
+    artifact_status = summary.get("stage_artifact_status")
+    if isinstance(artifact_status, Mapping):
+        status = str(artifact_status.get("status", "")).strip()
+        if status:
+            return status
+    if missing_jsonl or not rows:
+        return "not_available"
+    return "local_jsonl_present" if jsonl_path.exists() else "missing"
+
+
+def _attach_orca_residual_smoke_evidence(
+    summary: dict[str, Any],
+    rows: list[Mapping[str, Any]],
+    jsonl_path: Path,
+    *,
+    missing_jsonl: bool,
+) -> None:
+    """Attach required ORCA-residual smoke evidence fields to a stage summary."""
+    residual_values: list[float] = []
+    residual_sources: set[str] = set()
+    guard_values: list[float] = []
+    guard_sources: set[str] = set()
+    degraded_count = 0
+    for row in rows:
+        residual_rate, residual_source = _row_residual_clipping_rate(row)
+        residual_sources.add(residual_source)
+        if residual_rate is not None:
+            residual_values.append(residual_rate)
+        guard_rate, guard_source = _row_guard_veto_rate(row)
+        guard_sources.add(guard_source)
+        if guard_rate is not None:
+            guard_values.append(guard_rate)
+        if _row_is_fallback_or_degraded(row):
+            degraded_count += 1
+
+    residual_clipping_rate = _mean(residual_values)
+    guard_veto_rate = _mean(guard_values)
+    fallback_degraded_status = (
+        "not_available" if not rows else "degraded" if degraded_count > 0 else "clear"
+    )
+    artifact_pointer_status = _artifact_pointer_status(
+        summary,
+        jsonl_path,
+        missing_jsonl=missing_jsonl,
+        rows=rows,
+    )
+    missing_fields = [
+        field
+        for field, value in (
+            ("residual_clipping_rate", residual_clipping_rate),
+            ("guard_veto_rate", guard_veto_rate),
+            ("fallback_degraded_status", fallback_degraded_status),
+            ("artifact_pointer_status", artifact_pointer_status),
+        )
+        if value is None or value == ""
+    ]
+    summary["residual_clipping_rate"] = residual_clipping_rate
+    summary["guard_veto_rate"] = guard_veto_rate
+    summary["fallback_degraded_status"] = fallback_degraded_status
+    summary["artifact_pointer_status"] = artifact_pointer_status
+    summary["orca_residual_smoke_evidence"] = {
+        "schema_version": "orca-residual-smoke-evidence.v1",
+        "residual_clipping_rate": residual_clipping_rate,
+        "residual_clipping_source": (
+            "not_available" if not residual_sources else "+".join(sorted(residual_sources))
+        ),
+        "guard_veto_rate": guard_veto_rate,
+        "guard_veto_source": (
+            "not_available" if not guard_sources else "+".join(sorted(guard_sources))
+        ),
+        "fallback_degraded_status": fallback_degraded_status,
+        "fallback_degraded_rows": degraded_count,
+        "artifact_pointer_status": artifact_pointer_status,
+        "missing_required_fields": missing_fields,
+        "nominal_escalation_allowed": not missing_fields
+        and fallback_degraded_status == "clear"
+        and artifact_pointer_status not in {"missing", "not_available"},
+    }
+
+
+def _refresh_orca_residual_smoke_evidence(summary_payload: dict[str, Any]) -> None:
+    """Refresh ORCA-residual evidence after any summary rebuild path."""
+    rows = summary_payload.get("records")
+    _attach_orca_residual_smoke_evidence(
+        summary_payload["summary"],
+        rows if isinstance(rows, list) else [],
+        Path(str(summary_payload["jsonl_path"])),
+        missing_jsonl=not Path(str(summary_payload["jsonl_path"])).exists(),
+    )
+
+
 def _git_hash() -> str | None:
     """Read the current git commit for provenance metadata.
 
@@ -551,6 +742,87 @@ def _apply_stage_exclusions(
     return updated
 
 
+def _finalize_summary_payload(
+    *,
+    stage_cfg: Mapping[str, Any],
+    summary_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply late summary rebuilds and refresh required smoke evidence fields."""
+    finalized = _apply_stage_exclusions(stage_cfg=stage_cfg, summary_payload=summary_payload)
+    _refresh_orca_residual_smoke_evidence(finalized)
+    return finalized
+
+
+def _attach_result_provenance(
+    summary: dict[str, Any],
+    batch_summary: Mapping[str, Any],
+    jsonl_path: Path,
+) -> None:
+    """Attach map-runner result provenance to a public smoke summary when available."""
+    provenance = batch_summary.get("provenance")
+    if not isinstance(provenance, Mapping):
+        return
+    result_provenance = dict(provenance)
+    result_provenance["artifact_pointer_status"] = summary.get(
+        "artifact_pointer_status",
+        result_provenance.get("artifact_pointer_status", "unknown"),
+    )
+    result_provenance["jsonl_path"] = str(jsonl_path)
+    summary["result_provenance"] = result_provenance
+
+
+def _combined_result_provenance(
+    family_runs: Mapping[str, Any],
+    jsonl_path: Path,
+) -> dict[str, Any] | None:
+    """Combine per-override result provenance into a final aggregate summary."""
+    sources: dict[str, Any] = {}
+    for tag, run in sorted(family_runs.items()):
+        if not isinstance(run, Mapping):
+            continue
+        summary = run.get("summary")
+        if not isinstance(summary, Mapping):
+            continue
+        provenance = summary.get("result_provenance")
+        if isinstance(provenance, Mapping):
+            sources[str(tag)] = dict(provenance)
+    if not sources:
+        return None
+    artifact_statuses = {
+        str(source.get("artifact_pointer_status", "unknown")) for source in sources.values()
+    }
+    return {
+        "schema_version": "policy-search-combined-result-provenance.v1",
+        "jsonl_path": str(jsonl_path),
+        "artifact_pointer_status": (
+            "local_jsonl_present"
+            if artifact_statuses == {"local_jsonl_present"}
+            else "+".join(sorted(artifact_statuses))
+        ),
+        "source_count": len(sources),
+        "sources": sources,
+    }
+
+
+def _build_combined_summary_payload(
+    *,
+    combined_records: list[dict[str, Any]],
+    combined_jsonl: Path,
+    family_runs: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the final summary payload for scenario/config override batches."""
+    _write_records(combined_jsonl, combined_records)
+    combined_summary = summarize_policy_search_records(combined_records)
+    combined_provenance = _combined_result_provenance(family_runs, combined_jsonl)
+    if combined_provenance is not None:
+        combined_summary["result_provenance"] = combined_provenance
+    return {
+        "records": combined_records,
+        "summary": combined_summary,
+        "jsonl_path": str(combined_jsonl),
+    }
+
+
 def _run_stage_eval(  # noqa: PLR0913
     *,
     scenarios_or_path: Path | list[dict[str, Any]],
@@ -616,6 +888,14 @@ def _run_stage_eval(  # noqa: PLR0913
             availability = batch_summary.get("benchmark_availability")
             if isinstance(availability, Mapping):
                 summary["benchmark_availability"] = dict(availability)
+    _attach_orca_residual_smoke_evidence(
+        summary,
+        rows,
+        jsonl_path,
+        missing_jsonl=missing_jsonl,
+    )
+    if isinstance(batch_summary, Mapping):
+        _attach_result_provenance(summary, batch_summary, jsonl_path)
     summary["runtime_sec"] = float(max(time.perf_counter() - started, 0.0))
     return {
         "records": rows,
@@ -874,6 +1154,26 @@ def _write_markdown_report(  # noqa: C901, PLR0913
                 f"- Note: {artifact_status.get('message', 'n/a')}",
             ]
         )
+    smoke_evidence_raw = summary.get("orca_residual_smoke_evidence")
+    smoke_evidence = smoke_evidence_raw if isinstance(smoke_evidence_raw, Mapping) else {}
+    if smoke_evidence:
+        lines.extend(
+            [
+                "",
+                "## ORCA-Residual Smoke Evidence",
+                "",
+                f"- Residual clipping rate: "
+                f"{_format_optional_float(smoke_evidence.get('residual_clipping_rate'))}",
+                f"- Guard veto rate: "
+                f"{_format_optional_float(smoke_evidence.get('guard_veto_rate'))}",
+                f"- Fallback/degraded status: "
+                f"`{smoke_evidence.get('fallback_degraded_status', 'unknown')}`",
+                f"- Artifact pointer status: "
+                f"`{smoke_evidence.get('artifact_pointer_status', 'unknown')}`",
+                f"- Nominal escalation allowed: "
+                f"`{bool(smoke_evidence.get('nominal_escalation_allowed', False))}`",
+            ]
+        )
     evidence_adjusted_raw = summary.get("evidence_adjusted")
     evidence_adjusted = evidence_adjusted_raw if isinstance(evidence_adjusted_raw, dict) else {}
     if int(evidence_adjusted.get("excluded_episodes", 0) or 0) > 0:
@@ -1053,13 +1353,11 @@ def main() -> int:
             family_runs[tag] = {key: value for key, value in run.items() if key != "records"}
             combined_records.extend(run["records"])
         combined_jsonl = output_dir / f"{args.stage}__{args.candidate}__combined.jsonl"
-        _write_records(combined_jsonl, combined_records)
-        combined_summary = summarize_policy_search_records(combined_records)
-        summary_payload = {
-            "records": combined_records,
-            "summary": combined_summary,
-            "jsonl_path": str(combined_jsonl),
-        }
+        summary_payload = _build_combined_summary_payload(
+            combined_records=combined_records,
+            combined_jsonl=combined_jsonl,
+            family_runs=family_runs,
+        )
     else:
         summary_payload = _run_stage_eval(
             scenarios_or_path=scenarios_or_path,
@@ -1074,7 +1372,7 @@ def main() -> int:
             synthetic_actuation_profile=synthetic_actuation_profile,
         )
 
-    summary_payload = _apply_stage_exclusions(
+    summary_payload = _finalize_summary_payload(
         stage_cfg=stage_cfg,
         summary_payload=summary_payload,
     )

@@ -220,6 +220,47 @@ def test_proxy_signal_state_cannot_be_interpreted_as_planner_observable() -> Non
     assert contract["benchmark_evidence"] is False
 
 
+def test_signal_state_string_false_flags_fail_closed() -> None:
+    """String-like false values must not promote proxy metadata into benchmark evidence."""
+    contract = _signal_state_promotion_contract(
+        {
+            "schema_version": "signal-state-observable.v1",
+            "status": "planner_observable_signal_state",
+            "observation_mode": "planner_observable",
+            "planner_observable": "false",
+            "benchmark_evidence": "0",
+        }
+    )
+
+    assert contract["contract_state"] == "proxy_diagnostic"
+    assert contract["benchmark_evidence"] is False
+
+    proxy = _signal_state_proxy_wrapper(
+        {
+            "phase_timeline": [
+                {
+                    "phase": "pedestrian_walk_robot_red",
+                    "intent_phase": "crossing",
+                    "robot_right_of_way": "false",
+                    "pedestrian_right_of_way": np.bool_(True),
+                    "legality_state": "pedestrian_crossing_allowed",
+                }
+            ],
+            "planner_observable": "false",
+            "benchmark_evidence": "0",
+        },
+        "crossing",
+        "waiting_then_crossing",
+        "authored_scenario_metadata",
+    )
+
+    assert proxy is not None
+    assert proxy["robot_right_of_way"] is False
+    assert proxy["pedestrian_right_of_way"] is True
+    assert proxy["planner_observable"] is False
+    assert proxy["benchmark_evidence"] is False
+
+
 def test_explicit_observable_signal_state_names_planner_consumed_fields() -> None:
     """Only the explicit observable schema/status can promote signal fields to planner inputs."""
     contract = _signal_state_promotion_contract(

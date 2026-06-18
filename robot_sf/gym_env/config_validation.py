@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 from robot_sf.sensor.registry import list_sensors
 from robot_sf.sim.registry import list_backends
 
+_OPTIONAL_BACKENDS_WITH_LEGACY_FALLBACK = {"fast-pysf"}
+
 
 def _get_valid_field_names(config: BaseSimulationConfig) -> set[str]:
     """Extract valid field names from a dataclass config.
@@ -85,6 +87,13 @@ def _check_backend_valid(config: BaseSimulationConfig) -> None:
     available = list_backends()
 
     if backend not in available:
+        if backend in _OPTIONAL_BACKENDS_WITH_LEGACY_FALLBACK:
+            logger.warning(
+                "Optional backend '{}' is not registered; environment construction may use the "
+                "legacy simulator fallback.",
+                backend,
+            )
+            return
         known = ", ".join(available)
         raise KeyError(f"Unknown backend '{backend}'. Available backends: {known}")
 

@@ -44,12 +44,17 @@ Keep plans short and operational:
 
 - Restate the issue or user goal in repository terms, not generic assistant language.
 - Separate observed evidence from assumptions.
+- For bounded workflow cleanup, proceed autonomously when the maintainer direction is clear; label
+  uncertainty, assumptions, and evidence grade instead of pausing for routine confirmation.
 - Prefer canonical scripts and committed configs over ad-hoc commands.
 - When benchmark or planner claims are involved, include the exact docs/configs that anchor the claim.
 - State the proof obligation for any new planner, metric, skill, or test before implementation.
 - Close the plan only after that proof has been gathered or the remaining gap has been called out
   explicitly.
 - If scope expands, create a follow-up issue instead of silently broadening the implementation.
+- Use the `AGENTS.md` readiness matrix to choose validation depth. A small docs or workflow plan can
+  use cheap validation, but any stronger benchmark, metric, schema, model-provenance, or
+  paper-facing claim escalates to the proof tier for that claim.
 
 ## Review Expectations
 

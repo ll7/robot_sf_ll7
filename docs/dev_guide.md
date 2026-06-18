@@ -34,6 +34,32 @@ uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_en
 Host tools and optional machine capabilities that are not installed by `uv` are tracked in
 [`docs/dev_runtime_requirements.md`](dev_runtime_requirements.md).
 
+### Instruction precedence and proportional readiness
+
+Use the maintainer hierarchy and readiness matrix in `AGENTS.md` before older workflow prose or
+tool-specific compatibility pointers. In short: active maintainer direction wins over stale
+instructions, `docs/maintainer_values.md` defines the hard contracts, and Project #5 scores are
+advisory when fresh evidence or maintainer direction conflicts with them.
+
+Routine workflow cleanup can proceed without extra confirmation when it is bounded and the PR or
+handoff clearly labels assumptions, uncertainty, evidence grade, and any deferred follow-up issue.
+Use a detached checkout at latest `origin/main` only for read-only discovery, duplicate checks, and
+issue creation or update work. Create or switch to a branch/worktree before editing docs or code,
+running validation for a PR, pushing, or publishing.
+
+Docs-only and instruction-only changes normally use the cheap validation path: inspect the diff,
+verify changed links or paths where practical, and run available lightweight checks. Skill or AI
+workflow edits should also run the relevant skill and sync checks, for example:
+
+```bash
+uv run python scripts/dev/check_skills.py --preflight <skill-name>
+uv run python scripts/tools/sync_ai_config.py --check
+```
+
+Escalate to `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` when the change touches scripts,
+schemas, generated indexes, routing behavior, automation, runtime behavior, benchmark/metric/schema
+semantics, model provenance, or paper-facing claims.
+
 ### Claim-map validation
 
 The fast-results claim map is an executable issue queue, not only a context note. Before changing
@@ -423,6 +449,7 @@ uv run python scripts/dev/snapshot_issue_batch.py --active-portfolio \
   --json
 uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 2678 2679 --json \
   --expected-head-sha "$PR_HEAD_SHA"
+uv run python scripts/dev/pr_babysitter_snapshot.py 2679 --expected-head-sha "$SHA" --json
 uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" --json --once
 ```
 
@@ -993,22 +1020,25 @@ uv run pytest fast-pysf/tests  # → 12 tests (all passing with map fixtures)
 
 → Consider documenting the edge case in code comments and archiving the test, rather than spending hours debugging environmental setup issues.
 
-### Coverage workflow (automatic collection)
+### Coverage workflow (explicit opt-in)
 
-**Coverage collection is enabled by default** — no extra commands needed! When you run tests, coverage data is automatically collected and reported.
+Coverage collection is no longer enabled by default. Run tests normally for fast execution,
+and enable coverage explicitly when needed.
 
 The test harness sets the ``ROBOT_SF_ARTIFACT_ROOT`` environment variable so that
 example scripts and helpers write into a temporary directory instead of the
 repository tree. This keeps the canonical ``output/`` hierarchy clean while
-preserving the examples' default behavior for normal runs. To opt-in manually,
-export the same variable before invoking scripts.
+preserving normal example behavior.
 
 Try to increase the test coverage over time by adding tests when touching code. See the must-have checklist below for guidance.
 
 #### Quick start
 ```bash
-# Run tests (coverage collected automatically)
+# Run tests (no coverage by default)
 uv run pytest tests
+
+# Run tests with coverage (CI and explicit opt-in local runs)
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 
 # Run a focused local check and discard generated coverage output after success
 scripts/dev/run_focused_tests.sh tests/test_force_flags.py -q
@@ -1052,16 +1082,23 @@ TOTAL                                   10605    876  91.73%
 Configured in `pyproject.toml`:
 - `[tool.coverage.run]` — collection settings (source, omit patterns, parallel support)
 - `[tool.coverage.report]` — report formatting (precision, exclusions)
-- `[tool.pytest.ini_options]` — automatic pytest integration
+- `scripts/dev/run_tests_parallel.sh` — explicit pytest coverage opt-in for local wrapper and CI
+  runs
 
-No changes needed for normal development — defaults are production-ready.
+No changes needed for normal development — default pytest runs skip coverage output for faster
+feedback, while CI and explicit wrapper opt-in still generate reports.
 
 #### Advanced usage
 ```bash
-# Run with parallel workers (coverage merges automatically)
+# Run with parallel workers (faster local feedback)
 uv run pytest tests -n auto
 
+# Run with parallel workers and explicit coverage collection
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
+
 # Run specific test file with coverage
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests/test_gym_env.py -v
+# Run specific test file without coverage
 uv run pytest tests/test_gym_env.py -v
 
 # View coverage data programmatically

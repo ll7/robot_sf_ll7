@@ -1,0 +1,307 @@
+{
+  "claim_boundary": "This matrix records which ODD conditions and hazard classes are represented by checked-in configs only. It does not claim that any row has executed benchmark evidence, safety proof, or paper-facing validity. Uncovered or blocked rows must not be cited as covered in benchmark wording.\n",
+  "coverage_rows": [
+    {
+      "evidence_tier": "diagnostic",
+      "gap_reason": "Scenario contract exists, but no scenario_cert.v1 or executed benchmark evidence is checked in.\n",
+      "hazard_class": "robot_pedestrian_collision",
+      "included_planners": [
+        "goal",
+        "orca",
+        "social_force"
+      ],
+      "metrics": [
+        "collision_rate"
+      ],
+      "notes": "Platform dwell/flow interactions are intended but not certified.",
+      "odd_condition": "low_speed_public_space_v1",
+      "scenario_family": "station_platform",
+      "source_configs": [
+        "configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "status": "weakly_covered"
+    },
+    {
+      "evidence_tier": "candidate",
+      "gap_reason": "Included in paper_experiment_matrix_v1 checked-in config; durable runtime evidence is not committed.\n",
+      "hazard_class": "near_miss",
+      "included_planners": [
+        "goal",
+        "orca",
+        "social_force",
+        "teb",
+        "dwa",
+        "risk_dwa",
+        "ppo"
+      ],
+      "metrics": [
+        "min_ttc",
+        "pet"
+      ],
+      "notes": "Crossing family appears in the canonical paper matrix config.",
+      "odd_condition": "low_speed_public_space_v1",
+      "scenario_family": "classic_crossing",
+      "source_configs": [
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "status": "weakly_covered"
+    },
+    {
+      "evidence_tier": "diagnostic",
+      "gap_reason": "Smoke fixture exists; not integrated into a released benchmark campaign config with run evidence.\n",
+      "hazard_class": "blind_corner_emergence",
+      "included_planners": [
+        "goal",
+        "orca",
+        "social_force"
+      ],
+      "metrics": [
+        "min_ttc",
+        "clearance"
+      ],
+      "notes": "Visibility-limited emergence is probed but not benchmarked.",
+      "odd_condition": "low_speed_public_space_v1",
+      "scenario_family": "blind_corner",
+      "source_configs": [
+        "configs/scenarios/single/observation_visibility_blind_corner_smoke.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "status": "weakly_covered"
+    },
+    {
+      "evidence_tier": "candidate",
+      "gap_reason": "Classic interactions matrix includes corridor family; no durable run evidence is committed.\n",
+      "hazard_class": "pedestrian_flow_disruption",
+      "included_planners": [
+        "goal",
+        "orca",
+        "social_force",
+        "teb",
+        "dwa",
+        "risk_dwa",
+        "ppo"
+      ],
+      "metrics": [
+        "comfort_exposure_s",
+        "path_efficiency"
+      ],
+      "notes": "Corridor interactions are a core paper-matrix family.",
+      "odd_condition": "low_speed_public_space_v1",
+      "scenario_family": "corridor",
+      "source_configs": [
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        "configs/scenarios/classic_interactions.yaml"
+      ],
+      "status": "weakly_covered"
+    },
+    {
+      "evidence_tier": "candidate",
+      "gap_reason": "Classic interactions matrix includes bottleneck family; no durable run evidence is committed.\n",
+      "hazard_class": "robot_pedestrian_collision",
+      "included_planners": [
+        "goal",
+        "orca",
+        "social_force",
+        "teb",
+        "dwa",
+        "risk_dwa",
+        "ppo"
+      ],
+      "metrics": [
+        "collision_rate"
+      ],
+      "notes": "Bottleneck family is configured but not evidenced here.",
+      "odd_condition": "low_speed_public_space_v1",
+      "scenario_family": "bottleneck",
+      "source_configs": [
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml"
+      ],
+      "status": "weakly_covered"
+    },
+    {
+      "evidence_tier": "diagnostic",
+      "gap_reason": "Scenario contract exists for #1484 rows; executed evidence is not checked in.\n",
+      "hazard_class": "robot_pedestrian_collision",
+      "included_planners": [
+        "goal",
+        "orca",
+        "social_force"
+      ],
+      "metrics": [
+        "collision_rate",
+        "near_miss"
+      ],
+      "notes": "Cross-trap is an AMV-focused synthetic probe.",
+      "odd_condition": "low_speed_public_space_v1",
+      "scenario_family": "cross_trap",
+      "source_configs": [
+        "configs/scenarios/contracts/issue_2164_amv_cross_trap_contracts.yaml"
+      ],
+      "status": "weakly_covered"
+    },
+    {
+      "evidence_tier": "diagnostic",
+      "gap_reason": "Dense-pedestrian stress fixture exists but is not a calibrated crowd benchmark.\n",
+      "hazard_class": "robot_pedestrian_collision",
+      "included_planners": [
+        "goal",
+        "orca",
+        "social_force"
+      ],
+      "metrics": [
+        "collision_rate",
+        "comfort_exposure_s"
+      ],
+      "notes": "Density is intentionally bounded in the fixture.",
+      "odd_condition": "low_speed_public_space_v1",
+      "scenario_family": "dense_pedestrian",
+      "source_configs": [
+        "configs/scenarios/single/dense_pedestrian_stress.yaml"
+      ],
+      "status": "weakly_covered"
+    }
+  ],
+  "generated_at_utc": "2026-06-17T05:44:00.194026+00:00",
+  "generation": {
+    "base_commit": "f7e62cdf8c9a",
+    "command": "uv run python scripts/tools/generate_odd_hazard_coverage_matrix.py --config configs/benchmarks/odd_hazard_coverage.v1.yaml --out-json docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json --out-md docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.md --repo-root .",
+    "tree_state": "dirty"
+  },
+  "hazard_traceability_ref": {
+    "contract_id": "low_speed_public_space_hazards_v1",
+    "required_for_benchmark_claim": false,
+    "source": "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+  },
+  "known_gaps": [
+    {
+      "affected_hazard_classes": [
+        "robot_vru_collision"
+      ],
+      "affected_scenario_families": [
+        "cyclist_interaction"
+      ],
+      "gap_id": "cyclist_vru_interaction",
+      "reason": "No checked-in scenario contract or benchmark config exercises cyclist/VRU actors; Issue #2473 remains proposal only.\n",
+      "status": "absent",
+      "tracking_issue": "https://github.com/ll7/robot_sf_ll7/issues/2473"
+    },
+    {
+      "affected_hazard_classes": [
+        "signal_violation",
+        "pedestrian_flow_disruption"
+      ],
+      "affected_scenario_families": [
+        "signalized_crossing"
+      ],
+      "gap_id": "signalized_crossing",
+      "reason": "Signalized crossing config (Issue #2474) and signal-state contract (Issue #2662) exist, but signal state is proxy-only and no planner-observable benchmark evidence is checked in.\n",
+      "status": "blocked",
+      "tracking_issue": "https://github.com/ll7/robot_sf_ll7/issues/2474"
+    },
+    {
+      "affected_hazard_classes": [
+        "blind_corner_emergence"
+      ],
+      "affected_scenario_families": [
+        "occluded_emergence"
+      ],
+      "gap_id": "occluded_emergence_benchmark",
+      "reason": "Occluded-emergence fixtures exist but are not integrated into a released benchmark matrix with executed run evidence.\n",
+      "status": "blocked",
+      "tracking_issue": "https://github.com/ll7/robot_sf_ll7/issues/2526"
+    },
+    {
+      "affected_hazard_classes": [
+        "robot_fall_or_trip"
+      ],
+      "affected_scenario_families": [
+        "stairs"
+      ],
+      "gap_id": "stairs",
+      "reason": "No stair scenario, map, or contract is checked in.\n",
+      "status": "absent"
+    },
+    {
+      "affected_hazard_classes": [
+        "pedestrian_flow_disruption"
+      ],
+      "affected_scenario_families": [
+        "dense_pedestrian"
+      ],
+      "gap_id": "dense_crowds",
+      "reason": "Dense-pedestrian stress fixture is limited to a few deterministic pedestrians and is not a calibrated crowd benchmark. This gap is distinct from the weakly_covered dense_pedestrian row, which records only that a checked-in fixture exists.\n",
+      "status": "blocked",
+      "tracking_issue": "https://github.com/ll7/robot_sf_ll7/issues/1959"
+    },
+    {
+      "affected_hazard_classes": [
+        "near_miss",
+        "robot_pedestrian_collision"
+      ],
+      "affected_scenario_families": [
+        "doorway",
+        "t_intersection"
+      ],
+      "gap_id": "narrow_lane_conflict",
+      "reason": "Narrow passages appear in archetypes, but no explicit narrow-lane conflict scenario family is checked in.\n",
+      "status": "blocked",
+      "tracking_issue": "https://github.com/ll7/robot_sf_ll7/issues/1318"
+    },
+    {
+      "affected_hazard_classes": [
+        "amv_actuation_limit"
+      ],
+      "affected_scenario_families": [
+        "amv_actuation"
+      ],
+      "gap_id": "amv_actuation_limits",
+      "reason": "Synthetic AMV actuation stress slices exist (Issue #1556, Issue #2011) but are not hardware-calibrated or platform-class evidence.\n",
+      "status": "blocked",
+      "tracking_issue": "https://github.com/ll7/robot_sf_ll7/issues/2230"
+    },
+    {
+      "affected_hazard_classes": [
+        "observation_delay"
+      ],
+      "affected_scenario_families": [
+        "observation_noise"
+      ],
+      "gap_id": "sensor_latency",
+      "reason": "Observation-noise/latency smoke configs exist, but no systematic closed-loop benchmark with sensor-latency claims is checked in.\n",
+      "status": "blocked",
+      "tracking_issue": "https://github.com/ll7/robot_sf_ll7/issues/1744"
+    }
+  ],
+  "matrix_id": "issue_2911_low_speed_public_space_v1",
+  "odd_contract_ref": {
+    "contract_id": "low_speed_public_space_v1",
+    "required_for_benchmark_claim": true,
+    "source": "configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml"
+  },
+  "provenance": {
+    "authored_by": "robot_sf_ll7",
+    "notes": "Static coverage matrix for Issue #2911. All rows are metadata/candidate/diagnostic unless a separate benchmark run produces durable evidence and updates this matrix.\n",
+    "source_files": [
+      "configs/benchmarks/odd_hazard_coverage.v1.yaml",
+      "configs/benchmarks/odd_contracts/low_speed_public_space_v1.yaml",
+      "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+    ],
+    "source_issue": "https://github.com/ll7/robot_sf_ll7/issues/2911"
+  },
+  "schema_version": "odd_hazard_coverage.v1",
+  "summary": {
+    "coverage_row_count": 7,
+    "gap_status_counts": {
+      "absent": 2,
+      "blocked": 6
+    },
+    "known_gap_count": 8,
+    "reference_errors": [],
+    "reference_valid": true,
+    "status_counts": {
+      "weakly_covered": 7
+    }
+  }
+}

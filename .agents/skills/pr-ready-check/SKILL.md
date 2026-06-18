@@ -20,17 +20,31 @@ Run the canonical local readiness gates that mirror repo PR policy before handof
 
 ## Workflow
 
-1. Confirm repo guidance (`docs/dev_guide.md`, `.specify/memory/constitution.md`) when uncertain.
-2. Ensure environment has `.venv` loaded or `source .venv/bin/activate` is available.
-3. Run: `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
-4. If needed, use overrides, e.g. `MIN_COVERAGE`, `GOAL_COVERAGE`.
-5. Fix failures and rerun the same command until stable green.
-6. If benchmark outputs or model artifacts are involved, check artifact persistence policy before handoff.
+1. Confirm repo guidance (`AGENTS.md`, `docs/dev_guide.md`, `.specify/memory/constitution.md`) when uncertain.
+2. Classify the change using the `AGENTS.md` readiness matrix:
+   - docs-only or instruction-only: inspect the diff, verify changed links or paths where practical,
+     and run available lightweight markdown, index, skill, or sync checks.
+   - workflow/tooling docs or skills: also run relevant checks such as
+     `uv run python scripts/dev/check_skills.py --preflight <skill-name>` and
+     `uv run python scripts/tools/sync_ai_config.py --check`.
+   - runtime, benchmark, metric, schema, model-provenance, or paper-facing work: run executable
+     proof appropriate to the claim.
+3. Escalate to the full readiness pipeline when scripts, schemas, generated indexes, routing
+   behavior, automation, runtime behavior, benchmark/metric/schema semantics, model provenance, or
+   paper-facing claims are touched.
+4. Ensure environment has `.venv` loaded or `source .venv/bin/activate` is available.
+5. Run: `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
+6. If needed, use overrides, e.g. `MIN_COVERAGE`, `GOAL_COVERAGE`.
+7. Fix failures and rerun the same command until stable green.
+8. If benchmark outputs or model artifacts are involved, check artifact persistence policy before handoff.
 
 ## Guardrails
 
 - This skill runs validation; it does not perform PR creation or issue edits on its own.
-- Do not stop at lint green: ensure parallel tests and diff gates are also clean.
+- Do not require full PR readiness for low-risk docs/instruction-only changes unless the matrix
+  escalation rules apply; record the cheap validation commands instead.
+- When full readiness is required, do not stop at lint green: ensure parallel tests and diff gates
+  are also clean.
 - Treat benchmark fallback execution as unresolved unless explicitly scoped.
 
 ## Output

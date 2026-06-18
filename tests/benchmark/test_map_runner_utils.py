@@ -16,6 +16,7 @@ from loguru import logger
 
 from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.map_runner import (
+    _accumulate_batch_metadata,
     _apply_planner_selector_v2_context,
     _attach_planner_reset,
     _build_policy,
@@ -4085,6 +4086,52 @@ def test_run_map_batch_parallel_preserves_runtime_metadata_bridge(
     assert meta["kinematics_feasibility"]["commands_evaluated"] == 6
     assert meta["kinematics_feasibility"]["projected_count"] == 2
     assert meta["kinematics_feasibility"]["mean_abs_delta_linear"] == pytest.approx(0.2)
+
+
+def test_accumulate_batch_metadata_preserves_falsy_optional_values() -> None:
+    """Falsy numeric feasibility metadata should not be replaced by fallback values."""
+    feasibility_totals = {
+        "commands_evaluated": 0.0,
+        "infeasible_native_count": 0.0,
+        "projected_count": 0.0,
+        "sum_abs_delta_linear": 1.25,
+        "sum_abs_delta_angular": 2.5,
+        "max_abs_delta_linear": 0.0,
+        "max_abs_delta_angular": 0.0,
+    }
+    rec = {
+        "algorithm_metadata": {
+            "adapter_impact": {
+                "requested": True,
+                "native_steps": 0,
+                "adapted_steps": 0,
+            },
+            "kinematics_feasibility": {
+                "commands_evaluated": 4,
+                "infeasible_native_count": 0,
+                "projected_count": 0,
+                "mean_abs_delta_linear": 0.0,
+                "mean_abs_delta_angular": None,
+                "max_abs_delta_linear": 0.0,
+                "max_abs_delta_angular": None,
+            },
+        }
+    }
+
+    requested, native_steps, adapted_steps = _accumulate_batch_metadata(
+        rec,
+        feasibility_totals=feasibility_totals,
+    )
+
+    assert requested is True
+    assert native_steps == 0
+    assert adapted_steps == 0
+    assert feasibility_totals["commands_evaluated"] == 4
+    assert feasibility_totals["projected_count"] == 0
+    assert feasibility_totals["sum_abs_delta_linear"] == pytest.approx(1.25)
+    assert feasibility_totals["sum_abs_delta_angular"] == pytest.approx(2.5)
+    assert feasibility_totals["max_abs_delta_linear"] == 0.0
+    assert feasibility_totals["max_abs_delta_angular"] == 0.0
 
 
 def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyPatch) -> None:

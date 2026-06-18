@@ -52,7 +52,7 @@ status: blocked_on_issue_2441
 notes: >
   This card remains the launch packet for #1470. Execution/finalization for the
   corresponding trace-collection and evidence handoff is now actively tracked by
-  #2441 (status OPEN). PR #2989 references
+  issue #2441 (status OPEN). PR #2989 references
   `docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/`,
   which contains durable trace-collection evidence; downstream dataset materialization
   remains out of scope for this card.

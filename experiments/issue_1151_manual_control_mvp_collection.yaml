@@ -37,6 +37,6 @@ evidence_grade: observed
 paper_relevance: exploratory
 status: completed
 notes: >
-  #1151 is closed. Child issue #1219 is also closed with PR #1228 merged (local
-  Pygame runner surfaces in place), so this card no longer remains blocked on the
-  original child implementation dependency.
+  Issue #1151 is closed. Child issue #1219 is also closed with PR #1228 merged
+  (local Pygame runner surfaces in place), so this card no longer remains blocked
+  on the original child implementation dependency.

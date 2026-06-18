@@ -353,6 +353,45 @@ def _coerce_finite_float(value: Any) -> float | None:
     return result
 
 
+def _resolve_current_map_id(env_config: EnvSettings, map_def) -> str | None:
+    """Resolve the active map id from configuration and map definition.
+
+    When callers set ``map_id`` explicitly we return it directly; otherwise infer the
+    id by searching the configured map pool for the active ``map_def`` instance.
+
+    Returns:
+        Optional map identifier resolved from config or map pool.
+    """
+
+    configured_id = getattr(env_config, "map_id", None)
+    if configured_id:
+        return configured_id
+
+    try:
+        for map_id, candidate in env_config.map_pool.map_defs.items():
+            if candidate is map_def:
+                return map_id
+    except (AttributeError, TypeError):
+        pass
+    return None
+
+
+def _build_reset_info(env_config: EnvSettings, *, map_def, applied_seed: int | None) -> dict[str, Any]:
+    """Return a stable, non-placeholder reset metadata payload.
+
+    The payload intentionally keeps only lightweight, serializable fields useful for
+    downstream debugging and reproducibility.
+    """
+
+    return {
+        "map_id": _resolve_current_map_id(env_config, map_def),
+        "sim_time_in_secs": float(env_config.sim_config.sim_time_in_secs),
+        "time_per_step_in_secs": float(env_config.sim_config.time_per_step_in_secs),
+        "max_sim_steps": int(env_config.sim_config.max_sim_steps),
+        "seed": applied_seed,
+    }
+
+
 def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:
     """Extract finite reward-term scalars for telemetry replay.
 
@@ -1004,8 +1043,11 @@ class RobotEnv(BaseEnv):
                     # Legacy pickle recording
                     self.save_recording()
 
-            # info is necessary for the gym environment, but useless at the moment
-            info = {"info": "test"}
+            info = _build_reset_info(
+                self.config,
+                map_def=self.map_def,
+                applied_seed=self.applied_seed,
+            )
             # Reset telemetry timing on new episode
             self._last_wall_time = time.perf_counter()
             self._frame_idx = 0

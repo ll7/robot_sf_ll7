@@ -190,6 +190,50 @@ class MultiRobotEnv(MultiAgentEnv):
         any_terminated = any(terms)
         return obs_dict, total_reward, any_terminated, False, {"agents": masked_metas_tuple}
 
+    @staticmethod
+    def _resolve_current_map_id(config, map_def) -> str | None:
+        """Resolve the active map id from configuration and map definition.
+
+        Returns:
+            Optional map identifier from config or map pool by object identity.
+        """
+        configured_id = getattr(config, "map_id", None)
+        if configured_id:
+            return configured_id
+        try:
+            for map_id, candidate in config.map_pool.map_defs.items():
+                if candidate is map_def:
+                    return map_id
+        except (AttributeError, TypeError):
+            pass
+        return None
+
+    def _resolve_num_robots(self) -> int:
+        """Resolve the effective number of robots managed by this environment.
+
+        Returns:
+            The resolved robot count.
+        """
+        configured_num = getattr(self.config, "num_robots", None)
+        if configured_num is not None:
+            return int(configured_num)
+        return len(self._state_bindings)
+
+    def _build_reset_info(self, *, map_def, seed: int | None) -> dict[str, Any]:
+        """Build stable reset metadata for multi-robot environments.
+
+        Returns:
+            Reset metadata dictionary with map and timing fields.
+        """
+        return {
+            "map_id": self._resolve_current_map_id(self.config, map_def),
+            "sim_time_in_secs": float(self.config.sim_config.sim_time_in_secs),
+            "time_per_step_in_secs": float(self.config.sim_config.time_per_step_in_secs),
+            "max_sim_steps": int(self.config.sim_config.max_sim_steps),
+            "num_robots": self._resolve_num_robots(),
+            "seed": seed,
+        }
+
     def reset(
         self,
         *,
@@ -209,7 +253,10 @@ class MultiRobotEnv(MultiAgentEnv):
             OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
             OBS_RAYS: np.array([o[OBS_RAYS] for o in obs]),
         }
-        return obs_dict, {}
+        return obs_dict, self._build_reset_info(
+            map_def=self.map_def,
+            seed=getattr(self, "applied_seed", None),
+        )
 
     def render(self, **kwargs) -> None:
         """Render the environment for each robot view."""

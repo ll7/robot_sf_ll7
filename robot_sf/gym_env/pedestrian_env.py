@@ -83,6 +83,36 @@ def _reward_function_name(reward_func: Callable[..., object]) -> str:
     return getattr(reward_func, "__name__", type(reward_func).__name__)
 
 
+def _resolve_map_id(config, map_def) -> str | None:
+    """Resolve a configured map id from the configuration and map definition.
+
+    Returns:
+        Optional map identifier resolved from the configured map id or map pool.
+    """
+    configured = getattr(config, "map_id", None)
+    if configured:
+        return configured
+    try:
+        for map_id, candidate in config.map_pool.map_defs.items():
+            if candidate is map_def:
+                return map_id
+    except (AttributeError, TypeError):
+        pass
+    return None
+
+
+def _build_reset_info(config, *, map_def, seed: int | None = None) -> dict[str, Any]:
+    """Return stable reset metadata for pedestrian environments."""
+
+    return {
+        "map_id": _resolve_map_id(config, map_def),
+        "sim_time_in_secs": float(config.sim_config.sim_time_in_secs),
+        "time_per_step_in_secs": float(config.sim_config.time_per_step_in_secs),
+        "max_sim_steps": int(config.sim_config.max_sim_steps),
+        "seed": seed,
+    }
+
+
 class PedestrianEnv(SingleAgentEnv):
     """
     Pedestrian environment using the refactored single-agent architecture.
@@ -444,7 +474,11 @@ class PedestrianEnv(SingleAgentEnv):
             self.save_recording()
 
         # Preserve legacy info payload shape.
-        return obs_ped, {"info": "test"}
+        return obs_ped, _build_reset_info(
+            self.config,
+            map_def=self.map_def,
+            seed=getattr(self, "applied_seed", None),
+        )
 
     def render(self, **kwargs):
         """Render the environment."""

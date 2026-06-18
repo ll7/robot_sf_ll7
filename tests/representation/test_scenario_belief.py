@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from robot_sf.common.issue_provenance import SCENARIO_BELIEF_DESIGN_PARENT_ISSUE
 from robot_sf.gym_env.unified_config import ObservationVisibilitySettings, RobotSimulationConfig
 from robot_sf.representation import (
     TrackedAgentMetadata,
@@ -15,6 +16,7 @@ from robot_sf.representation import (
     scenario_belief_from_simulator_oracle,
     scenario_belief_from_visibility_limited_simulator,
 )
+from robot_sf.representation.scenario_belief import DESIGN_PARENT_ISSUE
 
 
 def _simulator_fixture() -> SimpleNamespace:
@@ -118,7 +120,8 @@ def test_debug_projection_is_deterministic_and_exposes_uncertainty() -> None:
     debug_a = partial.to_debug_dict()
     debug_b = partial.to_debug_dict()
     assert debug_a == debug_b
-    assert debug_a["design_parent_issue"] == 1966
+    assert DESIGN_PARENT_ISSUE == SCENARIO_BELIEF_DESIGN_PARENT_ISSUE
+    assert debug_a["design_parent_issue"] == SCENARIO_BELIEF_DESIGN_PARENT_ISSUE
     assert debug_a["source_summary"]["adapter"] == "visibility_limited_simulator"
     assert debug_a["agents"][1]["visibility_state"] == "out_of_range"
     assert (

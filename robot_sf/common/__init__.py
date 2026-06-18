@@ -44,6 +44,14 @@ from robot_sf.common.hardware import (
     detect_hardware_capacity,
     recommend_env_runners,
 )
+from robot_sf.common.issue_provenance import (
+    ISSUE_PROVENANCE_BY_KEY,
+    LIVE_FORECAST_REPLAY_GATE_CONTRACT,
+    LIVE_FORECAST_REPLAY_GATE_CONTRACT_ISSUE,
+    SCENARIO_BELIEF_DESIGN_PARENT,
+    SCENARIO_BELIEF_DESIGN_PARENT_ISSUE,
+    IssueProvenance,
+)
 from robot_sf.common.math_utils import (
     normalize_angle_atan2,
     wrap_angle_pi,
@@ -112,6 +120,13 @@ __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     "HardwareCapacity",
     "detect_hardware_capacity",
     "recommend_env_runners",
+    # Issue provenance registry (from .issue_provenance)
+    "ISSUE_PROVENANCE_BY_KEY",
+    "LIVE_FORECAST_REPLAY_GATE_CONTRACT",
+    "LIVE_FORECAST_REPLAY_GATE_CONTRACT_ISSUE",
+    "SCENARIO_BELIEF_DESIGN_PARENT",
+    "SCENARIO_BELIEF_DESIGN_PARENT_ISSUE",
+    "IssueProvenance",
     # Matplotlib utilities (from .matplotlib_utils)
     "ensure_interactive_backend",
     "is_headless_environment",

@@ -448,10 +448,133 @@ def test_control_plane_report_detects_research_state_drift(tmp_path: Path) -> No
     kinds = {finding["kind"] for finding in report["findings"]}
     assert "closed_issue_with_nonterminal_record" in kinds
     assert "closed_blocker_with_blocked_record" in kinds
-    assert "label_record_state_disagreement" in kinds
+    assert "derived_issue_label_update" in kinds
     assert "missing_config_or_input_path" in kinds
     assert "pending_artifact_alias" in kinds
     assert "missing_required_durable_reference" in kinds
+    derived_updates = [
+        finding for finding in report["findings"] if finding["kind"] == "derived_issue_label_update"
+    ]
+    assert report["derived_update_count"] == len(derived_updates)
+    assert derived_updates == [
+        {
+            "kind": "derived_issue_label_update",
+            "severity": "warning",
+            "record": "label_disagreement.yaml",
+            "issue": 1475,
+            "message": (
+                "issue #1475 state labels ['state:running'] should derive from "
+                "record state 'implementation_ready' as ['state:ready']"
+            ),
+            "expected_state_label": "state:ready",
+            "current_state_labels": ["state:running"],
+            "labels_to_add": ["state:ready"],
+            "labels_to_remove": ["state:running"],
+            "dry_run_only": True,
+        }
+    ]
+
+
+def test_control_plane_report_derives_terminal_state_label_removal(tmp_path: Path) -> None:
+    """Released records should suggest removing state labels rather than mutating GitHub."""
+    registry = tmp_path / "experiments" / "registry.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - released.yaml
+        """,
+    )
+    _write_yaml(
+        registry.parent / "released.yaml",
+        """
+        schema_version: experiment-record.v2
+        experiment_id: released-record
+        issue: 2001
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/2001
+        question: Is this release state authoritative?
+        hypothesis: The dry-run report should remove live state labels.
+        config:
+          - configs/exists.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/released
+        expected_artifacts:
+          - name: report
+            path: output/experiments/released/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        state: released
+        """,
+    )
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "exists.yaml").write_text("ok: true\n", encoding="utf-8")
+
+    report = build_control_plane_report(
+        registry,
+        issue_states={2001: "OPEN"},
+        issue_labels={2001: ["state:running", "type:analysis"]},
+    )
+
+    assert report["derived_update_count"] == 1
+    update = report["findings"][0]
+    assert update["kind"] == "derived_issue_label_update"
+    assert update["expected_state_label"] is None
+    assert update["current_state_labels"] == ["state:running"]
+    assert update["labels_to_add"] == []
+    assert update["labels_to_remove"] == ["state:running"]
+    assert update["dry_run_only"] is True
+
+
+def test_control_plane_report_ignores_unknown_legacy_status_labels(tmp_path: Path) -> None:
+    """Legacy v1 statuses should not trigger state-label removal suggestions."""
+    registry = tmp_path / "experiments" / "registry.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - legacy_planned.yaml
+        """,
+    )
+    _write_yaml(
+        registry.parent / "legacy_planned.yaml",
+        """
+        schema_version: experiment-record.v1
+        experiment_id: legacy-planned-record
+        issue: 2002
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/2002
+        question: Does legacy planned status map to issue state labels?
+        hypothesis: Legacy status should not drive the v2 label control plane.
+        config:
+          - configs/exists.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/legacy-planned
+        expected_artifacts:
+          - name: report
+            path: output/experiments/legacy-planned/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        status: planned
+        """,
+    )
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "exists.yaml").write_text("ok: true\n", encoding="utf-8")
+
+    report = build_control_plane_report(
+        registry,
+        issue_states={2002: "OPEN"},
+        issue_labels={2002: ["state:ready", "type:analysis"]},
+    )
+
+    assert report["derived_update_count"] == 0
+    assert report["findings"] == []
 
 
 def test_validator_checks_scalar_config_paths(tmp_path: Path) -> None:

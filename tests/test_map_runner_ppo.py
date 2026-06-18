@@ -389,3 +389,32 @@ def test_obs_to_ppo_format_handles_malformed_flat_ped_arrays():
 
     formatted = map_runner._obs_to_ppo_format(obs)
     assert formatted["agents"] == []
+
+
+def test_obs_to_ppo_format_tolerates_explicit_null_fields():
+    """Explicit null observation fields should fall back to safe defaults."""
+    obs = _sample_obs()
+    obs["robot"] = {
+        "position": None,
+        "velocity": None,
+        "speed": None,
+        "heading": None,
+        "radius": None,
+    }
+    obs["goal"] = {"current": None}
+    obs["pedestrians"] = {
+        "positions": None,
+        "velocities": None,
+        "count": None,
+        "radius": None,
+    }
+
+    formatted = map_runner._obs_to_ppo_format(obs)
+
+    assert formatted["dt"] == pytest.approx(0.1)
+    assert formatted["robot"]["position"] == [0.0, 0.0]
+    assert formatted["robot"]["velocity"] == [0.0, 0.0]
+    assert formatted["robot"]["goal"] == [0.0, 0.0]
+    assert formatted["robot"]["heading"] == 0.0
+    assert formatted["robot"]["radius"] == 0.3
+    assert formatted["agents"] == []

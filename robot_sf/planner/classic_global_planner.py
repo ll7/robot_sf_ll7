@@ -47,9 +47,16 @@ try:
 except ImportError:
     from python_motion_planning.common.visualizer import Visualizer2D as Visualizer
 
-_PLOT_GRID_MAP_SUPPORTS_ALPHA_3D = (
-    "alpha_3d" in inspect.signature(Visualizer.plot_grid_map).parameters
-)
+
+def _plot_grid_map_supports_alpha_3d() -> bool:
+    """Return whether the installed visualizer accepts the legacy alpha_3d argument."""
+    try:
+        return "alpha_3d" in inspect.signature(Visualizer.plot_grid_map).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+_PLOT_GRID_MAP_SUPPORTS_ALPHA_3D = _plot_grid_map_supports_alpha_3d()
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
@@ -267,11 +274,7 @@ def map_definition_to_motion_planning_grid(
     grid = Grid(bounds=[[0, width_cells], [0, height_cells]])
     grid.cells_per_meter = cfg.cells_per_meter
     grid.meters_per_cell = cfg.meters_per_cell
-    if not hasattr(grid.type_map, "array") and hasattr(grid.type_map, "data"):
-        try:
-            grid.type_map.array = grid.type_map.data
-        except AttributeError:
-            pass
+    _ensure_type_map_array_alias(grid)
 
     if cfg.add_boundary_obstacles:
         grid.fill_boundary_with_obstacles()
@@ -335,6 +338,20 @@ def _grid_type_map_array(grid: Grid) -> np.ndarray:
     if raw_array is None:
         raw_array = getattr(type_map, "data", type_map)
     return np.asarray(raw_array)
+
+
+def _ensure_type_map_array_alias(grid: Grid) -> None:
+    """Expose the stable type-map data under the older array attribute when needed."""
+    type_map = grid.type_map
+    if hasattr(type_map, "array") or not hasattr(type_map, "data"):
+        return
+    try:
+        type_map.array = type_map.data
+    except AttributeError as exc:
+        raise TypeError(
+            "Installed python-motion-planning GridTypeMap exposes data but cannot provide "
+            "the legacy array alias required by planner algorithms."
+        ) from exc
 
 
 def _sanitize_visualization_output_path(output_path: Path | str) -> Path:

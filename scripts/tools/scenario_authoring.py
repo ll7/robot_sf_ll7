@@ -10,6 +10,12 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from loguru import logger
 
+from robot_sf.benchmark.scenario_generator import (
+    SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION,
+    estimate_initial_difficulty,
+    normalize_generation_parameters,
+)
+
 if TYPE_CHECKING:
     import argparse
     from pathlib import Path
@@ -69,6 +75,7 @@ def build_scenario_payload(
     name: str,
     seeds: tuple[int, ...] = DEFAULT_SEEDS,
     source_issue: str = DEFAULT_SOURCE_ISSUE,
+    generation_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic, reviewable scenario YAML payload.
 
@@ -84,6 +91,11 @@ def build_scenario_payload(
         )
     scenario_name = _validate_output_name(name)
     seed_values = _validate_seed_tuple(seeds)
+    generation = normalize_generation_parameters(
+        {**(generation_profile or {}), "id": scenario_name, "repeats": 1}
+    )
+    initial_difficulty = estimate_initial_difficulty(generation)
+    seed_signature = ",".join(str(seed) for seed in seed_values)
     return {
         "schema_version": SCENARIO_MATRIX_SCHEMA_VERSION,
         "authoring_schema_version": AUTHORING_SCHEMA_VERSION,
@@ -91,6 +103,15 @@ def build_scenario_payload(
             {
                 "name": scenario_name,
                 "map_id": "classic_bottleneck",
+                "id": scenario_name,
+                "density": generation["density"],
+                "flow": generation["flow"],
+                "obstacle": generation["obstacle"],
+                "groups": generation["groups"],
+                "speed_var": generation["speed_var"],
+                "goal_topology": generation["goal_topology"],
+                "robot_context": generation["robot_context"],
+                "repeats": generation["repeats"],
                 "simulation_config": {
                     "max_episode_steps": 300,
                     "ped_density": 0.0,
@@ -98,6 +119,12 @@ def build_scenario_payload(
                 "robot_config": {},
                 "metadata": {
                     "archetype": "bottleneck",
+                    "generation_profile": {
+                        "schema_version": SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION,
+                        "seed_signature": seed_signature,
+                        "parameters": dict(generation),
+                    },
+                    "initial_difficulty": initial_difficulty,
                     "density": "draft_low",
                     "flow": "bi",
                     "purpose": "Draft bottleneck scenario for review and local smoke validation.",
@@ -463,6 +490,12 @@ def _validate_metadata(
         )
         return
     _metadata_string(metadata, "purpose", path=path, issues=issues)
+    if "generation_profile" in metadata:
+        _validate_generation_profile(
+            metadata.get("generation_profile"),
+            path=f"{path}/generation_profile",
+            issues=issues,
+        )
     if not require_authoring_metadata:
         return
     authoring = metadata.get("authoring")
@@ -507,6 +540,62 @@ def _metadata_string(
             hint=f"Add {key}: <reviewable text>.",
         )
     )
+
+
+def _validate_generation_profile(
+    generation_profile: Any,
+    *,
+    path: str,
+    issues: list[ValidationIssue],
+) -> None:
+    """Validate generation profile metadata for reproducibility."""
+
+    if not isinstance(generation_profile, dict):
+        issues.append(
+            ValidationIssue(
+                path=path,
+                message="metadata.generation_profile is required for draft authoring validation",
+                hint=(
+                    "Generate using create_scenario.py so generation_profile and "
+                    "initial_difficulty are both present."
+                ),
+            )
+        )
+        return
+
+    schema_version = generation_profile.get("schema_version")
+    if schema_version != SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION:
+        issues.append(
+            ValidationIssue(
+                path=f"{path}/schema_version",
+                message=(
+                    f"metadata.generation_profile.schema_version must equal "
+                    f"{SCENARIO_GENERATION_PARAMS_SCHEMA_VERSION}"
+                ),
+                hint="Use the scenario_generator profile schema version from constants.",
+            )
+        )
+
+    parameters = generation_profile.get("parameters")
+    if not isinstance(parameters, dict):
+        issues.append(
+            ValidationIssue(
+                path=f"{path}/parameters",
+                message="metadata.generation_profile.parameters is required and must be a mapping",
+                hint="Include density, flow, obstacle, groups, speed_var, goal_topology.",
+            )
+        )
+        return
+    try:
+        normalize_generation_parameters(parameters)
+    except ValueError as exc:
+        issues.append(
+            ValidationIssue(
+                path=path,
+                message=f"metadata.generation_profile.parameters invalid: {exc}",
+                hint="Fix invalid generation values before running the authoring validator.",
+            )
+        )
 
 
 def _validate_seeds(raw_seeds: Any, *, path: str, issues: list[ValidationIssue]) -> None:

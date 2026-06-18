@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator
 CONTRACT_SCHEMA_VERSION = "scenario_contract.v1"
 CERT_SCHEMA_VERSION = "scenario_cert.v1"
 SCENARIO_CONTRACT_SCHEMA_FILE = Path(__file__).with_name("schemas") / "scenario_contract.v1.json"
+SCENARIO_GENERATION_PROFILE_EXTENSION = "scenario_generation_profile.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +199,13 @@ def load_scenario_contracts(path: Path) -> list[ScenarioContract]:
         scenario_contract_from_dict(payload, source=f"{path.as_posix()}[{index}]")
         for index, payload in enumerate(payloads)
     ]
+
+
+def scenario_generation_profile_extension(contract: ScenarioContract) -> dict[str, Any]:
+    """Return a namespaced generation profile extension payload."""
+
+    raw_profile = contract.extensions.get(SCENARIO_GENERATION_PROFILE_EXTENSION)
+    return dict(raw_profile) if isinstance(raw_profile, Mapping) else {}
 
 
 def scenario_contract_from_dict(
@@ -474,6 +482,7 @@ __all__ = [
     "CERT_SCHEMA_VERSION",
     "CONTRACT_SCHEMA_VERSION",
     "SCENARIO_CONTRACT_SCHEMA_FILE",
+    "SCENARIO_GENERATION_PROFILE_EXTENSION",
     "ActorContract",
     "BenchmarkEligibilityHooks",
     "CountRange",
@@ -490,6 +499,7 @@ __all__ = [
     "load_scenario_contract_schema",
     "load_scenario_contracts",
     "scenario_contract_from_dict",
+    "scenario_generation_profile_extension",
     "validate_scenario_contract_references",
     "validate_scenario_odd_contract_reference",
 ]

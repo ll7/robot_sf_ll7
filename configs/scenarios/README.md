@@ -63,6 +63,32 @@ catch map and config errors.
 Passing this authoring validator only means the draft is structurally reviewable and loadable. It is
 not scenario certification, benchmark promotion, or benchmark evidence.
 
+Example reproducible bottleneck draft generation:
+
+```bash
+uv run python scripts/tools/create_scenario.py \
+  --template bottleneck \
+  --name draft_bottleneck_issue_3027 \
+  --density med \
+  --flow cross \
+  --obstacle maze \
+  --groups 0.25 \
+  --speed-var high \
+  --goal-topology circulate \
+  --robot-context ahead \
+  --seeds 101 102 \
+  --output configs/scenarios/single/draft_bottleneck_issue_3027.yaml
+```
+
+Resulting YAML includes:
+- `metadata.generation_profile` with `schema_version`, deterministic `seed_signature`, and
+  normalized `parameters`.
+- `metadata.initial_difficulty` with schema+score/band metadata for initial intent review.
+- `metadata.authoring.benchmark_evidence: false` and `metadata.authoring.status: draft`.
+
+The explicit `--flow/--obstacle/--goal-topology/...` flags are for reproducible pre-registration and
+later diff review.
+
 ## Scenario Contracts
 
 Versioned scenario-intent contracts live under `configs/scenarios/contracts/`.

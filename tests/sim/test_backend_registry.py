@@ -7,6 +7,13 @@ import pytest
 from robot_sf.sim import registry as loaded_registry
 
 
+@pytest.fixture(autouse=True)
+def _restore_loaded_registry_after_test():
+    """Restore registry module state after tests that reload it with mocked imports."""
+    yield
+    importlib.reload(loaded_registry)
+
+
 def test_default_backend_registered():
     """TODO docstring. Document this function."""
     backends = loaded_registry.list_backends()

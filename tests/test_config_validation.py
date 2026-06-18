@@ -59,7 +59,7 @@ class TestBackendValidation:
         config = RobotSimulationConfig()
         config.backend = "nonexistent_backend"
 
-        with pytest.raises(KeyError, match="Unknown backend.*Available backends"):
+        with pytest.raises(KeyError, match=r"Unknown backend.*Available backends"):
             _check_backend_valid(config)
 
     def test_valid_backend_accepted(self):

@@ -19,6 +19,51 @@ Each record must state:
 - `paper_relevance`
 - `status`
 
+## Experiment Record v2
+
+`experiment-record.v2` is the authoritative research-control-plane schema for new sprint studies.
+It replaces free-form `status` with one explicit `state` field. GitHub labels, status comments,
+dashboards, and release checklists should be derived from this state instead of maintained as
+independent runtime databases.
+
+Active states:
+
+```text
+idea -> protocol_frozen -> implementation_ready -> preflight_passed -> submitted -> running
+  -> finalized -> evidence_promoted -> claim_reviewed -> released
+```
+
+Terminal alternatives:
+
+```text
+blocked_external
+invalid_execution
+negative_result
+null_result
+superseded
+stopped_by_gate
+```
+
+Closed GitHub issues are historical truth unless a new follow-up issue is opened. Stale cards
+should be corrected or superseded through a PR rather than silently treated as active work.
+Local `output/` paths and `:pending` artifact aliases are not durable evidence.
+
+### Control-plane dry-run report
+
+Use the validator to emit a compact drift report before new empirical campaigns start:
+
+```bash
+uv run python scripts/tools/validate_experiment_registry.py \
+  experiments/registry.yaml \
+  --issue-state-json output/experiments/issue_state_snapshot.json \
+  --control-plane-report-json output/experiments/control_plane_report.json
+```
+
+The issue-state snapshot is a compact JSON list or object with `number`, `state`, and `labels`.
+The report detects closed issues with nonterminal cards, closed blockers with blocked cards,
+state-label disagreement, missing config/input paths, pending artifact aliases, and expected
+artifacts that still need durable references.
+
 Use `paper_relevance: exploratory` for local pilots and early research runs. Use
 `paper_relevance: paper_facing` only when every local `output/` artifact listed in `outputs` or
 `expected_artifacts` has a durable `durable_reference`, such as a W&B artifact, model registry

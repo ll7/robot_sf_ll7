@@ -19,6 +19,15 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_VERSION = "robot-sf-slurm-job-finalization.v1"
+CONTROL_PLANE_RUN_ARTIFACTS = (
+    "run_manifest.json",
+    "episodes.parquet",
+    "summary.json",
+    "checksums.sha256",
+    "stdout.log",
+    "stderr.log",
+    "environment.json",
+)
 
 SUCCESS_STATES = {"COMPLETED", "COMPLETING"}
 FAILED_STATES = {"FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY", "PREEMPTED"}
@@ -270,6 +279,32 @@ def build_finalization_report(
     return report
 
 
+def build_control_plane_finalization_report(
+    *,
+    issue_number: int,
+    job_id: str,
+    job_state: str,
+    run_root: str | Path,
+    optional_artifacts: list[str | Path] | None = None,
+    repo_root: Path = REPO_ROOT,
+    manual_decision: bool = False,
+    notes: str = "",
+) -> dict[str, Any]:
+    """Build a report using the July 2026 research-control-plane run contract."""
+    root = Path(run_root)
+    expected_artifacts = [root / name for name in CONTROL_PLANE_RUN_ARTIFACTS]
+    return build_finalization_report(
+        issue_number=issue_number,
+        job_id=job_id,
+        job_state=job_state,
+        expected_artifacts=expected_artifacts,
+        optional_artifacts=optional_artifacts,
+        repo_root=repo_root,
+        manual_decision=manual_decision,
+        notes=notes,
+    )
+
+
 def write_report(
     report: dict[str, Any], output: Path, *, markdown_output: Path | None = None
 ) -> None:
@@ -294,6 +329,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Required artifact path, relative to repo root unless absolute. May be repeated.",
     )
     parser.add_argument(
+        "--control-plane-run-root",
+        type=Path,
+        help=(
+            "Use the research-control-plane required artifact set under this run root "
+            "instead of passing each expected artifact manually."
+        ),
+    )
+    parser.add_argument(
         "--optional-artifact",
         action="append",
         default=[],
@@ -314,16 +357,28 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
-    report = build_finalization_report(
-        issue_number=args.issue,
-        job_id=args.job_id,
-        job_state=args.job_state,
-        expected_artifacts=args.expected_artifact,
-        optional_artifacts=args.optional_artifact,
-        repo_root=args.repo_root,
-        manual_decision=args.manual_decision,
-        notes=args.notes,
-    )
+    if args.control_plane_run_root is not None:
+        report = build_control_plane_finalization_report(
+            issue_number=args.issue,
+            job_id=args.job_id,
+            job_state=args.job_state,
+            run_root=args.control_plane_run_root,
+            optional_artifacts=args.optional_artifact,
+            repo_root=args.repo_root,
+            manual_decision=args.manual_decision,
+            notes=args.notes,
+        )
+    else:
+        report = build_finalization_report(
+            issue_number=args.issue,
+            job_id=args.job_id,
+            job_state=args.job_state,
+            expected_artifacts=args.expected_artifact,
+            optional_artifacts=args.optional_artifact,
+            repo_root=args.repo_root,
+            manual_decision=args.manual_decision,
+            notes=args.notes,
+        )
     write_report(report, args.output, markdown_output=args.markdown_output)
     print(report["issue_update_markdown"])
     return 0 if report["classification"] == "success" else 1

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent
 
-from scripts.tools.validate_experiment_registry import validate_registry
+from scripts.tools.validate_experiment_registry import build_control_plane_report, validate_registry
 
 
 def _write_yaml(path: Path, text: str) -> None:
@@ -96,3 +96,189 @@ def test_validator_rejects_paper_facing_local_only_outputs(tmp_path: Path) -> No
         "paper.yaml: paper-facing record references local-only output/ artifact "
         "without durable_reference: output/benchmarks/local_only/report.json"
     ) in errors
+
+
+def test_validator_accepts_experiment_record_v2_state(tmp_path: Path) -> None:
+    """New records may use the v2 authoritative state field instead of legacy status."""
+    registry = tmp_path / "experiments" / "registry.yaml"
+    record = registry.parent / "v2.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - v2.yaml
+        """,
+    )
+    _write_yaml(
+        record,
+        """
+        schema_version: experiment-record.v2
+        experiment_id: v2-protocol
+        issue: 3073
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/3073
+        question: What state owns this protocol?
+        hypothesis: A single state field prevents drift.
+        config:
+          - experiments/registry.yaml
+        command: uv run python scripts/tools/validate_experiment_registry.py
+        inputs:
+          - path: experiments/registry.yaml
+        outputs:
+          - path: output/experiments/v2-protocol
+        expected_artifacts:
+          - name: report
+            path: output/experiments/v2-protocol/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        state: protocol_frozen
+        """,
+    )
+
+    assert validate_registry(registry) == []
+
+
+def test_validator_rejects_unknown_experiment_record_v2_state(tmp_path: Path) -> None:
+    """The control plane should reject ad hoc state tokens."""
+    registry = tmp_path / "experiments" / "registry.yaml"
+    record = registry.parent / "bad.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - bad.yaml
+        """,
+    )
+    _write_yaml(
+        record,
+        """
+        schema_version: experiment-record.v2
+        experiment_id: bad-state
+        issue: 3073
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/3073
+        question: Bad state?
+        hypothesis: It should fail.
+        config:
+          - experiments/registry.yaml
+        command: uv run true
+        inputs:
+          - path: experiments/registry.yaml
+        outputs:
+          - path: output/experiments/bad-state
+        expected_artifacts:
+          - name: report
+            path: output/experiments/bad-state/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        state: kind_of_running
+        """,
+    )
+
+    errors = validate_registry(registry)
+
+    assert "bad.yaml: state must be one of" in errors[0]
+
+
+def test_control_plane_report_detects_research_state_drift(tmp_path: Path) -> None:
+    """The dry-run report should catch the sprint's known drift classes."""
+    registry = tmp_path / "experiments" / "registry.yaml"
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "exists.yaml").write_text("ok: true\n", encoding="utf-8")
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - closed_nonterminal.yaml
+          - blocked_on_closed.yaml
+          - label_disagreement.yaml
+        """,
+    )
+    _write_yaml(
+        registry.parent / "closed_nonterminal.yaml",
+        """
+        schema_version: experiment-record.v2
+        experiment_id: closed-nonterminal
+        issue: 1236
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/1236
+        question: Is a closed issue still active?
+        hypothesis: It should be terminal or superseded.
+        config:
+          - configs/exists.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/closed
+        expected_artifacts:
+          - name: report
+            path: output/experiments/closed/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        state: idea
+        """,
+    )
+    _write_yaml(
+        registry.parent / "blocked_on_closed.yaml",
+        """
+        schema_version: experiment-record.v1
+        experiment_id: blocked-on-closed
+        issue: 1151
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/1151
+        question: Is the blocker still active?
+        hypothesis: Closed blockers should not keep cards blocked.
+        config:
+          - configs/exists.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/blocked
+        expected_artifacts:
+          - name: report
+            path: output/experiments/blocked/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        status: blocked_on_issue_1219
+        """,
+    )
+    _write_yaml(
+        registry.parent / "label_disagreement.yaml",
+        """
+        schema_version: experiment-record.v2
+        experiment_id: label-disagreement
+        issue: 1475
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/1475
+        question: Do labels agree with the card?
+        hypothesis: They should derive from the card.
+        config:
+          - configs/missing.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/label
+        expected_artifacts:
+          - name: pending_policy
+            path: wandb-artifact://pending/issue-1475/policy:smoke
+            durable_reference_required: true
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        state: implementation_ready
+        """,
+    )
+
+    report = build_control_plane_report(
+        registry,
+        issue_states={1236: "CLOSED", 1219: "CLOSED", 1475: "OPEN"},
+        issue_labels={1475: ["state:running"]},
+    )
+
+    kinds = {finding["kind"] for finding in report["findings"]}
+    assert "closed_issue_with_nonterminal_record" in kinds
+    assert "closed_blocker_with_blocked_record" in kinds
+    assert "label_record_state_disagreement" in kinds
+    assert "missing_config_or_input_path" in kinds
+    assert "pending_artifact_alias" in kinds
+    assert "missing_required_durable_reference" in kinds

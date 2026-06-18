@@ -191,3 +191,42 @@ def test_cli_returns_nonzero_for_missing_artifacts(tmp_path: Path) -> None:
     assert exit_code == 1
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["classification"] == "missing_artifacts"
+
+
+def test_control_plane_contract_requires_full_run_artifact_set(tmp_path: Path) -> None:
+    """The sprint finalizer contract should fail closed on missing canonical files."""
+    run_root = tmp_path / "output" / "slurm" / "job-132"
+    for name in slurm_job_finalize.CONTROL_PLANE_RUN_ARTIFACTS:
+        if name == "stderr.log":
+            continue
+        _write(run_root / name, f"{name}\n")
+
+    report = slurm_job_finalize.build_control_plane_finalization_report(
+        issue_number=3075,
+        job_id="132",
+        job_state="COMPLETED",
+        run_root="output/slurm/job-132",
+        repo_root=tmp_path,
+    )
+
+    assert report["classification"] == "missing_artifacts"
+    missing = [artifact for artifact in report["artifacts"] if not artifact["exists"]]
+    assert [artifact["path"] for artifact in missing] == ["output/slurm/job-132/stderr.log"]
+
+
+def test_control_plane_contract_success_when_required_files_exist(tmp_path: Path) -> None:
+    """A complete canonical run root should finalize as success."""
+    run_root = tmp_path / "output" / "slurm" / "job-133"
+    for name in slurm_job_finalize.CONTROL_PLANE_RUN_ARTIFACTS:
+        _write(run_root / name, f"{name}\n")
+
+    report = slurm_job_finalize.build_control_plane_finalization_report(
+        issue_number=3075,
+        job_id="133",
+        job_state="COMPLETED",
+        run_root=run_root,
+        repo_root=tmp_path,
+    )
+
+    assert report["classification"] == "success"
+    assert report["artifact_status"] == "all_required_present"

@@ -99,6 +99,11 @@ records the workflow-helper field audit for `scripts/dev/` GitHub calls. Current
 payloads are mostly required or intentionally opt-in; repeated issue-claim checks are the main
 future optimization candidate.
 
+Recent research-engine gap audit: [issue_3058_research_engine_gap_audit.md](issue_3058_research_engine_gap_audit.md)
+records live issue/card/artifact mismatches before new empirical campaigns start. It routes
+existing conflicts to card correction, label cleanup, follow-up validation policy, or fail-closed
+terminal state without upgrading any benchmark or paper-facing claim.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

@@ -155,6 +155,20 @@ def test_output_and_expected_artifacts_have_artifact_ids() -> None:
             )
 
 
+def test_draft_templates_are_proposal_state_until_placeholders_are_filled() -> None:
+    """Generated draft cards should stay non-actionable until TODO fields are replaced."""
+    for template_name in TEMPLATE_NAMES:
+        record = _build_record(
+            experiment_id=f"test_{template_name.replace('-', '_')}",
+            issue="9999",
+            issue_url="https://example.com/9999",
+            template_name=template_name,
+            output_root=Path("output/experiments"),
+        )
+        assert record["evidence_grade"] == "proposal"
+        assert record["status"] == "proposal"
+
+
 def test_training_templates_include_slurm_early_stop_criteria() -> None:
     """Training-oriented experiment cards should predeclare Slurm stop rules."""
     expected_fields = {

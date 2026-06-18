@@ -177,7 +177,7 @@ def _template_benchmark_analysis(experiment_id: str, output_root: Path) -> Templ
         early_stop_criteria=_early_stop_criteria_template(),
         evidence_grade="proposal",
         paper_relevance="exploratory",
-        status="planned",
+        status="proposal",
         notes=(
             "TODO: Replace placeholders in curly braces before running. "
             "Local output paths are not durable evidence until promoted "
@@ -247,7 +247,7 @@ def _template_planner_ablation(experiment_id: str, output_root: Path) -> Templat
         early_stop_criteria=_early_stop_criteria_template(),
         evidence_grade="proposal",
         paper_relevance="exploratory",
-        status="planned",
+        status="proposal",
         notes=(
             "TODO: Replace placeholders in curly braces before running. "
             "Planner ablation must include at least three seeds per condition. "
@@ -315,7 +315,7 @@ def _template_figure_table_pack(experiment_id: str, output_root: Path) -> Templa
         early_stop_criteria={},
         evidence_grade="proposal",
         paper_relevance="exploratory",
-        status="planned",
+        status="proposal",
         notes=(
             "TODO: Replace placeholders in curly braces before running. "
             "All figures and tables must carry durable_reference before "

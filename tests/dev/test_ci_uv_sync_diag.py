@@ -79,16 +79,24 @@ def test_ci_uv_sync_diag_reports_runner_and_uv_state() -> None:
 
 
 def test_workflow_uv_cache_paths_match_setup_uv_cache_dir() -> None:
-    """Workflow cache paths must match the UV_CACHE_DIR configured by setup-uv."""
-    workflow_paths = [
-        ".github/workflows/ci.yml",
+    """Workflow uv caching must match the UV_CACHE_DIR configured by setup-uv."""
+    inline_cache_workflows = [
         ".github/workflows/perf-nightly.yml",
         ".github/workflows/pr-promoted-planner-smoke.yml",
     ]
     expected_archive = "${{ runner.temp }}/setup-uv-cache/archive-v0"
     expected_wheels = "${{ runner.temp }}/setup-uv-cache/wheels-v6"
 
-    for workflow_path in workflow_paths:
+    ci_workflow_text = (_repo_root() / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    ci_action_text = (_repo_root() / ".github/actions/setup-ci-python/action.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "uses: ./.github/actions/setup-ci-python" in ci_workflow_text
+    assert "astral-sh/setup-uv@" in ci_action_text
+    assert "~/.cache/uv" not in ci_workflow_text
+    assert "~/.cache/uv" not in ci_action_text
+
+    for workflow_path in inline_cache_workflows:
         workflow_text = (_repo_root() / workflow_path).read_text(encoding="utf-8")
         assert expected_archive in workflow_text, workflow_path
         assert expected_wheels in workflow_text, workflow_path

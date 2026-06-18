@@ -79,7 +79,7 @@ def write_result_store(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     episodes = pd.DataFrame(rows)
-    episodes.to_parquet(output_dir / "episodes.parquet", index=False)
+    _write_parquet_frame(episodes, output_dir / "episodes.parquet")
 
     summary = _summary_payload(
         rows, study_id=study_id, command=command, source_commit=source_commit
@@ -138,7 +138,7 @@ def validate_result_store(output_dir: Path) -> ResultStoreValidation:
 def _validate_episode_parquet(parquet_path: Path) -> list[str]:
     """Return validation errors for the episode Parquet surface."""
     try:
-        episodes = pd.read_parquet(parquet_path)
+        episodes = read_parquet_frame(parquet_path)
     except Exception as exc:
         # Pandas may surface engine-specific exceptions for corrupt or unsupported Parquet files.
         return [f"episodes.parquet could not be read: {exc}"]
@@ -160,6 +160,40 @@ def _validate_episode_parquet(parquet_path: Path) -> list[str]:
         if bool(missing_values.any()):
             errors.append(f"episodes.parquet has missing artifact provenance field: {field}")
     return errors
+
+
+def _write_parquet_frame(frame: pd.DataFrame, parquet_path: Path) -> None:
+    """Write a Parquet file with DuckDB fallback when pandas has no parquet engine."""
+    try:
+        frame.to_parquet(parquet_path, index=False)
+        return
+    except ImportError:
+        pass
+    try:
+        import duckdb
+    except ImportError as exc:  # pragma: no cover - only exercised in lean optional envs.
+        raise ImportError(
+            "Writing episodes.parquet requires pyarrow, fastparquet, or duckdb"
+        ) from exc
+    with duckdb.connect(database=":memory:") as connection:
+        connection.register("episodes", frame)
+        connection.execute("COPY episodes TO ? (FORMAT PARQUET)", [str(parquet_path)])
+
+
+def read_parquet_frame(parquet_path: Path) -> pd.DataFrame:
+    """Read a Parquet file with DuckDB fallback when pandas has no parquet engine."""
+    try:
+        return pd.read_parquet(parquet_path)
+    except ImportError:
+        pass
+    try:
+        import duckdb
+    except ImportError as exc:  # pragma: no cover - only exercised in lean optional envs.
+        raise ImportError(
+            "Reading episodes.parquet requires pyarrow, fastparquet, or duckdb"
+        ) from exc
+    with duckdb.connect(database=":memory:") as connection:
+        return connection.execute("SELECT * FROM read_parquet(?)", [str(parquet_path)]).fetchdf()
 
 
 def _validate_summary_file(summary_path: Path) -> list[str]:

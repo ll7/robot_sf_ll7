@@ -1,0 +1,385 @@
+{
+  "available_metrics": [
+    "success",
+    "collision",
+    "snqi",
+    "comfort_exposure"
+  ],
+  "claim_boundary": "descriptive report only; row-status caveats and sample gates must be reviewed before benchmark or paper-facing claims",
+  "input": {
+    "durable_input_label": "tests/fixtures/campaign_result_store/issue_3063_episode_rows.json",
+    "episode_count": 4,
+    "result_store": "transient_local_result_store",
+    "source_commit": "8e65f902fb5ed1825f7ae49fcb8f5391e223ed93",
+    "study_id": "issue-3063-fixture"
+  },
+  "limitations": [
+    "confidence intervals are normal-approximation descriptive intervals, not a significance claim",
+    "fallback, degraded, unavailable, failed, and diagnostic-only rows are surfaced as limitations instead of successful benchmark evidence"
+  ],
+  "metric_visual_summaries": [
+    {
+      "metric": "success",
+      "metric_family": "core",
+      "rows": [
+        {
+          "bar": "####################",
+          "denominator": 2,
+          "mean": 0.5,
+          "planner": "goal"
+        },
+        {
+          "bar": "####################",
+          "denominator": 2,
+          "mean": 0.5,
+          "planner": "orca"
+        }
+      ]
+    },
+    {
+      "metric": "collision",
+      "metric_family": "core",
+      "rows": [
+        {
+          "bar": "####################",
+          "denominator": 2,
+          "mean": 0.5,
+          "planner": "goal"
+        },
+        {
+          "bar": ".",
+          "denominator": 2,
+          "mean": 0.0,
+          "planner": "orca"
+        }
+      ]
+    },
+    {
+      "metric": "snqi",
+      "metric_family": "social_compliance",
+      "rows": [
+        {
+          "bar": "######",
+          "denominator": 2,
+          "mean": -0.1,
+          "planner": "goal"
+        },
+        {
+          "bar": "####################",
+          "denominator": 2,
+          "mean": 0.35,
+          "planner": "orca"
+        }
+      ]
+    },
+    {
+      "metric": "comfort_exposure",
+      "metric_family": "social_compliance",
+      "rows": [
+        {
+          "bar": "####################",
+          "denominator": 2,
+          "mean": 0.45,
+          "planner": "goal"
+        },
+        {
+          "bar": "###########",
+          "denominator": 2,
+          "mean": 0.25,
+          "planner": "orca"
+        }
+      ]
+    }
+  ],
+  "planner_summaries": [
+    {
+      "benchmark_valid_episode_count": 1,
+      "episode_count": 2,
+      "excluded_or_limited_episode_count": 1,
+      "metrics": {
+        "collision": {
+          "ci95_high": 1.48,
+          "ci95_low": -0.48,
+          "denominator": 2,
+          "mean": 0.5,
+          "missing": 0,
+          "sem": 0.5,
+          "std": 0.7071067811865476
+        },
+        "comfort_exposure": {
+          "ci95_high": 1.136,
+          "ci95_low": -0.23599999999999993,
+          "denominator": 2,
+          "mean": 0.45,
+          "missing": 0,
+          "sem": 0.35,
+          "std": 0.4949747468305833
+        },
+        "snqi": {
+          "ci95_high": 0.488,
+          "ci95_low": -0.688,
+          "denominator": 2,
+          "mean": -0.1,
+          "missing": 0,
+          "sem": 0.3,
+          "std": 0.42426406871192857
+        },
+        "success": {
+          "ci95_high": 1.48,
+          "ci95_low": -0.48,
+          "denominator": 2,
+          "mean": 0.5,
+          "missing": 0,
+          "sem": 0.5,
+          "std": 0.7071067811865476
+        }
+      },
+      "planner": "goal",
+      "row_status_counts": {
+        "fallback": 1,
+        "native": 1
+      }
+    },
+    {
+      "benchmark_valid_episode_count": 1,
+      "episode_count": 2,
+      "excluded_or_limited_episode_count": 1,
+      "metrics": {
+        "collision": {
+          "ci95_high": 0.0,
+          "ci95_low": 0.0,
+          "denominator": 2,
+          "mean": 0.0,
+          "missing": 0,
+          "sem": 0.0,
+          "std": 0.0
+        },
+        "comfort_exposure": {
+          "ci95_high": 0.348,
+          "ci95_low": 0.15200000000000002,
+          "denominator": 2,
+          "mean": 0.25,
+          "missing": 0,
+          "sem": 0.04999999999999999,
+          "std": 0.07071067811865474
+        },
+        "snqi": {
+          "ci95_high": 0.8399999999999999,
+          "ci95_low": -0.13999999999999996,
+          "denominator": 2,
+          "mean": 0.35,
+          "missing": 0,
+          "sem": 0.24999999999999997,
+          "std": 0.35355339059327373
+        },
+        "success": {
+          "ci95_high": 1.48,
+          "ci95_low": -0.48,
+          "denominator": 2,
+          "mean": 0.5,
+          "missing": 0,
+          "sem": 0.5,
+          "std": 0.7071067811865476
+        }
+      },
+      "planner": "orca",
+      "row_status_counts": {
+        "adapter": 1,
+        "degraded": 1
+      }
+    }
+  ],
+  "report_status": "analysis_only",
+  "row_status": {
+    "benchmark_valid_episode_count": 2,
+    "caveats": [
+      {
+        "count": 1,
+        "interpretation": "benchmark_valid_denominator",
+        "row_status": "adapter"
+      },
+      {
+        "count": 1,
+        "interpretation": "excluded_or_limited",
+        "row_status": "degraded"
+      },
+      {
+        "count": 1,
+        "interpretation": "excluded_or_limited",
+        "row_status": "fallback"
+      },
+      {
+        "count": 1,
+        "interpretation": "benchmark_valid_denominator",
+        "row_status": "native"
+      }
+    ],
+    "counts": {
+      "adapter": 1,
+      "degraded": 1,
+      "fallback": 1,
+      "native": 1
+    },
+    "excluded_or_limited_episode_count": 2,
+    "known_row_status_values": [
+      "native",
+      "adapter",
+      "diagnostic_only",
+      "fallback",
+      "degraded",
+      "unavailable",
+      "failed"
+    ]
+  },
+  "scenario_family_summaries": [
+    {
+      "benchmark_valid_episode_count": 1,
+      "episode_count": 2,
+      "excluded_or_limited_episode_count": 1,
+      "metrics": {
+        "collision": {
+          "ci95_high": 1.48,
+          "ci95_low": -0.48,
+          "denominator": 2,
+          "mean": 0.5,
+          "missing": 0,
+          "sem": 0.5,
+          "std": 0.7071067811865476
+        },
+        "comfort_exposure": {
+          "ci95_high": 1.136,
+          "ci95_low": -0.23599999999999993,
+          "denominator": 2,
+          "mean": 0.45,
+          "missing": 0,
+          "sem": 0.35,
+          "std": 0.4949747468305833
+        },
+        "snqi": {
+          "ci95_high": 0.488,
+          "ci95_low": -0.688,
+          "denominator": 2,
+          "mean": -0.1,
+          "missing": 0,
+          "sem": 0.3,
+          "std": 0.42426406871192857
+        },
+        "success": {
+          "ci95_high": 1.48,
+          "ci95_low": -0.48,
+          "denominator": 2,
+          "mean": 0.5,
+          "missing": 0,
+          "sem": 0.5,
+          "std": 0.7071067811865476
+        }
+      },
+      "planner": "goal",
+      "row_status_counts": {
+        "fallback": 1,
+        "native": 1
+      },
+      "scenario_family": "crossing"
+    },
+    {
+      "benchmark_valid_episode_count": 1,
+      "episode_count": 2,
+      "excluded_or_limited_episode_count": 1,
+      "metrics": {
+        "collision": {
+          "ci95_high": 0.0,
+          "ci95_low": 0.0,
+          "denominator": 2,
+          "mean": 0.0,
+          "missing": 0,
+          "sem": 0.0,
+          "std": 0.0
+        },
+        "comfort_exposure": {
+          "ci95_high": 0.348,
+          "ci95_low": 0.15200000000000002,
+          "denominator": 2,
+          "mean": 0.25,
+          "missing": 0,
+          "sem": 0.04999999999999999,
+          "std": 0.07071067811865474
+        },
+        "snqi": {
+          "ci95_high": 0.8399999999999999,
+          "ci95_low": -0.13999999999999996,
+          "denominator": 2,
+          "mean": 0.35,
+          "missing": 0,
+          "sem": 0.24999999999999997,
+          "std": 0.35355339059327373
+        },
+        "success": {
+          "ci95_high": 1.48,
+          "ci95_low": -0.48,
+          "denominator": 2,
+          "mean": 0.5,
+          "missing": 0,
+          "sem": 0.5,
+          "std": 0.7071067811865476
+        }
+      },
+      "planner": "orca",
+      "row_status_counts": {
+        "adapter": 1,
+        "degraded": 1
+      },
+      "scenario_family": "crossing"
+    }
+  ],
+  "schema_version": "campaign-comparison-report.v1",
+  "statistical_hooks": [
+    {
+      "comparison": "orca - goal",
+      "interpretation": "descriptive_only_formal_test_not_run",
+      "left_denominator": 2,
+      "left_planner": "goal",
+      "mean_delta": 0.0,
+      "method": "descriptive_mean_delta",
+      "metric": "success",
+      "right_denominator": 2,
+      "right_planner": "orca",
+      "sample_gate": "met"
+    },
+    {
+      "comparison": "orca - goal",
+      "interpretation": "descriptive_only_formal_test_not_run",
+      "left_denominator": 2,
+      "left_planner": "goal",
+      "mean_delta": -0.5,
+      "method": "descriptive_mean_delta",
+      "metric": "collision",
+      "right_denominator": 2,
+      "right_planner": "orca",
+      "sample_gate": "met"
+    },
+    {
+      "comparison": "orca - goal",
+      "interpretation": "descriptive_only_formal_test_not_run",
+      "left_denominator": 2,
+      "left_planner": "goal",
+      "mean_delta": 0.44999999999999996,
+      "method": "descriptive_mean_delta",
+      "metric": "snqi",
+      "right_denominator": 2,
+      "right_planner": "orca",
+      "sample_gate": "met"
+    },
+    {
+      "comparison": "orca - goal",
+      "interpretation": "descriptive_only_formal_test_not_run",
+      "left_denominator": 2,
+      "left_planner": "goal",
+      "mean_delta": -0.2,
+      "method": "descriptive_mean_delta",
+      "metric": "comfort_exposure",
+      "right_denominator": 2,
+      "right_planner": "orca",
+      "sample_gate": "met"
+    }
+  ]
+}

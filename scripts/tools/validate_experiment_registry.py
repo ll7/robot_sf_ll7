@@ -247,8 +247,7 @@ def _validate_actionable_required_durable_reference(
         return
     artifact_name = artifact.get("name") or artifact.get("path") or "<unnamed>"
     errors.append(
-        f"{display_path}: actionable record requires durable_reference for artifact "
-        f"{artifact_name}"
+        f"{display_path}: actionable record requires durable_reference for artifact {artifact_name}"
     )
 
 

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import robot_sf
 from robot_sf.telemetry import gpu as gpu_module
 from robot_sf.telemetry.gpu import GpuDeviceSample, GpuSample
 from robot_sf.telemetry.models import serialize_payload
@@ -88,6 +89,7 @@ def test_collect_gpu_sample_includes_per_device_breakdown(
 
 def test_sampler_serializes_per_device_gpu_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
     """Telemetry snapshots include a JSON-ready per-device breakdown."""
+    assert robot_sf.telemetry.sampler.collect_gpu_sample is not None
     sample = GpuSample(
         util_percent=40.0,
         memory_used_mb=6.0,

@@ -1,5 +1,6 @@
 """Robot SF package bootstrap and telemetry exports."""
 
+from . import telemetry as telemetry
 from .telemetry import (
     ManifestWriter,
     RunRegistry,
@@ -12,4 +13,5 @@ __all__ = [
     "RunRegistry",
     "RunTrackerConfig",
     "generate_run_id",
+    "telemetry",
 ]

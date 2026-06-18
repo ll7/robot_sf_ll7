@@ -7,12 +7,19 @@ from typing import Any
 import numpy as np
 
 
+def _default_if_none(value: Any, default: Any) -> Any:
+    """Return ``default`` when a parsed observation field is explicitly null."""
+    return default if value is None else value
+
+
 def normalize_xy_rows(values: Any) -> np.ndarray:
     """Normalize scalar/list/ndarray payloads to an ``(N, 2)`` float array.
 
     Returns:
         np.ndarray: ``(N, 2)`` array, or ``(0, 2)`` when input is empty/malformed.
     """
+    if values is None:
+        return np.zeros((0, 2), dtype=float)
     arr = np.asarray(values, dtype=float)
     if arr.size == 0:
         return np.zeros((0, 2), dtype=float)
@@ -37,15 +44,14 @@ def extract_ppo_pedestrians(
     Returns:
         tuple[np.ndarray, np.ndarray, float]: Pedestrian positions, velocities, and radius.
     """
-    ped_pos = normalize_xy_rows(pedestrians.get("positions", []))
-    ped_count_arr = np.asarray(pedestrians.get("count", [ped_pos.shape[0]]), dtype=float).reshape(
-        -1
-    )
+    ped_pos = normalize_xy_rows(_default_if_none(pedestrians.get("positions"), []))
+    ped_count_source = _default_if_none(pedestrians.get("count"), [ped_pos.shape[0]])
+    ped_count_arr = np.asarray(ped_count_source, dtype=float).reshape(-1)
     ped_count = int(ped_count_arr[0]) if ped_count_arr.size else int(ped_pos.shape[0])
     ped_count = max(0, min(ped_count, int(ped_pos.shape[0])))
     ped_pos = ped_pos[:ped_count]
 
-    ped_vel = normalize_xy_rows(pedestrians.get("velocities", []))
+    ped_vel = normalize_xy_rows(_default_if_none(pedestrians.get("velocities"), []))
     if ped_vel.shape[0] < ped_count:
         ped_vel = np.pad(
             ped_vel,
@@ -54,7 +60,8 @@ def extract_ppo_pedestrians(
         )
     ped_vel = ped_vel[:ped_count]
 
-    ped_radius_raw = np.asarray(pedestrians.get("radius", [0.35]), dtype=float).reshape(-1)
+    ped_radius_source = _default_if_none(pedestrians.get("radius"), [0.35])
+    ped_radius_raw = np.asarray(ped_radius_source, dtype=float).reshape(-1)
     ped_radius = float(ped_radius_raw[0]) if ped_radius_raw.size else 0.35
     return ped_pos, ped_vel, ped_radius
 
@@ -84,15 +91,29 @@ def obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
     goal = obs.get("goal", {}) if isinstance(obs.get("goal"), dict) else {}
     pedestrians = obs.get("pedestrians", {}) if isinstance(obs.get("pedestrians"), dict) else {}
 
-    robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float).reshape(-1)
-    robot_vel = np.asarray(robot.get("velocity", [0.0, 0.0]), dtype=float).reshape(-1)
+    robot_pos = np.asarray(
+        _default_if_none(robot.get("position"), [0.0, 0.0]), dtype=float
+    ).reshape(-1)
+    robot_vel = np.asarray(
+        _default_if_none(robot.get("velocity"), [0.0, 0.0]), dtype=float
+    ).reshape(-1)
     if robot_vel.size < 2:
-        speed = float(np.asarray(robot.get("speed", [0.0]), dtype=float).reshape(-1)[0])
-        heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
+        speed = float(
+            np.asarray(_default_if_none(robot.get("speed"), [0.0]), dtype=float).reshape(-1)[0]
+        )
+        heading = float(
+            np.asarray(_default_if_none(robot.get("heading"), [0.0]), dtype=float).reshape(-1)[0]
+        )
         robot_vel = np.array([speed * np.cos(heading), speed * np.sin(heading)], dtype=float)
-    robot_goal = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
-    robot_heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
-    robot_radius = float(np.asarray(robot.get("radius", [0.3]), dtype=float).reshape(-1)[0])
+    robot_goal = np.asarray(_default_if_none(goal.get("current"), [0.0, 0.0]), dtype=float).reshape(
+        -1
+    )
+    robot_heading = float(
+        np.asarray(_default_if_none(robot.get("heading"), [0.0]), dtype=float).reshape(-1)[0]
+    )
+    robot_radius = float(
+        np.asarray(_default_if_none(robot.get("radius"), [0.3]), dtype=float).reshape(-1)[0]
+    )
 
     ped_pos, ped_vel, ped_radius = extract_ppo_pedestrians(pedestrians)
 

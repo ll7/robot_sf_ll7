@@ -110,19 +110,37 @@ def validate_result_store(output_dir: Path) -> ResultStoreValidation:
             errors.append(f"missing required result-store file: {filename}")
     parquet_path = output_dir / "episodes.parquet"
     if parquet_path.is_file():
-        episodes = pd.read_parquet(parquet_path)
-        missing = [field for field in REQUIRED_EPISODE_FIELDS if field not in episodes.columns]
-        if missing:
-            errors.append(f"episodes.parquet missing required columns: {missing}")
+        errors.extend(_validate_episode_parquet(parquet_path))
     summary_path = output_dir / "summary.json"
     if summary_path.is_file():
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        if summary.get("schema_version") != SCHEMA_VERSION:
-            errors.append(
-                f"summary.json schema_version must be {SCHEMA_VERSION!r}, "
-                f"found {summary.get('schema_version')!r}"
-            )
+        errors.extend(_validate_summary_file(summary_path))
     return ResultStoreValidation(ok=not errors, errors=errors)
+
+
+def _validate_episode_parquet(parquet_path: Path) -> list[str]:
+    """Return validation errors for the episode Parquet surface."""
+    try:
+        episodes = pd.read_parquet(parquet_path)
+    except Exception as exc:
+        return [f"episodes.parquet could not be read: {exc}"]
+    missing = [field for field in REQUIRED_EPISODE_FIELDS if field not in episodes.columns]
+    if missing:
+        return [f"episodes.parquet missing required columns: {missing}"]
+    return []
+
+
+def _validate_summary_file(summary_path: Path) -> list[str]:
+    """Return validation errors for the summary JSON surface."""
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"summary.json could not be read: {exc}"]
+    if summary.get("schema_version") != SCHEMA_VERSION:
+        return [
+            f"summary.json schema_version must be {SCHEMA_VERSION!r}, "
+            f"found {summary.get('schema_version')!r}"
+        ]
+    return []
 
 
 def _validate_episode_rows(rows: list[Mapping[str, Any]]) -> list[str]:

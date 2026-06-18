@@ -66,3 +66,32 @@ def test_result_store_reports_missing_required_files(tmp_path: Path) -> None:
 
     assert not result.ok
     assert "missing required result-store file: episodes.parquet" in result.errors
+
+
+def test_result_store_reports_unreadable_artifacts(tmp_path: Path) -> None:
+    """Validation should report corrupt artifacts instead of raising."""
+    output_dir = tmp_path / "result-store"
+    write_result_store(
+        output_dir,
+        [
+            {
+                "run_id": "run-a",
+                "episode_id": "run-a-001",
+                "planner": "orca",
+                "scenario_id": "crossing",
+                "scenario_family": "crossing",
+                "seed": 5,
+                "row_status": "native",
+            }
+        ],
+        study_id="rsf-2026-06-ranking-transfer",
+        command="uv run robot_sf_bench ...",
+    )
+    (output_dir / "episodes.parquet").write_text("not parquet", encoding="utf-8")
+    (output_dir / "summary.json").write_text("{not json", encoding="utf-8")
+
+    result = validate_result_store(output_dir)
+
+    assert not result.ok
+    assert any(error.startswith("episodes.parquet could not be read:") for error in result.errors)
+    assert any(error.startswith("summary.json could not be read:") for error in result.errors)

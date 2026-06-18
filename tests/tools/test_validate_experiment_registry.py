@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent
 
-from scripts.tools.validate_experiment_registry import build_control_plane_report, validate_registry
+from scripts.tools.validate_experiment_registry import (
+    _load_issue_state_snapshot,
+    build_control_plane_report,
+    validate_registry,
+)
 
 
 def _write_yaml(path: Path, text: str) -> None:
@@ -282,3 +286,75 @@ def test_control_plane_report_detects_research_state_drift(tmp_path: Path) -> No
     assert "missing_config_or_input_path" in kinds
     assert "pending_artifact_alias" in kinds
     assert "missing_required_durable_reference" in kinds
+
+
+def test_validator_checks_scalar_config_paths(tmp_path: Path) -> None:
+    """Scalar config paths should be validated like list-valued paths."""
+    registry = tmp_path / "registry.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - scalar_config.yaml
+        """,
+    )
+    _write_yaml(
+        registry.parent / "scalar_config.yaml",
+        """
+        schema_version: experiment-record.v1
+        experiment_id: scalar-config
+        issue: 1475
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/1475
+        question: Does scalar config validation catch missing files?
+        hypothesis: It should catch missing files.
+        config: configs/missing.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/scalar
+        expected_artifacts:
+          - name: report
+            path: output/experiments/scalar/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        status: implementation_ready
+        """,
+    )
+    (registry.parent / "configs").mkdir()
+    (registry.parent / "configs" / "exists.yaml").write_text("ok: true\n", encoding="utf-8")
+
+    report = build_control_plane_report(registry)
+    messages = {finding["message"] for finding in report["findings"]}
+
+    assert "referenced path does not exist: configs/missing.yaml" in messages
+
+
+def test_issue_state_snapshot_filters_missing_label_names(tmp_path: Path) -> None:
+    """Issue snapshot labels should ignore null or name-less values."""
+    snapshot = tmp_path / "issues.json"
+    snapshot.write_text(
+        """
+        {
+          "issues": [
+            {
+              "number": 1475,
+              "state": "OPEN",
+              "labels": [
+                {"name": "state:running"},
+                {"color": "ffffff"},
+                null,
+                "type:analysis"
+              ]
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    states, labels = _load_issue_state_snapshot(snapshot)
+
+    assert states == {1475: "OPEN"}
+    assert labels == {1475: ["state:running", "type:analysis"]}

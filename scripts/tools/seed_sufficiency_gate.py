@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Literal
 
@@ -94,7 +94,10 @@ def main(argv: list[str] | None = None) -> int:
     """Run the seed-sufficiency gate from JSON."""
     args = _parse_args(argv)
     payload = json.loads(args.input_json.read_text(encoding="utf-8"))
-    decision = decide_seed_gate(SeedGateInput(**payload))
+    gate_fields = {field.name for field in fields(SeedGateInput)}
+    decision = decide_seed_gate(
+        SeedGateInput(**{key: value for key, value in payload.items() if key in gate_fields})
+    )
     result = asdict(decision)
     text = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output_json is not None:

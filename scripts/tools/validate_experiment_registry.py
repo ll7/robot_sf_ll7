@@ -410,9 +410,13 @@ def _iter_config_paths(record: Mapping[str, Any]) -> Iterable[Path]:
     """Yield repo-relative config and input paths that should exist."""
     for key in ("config", "inputs"):
         value = record.get(key)
-        if not isinstance(value, list):
+        if isinstance(value, str):
+            items = [value]
+        elif isinstance(value, list):
+            items = value
+        else:
             continue
-        for item in value:
+        for item in items:
             raw_path: str | None = None
             if isinstance(item, str):
                 raw_path = item
@@ -540,10 +544,13 @@ def _load_issue_state_snapshot(
             states[number] = row["state"]
         label_values = row.get("labels")
         if isinstance(label_values, list):
-            labels[number] = [
-                str(label.get("name") if isinstance(label, Mapping) else label)
-                for label in label_values
-            ]
+            parsed_labels: list[str] = []
+            for label in label_values:
+                value = label.get("name") if isinstance(label, Mapping) else label
+                if value is None:
+                    continue
+                parsed_labels.append(str(value))
+            labels[number] = parsed_labels
     return states, labels
 
 

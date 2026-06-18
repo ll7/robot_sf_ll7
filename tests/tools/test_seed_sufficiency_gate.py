@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from scripts.tools.seed_sufficiency_gate import SeedGateInput, decide_seed_gate
+import json
+
+from scripts.tools.seed_sufficiency_gate import SeedGateInput, decide_seed_gate, main
 
 
 def test_seed_gate_escalates_when_uncertainty_exceeds_target() -> None:
@@ -53,3 +55,21 @@ def test_seed_gate_keeps_unstable_s20_diagnostic_only() -> None:
 
     assert decision.decision == "diagnostic_only"
     assert decision.next_schedule is None
+
+
+def test_seed_gate_cli_ignores_extra_input_keys(tmp_path) -> None:
+    """Evolving input payloads should not crash the CLI on unknown fields."""
+    input_json = tmp_path / "seed-gate-input.json"
+    input_json.write_text(
+        json.dumps(
+            {
+                "schedule": "s5",
+                "ci_half_width": 0.2,
+                "target_ci_half_width": 0.1,
+                "future_schema_field": "ignored",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert main(["--input-json", str(input_json)]) == 0

@@ -4,6 +4,11 @@ This document maps the current `robot_sf_ll7` planner/config stack to Alyassi-st
 families for benchmark-facing use. It is intended to prevent manuscript-side repos from overclaiming
 support that is only partial, experimental, or still roadmap-only.
 
+For machine-checkable campaign planning, use
+`configs/benchmarks/planner_readiness_matrix_v1.yaml`. The YAML matrix records the same conservative
+readiness boundary with explicit `execution_mode`, `readiness_status`, `availability_status`,
+`row_status`, and `counts_as_success_evidence` fields.
+
 Use this matrix conservatively:
 
 * Treat `implemented and benchmarkable` rows as the only rows safe to cite as currently runnable

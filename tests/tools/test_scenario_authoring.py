@@ -101,6 +101,11 @@ def test_validator_reports_missing_required_fields_with_actionable_paths(tmp_pat
         "/scenarios/0/metadata/authoring" in message and "metadata.authoring" in message
         for message in messages
     )
+    assert any(
+        "/scenarios/0/metadata/generation_profile" in message
+        and "metadata.generation_profile" in message
+        for message in messages
+    )
 
 
 def test_validator_reports_unknown_map_id_from_loader(tmp_path: Path) -> None:

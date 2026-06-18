@@ -89,6 +89,9 @@ Resulting YAML includes:
 The explicit `--flow/--obstacle/--goal-topology/...` flags are for reproducible pre-registration and
 later diff review.
 
+Traceability: related issue `#3027`; implementing PR `#3095`; proof artifact
+`tests/tools/test_scenario_authoring.py`; canonical doc `docs/scenario_contracts.md`.
+
 ## Scenario Contracts
 
 Versioned scenario-intent contracts live under `configs/scenarios/contracts/`.

@@ -499,7 +499,7 @@ def test_metamorphic_obstacle_independence():
         )
         # Group assignments must be identical
         assert other.groups == ref.groups, f"groups differ between open and {obs_kind}"
-        # Metadata must agree except for obstacle, id, and generation_profile.
+        # Metadata must agree except for obstacle, id, generation_profile, and initial_difficulty.
         for k in ref.metadata:
             if k in ("obstacle", "id", "generation_profile", "initial_difficulty"):
                 continue

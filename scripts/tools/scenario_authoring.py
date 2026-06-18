@@ -490,7 +490,7 @@ def _validate_metadata(
         )
         return
     _metadata_string(metadata, "purpose", path=path, issues=issues)
-    if "generation_profile" in metadata:
+    if require_authoring_metadata or "generation_profile" in metadata:
         _validate_generation_profile(
             metadata.get("generation_profile"),
             path=f"{path}/generation_profile",

@@ -19,6 +19,7 @@ from robot_sf.benchmark.map_runner import (
     _apply_planner_selector_v2_context,
     _build_policy,
     _build_socnav_config,
+    _command_action_payload,
     _default_robot_command_space,
     _extract_ppo_pedestrians,
     _finalize_feasibility_metadata,
@@ -83,6 +84,23 @@ class _KinematicsStub:
         """Return empty kinematics diagnostics for the stub."""
         del command, projected
         return {}
+
+
+def test_command_action_payload_preserves_structured_holonomic_trace_fields() -> None:
+    """Structured holonomic commands should keep x/y velocity in trace selected_action."""
+    payload = _command_action_payload(
+        {
+            "command_kind": "holonomic_vxy_world",
+            "vx": 0.6,
+            "vy": -0.2,
+        }
+    )
+
+    assert payload == {
+        "command_kind": "holonomic_vxy_world",
+        "vx": pytest.approx(0.6),
+        "vy": pytest.approx(-0.2),
+    }
 
 
 def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:

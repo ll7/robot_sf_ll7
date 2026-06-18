@@ -1,0 +1,254 @@
+schema_version: planner-readiness-matrix.v1
+issue: 3060
+generated_from: docs/benchmark_planner_family_coverage.md
+validation_date: "2026-06-18"
+policy_sources:
+  - docs/context/issue_691_benchmark_fallback_policy.md
+  - .agents/skills/schemas/benchmark_row_status.v1.yaml
+  - robot_sf/benchmark/algorithm_readiness.py
+status_vocabulary:
+  execution_mode:
+    - native
+    - adapter
+    - mixed
+    - unknown
+  readiness_status:
+    - native
+    - adapter
+    - fallback
+    - degraded
+  availability_status:
+    - available
+    - partial-failure
+    - failed
+    - not_available
+  row_status:
+    - successful_evidence
+    - accepted_unavailable
+    - unexpected_failure
+    - fallback
+    - degraded
+    - blocked
+success_rule: >
+  A row counts as benchmark-strength success evidence only when row_status is
+  successful_evidence, availability_status is available, and readiness_status is native or adapter.
+  Fallback, degraded, blocked, accepted_unavailable, and unexpected_failure rows are visible
+  exclusions or caveats, not successful benchmark outcomes.
+rows:
+  - planner_id: goal
+    family: random_goal
+    representative_entrypoint: algo=goal
+    tier: baseline-ready
+    requires_explicit_opt_in: false
+    execution_mode: native
+    readiness_status: native
+    availability_status: available
+    row_status: successful_evidence
+    counts_as_success_evidence: true
+    artifact_dependency: none
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    reason: Goal-following heuristic baseline is baseline-ready and needs no model artifact.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py
+
+  - planner_id: random
+    family: random_goal
+    representative_entrypoint: configs/baselines/random.yaml
+    tier: diagnostic
+    requires_explicit_opt_in: true
+    execution_mode: native
+    readiness_status: degraded
+    availability_status: not_available
+    row_status: degraded
+    counts_as_success_evidence: false
+    artifact_dependency: none
+    source_paths:
+      - configs/baselines/random.yaml
+      - tests/benchmark/test_algorithm_metadata_contract.py
+    reason: Random policy is a stochastic diagnostic reference, not a benchmark-strength planner row.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_metadata_contract.py
+
+  - planner_id: social_force
+    family: social_force
+    representative_entrypoint: algo=social_force
+    tier: baseline-ready
+    requires_explicit_opt_in: false
+    execution_mode: adapter
+    readiness_status: adapter
+    availability_status: available
+    row_status: successful_evidence
+    counts_as_success_evidence: true
+    artifact_dependency: none
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    reason: Social-force adapter is a canonical baseline-ready planner row.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py
+
+  - planner_id: orca
+    family: reciprocal_avoidance
+    representative_entrypoint: algo=orca
+    tier: baseline-ready
+    requires_explicit_opt_in: false
+    execution_mode: adapter
+    readiness_status: adapter
+    availability_status: available
+    row_status: successful_evidence
+    counts_as_success_evidence: true
+    artifact_dependency: external_pointer
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+      - third_party/python-rvo2/README.md
+    reason: ORCA is baseline-ready when the vendored RVO2 dependency is available; fallback rows remain exclusions.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_metadata_contract.py
+
+  - planner_id: ppo
+    family: ppo
+    representative_entrypoint: configs/baselines/ppo_15m_grid_socnav.yaml
+    tier: experimental
+    requires_explicit_opt_in: false
+    execution_mode: mixed
+    readiness_status: native
+    availability_status: available
+    row_status: successful_evidence
+    counts_as_success_evidence: true
+    artifact_dependency: durable_manifest
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/baselines/ppo_15m_grid_socnav.yaml
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    reason: PPO is benchmarkable when the provenance and quality gates in its baseline config are satisfied.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py
+
+  - planner_id: guarded_ppo
+    family: ppo
+    representative_entrypoint: configs/algos/guarded_ppo_camera_ready.yaml
+    tier: experimental
+    requires_explicit_opt_in: false
+    execution_mode: mixed
+    readiness_status: degraded
+    availability_status: not_available
+    row_status: degraded
+    counts_as_success_evidence: false
+    artifact_dependency: durable_manifest
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/algos/guarded_ppo_camera_ready.yaml
+    reason: Safety-guarded PPO is experimental; guard fallback/veto behavior must be reported as a caveat before benchmark-strength use.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py
+
+  - planner_id: risk_dwa
+    family: orca_dwa_style
+    representative_entrypoint: configs/algos/risk_surface_dwa_v0.yaml
+    tier: experimental
+    requires_explicit_opt_in: true
+    execution_mode: adapter
+    readiness_status: degraded
+    availability_status: not_available
+    row_status: blocked
+    counts_as_success_evidence: false
+    artifact_dependency: none
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/algos/risk_surface_dwa_v0.yaml
+      - docs/context/issue_596_testing_only_planner_promotion_matrix.md
+    reason: Risk-DWA style planners are testing-only and require explicit opt-in plus promotion proof.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py
+
+  - planner_id: hybrid_rule_local_planner
+    family: hybrid_planner_candidate
+    representative_entrypoint: configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml
+    tier: experimental
+    requires_explicit_opt_in: true
+    execution_mode: adapter
+    readiness_status: degraded
+    availability_status: not_available
+    row_status: blocked
+    counts_as_success_evidence: false
+    artifact_dependency: none
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml
+    reason: Hybrid-rule local planners are controlled R&D candidates, not baseline comparability evidence.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py
+
+  - planner_id: hybrid_portfolio
+    family: hybrid_planner_candidate
+    representative_entrypoint: configs/algos/hybrid_portfolio_camera_ready.yaml
+    tier: experimental
+    requires_explicit_opt_in: true
+    execution_mode: mixed
+    readiness_status: fallback
+    availability_status: not_available
+    row_status: fallback
+    counts_as_success_evidence: false
+    artifact_dependency: none
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/algos/hybrid_portfolio_camera_ready.yaml
+    reason: Portfolio mode explicitly permits fallback; fallback execution is not benchmark success evidence.
+    validation_command: uv run pytest tests/benchmark/test_fallback_policy.py
+
+  - planner_id: prediction_planner
+    family: hybrid_planner_candidate
+    representative_entrypoint: configs/algos/prediction_planner_camera_ready.yaml
+    tier: experimental
+    requires_explicit_opt_in: false
+    execution_mode: adapter
+    readiness_status: degraded
+    availability_status: not_available
+    row_status: blocked
+    counts_as_success_evidence: false
+    artifact_dependency: local_output_only
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/algos/prediction_planner_camera_ready.yaml
+    reason: Predictive planner rows remain checkpoint/provenance dependent until durable model artifacts are named.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_metadata_contract.py
+
+  - planner_id: sacadrl
+    family: ppo
+    representative_entrypoint: algo=sacadrl
+    tier: experimental
+    requires_explicit_opt_in: false
+    execution_mode: adapter
+    readiness_status: degraded
+    availability_status: not_available
+    row_status: blocked
+    counts_as_success_evidence: false
+    artifact_dependency: external_pointer
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    reason: SA-CADRL adapter is dependency/model-sensitive and not part of the baseline-ready set.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py
+
+  - planner_id: socnav_bench
+    family: hybrid_planner_candidate
+    representative_entrypoint: algo=socnav_bench
+    tier: experimental
+    requires_explicit_opt_in: false
+    execution_mode: unknown
+    readiness_status: degraded
+    availability_status: not_available
+    row_status: accepted_unavailable
+    counts_as_success_evidence: false
+    artifact_dependency: external_pointer
+    source_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - docs/benchmark_planner_family_coverage.md
+      - configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml
+    reason: SocNavBench remains a dependency-sensitive bridge/proxy until re-entry proof is available.
+    validation_command: uv run pytest tests/benchmark/test_algorithm_readiness_contract.py

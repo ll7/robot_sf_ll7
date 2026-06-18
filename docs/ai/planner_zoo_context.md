@@ -16,7 +16,8 @@ that are:
 ## Current Planner Readiness Frame
 
 Use `docs/benchmark_planner_family_coverage.md` as the source of truth for readiness categories and
-benchmark-facing terminology.
+benchmark-facing terminology. Use `configs/benchmarks/planner_readiness_matrix_v1.yaml` when a
+machine-checkable campaign-planning surface is needed.
 
 Implemented and benchmarkable families today:
 

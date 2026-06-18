@@ -71,16 +71,14 @@ from robot_sf.benchmark.map_runner_env import build_env_config as _build_env_con
 from robot_sf.benchmark.map_runner_env import (
     validate_sensor_fusion_adapter_config as _validate_sensor_fusion_adapter_config,
 )
-from robot_sf.benchmark.map_runner_identity import compute_map_episode_id as _compute_map_episode_id
-from robot_sf.benchmark.map_runner_identity import resolve_seed_list as _resolve_seed_list
 from robot_sf.benchmark.map_runner_identity import (
-    scenario_identity_payload as _scenario_identity_payload,
+    _compute_map_episode_id,
+    _resolve_seed_list,
+    _scenario_identity_payload,
+    _scenario_with_episode_seed_defaults,
+    _select_seeds,
+    _suite_key,
 )
-from robot_sf.benchmark.map_runner_identity import (
-    scenario_with_episode_seed_defaults as _scenario_with_episode_seed_defaults,
-)
-from robot_sf.benchmark.map_runner_identity import select_seeds as _select_seeds
-from robot_sf.benchmark.map_runner_identity import suite_key as _suite_key
 from robot_sf.benchmark.map_runner_jsonl import write_validated_to_handle as _write_jsonl_record
 from robot_sf.benchmark.map_runner_metrics import (
     floor_collision_metrics_from_flags as _floor_collision_metrics_from_flags,

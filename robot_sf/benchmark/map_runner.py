@@ -9,7 +9,6 @@ import shlex
 import sys
 import time
 import uuid
-from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import fields
@@ -43,6 +42,16 @@ from robot_sf.benchmark.latency_stress import (
     not_available_latency_metrics,
 )
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
+from robot_sf.benchmark.map_runner_env import (
+    apply_active_observation_mode_to_env_config as _apply_active_observation_mode_to_env_config,
+)
+from robot_sf.benchmark.map_runner_env import (
+    apply_policy_env_observation_overrides as _apply_policy_env_observation_overrides,
+)
+from robot_sf.benchmark.map_runner_env import build_env_config as _build_env_config
+from robot_sf.benchmark.map_runner_env import (
+    validate_sensor_fusion_adapter_config as _validate_sensor_fusion_adapter_config,
+)
 from robot_sf.benchmark.map_runner_identity import compute_map_episode_id as _compute_map_episode_id
 from robot_sf.benchmark.map_runner_identity import resolve_seed_list as _resolve_seed_list
 from robot_sf.benchmark.map_runner_identity import (
@@ -114,8 +123,6 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.gym_env.observation_mode import ObservationMode
-from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.planner.adaptive_proxemic_selector import (
     AdaptiveProxemicSelectorAdapter,
     build_adaptive_proxemic_selector_config,
@@ -231,10 +238,7 @@ from robot_sf.planner.topology_guided_local_policy import (
     build_topology_guided_local_policy_config,
 )
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
-from robot_sf.training.scenario_loader import (
-    build_robot_config_from_scenario,
-    load_scenarios,
-)
+from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -2741,97 +2745,6 @@ def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
                     break
 
     return errors
-
-
-def _build_env_config(
-    scenario: dict[str, Any],
-    *,
-    scenario_path: Path,
-) -> RobotSimulationConfig:
-    """Build the benchmark environment config for one scenario.
-
-    Returns:
-        RobotSimulationConfig: Config with SocNav structured observations and grid enabled.
-    """
-    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
-    config.observation_mode = ObservationMode.SOCNAV_STRUCT
-    config.use_occupancy_grid = True
-    config.include_grid_in_observation = True
-    config.grid_config = GridConfig(
-        # Benchmark default upgraded to higher-resolution occupancy grids.
-        resolution=0.2,
-        width=32.0,
-        height=32.0,
-        channels=[
-            GridChannel.OBSTACLES,
-            GridChannel.PEDESTRIANS,
-            GridChannel.COMBINED,
-        ],
-        use_ego_frame=True,
-        center_on_robot=True,
-    )
-    return config
-
-
-def _apply_active_observation_mode_to_env_config(
-    config: RobotSimulationConfig,
-    *,
-    active_observation_mode: str,
-) -> None:
-    """Apply planner observation-mode requirements to the runtime environment config."""
-    if active_observation_mode != "sensor_fusion_state":
-        return
-    config.observation_mode = ObservationMode.DEFAULT_GYM
-    config.use_occupancy_grid = False
-    config.include_grid_in_observation = False
-    config.grid_config = None
-
-
-_POLICY_ENV_OBSERVATION_OVERRIDE_KEYS = frozenset(
-    {
-        "predictive_foresight_enabled",
-        "predictive_foresight_model_id",
-        "predictive_foresight_checkpoint_path",
-        "predictive_foresight_device",
-        "predictive_foresight_max_agents",
-        "predictive_foresight_horizon_steps",
-        "predictive_foresight_rollout_dt",
-        "predictive_foresight_ego_conditioning",
-        "predictive_foresight_near_distance",
-        "predictive_foresight_front_corridor_length",
-        "predictive_foresight_front_corridor_half_width",
-    }
-)
-
-
-def _apply_policy_env_observation_overrides(
-    config: RobotSimulationConfig,
-    policy_cfg: Mapping[str, Any],
-) -> None:
-    """Apply candidate observation-contract env overrides before env construction."""
-
-    raw_overrides = policy_cfg.get("env_overrides")
-    overrides = raw_overrides if isinstance(raw_overrides, Mapping) else {}
-    for key in _POLICY_ENV_OBSERVATION_OVERRIDE_KEYS:
-        if key in overrides:
-            setattr(config, key, overrides[key])
-
-
-def _validate_sensor_fusion_adapter_config(
-    *,
-    algo: str,
-    active_observation_mode: str,
-    algo_config: dict[str, Any],
-) -> None:
-    """Fail closed when a planner requests sensor-fusion input without an adapter."""
-    if active_observation_mode != "sensor_fusion_state":
-        return
-    algo_key = str(algo).strip().lower()
-    if algo_key == "safety_barrier" and not algo_config.get("lidar_occupancy_adapter"):
-        raise ValueError(
-            "safety_barrier with sensor_fusion_state/lidar_2d requires "
-            "algo_config['lidar_occupancy_adapter']."
-        )
 
 
 def _robot_kinematics_label(config: RobotSimulationConfig) -> str:

@@ -51,6 +51,13 @@ def _scenario_inventory() -> set[str]:
     return inventory
 
 
+def test_scenario_inventory_includes_single_scenario_yaml() -> None:
+    """Inventory discovery must include YAML files with a top-level scenario name."""
+    inventory = _scenario_inventory()
+
+    assert "benchmark_map_redundancy_3maps" in inventory
+
+
 def test_manifest_declares_proposal_only_boundary() -> None:
     """The suite proposal must not claim benchmark evidence or planner rankings."""
     payload = _load_yaml(CONFIG_PATH)

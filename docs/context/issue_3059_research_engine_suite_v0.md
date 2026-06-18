@@ -3,7 +3,8 @@
 Issue: [#3059](https://github.com/ll7/robot_sf_ll7/issues/3059)
 Status: proposal manifest; not benchmark evidence.
 
-Artifacts:
+## Proof artifacts and canonical pointers
+
 - Manifest:
   [`configs/benchmarks/issue_3059_research_engine_suite_v0.yaml`](../../configs/benchmarks/issue_3059_research_engine_suite_v0.yaml)
 - Contract test:

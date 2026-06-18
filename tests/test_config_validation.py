@@ -5,6 +5,7 @@ Validates config validation logic, conflict detection, and resolved config loggi
 
 import pytest
 
+from robot_sf.gym_env import config_validation
 from robot_sf.gym_env.config_validation import (
     _check_backend_valid,
     _check_sensor_names_valid,
@@ -68,6 +69,25 @@ class TestBackendValidation:
 
         # Should not raise
         _check_backend_valid(config)
+
+    def test_optional_fast_pysf_backend_can_use_legacy_fallback(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Missing optional fast-pysf backend is accepted for legacy simulator fallback."""
+        config = RobotSimulationConfig()
+        config.backend = "fast-pysf"
+        monkeypatch.setattr(config_validation, "list_backends", lambda: ["dummy"])
+
+        _check_backend_valid(config)
+
+    def test_non_optional_missing_backend_still_raises(self, monkeypatch: pytest.MonkeyPatch):
+        """Only the canonical optional backend may bypass registry validation."""
+        config = RobotSimulationConfig()
+        config.backend = "nonexistent_backend"
+        monkeypatch.setattr(config_validation, "list_backends", lambda: ["dummy"])
+
+        with pytest.raises(KeyError, match="Unknown backend.*Available backends"):
+            _check_backend_valid(config)
 
 
 class TestSensorValidation:

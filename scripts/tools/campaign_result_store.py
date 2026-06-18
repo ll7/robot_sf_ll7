@@ -145,14 +145,21 @@ def _validate_episode_parquet(parquet_path: Path) -> list[str]:
     missing = [field for field in REQUIRED_EPISODE_FIELDS if field not in episodes.columns]
     if missing:
         return [f"episodes.parquet missing required columns: {missing}"]
-    invalid_statuses = sorted(set(episodes["row_status"].dropna()) - set(ROW_STATUS_VALUES))
+    errors: list[str] = []
+    missing_status = episodes["row_status"].isna() | (
+        episodes["row_status"].astype(str).str.strip() == ""
+    )
+    if bool(missing_status.any()):
+        errors.append("episodes.parquet has missing row_status values")
+    status_values = episodes.loc[~missing_status, "row_status"].astype(str)
+    invalid_statuses = sorted(set(status_values) - set(ROW_STATUS_VALUES))
     if invalid_statuses:
-        return [f"episodes.parquet has invalid row_status values: {invalid_statuses}"]
+        errors.append(f"episodes.parquet has invalid row_status values: {invalid_statuses}")
     for field in ("artifact_uri", "artifact_sha256"):
-        missing_values = episodes[field].isna() | (episodes[field].astype(str).str.len() == 0)
+        missing_values = episodes[field].isna() | (episodes[field].astype(str).str.strip() == "")
         if bool(missing_values.any()):
-            return [f"episodes.parquet has missing artifact provenance field: {field}"]
-    return []
+            errors.append(f"episodes.parquet has missing artifact provenance field: {field}")
+    return errors
 
 
 def _validate_summary_file(summary_path: Path) -> list[str]:
@@ -183,9 +190,21 @@ def _validate_episode_rows(rows: list[Mapping[str, Any]]) -> list[str]:
         if row_status not in ROW_STATUS_VALUES:
             errors.append(f"row {index} invalid row_status: {row_status!r}")
         for field in ("artifact_uri", "artifact_sha256"):
-            if not str(row[field]).strip():
+            if _is_missing_value(row[field]):
                 errors.append(f"row {index} missing artifact provenance field: {field}")
     return errors
+
+
+def _is_missing_value(value: Any) -> bool:
+    """Return true for null, NaN, and blank provenance values."""
+    if value is None:
+        return True
+    try:
+        if bool(pd.isna(value)):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return isinstance(value, str) and not value.strip()
 
 
 def _summary_payload(

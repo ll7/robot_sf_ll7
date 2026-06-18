@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import duckdb
+import pandas as pd
 
 from scripts.tools.campaign_result_store import validate_result_store, write_result_store
 
@@ -139,6 +140,97 @@ def test_result_store_rejects_missing_artifact_provenance(tmp_path: Path) -> Non
 
     assert "missing artifact provenance field: artifact_uri" in message
     assert "missing artifact provenance field: artifact_sha256" in message
+
+
+def test_result_store_rejects_none_artifact_provenance(tmp_path: Path) -> None:
+    """None provenance values should not pass by stringifying to 'None'."""
+    output_dir = tmp_path / "result-store"
+
+    try:
+        write_result_store(
+            output_dir,
+            [
+                {
+                    "run_id": "run-a",
+                    "episode_id": "run-a-001",
+                    "planner": "orca",
+                    "scenario_id": "crossing",
+                    "scenario_family": "crossing",
+                    "seed": 5,
+                    "row_status": "native",
+                    "artifact_uri": None,
+                    "artifact_sha256": None,
+                }
+            ],
+            study_id="rsf-2026-06-ranking-transfer",
+            command="uv run robot_sf_bench ...",
+        )
+    except ValueError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - defensive assertion for clearer failure output.
+        raise AssertionError("write_result_store accepted None artifact provenance")
+
+    assert "missing artifact provenance field: artifact_uri" in message
+    assert "missing artifact provenance field: artifact_sha256" in message
+
+
+def test_result_store_reports_parquet_nulls_and_invalid_statuses(tmp_path: Path) -> None:
+    """Parquet validation should accumulate null provenance and row-status errors."""
+    output_dir = tmp_path / "result-store"
+    write_result_store(
+        output_dir,
+        [
+            {
+                "run_id": "run-a",
+                "episode_id": "run-a-001",
+                "planner": "orca",
+                "scenario_id": "crossing",
+                "scenario_family": "crossing",
+                "seed": 5,
+                "row_status": "native",
+                "artifact_uri": "wandb://robot-sf/run-a/episodes/run-a-001.jsonl",
+                "artifact_sha256": "a" * 64,
+            }
+        ],
+        study_id="rsf-2026-06-ranking-transfer",
+        command="uv run robot_sf_bench ...",
+    )
+    pd.DataFrame(
+        [
+            {
+                "run_id": "run-a",
+                "episode_id": "run-a-001",
+                "planner": "orca",
+                "scenario_id": "crossing",
+                "scenario_family": "crossing",
+                "seed": 5,
+                "row_status": None,
+                "artifact_uri": None,
+                "artifact_sha256": "",
+            },
+            {
+                "run_id": "run-a",
+                "episode_id": "run-a-002",
+                "planner": "orca",
+                "scenario_id": "crossing",
+                "scenario_family": "crossing",
+                "seed": 6,
+                "row_status": "success",
+                "artifact_uri": "wandb://robot-sf/run-a/episodes/run-a-002.jsonl",
+                "artifact_sha256": "b" * 64,
+            },
+        ]
+    ).to_parquet(output_dir / "episodes.parquet", index=False)
+
+    result = validate_result_store(output_dir)
+
+    assert not result.ok
+    assert "episodes.parquet has missing row_status values" in result.errors
+    assert "episodes.parquet has invalid row_status values: ['success']" in result.errors
+    assert "episodes.parquet has missing artifact provenance field: artifact_uri" in result.errors
+    assert (
+        "episodes.parquet has missing artifact provenance field: artifact_sha256" in result.errors
+    )
 
 
 def test_result_store_rejects_invalid_row_status(tmp_path: Path) -> None:

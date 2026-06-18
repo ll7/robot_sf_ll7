@@ -14,10 +14,11 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.issue_provenance import SCENARIO_BELIEF_DESIGN_PARENT_ISSUE
 from robot_sf.sensor.socnav_observation import _map_position_cap
 
 SCENARIO_BELIEF_SCHEMA_VERSION = "scenario-belief.v1"
-DESIGN_PARENT_ISSUE = 1966
+DESIGN_PARENT_ISSUE = SCENARIO_BELIEF_DESIGN_PARENT_ISSUE
 
 
 class VisibilityState(StrEnum):

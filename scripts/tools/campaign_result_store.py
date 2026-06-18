@@ -30,6 +30,8 @@ REQUIRED_EPISODE_FIELDS = (
     "scenario_family",
     "seed",
     "row_status",
+    "artifact_uri",
+    "artifact_sha256",
 )
 REQUIRED_STORE_FILES = (
     "episodes.parquet",
@@ -37,6 +39,17 @@ REQUIRED_STORE_FILES = (
     "analysis.json",
     "claim_card.yaml",
     "reproduction.md",
+    "tables/manifest.json",
+    "figures/manifest.json",
+)
+ROW_STATUS_VALUES = (
+    "native",
+    "adapter",
+    "diagnostic_only",
+    "fallback",
+    "degraded",
+    "unavailable",
+    "failed",
 )
 
 
@@ -54,6 +67,7 @@ def write_result_store(
     *,
     study_id: str,
     command: str,
+    source_commit: str | None = None,
     claim_card: Mapping[str, Any] | None = None,
     analysis: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -67,7 +81,9 @@ def write_result_store(
     episodes = pd.DataFrame(rows)
     episodes.to_parquet(output_dir / "episodes.parquet", index=False)
 
-    summary = _summary_payload(rows, study_id=study_id)
+    summary = _summary_payload(
+        rows, study_id=study_id, command=command, source_commit=source_commit
+    )
     (output_dir / "summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -95,6 +111,8 @@ def write_result_store(
         yaml.safe_dump(claim_payload, sort_keys=False),
         encoding="utf-8",
     )
+    _write_empty_output_manifest(output_dir / "tables", role="tables", study_id=study_id)
+    _write_empty_output_manifest(output_dir / "figures", role="figures", study_id=study_id)
     (output_dir / "reproduction.md").write_text(
         _reproduction_markdown(study_id=study_id, command=command),
         encoding="utf-8",
@@ -127,7 +145,21 @@ def _validate_episode_parquet(parquet_path: Path) -> list[str]:
     missing = [field for field in REQUIRED_EPISODE_FIELDS if field not in episodes.columns]
     if missing:
         return [f"episodes.parquet missing required columns: {missing}"]
-    return []
+    errors: list[str] = []
+    missing_status = episodes["row_status"].isna() | (
+        episodes["row_status"].astype(str).str.strip() == ""
+    )
+    if bool(missing_status.any()):
+        errors.append("episodes.parquet has missing row_status values")
+    status_values = episodes.loc[~missing_status, "row_status"].astype(str)
+    invalid_statuses = sorted(set(status_values) - set(ROW_STATUS_VALUES))
+    if invalid_statuses:
+        errors.append(f"episodes.parquet has invalid row_status values: {invalid_statuses}")
+    for field in ("artifact_uri", "artifact_sha256"):
+        missing_values = episodes[field].isna() | (episodes[field].astype(str).str.strip() == "")
+        if bool(missing_values.any()):
+            errors.append(f"episodes.parquet has missing artifact provenance field: {field}")
+    return errors
 
 
 def _validate_summary_file(summary_path: Path) -> list[str]:
@@ -153,30 +185,77 @@ def _validate_episode_rows(rows: list[Mapping[str, Any]]) -> list[str]:
         missing = [field for field in REQUIRED_EPISODE_FIELDS if field not in row]
         if missing:
             errors.append(f"row {index} missing required fields: {missing}")
+            continue
+        row_status = str(row["row_status"])
+        if row_status not in ROW_STATUS_VALUES:
+            errors.append(f"row {index} invalid row_status: {row_status!r}")
+        for field in ("artifact_uri", "artifact_sha256"):
+            if _is_missing_value(row[field]):
+                errors.append(f"row {index} missing artifact provenance field: {field}")
     return errors
 
 
-def _summary_payload(rows: list[Mapping[str, Any]], *, study_id: str) -> dict[str, Any]:
+def _is_missing_value(value: Any) -> bool:
+    """Return true for null, NaN, and blank provenance values."""
+    if value is None:
+        return True
+    try:
+        if bool(pd.isna(value)):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return isinstance(value, str) and not value.strip()
+
+
+def _summary_payload(
+    rows: list[Mapping[str, Any]],
+    *,
+    study_id: str,
+    command: str,
+    source_commit: str | None,
+) -> dict[str, Any]:
     """Build deterministic summary metadata for episode rows."""
     row_status_counts: dict[str, int] = {}
     planners: set[str] = set()
+    run_ids: set[str] = set()
     scenario_families: set[str] = set()
     seeds: set[int] = set()
     for row in rows:
         row_status = str(row["row_status"])
         row_status_counts[row_status] = row_status_counts.get(row_status, 0) + 1
         planners.add(str(row["planner"]))
+        run_ids.add(str(row["run_id"]))
         scenario_families.add(str(row["scenario_family"]))
         seeds.add(int(row["seed"]))
     return {
         "schema_version": SCHEMA_VERSION,
         "study_id": study_id,
+        "command": command,
+        "source_commit": source_commit,
         "episode_count": len(rows),
+        "run_count": len(run_ids),
+        "run_ids": sorted(run_ids),
         "planner_count": len(planners),
         "scenario_family_count": len(scenario_families),
         "seed_count": len(seeds),
         "row_status_counts": dict(sorted(row_status_counts.items())),
     }
+
+
+def _write_empty_output_manifest(output_dir: Path, *, role: str, study_id: str) -> None:
+    """Write a placeholder manifest for derived report output directories."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": f"campaign-result-store-{role}-manifest.v1",
+        "study_id": study_id,
+        "role": role,
+        "status": "empty_until_report_generation",
+        "files": [],
+    }
+    (output_dir / "manifest.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _reproduction_markdown(*, study_id: str, command: str) -> str:

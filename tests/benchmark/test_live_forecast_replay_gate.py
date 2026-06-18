@@ -34,6 +34,7 @@ from robot_sf.benchmark.live_forecast_replay_gate import (
     run_live_forecast_replay_gate,
     run_variant_closed_loop_replay,
 )
+from robot_sf.common.issue_provenance import LIVE_FORECAST_REPLAY_GATE_CONTRACT_ISSUE
 
 
 @pytest.fixture
@@ -88,6 +89,14 @@ class TestConstants:
         """Schema version should be stable."""
 
         assert LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION == "LiveForecastReplayGate.v1"
+
+    def test_issue_provenance_constant(self) -> None:
+        """The exported compatibility alias should come from the shared provenance registry."""
+
+        assert (
+            live_forecast_replay_gate_module.LIVE_FORECAST_REPLAY_GATE_ISSUE
+            == LIVE_FORECAST_REPLAY_GATE_CONTRACT_ISSUE
+        )
 
     def test_valid_run_classifications(self) -> None:
         """Run classification contract must contain the four required labels."""

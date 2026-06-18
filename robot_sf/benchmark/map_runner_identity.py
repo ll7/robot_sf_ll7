@@ -10,8 +10,6 @@ if TYPE_CHECKING:
 
 import yaml
 
-from robot_sf.benchmark.map_runner_policy_resolution import _scenario_family
-from robot_sf.benchmark.map_runner_trace import _scenario_id
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
@@ -165,5 +163,3 @@ select_seeds = _select_seeds
 scenario_identity_payload = _scenario_identity_payload
 compute_map_episode_id = _compute_map_episode_id
 scenario_with_episode_seed_defaults = _scenario_with_episode_seed_defaults
-scenario_id = _scenario_id
-scenario_family = _scenario_family

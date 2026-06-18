@@ -297,7 +297,9 @@ def _issue_state_findings(
                 )
             )
     labels = set(issue_labels.get(issue, ())) if issue is not None else set()
-    expected_label = STATE_TO_LABEL.get(record_state)
+    if record_state not in STATE_TO_LABEL:
+        return findings
+    expected_label = STATE_TO_LABEL[record_state]
     current_state_labels = labels & STATE_LABELS
     if (
         issue is not None

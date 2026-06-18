@@ -364,6 +364,54 @@ def test_control_plane_report_derives_terminal_state_label_removal(tmp_path: Pat
     assert update["dry_run_only"] is True
 
 
+def test_control_plane_report_ignores_unknown_legacy_status_labels(tmp_path: Path) -> None:
+    """Legacy v1 statuses should not trigger state-label removal suggestions."""
+    registry = tmp_path / "experiments" / "registry.yaml"
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - legacy_planned.yaml
+        """,
+    )
+    _write_yaml(
+        registry.parent / "legacy_planned.yaml",
+        """
+        schema_version: experiment-record.v1
+        experiment_id: legacy-planned-record
+        issue: 2002
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/2002
+        question: Does legacy planned status map to issue state labels?
+        hypothesis: Legacy status should not drive the v2 label control plane.
+        config:
+          - configs/exists.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/legacy-planned
+        expected_artifacts:
+          - name: report
+            path: output/experiments/legacy-planned/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        status: planned
+        """,
+    )
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "exists.yaml").write_text("ok: true\n", encoding="utf-8")
+
+    report = build_control_plane_report(
+        registry,
+        issue_states={2002: "OPEN"},
+        issue_labels={2002: ["state:ready", "type:analysis"]},
+    )
+
+    assert report["derived_update_count"] == 0
+    assert report["findings"] == []
+
+
 def test_validator_checks_scalar_config_paths(tmp_path: Path) -> None:
     """Scalar config paths should be validated like list-valued paths."""
     registry = tmp_path / "registry.yaml"

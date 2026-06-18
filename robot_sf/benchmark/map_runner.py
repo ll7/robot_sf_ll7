@@ -32,8 +32,6 @@ from robot_sf.benchmark.algorithm_readiness import (
 )
 from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.latency_stress import (
-    LatencyStressProfile,
-    load_latency_stress_profile,
     not_available_latency_metrics,
 )
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
@@ -102,6 +100,12 @@ from robot_sf.benchmark.map_runner_policy_metadata import (
 from robot_sf.benchmark.map_runner_policy_metadata import (
     holonomic_world_velocity_command as _holonomic_world_velocity_command,
 )
+from robot_sf.benchmark.map_runner_profile_metadata import (
+    load_latency_profile as _load_latency_profile,
+)
+from robot_sf.benchmark.map_runner_profile_metadata import (
+    load_synthetic_actuation_profile as _load_synthetic_actuation_profile_impl,
+)
 from robot_sf.benchmark.map_runner_provenance import (
     map_result_provenance as _map_result_provenance,
 )
@@ -143,10 +147,7 @@ from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationController,
-    SyntheticActuationProfile,
     not_available_saturation_metrics,
-    validate_actuation_profile_claim_boundary,
-    validate_synthetic_actuation_profile,
 )
 from robot_sf.benchmark.termination_reason import (
     build_outcome_payload,
@@ -342,46 +343,8 @@ _project_with_feasibility = planner_commands.project_with_feasibility
 _validate_planner_contract = planner_commands.validate_planner_contract
 
 
-def _load_synthetic_actuation_profile(payload: Any) -> SyntheticActuationProfile | None:
-    """Normalize optional synthetic-actuation payloads into the typed profile contract.
-
-    Returns:
-        A validated profile, or ``None`` when the payload is absent.
-    """
-    if payload is None:
-        return None
-    if isinstance(payload, SyntheticActuationProfile):
-        validate_synthetic_actuation_profile(payload)
-        return payload
-    if not isinstance(payload, dict):
-        raise TypeError("synthetic_actuation_profile must be a mapping when provided")
-    validate_actuation_profile_claim_boundary(payload)
-    claim_scope = str(payload.get("claim_scope", "synthetic-only")).strip() or "synthetic-only"
-    if claim_scope != "synthetic-only":
-        raise ValueError("synthetic_actuation_profile.claim_scope must be 'synthetic-only'")
-    profile = SyntheticActuationProfile(
-        name=str(payload.get("name", "")),
-        profile_version=str(payload.get("profile_version", "v0")),
-        claim_scope=claim_scope,
-        claim_boundary=str(payload.get("claim_boundary", "")),
-        max_linear_accel_m_s2=float(payload.get("max_linear_accel_m_s2")),
-        max_linear_decel_m_s2=float(payload.get("max_linear_decel_m_s2")),
-        max_yaw_rate_rad_s=float(payload.get("max_yaw_rate_rad_s")),
-        max_angular_accel_rad_s2=float(payload.get("max_angular_accel_rad_s2")),
-        latency_mode=str(payload.get("latency_mode", "")),
-        update_mode=str(payload.get("update_mode", "")),
-    )
-    validate_synthetic_actuation_profile(profile)
-    return profile
-
-
-def _load_latency_stress_profile(payload: Any) -> LatencyStressProfile | None:
-    """Normalize optional latency-stress payloads into the typed profile contract.
-
-    Returns:
-        A validated profile, or ``None`` when the payload is absent.
-    """
-    return load_latency_stress_profile(payload)
+_load_synthetic_actuation_profile = _load_synthetic_actuation_profile_impl
+_load_latency_stress_profile = _load_latency_profile
 
 
 def _build_adapter_policy(

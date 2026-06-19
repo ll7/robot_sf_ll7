@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 SCHEMA_VERSION = "slurm-evidence-reconciler.v1"
+FINALIZER_BRIDGE_SCHEMA_VERSION = "slurm-job-finalizer-bridge.v1"
 
 
 RUNNING_STATES = {
@@ -45,6 +46,16 @@ FAILED_STATES = {
 EVIDENCE_PRESERVE_STATES = {"completed", "success"}
 
 RAW_ARTIFACT_LIKE_SUFFIXES = {".zip", ".pt", ".pth", ".ckpt", ".jsonl", ".out", ".err"}
+FINALIZER_SCHEMA_VERSION = "robot-sf-slurm-job-finalization.v1"
+FINALIZER_DURABLE_POINTER_KEYS = (
+    "wandb_url",
+    "wandb_run_url",
+    "artifact_uri",
+    "artifact_url",
+    "dvc_uri",
+    "s3_uri",
+    "gs_uri",
+)
 
 
 def _normalize_status(value: Any) -> str:
@@ -162,6 +173,20 @@ class ManifestJob:
     scheduler_state: str | None = None
     ledger: str | None = None
     source_path: str = ""
+
+
+@dataclass(frozen=True)
+class FinalizerReport:
+    """One finalizer output row for bridge reconstruction."""
+
+    issue_number: int | None
+    job_id: str
+    classification: str
+    artifact_status: str
+    claim_boundary: str | None
+    durable_pointer: str | None
+    output_pointers: tuple[str, ...]
+    source_path: str
 
 
 def _extract_state_from_payload(
@@ -299,6 +324,49 @@ def _extract_claim_boundary(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_finalizer_durable_pointer(payload: dict[str, Any]) -> str | None:
+    """Extract a durable pointer from finalization payload fields."""
+    for key in FINALIZER_DURABLE_POINTER_KEYS:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for key in ("url", "uri", "path"):
+        value = payload.get(key)
+        if not isinstance(value, str):
+            continue
+        value = value.strip()
+        if value.startswith(
+            ("http://", "https://", "s3://", "gs://", "wandb://", "wandb-artifact://")
+        ):
+            return value
+    artifacts = payload.get("artifacts", [])
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                continue
+            pointer = _extract_pointer(artifact)
+            if pointer:
+                return pointer
+    return None
+
+
+def _extract_finalizer_output_pointers(payload: dict[str, Any]) -> tuple[str, ...]:
+    """Collect deterministic output pointers from a finalizer payload."""
+    artifacts = payload.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        return ()
+    pointers: list[str] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        path = artifact.get("path")
+        if isinstance(path, str):
+            normalized = path.strip()
+            if normalized:
+                pointers.append(normalized)
+    return tuple(sorted(set(pointers)))
+
+
 def _has_checksum(payload: dict[str, Any]) -> bool:
     """Return whether the payload row carries at least one checksum/checksum-like field."""
     for key in payload.keys():
@@ -324,6 +392,38 @@ def _iter_json_rows(data: Any) -> list[dict[str, Any]]:
     if isinstance(data, list):
         rows.extend(item for item in data if isinstance(item, dict))
     return rows
+
+
+def _load_finalizer_report(path: Path) -> list[FinalizerReport]:
+    """Load one finalizer output file."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise RuntimeError(f"cannot read finalizer {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{path}: malformed finalizer JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{path}: finalizer payload is not a mapping")
+    if _normalize_status(payload.get("schema_version")) != _normalize_status(
+        FINALIZER_SCHEMA_VERSION
+    ):
+        raise RuntimeError(f"{path}: unsupported schema_version {payload.get('schema_version')}")
+    issue_number = _coerce_seed(payload.get("issue_number"))
+    job_id = _coerce_csv_value(payload.get("job_id"))
+    if not job_id:
+        raise RuntimeError(f"{path}: missing finalizer job_id")
+    return [
+        FinalizerReport(
+            issue_number=issue_number,
+            job_id=job_id,
+            classification=_normalize_status(payload.get("classification")),
+            artifact_status=_normalize_status(payload.get("artifact_status")),
+            claim_boundary=_extract_claim_boundary(payload),
+            durable_pointer=_extract_finalizer_durable_pointer(payload),
+            output_pointers=_extract_finalizer_output_pointers(payload),
+            source_path=str(path),
+        )
+    ]
 
 
 def _iter_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -487,6 +587,174 @@ def _load_evidence_from_path(path: Path) -> list[EvidenceRow]:
     return []
 
 
+def _infer_finalizer_issue_transition(
+    finalizer: FinalizerReport, *, queue_status: str | None
+) -> str:
+    """Infer issue transition target status from finalizer status and durability."""
+    if finalizer.classification == "success":
+        if finalizer.artifact_status == "all_required_present":
+            if finalizer.durable_pointer:
+                return "success"
+            return "completed_pending_artifact_promotion"
+        if finalizer.artifact_status in {"partial_required_present", "required_missing"}:
+            return "failed_artifact_promotion"
+    if finalizer.classification in {"missing_artifacts", "failed", "incomplete", "not_available"}:
+        return finalizer.classification
+    if finalizer.classification == "manual_decision_required":
+        return "manual_decision_required"
+    if queue_status:
+        return queue_status
+    return "unknown"
+
+
+def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
+    finalizers: list[FinalizerReport],
+    manifest_jobs: list[ManifestJob],
+    queue_entries: list[QueueEntry],
+    evidence_rows: list[EvidenceRow],
+) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    """Build bridge rows for finalizers and validate manifest/context linkage."""
+    queue_by_id = {entry.queue_id: entry for entry in queue_entries}
+    queue_by_issue: dict[int, list[QueueEntry]] = {}
+    for entry in queue_entries:
+        issue = _coerce_seed(entry.issue)
+        if issue is not None:
+            queue_by_issue.setdefault(issue, []).append(entry)
+
+    rows: list[dict[str, Any]] = []
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    for finalizer in finalizers:
+        matching_jobs = [job for job in manifest_jobs if job.slurm_job_id == finalizer.job_id]
+        queue_id = None
+        seeds: tuple[int, ...] = ()
+        queue_status = None
+        issue_transition_from = "unknown"
+        evidence_preserved = False
+
+        if matching_jobs:
+            queue_ids = sorted({job.queue_id for job in matching_jobs})
+            if len(queue_ids) > 1:
+                errors.append(
+                    f"finalizer job {finalizer.job_id} maps to multiple queue_ids "
+                    f"{', '.join(queue_ids)}"
+                )
+                queue_id = queue_ids[0]
+            else:
+                queue_id = queue_ids[0]
+            queue_status = queue_by_id.get(queue_id, None)
+            if queue_status is not None:
+                issue_transition_from = queue_status.status
+            else:
+                warnings.append(
+                    f"finalizer job {finalizer.job_id}: queue_id {queue_id} not found in queue"
+                )
+
+            seed_values: set[int] = set()
+            for job in matching_jobs:
+                if job.seeds:
+                    seed_values.update(job.seeds)
+            seeds = tuple(sorted(seed_values))
+
+            if not seeds and queue_id is not None:
+                warnings.append(
+                    f"finalizer job {finalizer.job_id}: manifest seeds missing for queue_id {queue_id}"
+                )
+
+            if queue_status is not None:
+                queue_issue = _coerce_seed(queue_status.issue)
+                if (
+                    finalizer.classification == "success"
+                    and queue_issue is not None
+                    and finalizer.issue_number is not None
+                    and queue_issue != finalizer.issue_number
+                ):
+                    errors.append(
+                        f"finalizer job {finalizer.job_id}: issue mismatch between "
+                        f"finalizer({finalizer.issue_number}) and queue_id({queue_status.issue})"
+                    )
+
+            if seeds and queue_id is not None:
+                evidence_preserved = all(
+                    any(
+                        row.seed == seed
+                        and row.queue_id == queue_id
+                        and row.job_id == finalizer.job_id
+                        and _is_evidence_row_preserved(row)
+                        for row in evidence_rows
+                    )
+                    for seed in seeds
+                )
+            elif queue_id is not None and queue_status is not None:
+                evidence_preserved = True
+        elif finalizer.issue_number is not None:
+            errors.append(
+                f"finalizer job {finalizer.job_id}: no manifest row for queue/seed linkage"
+            )
+            entries = queue_by_issue.get(finalizer.issue_number, [])
+            if not entries:
+                warnings.append(
+                    f"finalizer job {finalizer.job_id}: issue {finalizer.issue_number} not in queue"
+                )
+            else:
+                queue_id = entries[0].queue_id
+                if len(entries) > 1:
+                    warnings.append(
+                        f"finalizer job {finalizer.job_id}: queue context ambiguous for issue "
+                        f"{finalizer.issue_number}"
+                    )
+                issue_transition_from = entries[0].status
+        else:
+            warnings.append(f"finalizer job {finalizer.job_id}: no job id mapping or issue context")
+
+        issue_transition_to = _infer_finalizer_issue_transition(
+            finalizer,
+            queue_status=issue_transition_from,
+        )
+
+        if finalizer.classification == "success" and not finalizer.durable_pointer:
+            errors.append(
+                f"finalizer job {finalizer.job_id}: missing durable_pointer for successful output"
+            )
+        if finalizer.classification == "success" and queue_id is None:
+            errors.append(
+                f"finalizer job {finalizer.job_id}: completed artifacts but no queue linkage"
+            )
+        if (
+            finalizer.classification == "success"
+            and queue_id is not None
+            and seeds
+            and not evidence_preserved
+        ):
+            errors.append(
+                f"finalizer job {finalizer.job_id}: completed artifacts are not preserved"
+            )
+        if not finalizer.output_pointers:
+            warnings.append(f"finalizer job {finalizer.job_id}: no output pointers found")
+
+        rows.append(
+            {
+                "issue": finalizer.issue_number,
+                "job_id": finalizer.job_id,
+                "queue_id": queue_id,
+                "seeds": list(seeds),
+                "artifact_status": finalizer.artifact_status,
+                "claim_boundary": finalizer.claim_boundary,
+                "durable_pointer": finalizer.durable_pointer,
+                "output_pointers": list(finalizer.output_pointers),
+                "issue_transition": {
+                    "from": issue_transition_from,
+                    "to": issue_transition_to,
+                },
+                "source_path": finalizer.source_path,
+            }
+        )
+
+    rows.sort(key=lambda row: (str(row["issue"] or ""), row["job_id"]))
+    return rows, sorted(set(errors)), sorted(set(warnings))
+
+
 def _build_seed_row(
     queue_entry: QueueEntry,
     seed: int,
@@ -579,6 +847,8 @@ def _build_errors_and_warnings(
     manifest_errors: list[str],
     manifest_warnings: list[str],
     evidence_warnings: list[str],
+    finalizer_errors: list[str],
+    finalizer_warnings: list[str],
     duplicate_experiments: dict[str, list[str]],
     duplicate_observations: dict[str, list[str]],
 ) -> tuple[list[str], list[str]]:
@@ -587,12 +857,13 @@ def _build_errors_and_warnings(
     duplicates = sorted({entry for entry in queue_ids if queue_ids.count(entry) > 1})
     errors: list[str] = []
     errors.extend(manifest_errors)
+    errors.extend(finalizer_errors)
     errors.extend(f"duplicate queue_id in queue: {dup}" for dup in duplicates)
     errors.extend(
         f"duplicate experiment_id across manifests: {experiment_id} in {', '.join(paths)}"
         for experiment_id, paths in sorted(duplicate_experiments.items())
     )
-    warnings = sorted(set(manifest_warnings + evidence_warnings))
+    warnings = manifest_warnings + evidence_warnings + finalizer_warnings
     if duplicates:
         warnings.append(f"duplicate queue_id in queue: {', '.join(duplicates)}")
     if duplicate_experiments:
@@ -600,18 +871,32 @@ def _build_errors_and_warnings(
     if duplicate_observations:
         for key, values in sorted(duplicate_observations.items()):
             warnings.append(f"duplicate queue_id/seed observation: {key} from {', '.join(values)}")
-    return errors, warnings
+    return errors, sorted(set(warnings))
 
 
 def reconcile(
-    *, queue_path: Path, submission_manifests: list[Path], evidence_root: Path
+    *,
+    queue_path: Path,
+    submission_manifests: list[Path],
+    evidence_root: Path,
+    finalizer_manifests: list[Path] | None = None,
+    generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Compute a deterministic status ledger for queue-seed pairs."""
+    finalizer_manifests = finalizer_manifests or []
+    generated_at = generated_at or datetime.now(timezone.utc).isoformat()  # noqa: UP017
     queue_entries = load_queue(queue_path)
     manifest_jobs, manifest_errors, manifest_warnings = load_submission_manifests(
         submission_manifests
     )
     evidence_rows, evidence_warnings = load_evidence_rows(evidence_root)
+    finalizer_reports: list[FinalizerReport] = []
+    finalizer_load_errors: list[str] = []
+    for finalizer_manifest in finalizer_manifests:
+        try:
+            finalizer_reports.extend(_load_finalizer_report(finalizer_manifest))
+        except RuntimeError as exc:
+            finalizer_load_errors.append(str(exc))
     duplicate_experiments = _build_duplicate_experiments(manifest_jobs)
     duplicate_observations = _build_duplicate_observations(manifest_jobs)
 
@@ -630,21 +915,36 @@ def reconcile(
                 evidence_rows=evidence_rows,
             )
             rows.append(row)
+    finalizer_rows, finalizer_errors, finalizer_warnings = _finalizer_rows_from_payloads(
+        finalizers=finalizer_reports,
+        manifest_jobs=manifest_jobs,
+        queue_entries=queue_entries,
+        evidence_rows=evidence_rows,
+    )
 
     errors, warnings = _build_errors_and_warnings(
         queue_entries=queue_entries,
         manifest_errors=manifest_errors,
         manifest_warnings=manifest_warnings,
         evidence_warnings=evidence_warnings,
+        finalizer_errors=finalizer_errors + finalizer_load_errors,
+        finalizer_warnings=finalizer_warnings,
         duplicate_experiments=duplicate_experiments,
         duplicate_observations=duplicate_observations,
     )
     return {
         "schema_version": SCHEMA_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),  # noqa: UP017
+        "generated_at": generated_at,
         "queue_path": str(queue_path),
         "submission_manifests": sorted({str(path) for path in submission_manifests}),
+        "finalizer_manifests": sorted({str(path) for path in finalizer_manifests}),
         "evidence_root": str(evidence_root),
+        "finalizer_bridge": {
+            "schema_version": FINALIZER_BRIDGE_SCHEMA_VERSION,
+            "rows": sorted(
+                finalizer_rows, key=lambda row: (str(row["issue"] or ""), row["job_id"])
+            ),
+        },
         "observations": sorted(rows, key=lambda row: (row["queue_id"], row["seed"])),
         "duplicate_ids": {
             "manifest_experiment_ids": sorted(duplicate_experiments),
@@ -695,6 +995,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path("docs/context/evidence"),
         help="Evidence root directory containing compact evidence summaries.",
     )
+    parser.add_argument(
+        "--finalizer-manifest",
+        action="append",
+        default=[],
+        help="Finalizer output path to include. May be repeated.",
+    )
+    parser.add_argument(
+        "--generated-at",
+        help="Optional stable generated_at timestamp for reproducible machine output.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     parser.add_argument(
         "--markdown",
@@ -712,6 +1022,8 @@ def main(argv: list[str] | None = None) -> int:
             queue_path=args.queue,
             submission_manifests=[Path(path) for path in args.submission_manifest],
             evidence_root=args.evidence_root,
+            finalizer_manifests=[Path(path) for path in args.finalizer_manifest],
+            generated_at=args.generated_at,
         )
     except RuntimeError as exc:
         print(f"reconcile_slurm_evidence: {exc}")

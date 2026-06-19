@@ -257,13 +257,17 @@ knowledge, not every transient iteration detail.
   [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
 * Issue #2397 SocNavBench Control-Pipeline Asset Status (2026-06-06):
   [issue_2397_socnavbench_control_status_2026-06-06.md](issue_2397_socnavbench_control_status_2026-06-06.md)
-* Issue #1583 high-risk root path boundaries:
+* Issue #1583 High-Risk Root Path Boundaries (superseded by
+  [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md);
+  provenance only):
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)
 * Issue #1636 benchmark metric semantics:
   [issue_1636_benchmark_metric_semantics.md](issue_1636_benchmark_metric_semantics.md)
 * Issue #1634 SocNav Module Split Plan (2026-05-28):
   [issue_1634_socnav_split_plan.md](issue_1634_socnav_split_plan.md)
-* Issues #1598/#1599 Root Compatibility Decisions (2026-05-28):
+* Issues #1598/#1599 Root Compatibility Decisions (2026-05-28) (superseded by
+  [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md);
+  provenance only):
   [issue_1598_1599_root_compatibility_decisions.md](issue_1598_1599_root_compatibility_decisions.md)
 * Issue #1504 ego-conditioned feature contract:
   [issue_1504_ego_feature_contract.md](issue_1504_ego_feature_contract.md)
@@ -572,7 +576,9 @@ knowledge, not every transient iteration detail.
   [issue_1659_lidar_occupancy_adapter.md](issue_1659_lidar_occupancy_adapter.md)
 * Issue #1653 CI runtime slice:
   [issue_1653_ci_runtime_slice.md](issue_1653_ci_runtime_slice.md)
-* Issue #1690 Root Layout Inventory:
+* Issue #1690 Root Layout Inventory (superseded by
+  [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md);
+  provenance only):
   [issue_1690_root_layout_inventory.md](issue_1690_root_layout_inventory.md)
 * Issue #1613 LiDAR Observation Track Setup (2026-05-29):
   [issue_1613_lidar_observation_track.md](issue_1613_lidar_observation_track.md)

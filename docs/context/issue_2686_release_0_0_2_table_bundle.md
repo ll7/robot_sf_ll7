@@ -29,6 +29,13 @@ existing `scripts/tools/benchmark_publication_bundle.py dissertation-bundle` wor
 | `tab:robot_sf_release_planner_results` | `tab_robot_sf_release_planner_results` | `reports/campaign_table.md` | `results` | Existing release-backed planner table only; no rerun or new ranking claim. |
 | `tab:release_failure_count_slices` | `tab_release_failure_count_slices` | `reports/scenario_family_breakdown.md` | `discussion` | Existing scenario-family outcome slices; not a new failure taxonomy. |
 
+Scope note for `campaign_table_core`:
+
+- This row set is the implementation-maturity `planner_group=core` partition from the
+  paper release contract, not the full manuscript-style orca-vs-ppo comparison table.
+- In release `0.0.2`, `ppo` is not present in `campaign_table_core` because it was outside
+  the scoped core set for that release.
+
 ## Durable Proof
 
 Small, reviewable proof copies are tracked under

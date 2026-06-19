@@ -510,6 +510,14 @@ Grouping semantics:
 * `reports/seed_variability_by_scenario.json` is the aggregate export grouped by
 `(scenario_id, planner_key)` across seeds
 
+* `reports/seed_episode_rows.csv` is a per-episode traceability export retained for legacy
+  compatibility with manuscript-side table tooling. In this release artifact family, the
+  `collision` column is the legacy per-episode **metric alias** sourced from
+  `metrics.collisions`; canonical event-level collision state remains
+  `outcome.collision_event` in the source `runs/<planner>/episodes.jsonl`, and the two
+  can diverge only if a planner/metric compatibility edge case is present in historical
+  releases.
+
 Confidence semantics:
 
 * the seed-variability export uses bootstrap over per-seed means
@@ -670,6 +678,15 @@ Core vs experimental partitions:
 `readiness_tier=baseline-ready` for non-paper runs).
 * `campaign_table_experimental.{csv,md}`:
   non-core rows ( `planner_group!=core` for paper-facing runs; non-baseline-ready otherwise).
+
+Interpretation note:
+
+- `campaign_table_core` is an implementation-maturity or policy-family slice, not
+  the manuscript main comparison set. For `orca`/`ppo`-style headline comparisons in release
+  or dissertation workflows, read from `campaign_table.csv` (or explicitly documented
+  alternative subset).
+- Release `0.0.2` used a scoped planner set where `ppo` was outside the core partition, so
+  its secondary-core table is expected not to contain the ppo row.
 
 Portability guarantee:
 

@@ -436,6 +436,12 @@ def build_seed_episode_rows(
 ) -> list[dict[str, Any]]:
     """Build planner-aware per-episode seed traceability rows for paper tooling.
 
+    Note:
+        ``collision`` is derived from ``metrics.collisions`` in each flattened
+        episode metric payload for compatibility with legacy release artifacts.
+        For canonical per-episode collision status, consumers should read
+        ``outcome.collision_event`` from source ``episodes.jsonl``.
+
     Returns:
         One flat row per executed episode with deterministic repeat indices.
     """

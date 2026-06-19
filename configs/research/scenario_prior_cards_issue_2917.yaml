@@ -139,9 +139,89 @@ cards:
       - docs/context/issue_2479_real_trajectory_scenario_prior.md
       - docs/context/issue_1091_sdd_importer.md
 
+  - card_id: adversarial_search_generated_scenario_prior
+    prior_family: adversarial/search-generated scenario prior family
+    classification: repository_trace_derived
+    source_type: repository_authored_configs_and_scripts
+    dataset_license_status: not_applicable_generated_synthetic
+    source_traces:
+      - robot_sf/adversarial/scenario_manifest.py
+      - configs/adversarial/crossing_ttc_space.yaml
+      - configs/scenarios/templates/crossing_ttc.yaml
+      - scripts/tools/generate_adversarial_scenario_manifests.py
+      - tests/adversarial/test_adversarial_search.py
+      - tests/adversarial/test_adversarial_scenario_manifest.py
+      - docs/context/evidence/issue_2562_adversarial_manifest_smoke/summary.json
+      - docs/context/evidence/issue_2567_adversarial_manifest_quality/summary.json
+    feature_extraction_method: >
+      Programmatic search generates adversarial_scenario_manifest.v1 candidates from a bounded
+      search space, validated against schema, control-hash, and degenerate-condition checks.
+      The generation tooling and validators are repository-trace-derived; no real-world data
+      is used.
+    parameter_bounds:
+      representation: adversarial_search_space.v1
+      units: position=m, velocity=m/s, time=s, seed=int
+      enforcement: robot_sf/adversarial/scenario_manifest.py validation and search-space config
+    excluded_populations:
+      - real-world pedestrian trajectories
+      - external datasets not staged through provenance manifests
+      - hardware-calibrated sensor populations
+    unsupported_claims:
+      - learned_prior_realism
+      - benchmark_usefulness
+      - cross_dataset_generalization
+      - planner_performance_improvement
+      - license_safe_redistribution_of_raw_data
+    odd_conditions:
+      - search space bounds defined in configs/adversarial/crossing_ttc_space.yaml
+      - generated candidates remain diagnostic-only until separately certified
+      - no planner performance or adversarial coverage claim
+    related_surfaces:
+      - docs/context/evidence/issue_2562_adversarial_manifest_smoke/summary.json
+      - docs/context/evidence/issue_2567_adversarial_manifest_quality/summary.json
+
+  - card_id: counterfactual_scenario_pair_mechanism_prior
+    prior_family: counterfactual scenario-pair mechanism prior family
+    classification: repository_trace_derived
+    source_type: repository_authored_scripts_and_configs
+    dataset_license_status: not_applicable_generated_synthetic
+    source_traces:
+      - scripts/tools/create_counterfactual_scenario_pair.py
+      - docs/context/issue_2547_counterfactual_mechanism_taxonomy.md
+      - docs/context/evidence/issue_2547_counterfactual_mechanism_taxonomy/summary.json
+      - tests/tools/test_create_counterfactual_scenario_pair.py
+    feature_extraction_method: >
+      Controlled counterfactual scenario pairs are generated via repository tooling that holds
+      scenario, seed, and planner fixed while varying a single perturbation feature (currently
+      robot_route_offset). The pair manifests include mechanism taxonomy rows and preflight
+      validation; no real-world data is used.
+    parameter_bounds:
+      representation: counterfactual_scenario_pair.v1
+      units: dx_m=m, dy_m=m, max_magnitude_m=m, seed=int
+      enforcement: scripts/tools/create_counterfactual_scenario_pair.py and perturbation preflight
+    excluded_populations:
+      - real-world trajectories
+      - external datasets not staged through provenance manifests
+      - hardware-calibrated sensor populations
+    unsupported_claims:
+      - learned_prior_realism
+      - benchmark_usefulness
+      - cross_dataset_generalization
+      - planner_performance_improvement
+      - license_safe_redistribution_of_raw_data
+      - causal_mechanism_evidence
+    odd_conditions:
+      - only robot_route_offset feature currently supported
+      - single pair is a mechanism hypothesis input, not causal evidence
+      - preflight validation required before execution
+    related_surfaces:
+      - docs/context/issue_2547_counterfactual_mechanism_taxonomy.md
+      - docs/context/evidence/issue_2547_counterfactual_mechanism_taxonomy/summary.json
+
 remaining_work:
   - Add cards for any future repository-trace-derived priors after an extraction tool exists.
   - Add external-dataset-derived cards only after source, license, checksum, and coordinate-frame
     provenance are recorded.
   - Link cards directly from future scenario contracts or ForecastBatch records when those schemas
     grow prior-family references.
+  - Consider adding additional counterfactual features beyond robot_route_offset as the taxonomy expands.

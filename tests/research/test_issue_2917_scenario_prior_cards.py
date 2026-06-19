@@ -82,3 +82,36 @@ def test_cards_reject_unsupported_prior_claims() -> None:
         assert required_rejections.issubset(unsupported), card["card_id"]
         assert card["excluded_populations"], card["card_id"]
         assert card["odd_conditions"], card["card_id"]
+
+
+def test_repository_trace_derived_cards_have_correct_classification() -> None:
+    """The adversarial and counterfactual cards should be repository_trace_derived."""
+    registry = _registry()
+    cards = {card["card_id"]: card for card in registry["cards"]}
+    expected_cards = {
+        "adversarial_search_generated_scenario_prior",
+        "counterfactual_scenario_pair_mechanism_prior",
+    }
+
+    assert expected_cards <= cards.keys()
+    assert {cards[card_id]["classification"] for card_id in expected_cards} == {
+        "repository_trace_derived"
+    }
+
+
+def test_counterfactual_card_rejects_causal_mechanism_evidence() -> None:
+    """The counterfactual card should explicitly reject causal mechanism evidence claims."""
+    registry = _registry()
+    cards = {card["card_id"]: card for card in registry["cards"]}
+
+    counterfactual = cards["counterfactual_scenario_pair_mechanism_prior"]
+    unsupported = set(counterfactual["unsupported_claims"])
+    required_claims = {
+        "causal_mechanism_evidence",
+        "learned_prior_realism",
+        "benchmark_usefulness",
+        "cross_dataset_generalization",
+        "planner_performance_improvement",
+        "license_safe_redistribution_of_raw_data",
+    }
+    assert required_claims <= unsupported

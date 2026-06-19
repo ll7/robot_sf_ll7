@@ -149,6 +149,10 @@ knowledge, not every transient iteration detail.
   [issue_3062_campaign_manifest_flow.md](issue_3062_campaign_manifest_flow.md)
   records the reusable research-campaign manifest contract, example manifest, output boundary, and
   validation path before runner-specific automation treats manifests as benchmark evidence.
+* Issue #3142 fast-pysf force optimization:
+  [issue_3142_fast_pysf_force_optimization.md](issue_3142_fast_pysf_force_optimization.md)
+  records the bounded semantics-preserving force-computation cleanup, diagnostic performance
+  boundary, and tracked compact summary.
 * Issue #3146 forecast replay fixture suite:
   [issue_3146_forecast_replay_fixture_suite.md](issue_3146_forecast_replay_fixture_suite.md)
   records the scenario-diverse diagnostic forecast replay suite, full variant matrix row

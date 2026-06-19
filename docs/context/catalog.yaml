@@ -822,6 +822,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_3142_fast_pysf_force_optimization.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_3025_large_crowd_step_profile.md
     status: current
     freshness: maintained
@@ -1658,6 +1662,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_3062_campaign_manifest_flow.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_3063_campaign_comparison_report.md
     status: current
     freshness: evidence
@@ -1683,6 +1691,18 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_3064_social_force_variant_matrix/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_3146_forecast_replay_fixture_suite.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3146_forecast_replay_fixture_suite/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3146_forecast_replay_fixture_suite/summary.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

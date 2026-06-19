@@ -12,6 +12,8 @@ copyright = "2026, Robot SF contributors"
 
 extensions = [
     "myst_parser",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon",
 ]
 
 source_suffix = {
@@ -41,6 +43,18 @@ html_theme = "sphinx_rtd_theme"
 html_title = "Robot SF Documentation"
 html_short_title = "Robot SF"
 html_show_sourcelink = True
+
+autodoc_default_options = {
+    "members": True,
+    "show-inheritance": True,
+}
+
+# Keep docs import-time light-weight when optional extras are missing.
+autodoc_mock_imports = [
+    "stable_baselines3",
+    "tensorboard",
+    "torch",
+]
 
 myst_heading_anchors = 3
 myst_enable_extensions = [

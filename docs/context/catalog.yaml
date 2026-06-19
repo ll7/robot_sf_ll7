@@ -822,6 +822,10 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_release
+  - path: docs/context/issue_3025_large_crowd_step_profile.md
+    status: current
+    freshness: maintained
+    area: benchmark_release
   - path: docs/context/issue_2174_one_factor_ablation_pilot.md
     status: current
     freshness: maintained

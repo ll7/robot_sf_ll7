@@ -1233,6 +1233,10 @@ knowledge, not every transient iteration detail.
 * [Issue #2214 Hot-Path Optimization Synthesis](./issue_2214_hot_path_synthesis.md)
   records the 2026-06-04 diagnostic comparison for the simulator hot-path optimization wave and
   classifies the local smoke evidence as startup dominated rather than a broad speedup claim.
+* [Issue #3025 Large Crowd Step Profiling](./issue_3025_large_crowd_step_profile.md)
+  documents the merged `--large-crowd-profile`/`--step-profile` harness changes, explicit cold-start
+  versus steady-mode warmup behavior, and a constrained diagnostic-to-optimization boundary for
+  future action.
 
 ## Planner Integration Notes
 

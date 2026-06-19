@@ -930,6 +930,10 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+  - path: docs/context/issue_2917_scenario_prior_cards.md
+    status: proposal
+    freshness: maintained
+    area: learned_policy
   - path: docs/context/issue_2474_signalized_crossing_benchmark.md
     status: proposal
     freshness: maintained

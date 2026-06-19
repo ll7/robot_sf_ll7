@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import cProfile
 import json
 import os
 import sys
@@ -51,6 +52,7 @@ from robot_sf.training.scenario_loader import (
 _DEFAULT_STEP_SAMPLES = 10
 _LARGE_CROWD_PROFILE_SCENARIO = "configs/scenarios/single/dense_pedestrian_stress.yaml"
 _LARGE_CROWD_PROFILE_STEP_SAMPLES = 20
+_DEFAULT_STEP_PROFILE_LIMIT = 10
 
 
 @dataclass(slots=True)
@@ -126,8 +128,14 @@ class StepProfileMetrics:
     pedestrian_count: int | None = None
     advisory: bool = True
     gating: str = "non-gating"
+    step_profile_hotspots: list[dict[str, float | int | str | None]] | None = None
 
-    def to_dict(self) -> dict[str, float | int | bool | str | None]:
+    def to_dict(
+        self,
+    ) -> dict[
+        str,
+        float | int | bool | str | list[dict[str, float | int | str | None]] | None,
+    ]:
         """Serialize step-profile diagnostics to a JSON-friendly mapping."""
         return {
             "scenario_id": self.scenario_id,
@@ -149,6 +157,7 @@ class StepProfileMetrics:
             "pedestrian_count": self.pedestrian_count,
             "advisory": self.advisory,
             "gating": self.gating,
+            "step_profile_hotspots": self.step_profile_hotspots,
         }
 
 
@@ -320,17 +329,98 @@ def _measure_profile_pedestrian_count(config: RobotSimulationConfig | None = Non
         env.close()
 
 
-def measure_step_loop_performance(  # noqa: C901
+def _collect_step_profile_hotspots(
+    profile: cProfile.Profile,
+    *,
+    limit: int,
+) -> list[dict[str, float | int | str | None]]:
+    """Extract a deterministic, bounded list of profiler hotspots."""
+
+    if limit <= 0:
+        return []
+
+    if hasattr(profile, "create_stats"):
+        profile.create_stats()
+
+    raw_stats = getattr(profile, "stats", None)
+    if not isinstance(raw_stats, Mapping):
+        return []
+    hotspots: list[dict[str, float | int | str | None]] = []
+    for (file, line_no, func_name), data in raw_stats.items():
+        if not isinstance(file, str):
+            file = "<unknown>"
+        try:
+            raw_line = int(line_no)
+        except (TypeError, ValueError):
+            raw_line = 0
+        try:
+            _ccalls, ncalls, tottime, cumtime, *_ = data
+            ncalls = int(ncalls)
+            tottime = float(tottime)
+            cumtime = float(cumtime)
+        except (TypeError, ValueError):
+            continue
+        hotspots.append(
+            {
+                "file": _format_profile_file_path(file),
+                "line": raw_line,
+                "name": str(func_name),
+                "ncalls": ncalls,
+                "tottime": tottime,
+                "cumtime": cumtime,
+            },
+        )
+
+    hotspots.sort(
+        key=lambda row: (
+            -(row["cumtime"] if isinstance(row["cumtime"], (float, int)) else 0.0),
+            -(row["tottime"] if isinstance(row["tottime"], (float, int)) else 0.0),
+            row["file"],
+            row["line"],
+            row["name"],
+        ),
+    )
+    return hotspots[:limit]
+
+
+def _format_profile_file_path(file: str) -> str:
+    """Return a portable profiler file label without machine-local prefixes."""
+
+    if file.startswith("<") and file.endswith(">"):
+        return file
+    normalized = file.replace("\\", "/")
+    path = Path(normalized)
+    if path.is_absolute():
+        try:
+            return path.relative_to(Path.cwd()).as_posix()
+        except ValueError:
+            pass
+
+    parts = tuple(part for part in normalized.split("/") if part)
+    if "site-packages" in parts:
+        index = parts.index("site-packages")
+        return "/".join(parts[index:])
+    if ".venv" in parts:
+        index = parts.index(".venv")
+        return "/".join(parts[index + 1 :])
+    try:
+        return path.relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        pass
+    if not path.is_absolute():
+        return normalized
+    return path.name
+
+
+def _run_step_loop_measurement(  # noqa: C901, PLR0915
     step_samples: int = 10,
     config: RobotSimulationConfig | None = None,
     warmup_steps: int = 0,
-) -> StepLoopMetrics:
-    """Measure first-step and steady step-loop attribution.
-
-    The result is advisory telemetry only. Existing smoke thresholds still gate
-    environment creation and reset throughput, while these fields help diagnose
-    whether future slowdowns are startup- or steady-step dominated.
-    """
+    step_profile_limit: int = _DEFAULT_STEP_PROFILE_LIMIT,
+    *,
+    profile: bool = False,
+) -> tuple[StepLoopMetrics, list[dict[str, float | int | str | None]] | None]:
+    """Measure first-step and steady step-loop attribution."""
 
     if step_samples <= 0:
         raise ValueError("step_samples must be greater than zero")
@@ -340,6 +430,7 @@ def measure_step_loop_performance(  # noqa: C901
     print("\n=== Step Loop Attribution ===")
     env = make_robot_env(config=copy.deepcopy(config or RobotSimulationConfig()), debug=False)
     action = (0.0, 0.0)
+    profiler = cProfile.Profile() if profile else None
 
     try:
         env.reset()
@@ -372,6 +463,9 @@ def measure_step_loop_performance(  # noqa: C901
             )
             env.reset()
 
+        if profiler is not None:
+            profiler.enable()
+
         loop_start = time.time()
         first_step_start = time.time()
         _, _, terminated, truncated, _ = env.step(action)
@@ -386,6 +480,8 @@ def measure_step_loop_performance(  # noqa: C901
         steady_step_loop_sec = time.time() - steady_start
         step_loop_sec = time.time() - loop_start
     finally:
+        if profiler is not None:
+            profiler.disable()
         env.close()
 
     steps_per_sec = step_samples / step_loop_sec if step_loop_sec > 0 else 0.0
@@ -406,20 +502,69 @@ def measure_step_loop_performance(  # noqa: C901
     else:
         print("Steady step loop: not available (single step sample)")
 
-    return StepLoopMetrics(
-        step_samples=step_samples,
-        first_step_sec=first_step_sec,
-        step_loop_sec=step_loop_sec,
-        steady_step_loop_sec=steady_step_loop_sec,
-        steps_per_sec=steps_per_sec,
-        steady_steps_per_sec=steady_steps_per_sec,
-        warmup_excluded=warmup_excluded,
-        warmup_first_step_sec=warmup_first_step_sec,
-        warmup_step_loop_sec=warmup_step_loop_sec,
-        warmup_steps_per_sec=warmup_steps_per_sec,
-        first_step_pedestrian_count=first_step_pedestrian_count,
-        measurement_mode=measurement_mode,
+    return (
+        StepLoopMetrics(
+            step_samples=step_samples,
+            first_step_sec=first_step_sec,
+            step_loop_sec=step_loop_sec,
+            steady_step_loop_sec=steady_step_loop_sec,
+            steps_per_sec=steps_per_sec,
+            steady_steps_per_sec=steady_steps_per_sec,
+            warmup_excluded=warmup_excluded,
+            warmup_first_step_sec=warmup_first_step_sec,
+            warmup_step_loop_sec=warmup_step_loop_sec,
+            warmup_steps_per_sec=warmup_steps_per_sec,
+            first_step_pedestrian_count=first_step_pedestrian_count,
+            measurement_mode=measurement_mode,
+        ),
+        (
+            _collect_step_profile_hotspots(profiler, limit=step_profile_limit)
+            if profiler is not None
+            else None
+        ),
     )
+
+
+def measure_step_loop_performance(
+    step_samples: int = 10,
+    config: RobotSimulationConfig | None = None,
+    warmup_steps: int = 0,
+) -> StepLoopMetrics:
+    """Measure first-step and steady step-loop attribution.
+
+    The result is advisory telemetry only. Existing smoke thresholds still gate
+    environment creation and reset throughput, while these fields help diagnose
+    whether future slowdowns are startup- or steady-step dominated.
+    """
+
+    metrics, _ = _run_step_loop_measurement(
+        step_samples=step_samples,
+        config=config,
+        warmup_steps=warmup_steps,
+    )
+    return metrics
+
+
+def measure_step_loop_performance_with_profile(
+    step_samples: int = 10,
+    config: RobotSimulationConfig | None = None,
+    warmup_steps: int = 0,
+    step_profile_limit: int = _DEFAULT_STEP_PROFILE_LIMIT,
+) -> tuple[StepLoopMetrics, list[dict[str, float | int | str | None]]]:
+    """Measure step-loop timings and collect a compact profiler hotspot list."""
+
+    metrics, hotspots = _run_step_loop_measurement(
+        step_samples=step_samples,
+        config=config,
+        warmup_steps=warmup_steps,
+        step_profile_limit=step_profile_limit,
+        profile=True,
+    )
+    if hotspots is None:
+        return metrics, []
+    if step_profile_limit <= 0:
+        return metrics, []
+    return metrics, hotspots[:step_profile_limit]
 
 
 def measure_step_profile(
@@ -428,6 +573,7 @@ def measure_step_profile(
     config: RobotSimulationConfig | None = None,
     step_loop: StepLoopMetrics | None = None,
     scenario_metadata: ScenarioProfileMetadata | None = None,
+    step_profile_hotspots: list[dict[str, float | int | str | None]] | None = None,
 ) -> StepProfileMetrics:
     """Build diagnostic step-profile metadata for the smoke test contract."""
 
@@ -457,6 +603,7 @@ def measure_step_profile(
         if scenario_metadata is not None
         else None,
         pedestrian_count=pedestrian_count,
+        step_profile_hotspots=step_profile_hotspots,
     )
 
 
@@ -472,6 +619,8 @@ def run_performance_smoke_test(  # noqa: PLR0913
     creation_hard: float | None = None,
     reset_soft: float | None = None,
     reset_hard: float | None = None,
+    step_profile: bool = False,
+    step_profile_limit: int = _DEFAULT_STEP_PROFILE_LIMIT,
     enforce: bool | None = None,
     on_ci: bool | None = None,
 ) -> SmokeTestResult:
@@ -490,6 +639,8 @@ def run_performance_smoke_test(  # noqa: PLR0913
         creation_hard: Hard threshold (seconds) for environment creation time.
         reset_soft: Soft threshold (resets/sec) for environment reset throughput.
         reset_hard: Hard threshold (resets/sec) for environment reset throughput.
+        step_profile: Collect cProfile hotspots from the measured step loop.
+        step_profile_limit: Number of hottest profiler rows to retain.
         enforce: When True, treat soft breaches as failures.
         on_ci: Override CI detection (defaults to GITHUB_ACTIONS env var).
 
@@ -521,21 +672,35 @@ def run_performance_smoke_test(  # noqa: PLR0913
         enforce if enforce is not None else os.environ.get("ROBOT_SF_PERF_ENFORCE", "0") == "1"
     )
     on_ci = on_ci if on_ci is not None else os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+    if step_profile and step_profile_limit <= 0:
+        raise ValueError("step_profile_limit must be greater than zero")
     config, scenario_label, scenario_metadata = _load_scenario_config(
         scenario, scenario_name=scenario_name
     )
     creation_time = measure_environment_creation(config)
     perf_metrics = measure_environment_performance(num_resets, config=config)
-    step_loop = measure_step_loop_performance(
-        step_samples,
-        config=config,
-        warmup_steps=warmup_steps,
-    )
-    step_profile = measure_step_profile(
+    step_profile_hotspots: list[dict[str, float | int | str | None]] | None = None
+    if step_profile:
+        step_loop, step_profile_hotspots = measure_step_loop_performance_with_profile(
+            step_samples=step_samples,
+            config=config,
+            warmup_steps=warmup_steps,
+            step_profile_limit=step_profile_limit,
+        )
+        if step_profile_hotspots is not None:
+            step_profile_hotspots = step_profile_hotspots[:step_profile_limit]
+    else:
+        step_loop = measure_step_loop_performance(
+            step_samples=step_samples,
+            config=config,
+            warmup_steps=warmup_steps,
+        )
+    step_profile_metrics = measure_step_profile(
         step_samples=step_samples,
         config=config,
         step_loop=step_loop,
         scenario_metadata=scenario_metadata,
+        step_profile_hotspots=step_profile_hotspots,
     )
     resets_per_sec = perf_metrics["resets_per_sec"]
 
@@ -589,7 +754,7 @@ def run_performance_smoke_test(  # noqa: PLR0913
         thresholds=thresholds,
         statuses=statuses,
         step_loop=step_loop,
-        step_profile=step_profile,
+        step_profile=step_profile_metrics,
         recommendations=recommendations,
         scenario=scenario_label or scenario,
         exit_code=exit_code,
@@ -658,6 +823,23 @@ def parse_args() -> argparse.Namespace:
             "unless --scenario or --step-samples override them."
         ),
     )
+    parser.add_argument(
+        "--step-profile",
+        action="store_true",
+        help=(
+            "Collect a compact cProfile hotspot slice from the measured step loop. "
+            "Profiling excludes warmup and environment setup/reset."
+        ),
+    )
+    parser.add_argument(
+        "--step-profile-limit",
+        type=int,
+        default=_DEFAULT_STEP_PROFILE_LIMIT,
+        help=(
+            f"Maximum number of profiler hotspots to include when --step-profile is set "
+            f"(default: {_DEFAULT_STEP_PROFILE_LIMIT})."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -695,6 +877,8 @@ def main() -> int:  # noqa: C901
         warmup_steps=args.warmup_steps,
         scenario=args.scenario,
         scenario_name=args.scenario_name,
+        step_profile=args.step_profile,
+        step_profile_limit=args.step_profile_limit,
         include_recommendations=args.include_recommendations,
         creation_soft=creation_soft,
         creation_hard=creation_hard,
@@ -735,6 +919,13 @@ def main() -> int:  # noqa: C901
             f"Step profile: {result.step_profile.advisory=} gating={result.step_profile.gating} "
             f"scenario={result.step_profile.scenario_id} ped_count={result.step_profile.pedestrian_count}",
         )
+        if result.step_profile.step_profile_hotspots:
+            top = result.step_profile.step_profile_hotspots[0]
+            print(
+                "Top step hotspot: "
+                f"{top['name']} @ {top['file']}:{top['line']} "
+                f"cumtime={top['cumtime']:.3f}s ncalls={top['ncalls']}",
+            )
 
     if result.recommendations:
         print("\nRecommendations:")

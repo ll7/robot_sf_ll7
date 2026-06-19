@@ -1,0 +1,7 @@
+{
+  "output_dir": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19",
+  "figures_dir": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures",
+  "figure_count": 5,
+  "first_run_manifest": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figure_pack_manifest.json",
+  "command": "uv run python scripts/analysis/build_issue_2946_mechanism_figure_pack.py"
+}

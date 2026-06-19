@@ -762,6 +762,18 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_release
+  - path: docs/context/issue_2946_mechanism_figure_pack.md
+    status: current
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figure_pack_manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
+  - path: docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figure_pack_metadata.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_release
   - path: docs/context/issue_2263_mechanism_activation_report_fields.md
     status: current
     freshness: maintained

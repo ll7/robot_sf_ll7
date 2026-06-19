@@ -1,0 +1,201 @@
+{
+  "issue": 2946,
+  "generated_at": "2026-06-19T00:00:00+00:00",
+  "schema_version": "issue_2946_mechanism_figure_pack.v1",
+  "inputs": {
+    "issue_2432": {
+      "path": "docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/candidate_pair_comparison.csv",
+      "name": "issue_2432 candidate pair CSV",
+      "sha256": "1471246d960711c229060efc298c225f59037f12f17bd6edf398fd406b1437ae"
+    },
+    "issue_2432_summary": {
+      "path": "docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/summary.json",
+      "name": "issue_2432 summary",
+      "sha256": "c33fcdbf91423a018c1f077d02708dd718bf9859ff6d5467e0f8d3c42f6dbdaf"
+    },
+    "issue_2434": {
+      "path": "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/candidate_pair_comparison.csv",
+      "name": "issue_2434 scenario sweep CSV",
+      "sha256": "1192a96c0a744e2f9c2aab8d5a404f56444de172042a32b37f3e9e53e32e9c10"
+    },
+    "issue_2434_summary": {
+      "path": "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/summary.json",
+      "name": "issue_2434 summary",
+      "sha256": "80d4932380e05dc1eef51a74148dcdf0e136cefdbad4f6d5ee34432f6683f76b"
+    },
+    "issue_2428_default_panel": {
+      "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_default_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--b05ccbf52ac7ab9b.png",
+      "name": "issue_2428 default panel PNG",
+      "sha256": "5841a9b7407091f2cf614f87b12a37adb32f879354d6db41aeef008da9722f44"
+    },
+    "issue_2428_ammv_panel": {
+      "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_ammv_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--5fde302d5414e476.png",
+      "name": "issue_2428 ammv panel PNG",
+      "sha256": "924d010ab3ae92db35579ce9c291785dfd32c83f5fdb9a33eedd10912cd529fd"
+    },
+    "issue_2753": {
+      "path": "docs/context/evidence/issue_2753_signalized_crossing_metrics/summary.json",
+      "name": "issue_2753 fixture row summary",
+      "sha256": "46d3ac88f9ba2a100662799d0f4526f2c9b19678d2f1a85b337aab45fc717bd3"
+    },
+    "issue_2799": {
+      "path": "docs/context/evidence/issue_2799_signalized_runtime/summary.json",
+      "name": "issue_2799 runtime row summary",
+      "sha256": "0164b8502a98e585be26651a2006efe1ec66635fe70ab9095d10a37c1af2e67f"
+    }
+  },
+  "output_dir": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19",
+  "source_issue_lineage": [
+    2159,
+    2227,
+    2428,
+    2430,
+    2432,
+    2434,
+    2444,
+    2753,
+    2754,
+    2799,
+    2923,
+    2924,
+    2946
+  ],
+  "source_issue_notes": {
+    "2444": "Existing follow-up lane for a nonzero AMMV/default mechanism-divergence pair; no tracked evidence bundle from that issue was available as a direct input here.",
+    "2754": "Existing follow-up lane for a signalized-crossing failure-case pack; current inputs use its predecessor denominator/row-status summaries only.",
+    "2924": "Existing follow-up lane for counterfactual scenario-pair runner work; no tracked evidence bundle from that issue was available as a direct input here."
+  },
+  "existing_follow_up_issue_lanes": [
+    2444,
+    2754,
+    2924
+  ],
+  "figures": {
+    "01_panel_default_social_force": {
+      "type": "png",
+      "path": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/01_panel_default_social_force.png",
+      "title": "Issue #2428 default Social Force trajectory panel",
+      "claim_boundary": "Single-row, scenario-seeded diagnostic panel; does not imply general AMMV advantage.",
+      "sources": [
+        "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_default_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--b05ccbf52ac7ab9b.png"
+      ],
+      "provenance": {
+        "source": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_default_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--b05ccbf52ac7ab9b.png",
+        "destination": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/01_panel_default_social_force.png",
+        "size_bytes": 42213,
+        "sha256": "5841a9b7407091f2cf614f87b12a37adb32f879354d6db41aeef008da9722f44"
+      },
+      "output_sha256": "5841a9b7407091f2cf614f87b12a37adb32f879354d6db41aeef008da9722f44"
+    },
+    "02_panel_ammv_social_force": {
+      "type": "png",
+      "path": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/02_panel_ammv_social_force.png",
+      "title": "Issue #2428 AMMV-aware Social Force trajectory panel",
+      "claim_boundary": "Single-row, scenario-seeded diagnostic panel; demonstrates AMMV trace renderability only.",
+      "sources": [
+        "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_ammv_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--5fde302d5414e476.png"
+      ],
+      "provenance": {
+        "source": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panels/trajectory_panel_ammv_social_force_classic_head_on_corridor_low_other_classic_head_on_corridor_low--111--5fde302d5414e476.png",
+        "destination": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/02_panel_ammv_social_force.png",
+        "size_bytes": 41733,
+        "sha256": "924d010ab3ae92db35579ce9c291785dfd32c83f5fdb9a33eedd10912cd529fd"
+      },
+      "output_sha256": "924d010ab3ae92db35579ce9c291785dfd32c83f5fdb9a33eedd10912cd529fd"
+    },
+    "03_seed_pair_delta_breakdown": {
+      "type": "svg",
+      "path": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/03_seed_pair_delta_breakdown.svg",
+      "title": "Issue #2432 per-pair frame delta summary",
+      "claim_boundary": "Adapter-mode local head-on seed slice only; all rows in this slice are numerically identical at frame level.",
+      "sources": [
+        "docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/candidate_pair_comparison.csv",
+        "docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/summary.json"
+      ],
+      "metrics": {
+        "figure": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/03_seed_pair_delta_breakdown.svg",
+        "summary": {
+          "input_rows": 3,
+          "plotted_rows": 3,
+          "skipped_non_finite_rows": 0,
+          "zero_delta_rows": 3,
+          "nonzero_delta_rows": 0
+        }
+      }
+    },
+    "04_scenario_sweep_delta_summary": {
+      "type": "svg",
+      "path": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/04_scenario_sweep_delta_summary.svg",
+      "title": "Issue #2434 multi-scenario deltas (classic families)",
+      "claim_boundary": "Adapter-mode compact 5-scenario sweep; no per-scenario frame/metric delta > 0 was found in the recorded outputs.",
+      "sources": [
+        "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/candidate_pair_comparison.csv",
+        "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/summary.json"
+      ],
+      "metrics": {
+        "figure": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/04_scenario_sweep_delta_summary.svg",
+        "scenarios": [
+          "classic_bottleneck_medium",
+          "classic_cross_trap_low",
+          "classic_doorway_high",
+          "classic_head_on_corridor_medium",
+          "classic_overtaking_medium"
+        ],
+        "input_rows": 15,
+        "skipped_non_finite_cells": 0,
+        "zero_metric_cells": 25,
+        "metric_count": 25
+      }
+    },
+    "05_signalized_row_type_counts": {
+      "type": "svg",
+      "path": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/05_signalized_row_type_counts.svg",
+      "title": "Signalized row-type eligibility and exclusion",
+      "claim_boundary": "Compliance denominator semantics only; two compatible observables and two denominator-zero excluded rows per source.",
+      "sources": [
+        "docs/context/evidence/issue_2753_signalized_crossing_metrics/summary.json",
+        "docs/context/evidence/issue_2799_signalized_runtime/summary.json"
+      ],
+      "metrics": {
+        "figure": "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figures/05_signalized_row_type_counts.svg",
+        "fixture_row_type_counts": {
+          "eligible": {
+            "green_proceed": 1,
+            "proxy_only_denominator_excluded": 0,
+            "red_required_stop": 1,
+            "unavailable_no_claim": 0
+          },
+          "excluded": {
+            "green_proceed": 0,
+            "proxy_only_denominator_excluded": 1,
+            "red_required_stop": 0,
+            "unavailable_no_claim": 1
+          }
+        },
+        "runtime_row_type_counts": {
+          "eligible": {
+            "green_proceed": 1,
+            "proxy_only_denominator_excluded": 0,
+            "red_required_stop": 1,
+            "unavailable_no_claim": 0
+          },
+          "excluded": {
+            "green_proceed": 0,
+            "proxy_only_denominator_excluded": 1,
+            "red_required_stop": 0,
+            "unavailable_no_claim": 1
+          }
+        }
+      }
+    }
+  },
+  "validation_commands": [
+    "python -m json.tool docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/panels/trajectory_panel_manifest.json",
+    "python -m json.tool docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/summary.json",
+    "python - <<'PY'\nimport csv\nfrom pathlib import Path\nrows = list(csv.DictReader(Path('docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/candidate_pair_comparison.csv').open()))\nprint(f\"issue_2432 candidate rows: {len(rows)}\")\nPY",
+    "python -m json.tool docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/summary.json",
+    "python - <<'PY'\nimport csv\nfrom pathlib import Path\nrows = list(csv.DictReader(Path('docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/candidate_pair_comparison.csv').open()))\nprint(f\"issue_2434 candidate rows: {len(rows)}\")\nPY",
+    "python -m json.tool docs/context/evidence/issue_2753_signalized_crossing_metrics/summary.json",
+    "python -m json.tool docs/context/evidence/issue_2799_signalized_runtime/summary.json"
+  ]
+}

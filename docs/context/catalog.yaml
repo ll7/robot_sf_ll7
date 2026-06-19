@@ -53,6 +53,14 @@ entries:
     status: current
     freshness: policy
     area: agent_workflow
+  - path: docs/context/issue_2909_github_payload_overfetch_audit.md
+    status: current
+    freshness: maintained
+    area: agent_workflow
+  - path: docs/context/issue_3098_closed_state_label_hygiene.md
+    status: current
+    freshness: maintained
+    area: agent_workflow
   - path: docs/context/issue_728_coding_agents_compatibility.md
     status: current
     freshness: policy
@@ -1614,9 +1622,41 @@ entries:
     status: current
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_3000_map_public_smoke_provenance.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/issue_3061_social_compliance_metric_contract.md
     status: current
     freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_3063_campaign_comparison_report.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3063_campaign_comparison_report/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3063_campaign_comparison_report/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3063_campaign_comparison_report/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/issue_3064_behavior_variants_inventory.md
+    status: current
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3064_social_force_variant_matrix/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3064_social_force_variant_matrix/README.md
+    status: evidence
+    freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_3076_campaign_result_store_contract.md
     status: current

@@ -1,0 +1,55 @@
+{
+  "schema": "issue_3142_fast_pysf_force_optimization_summary.v1",
+  "issue": 3142,
+  "captured_at": "2026-06-19",
+  "base_ref": "origin/main",
+  "head_branch": "issue-3142-fast-pysf-force-optimization",
+  "scenario": "configs/scenarios/single/dense_pedestrian_stress.yaml",
+  "command_shape": "uv run python scripts/validation/performance_smoke_test.py --large-crowd-profile --step-profile --num-resets 2 --step-samples 20 --step-profile-mode steady --step-profile-limit 8",
+  "change": "Cache pedestrian count once per GroupCoherenceForceAlt.__call__ invocation, then cache positions, groups, and config factor only after the no-group early return.",
+  "baseline": {
+    "json_output": "output/issue-3142/baseline/steady-profile.json",
+    "step_samples": 20,
+    "pedestrian_count": 17,
+    "steady_step_loop_sec": 0.011563539505004883,
+    "steady_steps_per_sec": 1643.095523803633,
+    "compute_forces_cumtime_sec": 0.006739102,
+    "sum_forces_cumtime_sec": 0.006729992000000001,
+    "group_coherence_call_cumtime_sec": 0.003266096
+  },
+  "after": {
+    "json_output": "output/issue-3142/after/steady-profile.json",
+    "step_samples": 20,
+    "pedestrian_count": 17,
+    "steady_step_loop_sec": 0.011503934860229492,
+    "steady_steps_per_sec": 1651.6087956726285,
+    "compute_forces_cumtime_sec": 0.0067040680000000005,
+    "sum_forces_cumtime_sec": 0.006694996000000001,
+    "group_coherence_call_cumtime_sec": 0.003273789
+  },
+  "interpretation": {
+    "classification": "diagnostic_supporting_evidence",
+    "steady_loop_direction": "slightly_faster",
+    "steady_loop_delta_percent": 0.518134525549187,
+    "hotspot_direction": "mixed_or_flat",
+    "caveat": "Single before/after smoke comparison is too small and noisy to claim a robust speedup."
+  },
+  "validation": [
+    {
+      "command": "uv run pytest fast-pysf/tests/test_forces.py fast-pysf/tests/test_simulator.py",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run pytest fast-pysf/tests",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run pytest tests/perf/test_large_crowd_step_profile_contract.py tests/validation/test_performance_smoke_test.py",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run ruff check fast-pysf/pysocialforce/forces.py",
+      "exit_code": 0
+    }
+  ]
+}

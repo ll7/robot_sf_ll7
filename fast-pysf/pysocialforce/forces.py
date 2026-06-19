@@ -618,19 +618,24 @@ class GroupCoherenceForceAlt:
             np.ndarray: Force vectors with shape (num_peds, 2), scaled by the
             coherence-force factor.
         """
-        forces = np.zeros((self.peds.size(), 2))
+        ped_count = self.peds.size()
+        forces = np.zeros((ped_count, 2))
 
         # If no groups exist within the pedestrian data, return the initialized zero-forces array.
         if not self.peds.has_group():
             return forces
 
+        ped_positions = self.peds.pos()
+        ped_groups = self.peds.groups
+        config_factor = self.config.factor
+
         # Iterate over groups of pedestrians to calculate coherence forces.
-        for group in self.peds.groups:
+        for group in ped_groups:
             # Set the threshold based on the number of members in the group.
             threshold = (len(group) - 1) / 2
 
             # Extract the positions of all members in the current group.
-            member_pos = self.peds.pos()[group, :]
+            member_pos = ped_positions[group, :]
 
             # Continue to the next group if the current one has no members.
             if len(member_pos) == 0:
@@ -653,7 +658,7 @@ class GroupCoherenceForceAlt:
             forces[group, :] += (force_vec.T * softened_factor).T
 
         # Return the calculated forces scaled by the factor defined in the configuration.
-        return forces * self.config.factor
+        return forces * config_factor
 
 
 class GroupRepulsiveForce:

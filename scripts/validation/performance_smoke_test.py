@@ -611,7 +611,7 @@ def run_performance_smoke_test(  # noqa: PLR0913
     *,
     num_resets: int = 5,
     step_samples: int = 10,
-    warmup_steps: int = 0,
+    warmup_steps: int | None = None,
     scenario: str | None = None,
     scenario_name: str | None = None,
     include_recommendations: bool = True,
@@ -632,6 +632,9 @@ def run_performance_smoke_test(  # noqa: PLR0913
         warmup_steps: Optional untimed steps before the measured loop. When non-zero,
             warm-start fields are populated and cold fields are flagged with
             ``warmup_excluded`` so callers do not treat them as cold-start timings.
+            When omitted, step-profile runs default this to one warmup step so
+            profiler hotspots emphasize steady-step work instead of first-step
+            compilation/setup; non-profile runs default to zero warmup steps.
         scenario: Optional scenario config path used to load a custom config.
         scenario_name: Optional scenario name/id to select from a multi-scenario config.
         include_recommendations: Include guidance strings in the result payload.
@@ -649,6 +652,8 @@ def run_performance_smoke_test(  # noqa: PLR0913
     """
     if step_samples <= 0:
         raise ValueError("step_samples must be greater than zero")
+    if warmup_steps is None:
+        warmup_steps = 1 if step_profile else 0
     if warmup_steps < 0:
         raise ValueError("warmup_steps must be non-negative")
 
@@ -784,10 +789,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--warmup-steps",
         type=int,
-        default=0,
+        default=None,
         help=(
             "Optional untimed simulator steps before measured attribution. "
-            "Non-zero values populate warm-start fields and set warmup_excluded=true."
+            "Defaults to 1 for --step-profile and 0 otherwise; explicit 0 keeps "
+            "cold-start profiling. Non-zero values populate warm-start fields and "
+            "set warmup_excluded=true."
         ),
     )
     parser.add_argument(
@@ -828,7 +835,8 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Collect a compact cProfile hotspot slice from the measured step loop. "
-            "Profiling excludes warmup and environment setup/reset."
+            "Profiling excludes environment setup/reset and uses one warmup step by "
+            "default unless --warmup-steps is explicit."
         ),
     )
     parser.add_argument(

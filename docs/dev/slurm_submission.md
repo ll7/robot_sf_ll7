@@ -155,6 +155,34 @@ Submission state rules:
 - Public issue/PR comments may include job id and partition for traceability, but must not include private host
   names, account/QoS details, scratch paths, or private retrieval mechanics.
 
+## Capacity-aware / fill batches
+
+When submitting a batch intended to fill spare cluster capacity (rather than a single prioritised
+experiment), the batch may include several unrelated ready experiments, but it must satisfy these
+public-safe preconditions before `sbatch`:
+
+1. Live queue evidence: refresh `squeue --me` and partition-wide `squeue` so submissions reflect
+   current load.
+2. Bounded scope: declare a maximum job count, total GPU/CPU budget, or wall-time cap derived from
+   visible spare capacity.
+3. Duplicate checks: each job passes the standard duplicate gate (same issue/objective lane, config,
+   seed set, commit, cluster, job name, output root).
+4. Traceability: every job gets the shared traceability checklist (issue/PR comment or private-ledger
+   handoff plus immediate health check).
+5. Immediate health check: verify `squeue` acceptance after each submission; halt the batch on the
+   first failure.
+6. Polite scheduling: where the scheduler supports it, use `--nice` factors or equivalent to avoid
+   displacing higher-priority work.
+7. Avoid resource starvation: do not saturate a partition so heavily that other users' eligible jobs
+   cannot start within a reasonable window.
+8. Cluster-specific leave-one-way rule (imech192): when submitting on imech192, always preserve at
+   least one GPUxCPU way free for other users unless the queue is empty or the maintainer explicitly
+   overrides.
+
+Capacity-aware batches use the same shared traceability checklist and submission-state rules as any
+other SLURM submission. Private cluster mechanics (hostnames, QoS tuning, scratch paths) stay in the
+private operations overlay and must not appear in public issue/PR comments.
+
 ## Multiple branches from one login node
 
 When two active branches need to submit or monitor SLURM jobs from the same login node, prefer one

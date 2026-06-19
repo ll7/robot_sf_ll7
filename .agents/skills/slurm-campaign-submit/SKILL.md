@@ -71,6 +71,33 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
     relevant analysis skill or context note, while `failed_preflight` or early wrapper failures must
     be fixed in a worktree before resubmission.
 
+## Capacity-aware / fill batches
+
+When the goal is to fill available cluster capacity rather than run a prioritised experiment, the
+batch may contain several unrelated ready experiments, but all preconditions in this section must be
+satisfied before `sbatch`:
+
+- Live queue evidence: refresh `squeue --me` and `squeue` cluster-wide (or partition-wide) so the
+  submission reflects current load, not stale logs.
+- Bounded scope: the batch must have a declared maximum job count, total GPU/CPU budget, or
+  wall-time cap derived from visible spare capacity.
+- Duplicate checks: each job in the batch passes the standard duplicate gate (same issue/objective
+  lane, config, seed set, commit, cluster, job name, output root).
+- Traceability: every submitted job gets the shared traceability checklist update (issue/PR comment
+  or private-ledger handoff plus immediate health check).
+- Immediate health check: verify `squeue` acceptance after each submission; halt the batch on the
+  first health-check failure.
+- Polite scheduling: where the scheduler supports it, use `--nice` factors or equivalent to avoid
+  displacing higher-priority work.
+- Avoid resource starvation: do not saturate a partition so heavily that other users' eligible jobs
+  cannot start within a reasonable window.
+- Cluster-specific leave-one-way rule (imech192): when submitting on imech192, always preserve at
+  least one GPUxCPU way free for other users unless the queue is empty or the maintainer explicitly
+  overrides.
+
+Fill batches are not mandatory proof of cluster citizenship; they are an optional capacity-filling
+mode. The single `gse-` background lane in `goal-slurm-experiment` remains independent.
+
 ## Guardrails
 
 - Do not infer live cluster capacity from stale logs.

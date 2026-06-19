@@ -23,6 +23,11 @@ output_schema: skill_run_summary.v1
 Use this skill for the always-on background training lane: keep at most one skill-owned learning or
 training SLURM job pending/running, and when none exists, find and prepare the best next experiment.
 
+This skill governs the single `gse-` background job lane only. It does not restrict explicit
+capacity-aware batch or campaign workflows that are submitted through `slurm-campaign-submit`
+under separate preconditions (live queue/capacity evidence, bounded scope, duplicate checks,
+traceability, and immediate health checks).
+
 It orchestrates:
 
 - `experiment-context` for canonical config, command, artifact, and validation routing.

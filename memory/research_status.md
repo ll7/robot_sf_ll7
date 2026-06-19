@@ -9,19 +9,19 @@ metadata:
 
 # Robot SF Research Status
 
-**Last Updated**: 2026-06-19  
-**Status Tracking**: GitHub Projects #5 (advisory prioritization)  
+**Last Updated**: 2026-06-19
+**Status Tracking**: GitHub Projects #5 (advisory prioritization)
 **Related**: [Benchmark Platform Status](benchmark_platform_status.md)
 
 ## Active Research Areas
 
 ### 1. Social Compliance Metric (Exploratory → Candidate)
 
-**Status**: Exploratory  
+**Status**: Exploratory
 **Hypothesis**: Social compliance (respecting pedestrian comfort, maintaining safe distances) is
 orthogonal to success/efficiency metrics and should be measured separately.
 
-**Evidence**: Smoke evidence  
+**Evidence**: Smoke evidence
 - Metric contract defined in PR #3088
 - Component probes: proximity comfort, trajectory smoothness, interaction naturalness
 - Next step: Integration into SNQI weighting framework
@@ -32,10 +32,10 @@ orthogonal to success/efficiency metrics and should be measured separately.
 
 ### 2. Route Corridor Subgoal Recovery (Blocked)
 
-**Status**: Blocked  
+**Status**: Blocked
 **Issue**: Planners occasionally deviate from route corridor; recovery logic unclear.
 
-**Evidence**: Diagnostic-only  
+**Evidence**: Diagnostic-only
 - Related corner cases are tracked in issue-specific benchmark and context notes; no single
   canonical issue is assigned in this memory entry yet.
 - Current fallback: Reset planner state (crude but effective)
@@ -54,11 +54,11 @@ orthogonal to success/efficiency metrics and should be measured separately.
 
 ### 3. Adversarial Scenario Search (Exploratory)
 
-**Status**: Exploratory; diagnostic-only results  
+**Status**: Exploratory; diagnostic-only results
 **Hypothesis**: Automated search can find pedestrian configurations that expose planner failures
 faster than manual scenario design.
 
-**Evidence**: Diagnostic  
+**Evidence**: Diagnostic
 - Scenario generation profile coverage is still being consolidated across issue-specific notes.
 - Tool: `scripts/tools/generate_adversarial_scenario_manifests.py` (experimental)
 - Limitation: No ground truth for "interesting" adversarial scenario (subjective)
@@ -72,10 +72,10 @@ measure repeatability across planner families
 
 ### 4. Planner Readiness Matrix (Candidate)
 
-**Status**: Candidate; nominal benchmark evidence  
+**Status**: Candidate; nominal benchmark evidence
 **Deliverable**: Matrix showing which planners are ready for which map families / scenario types.
 
-**Evidence**: Published  
+**Evidence**: Published
 - Matrix generated in PR #3087
 - Covers SocialForce, PPO, Random across standard H500 maps
 - Shows success rate, SNQI by map family
@@ -88,11 +88,11 @@ measure repeatability across planner families
 
 ### 5. Multi-Pedestrian Family Investigation (Smoke)
 
-**Status**: Smoke evidence  
+**Status**: Smoke evidence
 **Hypothesis**: Varying pedestrian dynamics (SocialForce parameters, crowd size) reveals planner
 robustness gaps.
 
-**Evidence**: Smoke  
+**Evidence**: Smoke
 - Smoke runs completed on H500 subset (Issue #1015)
 - Preliminary result: PPO more sensitive to crowd size than SocialForce
 - Need: Full benchmark run for nominal evidence
@@ -162,19 +162,19 @@ When work is blocked:
 
 ### H500 Validation Campaign
 
-**Tracking**: Issue #1049  
-**Status**: In progress  
-**Scope**: Full benchmark validation of H500 route set under nominal benchmark contract  
-**Timeline**: Ongoing; checkpoint results at 25/50/75/100 map completion  
+**Tracking**: Issue #1049
+**Status**: In progress
+**Scope**: Full benchmark validation of H500 route set under nominal benchmark contract
+**Timeline**: Ongoing; checkpoint results at 25/50/75/100 map completion
 **Evidence**: Nominal (108 tests passing); full campaign = paper-grade
 
 ### Semantic Blocker Audit
 
-**Tracking**: Issue #1057  
-**Status**: In progress  
+**Tracking**: Issue #1057
+**Status**: In progress
 **Scope**: Audit planner implementations for unintended blocking behavior (e.g., SocialForce
-collision detection edge cases)  
-**Output**: Issue-specific context note with reproduction configs  
+collision detection edge cases)
+**Output**: Issue-specific context note with reproduction configs
 **Evidence**: Diagnostic + smoke evidence for identified cases
 
 ---

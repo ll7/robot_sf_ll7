@@ -11,9 +11,9 @@ metadata:
 
 # Issue #790 SAC Planner Action Semantics Mismatch
 
-**Status**: Resolved  
-**Issue**: [#790](https://github.com/ll7/robot_sf_ll7/issues/790)  
-**Branch**: (feature branch if tracked)  
+**Status**: Resolved
+**Issue**: [#790](https://github.com/ll7/robot_sf_ll7/issues/790)
+**Branch**: (feature branch if tracked)
 **Last Updated**: 2026-06-19
 
 ## Problem Statement

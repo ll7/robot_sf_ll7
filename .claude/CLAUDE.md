@@ -130,6 +130,6 @@ See [`.agents/skills/README.md`](../.agents/skills/README.md) for full matrix. C
 
 ---
 
-**Last Updated**: 2026-06-19  
-**Maintainer**: See [`docs/maintainer_values.md`](../docs/maintainer_values.md)  
+**Last Updated**: 2026-06-19
+**Maintainer**: See [`docs/maintainer_values.md`](../docs/maintainer_values.md)
 **Changelog**: See [`CHANGELOG.md`](../CHANGELOG.md) for recent project updates

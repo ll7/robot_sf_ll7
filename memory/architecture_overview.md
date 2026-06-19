@@ -8,8 +8,8 @@ metadata:
 
 # Robot SF Architecture Overview
 
-**Status**: Stable reference  
-**Last Updated**: 2026-06-19  
+**Status**: Stable reference
+**Last Updated**: 2026-06-19
 **Related**: [Benchmark Platform Status](benchmark_platform_status.md)
 
 ## Core Layers

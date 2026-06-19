@@ -9,9 +9,9 @@ metadata:
 
 # Social Navigation Benchmark Platform Status
 
-**Status**: Fully operational  
-**Last Updated**: 2026-06-19  
-**Evidence Grade**: Nominal benchmark evidence (108 tests passing)  
+**Status**: Fully operational
+**Last Updated**: 2026-06-19
+**Evidence Grade**: Nominal benchmark evidence (108 tests passing)
 **Related**: [Architecture Overview](architecture_overview.md)
 
 ## Platform Overview
@@ -121,7 +121,7 @@ When benchmark execution cannot complete under ideal conditions:
 
 ### Candidate Planners
 
-Status: **Blocked** pending architectural decision  
+Status: **Blocked** pending architectural decision
 - Hybrid (rule-based + learning): Design phase
 - Graph-based (visibility graph, RRT): Integration pending
 - Learning-based variants (DQN, SAC): Reference implementation only
@@ -130,7 +130,7 @@ Status: **Blocked** pending architectural decision
 
 ### Scenario Generation
 
-Status: **Exploratory**  
+Status: **Exploratory**
 - Adversarial scenario search: in progress across issue-specific context notes.
 - Map synthesis: Diagnostic-only results
 

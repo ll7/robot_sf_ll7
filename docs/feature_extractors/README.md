@@ -4,6 +4,13 @@ This directory contains documentation for the enhanced feature extraction system
 alternative feature extractors while keeping full backward compatibility with the original
 `DynamicsExtractor`.
 
+Import topology:
+
+- `robot_sf.feature_extractor` is the legacy compatibility module for the original
+  `DynamicsExtractor`.
+- `robot_sf.feature_extractors` is the canonical namespace for new extractor implementations,
+  presets, and configuration helpers.
+
 ## Quick Start
 
 ```python
@@ -27,7 +34,7 @@ model.learn(total_timesteps=100_000)
 ## Available Feature Extractors
 
 ### 1. Original DynamicsExtractor (Legacy)
-- **File**: `robot_sf/feature_extractor.py`
+- **File**: `robot_sf/feature_extractor.py` (legacy compatibility module)
 - **Description**: Original convolutional approach with multiple layers
 - **Parameters**: ~5K (conv mode) or 0 (flatten mode)
 - **Use Case**: Baseline comparison, established performance

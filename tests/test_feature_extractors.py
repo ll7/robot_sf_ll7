@@ -10,6 +10,7 @@ import pytest
 import torch as th
 from gymnasium import spaces
 
+from robot_sf.feature_extractor import DynamicsExtractor
 from robot_sf.feature_extractors import (
     AttentionFeatureExtractor,
     LightweightCNNExtractor,
@@ -244,6 +245,19 @@ class TestFeatureExtractors:
             assert features.shape[0] == 2  # Batch size
             assert features.shape[1] == extractor.features_dim
 
+    def test_dynamics_legacy_import_stays_supported(self, observation_space, sample_observation):
+        """Test importing, instantiating, and running the legacy DynamicsExtractor entrypoint."""
+        extractor = DynamicsExtractor(observation_space)
+
+        assert isinstance(extractor, DynamicsExtractor)
+        assert extractor.features_dim > 0
+
+        features = extractor(sample_observation)
+        assert isinstance(features, th.Tensor)
+        assert features.shape[0] == 2
+        assert features.shape[1] == extractor.features_dim
+        assert not th.isnan(features).any()
+
 
 class TestFeatureExtractorConfig:
     """Test feature extractor configuration system."""
@@ -257,6 +271,11 @@ class TestFeatureExtractorConfig:
         assert config.extractor_type == FeatureExtractorType.MLP
         assert config.params["ray_hidden_dims"] == [128, 64]
         assert config.get_extractor_class() == MLPFeatureExtractor
+
+    def test_dynamics_config_routes_to_legacy_class(self):
+        """Test that dynamics config resolves to the legacy DynamicsExtractor class."""
+        config = FeatureExtractorConfig(extractor_type=FeatureExtractorType.DYNAMICS)
+        assert config.get_extractor_class() is DynamicsExtractor
 
     def test_config_policy_kwargs(self):
         """Test generating policy kwargs from config."""

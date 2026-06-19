@@ -1,5 +1,6 @@
 """Contract coverage for deterministic large-crowd step-profile telemetry."""
 
+from argparse import Namespace
 from pathlib import Path
 
 from scripts.validation import performance_smoke_test
@@ -9,13 +10,13 @@ def test_large_crowd_step_profile_contract(monkeypatch) -> None:
     """Smoke profile output includes deterministic scenario + advisory metadata."""
 
     repo_root = Path(__file__).resolve().parents[2]
-    scenario_path = repo_root / "configs/scenarios/archetypes/classic_group_crossing.yaml"
+    scenario_path = repo_root / "configs/scenarios/single/dense_pedestrian_stress.yaml"
     scenario_metadata = performance_smoke_test.ScenarioProfileMetadata(
-        scenario_id="classic_group_crossing_high",
-        scenario_name="classic_group_crossing_high",
+        scenario_id="dense_pedestrian_stress",
+        scenario_name="dense_pedestrian_stress",
         scenario_path=str(scenario_path),
         density="high",
-        density_advisory="high_density_stress",
+        density_advisory="diagnostic_stress_only",
     )
 
     monkeypatch.setattr(
@@ -53,23 +54,23 @@ def test_large_crowd_step_profile_contract(monkeypatch) -> None:
     monkeypatch.setattr(
         performance_smoke_test,
         "_measure_profile_pedestrian_count",
-        lambda config=None: 142,
+        lambda config=None: 17,
     )
     monkeypatch.setattr(
         performance_smoke_test,
         "_load_scenario_config",
         lambda scenario, *, scenario_name=None: (
             performance_smoke_test.RobotSimulationConfig(),
-            scenario_name or "classic_group_crossing_high",
+            scenario_name or "dense_pedestrian_stress",
             scenario_metadata,
         ),
     )
 
     result = performance_smoke_test.run_performance_smoke_test(
         num_resets=2,
-        step_samples=3,
+        step_samples=20,
         scenario=str(scenario_path),
-        scenario_name="classic_group_crossing_high",
+        scenario_name="dense_pedestrian_stress",
         include_recommendations=False,
         creation_soft=3.0,
         creation_hard=8.0,
@@ -82,14 +83,14 @@ def test_large_crowd_step_profile_contract(monkeypatch) -> None:
     payload = result.to_dict()
     step_profile = payload["step_profile"]
 
-    assert payload["scenario"] == "classic_group_crossing_high"
+    assert payload["scenario"] == "dense_pedestrian_stress"
     assert step_profile is not None
-    assert step_profile["scenario_id"] == "classic_group_crossing_high"
-    assert step_profile["scenario_name"] == "classic_group_crossing_high"
+    assert step_profile["scenario_id"] == "dense_pedestrian_stress"
+    assert step_profile["scenario_name"] == "dense_pedestrian_stress"
     assert step_profile["scenario_path"] == str(scenario_path)
     assert step_profile["density"] == "high"
-    assert step_profile["density_advisory"] == "high_density_stress"
-    assert step_profile["step_samples"] == 3
+    assert step_profile["density_advisory"] == "diagnostic_stress_only"
+    assert step_profile["step_samples"] == 20
     assert step_profile["first_step_sec"] == 0.2
     assert step_profile["step_loop_sec"] == 1.0
     assert step_profile["steady_step_loop_sec"] == 0.8
@@ -100,9 +101,39 @@ def test_large_crowd_step_profile_contract(monkeypatch) -> None:
     assert step_profile["warmup_step_loop_sec"] is None
     assert step_profile["warmup_steps_per_sec"] is None
     assert step_profile["measurement_mode"] == "cold_only"
-    assert step_profile["pedestrian_count"] == 142
+    assert step_profile["pedestrian_count"] == 17
     assert step_profile["advisory"] is True
     assert step_profile["gating"] == "non-gating"
+
+
+def test_large_crowd_profile_preset_selects_dense_diagnostic_fixture() -> None:
+    """The CLI preset names the reproducible dense stress profiling command."""
+
+    args = Namespace(
+        large_crowd_profile=True,
+        scenario=None,
+        step_samples=None,
+    )
+
+    performance_smoke_test._apply_large_crowd_profile_preset(args)
+
+    assert args.scenario == "configs/scenarios/single/dense_pedestrian_stress.yaml"
+    assert args.step_samples == 20
+
+
+def test_large_crowd_profile_preset_keeps_explicit_overrides() -> None:
+    """Explicit scenario and sample choices win over the convenience preset."""
+
+    args = Namespace(
+        large_crowd_profile=True,
+        scenario="configs/scenarios/archetypes/classic_group_crossing.yaml",
+        step_samples=10,
+    )
+
+    performance_smoke_test._apply_large_crowd_profile_preset(args)
+
+    assert args.scenario == "configs/scenarios/archetypes/classic_group_crossing.yaml"
+    assert args.step_samples == 10
 
 
 def test_large_crowd_step_profile_reuses_first_step_ped_count(monkeypatch) -> None:

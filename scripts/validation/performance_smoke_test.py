@@ -48,6 +48,10 @@ from robot_sf.training.scenario_loader import (
     select_scenario,
 )
 
+_DEFAULT_STEP_SAMPLES = 10
+_LARGE_CROWD_PROFILE_SCENARIO = "configs/scenarios/single/dense_pedestrian_stress.yaml"
+_LARGE_CROWD_PROFILE_STEP_SAMPLES = 20
+
 
 @dataclass(slots=True)
 class StepLoopMetrics:
@@ -609,7 +613,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--step-samples",
         type=int,
-        default=10,
+        default=None,
         help="Number of simulator steps for advisory startup/steady attribution (default: 10)",
     )
     parser.add_argument(
@@ -646,6 +650,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Emit recommendation guidance when thresholds breach",
     )
+    parser.add_argument(
+        "--large-crowd-profile",
+        action="store_true",
+        help=(
+            "Use the dense pedestrian diagnostic stress fixture and 20 measured steps "
+            "unless --scenario or --step-samples override them."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -660,6 +672,9 @@ def main() -> int:  # noqa: C901
     print("=" * 60)
 
     args = parse_args()
+    _apply_large_crowd_profile_preset(args)
+    if args.step_samples is None:
+        args.step_samples = _DEFAULT_STEP_SAMPLES
 
     creation_soft = _env_float("ROBOT_SF_PERF_CREATION_SOFT", 3.0)
     creation_hard = _env_float("ROBOT_SF_PERF_CREATION_HARD", 8.0)
@@ -757,6 +772,17 @@ def _default_summary_path() -> Path:
     """
     ensure_canonical_tree(categories=("benchmarks",))
     return get_artifact_category_path("benchmarks") / "performance_smoke_test.json"
+
+
+def _apply_large_crowd_profile_preset(args: argparse.Namespace) -> None:
+    """Apply the built-in high-density diagnostic profile preset in-place."""
+
+    if not args.large_crowd_profile:
+        return
+    if args.scenario is None:
+        args.scenario = _LARGE_CROWD_PROFILE_SCENARIO
+    if args.step_samples is None:
+        args.step_samples = _LARGE_CROWD_PROFILE_STEP_SAMPLES
 
 
 def _status_label(soft_ok: bool, hard_ok: bool, enforce: bool) -> str:

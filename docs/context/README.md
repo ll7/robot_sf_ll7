@@ -145,6 +145,10 @@ knowledge, not every transient iteration detail.
   [issue_3063_campaign_comparison_report.md](issue_3063_campaign_comparison_report.md)
   records the analysis-only result-store report path, fixture proof, row-status caveats, and
   follow-up boundary before any benchmark or paper-facing claim.
+* Issue #3062 campaign manifest flow:
+  [issue_3062_campaign_manifest_flow.md](issue_3062_campaign_manifest_flow.md)
+  records the reusable research-campaign manifest contract, example manifest, output boundary, and
+  validation path before runner-specific automation treats manifests as benchmark evidence.
 * Active research-lane scientific states:
   [research_lane_states.md](research_lane_states.md)
 * Issue #2571 Active Research Queue:

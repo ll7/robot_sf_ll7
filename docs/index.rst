@@ -82,6 +82,7 @@ references.
    :maxdepth: 1
 
    Developer Guide <dev_guide>
+   API Reference <api/index>
    Environment API <ENVIRONMENT>
    Observation Contract <dev/observation_contract>
    Helper Catalog <dev/helper_catalog>

@@ -57,6 +57,10 @@ Location: `scripts/validation/performance_smoke_test.py`
   - `step_loop.steady_step_loop_sec`
   - `step_loop.steps_per_sec`
   - `step_loop.steady_steps_per_sec`
+  - `step_loop.measurement_mode`
+  - `step_loop.warmup_excluded`
+  - `step_loop.warmup_first_step_sec`, `step_loop.warmup_step_loop_sec`, and
+    `step_loop.warmup_steps_per_sec` when explicit warmup attribution is requested
 
 Large-crowd profiling now emits an additive `step_profile` contract block:
 - `step_profile.advisory` (always `true` for this profile)
@@ -67,12 +71,19 @@ Large-crowd profiling now emits an additive `step_profile` contract block:
 - `step_profile.step_loop_sec`
 - `step_profile.steady_step_loop_sec`, `step_profile.steady_steps_per_sec`
 - `step_profile.steps_per_sec`
+- `step_profile.measurement_mode`, `step_profile.warmup_excluded`
+- `step_profile.warmup_first_step_sec`, `step_profile.warmup_step_loop_sec`, and
+  `step_profile.warmup_steps_per_sec` when explicit warmup attribution is requested
 - `step_profile.pedestrian_count` (when observed after reset/step)
 
 These fields are advisory and are for diagnostic reproducibility; they are not benchmark gates.
 
 The step-loop fields help classify local slowdowns but do not add hard smoke-test gates by
-default. Use `--step-samples` to tune the advisory sample count for local diagnosis.
+default. Use `--step-samples` to tune the advisory sample count for local diagnosis. By default,
+`first_step_sec`, `step_loop_sec`, and `steps_per_sec` measure the cold first step after reset.
+Use `--warmup-steps` only when you intentionally want warm-start attribution; warm-start output is
+flagged with `measurement_mode` and `warmup_excluded` so it cannot be mistaken for cold-start
+performance evidence.
 
 **Usage**:
 ```bash
@@ -89,6 +100,14 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
     --scenario-name classic_group_crossing_high \
     --step-samples 3 --num-resets 1 \
     --json-output output/benchmarks/perf/issue_3025_smoke.json
+
+# Explicit warm-start attribution for startup/JIT diagnosis only; not a runtime speedup claim
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python scripts/validation/performance_smoke_test.py \
+    --scenario configs/scenarios/archetypes/classic_group_crossing.yaml \
+    --scenario-name classic_group_crossing_high \
+    --step-samples 3 --warmup-steps 1 --num-resets 1 \
+    --json-output output/benchmarks/perf/issue_3025_warmup_attribution.json
 ```
 
 ### Cold/Warm Regression Suite

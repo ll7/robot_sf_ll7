@@ -51,7 +51,12 @@ from robot_sf.training.scenario_loader import (
 
 @dataclass(slots=True)
 class StepLoopMetrics:
-    """Advisory simulator step-loop attribution for performance smoke output."""
+    """Advisory simulator step-loop attribution for performance smoke output.
+
+    Cold-path metrics are always reported in ``first_step_sec``, ``step_loop_sec``,
+    and ``steps_per_sec`` and should correspond to the first real ``env.step``
+    after a reset.
+    """
 
     step_samples: int
     first_step_sec: float
@@ -59,8 +64,13 @@ class StepLoopMetrics:
     steady_step_loop_sec: float
     steps_per_sec: float
     steady_steps_per_sec: float
+    warmup_excluded: bool = False
+    warmup_first_step_sec: float | None = None
+    warmup_step_loop_sec: float | None = None
+    warmup_steps_per_sec: float | None = None
+    measurement_mode: str = "cold_only"
 
-    def to_dict(self) -> dict[str, float | int]:
+    def to_dict(self) -> dict[str, float | int | bool | str | None]:
         """Serialize step-loop metrics to a JSON-friendly mapping."""
         return {
             "step_samples": self.step_samples,
@@ -69,6 +79,11 @@ class StepLoopMetrics:
             "steady_step_loop_sec": self.steady_step_loop_sec,
             "steps_per_sec": self.steps_per_sec,
             "steady_steps_per_sec": self.steady_steps_per_sec,
+            "warmup_excluded": self.warmup_excluded,
+            "warmup_first_step_sec": self.warmup_first_step_sec,
+            "warmup_step_loop_sec": self.warmup_step_loop_sec,
+            "warmup_steps_per_sec": self.warmup_steps_per_sec,
+            "measurement_mode": self.measurement_mode,
         }
 
 
@@ -93,12 +108,17 @@ class StepProfileMetrics:
     steady_step_loop_sec: float
     steps_per_sec: float
     steady_steps_per_sec: float
-    scenario_id: str | None
-    scenario_name: str | None
-    scenario_path: str | None
-    density: str | None
-    density_advisory: str | None
-    pedestrian_count: int | None
+    warmup_excluded: bool = False
+    warmup_first_step_sec: float | None = None
+    warmup_step_loop_sec: float | None = None
+    warmup_steps_per_sec: float | None = None
+    measurement_mode: str = "cold_only"
+    scenario_id: str | None = None
+    scenario_name: str | None = None
+    scenario_path: str | None = None
+    density: str | None = None
+    density_advisory: str | None = None
+    pedestrian_count: int | None = None
     advisory: bool = True
     gating: str = "non-gating"
 
@@ -116,6 +136,11 @@ class StepProfileMetrics:
             "steady_step_loop_sec": self.steady_step_loop_sec,
             "steps_per_sec": self.steps_per_sec,
             "steady_steps_per_sec": self.steady_steps_per_sec,
+            "warmup_excluded": self.warmup_excluded,
+            "warmup_first_step_sec": self.warmup_first_step_sec,
+            "warmup_step_loop_sec": self.warmup_step_loop_sec,
+            "warmup_steps_per_sec": self.warmup_steps_per_sec,
+            "measurement_mode": self.measurement_mode,
             "pedestrian_count": self.pedestrian_count,
             "advisory": self.advisory,
             "gating": self.gating,
@@ -290,9 +315,10 @@ def _measure_profile_pedestrian_count(config: RobotSimulationConfig | None = Non
         env.close()
 
 
-def measure_step_loop_performance(
+def measure_step_loop_performance(  # noqa: C901
     step_samples: int = 10,
     config: RobotSimulationConfig | None = None,
+    warmup_steps: int = 0,
 ) -> StepLoopMetrics:
     """Measure first-step and steady step-loop attribution.
 
@@ -303,12 +329,42 @@ def measure_step_loop_performance(
 
     if step_samples <= 0:
         raise ValueError("step_samples must be greater than zero")
+    if warmup_steps < 0:
+        raise ValueError("warmup_steps must be non-negative")
 
     print("\n=== Step Loop Attribution ===")
     env = make_robot_env(config=copy.deepcopy(config or RobotSimulationConfig()), debug=False)
     action = (0.0, 0.0)
+
     try:
         env.reset()
+
+        warmup_excluded = False
+        warmup_first_step_sec = None
+        warmup_step_loop_sec = None
+        warmup_steps_per_sec = None
+        measurement_mode = "cold_only"
+
+        terminated = False
+        truncated = False
+        if warmup_steps > 0:
+            measurement_mode = "cold_with_warmup"
+            warmup_excluded = True
+            warm_start = time.time()
+            for sample in range(warmup_steps):
+                if sample > 0:
+                    # Keep the warmup run independent of the measured cold path.
+                    if terminated or truncated:
+                        env.reset()
+                step_start = time.time()
+                _, _, terminated, truncated, _ = env.step(action)
+                if sample == 0:
+                    warmup_first_step_sec = time.time() - step_start
+            warmup_step_loop_sec = time.time() - warm_start
+            warmup_steps_per_sec = (
+                warmup_steps / warmup_step_loop_sec if warmup_step_loop_sec > 0 else 0.0
+            )
+            env.reset()
 
         loop_start = time.time()
         first_step_start = time.time()
@@ -350,6 +406,11 @@ def measure_step_loop_performance(
         steady_step_loop_sec=steady_step_loop_sec,
         steps_per_sec=steps_per_sec,
         steady_steps_per_sec=steady_steps_per_sec,
+        warmup_excluded=warmup_excluded,
+        warmup_first_step_sec=warmup_first_step_sec,
+        warmup_step_loop_sec=warmup_step_loop_sec,
+        warmup_steps_per_sec=warmup_steps_per_sec,
+        measurement_mode=measurement_mode,
     )
 
 
@@ -373,6 +434,11 @@ def measure_step_profile(
         steady_step_loop_sec=loop_metrics.steady_step_loop_sec,
         steps_per_sec=loop_metrics.steps_per_sec,
         steady_steps_per_sec=loop_metrics.steady_steps_per_sec,
+        warmup_excluded=loop_metrics.warmup_excluded,
+        warmup_first_step_sec=loop_metrics.warmup_first_step_sec,
+        warmup_step_loop_sec=loop_metrics.warmup_step_loop_sec,
+        warmup_steps_per_sec=loop_metrics.warmup_steps_per_sec,
+        measurement_mode=loop_metrics.measurement_mode,
         scenario_id=scenario_metadata.scenario_id if scenario_metadata is not None else None,
         scenario_name=scenario_metadata.scenario_name if scenario_metadata is not None else None,
         scenario_path=scenario_metadata.scenario_path if scenario_metadata is not None else None,
@@ -388,6 +454,7 @@ def run_performance_smoke_test(  # noqa: PLR0913
     *,
     num_resets: int = 5,
     step_samples: int = 10,
+    warmup_steps: int = 0,
     scenario: str | None = None,
     scenario_name: str | None = None,
     include_recommendations: bool = True,
@@ -402,6 +469,10 @@ def run_performance_smoke_test(  # noqa: PLR0913
 
     Args:
         num_resets: Number of resets to run for throughput measurement.
+        step_samples: Number of measured simulator steps for advisory attribution.
+        warmup_steps: Optional untimed steps before the measured loop. When non-zero,
+            warm-start fields are populated and cold fields are flagged with
+            ``warmup_excluded`` so callers do not treat them as cold-start timings.
         scenario: Optional scenario config path used to load a custom config.
         scenario_name: Optional scenario name/id to select from a multi-scenario config.
         include_recommendations: Include guidance strings in the result payload.
@@ -417,6 +488,8 @@ def run_performance_smoke_test(  # noqa: PLR0913
     """
     if step_samples <= 0:
         raise ValueError("step_samples must be greater than zero")
+    if warmup_steps < 0:
+        raise ValueError("warmup_steps must be non-negative")
 
     creation_soft = (
         creation_soft
@@ -443,7 +516,11 @@ def run_performance_smoke_test(  # noqa: PLR0913
     )
     creation_time = measure_environment_creation(config)
     perf_metrics = measure_environment_performance(num_resets, config=config)
-    step_loop = measure_step_loop_performance(step_samples, config=config)
+    step_loop = measure_step_loop_performance(
+        step_samples,
+        config=config,
+        warmup_steps=warmup_steps,
+    )
     step_profile = measure_step_profile(
         step_samples=step_samples,
         config=config,
@@ -530,6 +607,15 @@ def parse_args() -> argparse.Namespace:
         help="Number of simulator steps for advisory startup/steady attribution (default: 10)",
     )
     parser.add_argument(
+        "--warmup-steps",
+        type=int,
+        default=0,
+        help=(
+            "Optional untimed simulator steps before measured attribution. "
+            "Non-zero values populate warm-start fields and set warmup_excluded=true."
+        ),
+    )
+    parser.add_argument(
         "--json-output",
         type=Path,
         help="Override the JSON summary path (defaults to output/benchmarks/performance_smoke_test.json)",
@@ -557,7 +643,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
+def main() -> int:  # noqa: C901
     """TODO docstring. Document this function.
 
 
@@ -585,6 +671,7 @@ def main() -> int:
     result = run_performance_smoke_test(
         num_resets=args.num_resets,
         step_samples=args.step_samples,
+        warmup_steps=args.warmup_steps,
         scenario=args.scenario,
         scenario_name=args.scenario_name,
         include_recommendations=args.include_recommendations,
@@ -612,8 +699,16 @@ def main() -> int:
         f"loop={result.step_loop.step_loop_sec:.3f}s "
         f"({result.step_loop.steps_per_sec:.2f} steps/sec), "
         f"steady={result.step_loop.steady_step_loop_sec:.3f}s "
-        f"({result.step_loop.steady_steps_per_sec:.2f} steady steps/sec)",
+        f"({result.step_loop.steady_steps_per_sec:.2f} steady steps/sec), "
+        f"measurement_mode={result.step_loop.measurement_mode}, "
+        f"warmup_excluded={result.step_loop.warmup_excluded}",
     )
+    if result.step_loop.warmup_excluded:
+        print(
+            f"Warmup attribution: first={result.step_loop.warmup_first_step_sec:.3f}s "
+            f"loop={result.step_loop.warmup_step_loop_sec:.3f}s "
+            f"({result.step_loop.warmup_steps_per_sec:.2f} steps/sec)",
+        )
     if result.step_profile is not None:
         print(
             f"Step profile: {result.step_profile.advisory=} gating={result.step_profile.gating} "
@@ -757,6 +852,11 @@ def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
         "timestamp_ms": int(result.timestamp.timestamp() * 1000),
         "step_id": "performance_smoke_test",
         "steps_per_sec": result.resets_per_sec,
+        "measurement_mode": result.step_loop.measurement_mode,
+        "warmup_excluded": result.step_loop.warmup_excluded,
+        "warmup_first_step_sec": result.step_loop.warmup_first_step_sec,
+        "warmup_step_loop_sec": result.step_loop.warmup_step_loop_sec,
+        "warmup_steps_per_sec": result.step_loop.warmup_steps_per_sec,
         "first_step_sec": result.step_loop.first_step_sec,
         "step_loop_sec": result.step_loop.step_loop_sec,
         "steady_step_loop_sec": result.step_loop.steady_step_loop_sec,

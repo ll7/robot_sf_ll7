@@ -36,13 +36,18 @@ def test_large_crowd_step_profile_contract(monkeypatch) -> None:
     monkeypatch.setattr(
         performance_smoke_test,
         "measure_step_loop_performance",
-        lambda step_samples=10, config=None: performance_smoke_test.StepLoopMetrics(
+        lambda step_samples=10, config=None, warmup_steps=0: performance_smoke_test.StepLoopMetrics(
             step_samples=step_samples,
             first_step_sec=0.2,
             step_loop_sec=1.0,
             steady_step_loop_sec=0.8,
             steps_per_sec=3.0,
             steady_steps_per_sec=2.6666666666666665,
+            warmup_excluded=False,
+            warmup_first_step_sec=None,
+            warmup_step_loop_sec=None,
+            warmup_steps_per_sec=None,
+            measurement_mode="cold_only",
         ),
     )
     monkeypatch.setattr(
@@ -90,6 +95,11 @@ def test_large_crowd_step_profile_contract(monkeypatch) -> None:
     assert step_profile["steady_step_loop_sec"] == 0.8
     assert step_profile["steps_per_sec"] == 3.0
     assert step_profile["steady_steps_per_sec"] == 2.6666666666666665
+    assert step_profile["warmup_excluded"] is False
+    assert step_profile["warmup_first_step_sec"] is None
+    assert step_profile["warmup_step_loop_sec"] is None
+    assert step_profile["warmup_steps_per_sec"] is None
+    assert step_profile["measurement_mode"] == "cold_only"
     assert step_profile["pedestrian_count"] == 142
     assert step_profile["advisory"] is True
     assert step_profile["gating"] == "non-gating"

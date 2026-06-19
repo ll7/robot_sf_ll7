@@ -1,11 +1,11 @@
 # Issue #3025 Large-Crowd Step Profile
 
-Date: 2026-06-19  
+Date: 2026-06-19
 Status: diagnostic synthesis; no speedup claim.
 
 ## Scope
 
-Parent issue: <https://github.com/ll7/robot_sf_ll7/issues/3025>  
+Parent issue: <https://github.com/ll7/robot_sf_ll7/issues/3025>
 Supporting PRs: <https://github.com/ll7/robot_sf_ll7/pull/3121>, <https://github.com/ll7/robot_sf_ll7/pull/3122>, <https://github.com/ll7/robot_sf_ll7/pull/3124>, <https://github.com/ll7/robot_sf_ll7/pull/3125>
 
 The merged PRs added a dedicated profiling surface in

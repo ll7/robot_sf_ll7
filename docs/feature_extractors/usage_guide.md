@@ -3,6 +3,13 @@
 This guide provides practical examples and best practices for using the enhanced feature extraction
 system.
 
+Import path guidance:
+
+- Legacy baseline path kept for backward compatibility:
+  `from robot_sf.feature_extractor import DynamicsExtractor`
+- Preferred namespace for new extractors and configuration:
+  `from robot_sf.feature_extractors...`
+
 ## Basic Usage Patterns
 
 ### 1. Quick Start with Presets

@@ -1,4 +1,10 @@
-"""Feature extractors for processing observations in reinforcement learning."""
+"""Legacy feature extractor entrypoint kept for compatibility.
+
+The original ``DynamicsExtractor`` class is preserved here to avoid breaking
+historical imports, training configs, and serialized Stable-Baselines3 policy
+artifacts. The canonical modern feature-extractor namespace is now
+``robot_sf.feature_extractors``.
+"""
 # WARNING: don't move this script or else loading trained SB3 policies might not work
 
 import numpy as np

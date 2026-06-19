@@ -146,6 +146,10 @@ records the diagnostic-only conclusion that actuation feasibility is a secondary
 the matched AMV actuation-smoke pair, not planner-improvement, benchmark, hardware-calibration, or
 paper-facing evidence.
 
+Recent evidence-catalog backlog: [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
+records the 2026-06-19 full evidence-catalog hygiene scan, 116 uncovered tracked evidence bundles
+or files, and the bounded split strategy for future Issue #3014 catalog cleanup PRs.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

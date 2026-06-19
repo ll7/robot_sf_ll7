@@ -157,6 +157,9 @@ knowledge, not every transient iteration detail.
   [issue_3146_forecast_replay_fixture_suite.md](issue_3146_forecast_replay_fixture_suite.md)
   records the scenario-diverse diagnostic forecast replay suite, full variant matrix row
   classifications, and tracked evidence summary.
+* Issue #3014 evidence-catalog backlog:
+  [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
+  records the current uncovered evidence-bundle count and split strategy for catalog cleanup.
 * Active research-lane scientific states:
   [research_lane_states.md](research_lane_states.md)
 * Issue #2571 Active Research Queue:

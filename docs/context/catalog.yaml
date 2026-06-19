@@ -954,6 +954,14 @@ entries:
     status: current
     freshness: dated
     area: predictive_planner
+  - path: docs/context/evidence/issue_1393_gensafenav_source_harness_2026-05-20/report.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1394_crowdnav_height_source_harness_2026-05-20/report.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/README.md
     status: evidence
     freshness: evidence

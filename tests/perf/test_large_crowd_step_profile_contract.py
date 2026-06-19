@@ -1,0 +1,95 @@
+"""Contract coverage for deterministic large-crowd step-profile telemetry."""
+
+from pathlib import Path
+
+from scripts.validation import performance_smoke_test
+
+
+def test_large_crowd_step_profile_contract(monkeypatch) -> None:
+    """Smoke profile output includes deterministic scenario + advisory metadata."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    scenario_path = repo_root / "configs/scenarios/archetypes/classic_group_crossing.yaml"
+    scenario_metadata = performance_smoke_test.ScenarioProfileMetadata(
+        scenario_id="classic_group_crossing_high",
+        scenario_name="classic_group_crossing_high",
+        scenario_path=str(scenario_path),
+        density="high",
+        density_advisory="high_density_stress",
+    )
+
+    monkeypatch.setattr(
+        performance_smoke_test,
+        "measure_environment_creation",
+        lambda config=None: 1.25,
+    )
+    monkeypatch.setattr(
+        performance_smoke_test,
+        "measure_environment_performance",
+        lambda num_resets=5, config=None: {
+            "resets_per_sec": 4.0,
+            "ms_per_reset": 250.0,
+            "total_resets": float(num_resets),
+            "total_time": 0.5,
+        },
+    )
+    monkeypatch.setattr(
+        performance_smoke_test,
+        "measure_step_loop_performance",
+        lambda step_samples=10, config=None: performance_smoke_test.StepLoopMetrics(
+            step_samples=step_samples,
+            first_step_sec=0.2,
+            step_loop_sec=1.0,
+            steady_step_loop_sec=0.8,
+            steps_per_sec=3.0,
+            steady_steps_per_sec=2.6666666666666665,
+        ),
+    )
+    monkeypatch.setattr(
+        performance_smoke_test,
+        "_measure_profile_pedestrian_count",
+        lambda config=None: 142,
+    )
+    monkeypatch.setattr(
+        performance_smoke_test,
+        "_load_scenario_config",
+        lambda scenario, *, scenario_name=None: (
+            performance_smoke_test.RobotSimulationConfig(),
+            scenario_name or "classic_group_crossing_high",
+            scenario_metadata,
+        ),
+    )
+
+    result = performance_smoke_test.run_performance_smoke_test(
+        num_resets=2,
+        step_samples=3,
+        scenario=str(scenario_path),
+        scenario_name="classic_group_crossing_high",
+        include_recommendations=False,
+        creation_soft=3.0,
+        creation_hard=8.0,
+        reset_soft=0.5,
+        reset_hard=0.2,
+        enforce=False,
+        on_ci=False,
+    )
+
+    payload = result.to_dict()
+    step_profile = payload["step_profile"]
+
+    assert payload["scenario"] == "classic_group_crossing_high"
+    assert step_profile is not None
+    assert step_profile["scenario_id"] == "classic_group_crossing_high"
+    assert step_profile["scenario_name"] == "classic_group_crossing_high"
+    assert step_profile["scenario_path"] == str(scenario_path)
+    assert step_profile["density"] == "high"
+    assert step_profile["density_advisory"] == "high_density_stress"
+    assert step_profile["step_samples"] == 3
+    assert step_profile["first_step_sec"] == 0.2
+    assert step_profile["step_loop_sec"] == 1.0
+    assert step_profile["steady_step_loop_sec"] == 0.8
+    assert step_profile["steps_per_sec"] == 3.0
+    assert step_profile["steady_steps_per_sec"] == 2.6666666666666665
+    assert step_profile["pedestrian_count"] == 142
+    assert step_profile["advisory"] is True
+    assert step_profile["gating"] == "non-gating"

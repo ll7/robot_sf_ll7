@@ -58,6 +58,19 @@ Location: `scripts/validation/performance_smoke_test.py`
   - `step_loop.steps_per_sec`
   - `step_loop.steady_steps_per_sec`
 
+Large-crowd profiling now emits an additive `step_profile` contract block:
+- `step_profile.advisory` (always `true` for this profile)
+- `step_profile.gating` (`"non-gating"`)
+- `step_profile.scenario_id`, `step_profile.scenario_name`, `step_profile.scenario_path`
+- `step_profile.density` and `step_profile.density_advisory` when present in scenario metadata
+- `step_profile.step_samples`, `step_profile.first_step_sec`
+- `step_profile.step_loop_sec`
+- `step_profile.steady_step_loop_sec`, `step_profile.steady_steps_per_sec`
+- `step_profile.steps_per_sec`
+- `step_profile.pedestrian_count` (when observed after reset/step)
+
+These fields are advisory and are for diagnostic reproducibility; they are not benchmark gates.
+
 The step-loop fields help classify local slowdowns but do not add hard smoke-test gates by
 default. Use `--step-samples` to tune the advisory sample count for local diagnosis.
 
@@ -68,6 +81,14 @@ DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
   uv run python scripts/validation/performance_smoke_test.py --step-samples 10
 
 # Results saved to: output/benchmarks/performance_smoke_test.json
+
+# High-density advisory snapshot for [issue #3025](https://github.com/ll7/robot_sf_ll7/issues/3025)
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+  uv run python scripts/validation/performance_smoke_test.py \
+    --scenario configs/scenarios/archetypes/classic_group_crossing.yaml \
+    --scenario-name classic_group_crossing_high \
+    --step-samples 3 --num-resets 1 \
+    --json-output output/benchmarks/perf/issue_3025_smoke.json
 ```
 
 ### Cold/Warm Regression Suite

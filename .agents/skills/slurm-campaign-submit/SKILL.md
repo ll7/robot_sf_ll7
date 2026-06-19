@@ -52,9 +52,17 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
    shows the intended config, launcher, job name, output root, and duplicate-check evidence.
 8. Submit non-queue campaigns with explicit config and job name; capture job ID plus stdout/stderr paths.
 9. Record output root and expected artifacts: manifest, checkpoint, report, metrics, videos, or release bundle.
-10. Classify status as `submitted`, `blocked`, or `failed_preflight`; classify failures as config, cluster capacity, wrapper, dependency, or unknown.
-11. Hand artifact classification to `artifact-provenance` before downstream reports depend on local `output/`.
-12. After completion or predeclared cancellation, route results before rerunning:
+10. Classify pre-health status as `route_accepted`, `blocked`, or `failed_preflight`; classify
+    successful route acceptance with missing issue/PR or private-ledger traceability as
+    `partial_traceable`; classify failures as config, cluster capacity, wrapper, dependency, or unknown.
+11. Immediately run a submission health check (`squeue`, `sacct`, initial stderr availability) and apply the
+    shared checklist in `docs/dev/slurm_submission.md`.
+12. Hand artifact classification to `artifact-provenance` before downstream reports depend on local `output/`.
+13. A clean `submitted` state requires both immediate health-check success and the checklist traceability update
+    (issue/PR comment plus private-ledger or handoff reference). If route acceptance succeeds but
+    either traceability record is missing, keep `partial_traceable`. `sbatch`/`sacct` acceptance alone is only
+    route evidence and does not imply benchmark or report proof.
+14. After completion or predeclared cancellation, route results before rerunning:
     - cancelled runs may be diagnostic evidence only when the early-stop criteria were declared and
       the configured preservation action captured logs, manifest, config, commit, and artifact
       status;
@@ -72,6 +80,7 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
 - Do not treat a queued job as completed evidence.
 - Do not cancel a low-signal training job as diagnostic evidence unless the early-stop rule was
   predeclared and the diagnostic-preservation action has been completed.
+- Do not treat `sbatch` output or acceptance as final submission proof.
 - Do not treat a `resource:slurm` issue as runnable when its latest comments require durable
   artifact pointers, exact commits, maintainer confirmation, or a concrete launcher first.
 - Do not let an issue's `slurm` label override the suitability gate. A `slurm` label means the
@@ -95,3 +104,6 @@ Use `campaign_submission.v1`. Include:
 - `runtime_basis`: the rows/seeds/scenarios/horizon/workers calculation or preflight source;
 - `local_default_overridden`: `true` only when a sub-1-hour run still has a compute-node-only reason;
 - `evidence_claim`: `smoke`, `compatibility`, `campaign`, or `blocked`.
+- `submission_record`: issue/PR reference, partition, finalizer outcome, private ledger reference,
+  final health-check status, and artifact status.
+- `submission_state`: `submitted`, `partial_traceable`, or `blocked`.

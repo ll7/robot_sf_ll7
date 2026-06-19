@@ -62,8 +62,9 @@ launcher, seed set, commit or declared code version, target cluster, job name, o
 duplicate blocks `--submit`; reruns should use a new queue id, changed output root, and documented
 reason.
 
-Final reports should include the generated manifest path, job id, cluster/host, command, branch,
-commit SHA, config, launcher, seed set, output/log paths, skipped entries, and monitoring command.
+Final reports should include the generated manifest path, job id, public partition or cluster label,
+command, branch, commit SHA, config, launcher, seed set, output/log paths, skipped entries,
+monitoring command, and private ledger reference when applicable.
 
 ## Examples
 
@@ -113,6 +114,46 @@ scripts/dev/sbatch_use_max_time.sh --time 08:00:00 SLURM/templates/gpu_training.
   the wrapper can resolve the correct limit without extra flags.
 - If Slurm tools are unavailable in the current shell, fall back to a manual `sbatch`
   command with an explicit `--time`.
+
+## Shared SLURM Traceability Checklist
+
+Use this single checklist for public issue/PR comments and private-ops ledger/handoff updates.
+Do not duplicate fields into separate public/private lists; use the same checklist with public-safe
+fields in public surfaces and private-only fields in private surfaces.
+
+- Submission intent
+  - issue/PR reference
+  - experiment intent or hypothesis
+  - expected evidence tier (`smoke`, `probe`, `campaign`, or diagnostic)
+- Launch identity
+  - command surface and launcher path
+  - config path or exact snapshot
+  - branch, commit, and dirty-tree status
+  - partition and job name
+- Route and health evidence
+  - submitted job id
+  - immediate route check outcome (`squeue`, `sacct`, earliest stderr/early log tail)
+  - submitter finalizer command and exit/result
+  - queue/duplicate gate status (satisfied or reason blocked)
+- Public/Private trace
+  - issue/PR comment id and posted fields (job id, partition, branch, commit, config, outputs)
+  - private ops ledger/handoff reference (or equivalent private record)
+- Output and artifacts
+  - output root
+  - manifest path, checkpoints, report path, and artifact status (`non_durable`, `durable`,
+    `promoted`, or `discarded`)
+- Completion and follow-up
+  - run classification (`completed_needs_analysis`, `diagnostic`, `failed_preflight`, `blocked`,
+    `partial_traceable`)
+  - next action and rerun decision
+
+Submission state rules:
+
+- `sbatch`/`sacct` success or a job id is route evidence only.
+- Use `submitted` only when the immediate health check succeeds and both traceability records are complete.
+- If either route traceability step is missing, use `partial_traceable` and keep status explicitly blocked.
+- Public issue/PR comments may include job id and partition for traceability, but must not include private host
+  names, account/QoS details, scratch paths, or private retrieval mechanics.
 
 ## Multiple branches from one login node
 

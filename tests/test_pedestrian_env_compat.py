@@ -64,6 +64,25 @@ def test_make_pedestrian_env_uses_stub_robot_model() -> None:
         env.exit()
 
 
+def test_runtime_stub_is_shared_between_env_and_factory_paths() -> None:
+    """Fallback ``None`` wiring resolves to the same runtime stub implementation."""
+    env_from_env_ctor = PedestrianEnv(robot_model=None)
+    try:
+        env_from_factory = make_pedestrian_env(robot_model=None)
+        try:
+            assert env_from_env_ctor.robot_model.__class__ is env_from_factory.robot_model.__class__
+            assert (
+                env_from_env_ctor.robot_model.__class__.__module__
+                == "robot_sf.gym_env._stub_robot_model"
+            )
+            assert isinstance(env_from_env_ctor.robot_model, StubRobotModel)
+            assert isinstance(env_from_factory.robot_model, StubRobotModel)
+        finally:
+            env_from_factory.exit()
+    finally:
+        env_from_env_ctor.exit()
+
+
 def test_pedestrian_env_does_not_mutate_input_config_for_deprecated_force_flag() -> None:
     """Deprecated force override should be isolated to the constructed environment."""
     config = PedestrianSimulationConfig()

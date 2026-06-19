@@ -954,6 +954,18 @@ entries:
     status: current
     freshness: dated
     area: predictive_planner
+  - path: docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/README.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/README.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/README.md
+    status: evidence
+    freshness: evidence
+    area: learned_policy
   - path: docs/context/open_issues_training_split_audit_2026-05-30.md
     status: current
     freshness: dated

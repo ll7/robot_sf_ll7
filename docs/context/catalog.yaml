@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-19
+updated_at: 2026-06-20
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -1830,3 +1830,19 @@ entries:
     status: evidence
     freshness: evidence
     area: carla_external_sim
+  - path: docs/context/evidence/issue_1454_s10_preflight_2026-05-22/fixed_h100/matrix_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1454_stage_a_fixed_h100_2026-05-22/reports/statistical_sufficiency.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/reports/matrix_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1462_s10_h500_failure_modes_2026-05-24/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

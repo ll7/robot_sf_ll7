@@ -1,6 +1,6 @@
 ---
 name: project-sac-action-semantics
-description: SAC planner action semantics mismatch — delta vs absolute velocity between training and benchmark; resolution via _VelocityTargetActionWrapper
+description: SAC planner action semantics mismatch — delta vs absolute velocity between training and benchmark; current implementation records semantics in SACPlannerConfig
 metadata:
   type: project
   category: known-issues
@@ -32,43 +32,21 @@ velocity by X". Under benchmark contract, learned behavior was invalid.
 
 ## Resolution
 
-### Solution: _VelocityTargetActionWrapper
+### Current Implementation
 
-Implement action semantics wrapper that converts delta actions to absolute targets (or vice versa).
+`robot_sf/baselines/sac.py` declares `SACPlannerConfig.action_semantics` with explicit
+`"delta"` and `"absolute"` modes. `SACPlanner._action_vec_to_dict()` preserves negative delta
+actions in `"delta"` mode, while `"absolute"` mode clamps unicycle commands to `v_max` and
+`omega_max`.
 
-**Implementation**:
-```python
-class _VelocityTargetActionWrapper:
-    """Convert delta actions to absolute velocity targets."""
-    
-    def __init__(self, env, action_semantics: str = "absolute"):
-        """
-        Args:
-            env: Wrapped Gymnasium environment
-            action_semantics: "absolute" (default) or "delta"
-        """
-        self.env = env
-        self.action_semantics = action_semantics
-        self._last_velocity = None
-    
-    def step(self, action):
-        if self.action_semantics == "absolute":
-            # Actions are absolute targets; pass through
-            return self.env.step(action)
-        elif self.action_semantics == "delta":
-            # Actions are deltas; integrate to absolute target
-            absolute_action = self._last_velocity + action
-            obs, reward, terminated, truncated, info = self.env.step(absolute_action)
-            self._last_velocity = absolute_action
-            return obs, reward, terminated, truncated, info
-```
-
-**Configuration**: Set `action_semantics: absolute` in planner config (default).
+There is no standalone velocity-target action wrapper in the current tree. Future wrapper work
+should either add the wrapper with tests, or keep this memory note pointed at the actual
+`SACPlannerConfig` and `SACPlanner._action_vec_to_dict()` implementation.
 
 **Impact**:
-- ✅ Trained SAC model now passes benchmark validation
-- ✅ Action semantics explicitly declared in config (no implicit conversions)
-- ✅ Backward compatible: existing SocialForce and random planners unaffected
+- Action semantics are explicitly declared in config rather than inferred.
+- Unit tests cover the absolute-mode clamp behavior and related SAC planner compatibility paths.
+- This note does not claim a benchmark result or trained-model recovery beyond the in-tree tests.
 
 ---
 
@@ -76,16 +54,15 @@ class _VelocityTargetActionWrapper:
 
 ### Test Coverage
 
-- Unit test: Action wrapper output matches expected semantics
-- Integration test: SAC model trained with `action_semantics: delta` → runs under `action_semantics: absolute`
-- Benchmark test: SAC achieves baseline SNQI (within 5% of training reward)
+- Unit tests: `tests/baselines/test_sac_planner.py`
+- Implementation reference: `robot_sf/baselines/sac.py`
+- Current proof boundary: implementation/test coverage for planner action conversion semantics.
 
 ### Benchmark Evidence
 
-- **Grade**: Nominal benchmark evidence
-- **Config**: `configs/benchmarks/sac_action_semantics_test.yaml`
-- **Command**: `uv run python -m robot_sf.benchmark run configs/benchmarks/sac_action_semantics_test.yaml`
-- **Result**: SNQI 78±4 (vs. SocialForce 72±4; PPO 85±3)
+- **Grade**: test-backed implementation evidence only.
+- **Benchmark result**: not established by this memory note.
+- **Dedicated benchmark config**: not present in the current tree.
 
 ---
 
@@ -101,7 +78,8 @@ class _VelocityTargetActionWrapper:
 
 ### Prevention
 
-1. Add integration test: Train model with one semantics, run under another → must fail or auto-convert
+1. Add integration test: train or load a model with one semantics, run under another, and either
+   fail closed or convert explicitly.
 2. Document action semantics in planner protocol docstring
 3. Review code: Search for velocity/action calculations; check for implicit delta ↔ absolute transitions
 
@@ -109,14 +87,12 @@ class _VelocityTargetActionWrapper:
 
 ## Related Issues
 
-- **Issue #XXX**: Planner protocol formalization (action semantics as first-class contract)
-- **Issue #YYY**: Learned planner validation checklist (prevent similar mismatches)
+- Issue #790: SAC planner action semantics mismatch.
 
 ---
 
 ## Reference
 
-- **PR**: (link to merged PR if applicable)
-- **Test file**: `tests/test_sac_action_semantics.py`
-- **Wrapper**: `robot_sf/wrappers/velocity_target_action_wrapper.py`
-- **Config example**: `configs/benchmarks/sac_action_semantics_test.yaml`
+- **Implementation**: `robot_sf/baselines/sac.py`
+- **Test file**: `tests/baselines/test_sac_planner.py`
+- **Config examples**: `configs/baselines/sac_gate_socnav_struct*.yaml`

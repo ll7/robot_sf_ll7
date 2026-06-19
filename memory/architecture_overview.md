@@ -10,7 +10,7 @@ metadata:
 
 **Status**: Stable reference  
 **Last Updated**: 2026-06-19  
-**Related**: [[benchmark-platform-status]], [[decision-factory-pattern]]
+**Related**: [Benchmark Platform Status](benchmark_platform_status.md)
 
 ## Core Layers
 
@@ -24,13 +24,13 @@ metadata:
 - Pedestrian dynamics: `pysocialforce` integration (physics-based crowd simulation)
 - Robot navigation: Planner interface (`PlannerProtocol`)
 - Episode runner: Parallel execution with deterministic seeding and resume capability
-- Reference: `robot_sf.simulator`, `robot_sf.dynamics`
+- Reference: `robot_sf/sim/`, `robot_sf/gym_env/`
 
 ### 3. Planner Interface
 - Protocol: `PlannerProtocol` defines reset/act/done contracts
 - Implementations: SocialForce (baseline), PPO (learned), Random (fallback)
 - Status: All baseline planners functional; extensible for new families
-- Reference: `robot_sf.planners`
+- Reference: `robot_sf/planner/`
 
 ### 4. Benchmark Suite (Social Navigation Benchmark Platform)
 - Metrics: SNQI composite index with weighted components
@@ -50,13 +50,13 @@ metadata:
 ```
 robot_sf/
 ├── spec_factory.py           # Gymnasium entry points
-├── simulator.py              # Core simulation loop
-├── dynamics/                 # Pedestrian & robot physics
-├── planners/                 # Planner implementations (SocialForce, PPO, Random)
+├── gym_env/                  # Gymnasium environment bindings
+├── sim/                      # Simulator and backend glue
+├── planner/                  # Planner implementations and adapters
+├── nav/                      # Map parsing and path planning
 ├── benchmark/                # Social Navigation Benchmark Platform
 ├── metrics/                  # SNQI and component calculations
-├── tools/                    # Visualization, analysis, export
-└── schemas/                  # Dataclass contracts for all IO
+└── render/                   # Playback and visualization support
 
 tests/                         # Test suite (run with run_tests_parallel.sh)
 examples/quickstart/           # 3-step onboarding (basic, trained, custom map)
@@ -85,7 +85,7 @@ configs/benchmarks/            # Route clearance certifications, benchmark confi
 - **Components**: Success rate, collision avoidance, lateral displacement, time efficiency
 - **Weighting**: Configurable (default weights in `configs/benchmarks/`)
 - **Status**: Published; supports weight-sensitivity analysis
-- **Reference**: [[benchmark-platform-status]]
+- **Reference**: [Benchmark Platform Status](benchmark_platform_status.md)
 
 ## Artifact Provenance
 

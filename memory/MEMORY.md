@@ -100,12 +100,13 @@ files that agents read on demand.
 
 - [Issue #790 SAC Action Semantics Mismatch](project_sac_action_semantics.md)
   Delta vs absolute velocity mismatch between training and benchmark; resolution via
-  _VelocityTargetActionWrapper; validation and lessons learned.
+  explicit `SACPlannerConfig.action_semantics`; validation and lessons learned.
 
 ## Maintenance
 
 - Agents should treat this directory as optional but preferred startup context for durable repo
   facts after reading `AGENTS.md`.
 - If the tree grows large, keep this index concise and move detail into additional topic files.
-- Use `anthropic-skills:consolidate-memory` quarterly to merge duplicates and archive resolved items.
-- Cross-link with `[[name]]` syntax (name = file slug without .md).
+- Use targeted memory edits plus `.agents/skills/context-note-maintainer/` when memory facts need
+  companion context-note updates.
+- Cross-link with ordinary Markdown links to files that exist in this repository.

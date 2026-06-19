@@ -15,8 +15,8 @@ For all work in this repository, consult sources in this order:
    precedence order for resolving conflicts.
 4. **[`docs/dev_guide.md`](../docs/dev_guide.md)** — contributor workflow, testing strategy, and
    validation checklist.
-5. **[`.agents/PLANS.md`](.agents/PLANS.md)** — plan-writing convention for non-trivial work.
-6. **[`.agents/skills/README.md`](.agents/skills/README.md)** — skill landscape, maturity levels,
+5. **[`.agents/PLANS.md`](../.agents/PLANS.md)** — plan-writing convention for non-trivial work.
+6. **[`.agents/skills/README.md`](../.agents/skills/README.md)** — skill landscape, maturity levels,
    and decision tree for common Claude Code tasks.
 7. **[`memory/MEMORY.md`](../memory/MEMORY.md)** — project-local cross-session memory index (stable
    facts, research hypotheses, blocked work).
@@ -26,32 +26,37 @@ For all work in this repository, consult sources in this order:
 When using a specific tool or agent, read these first:
 
 - **GitHub (Copilot, PR agents)**: [`.github/copilot-instructions.md`](../.github/copilot-instructions.md)
-- **Codex / VS Code**: This file (symlinked as `.codex/CLAUDE.md`)
+- **Codex / VS Code**: [`AGENTS.md`](../AGENTS.md) plus Codex-compatible skill mirrors under
+  [`.codex/skills`](../.codex/skills)
 - **Cline / Claude Extension**: This file
 - **Manual usage**: Start with [`AGENTS.md`](../AGENTS.md)
 
 ## Machine Context
 
-- **Local machine config**: [`local.machine.md`](../local.machine.md) — hardware, disk space (83%
-  full), GPU (RTX 3070), resource limits
+- **Local machine config**: optional `local.machine.md` at the repository root when present
 - **Disk artifacts**: All generated output must go to git-ignored `output/` directory; small,
   durable evidence may be promoted to `docs/context/evidence/`
-- **Token optimization**: Global RTK proxy configured; all commands are automatically token-optimized
-  (60-90% savings). Use `rtk gain` to check savings analytics.
+- **Token optimization**: prefix shell commands with `rtk` when following this repository's agent
+  guidance.
 
 ## Quick Start for Claude Code Tasks
 
 ### For exploration or triage:
 1. Check [`memory/MEMORY.md`](../memory/MEMORY.md) to ground context in prior work.
-2. Use `.agents/skills/context-map/SKILL.md` for multi-file navigation.
-3. Use `.agents/skills/what-context-needed/SKILL.md` if the task is underspecified.
+2. Use [`.agents/skills/context-map/SKILL.md`](../.agents/skills/context-map/SKILL.md) for
+   multi-file navigation.
+3. Use [`.agents/skills/what-context-needed/SKILL.md`](../.agents/skills/what-context-needed/SKILL.md)
+   if the task is underspecified.
 
 ### For implementation:
 1. Consult [`AGENTS.md`](../AGENTS.md) and [`docs/dev_guide.md`](../docs/dev_guide.md) for
    validation approach (docs-only, code-focused, benchmark-facing, paper-grade).
-2. Use `.agents/skills/quality-playbook/SKILL.md` to pick validation style.
-3. Use `.agents/skills/auto-improvement/SKILL.md` for refinement loops.
-4. Use `.agents/skills/autoresearch/SKILL.md` for measurement-driven improvement.
+2. Use [`.agents/skills/quality-playbook/SKILL.md`](../.agents/skills/quality-playbook/SKILL.md) to
+   pick validation style.
+3. Use [`.agents/skills/auto-improvement/SKILL.md`](../.agents/skills/auto-improvement/SKILL.md) for
+   refinement loops.
+4. Use [`.agents/skills/autoresearch/SKILL.md`](../.agents/skills/autoresearch/SKILL.md) for
+   measurement-driven improvement.
 
 ### Before opening a PR:
 1. Run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` (or cheaper path from
@@ -60,7 +65,10 @@ When using a specific tool or agent, read these first:
 3. Update `CHANGELOG.md` for user-facing changes.
 
 ### For code review:
-- Use `engineering:code-review` skill (or `/code-review` slash command).
+- Use [`.agents/skills/review-and-refactor/SKILL.md`](../.agents/skills/review-and-refactor/SKILL.md)
+  for narrow code review, or
+  [`.agents/skills/review-benchmark-change/SKILL.md`](../.agents/skills/review-benchmark-change/SKILL.md)
+  for benchmark-facing changes.
 - For benchmark/metric changes, always require `paper-grade` evidence per
   [`docs/maintainer_values.md`](../docs/maintainer_values.md).
 
@@ -99,24 +107,26 @@ Always open with claim boundary, evidence status, major caveats, and uncertainty
 
 ## Skills Quick Reference
 
-See [`.agents/skills/README.md`](.agents/skills/README.md) for full matrix. Common patterns:
+See [`.agents/skills/README.md`](../.agents/skills/README.md) for full matrix. Common patterns:
 
 | Task | Recommended Skill |
 | --- | --- |
 | Multi-file navigation | `.agents/skills/context-map/` |
 | Validation planning | `.agents/skills/quality-playbook/` |
-| Benchmark changes | Full PR + `engineering:code-review` |
+| Benchmark changes | Full PR + `.agents/skills/review-benchmark-change/` |
 | Docs sync on code change | `.agents/skills/update-docs-on-code-change/` |
 | Measurement loop | `.agents/skills/autoresearch/` |
 | Quick refinement | `.agents/skills/auto-improvement/` |
-| Memory housekeeping | `anthropic-skills:consolidate-memory` |
+| Memory housekeeping | `.agents/skills/context-note-maintainer/` plus targeted memory edits |
 
 ## Troubleshooting & Help
 
 - **Claude Code features**: `/help` or <https://github.com/anthropics/claude-code/issues>
 - **Repo-specific blocks**: Check `AGENTS.md` and active issues in `docs/context/`
-- **Skill questions**: See `.agents/skills/README.md` or use `skill-creator` to improve
-- **Memory questions**: See `memory/MEMORY.md` or `docs/context/issue_1714_context_architecture.md`
+- **Skill questions**: See [`.agents/skills/README.md`](../.agents/skills/README.md) or use
+  `skill-creator` to improve
+- **Memory questions**: See [`memory/MEMORY.md`](../memory/MEMORY.md) and
+  [`docs/context/INDEX.md`](../docs/context/INDEX.md)
 
 ---
 

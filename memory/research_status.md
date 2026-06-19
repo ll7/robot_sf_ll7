@@ -11,7 +11,7 @@ metadata:
 
 **Last Updated**: 2026-06-19  
 **Status Tracking**: GitHub Projects #5 (advisory prioritization)  
-**Related**: [[benchmark-platform-status]], [[decision-planner-roadmap]]
+**Related**: [Benchmark Platform Status](benchmark_platform_status.md)
 
 ## Active Research Areas
 
@@ -36,7 +36,8 @@ orthogonal to success/efficiency metrics and should be measured separately.
 **Issue**: Planners occasionally deviate from route corridor; recovery logic unclear.
 
 **Evidence**: Diagnostic-only  
-- Identified in Issue #XXX; corner cases reproduced
+- Related corner cases are tracked in issue-specific benchmark and context notes; no single
+  canonical issue is assigned in this memory entry yet.
 - Current fallback: Reset planner state (crude but effective)
 - Candidate fix: Subgoal-based corridor re-entry
 
@@ -58,7 +59,7 @@ orthogonal to success/efficiency metrics and should be measured separately.
 faster than manual scenario design.
 
 **Evidence**: Diagnostic  
-- Scenario generation profiles defined (Issue #XXX)
+- Scenario generation profile coverage is still being consolidated across issue-specific notes.
 - Tool: `scripts/tools/generate_adversarial_scenario_manifests.py` (experimental)
 - Limitation: No ground truth for "interesting" adversarial scenario (subjective)
 
@@ -106,9 +107,9 @@ robustness gaps.
 
 | Issue | Title | Blocker | Revival Condition |
 | --- | --- | --- | --- |
-| #1028 | Route corridor subgoal recovery | Route corridor contract undefined | Formalize + metric definition |
-| #1004 | Policy stack v1 runtime | Architecture decision on composability | Planner roadmap decision |
-| #1049 | H500 mechanism pilot | Benchmark route clearance certification | Complete v1 cert audit |
+| Issue #1028 | Route corridor subgoal recovery | Route corridor contract undefined | Formalize + metric definition |
+| Issue #1004 | Policy stack v1 runtime | Architecture decision on composability | Planner roadmap decision |
+| Issue #1049 | H500 mechanism pilot | Benchmark route clearance certification | Complete v1 cert audit |
 
 ---
 
@@ -152,8 +153,8 @@ When work is blocked:
 
 1. Name the blocker precisely (e.g., "route corridor definition", not "unclear architecture")
 2. Document the exact artifact/decision/dependency needed
-3. List revival condition (e.g., "when ADR #XXX is approved")
-4. Link to related decisions: `[[decision-planner-roadmap]]`, etc.
+3. List revival condition, such as when a named ADR or roadmap decision is approved.
+4. Link to related decisions or context notes when those files exist in the repository.
 
 ---
 
@@ -182,9 +183,11 @@ collision detection edge cases)
 
 ### Key Decisions (ADRs)
 
-- **Factory pattern**: [[decision-factory-pattern]] — why Gymnasium factories over hardcoded APIs
-- **Planner roadmap**: [[decision-planner-roadmap]] — which planner families to support
-- **SNQI metric**: [[decision-snqi-metric]] — why these 4 components and these weights
+- **Factory pattern**: see `robot_sf/spec_factory.py` and `docs/architecture/configuration.md`.
+- **Planner roadmap**: see planner-facing context notes under `docs/context/` and
+  `docs/ai/repo_overview.md`.
+- **SNQI metric**: see benchmark metric documentation and implementation under
+  `robot_sf/benchmark/` and `robot_sf/metrics/`.
 - **Fallback policy**: See `docs/context/issue_691_benchmark_fallback_policy.md`
 
 ---
@@ -193,8 +196,9 @@ collision detection edge cases)
 
 - Review this file quarterly; archive resolved blocked work
 - For new research directions, add entry with status label and tracking issue
-- Link decisions with `[[name]]` syntax; create decision files as needed
-- Use `anthropic-skills:consolidate-memory` to merge duplicate entries
+- Link decisions with ordinary Markdown links to files that exist in this repository.
+- Use targeted memory edits plus `.agents/skills/context-note-maintainer/` when durable context
+  notes need companion updates.
 
 ---
 

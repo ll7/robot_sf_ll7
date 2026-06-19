@@ -12,7 +12,7 @@ metadata:
 **Status**: Fully operational  
 **Last Updated**: 2026-06-19  
 **Evidence Grade**: Nominal benchmark evidence (108 tests passing)  
-**Related**: [[architecture-overview]], [[decision-snqi-metric]]
+**Related**: [Architecture Overview](architecture_overview.md)
 
 ## Platform Overview
 
@@ -126,12 +126,12 @@ Status: **Blocked** pending architectural decision
 - Graph-based (visibility graph, RRT): Integration pending
 - Learning-based variants (DQN, SAC): Reference implementation only
 
-**Revival condition**: Blocker removal via [[decision-planner-roadmap]]
+**Revival condition**: blocker removal through a current planner roadmap or ADR.
 
 ### Scenario Generation
 
 Status: **Exploratory**  
-- Adversarial scenario search: In progress (Issue #XXX)
+- Adversarial scenario search: in progress across issue-specific context notes.
 - Map synthesis: Diagnostic-only results
 
 **How to apply**: Open as exploratory issue with clear status label; don't treat as benchmark evidence

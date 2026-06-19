@@ -313,6 +313,8 @@ knowledge, not every transient iteration detail.
   [issue_2459_socnavbench_hunavsim_mapping.md](issue_2459_socnavbench_hunavsim_mapping.md)
 * Issue #2928 SocNavBench / HuNavSim Metric Correspondence:
   [issue_2928_socnavbench_hunavsim_metric_correspondence.md](issue_2928_socnavbench_hunavsim_metric_correspondence.md)
+* Issue #2930 External Benchmark Positioning:
+  [issue_2930_external_benchmark_positioning.md](issue_2930_external_benchmark_positioning.md)
 * Issue #2442 Navground planner-zoo assessment:
   [issue_2442_navground_assessment.md](issue_2442_navground_assessment.md)
 * Issue #2550 (2026-06-11): Navground Adapter Spike Report:

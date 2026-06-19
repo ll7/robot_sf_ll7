@@ -1,0 +1,115 @@
+schema_version: research-campaign-manifest.v0.1
+
+campaign:
+  id: issue_3062_example_research_campaign
+  parent_issue: 3062
+  purpose: Example contract for research-engine campaign provenance and artifact flow.
+  evidence_tier: proposal
+  claim_boundary: >
+    This example validates manifest shape only. It does not claim planner,
+    metric, benchmark, or paper-facing results.
+
+scenario_suite:
+  matrix_path: configs/benchmarks/issue_3059_research_engine_suite_v0.yaml
+  scenario_ids:
+    - nominal_shared_space
+  suite_hash_policy: record_sha256_before_run
+
+planners:
+  rows:
+    - planner_id: social_force
+      adapter_mode: native
+      config_path: null
+      expected_availability: available
+    - planner_id: prediction_planner
+      adapter_mode: adapter
+      config_path: configs/benchmarks/planner_readiness_matrix_v1.yaml
+      expected_availability: adapter_preflight_required
+
+seed_policy:
+  mode: fixed-list
+  seeds:
+    - 101
+    - 202
+  repeat_policy: every_planner_scenario_pair
+
+metrics:
+  ids:
+    - success_rate
+    - collision_rate
+    - min_clearance_m
+    - timeout_rate
+  denominator_policy: report_per_planner_scenario_seed_denominators
+  baseline_or_weights: not_required
+
+row_status_policy:
+  allowed_values:
+    - successful_evidence
+    - diagnostic_only
+    - fallback
+    - degraded
+    - not_available
+    - failed
+    - blocked
+  success_values:
+    - successful_evidence
+  fail_closed_values:
+    - not_available
+    - failed
+    - blocked
+  fallback_policy: >
+    Fallback and degraded rows remain visible in summaries and cannot be counted
+    as benchmark-strength success evidence.
+
+outputs:
+  local_root: output/benchmarks/issue_3062_example_research_campaign
+  disposable: true
+  required_paths:
+    - campaign_manifest.json
+    - manifest.json
+    - run_meta.json
+    - preflight/validate_config.json
+    - preflight/preview_scenarios.json
+    - reports/campaign_summary.json
+    - reports/campaign_table.csv
+    - reports/campaign_table.md
+    - reports/row_status_summary.json
+  summary_json:
+    path: reports/campaign_summary.json
+    required_fields:
+      - campaign_id
+      - source_manifest
+      - git_commit
+      - planner_rows
+      - row_status_summary
+      - artifact_paths
+      - caveats
+  summary_table:
+    path: reports/campaign_table.csv
+    required_columns:
+      - scenario_id
+      - planner_id
+      - adapter_mode
+      - seed
+      - row_status
+      - success_rate
+      - collision_rate
+      - min_clearance_m
+      - timeout_rate
+
+durable_evidence:
+  plan:
+    kind: tracked_context_evidence
+    path: docs/context/evidence/issue_3062_campaign_manifest_example/README.md
+    required_before_claim: true
+  external_artifact_pointer: not_required_for_example
+  local_output_boundary: >
+    The output/ tree is a disposable local cache. Durable review evidence must
+    be copied or summarized under docs/context/evidence, a release artifact, or
+    an external artifact pointer with checksums.
+
+validation:
+  commands:
+    - uv run pytest tests/benchmark/test_research_campaign_manifest_contract.py
+  dry_run: not_required_for_example
+  expected_result: Manifest loads and required contract fields are present.

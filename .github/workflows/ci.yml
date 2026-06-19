@@ -169,6 +169,30 @@ jobs:
           CI_STEP_TIMEOUT_SECONDS: "300"
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
 
+  wheel-smoke-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Build wheel
+        run: uv build
+
+      - name: Clean wheel install/import smoke
+        run: bash scripts/validation/wheel_install_smoke.sh
+
+      - name: Upload wheel smoke report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wheel-smoke-report
+          path: output/validation/wheel_install_smoke_report.json
+          if-no-files-found: warn
+
   examples-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -188,6 +212,7 @@ jobs:
     needs:
       - fast-feedback
       - smoke-artifacts
+      - wheel-smoke-install
       - examples-smoke
     if: always()
     steps:
@@ -195,6 +220,10 @@ jobs:
         run: |
           if [[ "${{ needs.fast-feedback.result }}" != "success" ]]; then
             echo "fast-feedback finished with ${{ needs.fast-feedback.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.wheel-smoke-install.result }}" != "success" ]]; then
+            echo "wheel-smoke-install finished with ${{ needs.wheel-smoke-install.result }}" >&2
             exit 1
           fi
           if [[ "${{ needs.smoke-artifacts.result }}" != "success" ]]; then

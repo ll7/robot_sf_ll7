@@ -140,6 +140,10 @@ knowledge, not every transient iteration detail.
   [issue_3064_behavior_variants_inventory.md](issue_3064_behavior_variants_inventory.md)
   records the fail-closed classification of native Social Force, AMMV-aware Social Force, and
   Social-Navigation-PyEnvs adapter-backed behavior variants for benchmark selection.
+* Issue #3063 campaign comparison report:
+  [issue_3063_campaign_comparison_report.md](issue_3063_campaign_comparison_report.md)
+  records the analysis-only result-store report path, fixture proof, row-status caveats, and
+  follow-up boundary before any benchmark or paper-facing claim.
 * Active research-lane scientific states:
   [research_lane_states.md](research_lane_states.md)
 * Issue #2571 Active Research Queue:

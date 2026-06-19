@@ -1,0 +1,62 @@
+[
+  {
+    "run_id": "run-goal",
+    "episode_id": "goal-1",
+    "planner": "goal",
+    "scenario_id": "crossing_easy",
+    "scenario_family": "crossing",
+    "seed": 1,
+    "row_status": "native",
+    "artifact_uri": "fixture://issue-3063/run-goal/goal-1.jsonl",
+    "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "success": true,
+    "collision": false,
+    "snqi": 0.2,
+    "comfort_exposure": 0.1
+  },
+  {
+    "run_id": "run-goal",
+    "episode_id": "goal-2",
+    "planner": "goal",
+    "scenario_id": "crossing_hard",
+    "scenario_family": "crossing",
+    "seed": 2,
+    "row_status": "fallback",
+    "artifact_uri": "fixture://issue-3063/run-goal/goal-2.jsonl",
+    "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "success": false,
+    "collision": true,
+    "snqi": -0.4,
+    "comfort_exposure": 0.8
+  },
+  {
+    "run_id": "run-orca",
+    "episode_id": "orca-1",
+    "planner": "orca",
+    "scenario_id": "crossing_easy",
+    "scenario_family": "crossing",
+    "seed": 1,
+    "row_status": "adapter",
+    "artifact_uri": "fixture://issue-3063/run-orca/orca-1.jsonl",
+    "artifact_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "success": true,
+    "collision": false,
+    "snqi": 0.6,
+    "comfort_exposure": 0.2
+  },
+  {
+    "run_id": "run-orca",
+    "episode_id": "orca-2",
+    "planner": "orca",
+    "scenario_id": "crossing_hard",
+    "scenario_family": "crossing",
+    "seed": 2,
+    "row_status": "degraded",
+    "artifact_uri": "fixture://issue-3063/run-orca/orca-2.jsonl",
+    "artifact_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "success": false,
+    "collision": false,
+    "snqi": 0.1,
+    "comfort_exposure": 0.3
+  }
+]

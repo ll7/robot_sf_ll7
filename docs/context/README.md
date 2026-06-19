@@ -618,6 +618,8 @@ knowledge, not every transient iteration detail.
   [issue_2941_native_forecast_replay.md](issue_2941_native_forecast_replay.md)
 * Issue #2960 Forecast planner consumer smoke:
   [issue_2960_forecast_planner_consumer.md](issue_2960_forecast_planner_consumer.md)
+* Issue #2966 Planner-consumed forecast slice:
+  [issue_2966_planner_consumed_forecast_slice.md](issue_2966_planner_consumed_forecast_slice.md)
 * Issue #2937 Horizon/timestep denominator-health fixture repair:
   [issue_2937_horizon_denominator_health.md](issue_2937_horizon_denominator_health.md)
 * Issue #2943 Fast-Results Milestone / Claim Map v0 (2026-06-16):

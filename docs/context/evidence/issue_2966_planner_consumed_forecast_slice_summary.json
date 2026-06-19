@@ -1,0 +1,117 @@
+{
+  "schema_version": "PlannerConsumedForecastSlice.v1",
+  "issue": 2966,
+  "commit": "bb39c2462",
+  "claim_boundary": "Diagnostic/smoke evidence that forecast variants are consumed by PredictionPlannerAdapter and produce forecast-brake replay closed-loop metrics. Not benchmark evidence; does not claim any forecast variant improves safety, success, or runtime.",
+  "result_classification": "diagnostic_smoke",
+  "commands": {
+    "consumer_smoke": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/validate_forecast_planner_consumer.py --output-dir <ignored-local-output-dir>/consumer_smoke --variants none cv semantic interaction_aware risk_filtered",
+    "live_replay_full_matrix": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/validate_live_forecast_replay_gate.py --full-matrix --output-dir <ignored-local-output-dir>/live_replay_full_matrix"
+  },
+  "exit_codes": {
+    "consumer_smoke": 0,
+    "live_replay_full_matrix": 0
+  },
+  "variants": ["none", "cv", "semantic", "interaction_aware", "risk_filtered"],
+  "fixtures": {
+    "consumer_smoke": {
+      "type": "deterministic_socnav_observation",
+      "seed": 2960,
+      "scenario": "deterministic_motion_rich_socnav_smoke",
+      "same_seed_across_variants": true,
+      "pedestrian_count": 3,
+      "dt_s": 0.5,
+      "local_output": "consumer smoke JSON/Markdown were generated under ignored worktree-local output; rerun the recorded command to reproduce them"
+    },
+    "live_replay": {
+      "type": "simulation_trace_export_v1",
+      "trace_id": "issue_2765_dense_pedestrian_stress_seed2765_ep0000",
+      "scenario_id": "dense_pedestrian_stress",
+      "seed": 2765,
+      "episode_id": "dense_pedestrian_stress_ep0000",
+      "planner_id": "hybrid_rule_v0_minimal",
+      "actor_count": 3,
+      "frames": 20,
+      "local_output": "live replay JSON/Markdown were generated under ignored worktree-local output; rerun the recorded command to reproduce them"
+    }
+  },
+  "scenario_selection_note": "Current validation scripts only support one deterministic consumer fixture and one live trace fixture. A 3-scenario map benchmark is not available without additional trace fixtures or a scenario-specific map-runner config.",
+  "variant_classifications": {
+    "consumer_smoke": {
+      "none": {"execution_mode": "native", "classification": "native", "prediction_changed_vs_none": false},
+      "cv": {"execution_mode": "native", "classification": "degraded", "prediction_changed_vs_none": false},
+      "semantic": {"execution_mode": "native", "classification": "degraded", "prediction_changed_vs_none": false},
+      "interaction_aware": {"execution_mode": "native", "classification": "native", "prediction_changed_vs_none": true},
+      "risk_filtered": {"execution_mode": "native", "classification": "degraded", "prediction_changed_vs_none": false}
+    },
+    "live_replay_full_matrix": {
+      "overall_status": "native",
+      "classification_reason": "cv forecast produces closed-loop metrics that differ from the integrated no-forecast baseline",
+      "none": {"execution_mode": "native", "classification": "native", "closed_loop_source": "no_forecast_replay", "collision": false, "progress_m": 0.545, "false_positive_stops": 0},
+      "cv": {"execution_mode": "native", "classification": "degraded", "closed_loop_source": "forecast_brake_replay", "collision": false, "progress_m": 0.0, "false_positive_stops": 20},
+      "semantic": {"execution_mode": "native", "classification": "degraded", "closed_loop_source": "forecast_brake_replay", "collision": false, "progress_m": 0.0, "false_positive_stops": 20},
+      "interaction_aware": {"execution_mode": "native", "classification": "degraded", "closed_loop_source": "forecast_brake_replay", "collision": false, "progress_m": 0.0, "false_positive_stops": 20},
+      "risk_filtered": {"execution_mode": "native", "classification": "degraded", "closed_loop_source": "forecast_brake_replay", "collision": false, "progress_m": 0.0, "false_positive_stops": 20}
+    }
+  },
+  "same_seed_caveats": [
+    "Consumer smoke uses a single deterministic SocNav observation with seed 2960 across all variants.",
+    "Live replay uses a single trace (dense_pedestrian_stress seed 2765) across all variants.",
+    "Neither fixture provides scenario diversity; results are fixture-specific, not statistically powered."
+  ],
+  "degraded_or_fallback_rows": [
+    {
+      "surface": "consumer_smoke",
+      "variant": "cv",
+      "reason": "Predicted futures match the no-forecast constant-velocity baseline in this fixture."
+    },
+    {
+      "surface": "consumer_smoke",
+      "variant": "semantic",
+      "reason": "No semantic metadata available in the fixture; predictions default to constant-velocity."
+    },
+    {
+      "surface": "consumer_smoke",
+      "variant": "risk_filtered",
+      "reason": "Risk filtering widens uncertainty only; mean futures match baseline."
+    },
+    {
+      "surface": "live_replay",
+      "variant": "cv",
+      "reason": "Forecast-brake replay policy stops unconditionally; 20 false-positive stops, 0 progress."
+    },
+    {
+      "surface": "live_replay",
+      "variant": "semantic",
+      "reason": "Identical to cv: forecast-brake replay stops unconditionally."
+    },
+    {
+      "surface": "live_replay",
+      "variant": "interaction_aware",
+      "reason": "Identical to cv: forecast-brake replay stops unconditionally."
+    },
+    {
+      "surface": "live_replay",
+      "variant": "risk_filtered",
+      "reason": "Identical to cv: forecast-brake replay stops unconditionally."
+    }
+  ],
+  "map_runner_slice_decision": "STOP. All non-none live-replay variants produce identical degraded closed-loop metrics (20 false-positive stops, 0.0 progress). Consumer smoke confirms cv/semantic/risk_filtered predictions match baseline. A 3-scenario map-runner slice with allow_fallback=false would not produce new evidence.",
+  "execution_modes": {
+    "all_variants_execution_mode": "native",
+    "note": "All variants built BaselineProbabilisticPredictor and fed forecasts into the planner scoring path. Degradation is semantic (predictions match baseline or replay policy is uniformly conservative), not a missing-component fallback."
+  },
+  "limitations": [
+    "Single deterministic SocNav observation for consumer smoke; not statistically powered.",
+    "Single trace fixture for live replay; not scenario-diverse.",
+    "Forecast-brake replay policy is a minimal brake heuristic, not a production planner.",
+    "No 3-scenario map benchmark available; current scripts only support one consumer fixture and one trace.",
+    "All non-none live-replay variants produce identical closed-loop metrics due to uniform forecast-brake behavior.",
+    "Results are diagnostic/smoke, not benchmark or paper-facing evidence."
+  ],
+  "artifacts": {
+    "durable_summary": "this JSON file",
+    "raw_outputs": "ignored worktree-local validation outputs only; rerun the recorded commands to reproduce"
+  },
+  "next_recommended_step": "Follow-up issue #3146 tracks the next proof surface: create motion-rich trace fixtures for at least 3 scenario families (e.g., crossing, bottleneck, corridor) with forecast-affecting pedestrian dynamics, then rerun the live replay full matrix. The current forecast-brake replay policy may need tuning to avoid uniform false-positive stopping before scenario-diverse evidence is meaningful."
+}

@@ -17,6 +17,7 @@ WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
     "smoke-artifacts": 30,
+    "wheel-smoke-install": 20,
     "examples-smoke": 30,
     "ci": 5,
 }
@@ -193,6 +194,19 @@ def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -
     assert _workflow_job_phases("examples-smoke") == {"examples-smoke"}
     assert "needs" not in workflow["jobs"]["examples-smoke"]
     assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
+
+
+def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> None:
+    """Keep wheel install smoke in a separately timed job required by aggregate CI."""
+    workflow = yaml.safe_load(_workflow_text())
+    wheel_smoke_steps = workflow["jobs"]["wheel-smoke-install"]["steps"]
+    wheel_smoke_run_blocks = [step.get("run", "") for step in wheel_smoke_steps]
+
+    assert "wheel-smoke-install" in workflow["jobs"]
+    assert any("uv build" in run_block for run_block in wheel_smoke_run_blocks)
+    assert any("wheel_install_smoke.sh" in run_block for run_block in wheel_smoke_run_blocks)
+    assert "needs" not in workflow["jobs"]["wheel-smoke-install"]
+    assert "wheel-smoke-install" in workflow["jobs"]["ci"]["needs"]
 
 
 def test_ci_driver_test_phase_excludes_separately_timed_examples() -> None:

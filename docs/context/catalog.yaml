@@ -1846,3 +1846,19 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1416_converted_map_cache_2026-05-20/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1428_orca_residual_lineage_2026-05-24/orca_residual_guarded_ppo_v0_smoke_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1467_carla_replay_metrics_2026-05-24/parity_report_native_metric_probe.json
+    status: evidence
+    freshness: evidence
+    area: carla_external_sim
+  - path: docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/reports/matrix_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

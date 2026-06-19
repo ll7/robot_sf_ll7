@@ -22,7 +22,7 @@ LLM Constitution and guides can be found here:
 # Check host tools that live outside uv.
 scripts/dev/check_runtime_requirements.sh
 
-# One‑time setup with dev extras and pre-commit
+# One‑time setup with all extras and pre-commit
 uv sync --all-extras
 source .venv/bin/activate
 uv run pre-commit install
@@ -227,7 +227,7 @@ run it. Highlights include:
   unified configs.
 - **Observation & training workflows**: `03_image_observations.py` and
   `04_feature_extractors.py` showcase image sensors and feature extractor presets
-  (run with `uv sync --all-extras`).
+  (run with `uv sync --extra training`, or `uv sync --all-extras` for full local parity).
 - **Pedestrian & policy scenarios**: Scripts `06`–`11` cover factory-based
   pedestrian environments, single/multi pedestrian setups, and PPO rollouts using
   the maintained checkpoints under `model/`.
@@ -735,9 +735,10 @@ benchmark verifier boundaries, and PPO run-record provenance is
 ### Data flow and integration
 
 - **Training loop**: `scripts/training/train_ppo.py` →
-  factory functions → vectorized environments → StableBaselines3
+  factory functions → vectorized environments → StableBaselines3 (`uv sync --extra training`)
 - **RLlib workflow**: `scripts/training/train_dreamerv3_rllib.py` →
   factory functions → RLlib env registration → DreamerV3
+  (`uv sync --extra rllib --extra training`)
 - **Benchmarking**: `robot_sf/benchmark/cli.py` → baseline algorithms → episode runs → JSON/JSONL output → analysis
 - **Pedestrian simulation**: Robot environments → FastPysfWrapper → `fast-pysf` subtree → NumPy/Numba physics
 

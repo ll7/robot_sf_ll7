@@ -133,8 +133,13 @@ truly needs different machine-specific behavior.
 Some workflows require Python extras or external assets in addition to host tools:
 
 * ORCA/RVO2 planner paths may require `uv sync --extra orca`.
+* Training and optimization workflows use `uv sync --extra training` and
+  `uv run --extra training ...`.
+* GPU training workflows should combine training and GPU extras, for example
+  `uv sync --extra training --extra gpu`.
 * Imitation workflows use `uv sync --group imitation` and `uv run --group imitation ...`.
-* RLlib/DreamerV3 paths use `uv sync --extra rllib` and `uv run --extra rllib ...`.
+* RLlib/DreamerV3 paths use `uv sync --extra rllib --extra training` and
+  `uv run --extra rllib --extra training ...`.
 * Social-Navigation-PyEnvs adapter experiments require the external checkout or a documented
   fail-closed `not_available`/`failed` status.
 * CARLA live replay requires both a compatible CARLA server path and the matching host-side Python

@@ -67,6 +67,13 @@ The smoke installs the built wheel into a temporary venv, then verifies a minima
 with a small bootstrap dependency set (`loguru`, `numba`, `matplotlib`). This is a
 `clean install + import` guardrail, not a full runtime benchmark install.
 
+Training and experiment tooling is optional for core imports. Install it explicitly when
+running PPO/SB3, Optuna, TensorBoard, or W&B workflows:
+
+```bash
+uv sync --extra training
+```
+
 CARLA is not installed by `uv sync --all-extras`. On CARLA-capable Linux x86_64 hosts, opt into
 the pinned host-side client with `uv sync --all-extras --group carla` and check the Docker runtime
 with `scripts/dev/check_carla_runtime.sh`.

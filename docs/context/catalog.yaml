@@ -1714,3 +1714,19 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1045_h500_solvability_mechanisms_2026-05-07/h500_solvability_mechanisms.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1049_h500_mechanism_pilot_2026-05-07/representative_trace_summary.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1055_exposure_aware_h500_tables_2026-05-07/fixed_vs_h500_outcome_table.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1065_route_clearance_audit_2026-05-09/route_clearance_warning_classification.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

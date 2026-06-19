@@ -1086,6 +1086,9 @@ knowledge, not every transient iteration detail.
 * [Issue #2443 AMV Actuation Trace Review](issue_2443_amv_trace_review.md)
   records the compact progress-vs-clipping review for the matched AMV actuation-smoke pair and
   fails closed on missing raw frame/event IDs.
+* [Issue #2446 AMV Actuation Feasibility Ranking](issue_2446_amv_feasibility_ranking.md)
+  classifies actuation feasibility as a diagnostic secondary ranking signal for the matched AMV
+  actuation-smoke pair without upgrading it to planner-improvement or benchmark evidence.
 * [Issue #2440 AMV Timeout Closure](issue_2440_amv_timeout_closure.md)
   closes the timeout-driver classification as `feasibility_improved_but_route_blocked` and keeps
   actuation-aware scoring diagnostic-only for planner improvement.

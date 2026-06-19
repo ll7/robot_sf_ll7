@@ -133,6 +133,11 @@ records the analysis-only report path from canonical campaign result stores, wit
 evidence showing row-status caveats, denominators, metric summaries, visual summaries, and
 descriptive statistical hooks.
 
+Recent AMV actuation feasibility ranking: [issue_2446_amv_feasibility_ranking.md](issue_2446_amv_feasibility_ranking.md)
+records the diagnostic-only conclusion that actuation feasibility is a secondary ranking signal for
+the matched AMV actuation-smoke pair, not planner-improvement, benchmark, hardware-calibration, or
+paper-facing evidence.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

@@ -139,11 +139,16 @@ about what the repository believes now rather than what to submit next.
    - Submit through existing wrappers such as `scripts/dev/sbatch_use_max_time.sh` or a
      candidate-specific helper under `scripts/dev/`.
    - Use a short skill-owned job name: `gse-<issue>-<slug>`.
-   - Capture job id, branch, commit, config path, SLURM script, output root, and stdout/stderr path.
+   - Capture job id, branch, commit, config path, SLURM script, output root, partition, and stdout/stderr path.
    - For long-running training, capture the predeclared early-stop criteria from the experiment card
      or launch packet: metric, threshold, check cadence, minimum runtime/timesteps, cancel
      condition, and diagnostic-preservation action.
-   - Immediately check `squeue`, `sacct`, and early stderr when the job starts.
+   - Immediately run health checks (`squeue`, `sacct`, and early stderr tail) after submission.
+   - Apply the shared traceability checklist in `docs/dev/slurm_submission.md`.
+     - A job is only `submitted` when the immediate health check and the issue/PR traceability update
+       (or private-ledger handoff) are complete.
+     - If immediate health or traceability update fails, classify the run as `partial_traceable` or
+       `blocked` instead of cleanly submitted.
 
 8. Monitor with long, low-churn intervals.
    - Estimate remaining wall time from observed timesteps/throughput, configured horizon, and eval
@@ -163,10 +168,13 @@ about what the repository believes now rather than what to submit next.
    - Keep interim metrics labeled as live training state, not benchmark or guarded-policy evidence.
 
 9. Record the handoff.
-   - Comment on the issue or update the relevant context note with the job id, branch, commit,
-     config, logs, output root, durable artifact status, validation status, and next action.
-   - Keep local `output/` paths labeled as non-durable until `artifact-provenance` classifies or
-     promotes them.
+   - Comment on the issue with the shared checklist fields (job id, partition, branch, commit,
+     config, logs/output root, immediate health check outcome, next action, ledger reference, and finalizer
+     status) and keep private mechanics in private ops records.
+   - Keep local `output/` paths labeled as non-durable until `artifact-provenance` classifies or promotes
+     them.
+   - Record finalizer result and artifact status in the run record so route completion is separated from
+     evidence maturity.
 
 ## Candidate Policy
 
@@ -215,6 +223,8 @@ Use `skill_run_summary.v1` or a compact equivalent. Include:
   `completed_needs_analysis`, `blocked_dependency`, or `analysis_only`.
 - `validation_route`: `local_preflight`, `slurm_pr_gate`, `training_submission`, plus what passed,
   failed, or was deferred.
-- `submission`: job id, command surface, output root, log paths, and immediate health check result
-  when a job was submitted.
+- `submission`: job id, command surface, partition, output root, log paths, immediate health check result,
+  and finalizer result when a job was submitted.
+- `submission_record`: issue/PR comment id, private ledger reference, artifact status, and submission
+  classification (`submitted`, `partial_traceable`, or `blocked`).
 - `next_action`: the one concrete follow-up for the user or next agent.

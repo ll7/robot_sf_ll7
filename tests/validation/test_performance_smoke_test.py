@@ -185,8 +185,10 @@ def test_step_loop_warmup_fields_are_explicitly_separate(monkeypatch) -> None:
     assert payload["step_loop_sec"] == pytest.approx(1.7)
 
 
-def test_run_performance_smoke_profile_injects_single_warmup_step(monkeypatch) -> None:
-    """Profile runs should warm up one unreported step by default."""
+def test_run_performance_smoke_profile_injects_single_warmup_step_for_steady_mode(
+    monkeypatch,
+) -> None:
+    """Steady profile mode should warm up one unreported step by default."""
 
     called_args: dict[str, int] = {}
     _patch_profile_smoke_measurements(monkeypatch, called_args)
@@ -206,6 +208,30 @@ def test_run_performance_smoke_profile_injects_single_warmup_step(monkeypatch) -
     )
 
     assert called_args.get("warmup_steps") == 1
+
+
+def test_run_performance_smoke_profile_cold_start_mode_uses_zero_warmup(monkeypatch) -> None:
+    """Cold-start step-profile mode should route with zero warmup steps."""
+
+    called_args: dict[str, int] = {}
+    _patch_profile_smoke_measurements(monkeypatch, called_args)
+
+    performance_smoke_test.run_performance_smoke_test(
+        num_resets=2,
+        step_samples=20,
+        step_profile=True,
+        step_profile_mode="cold-start",
+        step_profile_limit=5,
+        include_recommendations=False,
+        creation_soft=3.0,
+        creation_hard=8.0,
+        reset_soft=0.5,
+        reset_hard=0.2,
+        enforce=False,
+        on_ci=False,
+    )
+
+    assert called_args.get("warmup_steps") == 0
 
 
 def test_run_performance_smoke_profile_preserves_explicit_warmup_steps(monkeypatch) -> None:
@@ -243,6 +269,44 @@ def test_run_performance_smoke_profile_preserves_explicit_zero_warmup(monkeypatc
         step_samples=20,
         warmup_steps=0,
         step_profile=True,
+        step_profile_limit=5,
+        include_recommendations=False,
+        creation_soft=3.0,
+        creation_hard=8.0,
+        reset_soft=0.5,
+        reset_hard=0.2,
+        enforce=False,
+        on_ci=False,
+    )
+
+    assert called_args.get("warmup_steps") == 0
+
+
+def test_run_performance_smoke_profile_rejects_unknown_mode() -> None:
+    """Unknown step-profile modes should fail before measurement starts."""
+
+    with pytest.raises(ValueError, match="step_profile_mode"):
+        performance_smoke_test.run_performance_smoke_test(
+            step_profile=True,
+            step_profile_mode="startup",
+            include_recommendations=False,
+        )
+
+
+def test_run_performance_smoke_profile_explicit_warmup_ignores_unknown_mode(
+    monkeypatch,
+) -> None:
+    """Explicit warmup settings should win before mode validation."""
+
+    called_args: dict[str, int] = {}
+    _patch_profile_smoke_measurements(monkeypatch, called_args)
+
+    performance_smoke_test.run_performance_smoke_test(
+        num_resets=2,
+        step_samples=20,
+        warmup_steps=0,
+        step_profile=True,
+        step_profile_mode="startup",
         step_profile_limit=5,
         include_recommendations=False,
         creation_soft=3.0,

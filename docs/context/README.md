@@ -631,6 +631,8 @@ knowledge, not every transient iteration detail.
   [issue_1272_validation_falsification_strategy.md](issue_1272_validation_falsification_strategy.md)
 * Issue #1432 Adaptive Test Strategy Claim Audit (2026-05-22):
   [adaptive_test_claim_audit_2026-05.md](adaptive_test_claim_audit_2026-05.md)
+* Issue #2953 Qwen-RobotNav Metric And Benchmark Audit (2026-06-19):
+  [issue_2953_qwen_robotnav_metric_audit.md](issue_2953_qwen_robotnav_metric_audit.md)
 * Issue #2468 Adversarial Scenario Generation Roadmap (2026-06-07):
   [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md)
 * Issue #2524 Adversarial Scenario Manifest Generation (2026-06-07):

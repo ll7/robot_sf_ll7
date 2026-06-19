@@ -145,16 +145,17 @@ def _load_crowd_sim_env():
 
 
 def _load_stub_robot_model():
-    """Lazy-load the stub robot model class for testing.
+    """Lazy-load the runtime fallback stub robot model class.
 
     Returns a minimal robot model that produces zero actions, enabling pedestrian
-    environment initialization without requiring a trained policy.
+    environment initialization in backward-compatible runtime paths without a trained
+    policy.
 
     Returns:
         type: StubRobotModel class (callable) providing zero-action fallback.
 
     Raises:
-        ModuleNotFoundError: If _stub_robot_model module is not available.
+        ModuleNotFoundError: If ``robot_sf.gym_env._stub_robot_model`` is unavailable.
     """
     module = importlib.import_module("robot_sf.gym_env._stub_robot_model")
     return module.StubRobotModel
@@ -767,7 +768,8 @@ def make_pedestrian_env(  # noqa: PLR0913
       ``record_video=True`` (no implicit flip). Required by T012 test.
     * May auto-enable ``debug`` when effective recording is active to ensure frames
       are produced.
-    * Injects a stub robot model when ``robot_model`` is ``None`` for backward compatibility.
+    * Injects the shared runtime fallback stub robot model when ``robot_model`` is
+      ``None`` for backward compatibility and low-friction debugging.
 
     Parameters follow the same semantics; additional ones:
     robot_model : Any | None

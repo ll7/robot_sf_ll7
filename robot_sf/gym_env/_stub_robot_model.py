@@ -1,6 +1,13 @@
-"""Shared lightweight stub robot model used as a fallback.
+"""Shared lightweight fallback robot model used by runtime pedestrian environments.
 
-Centralizing the stub avoids duplication across factories and environments.
+This module is part of runtime compatibility, not just tests.
+
+Historically both ``environment_factory`` and ``pedestrian_env`` defined inline
+fallback models when a concrete robot policy/model was not provided. Centralizing
+the fallback keeps this behavior consistent and protects existing examples and
+legacy scripts that still call ``PedestrianEnv(robot_model=None)`` or
+``make_pedestrian_env(robot_model=None)``.
+
 The stub intentionally performs a local NumPy import inside ``predict`` to keep
 module import cost negligible when the stub is unused.
 
@@ -30,9 +37,11 @@ def _get_numpy():
 
 
 class StubRobotModel:  # pragma: no cover - trivial
-    """Fallback model returning a zero action.
+    """Runtime fallback model returning a zero action.
 
-    The action dimensionality (2,) matches the historical expectation in tests.
+    The action dimensionality (2,) matches historical expectations for pedestrian
+    compatibility scenarios when the environment does not provide an action-space
+    shape before initialization.
     Returning ``(action, None)`` mirrors common RL model predict signatures
     (e.g., Stable Baselines returning (action, state)).
     """

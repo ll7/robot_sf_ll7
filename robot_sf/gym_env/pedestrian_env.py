@@ -130,6 +130,8 @@ class PedestrianEnv(SingleAgentEnv):
         Args:
             env_config: Pedestrian simulation configuration (unified or legacy).
             robot_model: Pre-trained robot model for adversarial interaction.
+                When ``None``, the shared runtime fallback stub from
+                ``robot_sf.gym_env._stub_robot_model`` is used.
             reward_func: Reward function for pedestrian training.
             debug: Enable debug mode with visualization.
             recording_enabled: Enable state recording.
@@ -147,6 +149,8 @@ class PedestrianEnv(SingleAgentEnv):
 
         # Store robot model
         if robot_model is None:
+            # Runtime compatibility path: keep explicit None as a supported entrypoint
+            # for legacy examples/scripts that rely on zero-action defaults.
             robot_model = StubRobotModel()
         self.robot_model = robot_model
 

@@ -90,6 +90,7 @@ knowledge, not every transient iteration detail.
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
+* Issue #2946 mechanism-evidence figure pack: [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Issue #1181/#1191 ML-Intern Bounded Assistant Assessment and Codex-Native Workflow Extraction:

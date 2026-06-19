@@ -150,7 +150,7 @@ fields in public surfaces and private-only fields in private surfaces.
 Submission state rules:
 
 - `sbatch`/`sacct` success or a job id is route evidence only.
-- `submitted` only when immediate health check plus issue/PR + private-ops traceability are both complete.
+- Use `submitted` only when the immediate health check succeeds and both traceability records are complete.
 - If either route traceability step is missing, use `partial_traceable` and keep status explicitly blocked.
 - Public issue/PR comments may include job id and partition for traceability, but must not include private host
   names, account/QoS details, scratch paths, or private retrieval mechanics.

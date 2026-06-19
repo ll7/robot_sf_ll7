@@ -28,6 +28,12 @@ def _write_csv(path: Path, header: list[str], rows: list[dict[str, str]]) -> Non
             handle.write(",".join(row.get(key, "") for key in header) + "\n")
 
 
+def _write_json(path: Path, payload: dict) -> None:
+    """Write one compact JSON payload."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def _queue_payload() -> dict:
     """Return a minimal queue payload used by most tests."""
     return {
@@ -413,3 +419,180 @@ def test_happy_path_json_shape_is_stable(tmp_path: Path) -> None:
     assert row["status"] == "evidence_preserved"
     assert row["seed"] == 101
     assert row["queue_id"] == "issue-2656-example"
+
+
+def test_finalizer_manifest_bridge_captures_output_pointer_and_transition(tmp_path: Path) -> None:
+    """Successful finalizers should surface output pointers and issue transition fields."""
+    payload = _queue_payload()
+    payload["entries"][0]["id"] = "issue-2656-example"
+    payload["entries"][0]["seeds"] = [201]
+    payload["entries"][0]["issue"] = 2656
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="completed",
+            seeds=[201],
+            slurm_job_id=901,
+            exp_id="exp-finalizer",
+        ),
+    )
+
+    finalizer = tmp_path / "evidence" / "finalization_901.json"
+    _write_json(
+        finalizer,
+        {
+            "schema_version": "robot-sf-slurm-job-finalization.v1",
+            "issue_number": 2656,
+            "job_id": "901",
+            "job_state": "COMPLETED",
+            "classification": "success",
+            "artifact_status": "all_required_present",
+            "artifacts": [
+                {
+                    "path": "output/slurm/job-901/oracle_candidate_trace_manifest.json",
+                    "artifact_uri": "wandb-artifact://robot-sf/finalizer/job-901:latest",
+                    "exists": True,
+                    "required": True,
+                    "kind": "file",
+                    "sha256": "deadbeef",
+                    "size_bytes": 1,
+                }
+            ],
+            "claim_boundary": "compact local",
+        },
+    )
+
+    evidence = tmp_path / "evidence" / "seed_summary.csv"
+    _write_csv(
+        evidence,
+        ["queue_id", "seed", "job_id", "wandb_url", "claim_boundary", "run_summary_sha256"],
+        [
+            {
+                "queue_id": "issue-2656-example",
+                "seed": "201",
+                "job_id": "901",
+                "wandb_url": "https://wandb.ai/example/run/901",
+                "claim_boundary": "compact local",
+                "run_summary_sha256": "0123456789abcdef0123456789abcdef",
+            }
+        ],
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+        finalizer_manifests=[finalizer],
+        generated_at="2026-06-19T00:00:00+00:00",
+    )
+
+    assert report["generated_at"] == "2026-06-19T00:00:00+00:00"
+    assert report["finalizer_bridge"]["schema_version"] == "slurm-job-finalizer-bridge.v1"
+    bridge_row = report["finalizer_bridge"]["rows"][0]
+    assert bridge_row["job_id"] == "901"
+    assert bridge_row["issue_transition"]["to"] == "success"
+    assert bridge_row["durable_pointer"] == "wandb-artifact://robot-sf/finalizer/job-901:latest"
+    assert bridge_row["output_pointers"]
+    assert bridge_row["artifact_status"] == "all_required_present"
+    assert bridge_row["source_path"] == str(finalizer)
+
+
+def test_finalizer_missing_durable_pointer_and_queue_linkage_flags_error(tmp_path: Path) -> None:
+    """Missing durable pointers and queue mapping should be flagged by the checker."""
+    payload = _queue_payload()
+    payload["entries"][0]["id"] = "issue-2656-example"
+    payload["entries"][0]["seeds"] = [202]
+    payload["entries"][0]["issue"] = 2656
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="completed",
+            seeds=[202],
+            slurm_job_id=902,
+            exp_id="exp-finalizer",
+        ),
+    )
+
+    finalizer = tmp_path / "evidence" / "finalization_902.json"
+    _write_json(
+        finalizer,
+        {
+            "schema_version": "robot-sf-slurm-job-finalization.v1",
+            "issue_number": 2656,
+            "job_id": "902",
+            "classification": "success",
+            "artifact_status": "all_required_present",
+            "artifacts": [
+                {
+                    "path": "output/slurm/job-902/oracle_candidate_trace_manifest.json",
+                    "exists": True,
+                    "required": True,
+                    "kind": "file",
+                    "sha256": "cafebabe",
+                    "size_bytes": 1,
+                }
+            ],
+            "claim_boundary": "compact local",
+        },
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+        finalizer_manifests=[finalizer],
+    )
+
+    assert any(
+        "missing durable_pointer for successful output" in error for error in report["errors"]
+    )
+    assert any("completed artifacts are not preserved" in error for error in report["errors"])
+
+
+def test_missing_finalizer_manifest_mapping_is_reported(tmp_path: Path) -> None:
+    """Finalizer rows that cannot be traced to a manifest must be flagged."""
+    payload = _queue_payload()
+    payload["entries"][0]["issue"] = 2656
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    finalizer = tmp_path / "evidence" / "finalization_903.json"
+    _write_json(
+        finalizer,
+        {
+            "schema_version": "robot-sf-slurm-job-finalization.v1",
+            "issue_number": 2656,
+            "job_id": "903",
+            "classification": "success",
+            "artifact_status": "required_missing",
+            "artifacts": [
+                {
+                    "path": "output/slurm/job-903/oracle_candidate_trace_manifest.json",
+                    "exists": False,
+                    "required": True,
+                    "kind": "file",
+                }
+            ],
+        },
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[],
+        evidence_root=tmp_path / "evidence",
+        finalizer_manifests=[finalizer],
+    )
+
+    assert any(
+        "no manifest row for queue/seed linkage" in error for error in report["errors"]
+    ) or any("issue 2656 not in queue" in error for error in report["warnings"])

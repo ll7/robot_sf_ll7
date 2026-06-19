@@ -1730,3 +1730,19 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1111_carla_setup_smoke_2026-05-18/setup_smoke.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1113_continuous_h500_2026-05-10/comparison.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1169_carla_live_replay_2026-05-18/live_replay_static_boundary_fixed.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1239_human_model_transfer_2026-05-18/preflight_matrix_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

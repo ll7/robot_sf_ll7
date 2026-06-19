@@ -257,7 +257,7 @@ knowledge, not every transient iteration detail.
   [issue_1584_socnav_unavailable_row_policy.md](issue_1584_socnav_unavailable_row_policy.md)
 * Issue #2397 SocNavBench Control-Pipeline Asset Status (2026-06-06):
   [issue_2397_socnavbench_control_status_2026-06-06.md](issue_2397_socnavbench_control_status_2026-06-06.md)
-* Issue #1583 high-risk root path boundaries (superseded by
+* Issue #1583 High-Risk Root Path Boundaries (superseded by
   [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md);
   provenance only):
   [issue_1583_high_risk_root_boundaries.md](issue_1583_high_risk_root_boundaries.md)

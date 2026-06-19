@@ -53,6 +53,9 @@ _DEFAULT_STEP_SAMPLES = 10
 _LARGE_CROWD_PROFILE_SCENARIO = "configs/scenarios/single/dense_pedestrian_stress.yaml"
 _LARGE_CROWD_PROFILE_STEP_SAMPLES = 20
 _DEFAULT_STEP_PROFILE_LIMIT = 10
+_STEP_PROFILE_MODE_STEADY = "steady"
+_STEP_PROFILE_MODE_COLD_START = "cold-start"
+_STEP_PROFILE_MODES = {_STEP_PROFILE_MODE_STEADY, _STEP_PROFILE_MODE_COLD_START}
 
 
 @dataclass(slots=True)
@@ -620,6 +623,7 @@ def run_performance_smoke_test(  # noqa: PLR0913
     reset_soft: float | None = None,
     reset_hard: float | None = None,
     step_profile: bool = False,
+    step_profile_mode: str | None = None,
     step_profile_limit: int = _DEFAULT_STEP_PROFILE_LIMIT,
     enforce: bool | None = None,
     on_ci: bool | None = None,
@@ -643,6 +647,10 @@ def run_performance_smoke_test(  # noqa: PLR0913
         reset_soft: Soft threshold (resets/sec) for environment reset throughput.
         reset_hard: Hard threshold (resets/sec) for environment reset throughput.
         step_profile: Collect cProfile hotspots from the measured step loop.
+        step_profile_mode: Controls default warmup behavior for step-profile runs
+            when ``warmup_steps`` is omitted. ``steady`` performs one default
+            warmup step. ``cold-start`` uses zero warmup steps so first-step
+            timing includes setup/JIT overhead.
         step_profile_limit: Number of hottest profiler rows to retain.
         enforce: When True, treat soft breaches as failures.
         on_ci: Override CI detection (defaults to GITHUB_ACTIONS env var).
@@ -652,8 +660,11 @@ def run_performance_smoke_test(  # noqa: PLR0913
     """
     if step_samples <= 0:
         raise ValueError("step_samples must be greater than zero")
-    if warmup_steps is None:
-        warmup_steps = 1 if step_profile else 0
+    warmup_steps = _resolve_step_profile_warmup_steps(
+        step_profile=step_profile,
+        step_profile_mode=step_profile_mode,
+        warmup_steps=warmup_steps,
+    )
     if warmup_steps < 0:
         raise ValueError("warmup_steps must be non-negative")
 
@@ -792,8 +803,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional untimed simulator steps before measured attribution. "
-            "Defaults to 1 for --step-profile and 0 otherwise; explicit 0 keeps "
-            "cold-start profiling. Non-zero values populate warm-start fields and "
+            "When omitted, this default depends on --step-profile-mode; explicit "
+            "values still apply regardless. Non-zero values populate warm-start "
+            "fields and "
             "set warmup_excluded=true."
         ),
     )
@@ -835,8 +847,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Collect a compact cProfile hotspot slice from the measured step loop. "
-            "Profiling excludes environment setup/reset and uses one warmup step by "
-            "default unless --warmup-steps is explicit."
+            "Profiling excludes environment setup/reset by default."
+        ),
+    )
+    parser.add_argument(
+        "--step-profile-mode",
+        choices=("steady", "cold-start"),
+        default="steady",
+        help=(
+            "Step-profile warmup mode (default: steady). "
+            "'steady' runs one untimed warmup step before measured profiling; "
+            "'cold-start' runs the profiler without warmup."
         ),
     )
     parser.add_argument(
@@ -849,6 +870,27 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     return parser.parse_args()
+
+
+def _resolve_step_profile_warmup_steps(
+    *,
+    step_profile: bool,
+    step_profile_mode: str | None,
+    warmup_steps: int | None,
+) -> int:
+    """Resolve omitted profile warmup defaults without replacing explicit values."""
+
+    if warmup_steps is not None:
+        return warmup_steps
+    if step_profile_mode is None:
+        step_profile_mode = _STEP_PROFILE_MODE_STEADY
+    if step_profile_mode not in _STEP_PROFILE_MODES:
+        raise ValueError("step_profile_mode must be one of: steady, cold-start")
+    if not step_profile:
+        return 0
+    if step_profile_mode == _STEP_PROFILE_MODE_COLD_START:
+        return 0
+    return 1
 
 
 def main() -> int:  # noqa: C901
@@ -886,6 +928,7 @@ def main() -> int:  # noqa: C901
         scenario=args.scenario,
         scenario_name=args.scenario_name,
         step_profile=args.step_profile,
+        step_profile_mode=args.step_profile_mode,
         step_profile_limit=args.step_profile_limit,
         include_recommendations=args.include_recommendations,
         creation_soft=creation_soft,

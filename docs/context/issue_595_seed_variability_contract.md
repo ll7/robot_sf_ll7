@@ -79,6 +79,10 @@ Required columns:
 - `time_to_goal`
 - `snqi`
 
+`collision` is the legacy per-episode metric alias from `metrics.collisions`.
+For canonical per-episode outcome, consumers should read `outcome.collision_event`
+from source episode records (`runs/<planner>/episodes.jsonl`).
+
 `repeat_index` is a deterministic zero-based index within each
 `(scenario_id, planner_key, seed)` group.
 

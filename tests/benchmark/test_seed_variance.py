@@ -166,6 +166,33 @@ def test_build_seed_episode_rows_assigns_repeat_index_deterministically() -> Non
     assert rows[0]["time_to_goal"] == pytest.approx(0.90)
 
 
+def test_build_seed_episode_rows_collision_remains_legacy_metric_alias() -> None:
+    """Compatibility export keeps collision sourced from metrics, not outcome events."""
+    rows = build_seed_episode_rows(
+        [
+            {
+                "episode_id": "ep-legacy-collision",
+                "scenario_id": "classic_cross_trap_low",
+                "seed": 111,
+                "algo": "orca",
+                "planner_key": "orca",
+                "kinematics": "differential_drive",
+                "metrics": {
+                    "success": 1.0,
+                    "collisions": 0.0,
+                    "near_misses": 0.0,
+                    "time_to_goal_norm": 0.20,
+                },
+                "outcome": {
+                    "collision_event": True,
+                },
+            }
+        ]
+    )
+
+    assert rows[0]["collision"] == 0.0
+
+
 def test_build_seed_episode_rows_groups_repeat_index_by_kinematics() -> None:
     """Repeat indices should restart when the same planner runs under other kinematics."""
     records = _sample_records() + [

@@ -9,7 +9,7 @@ metadata:
   status: resolved
 ---
 
-# SAC Planner Action Semantics Mismatch (Issue #790)
+# Issue #790 SAC Planner Action Semantics Mismatch
 
 **Status**: Resolved  
 **Issue**: [#790](https://github.com/ll7/robot_sf_ll7/issues/790)  

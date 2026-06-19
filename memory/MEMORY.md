@@ -98,7 +98,7 @@ files that agents read on demand.
 
 ### `known-issues/` (New)
 
-- [SAC Action Semantics Mismatch (Issue #790)](project_sac_action_semantics.md)
+- [Issue #790 SAC Action Semantics Mismatch](project_sac_action_semantics.md)
   Delta vs absolute velocity mismatch between training and benchmark; resolution via
   _VelocityTargetActionWrapper; validation and lessons learned.
 

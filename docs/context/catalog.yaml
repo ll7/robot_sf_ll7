@@ -1126,6 +1126,10 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/issue_2928_socnavbench_hunavsim_metric_correspondence.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2459/mapping_table_fixture.yaml
     status: proposal
     freshness: evidence

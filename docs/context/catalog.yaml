@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-16
+updated_at: 2026-06-19
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -1591,6 +1591,10 @@ entries:
     freshness: maintained
     area: benchmark_evidence
   - path: docs/context/issue_3058_research_engine_gap_audit.md
+    status: current
+    freshness: maintained
+    area: benchmark_evidence
+  - path: docs/context/issue_3061_social_compliance_metric_contract.md
     status: current
     freshness: maintained
     area: benchmark_evidence

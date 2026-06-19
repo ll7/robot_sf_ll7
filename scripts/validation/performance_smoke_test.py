@@ -69,6 +69,7 @@ class StepLoopMetrics:
     warmup_step_loop_sec: float | None = None
     warmup_steps_per_sec: float | None = None
     measurement_mode: str = "cold_only"
+    first_step_pedestrian_count: int | None = None
 
     def to_dict(self) -> dict[str, float | int | bool | str | None]:
         """Serialize step-loop metrics to a JSON-friendly mapping."""
@@ -344,6 +345,7 @@ def measure_step_loop_performance(  # noqa: C901
         warmup_step_loop_sec = None
         warmup_steps_per_sec = None
         measurement_mode = "cold_only"
+        first_step_pedestrian_count = None
 
         terminated = False
         truncated = False
@@ -370,6 +372,7 @@ def measure_step_loop_performance(  # noqa: C901
         first_step_start = time.time()
         _, _, terminated, truncated, _ = env.step(action)
         first_step_sec = time.time() - first_step_start
+        first_step_pedestrian_count = _extract_pedestrian_count(env)
 
         steady_start = time.time()
         for index in range(1, step_samples):
@@ -410,6 +413,7 @@ def measure_step_loop_performance(  # noqa: C901
         warmup_first_step_sec=warmup_first_step_sec,
         warmup_step_loop_sec=warmup_step_loop_sec,
         warmup_steps_per_sec=warmup_steps_per_sec,
+        first_step_pedestrian_count=first_step_pedestrian_count,
         measurement_mode=measurement_mode,
     )
 
@@ -426,7 +430,9 @@ def measure_step_profile(
     loop_metrics = step_loop or measure_step_loop_performance(
         step_samples=step_samples, config=config
     )
-    pedestrian_count = _measure_profile_pedestrian_count(config=config)
+    pedestrian_count = loop_metrics.first_step_pedestrian_count
+    if pedestrian_count is None:
+        pedestrian_count = _measure_profile_pedestrian_count(config=config)
     return StepProfileMetrics(
         step_samples=loop_metrics.step_samples,
         first_step_sec=loop_metrics.first_step_sec,

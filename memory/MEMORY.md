@@ -80,9 +80,32 @@ files that agents read on demand.
 - [Benchmark Memory Scope](benchmarks/2026-04-13_benchmark_memory_scope.md)
   What benchmark-facing evidence belongs in memory, what must stay in `docs/context/`, and why
   fallback/degraded outcomes cannot be stored as success claims.
+- [Benchmark Platform Status](benchmark_platform_status.md)
+  Social Navigation Benchmark Platform operational status; fully operational (108 tests);
+  workflows, metrics, baseline planners, known limitations, artifact provenance checklist.
+
+### `architecture/` (Extended)
+
+- [Architecture Overview](architecture_overview.md) — Core layers (factory, simulation, planners,
+  benchmark, utilities), module organization, design decisions, artifact provenance, performance
+  characteristics.
+
+### `research/` (New)
+
+- [Research Status](research_status.md) — Active research directions (social compliance, route
+  recovery, adversarial search, planner readiness, multi-ped families); status labels; evidence
+  grading; blocked work; methodology for capturing hypotheses.
+
+### `known-issues/` (New)
+
+- [SAC Action Semantics Mismatch (Issue #790)](project_sac_action_semantics.md)
+  Delta vs absolute velocity mismatch between training and benchmark; resolution via
+  _VelocityTargetActionWrapper; validation and lessons learned.
 
 ## Maintenance
 
 - Agents should treat this directory as optional but preferred startup context for durable repo
   facts after reading `AGENTS.md`.
 - If the tree grows large, keep this index concise and move detail into additional topic files.
+- Use `anthropic-skills:consolidate-memory` quarterly to merge duplicates and archive resolved items.
+- Cross-link with `[[name]]` syntax (name = file slug without .md).

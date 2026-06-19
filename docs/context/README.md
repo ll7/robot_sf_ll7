@@ -208,7 +208,7 @@ knowledge, not every transient iteration detail.
 * Issue #2624 Topology Reuse-Penalty Paired Diagnostic Gate 2026-06-11:
   [issue_2624_topology_reuse_penalty_gate.md](issue_2624_topology_reuse_penalty_gate.md)
   ([summary](evidence/issue_2624_topology_reuse_penalty_gate/summary.json))
-* Issue #2660 Topology Successor Gate After Reuse-Penalty Regression:
+* Issue #2660 Topology Successor Gate After Reuse-Penalty Regression (superseded by Issue #2704):
   [issue_2660_topology_successor_gate.md](issue_2660_topology_successor_gate.md)
 * Issue #2704 Progress-Gated Topology Successor Diagnostic:
   [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)
@@ -337,7 +337,7 @@ knowledge, not every transient iteration detail.
 
   [issue_2281_research_v1_trace_review_pack.md](issue_2281_research_v1_trace_review_pack.md)
 
-* Issue #2309 AMV trace export blocker:
+* Issue #2309 AMV trace export blocker (historical; partially superseded by Issue #2405):
 
   [issue_2309_amv_trace_export_blocker.md](issue_2309_amv_trace_export_blocker.md)
 
@@ -883,7 +883,7 @@ knowledge, not every transient iteration detail.
 * Issue #2624 Topology Reuse-Penalty Paired Diagnostic Gate 2026-06-11:
   [issue_2624_topology_reuse_penalty_gate.md](issue_2624_topology_reuse_penalty_gate.md)
   ([summary](evidence/issue_2624_topology_reuse_penalty_gate/summary.json))
-* Issue #2660 Topology Successor Gate After Reuse-Penalty Regression:
+* Issue #2660 Topology Successor Gate After Reuse-Penalty Regression (superseded by Issue #2704):
   [issue_2660_topology_successor_gate.md](issue_2660_topology_successor_gate.md)
 * Issue #2704 Progress-Gated Topology Successor Diagnostic:
   [issue_2704_progress_gated_topology_successor.md](issue_2704_progress_gated_topology_successor.md)

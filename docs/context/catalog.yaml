@@ -450,7 +450,8 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_2660_topology_successor_gate.md
-    status: historical
+    status: superseded
+    replacement: docs/context/issue_2704_progress_gated_topology_successor.md
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_2704_progress_gated_topology_successor.md
@@ -682,7 +683,7 @@ entries:
     freshness: evidence
     area: benchmark_release
   - path: docs/context/issue_2309_amv_trace_export_blocker.md
-    status: current
+    status: historical
     freshness: evidence
     area: benchmark_release
   - path: docs/context/evidence/issue_2309_amv_trace_export_probe_2026-06-05/summary.json
@@ -1198,7 +1199,8 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_2903_horizon_denominator_health.md
-    status: historical
+    status: superseded
+    replacement: docs/context/issue_2937_horizon_denominator_health.md
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_2937_horizon_denominator_health_2026-06-16/summary.json

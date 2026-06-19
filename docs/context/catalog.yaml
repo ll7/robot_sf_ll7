@@ -1694,3 +1694,23 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/matrix_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1023_scenario_horizons_preflight_2026-05-06/reports/matrix_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1023_candidate_augmented_preflight_2026-05-06/reports/matrix_summary.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports/matrix_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1023_candidate_augmented_local_full_2026-05-06/reports/matrix_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

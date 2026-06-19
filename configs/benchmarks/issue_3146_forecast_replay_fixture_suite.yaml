@@ -1,0 +1,66 @@
+schema_version: forecast-replay-fixture-suite.v0.1
+issue: 3146
+claim_boundary: >
+  Diagnostic smoke evidence for planner-consumed forecast replay across
+  scenario-diverse existing trace fixtures. This is not benchmark-strengthening
+  or paper-grade evidence, and it does not claim forecast variant superiority.
+
+variants:
+  - none
+  - cv
+  - semantic
+  - interaction_aware
+  - risk_filtered
+
+replay_policy:
+  gate: scripts/validation/validate_live_forecast_replay_gate.py
+  full_matrix: true
+  row_classification_policy: fail_closed
+  degraded_or_blocked_success: false
+  diagnostic_brake_distance_m:
+    cv: 3.0
+    semantic: 2.5
+    interaction_aware: 2.0
+    risk_filtered: 1.5
+
+fixtures:
+  - fixture_id: crossing_goal_directed
+    scenario_family: crossing
+    trace: tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json
+    expected_seed: 2868
+    expected_scenario_id: issue_2868_goal_directed_crossing
+    expected_execution_mode: native
+  - fixture_id: corridor_route_conflict
+    scenario_family: corridor_route_conflict
+    trace: tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json
+    expected_seed: 2868
+    expected_scenario_id: issue_2868_route_conflict_goal
+    expected_execution_mode: native
+  - fixture_id: dense_bottleneck_stress
+    scenario_family: dense_bottleneck
+    trace: tests/fixtures/analysis_workbench/simulation_trace_export_v1/dense_pedestrian_stress_episode_0000.json
+    expected_seed: 2765
+    expected_scenario_id: dense_pedestrian_stress
+    expected_execution_mode: native
+  - fixture_id: signalized_crossing_degraded
+    scenario_family: signalized_crossing
+    trace: tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json
+    expected_seed: 2868
+    expected_scenario_id: issue_2868_signalized_crossing
+    expected_execution_mode: degraded
+
+summary_contract:
+  required_fixture_count: 3
+  required_distinct_scenario_families: 3
+  required_variant_count: 5
+  required_fields:
+    - fixture_id
+    - scenario_family
+    - scenario_id
+    - seed
+    - execution_mode
+    - row_classification
+    - variant_results
+    - same_seed_deltas
+    - caveats
+  required_native_non_none_signature_count: 2

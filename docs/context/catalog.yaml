@@ -1394,7 +1394,15 @@ entries:
     status: evidence
     freshness: evidence
     area: manual_control_trace
+  - path: docs/context/evidence/issue_2430_ammv_trace_annotation_2026-06-06/README.md
+    status: evidence
+    freshness: evidence
+    area: manual_control_trace
   - path: docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/README.md
+    status: evidence
+    freshness: evidence
+    area: manual_control_trace
+  - path: docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/README.md
     status: evidence
     freshness: evidence
     area: manual_control_trace

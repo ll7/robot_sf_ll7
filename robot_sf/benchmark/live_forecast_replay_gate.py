@@ -98,6 +98,12 @@ DEFAULT_NEAR_MISS_DISTANCE_M: float = 1.5
 DEFAULT_STOP_SPEED_MPS: float = 0.05
 DEFAULT_PROGRESS_GOAL_PROXIMITY_M: float = 1.0
 DEFAULT_RISK_DISTANCE_M: float = 3.0
+DEFAULT_VARIANT_RISK_DISTANCE_M: dict[str, float] = {
+    "cv": 3.0,
+    "semantic": 2.5,
+    "interaction_aware": 2.0,
+    "risk_filtered": 1.5,
+}
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,9 @@ class LiveForecastReplayGateConfig:
     stop_speed_mps: float = DEFAULT_STOP_SPEED_MPS
     progress_goal_proximity_m: float = DEFAULT_PROGRESS_GOAL_PROXIMITY_M
     risk_distance_m: float = DEFAULT_RISK_DISTANCE_M
+    variant_risk_distance_m: dict[str, float] = field(
+        default_factory=lambda: dict(DEFAULT_VARIANT_RISK_DISTANCE_M)
+    )
     observation_adapter: ForecastObservationAdapter = field(
         default_factory=OracleFullStateForecastAdapter
     )
@@ -640,8 +649,14 @@ def _predictor_for_replay_variant(
         variant=variant,
         horizons_s=config.horizons_s,
         dt_s=dt_s,
-        risk_distance_m=config.risk_distance_m,
+        risk_distance_m=_risk_distance_for_variant(variant, config),
     )
+
+
+def _risk_distance_for_variant(variant: str, config: LiveForecastReplayGateConfig) -> float:
+    """Return the diagnostic brake distance for a forecast variant."""
+
+    return float(config.variant_risk_distance_m.get(variant, config.risk_distance_m))
 
 
 def _frame_step_dt_s(
@@ -666,7 +681,8 @@ def run_variant_closed_loop_replay(
     forecast braking disabled.  Other variants instantiate a
     :class:`BaselineProbabilisticPredictor`, query it at each step, and override
     the recorded linear speed with zero when any predicted pedestrian mean comes
-    within ``risk_distance_m`` of the robot.
+    within the configured variant-specific diagnostic brake distance of the
+    robot.
 
     The policy is intentionally minimal: it proves the forecast can influence
     closed-loop metrics without claiming that the brake heuristic is a good
@@ -690,6 +706,7 @@ def run_variant_closed_loop_replay(
 
     dt_s = _trace_dt_s(trace)
     predictor = _predictor_for_replay_variant(variant, config, dt_s)
+    brake_distance_m = _risk_distance_for_variant(variant, config)
 
     initial_robot = trace.frames[0].robot
     robot_position = np.asarray(initial_robot.get("position", [0.0, 0.0]), dtype=float)
@@ -720,7 +737,7 @@ def run_variant_closed_loop_replay(
                 predictor,
                 observation,
                 robot_position,
-                config.risk_distance_m,
+                brake_distance_m,
             )
         except (ValueError, TypeError):  # pragma: no cover - defensive fallback
             brake = False
@@ -1094,12 +1111,13 @@ def _build_variant_result(
             "closed_loop_metric_source": closed_loop_metrics.get(
                 "replay_policy", "no_forecast_replay"
             ),
+            "replay_policy_params": {"brake_distance_m": None},
         }
     batch = build_variant_forecast_batch(
         trace,
         variant,
         horizons_s=feasible_horizons,
-        risk_distance_m=config.risk_distance_m,
+        risk_distance_m=_risk_distance_for_variant(variant, config),
         observation_adapter=config.observation_adapter,
     )
     forecast_step = batch.metadata.get("step_index", 0)
@@ -1146,6 +1164,7 @@ def _build_variant_result(
         "closed_loop_metrics": closed_loop_metrics,
         "closed_loop_metric_source": closed_loop_source,
         "closed_loop_replay_error": replay_error,
+        "replay_policy_params": {"brake_distance_m": _risk_distance_for_variant(variant, config)},
     }
 
 

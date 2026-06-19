@@ -17,11 +17,14 @@ already visible in the repository:
 
 - authored scenario contracts and perturbation pilots;
 - the #2523 proxy `scenario_prior.v1` smoke fixture;
-- the #2479 SDD scenario-distribution candidate.
+- the #2479 SDD scenario-distribution candidate;
+- repository-trace-derived adversarial/search-generated scenario prior family;
+- repository-trace-derived counterfactual scenario-pair mechanism prior family.
 
 The registry records source type, license/provenance status, source traces, extraction method,
 parameter-bound source, excluded populations, unsupported claims, and ODD conditions for each
-family.
+family. The two new repository-trace-derived families are diagnostic or smoke-level only;
+they do not constitute benchmark evidence, causality evidence, or real-world representativeness.
 
 ## Claim Boundary
 

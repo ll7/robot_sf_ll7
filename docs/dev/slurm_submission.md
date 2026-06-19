@@ -157,7 +157,7 @@ Submission state rules:
 
 ## Capacity-aware / fill batches
 
-When submitting a batch intended to fill spare cluster capacity (rather than a single prioritised
+When submitting a batch intended to fill spare cluster capacity (rather than a single prioritized
 experiment), the batch may include several unrelated ready experiments, but it must satisfy these
 public-safe preconditions before `sbatch`:
 

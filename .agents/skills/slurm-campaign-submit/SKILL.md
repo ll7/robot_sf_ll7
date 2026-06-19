@@ -73,7 +73,7 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
 
 ## Capacity-aware / fill batches
 
-When the goal is to fill available cluster capacity rather than run a prioritised experiment, the
+When the goal is to fill available cluster capacity rather than run a prioritized experiment, the
 batch may contain several unrelated ready experiments, but all preconditions in this section must be
 satisfied before `sbatch`:
 

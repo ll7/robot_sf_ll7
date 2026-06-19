@@ -22,6 +22,31 @@ The JSON payload uses `schema_version: robot-sf-debug-timeline.v1` and records:
 - selected/proposed action when present,
 - TTC, PET, and clearance annotations when present in frame or episode metrics.
 
+### Replay State Debug
+
+For quick per-frame inspection of a JSONL replay (headless, read-only), use:
+
+```bash
+uv run python scripts/tools/debug_replay_state.py \
+  output/benchmarks/example/episodes.jsonl \
+  --episode-id 7 \
+  --step 12 \
+  --agent-id 1 \
+  --output-mode json
+```
+
+The structured output includes:
+
+- replay path and selected episode index/id,
+- frame index and timestep,
+- robot pose, pedestrian count and a small pedestrian position sample,
+- selected-agent pose if `--agent-id` is set,
+- `ray_summary` (`count`, `shape`, min/max ray norms) when ray vectors are present,
+- `sensor_summary` for fields present in the raw state record (for example `observation_image`, `planned_path`),
+- episode metadata when available.
+
+The command is diagnostic only; it does not render or mutate replay files.
+
 For typed `simulation_trace_export.v1` artifacts, render a static Markdown inspection report with:
 
 ```bash

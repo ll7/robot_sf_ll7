@@ -9,25 +9,26 @@ metadata:
 
 # Social Navigation Benchmark Platform Status
 
-**Status**: Fully operational
+**Status**: Operational support surface
 **Last Updated**: 2026-06-19
-**Evidence Grade**: Nominal benchmark evidence (108 tests passing)
+**Evidence Grade**: Development readiness evidence; benchmark claims require run-specific proof
 **Related**: [Architecture Overview](architecture_overview.md)
 
 ## Platform Overview
 
-The Social Navigation Benchmark Platform is a complete, production-ready system for evaluating robot
-navigation planners in pedestrian-filled environments.
+The Social Navigation Benchmark Platform is the maintained evaluation surface for robot navigation
+planners in pedestrian-filled environments. Treat this note as a workflow/status guide, not as a
+standalone benchmark result.
 
 | Component | Status | Notes |
 | --- | --- | --- |
-| Episode Runner | ✅ Complete | Parallel execution, resume, deterministic seeding |
-| Metrics Suite | ✅ Complete | SNQI composite + component breakdown |
-| Baseline Planners | ✅ Complete | SocialForce, PPO, Random with unified interface |
-| Statistical Analysis | ✅ Complete | Bootstrap CI, robust aggregation |
-| Figure Orchestrator | ✅ Complete | Distribution plots, Pareto frontiers, force fields |
-| CLI Tools | ✅ Complete | 15 subcommands covering full workflow |
-| Documentation | ✅ Complete | Quickstart, CLI reference, example workflows |
+| Episode Runner | Available | Parallel execution, resume, deterministic seeding |
+| Metrics Suite | Available | SNQI composite + component breakdown |
+| Baseline Planners | Available | SocialForce, PPO, Random with unified interface |
+| Statistical Analysis | Available | Bootstrap CI, robust aggregation |
+| Figure Orchestrator | Available | Distribution plots, Pareto frontiers, force fields |
+| CLI Tools | Available | 15 subcommands covering full workflow |
+| Documentation | Available | Quickstart, CLI reference, example workflows |
 
 ## Operational Capabilities
 
@@ -54,7 +55,7 @@ navigation planners in pedestrian-filled environments.
   - Lateral displacement (not excessive deviation from optimal path)
   - Time efficiency (reach goal in reasonable time)
 - Weighting: Configurable; default weights in `configs/benchmarks/`
-- Evidence: Published; supports sensitivity analysis
+- Evidence: Implemented and documented; run-specific sensitivity claims require linked artifacts
 
 ### Baseline Planners
 
@@ -100,7 +101,7 @@ When benchmark execution cannot complete under ideal conditions:
 
 ### Testing Coverage
 
-- 108 tests passing (CI: `scripts/dev/run_tests_parallel.sh`)
+- Test-suite evidence should be reported with the exact command, commit, and date used.
 - Covers factory API, planner interface, metric calculation, CLI commands
 - Test failure classification: See `.github/copilot-instructions.md` for evaluation protocol
 
@@ -147,10 +148,10 @@ For any benchmark claim (whether in issue, PR, or paper):
 5. **Uncertainty**: If confidence < 95%, include numeric bound or condition
 
 **Example**:
-> Nominal benchmark evidence (108 tests passing): PPO achieves 85±3 SNQI vs. 72±4 SocialForce
-> on certified H500 maps (Route Clearance v1) with 5-run bootstrap CI. Config:
+> Nominal benchmark evidence: PPO achieves 85±3 SNQI vs. 72±4 SocialForce on certified H500 maps
+> (Route Clearance v1) with 5-run bootstrap CI. Config:
 > `configs/benchmarks/h500_ppo_baseline.yaml`. Non-certified maps excluded per fallback policy
-> (`docs/context/issue_691_*`). Reproduction: `uv run python -m robot_sf.benchmark run <config>`
+> (`docs/context/issue_691_*`). Reproduction: `uv run python -m robot_sf.benchmark run <config>`.
 
 ## Reference & Documentation
 

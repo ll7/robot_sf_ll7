@@ -166,7 +166,8 @@ When work is blocked:
 **Status**: In progress
 **Scope**: Full benchmark validation of H500 route set under nominal benchmark contract
 **Timeline**: Ongoing; checkpoint results at 25/50/75/100 map completion
-**Evidence**: Nominal (108 tests passing); full campaign = paper-grade
+**Evidence**: Development/test readiness evidence exists; full campaign evidence is required before
+paper-grade claims.
 
 ### Semantic Blocker Audit
 

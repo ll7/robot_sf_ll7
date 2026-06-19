@@ -81,8 +81,9 @@ files that agents read on demand.
   What benchmark-facing evidence belongs in memory, what must stay in `docs/context/`, and why
   fallback/degraded outcomes cannot be stored as success claims.
 - [Benchmark Platform Status](benchmark_platform_status.md)
-  Social Navigation Benchmark Platform operational status; fully operational (108 tests);
-  workflows, metrics, baseline planners, known limitations, artifact provenance checklist.
+  Social Navigation Benchmark Platform operational status, workflows, metrics, baseline planners,
+  known limitations, and artifact provenance checklist; benchmark claims still require
+  run-specific proof.
 
 ### `architecture/` (Extended)
 

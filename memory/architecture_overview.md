@@ -36,7 +36,7 @@ metadata:
 - Metrics: SNQI composite index with weighted components
 - Runners: Episode execution with observation/action/metric collection
 - Tools: CLI with 15 subcommands, figure orchestration, statistical analysis
-- Status: **Fully operational** (108 tests passing)
+- Status: **Available evaluation surface**; benchmark claims still require run-specific evidence
 - Reference: `robot_sf.benchmark`, `specs/120-social-navigation-benchmark-plan/`
 
 ### 5. Utilities & Tooling

@@ -1802,3 +1802,15 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1318_teb_corridor_deadlock_2026-05-20/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1353_broader_amv_2026-05-26/nominal/amv_coverage_summary.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

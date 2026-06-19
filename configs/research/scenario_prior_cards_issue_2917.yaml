@@ -1,0 +1,147 @@
+schema_version: scenario-prior-card-registry.v1
+name: scenario_prior_cards_issue_2917
+issue: 2917
+status: partial_initial_registry
+benchmark_evidence: false
+claim_boundary: >
+  This registry makes known Robot SF scenario-prior families auditable. It does not
+  prove learned-prior realism, benchmark usefulness, cross-dataset generalization,
+  planner improvement, or license-safe redistribution of raw external data.
+
+card_contract:
+  required_fields:
+    - card_id
+    - prior_family
+    - classification
+    - source_type
+    - dataset_license_status
+    - source_traces
+    - feature_extraction_method
+    - parameter_bounds
+    - excluded_populations
+    - unsupported_claims
+    - odd_conditions
+  classification_values:
+    - authored
+    - repository_trace_derived
+    - external_dataset_candidate
+    - proxy_only
+    - mixed
+    - legacy_unclassified
+  claim_boundary_fields:
+    benchmark_evidence: false
+    realism_claim: false
+    training_input: false
+
+cards:
+  - card_id: authored_scenario_contract_priors
+    prior_family: authored scenario contracts and perturbation pilots
+    classification: authored
+    source_type: repository_authored_configs
+    dataset_license_status: not_applicable_authored_repo_config
+    source_traces:
+      - configs/scenarios/contracts
+      - configs/scenarios/perturbations
+      - docs/scenario_contracts.md
+      - docs/scenario_perturbation_manifest.md
+    feature_extraction_method: >
+      Human-authored scenario contracts and perturbation manifests encode intended ODD,
+      actor, route, timing, density, and parameter-variation assumptions. Treat these as
+      authored priors until a separate extraction pass derives measured distributions.
+    parameter_bounds:
+      representation: contract_or_manifest_specific
+      units: use each referenced scenario_contract.v1 or perturbation manifest
+      enforcement: scenario_cert.v1 and scenario-specific validation remain separate gates
+    excluded_populations:
+      - external pedestrian datasets not staged through provenance manifests
+      - hardware-calibrated sensor populations
+      - non-pedestrian road users unless a scenario contract explicitly includes them
+    unsupported_claims:
+      - learned_prior_realism
+      - benchmark_usefulness
+      - cross_dataset_generalization
+      - planner_performance_improvement
+    odd_conditions:
+      - authored ODD assumptions live in scenario_contract.v1 files when present
+      - perturbation pilots are stress/design priors until execution evidence exists
+    related_surfaces:
+      - docs/scenario_contracts.md
+      - docs/scenario_certification.md
+
+  - card_id: issue_2523_proxy_scenario_prior_fixture
+    prior_family: proxy scenario_prior.v1 smoke fixture
+    classification: proxy_only
+    source_type: proxy_synthetic
+    dataset_license_status: not_applicable_proxy_fixture
+    source_traces:
+      - docs/context/evidence/issue_2523_scenario_prior_smoke/scenario_prior.v1.json
+      - docs/context/evidence/issue_2523_scenario_prior_smoke/summary.json
+      - tests/research/test_issue_2523_scenario_prior_smoke.py
+    feature_extraction_method: >
+      Embedded proxy scene summaries exercise the scenario_prior.v1 feature shape without
+      reading raw external data.
+    parameter_bounds:
+      representation: scenario_prior.v1 proxy smoke
+      units: position=m, velocity=m/s, time=s, density=agents_per_m2
+      enforcement: tests/research/test_issue_2523_scenario_prior_smoke.py
+    excluded_populations:
+      - real SDD trajectories
+      - ETH/UCY, TrajNet-style, and road-user interaction datasets
+      - learned or fitted scenario distributions
+    unsupported_claims:
+      - learned_prior_realism
+      - benchmark_usefulness
+      - cross_dataset_generalization
+      - planner_performance_improvement
+      - license_safe_redistribution_of_raw_data
+    odd_conditions:
+      - proxy fixture only
+      - not executable until real data is staged
+      - no realism or training-input claim
+    related_surfaces:
+      - docs/context/issue_2523_scenario_prior_smoke.md
+      - docs/context/issue_2479_real_trajectory_scenario_prior.md
+
+  - card_id: sdd_scenario_distribution_candidate
+    prior_family: Stanford Drone Dataset scenario-distribution candidate
+    classification: external_dataset_candidate
+    source_type: external_dataset_candidate
+    dataset_license_status: verified_in_repo_docs_but_raw_data_not_staged
+    source_traces:
+      - configs/research/scenario_distribution_prior_issue_2479.yaml
+      - scripts/tools/import_sdd_scenarios.py
+      - scripts/tools/manage_external_data.py
+      - docs/external_data_setup.md
+      - docs/real_world_trajectory_import.md
+    feature_extraction_method: >
+      Future staged-data spike should derive compact feature summaries from importer
+      provenance and scenario/map outputs. Until staging occurs, this card is a candidate
+      provenance gate, not extracted prior evidence.
+    parameter_bounds:
+      representation: scenario_distribution_prior_issue_2479
+      units: position=m, velocity=m/s, time=s, density=agents_per_m2
+      enforcement: tests/research/test_scenario_distribution_prior_manifest.py
+    excluded_populations:
+      - unstaged raw SDD annotations
+      - non-SDD datasets
+      - any dataset whose license or coordinate frame is not verified in repo docs
+    unsupported_claims:
+      - learned_prior_realism
+      - benchmark_usefulness
+      - cross_dataset_generalization
+      - planner_performance_improvement
+      - license_safe_redistribution_of_raw_data
+    odd_conditions:
+      - local SDD annotations must be staged outside git
+      - raw files remain ignored and local-only
+      - compact generated evidence must carry source URL, license/access note, and checksum
+    related_surfaces:
+      - docs/context/issue_2479_real_trajectory_scenario_prior.md
+      - docs/context/issue_1091_sdd_importer.md
+
+remaining_work:
+  - Add cards for any future repository-trace-derived priors after an extraction tool exists.
+  - Add external-dataset-derived cards only after source, license, checksum, and coordinate-frame
+    provenance are recorded.
+  - Link cards directly from future scenario contracts or ForecastBatch records when those schemas
+    grow prior-family references.

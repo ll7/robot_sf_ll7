@@ -784,6 +784,9 @@ knowledge, not every transient iteration detail.
   [issue_2523_scenario_prior_smoke.md](issue_2523_scenario_prior_smoke.md)
   ([summary](evidence/issue_2523_scenario_prior_smoke/summary.json),
   [artifact](evidence/issue_2523_scenario_prior_smoke/scenario_prior.v1.json))
+* Issue #2917 ScenarioPrior.v1 Provenance Cards (2026-06-19):
+  [issue_2917_scenario_prior_cards.md](issue_2917_scenario_prior_cards.md)
+  ([registry](../../configs/research/scenario_prior_cards_issue_2917.yaml))
 * Issue #2474 Signalized Pedestrian Crossing Benchmark Scope (2026-06-06):
   [issue_2474_signalized_crossing_benchmark.md](issue_2474_signalized_crossing_benchmark.md)
 * Issue #2662 Signal-State Promotion Contract (2026-06-12):

@@ -74,7 +74,14 @@ Large-crowd profiling now emits an additive `step_profile` contract block:
 - `step_profile.measurement_mode`, `step_profile.warmup_excluded`
 - `step_profile.warmup_first_step_sec`, `step_profile.warmup_step_loop_sec`, and
   `step_profile.warmup_steps_per_sec` when explicit warmup attribution is requested
-- `step_profile.pedestrian_count` (when observed after reset/step)
+- `step_profile.pedestrian_count` (when observed after reset/step). The fast path tracked in
+  [#3025](https://github.com/ll7/robot_sf_ll7/issues/3025) and
+  [PR #3114](https://github.com/ll7/robot_sf_ll7/pull/3114) reuses the first measured step's
+  pedestrian occupancy snapshot in
+  [`scripts/validation/performance_smoke_test.py`](../scripts/validation/performance_smoke_test.py),
+  with contract coverage in
+  [`tests/perf/test_large_crowd_step_profile_contract.py`](../tests/perf/test_large_crowd_step_profile_contract.py),
+  so the profiler avoids an extra env create/reset/step pass solely for count collection.
 
 These fields are advisory and are for diagnostic reproducibility; they are not benchmark gates.
 

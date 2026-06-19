@@ -103,3 +103,40 @@ def test_large_crowd_step_profile_contract(monkeypatch) -> None:
     assert step_profile["pedestrian_count"] == 142
     assert step_profile["advisory"] is True
     assert step_profile["gating"] == "non-gating"
+
+
+def test_large_crowd_step_profile_reuses_first_step_ped_count(monkeypatch) -> None:
+    """Avoid extra simulation runs when step-loop already captured ped count."""
+
+    def explode_if_called(*_args: object, **_kwargs: object) -> int:
+        raise AssertionError("pedestrian count fallback should not be used")
+
+    monkeypatch.setattr(
+        performance_smoke_test,
+        "_measure_profile_pedestrian_count",
+        explode_if_called,
+    )
+
+    loop_metrics = performance_smoke_test.StepLoopMetrics(
+        step_samples=32,
+        first_step_sec=0.3,
+        step_loop_sec=3.0,
+        steady_step_loop_sec=2.7,
+        steps_per_sec=10.0,
+        steady_steps_per_sec=12.0,
+        warmup_excluded=False,
+        warmup_first_step_sec=None,
+        warmup_step_loop_sec=None,
+        warmup_steps_per_sec=None,
+        measurement_mode="cold_only",
+        first_step_pedestrian_count=17,
+    )
+
+    profile = performance_smoke_test.measure_step_profile(
+        step_samples=32,
+        config=performance_smoke_test.RobotSimulationConfig(),
+        step_loop=loop_metrics,
+        scenario_metadata=None,
+    )
+
+    assert profile.pedestrian_count == 17

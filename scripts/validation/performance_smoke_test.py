@@ -28,6 +28,7 @@ import json
 import os
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -72,6 +73,56 @@ class StepLoopMetrics:
 
 
 @dataclass(slots=True)
+class ScenarioProfileMetadata:
+    """Minimal scenario metadata for reproducible step-profile snapshots."""
+
+    scenario_id: str | None
+    scenario_name: str | None
+    scenario_path: str | None
+    density: str | None = None
+    density_advisory: str | None = None
+
+
+@dataclass(slots=True)
+class StepProfileMetrics:
+    """Deterministic-ish diagnostic profile emitted for high-density snapshots."""
+
+    step_samples: int
+    first_step_sec: float
+    step_loop_sec: float
+    steady_step_loop_sec: float
+    steps_per_sec: float
+    steady_steps_per_sec: float
+    scenario_id: str | None
+    scenario_name: str | None
+    scenario_path: str | None
+    density: str | None
+    density_advisory: str | None
+    pedestrian_count: int | None
+    advisory: bool = True
+    gating: str = "non-gating"
+
+    def to_dict(self) -> dict[str, float | int | bool | str | None]:
+        """Serialize step-profile diagnostics to a JSON-friendly mapping."""
+        return {
+            "scenario_id": self.scenario_id,
+            "scenario_name": self.scenario_name,
+            "scenario_path": self.scenario_path,
+            "density": self.density,
+            "density_advisory": self.density_advisory,
+            "step_samples": self.step_samples,
+            "first_step_sec": self.first_step_sec,
+            "step_loop_sec": self.step_loop_sec,
+            "steady_step_loop_sec": self.steady_step_loop_sec,
+            "steps_per_sec": self.steps_per_sec,
+            "steady_steps_per_sec": self.steady_steps_per_sec,
+            "pedestrian_count": self.pedestrian_count,
+            "advisory": self.advisory,
+            "gating": self.gating,
+        }
+
+
+@dataclass(slots=True)
 class SmokeTestResult:
     """Structured result for performance smoke tests."""
 
@@ -84,6 +135,7 @@ class SmokeTestResult:
     thresholds: dict[str, float | bool]
     statuses: dict[str, str]
     step_loop: StepLoopMetrics
+    step_profile: StepProfileMetrics | None = None
     recommendations: tuple[PerformanceRecommendation, ...] = ()
     scenario: str | None = None
     exit_code: int = 0
@@ -106,6 +158,7 @@ class SmokeTestResult:
             "thresholds": self.thresholds,
             "statuses": self.statuses,
             "scenario": self.scenario,
+            "step_profile": self.step_profile.to_dict() if self.step_profile is not None else None,
             "exit_code": self.exit_code,
             "recommendations": [serialize_payload(rec) for rec in self.recommendations],
         }
@@ -172,6 +225,71 @@ def measure_environment_creation(config: RobotSimulationConfig | None = None) ->
     return creation_time
 
 
+def _coerce_count(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        if value.is_integer() and value >= 0.0:
+            return int(value)
+        return None
+    shape = getattr(value, "shape", None)
+    if isinstance(shape, tuple) and shape:
+        return int(shape[0]) if shape[0] >= 0 else None
+    try:
+        size = len(value)
+    except Exception:  # pragma: no cover - defensive for odd value objects
+        size = None
+    if size is not None and isinstance(size, int):
+        return size if size >= 0 else None
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return None
+    return count if count >= 0 else None
+
+
+def _extract_pedestrian_count(obj: Any) -> int | None:
+    if obj is None:
+        return None
+    for path in (
+        ("simulator", "ped_pos"),
+        ("sim", "ped_pos"),
+        ("simulator", "pysf_state", "num_peds"),
+        ("sim", "pysf_state", "num_peds"),
+    ):
+        current: Any = obj
+        for part in path:
+            if not hasattr(current, part):
+                current = None
+                break
+            current = getattr(current, part)
+        if current is None:
+            continue
+        count = _coerce_count(current)
+        if count is not None:
+            return count
+    return None
+
+
+def _measure_profile_pedestrian_count(config: RobotSimulationConfig | None = None) -> int | None:
+    """Sample a single pedestrian count from the profiling env."""
+
+    env_config = RobotSimulationConfig() if config is None else copy.deepcopy(config)
+    env = make_robot_env(config=env_config, debug=False)
+    action = (0.0, 0.0)
+    try:
+        env.reset()
+        env.step(action)
+        return _extract_pedestrian_count(env)
+    except Exception as exc:  # pragma: no cover - defensive when env APIs drift
+        print(f"Unable to sample profiling pedestrian count: {exc}", file=sys.stderr)
+        return None
+    finally:
+        env.close()
+
+
 def measure_step_loop_performance(
     step_samples: int = 10,
     config: RobotSimulationConfig | None = None,
@@ -235,11 +353,43 @@ def measure_step_loop_performance(
     )
 
 
+def measure_step_profile(
+    *,
+    step_samples: int = 10,
+    config: RobotSimulationConfig | None = None,
+    step_loop: StepLoopMetrics | None = None,
+    scenario_metadata: ScenarioProfileMetadata | None = None,
+) -> StepProfileMetrics:
+    """Build diagnostic step-profile metadata for the smoke test contract."""
+
+    loop_metrics = step_loop or measure_step_loop_performance(
+        step_samples=step_samples, config=config
+    )
+    pedestrian_count = _measure_profile_pedestrian_count(config=config)
+    return StepProfileMetrics(
+        step_samples=loop_metrics.step_samples,
+        first_step_sec=loop_metrics.first_step_sec,
+        step_loop_sec=loop_metrics.step_loop_sec,
+        steady_step_loop_sec=loop_metrics.steady_step_loop_sec,
+        steps_per_sec=loop_metrics.steps_per_sec,
+        steady_steps_per_sec=loop_metrics.steady_steps_per_sec,
+        scenario_id=scenario_metadata.scenario_id if scenario_metadata is not None else None,
+        scenario_name=scenario_metadata.scenario_name if scenario_metadata is not None else None,
+        scenario_path=scenario_metadata.scenario_path if scenario_metadata is not None else None,
+        density=scenario_metadata.density if scenario_metadata is not None else None,
+        density_advisory=scenario_metadata.density_advisory
+        if scenario_metadata is not None
+        else None,
+        pedestrian_count=pedestrian_count,
+    )
+
+
 def run_performance_smoke_test(  # noqa: PLR0913
     *,
     num_resets: int = 5,
     step_samples: int = 10,
     scenario: str | None = None,
+    scenario_name: str | None = None,
     include_recommendations: bool = True,
     creation_soft: float | None = None,
     creation_hard: float | None = None,
@@ -253,6 +403,7 @@ def run_performance_smoke_test(  # noqa: PLR0913
     Args:
         num_resets: Number of resets to run for throughput measurement.
         scenario: Optional scenario config path used to load a custom config.
+        scenario_name: Optional scenario name/id to select from a multi-scenario config.
         include_recommendations: Include guidance strings in the result payload.
         creation_soft: Soft threshold (seconds) for environment creation time.
         creation_hard: Hard threshold (seconds) for environment creation time.
@@ -287,10 +438,18 @@ def run_performance_smoke_test(  # noqa: PLR0913
         enforce if enforce is not None else os.environ.get("ROBOT_SF_PERF_ENFORCE", "0") == "1"
     )
     on_ci = on_ci if on_ci is not None else os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
-    config, scenario_label = _load_scenario_config(scenario)
+    config, scenario_label, scenario_metadata = _load_scenario_config(
+        scenario, scenario_name=scenario_name
+    )
     creation_time = measure_environment_creation(config)
     perf_metrics = measure_environment_performance(num_resets, config=config)
     step_loop = measure_step_loop_performance(step_samples, config=config)
+    step_profile = measure_step_profile(
+        step_samples=step_samples,
+        config=config,
+        step_loop=step_loop,
+        scenario_metadata=scenario_metadata,
+    )
     resets_per_sec = perf_metrics["resets_per_sec"]
 
     creation_soft_ok = creation_time <= creation_soft
@@ -343,6 +502,7 @@ def run_performance_smoke_test(  # noqa: PLR0913
         thresholds=thresholds,
         statuses=statuses,
         step_loop=step_loop,
+        step_profile=step_profile,
         recommendations=recommendations,
         scenario=scenario_label or scenario,
         exit_code=exit_code,
@@ -385,6 +545,11 @@ def parse_args() -> argparse.Namespace:
         help="Optional scenario config (YAML) applied before measuring performance",
     )
     parser.add_argument(
+        "--scenario-name",
+        type=str,
+        help="Optional scenario name/id to select from a multi-scenario config",
+    )
+    parser.add_argument(
         "--include-recommendations",
         action="store_true",
         help="Emit recommendation guidance when thresholds breach",
@@ -421,6 +586,7 @@ def main() -> int:
         num_resets=args.num_resets,
         step_samples=args.step_samples,
         scenario=args.scenario,
+        scenario_name=args.scenario_name,
         include_recommendations=args.include_recommendations,
         creation_soft=creation_soft,
         creation_hard=creation_hard,
@@ -448,6 +614,11 @@ def main() -> int:
         f"steady={result.step_loop.steady_step_loop_sec:.3f}s "
         f"({result.step_loop.steady_steps_per_sec:.2f} steady steps/sec)",
     )
+    if result.step_profile is not None:
+        print(
+            f"Step profile: {result.step_profile.advisory=} gating={result.step_profile.gating} "
+            f"scenario={result.step_profile.scenario_id} ped_count={result.step_profile.pedestrian_count}",
+        )
 
     if result.recommendations:
         print("\nRecommendations:")
@@ -591,6 +762,18 @@ def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
         "steady_step_loop_sec": result.step_loop.steady_step_loop_sec,
         "sim_steps_per_sec": result.step_loop.steps_per_sec,
         "steady_sim_steps_per_sec": result.step_loop.steady_steps_per_sec,
+        "step_profile_advisory": result.step_profile.advisory
+        if result.step_profile is not None
+        else None,
+        "step_profile_gating": result.step_profile.gating
+        if result.step_profile is not None
+        else None,
+        "step_profile_scenario_id": result.step_profile.scenario_id
+        if result.step_profile is not None
+        else None,
+        "step_profile_pedestrian_count": result.step_profile.pedestrian_count
+        if result.step_profile is not None
+        else None,
         "notes": "perf-smoke-summary",
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -617,26 +800,57 @@ def _env_float(name: str, default: float) -> float:
 
 def _load_scenario_config(
     scenario: str | None,
-) -> tuple[RobotSimulationConfig, str | None]:
-    """Load a scenario config if available and return config plus scenario id."""
+    *,
+    scenario_name: str | None = None,
+) -> tuple[RobotSimulationConfig, str | None, ScenarioProfileMetadata | None]:
+    """Load a scenario config if available and return config plus scenario id/path."""
 
     if not scenario:
-        return RobotSimulationConfig(), None
+        return RobotSimulationConfig(), None, None
     scenario_path = Path(scenario)
     if not scenario_path.exists():
         print(f"Scenario file not found: {scenario_path} (using default config)")
-        return RobotSimulationConfig(), scenario
+        return RobotSimulationConfig(), scenario, None
     try:
         scenarios = load_scenarios(scenario_path)
-        selected = select_scenario(scenarios, None)
+        selected = select_scenario(scenarios, scenario_name)
     except ValueError as exc:
         print(f"Invalid scenario config '{scenario_path}': {exc} (using default config)")
-        return RobotSimulationConfig(), scenario_path.stem
+        return (
+            RobotSimulationConfig(),
+            scenario_name or scenario_path.stem,
+            ScenarioProfileMetadata(
+                scenario_id=scenario_name or scenario_path.stem,
+                scenario_name=scenario_name or scenario_path.stem,
+                scenario_path=str(scenario_path),
+            ),
+        )
     config = build_robot_config_from_scenario(selected, scenario_path=scenario_path)
     scenario_id = str(
         selected.get("name") or selected.get("scenario_id") or scenario_path.stem,
     )
-    return config, scenario_id
+    scenario_metadata = ScenarioProfileMetadata(
+        scenario_id=scenario_id,
+        scenario_name=str(
+            selected.get("name") or selected.get("scenario_id") or scenario_path.stem
+        ),
+        scenario_path=str(scenario_path),
+        density=_scenario_metadata_text(selected, "density"),
+        density_advisory=_scenario_metadata_text(selected, "density_advisory"),
+    )
+    return config, scenario_id, scenario_metadata
+
+
+def _scenario_metadata_text(scenario: Mapping[str, Any], key: str) -> str | None:
+    """Return a string metadata value from a scenario entry when present."""
+
+    metadata = scenario.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return None
+    value = metadata.get(key)
+    if value is None:
+        return None
+    return str(value)
 
 
 if __name__ == "__main__":

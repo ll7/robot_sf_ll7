@@ -165,6 +165,13 @@ Policy caveats:
 - `issue_3206_pedestrian_archetype_reporting_2026-06-20/`: composition-report-only packet for
   the shipped pedestrian speed-archetype MVP. Records deterministic counts, speed factors, and
   no-result boundaries for later homogeneous-vs-heterogeneous smoke runs.
+- `issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/`: launch-packet-only simulation
+  fidelity sensitivity contract for #3207. Defines the tracked config, fidelity axes, required
+  rank-stability and metric-drift outputs, and no-evidence boundary before any sweep is run.
+- `issue_3207_fidelity_sensitivity_smoke_2026-06-20/`: diagnostic-only two-planner live smoke for
+  #3207 over the same compact scenario surface. It materializes rank-stability and metric-drift
+  calculations across clean timestep variants and the existing observation-noise smoke profile; it
+  is not benchmark-strength planner-ranking, sensor-realism, or sim-to-real evidence.
 - `issue_3233_near_field_observation_noise/`: diagnostic-only same-seed clean vs perturbed
   step-diagnostics replay on a deterministic near-field live fixture. The clean baseline reached
   1.45 m closest robot-pedestrian distance and selected low-speed commands under dynamic-collision

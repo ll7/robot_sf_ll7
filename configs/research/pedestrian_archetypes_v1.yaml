@@ -1,0 +1,39 @@
+# Heterogeneous pedestrian behavior archetypes (speed-based MVP, issue #3230).
+#
+# Each archetype defines a `desired_speed_factor` that multiplies the spawn
+# config's base `initial_speed` to set a per-pedestrian desired/maximum speed.
+# The Social Force backend already derives per-agent max speed from initial
+# velocity magnitude, so this needs no physics change.
+#
+# IMPORTANT: these factors are clearly-labeled MODELING CHOICES (qualitatively
+# motivated: cautious walkers move slower, hurried walkers faster), NOT values
+# calibrated to any pedestrian dataset. Outputs are mechanism evidence, not
+# benchmark or real-world realism evidence. Dataset calibration is a separate
+# lane (see #3206 and the external-prior work).
+schema_version: pedestrian-archetypes.v1
+issue: 3230
+
+archetypes:
+  cautious:
+    desired_speed_factor: 0.7
+    note: Slower, more hesitant walkers (e.g. elderly, distracted, careful).
+  standard:
+    desired_speed_factor: 1.0
+    note: Baseline walker; matches the homogeneous default exactly.
+  hurried:
+    desired_speed_factor: 1.4
+    note: Faster, goal-driven walkers (e.g. commuters in a hurry).
+
+# Example population compositions (fractions per archetype, must sum to 1.0).
+# These are illustrative; callers pass a composition dict to PedSpawnConfig.
+example_compositions:
+  homogeneous_standard:
+    standard: 1.0
+  mixed_balanced:
+    cautious: 0.34
+    standard: 0.33
+    hurried: 0.33
+  rush_hour:
+    cautious: 0.2
+    standard: 0.3
+    hurried: 0.5

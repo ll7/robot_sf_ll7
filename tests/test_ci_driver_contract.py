@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
@@ -243,11 +244,13 @@ def test_wheel_install_smoke_tests_optional_extras_independently() -> None:
 def test_wheel_metadata_vendors_compatible_fast_pysf_package() -> None:
     """Clean wheel installs must not resolve the incompatible PyPI pysocialforce package."""
     project = _pyproject()
-    dependencies = project["project"]["dependencies"]
+    dependency_names = {
+        Requirement(dependency).name for dependency in project["project"]["dependencies"]
+    }
     wheel_force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
     sdist_includes = project["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
 
-    assert "pysocialforce" not in dependencies
+    assert "pysocialforce" not in dependency_names
     assert wheel_force_include["fast-pysf/pysocialforce"] == "pysocialforce"
     assert "/fast-pysf/pysocialforce" in sdist_includes
 

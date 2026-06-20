@@ -15,12 +15,13 @@ Related surfaces:
 
 ## Current Command Surface
 
-Issue #3265 adds an opt-in pre-planner certification gate to the smoke runner:
-`--require-candidate-certification`. When enabled, the runner writes an
-`adversarial_candidate_quality.v1` payload before materialization, records the payload path and
-applied policy in `candidate_certification`, and blocks rejected batches before planner execution.
-`--allow-rejected-candidates-diagnostic` is the explicit diagnostic-only override; certification
-status stays separate from `planner_runs` and post-execution smoke classification.
+Issue [`#3265`](https://github.com/ll7/robot_sf_ll7/issues/3265) adds an opt-in
+pre-planner certification gate to the smoke runner: `--require-candidate-certification`. When
+enabled, the runner writes an `adversarial_candidate_quality.v1` payload before materialization,
+records the payload path and applied policy in `candidate_certification`, and blocks rejected
+batches before planner execution. `--allow-rejected-candidates-diagnostic` is the explicit
+diagnostic-only override; certification status stays separate from `planner_runs` and
+post-execution smoke classification.
 
 ## Result
 

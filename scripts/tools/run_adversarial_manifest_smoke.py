@@ -156,6 +156,18 @@ def _candidate_certification_policy(args: argparse.Namespace) -> BatchCertificat
     )
 
 
+def _bounded_unit_interval(value: str) -> float:
+    """Parse a finite float constrained to the unit interval."""
+
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a finite float between 0 and 1") from exc
+    if not math.isfinite(parsed) or not 0.0 <= parsed <= 1.0:
+        raise argparse.ArgumentTypeError("must be a finite float between 0 and 1")
+    return parsed
+
+
 def _candidate_certification_output_path(args: argparse.Namespace, output_dir: Path) -> Path:
     """Resolve where the certification payload should be written."""
 
@@ -643,7 +655,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--min-batch-validity-rate",
-        type=float,
+        type=_bounded_unit_interval,
         default=None,
         help="Optional candidate-batch validity rate required before planner execution.",
     )

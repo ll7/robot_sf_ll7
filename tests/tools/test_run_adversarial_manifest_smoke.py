@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D
@@ -591,3 +592,25 @@ def test_run_smoke_does_not_materialize_duplicate_valid_candidates(
     assert payload["candidate_certification"]["rejection_counts"] == {"duplicate": 1}
     assert payload["candidate_certification"]["accepted_count"] == 1
     assert materialized_inputs == [[first_manifest]]
+
+
+@pytest.mark.parametrize("threshold", ["nan", "-0.1", "1.1", "inf"])
+def test_parser_rejects_invalid_batch_validity_thresholds(threshold: str) -> None:
+    """The smoke CLI should reject invalid certification thresholds at parse time."""
+    parser = smoke.build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "--search-space",
+                "space.yaml",
+                "--scenario-template",
+                "template.yaml",
+                "--output-dir",
+                "output",
+                "--summary-json",
+                "summary.json",
+                "--min-batch-validity-rate",
+                threshold,
+            ]
+        )

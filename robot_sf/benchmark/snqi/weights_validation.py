@@ -18,17 +18,15 @@ with all values cast to float for downstream use.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
+from loguru import logger
 
 from .compute import WEIGHT_NAMES
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-logger = logging.getLogger(__name__)
 
 # Backward-compatible aliasing for weight names.
 #
@@ -55,9 +53,7 @@ def _apply_weight_aliases(working: dict[str, object]) -> None:
         if not has_canonical:
             working[canonical] = working[alias]
             logger.warning(
-                "Weight '%s' is deprecated; use '%s'. Mapping alias automatically.",
-                alias,
-                canonical,
+                f"Weight '{alias}' is deprecated; use '{canonical}'. Mapping alias automatically."
             )
             continue
         # Both present: check if numerically equal; if not, warn and prefer canonical.
@@ -66,16 +62,13 @@ def _apply_weight_aliases(working: dict[str, object]) -> None:
             canon_val = float(working[canonical])  # type: ignore[arg-type]
         except Exception:
             logger.warning(
-                "Alias '%s' provided alongside '%s'; ignoring alias due to non-numeric values",
-                alias,
-                canonical,
+                f"Alias '{alias}' provided alongside '{canonical}'; "
+                "ignoring alias due to non-numeric values"
             )
             continue
         if alias_val != canon_val:
             logger.warning(
-                "Alias '%s' provided alongside '%s'; ignoring alias (values differ)",
-                alias,
-                canonical,
+                f"Alias '{alias}' provided alongside '{canonical}'; ignoring alias (values differ)"
             )
 
 
@@ -99,7 +92,7 @@ def validate_weights_mapping(raw: Mapping[str, object]) -> dict[str, float]:
         raise ValueError(f"Missing weight keys: {missing}")
     extraneous = [k for k in working if k not in WEIGHT_NAMES and k not in _WEIGHT_ALIASES]
     if extraneous:
-        logger.warning("Extraneous weight keys will be ignored: %s", extraneous)
+        logger.warning(f"Extraneous weight keys will be ignored: {extraneous}")
     validated: dict[str, float] = {}
     for k in WEIGHT_NAMES:
         v = working[k]
@@ -111,7 +104,7 @@ def validate_weights_mapping(raw: Mapping[str, object]) -> dict[str, float]:
         if not np.isfinite(fv) or fv < 0:
             raise ValueError(f"Invalid weight value for {k}: {fv}")
         if fv > 10:
-            logger.warning("Weight %s unusually large (%.3f) > 10", k, fv)
+            logger.warning(f"Weight {k} unusually large ({fv:.3f}) > 10")
         validated[k] = fv
     return validated
 

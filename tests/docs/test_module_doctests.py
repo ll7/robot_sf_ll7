@@ -108,6 +108,6 @@ def test_module_doctests(module_name: str) -> None:
 
 
 def test_allowlist_and_exclusions_are_disjoint() -> None:
-    """A module is either executed or explicitly excluded, never both, never forgotten."""
+    """Curated doctest entries are either executed or explicitly excluded, never both."""
     overlap = set(DOCTEST_MODULES) & EXCLUDED_MODULES
     assert not overlap, f"modules both allowlisted and excluded: {sorted(overlap)}"

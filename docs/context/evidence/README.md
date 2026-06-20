@@ -153,6 +153,10 @@ Policy caveats:
   trace fixture as non-corridor forecast evidence. Corridor and occluded-emergence traces are
   evaluated; crossing and bottleneck remain zero-motion limitations, and signalized/dense/bottleneck
   motion-rich coverage remains unavailable.
+- `issue_2915_forecast_baselines_2026-06-20/`: analysis-only comparison of constant-velocity,
+  semantic CV, and interaction-aware CV baselines on identical configured trace-origin forecast
+  batches. The bundle includes one ForecastBatch.v1 JSONL per baseline, a comparison table, and a
+  report naming strongest baselines per scenario family with fail-closed unavailable rows.
 - `issue_2749_observation_noise_diagnostics/`: diagnostic-only paired no-op vs
   perception-limited observation-noise step diagnostics for `hybrid_rule_v0_minimal` on a
   pedestrian-present stress-slice scenario; perturbation plumbing activated, but the distant

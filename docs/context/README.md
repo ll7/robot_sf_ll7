@@ -158,6 +158,10 @@ knowledge, not every transient iteration detail.
   records the scenario-diverse frozen-policy diagnostic forecast replay suite, full variant
   matrix row classifications, tracked #3164 evidence summary, and the negative result that
   non-`none` variants collapse under shared replay braking.
+* Issue #3200 pedestrian-density runtime smoke:
+  [issue_3200_density_runtime_smoke_summary.json](evidence/issue_3200_density_runtime_smoke_summary.json)
+  records the diagnostic-only same-seed smoke over top coverage-novel and lowest-novelty comparator
+  rows, with all rows classified `horizon_exhausted` and no benchmark claim promoted.
 * Issue #3014 Evidence Catalog Backlog 2026-06-19:
   [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
   records the current uncovered evidence-bundle count and split strategy for catalog cleanup.

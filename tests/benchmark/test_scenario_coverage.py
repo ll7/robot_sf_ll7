@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.scenario_coverage import (
     build_scenario_coverage_report,
     scenario_coverage_report_markdown,
     write_scenario_coverage_report,
 )
+from scripts.tools.scenario_coverage_entropy import load_scenario_matrix
 
 
 def _scenario(

@@ -1,0 +1,142 @@
+{
+  "schema_version": "density_runtime_smoke_summary.v1",
+  "issue": 3200,
+  "title": "pedestrian-density coverage-entropy runtime smoke",
+  "evidence_status": "diagnostic-only",
+  "claim_boundary": "bounded same-seed goal-policy runtime smoke; not benchmark or paper evidence",
+  "source_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "generated_runtime_inputs": {
+    "coverage_json": "<ignored-output-root>/issue_3200_density_runtime_smoke/coverage_entropy.json",
+    "selected_matrix": "<ignored-output-root>/issue_3200_density_runtime_smoke/selected_matrix.yaml",
+    "runtime_smoke_json": "<ignored-output-root>/issue_3200_density_runtime_smoke/runtime_smoke.json",
+    "local_output_boundary": "ignored local outputs; reproducible from the commands in this summary"
+  },
+  "commands": [
+    "uv sync --frozen",
+    "uv sync --frozen --extra training",
+    "uv run python scripts/tools/scenario_coverage_entropy.py configs/scenarios/classic_interactions_francis2023.yaml --output-json <ignored-output-root>/issue_3200_density_runtime_smoke/coverage_entropy.json --output-markdown <ignored-output-root>/issue_3200_density_runtime_smoke/coverage_entropy.md",
+    "uv run python scripts/tools/density_runtime_smoke.py --matrix <ignored-output-root>/issue_3200_density_runtime_smoke/selected_matrix.yaml --coverage-json <ignored-output-root>/issue_3200_density_runtime_smoke/coverage_entropy.json --output-json <ignored-output-root>/issue_3200_density_runtime_smoke/runtime_smoke.json --top-k 2 --seed 3200 --horizon 80 --dt 0.1"
+  ],
+  "selection_summary": {
+    "coverage_scenario_count": 48,
+    "coverage_entropy": 0.553705,
+    "top_k": 2,
+    "novel_count": 2,
+    "comparator_count": 2,
+    "coverage_redundant_count": 0,
+    "comparator_source": "lowest_novelty_fallback",
+    "caveat": "The coverage report contained no merge_or_drop rows, so the smoke used the two lowest-novelty review rows as a redundant/typical comparator rather than literal redundant rows."
+  },
+  "runtime_controls": {
+    "seed": 3200,
+    "horizon": 80,
+    "dt": 0.1,
+    "policy": "simple goal-directed diagnostic policy"
+  },
+  "failure_semantics_counts": {
+    "horizon_exhausted": 4
+  },
+  "rows": [
+    {
+      "scenario_id": "classic_station_platform_medium",
+      "selection_group": "novel",
+      "novelty_score": 0.5,
+      "nearest_neighbor": "classic_cross_trap_medium",
+      "coverage_recommendation": "retain_or_investigate",
+      "termination_reason": "max_steps",
+      "failure_semantics": "horizon_exhausted",
+      "outcome": {
+        "success": false,
+        "collision": false,
+        "timeout": true
+      },
+      "metrics": {
+        "success": 0.0,
+        "collisions": 0.0,
+        "near_misses": 0.0,
+        "min_distance": 6.14409899484645,
+        "progress_ratio": 0.9995809472729765,
+        "steps": 80
+      },
+      "row_status": "diagnostic_only",
+      "counts_as_success_evidence": false
+    },
+    {
+      "scenario_id": "francis2023_circular_crossing",
+      "selection_group": "novel",
+      "novelty_score": 0.4,
+      "nearest_neighbor": "francis2023_parallel_traffic",
+      "coverage_recommendation": "retain_or_investigate",
+      "termination_reason": "max_steps",
+      "failure_semantics": "horizon_exhausted",
+      "outcome": {
+        "success": false,
+        "collision": false,
+        "timeout": true
+      },
+      "metrics": {
+        "success": 0.0,
+        "collisions": 0.0,
+        "near_misses": 0.0,
+        "min_distance": 3.2407787136718325,
+        "progress_ratio": 0.9996335567148534,
+        "steps": 80
+      },
+      "row_status": "diagnostic_only",
+      "counts_as_success_evidence": false
+    },
+    {
+      "scenario_id": "classic_group_crossing_high",
+      "selection_group": "redundant_comparator",
+      "novelty_score": 0.153846,
+      "nearest_neighbor": "classic_group_crossing_medium",
+      "coverage_recommendation": "review",
+      "termination_reason": "max_steps",
+      "failure_semantics": "horizon_exhausted",
+      "outcome": {
+        "success": false,
+        "collision": false,
+        "timeout": true
+      },
+      "metrics": {
+        "success": 0.0,
+        "collisions": 0.0,
+        "near_misses": 0.0,
+        "min_distance": 4.436254258602422,
+        "progress_ratio": 0.9994732937733182,
+        "steps": 80
+      },
+      "row_status": "diagnostic_only",
+      "counts_as_success_evidence": false
+    },
+    {
+      "scenario_id": "classic_group_crossing_medium",
+      "selection_group": "redundant_comparator",
+      "novelty_score": 0.153846,
+      "nearest_neighbor": "classic_group_crossing_high",
+      "coverage_recommendation": "review",
+      "termination_reason": "max_steps",
+      "failure_semantics": "horizon_exhausted",
+      "outcome": {
+        "success": false,
+        "collision": false,
+        "timeout": true
+      },
+      "metrics": {
+        "success": 0.0,
+        "collisions": 0.0,
+        "near_misses": 0.0,
+        "min_distance": 4.436254206156205,
+        "progress_ratio": 0.9994732937733182,
+        "steps": 80
+      },
+      "row_status": "diagnostic_only",
+      "counts_as_success_evidence": false
+    }
+  ],
+  "interpretation": {
+    "observed_evidence": "All four same-seed rows executed through the local environment path and ended by max_steps with no collisions and no near-miss timesteps.",
+    "diagnostic_conclusion": "This smoke did not distinguish top-novel from lowest-novelty comparator rows by the requested failure-semantics labels.",
+    "residual_risk": "The comparator is a lowest-novelty fallback because the coverage report had no literal redundant candidates; one seed, one simple goal policy, and horizon 80 are insufficient for benchmark claims."
+  }
+}

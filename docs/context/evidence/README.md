@@ -132,6 +132,10 @@ Policy caveats:
   three-pedestrian stress fixture; eight conditions expose forecast ambiguity while the full missed
   detection condition is classified as scenario-too-weak. Uses stored trace action proxies, not
   live planner replay or paper-facing benchmark evidence.
+- `issue_3200_density_runtime_smoke_summary.json`: diagnostic-only same-seed runtime smoke over
+  coverage-entropy-selected pedestrian-density candidates. The coverage report had no literal
+  redundant rows, so the comparator uses lowest-novelty review rows; all four rows ended
+  `horizon_exhausted` and count as no benchmark-success evidence.
 - `issue_2756_occluded_emergence_2026-06-13/`: smoke/diagnostic note for the
   deterministic occluded-emergence trace fixture. The fixture separates ground-truth and observed
   pedestrian state, records first visibility and conflict timing, and feeds observation-noise plus

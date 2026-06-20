@@ -440,7 +440,7 @@ def _build_env(
     env_fns = [(lambda idx=i: _make(idx)) for i in range(config.num_envs)]
     if config.num_envs == 1:
         return DummyVecEnv(env_fns)
-    return SubprocVecEnv(env_fns)
+    return SubprocVecEnv(env_fns, start_method="spawn")
 
 
 def _apply_env_overrides(robot_config: Any, overrides: Mapping[str, object]) -> None:

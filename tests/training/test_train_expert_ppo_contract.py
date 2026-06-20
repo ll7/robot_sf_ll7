@@ -271,7 +271,8 @@ def test_init_training_model_quiets_loguru_while_spawning_subproc_workers(
     class _FakeSubprocVecEnv:
         """SubprocVecEnv stub that records inherited LOGURU level."""
 
-        def __init__(self, env_fns):
+        def __init__(self, env_fns, *, start_method: str | None = None):
+            assert start_method == "spawn"
             observed_levels.append(train_ppo.os.environ.get("LOGURU_LEVEL"))
             self.env_fns = env_fns
 

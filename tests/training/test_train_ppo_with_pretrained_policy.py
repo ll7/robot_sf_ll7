@@ -16,6 +16,7 @@ from scripts.training.train_ppo_with_pretrained_policy import (
     _describe_num_envs_resolution,
     _host_memory_gib,
     _load_dataset_metadata,
+    _make_vec_finetuning_env,
     _parse_num_envs,
     _resolve_num_envs,
 )
@@ -101,3 +102,43 @@ def test_checkpoint_callback_divides_frequency_by_vec_env_count(tmp_path: Path) 
     assert callback is not None
     assert callback.save_freq == 22_727
     assert callback.save_path == str(tmp_path)
+
+
+def test_make_vec_finetuning_env_uses_spawn_for_subproc_workers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fine-tuning subproc envs should use the portable spawn start method."""
+    observed: dict[str, object] = {}
+
+    class _FakeSubprocVecEnv:
+        """SubprocVecEnv stub that records factories and start method."""
+
+        def __init__(self, env_fns, *, start_method: str | None = None):
+            observed["start_method"] = start_method
+            observed["envs"] = [fn() for fn in env_fns]
+
+    monkeypatch.setattr(
+        "scripts.training.train_ppo_with_pretrained_policy.SubprocVecEnv",
+        _FakeSubprocVecEnv,
+    )
+    monkeypatch.setattr(
+        "scripts.training.train_ppo_with_pretrained_policy._make_finetuning_env",
+        lambda _config, *, context, seed: {"context": context, "seed": seed},
+    )
+
+    config = PPOFineTuningConfig.from_raw(
+        run_id="demo",
+        pretrained_policy_id="bc",
+        total_timesteps=1000,
+        random_seeds=(7,),
+        num_envs=2,
+        worker_mode="subproc",
+    )
+
+    _make_vec_finetuning_env(config)
+
+    assert observed["start_method"] == "spawn"
+    assert observed["envs"] == [
+        {"context": "PPO fine-tuning worker 0", "seed": 7},
+        {"context": "PPO fine-tuning worker 1", "seed": 8},
+    ]

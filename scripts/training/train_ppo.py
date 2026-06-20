@@ -2373,7 +2373,7 @@ def _init_training_model(
     ]
     if worker_mode == "subproc":
         with _subproc_worker_log_environment(worker_mode):
-            vec_env = SubprocVecEnv(env_fns)
+            vec_env = SubprocVecEnv(env_fns, start_method="spawn")
     else:
         vec_env = DummyVecEnv(env_fns)
     policy_class, policy_kwargs, critic_profile = _resolve_policy_selection(config)

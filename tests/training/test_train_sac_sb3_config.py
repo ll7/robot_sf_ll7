@@ -362,7 +362,8 @@ def test_build_env_uses_subproc_vec_env_for_multi_env(
     class _FakeSubprocVecEnv:
         """SubprocVecEnv stub that eagerly builds envs from factories."""
 
-        def __init__(self, env_fns: list[object]) -> None:
+        def __init__(self, env_fns: list[object], *, start_method: str | None = None) -> None:
+            assert start_method == "spawn"
             self.envs = [fn() for fn in env_fns]
             self.observation_space = self.envs[0].observation_space
             self.action_space = self.envs[0].action_space

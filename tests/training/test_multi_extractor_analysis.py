@@ -10,6 +10,7 @@ from scripts.multi_extractor_training import (
     RunContext,
     RunSettings,
     _enrich_records_with_analysis,
+    _get_vec_env_config,
 )
 
 
@@ -24,6 +25,24 @@ def _write_eval_history(path, timesteps, rewards):
     eval_dir = path / "eval_logs"
     eval_dir.mkdir(parents=True, exist_ok=True)
     np.savez(eval_dir / "evaluations.npz", timesteps=np.array(timesteps), results=np.array(rewards))
+
+
+def test_get_vec_env_config_uses_spawn_for_vectorized_workers() -> None:
+    """Vectorized extractor runs should use real spawn subprocess workers."""
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+
+    vec_cls, vec_kwargs, n_envs = _get_vec_env_config(worker_mode="vectorized", num_envs=3)
+    assert vec_cls is SubprocVecEnv
+    assert vec_kwargs == {"start_method": "spawn"}
+    assert n_envs == 3
+
+    dummy_cls, dummy_kwargs, dummy_envs = _get_vec_env_config(
+        worker_mode="single-thread",
+        num_envs=3,
+    )
+    assert dummy_cls is DummyVecEnv
+    assert dummy_kwargs is None
+    assert dummy_envs == 1
 
 
 def test_enrich_records_computes_convergence_and_figures(tmp_path):

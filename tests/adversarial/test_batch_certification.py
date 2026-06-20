@@ -172,3 +172,31 @@ def test_certify_candidate_batch_end_to_end(tmp_path: Path) -> None:
     # The quality summary is embedded for provenance.
     assert result.quality_summary is not None
     assert result.to_dict()["quality_summary"]["manifest_count"] == 4
+
+
+def test_certify_with_reference_manifest_computes_perturbation(tmp_path: Path) -> None:
+    """Passing a reference manifest exercises the perturbation-distance provenance path."""
+    reference = tmp_path / "reference.yaml"
+    _write_manifest(reference, _controls(0.0), "valid")
+    batch_dir = tmp_path / "batch"
+    batch_dir.mkdir()
+    _write_manifest(batch_dir / "near.yaml", _controls(0.1), "valid")
+    _write_manifest(batch_dir / "far.yaml", _controls(5.0), "valid")
+
+    result = certify_candidate_batch([batch_dir], reference_manifest=reference)
+
+    assert result.total == 2
+    assert result.accepted is True
+    assert result.quality_summary is not None
+    # Perturbation distances are computed relative to the reference candidate.
+    assert result.quality_summary.perturbation_count >= 1
+    summary_payload = result.to_dict()["quality_summary"]
+    assert "perturbation_from_reference" in summary_payload
+
+
+def test_certify_records_without_quality_summary(tmp_path: Path) -> None:
+    """The path entry can skip the embedded quality summary."""
+    _write_manifest(tmp_path / "a.yaml", _controls(0.0), "valid")
+    result = certify_candidate_batch([tmp_path], include_quality_summary=False)
+    assert result.quality_summary is None
+    assert "quality_summary" not in result.to_dict()

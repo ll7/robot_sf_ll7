@@ -815,23 +815,29 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     mixing_cfg = cfg.get("mixing", {})
     if not isinstance(mixing_cfg, dict):
         raise TypeError("mixing must be a mapping")
-    _run(
-        [
-            sys.executable,
-            "scripts/training/build_predictive_mixed_dataset.py",
-            "--base-dataset",
-            str(paths.base_dataset),
-            "--hardcase-dataset",
-            str(paths.hardcase_dataset),
-            "--hardcase-repeat",
-            str(int(mixing_cfg.get("hardcase_repeat", 2))),
-            "--shuffle-seed",
-            str(int(mixing_cfg.get("shuffle_seed", 42))),
-            "--output",
-            str(paths.mixed_dataset),
-        ],
-        log_level=args.log_level,
-    )
+    mixed_builder_cmd = [
+        sys.executable,
+        "scripts/training/build_predictive_mixed_dataset.py",
+        "--base-dataset",
+        str(paths.base_dataset),
+        "--hardcase-dataset",
+        str(paths.hardcase_dataset),
+        "--output",
+        str(paths.mixed_dataset),
+    ]
+    weighting_spec_raw = mixing_cfg.get("weighting_spec")
+    if weighting_spec_raw is not None:
+        mixed_builder_cmd.extend(
+            [
+                "--weighting-spec",
+                str(_resolve(weighting_spec_raw, base=config_path.parent)),
+            ]
+        )
+    if "hardcase_repeat" in mixing_cfg:
+        mixed_builder_cmd.extend(["--hardcase-repeat", str(int(mixing_cfg["hardcase_repeat"]))])
+    if "shuffle_seed" in mixing_cfg:
+        mixed_builder_cmd.extend(["--shuffle-seed", str(int(mixing_cfg["shuffle_seed"]))])
+    _run(mixed_builder_cmd, log_level=args.log_level)
     mixed_dataset_manifest = _write_dataset_manifest(
         dataset_path=paths.mixed_dataset,
         summary_path=paths.mixed_dataset.with_suffix(".json"),

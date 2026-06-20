@@ -352,6 +352,89 @@ def test_pipeline_collection_commands_pass_ego_conditioning(monkeypatch, tmp_pat
     assert mixed_manifest["extra"]["producer_metadata_preflight_status"] == "ok"
 
 
+def test_pipeline_passes_resolved_weighting_spec_to_mixed_builder(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Pipeline mixing config should pass a resolved hard-case weighting spec path."""
+    config_path = tmp_path / "predictive_weighting.yaml"
+    weighting_spec = tmp_path / "configs" / "crossing_conflict_weighting.yaml"
+    weighting_spec.parent.mkdir(parents=True)
+    weighting_spec.write_text(
+        yaml.safe_dump(
+            {
+                "profile_id": "crossing_conflict_hardcase_repeat_test",
+                "weighting": {
+                    "rule": "repeat_hardcase_rows",
+                    "hardcase_family": "crossing_conflict",
+                    "hardcase_repeat": 3,
+                    "shuffle_seed": 3214,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_root = _pipeline_test_output_root(tmp_path)
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "experiment": {"run_id": "predictive_weighting_smoke"},
+                "output": {"root": output_root},
+                "scenarios": {
+                    "scenario_matrix": "scenarios.yaml",
+                    "hard_seed_manifest": "hard.yaml",
+                    "planner_grid": "grid.yaml",
+                },
+                "base_collection": {"seeds_per_scenario": 1, "ego_conditioning": True},
+                "hardcase_collection": {"ego_conditioning": True},
+                "mixing": {"weighting_spec": "configs/crossing_conflict_weighting.yaml"},
+                "training": {},
+                "wandb": {"enabled": False},
+                "evaluation": {},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "scenarios.yaml").write_text("[]\n", encoding="utf-8")
+    (tmp_path / "hard.yaml").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "grid.yaml").write_text("{}\n", encoding="utf-8")
+
+    monkeypatch.setattr(pipeline, "_sha1_file", lambda _path: "cfghash")
+    monkeypatch.setattr(pipeline, "_git_hash", lambda: "deadbeef")
+    monkeypatch.setattr(
+        pipeline,
+        "_build_random_seed_manifest",
+        lambda **kwargs: _write_seed_manifest(Path(kwargs["output_path"])),
+    )
+    invoked: list[list[str]] = []
+    monkeypatch.setattr(pipeline, "_run", _make_ego_pipeline_run_stub(invoked))
+    monkeypatch.setattr(
+        pipeline,
+        "_run_capture_json",
+        lambda _cmd, **_kwargs: {"status": "ok", "return_code": 0},
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "_parse_args",
+        lambda: pipeline.argparse.Namespace(
+            config=config_path,
+            run_id="predictive_weighting_smoke",
+            log_level="INFO",
+        ),
+    )
+
+    assert pipeline.main() == 0
+    mixed_builder_cmd = next(
+        cmd for cmd in invoked if any("build_predictive_mixed_dataset.py" in part for part in cmd)
+    )
+    assert mixed_builder_cmd[mixed_builder_cmd.index("--weighting-spec") + 1] == str(
+        weighting_spec.resolve()
+    )
+    assert "--hardcase-repeat" not in mixed_builder_cmd
+    assert "--shuffle-seed" not in mixed_builder_cmd
+
+
 def test_pipeline_passes_obstacle_model_family_to_collectors_and_training(
     monkeypatch,
     tmp_path: Path,

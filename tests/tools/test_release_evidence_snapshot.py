@@ -182,6 +182,58 @@ def test_release_evidence_snapshot_malformed_catalog_fails_closed(
     )
 
 
+def test_release_evidence_snapshot_malformed_json_catalog_fails_closed(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Malformed JSON catalogs should use the same fail-closed parser path as YAML."""
+    repo = _init_fixture_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+    catalog_path = repo / "docs/context/evidence/issue_fixture/artifact_catalog.json"
+    catalog_path.write_text('{"artifacts": [', encoding="utf-8")
+    subprocess.run([GIT, "add", "."], cwd=repo, check=True)
+    subprocess.run([GIT, "commit", "-m", "malformed json catalog fixture"], cwd=repo, check=True)
+    output_json = tmp_path / "snapshot.json"
+
+    exit_code = snapshot.main(
+        [
+            "--source-ref",
+            "HEAD",
+            "--no-default-includes",
+            "--artifact-catalog",
+            "docs/context/evidence/issue_fixture/artifact_catalog.json",
+            "--no-auto-artifact-catalogs",
+            "--output-json",
+            str(output_json),
+        ]
+    )
+
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert payload["status"] == "fail_closed"
+    assert payload["artifact_catalogs"][0]["status"] == "invalid"
+    assert any(
+        issue.startswith("could not parse") for issue in payload["artifact_catalogs"][0]["issues"]
+    )
+
+
+def test_release_evidence_snapshot_git_error_without_stderr_fails_closed(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Git subprocess failures without stderr should still become a clear snapshot error."""
+
+    def raise_without_stderr(*_args: Any, **_kwargs: Any) -> str:
+        raise subprocess.CalledProcessError(returncode=128, cmd=["git", "rev-parse"])
+
+    monkeypatch.setattr(snapshot.subprocess, "check_output", raise_without_stderr)
+
+    try:
+        snapshot._git_text(tmp_path, "rev-parse", "HEAD")
+    except snapshot.SnapshotError as exc:
+        assert str(exc) == "git rev-parse HEAD failed: "
+    else:
+        raise AssertionError("expected SnapshotError")
+
+
 def _init_fixture_repo(repo: Path) -> Path:
     """Create a tiny Git repository with a valid tracked artifact catalog."""
     repo.mkdir()

@@ -98,6 +98,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2924_counterfactual_pair_2026-06-21/`: analysis-only counterfactual pair
+  runner evidence for a matched prediction-risk fixture. It records invariant enforcement,
+  mechanism-trace activation delta, `min_clearance_m` outcome delta, and diagnostic trace panels.
+  Not benchmark-strength, paper-grade, or planner-superiority evidence.
 - `issue_1470_oracle_imitation_traces_12911_2026-06-17/`: tracked closeout evidence
   for Slurm job `12911` on #1470/#2441. The bundle includes the small six-row oracle
   imitation trace JSONL and manifest. It is trace-collection evidence only, not final

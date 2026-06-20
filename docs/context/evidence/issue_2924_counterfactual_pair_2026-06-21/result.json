@@ -1,0 +1,116 @@
+{
+  "activation_delta": {
+    "activated_bool_delta": 1,
+    "active_count_delta": 1,
+    "effect_count_delta": 1
+  },
+  "baseline": {
+    "activation": {
+      "activated": false,
+      "active_count": 0,
+      "classifications": {
+        "active-but-irrelevant": 0,
+        "inactive": 1,
+        "revise": 0,
+        "slice-local": 0,
+        "stop": 0
+      },
+      "effect_count": 0,
+      "mechanism_id": "prediction_risk_gating",
+      "row_count": 1
+    },
+    "config_id": "baseline_occluded_emergence",
+    "metrics": {
+      "collision_count": 0,
+      "min_clearance_m": 0.18,
+      "route_progress_m": 0.7
+    }
+  },
+  "claim_boundary": "analysis_only_not_benchmark_or_paper_grade_evidence",
+  "diagnostic_limitations": [
+    "Analysis-only tracked fixture comparison; no live benchmark or planner-superiority claim.",
+    "The artifact invariant names the durable fixture family, while each side uses a different compact trace export path for panel rendering.",
+    "Trace panels are visual diagnostics and are not paper-grade evidence."
+  ],
+  "evidence_tier": "analysis_only",
+  "expected_mechanism": "prediction_risk_gating",
+  "generated_at_utc": "2026-06-20T22:41:24.829444Z",
+  "hypothesis_verdict": "survived",
+  "intervention": {
+    "activation": {
+      "activated": true,
+      "active_count": 1,
+      "classifications": {
+        "active-but-irrelevant": 0,
+        "inactive": 0,
+        "revise": 1,
+        "slice-local": 0,
+        "stop": 0
+      },
+      "effect_count": 1,
+      "mechanism_id": "prediction_risk_gating",
+      "row_count": 1
+    },
+    "config_id": "intervention_left_close_occluded_emergence",
+    "metrics": {
+      "collision_count": 0,
+      "min_clearance_m": 0.42,
+      "route_progress_m": 0.82
+    }
+  },
+  "invariant_fields": {
+    "artifact": "issue_2924_prediction_risk_pair_fixture.v1",
+    "planner": "hybrid_rule_v0_minimal",
+    "scenario": "issue_2924_prediction_risk_occluded_emergence",
+    "seed": 111
+  },
+  "manifest_schema_version": "counterfactual_pair.v1",
+  "outcome_delta": {
+    "baseline": 0.18,
+    "delta": 0.24,
+    "expected_direction": "increase",
+    "intervention": 0.42,
+    "metric": "min_clearance_m",
+    "min_delta": 0.05
+  },
+  "pair_id": "issue_2924_prediction_risk_occluded_emergence",
+  "pair_result": {
+    "activation_delta": 1,
+    "baseline_activated": false,
+    "hypothesis": {
+      "expected_direction": "increase",
+      "expected_mechanism": "prediction_risk_gating",
+      "outcome_metric": "min_clearance_m"
+    },
+    "intervention_activated": true,
+    "outcome_baseline": 0.18,
+    "outcome_delta": 0.24,
+    "outcome_intervention": 0.42,
+    "reason": "mechanism activated and min_clearance_m moved increase by +0.24",
+    "schema_version": "counterfactual_pair_result.v1",
+    "verdict": "survived"
+  },
+  "schema_version": "counterfactual_pair_run.v1",
+  "trace_panel": {
+    "artifacts": [
+      {
+        "artifact_id": "trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_low_progress_intervention_left_close_occluded_emergence_ep0000",
+        "category": "low_progress",
+        "panel_type": "trajectory_panel",
+        "pdf_path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panels/trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_low_progress_intervention_left_close_occluded_emergence_ep0000.pdf",
+        "png_path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panels/trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_low_progress_intervention_left_close_occluded_emergence_ep0000.png"
+      },
+      {
+        "artifact_id": "trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_other_baseline_occluded_emergence_ep0000",
+        "category": "other",
+        "panel_type": "trajectory_panel",
+        "pdf_path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panels/trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_other_baseline_occluded_emergence_ep0000.pdf",
+        "png_path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panels/trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_other_baseline_occluded_emergence_ep0000.png"
+      }
+    ],
+    "captions_path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/captions.md",
+    "manifest_path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panel_manifest.json",
+    "output_dir": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels",
+    "selection_csv": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/representative_episode_selection.csv"
+  }
+}

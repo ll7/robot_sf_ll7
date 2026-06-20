@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "counterfactual_pair.v1.json",
+  "title": "Counterfactual Pair Manifest v1",
+  "description": "Analysis-only manifest for matched baseline/intervention mechanism-hypothesis pairs. The manifest records the invariant scenario/seed/planner/artifact controls, observed-result inputs, mechanism trace inputs, expected mechanism, and expected metric direction. It is not benchmark or paper-grade evidence by itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "pair_id",
+    "evidence_tier",
+    "claim_boundary",
+    "invariant_fields",
+    "baseline_config",
+    "intervention_config",
+    "expected_mechanism",
+    "expected_metric_direction"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "counterfactual_pair.v1"
+    },
+    "pair_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_tier": {
+      "const": "analysis_only"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invariant_fields": {
+      "$ref": "#/$defs/invariant_fields"
+    },
+    "baseline_config": {
+      "$ref": "#/$defs/run_config"
+    },
+    "intervention_config": {
+      "$ref": "#/$defs/run_config"
+    },
+    "expected_mechanism": {
+      "type": "string",
+      "enum": [
+        "static_recentering",
+        "topology_guidance",
+        "prediction_risk_gating",
+        "orca_residuals",
+        "signal_state_logic",
+        "amv_actuation_constraints"
+      ]
+    },
+    "expected_metric_direction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "direction"
+      ],
+      "properties": {
+        "metric": {
+          "type": "string",
+          "minLength": 1
+        },
+        "direction": {
+          "enum": [
+            "increase",
+            "decrease"
+          ]
+        },
+        "min_delta": {
+          "type": "number",
+          "minimum": 0
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    },
+    "diagnostic_limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "invariant_fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario",
+        "seed",
+        "planner",
+        "artifact"
+      ],
+      "properties": {
+        "scenario": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "planner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "run_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config_id",
+        "result_path",
+        "mechanism_trace_path",
+        "invariant_fields"
+      ],
+      "properties": {
+        "config_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mechanism_trace_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_export_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "invariant_fields": {
+          "$ref": "#/$defs/invariant_fields"
+        }
+      }
+    }
+  }
+}

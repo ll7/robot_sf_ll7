@@ -1,0 +1,11 @@
+# Representative Trajectory Panels
+
+These static panels are diagnostic-only visual artifacts. They preserve trace evidence boundaries and do not replace aggregate benchmark summaries.
+
+## trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_low_progress_intervention_left_close_occluded_emergence_ep0000
+
+hybrid_rule_v0_minimal on issue_2924_prediction_risk_occluded_emergence episode intervention_left_close_occluded_emergence_ep0000; selected as low_progress. Diagnostic-only trace panel.
+
+## trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_other_baseline_occluded_emergence_ep0000
+
+hybrid_rule_v0_minimal on issue_2924_prediction_risk_occluded_emergence episode baseline_occluded_emergence_ep0000; selected as other. Diagnostic-only trace panel.

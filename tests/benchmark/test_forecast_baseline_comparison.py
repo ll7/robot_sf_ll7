@@ -71,6 +71,13 @@ def test_higher_is_better_metric_outside_default_set() -> None:
     assert coverage.best == "semantic_cv"
 
 
+def test_explicit_metrics_are_deduplicated_in_order() -> None:
+    """Duplicate explicit metrics still emit one ranking per unique metric."""
+    comparison = compare_forecast_baselines(_METRICS, metrics=["fde", "ade", "fde"])
+    assert comparison.metrics == ["fde", "ade"]
+    assert [ranking.metric for ranking in comparison.rankings] == ["fde", "ade"]
+
+
 def test_empty_input_raises() -> None:
     """An empty comparison is rejected."""
     with pytest.raises(ValueError, match="at least one baseline"):

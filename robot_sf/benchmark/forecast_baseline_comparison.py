@@ -109,7 +109,7 @@ def compare_forecast_baselines(
     baselines = sorted(metrics_by_baseline)
     lower_set = set(lower_is_better_metrics)
     if metrics is not None:
-        metric_names = list(metrics)
+        metric_names = list(dict.fromkeys(metrics))
     else:
         metric_names = sorted({name for row in metrics_by_baseline.values() for name in row})
 

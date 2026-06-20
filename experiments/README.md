@@ -79,7 +79,23 @@ The issue-state snapshot is a compact JSON list or object with `number`, `state`
 The report detects closed issues with nonterminal cards, closed blockers with blocked cards,
 dry-run derived `state:*` label updates, missing config/input paths, pending artifact aliases, and
 expected artifacts that still need durable references. It reports `labels_to_add` and
-`labels_to_remove` but never mutates GitHub.
+`labels_to_remove` without mutating GitHub by default.
+
+To explicitly project derived registry state labels back to GitHub issues, rerun the same command
+with `--apply-labels` and a write cap:
+
+```bash
+uv run python scripts/tools/validate_experiment_registry.py \
+  experiments/registry.yaml \
+  --issue-state-json output/experiments/issue_state_snapshot.json \
+  --control-plane-report-json output/experiments/control_plane_report.json \
+  --apply-labels \
+  --max-writes 5
+```
+
+The apply path only touches `state:*` labels from existing `derived_issue_label_update` findings,
+checks `gh api rate_limit` before writing, honors `--max-writes`, and writes a disposable audit log
+under `output/issue_state_sync/`.
 This v2 control-plane guidance is part of the #3057 research-control-plane work and is exercised by
 `tests/tools/test_validate_experiment_registry.py`.
 

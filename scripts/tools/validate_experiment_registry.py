@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +82,7 @@ STATE_TO_LABEL = {
 RUNNING_LABEL = "state:running"
 PROPOSAL_RECORD_STATES = {"idea", "proposal"}
 ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z0-9][A-Za-z0-9_.:/-]*>")
+DEFAULT_STATE_LABEL_AUDIT_DIR = Path("output/issue_state_sync")
 
 
 def validate_registry(registry_path: Path) -> list[str]:
@@ -160,6 +163,90 @@ def build_control_plane_report(
             1 for finding in findings if finding.get("kind") == "derived_issue_label_update"
         ),
     }
+
+
+def apply_derived_issue_label_updates(
+    report: Mapping[str, Any],
+    *,
+    max_writes: int,
+    audit_log_path: Path,
+    min_rate_limit_remaining: int = 25,
+    gh_runner: Any | None = None,
+) -> dict[str, Any]:
+    """Apply derived `state:*` label updates from a control-plane report.
+
+    The control plane remains dry-run by default. This function is the explicit
+    write boundary for `--apply-labels`: it only consumes existing
+    `derived_issue_label_update` findings, only touches labels in `STATE_LABELS`,
+    checks GitHub API quota before the batch, and writes an audit log.
+    """
+
+    runner = gh_runner or _run_gh
+    updates = _derived_label_updates_from_report(report)
+    if len(updates) > max_writes:
+        raise RuntimeError(
+            f"refusing to apply {len(updates)} label updates; --max-writes is {max_writes}"
+        )
+    rate_limit = _read_rate_limit(runner)
+    remaining = rate_limit.get("remaining")
+    if not isinstance(remaining, int):
+        raise RuntimeError(
+            "refusing to apply label updates; unable to determine GitHub core rate limit remaining"
+        )
+    if remaining < min_rate_limit_remaining:
+        raise RuntimeError(
+            f"refusing to apply label updates; GitHub core rate limit remaining "
+            f"{remaining} < {min_rate_limit_remaining}"
+        )
+
+    applied: list[dict[str, Any]] = []
+    error_to_raise: Exception | None = None
+    for update in updates:
+        command = _issue_label_edit_command(update)
+        try:
+            result = runner(command)
+            stdout = getattr(result, "stdout", "")
+            stderr = getattr(result, "stderr", "")
+            returncode = int(getattr(result, "returncode", 1))
+        except Exception as exc:
+            stdout = ""
+            stderr = str(exc)
+            returncode = 1
+            error_to_raise = exc
+        applied.append(
+            {
+                "issue": update["issue"],
+                "record": update["record"],
+                "labels_to_add": update["labels_to_add"],
+                "labels_to_remove": update["labels_to_remove"],
+                "command": ["gh", *command],
+                "returncode": returncode,
+                "stdout": stdout,
+                "stderr": stderr,
+            }
+        )
+        if returncode != 0 and error_to_raise is None:
+            error_to_raise = RuntimeError(
+                f"gh issue edit failed for issue #{update['issue']} with {returncode}: "
+                f"{(stderr or stdout).strip()}"
+            )
+        if error_to_raise is not None:
+            break
+
+    audit = {
+        "schema_version": "experiment-state-label-apply.v1",
+        "created_at_utc": datetime.now(UTC).isoformat(),
+        "max_writes": max_writes,
+        "min_rate_limit_remaining": min_rate_limit_remaining,
+        "rate_limit": rate_limit,
+        "applied_count": sum(1 for entry in applied if entry["returncode"] == 0),
+        "applied": applied,
+    }
+    audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_log_path.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if error_to_raise is not None:
+        raise error_to_raise
+    return audit
 
 
 def _validate_record(
@@ -299,6 +386,96 @@ def _control_plane_findings_for_record(
     findings.extend(_artifact_alias_findings(record, display_path, issue=issue))
     findings.extend(_durable_reference_findings(record, display_path, issue=issue))
     return findings
+
+
+def _derived_label_updates_from_report(report: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return applicable label-update findings from a control-plane report."""
+
+    updates: list[dict[str, Any]] = []
+    findings = report.get("findings", [])
+    if not isinstance(findings, list):
+        return updates
+    for finding in findings:
+        if not isinstance(finding, Mapping):
+            continue
+        if finding.get("kind") != "derived_issue_label_update":
+            continue
+        labels_to_add = _validate_state_label_list(finding.get("labels_to_add"), "labels_to_add")
+        labels_to_remove = _validate_state_label_list(
+            finding.get("labels_to_remove"), "labels_to_remove"
+        )
+        if not labels_to_add and not labels_to_remove:
+            continue
+        issue = _issue_number(finding.get("issue"))
+        if issue is None:
+            raise RuntimeError(f"derived label update has invalid issue: {finding!r}")
+        updates.append(
+            {
+                "issue": issue,
+                "record": finding.get("record"),
+                "labels_to_add": labels_to_add,
+                "labels_to_remove": labels_to_remove,
+            }
+        )
+    return updates
+
+
+def _validate_state_label_list(value: Any, field_name: str) -> list[str]:
+    """Return validated `state:*` labels from a report field."""
+
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise RuntimeError(f"{field_name} must be a list, got {value!r}")
+    labels = [str(label) for label in value]
+    invalid = sorted(set(labels) - STATE_LABELS)
+    if invalid:
+        raise RuntimeError(f"{field_name} contains non-state labels: {invalid}")
+    return sorted(labels)
+
+
+def _issue_label_edit_command(update: Mapping[str, Any]) -> list[str]:
+    """Build a `gh issue edit` command for one derived label update."""
+
+    command = ["issue", "edit", str(update["issue"])]
+    for label in update["labels_to_add"]:
+        command.extend(["--add-label", label])
+    for label in update["labels_to_remove"]:
+        command.extend(["--remove-label", label])
+    return command
+
+
+def _run_gh(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run a GitHub CLI command for label application."""
+
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=False)
+
+
+def _read_rate_limit(gh_runner: Any) -> dict[str, Any]:
+    """Return compact GitHub API rate-limit state for apply guards."""
+
+    result = gh_runner(["api", "rate_limit"])
+    stdout = getattr(result, "stdout", "")
+    stderr = getattr(result, "stderr", "")
+    if int(getattr(result, "returncode", 1)) != 0:
+        raise RuntimeError(f"gh api rate_limit failed: {(stderr or stdout).strip()}")
+    try:
+        payload = json.loads(stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"gh api rate_limit returned invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        payload = {}
+    resources = payload.get("resources")
+    if not isinstance(resources, dict):
+        resources = {}
+    core = resources.get("core")
+    if not isinstance(core, dict):
+        core = {}
+    return {
+        "remaining": core.get("remaining"),
+        "limit": core.get("limit"),
+        "reset": core.get("reset"),
+    }
 
 
 def _issue_state_findings(
@@ -705,6 +882,42 @@ def _parse_issue_label_names(label_values: Iterable[Any]) -> list[str]:
     return parsed_labels
 
 
+def _apply_labels_from_cli_args(
+    args: argparse.Namespace,
+    report: dict[str, Any] | None,
+    errors: list[str],
+) -> None:
+    """Apply derived label updates for CLI mode, appending errors instead of raising."""
+
+    if not args.apply_labels:
+        return
+    if args.control_plane_report_json is None:
+        errors.append("--apply-labels requires --control-plane-report-json")
+    if args.issue_state_json is None:
+        errors.append("--apply-labels requires --issue-state-json with current labels")
+    if args.max_writes < 1:
+        errors.append("--apply-labels requires --max-writes greater than 0")
+    if report is None or errors:
+        return
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    audit_log = args.label_audit_log or (DEFAULT_STATE_LABEL_AUDIT_DIR / f"{timestamp}.json")
+    try:
+        audit = apply_derived_issue_label_updates(
+            report,
+            max_writes=args.max_writes,
+            audit_log_path=audit_log,
+            min_rate_limit_remaining=args.min_rate_limit_remaining,
+        )
+    except RuntimeError as exc:
+        errors.append(str(exc))
+        return
+    print(
+        f"applied {audit['applied_count']} derived issue state-label updates; "
+        f"audit log: {audit_log}"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the experiment registry validator CLI."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -725,9 +938,32 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="Write a dry-run research control-plane drift report.",
     )
+    parser.add_argument(
+        "--apply-labels",
+        action="store_true",
+        help="Apply derived state:* label updates from the control-plane report via gh.",
+    )
+    parser.add_argument(
+        "--max-writes",
+        type=int,
+        default=0,
+        help="Maximum issue-label writes allowed with --apply-labels.",
+    )
+    parser.add_argument(
+        "--min-rate-limit-remaining",
+        type=int,
+        default=25,
+        help="Minimum GitHub core API quota required before --apply-labels writes.",
+    )
+    parser.add_argument(
+        "--label-audit-log",
+        type=Path,
+        help="Optional audit-log path for --apply-labels.",
+    )
     args = parser.parse_args(argv)
 
     errors = validate_registry(args.registry)
+    report: dict[str, Any] | None = None
     if args.control_plane_report_json is not None:
         issue_states: dict[int, str] = {}
         issue_labels: dict[int, list[str]] = {}
@@ -749,6 +985,12 @@ def main(argv: list[str] | None = None) -> int:
             f"wrote control-plane report: {args.control_plane_report_json} "
             f"({report['finding_count']} findings)"
         )
+        if report["derived_update_count"] and not args.apply_labels:
+            errors.append(
+                f"derived issue state-label updates pending: {report['derived_update_count']} "
+                "updates; rerun with --apply-labels and --max-writes to apply"
+            )
+    _apply_labels_from_cli_args(args, report, errors)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)

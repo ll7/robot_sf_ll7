@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from textwrap import dedent
+from types import SimpleNamespace
 
+from scripts.tools import validate_experiment_registry as registry_validator
 from scripts.tools.validate_experiment_registry import (
     _load_issue_state_snapshot,
+    apply_derived_issue_label_updates,
     build_control_plane_report,
     main,
     validate_registry,
@@ -675,3 +679,339 @@ def test_issue_state_snapshot_errors_are_reported_by_cli(tmp_path: Path) -> None
 
     assert exit_code == 1
     assert report.is_file()
+
+
+def test_apply_derived_issue_label_updates_uses_guarded_gh_boundary(tmp_path: Path) -> None:
+    """Applying state-label drift should only edit derived `state:*` labels."""
+
+    report = {
+        "findings": [
+            {
+                "kind": "derived_issue_label_update",
+                "record": "label.yaml",
+                "issue": 1475,
+                "labels_to_add": ["state:ready"],
+                "labels_to_remove": ["state:running"],
+            }
+        ]
+    }
+    commands: list[list[str]] = []
+
+    def fake_gh(args: list[str]) -> SimpleNamespace:
+        commands.append(args)
+        if args == ["api", "rate_limit"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"resources": {"core": {"remaining": 100, "limit": 5000}}}),
+                stderr="",
+            )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    audit = apply_derived_issue_label_updates(
+        report,
+        max_writes=1,
+        audit_log_path=tmp_path / "audit.json",
+        gh_runner=fake_gh,
+    )
+
+    assert commands == [
+        ["api", "rate_limit"],
+        [
+            "issue",
+            "edit",
+            "1475",
+            "--add-label",
+            "state:ready",
+            "--remove-label",
+            "state:running",
+        ],
+    ]
+    assert audit["applied_count"] == 1
+    assert json.loads((tmp_path / "audit.json").read_text())["applied"][0]["issue"] == 1475
+
+
+def test_apply_derived_issue_label_updates_rejects_non_state_labels(tmp_path: Path) -> None:
+    """The apply path must not mutate labels outside the state-label projection."""
+
+    report = {
+        "findings": [
+            {
+                "kind": "derived_issue_label_update",
+                "record": "label.yaml",
+                "issue": 1475,
+                "labels_to_add": ["state:ready", "priority:high"],
+                "labels_to_remove": [],
+            }
+        ]
+    }
+
+    try:
+        apply_derived_issue_label_updates(
+            report,
+            max_writes=1,
+            audit_log_path=tmp_path / "audit.json",
+            gh_runner=lambda args: SimpleNamespace(returncode=0, stdout="{}", stderr=""),
+        )
+    except RuntimeError as exc:
+        assert "non-state labels" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected non-state label rejection")
+
+
+def test_apply_derived_issue_label_updates_fails_closed_without_rate_limit(
+    tmp_path: Path,
+) -> None:
+    """Indeterminate rate-limit payloads must not allow GitHub mutations."""
+
+    report = {
+        "findings": [
+            {
+                "kind": "derived_issue_label_update",
+                "record": "label.yaml",
+                "issue": 1475,
+                "labels_to_add": ["state:ready"],
+                "labels_to_remove": ["state:running"],
+            }
+        ]
+    }
+    commands: list[list[str]] = []
+
+    def fake_gh(args: list[str]) -> SimpleNamespace:
+        commands.append(args)
+        return SimpleNamespace(
+            returncode=0, stdout=json.dumps({"resources": {"core": {}}}), stderr=""
+        )
+
+    try:
+        apply_derived_issue_label_updates(
+            report,
+            max_writes=1,
+            audit_log_path=tmp_path / "audit.json",
+            gh_runner=fake_gh,
+        )
+    except RuntimeError as exc:
+        assert "unable to determine GitHub core rate limit remaining" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected indeterminate rate-limit rejection")
+
+    assert commands == [["api", "rate_limit"]]
+    assert not (tmp_path / "audit.json").exists()
+
+
+def test_apply_derived_issue_label_updates_writes_audit_before_write_failure(
+    tmp_path: Path,
+) -> None:
+    """Partial GitHub write failures should leave a local audit trail."""
+
+    report = {
+        "findings": [
+            {
+                "kind": "derived_issue_label_update",
+                "record": "label.yaml",
+                "issue": 1475,
+                "labels_to_add": ["state:ready"],
+                "labels_to_remove": ["state:running"],
+            }
+        ]
+    }
+
+    def fake_gh(args: list[str]) -> SimpleNamespace:
+        if args == ["api", "rate_limit"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"resources": {"core": {"remaining": 100, "limit": 5000}}}),
+                stderr="",
+            )
+        return SimpleNamespace(returncode=2, stdout="", stderr="permission denied")
+
+    try:
+        apply_derived_issue_label_updates(
+            report,
+            max_writes=1,
+            audit_log_path=tmp_path / "audit.json",
+            gh_runner=fake_gh,
+        )
+    except RuntimeError as exc:
+        assert "gh issue edit failed for issue #1475" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected GitHub write failure")
+
+    audit = json.loads((tmp_path / "audit.json").read_text())
+    assert audit["applied_count"] == 0
+    assert audit["applied"][0]["issue"] == 1475
+    assert audit["applied"][0]["returncode"] == 2
+    assert audit["applied"][0]["stderr"] == "permission denied"
+
+
+def test_main_apply_labels_requires_explicit_report_snapshot_and_write_cap(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """CLI apply mode should be opt-in and use the mocked gh boundary."""
+
+    registry = tmp_path / "experiments" / "registry.yaml"
+    record = registry.parent / "label.yaml"
+    issue_state = tmp_path / "issues.json"
+    report = tmp_path / "report.json"
+    audit = tmp_path / "audit.json"
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "exists.yaml").write_text("ok: true\n", encoding="utf-8")
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - label.yaml
+        """,
+    )
+    _write_yaml(
+        record,
+        """
+        schema_version: experiment-record.v2
+        experiment_id: label-apply
+        issue: 1475
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/1475
+        question: Do labels agree with the card?
+        hypothesis: They should derive from the card.
+        config:
+          - configs/exists.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/label
+        expected_artifacts:
+          - name: report
+            path: output/experiments/label/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        state: implementation_ready
+        """,
+    )
+    issue_state.write_text(
+        json.dumps(
+            {
+                "issues": [
+                    {
+                        "number": 1475,
+                        "state": "OPEN",
+                        "labels": ["state:running", "type:analysis"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    commands: list[list[str]] = []
+
+    def fake_gh(args: list[str]) -> SimpleNamespace:
+        commands.append(args)
+        if args == ["api", "rate_limit"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"resources": {"core": {"remaining": 100, "limit": 5000}}}),
+                stderr="",
+            )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(registry_validator, "_run_gh", fake_gh)
+
+    exit_code = main(
+        [
+            str(registry),
+            "--issue-state-json",
+            str(issue_state),
+            "--control-plane-report-json",
+            str(report),
+            "--apply-labels",
+            "--max-writes",
+            "1",
+            "--label-audit-log",
+            str(audit),
+        ]
+    )
+
+    assert exit_code == 0
+    assert report.is_file()
+    assert audit.is_file()
+    assert commands[-1] == [
+        "issue",
+        "edit",
+        "1475",
+        "--add-label",
+        "state:ready",
+        "--remove-label",
+        "state:running",
+    ]
+
+
+def test_main_dry_run_exits_nonzero_when_derived_label_drift_exists(tmp_path: Path) -> None:
+    """Dry-run report mode should fail closed when state-label projection drift exists."""
+
+    registry = tmp_path / "experiments" / "registry.yaml"
+    record = registry.parent / "label.yaml"
+    issue_state = tmp_path / "issues.json"
+    report = tmp_path / "report.json"
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "exists.yaml").write_text("ok: true\n", encoding="utf-8")
+    _write_yaml(
+        registry,
+        """
+        schema_version: experiment-registry.v1
+        records:
+          - label.yaml
+        """,
+    )
+    _write_yaml(
+        record,
+        """
+        schema_version: experiment-record.v2
+        experiment_id: label-dry-run
+        issue: 1475
+        issue_url: https://github.com/ll7/robot_sf_ll7/issues/1475
+        question: Do labels agree with the card?
+        hypothesis: They should derive from the card.
+        config:
+          - configs/exists.yaml
+        command: uv run true
+        inputs:
+          - path: configs/exists.yaml
+        outputs:
+          - path: output/experiments/label
+        expected_artifacts:
+          - name: report
+            path: output/experiments/label/report.json
+        evidence_grade: proposal
+        paper_relevance: exploratory
+        state: implementation_ready
+        """,
+    )
+    issue_state.write_text(
+        json.dumps(
+            {
+                "issues": [
+                    {
+                        "number": 1475,
+                        "state": "OPEN",
+                        "labels": ["state:running"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            str(registry),
+            "--issue-state-json",
+            str(issue_state),
+            "--control-plane-report-json",
+            str(report),
+        ]
+    )
+
+    assert exit_code == 1
+    payload = json.loads(report.read_text())
+    assert payload["derived_update_count"] == 1

@@ -1,0 +1,97 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+  - name: issue_2926_pedestrian_only_cut_rejected
+    map_file: ../maps/issue_2926_pedestrian_only_cut.yaml
+    simulation_config:
+      max_episode_steps: 40
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      purpose: Certification smoke fixture for rejecting AMV traversal through pedestrian-only infrastructure.
+      archetype: shared_space_infrastructure
+      issue: 2926
+      generation_profile:
+        schema_version: scenario_generation_params.v1
+        seed_signature: 2926
+        parameters:
+          id: issue_2926_pedestrian_only_cut_rejected
+          preset: manual_shared_space_infrastructure_smoke
+          infrastructure_zone: pedestrian_only_cut
+          route_contract: illegal_amv_traversal_rejected
+      authoring:
+        status: draft
+        template: manual-shared-space-infrastructure-certification-smoke
+        source_issue: https://github.com/ll7/robot_sf_ll7/issues/2926
+        benchmark_evidence: false
+      infrastructure_semantics:
+        status: certification_only
+        target_zone_id: pedestrian_only_cut
+        expected_certification: invalid
+        claim_boundary: >
+          Certification smoke fixture only. This records route-validation semantics
+          for pedestrian-only infrastructure and does not establish benchmark
+          performance evidence.
+    seeds: [2926]
+  - name: issue_2926_stair_access_rejected
+    map_file: ../maps/issue_2926_stair_access.yaml
+    simulation_config:
+      max_episode_steps: 40
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      purpose: Certification smoke fixture for rejecting AMV traversal through stair infrastructure.
+      archetype: shared_space_infrastructure
+      issue: 2926
+      generation_profile:
+        schema_version: scenario_generation_params.v1
+        seed_signature: 2927
+        parameters:
+          id: issue_2926_stair_access_rejected
+          preset: manual_shared_space_infrastructure_smoke
+          infrastructure_zone: stair_access
+          route_contract: illegal_amv_traversal_rejected
+      authoring:
+        status: draft
+        template: manual-shared-space-infrastructure-certification-smoke
+        source_issue: https://github.com/ll7/robot_sf_ll7/issues/2926
+        benchmark_evidence: false
+      infrastructure_semantics:
+        status: certification_only
+        target_zone_id: stair_access
+        expected_certification: invalid
+        claim_boundary: >
+          Certification smoke fixture only. This records route-validation semantics
+          for stair access and does not establish benchmark performance evidence.
+    seeds: [2927]
+  - name: issue_2926_signalized_crossing_zone_rejected
+    map_file: ../maps/issue_2926_signalized_crossing_wait_box.yaml
+    simulation_config:
+      max_episode_steps: 40
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      purpose: Certification smoke fixture for rejecting AMV traversal through signalized crossing wait zones.
+      archetype: shared_space_infrastructure
+      issue: 2926
+      generation_profile:
+        schema_version: scenario_generation_params.v1
+        seed_signature: 2928
+        parameters:
+          id: issue_2926_signalized_crossing_zone_rejected
+          preset: manual_shared_space_infrastructure_smoke
+          infrastructure_zone: signalized_crossing_wait_box
+          route_contract: illegal_amv_traversal_rejected
+      authoring:
+        status: draft
+        template: manual-shared-space-infrastructure-certification-smoke
+        source_issue: https://github.com/ll7/robot_sf_ll7/issues/2926
+        benchmark_evidence: false
+      infrastructure_semantics:
+        status: certification_only
+        target_zone_id: signalized_crossing_wait_box
+        expected_certification: invalid
+        claim_boundary: >
+          Certification smoke fixture only. This records route-validation semantics
+          for signalized crossing wait zones and does not establish benchmark
+          performance evidence.
+    seeds: [2928]

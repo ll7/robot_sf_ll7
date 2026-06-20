@@ -378,6 +378,22 @@ def _certify_route(
             evidence=evidence,
         )
 
+    infrastructure_reasons, infrastructure_checks = _infrastructure_checks(
+        map_def,
+        route_line=route_line,
+    )
+    checks["infrastructure"] = infrastructure_checks
+    if infrastructure_reasons:
+        reasons.extend(infrastructure_reasons)
+        return _route_certificate(
+            route,
+            route_id=route_id,
+            status=INVALID,
+            reasons=reasons,
+            checks=checks,
+            evidence=evidence,
+        )
+
     dynamic_reasons, dynamic_checks = _dynamic_checks(
         map_def,
         planned_line=planned_line,
@@ -766,6 +782,44 @@ def _circumradius(p0: Vec2D, p1: Vec2D, p2: Vec2D) -> float | None:
     if a <= 1e-9 or b <= 1e-9 or c <= 1e-9 or area2 <= 1e-9:
         return None
     return float((a * b * c) / (2.0 * area2))
+
+
+def _infrastructure_checks(
+    map_def: MapDefinition,
+    *,
+    route_line: LineString,
+) -> tuple[list[str], dict[str, Any]]:
+    """Check certification-only public-space restrictions for AMV routes.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Invalidity reasons and diagnostics.
+    """
+    zones = list(getattr(map_def, "infrastructure_zones", []))
+    checks: dict[str, Any] = {
+        "zone_count": len(zones),
+        "intersected_zone_ids": [],
+        "illegal_amv_zone_ids": [],
+    }
+    if not zones:
+        return [], checks
+
+    illegal: list[dict[str, str]] = []
+    intersected: list[str] = []
+    for zone in zones:
+        if not route_line.intersects(zone.polygon()):
+            continue
+        intersected.append(zone.id)
+        allowed = set(zone.allowed_actor_types)
+        if allowed.isdisjoint({"all", "amv", "robot", "vehicle"}):
+            illegal.append({"id": zone.id, "zone_type": zone.zone_type})
+
+    checks["intersected_zone_ids"] = intersected
+    checks["illegal_amv_zone_ids"] = [entry["id"] for entry in illegal]
+    checks["illegal_amv_zones"] = illegal
+    if not illegal:
+        return [], checks
+    labels = ", ".join(f"{entry['id']}({entry['zone_type']})" for entry in illegal)
+    return [f"illegal_amv_infrastructure_traversal: {labels}"], checks
 
 
 def _dynamic_checks(

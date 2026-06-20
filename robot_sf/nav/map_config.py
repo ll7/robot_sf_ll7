@@ -274,6 +274,49 @@ class SinglePedestrianDefinition:
 
 
 @dataclass
+class InfrastructureZone:
+    """Semantic public-space zone used by certification and route-validation tools.
+
+    The zone is metadata only for runtime simulation. Certification consumes it to
+    reject AMV/robot routes through pedestrian-only or otherwise restricted areas.
+    """
+
+    id: str
+    zone_type: str
+    vertices: list[Vec2D]
+    allowed_actor_types: tuple[str, ...] = ("pedestrian",)
+    note: str | None = None
+
+    def __post_init__(self) -> None:
+        """Normalize and validate the infrastructure-zone payload."""
+        if not isinstance(self.id, str) or not self.id.strip():
+            raise ValueError("InfrastructureZone id must be a non-empty string")
+        self.id = self.id.strip()
+        if not isinstance(self.zone_type, str) or not self.zone_type.strip():
+            raise ValueError(f"InfrastructureZone '{self.id}' zone_type must be non-empty")
+        self.zone_type = self.zone_type.strip().lower()
+        if len(self.vertices) < 3:
+            raise ValueError(f"InfrastructureZone '{self.id}' requires at least three vertices")
+        self.vertices = [(float(x), float(y)) for x, y in self.vertices]
+        polygon = self.polygon()
+        if polygon.is_empty or not polygon.is_valid or polygon.area <= 0:
+            raise ValueError(f"InfrastructureZone '{self.id}' must form a valid non-empty polygon")
+        allowed = tuple(str(actor).strip().lower() for actor in self.allowed_actor_types)
+        allowed = tuple(actor for actor in allowed if actor)
+        if not allowed:
+            raise ValueError(
+                f"InfrastructureZone '{self.id}' allowed_actor_types must not be empty"
+            )
+        self.allowed_actor_types = allowed
+        if self.note is not None:
+            self.note = str(self.note)
+
+    def polygon(self) -> Polygon:
+        """Return the zone as a Shapely polygon."""
+        return Polygon(self.vertices)
+
+
+@dataclass
 class MapDefinition:
     """
     A class to represent a map definition.
@@ -335,6 +378,9 @@ class MapDefinition:
     obstacle logic, or planner behaviour.  It is consumed by topology,
     prediction, and observation-noise diagnostics.
     """
+
+    infrastructure_zones: list[InfrastructureZone] = field(default_factory=list)
+    """Semantic public-space zones for certification-only route validation."""
 
     _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
     """Internal lookup table from POI label to position for faster access."""
@@ -652,6 +698,8 @@ class MapDefinition:
             self.single_pedestrians = []
         if not hasattr(self, "semantic_boundaries"):
             self.semantic_boundaries = []
+        if not hasattr(self, "infrastructure_zones"):
+            self.infrastructure_zones = []
         self._build_poi_lookup()
 
 
@@ -1037,6 +1085,49 @@ def _parse_single_pedestrians(
     return single_pedestrians
 
 
+def _parse_infrastructure_zones(
+    map_structure: dict,
+    *,
+    min_x: float,
+    min_y: float,
+) -> list[InfrastructureZone]:
+    """Parse optional infrastructure zones from map data.
+
+    Returns:
+        list[InfrastructureZone]: Parsed certification-only infrastructure zones.
+    """
+    zones = map_structure.get("infrastructure_zones", [])
+    if zones is None:
+        return []
+    if not isinstance(zones, list):
+        raise ValueError("infrastructure_zones must be a list")
+    parsed: list[InfrastructureZone] = []
+    for idx, zone in enumerate(zones):
+        if not isinstance(zone, dict):
+            raise ValueError(f"infrastructure_zones[{idx}] must be a mapping")
+        raw_vertices = zone.get("vertices")
+        if not isinstance(raw_vertices, list):
+            raise ValueError(f"infrastructure_zones[{idx}] missing vertices list")
+        vertices = [
+            _normalize_position(tuple(vertex), min_x=min_x, min_y=min_y) for vertex in raw_vertices
+        ]
+        allowed = zone.get("allowed_actor_types", ("pedestrian",))
+        if isinstance(allowed, str):
+            allowed_actor_types = (allowed,)
+        else:
+            allowed_actor_types = tuple(allowed)
+        parsed.append(
+            InfrastructureZone(
+                id=str(zone.get("id") or f"infrastructure_zone_{idx}"),
+                zone_type=str(zone.get("zone_type") or "restricted"),
+                vertices=vertices,
+                allowed_actor_types=allowed_actor_types,
+                note=zone.get("note"),
+            )
+        )
+    return parsed
+
+
 def _build_map_bounds(width: float, height: float) -> list[Line2D]:
     """Build boundary lines for a rectangular map.
 
@@ -1118,6 +1209,11 @@ def serialize_map(map_structure: dict) -> MapDefinition:
     robot_routes = robot_routes + [_reverse_route(route) for route in robot_routes]
 
     single_pedestrians = _parse_single_pedestrians(map_structure, min_x=min_x, min_y=min_y)
+    infrastructure_zones = _parse_infrastructure_zones(
+        map_structure,
+        min_x=min_x,
+        min_y=min_y,
+    )
     map_bounds = _build_map_bounds(width, height)
 
     return MapDefinition(
@@ -1133,4 +1229,5 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         ped_crowded_zones,
         ped_routes,
         single_pedestrians,
+        infrastructure_zones=infrastructure_zones,
     )

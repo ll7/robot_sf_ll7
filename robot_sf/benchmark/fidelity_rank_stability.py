@@ -29,24 +29,41 @@ FIDELITY_RANK_STABILITY_SCHEMA = "fidelity_rank_stability.v1"
 
 
 def rank_planners(
-    table: Mapping[str, Mapping[str, float]],
+    table: Mapping[str, Mapping[str, object]],
     metric: str,
     *,
     higher_is_better: bool = True,
 ) -> list[str]:
     """Return planner names ordered best to worst by ``metric``.
 
-    Ties are broken by planner name for stable, deterministic output.
+    Ties are broken by planner name for stable, deterministic output. Rows
+    missing ``metric`` or carrying non-numeric/non-finite values sort last.
 
     Returns:
         Planner names ordered from best to worst on ``metric``.
     """
 
-    def sort_key(planner: str) -> tuple[float, str]:
-        value = float(table[planner][metric])
-        return (-value if higher_is_better else value, planner)
+    def sort_key(planner: str) -> tuple[int, float, str]:
+        value = _finite_metric_value(table[planner], metric)
+        if value is None:
+            return (1, 0.0, planner)
+        return (0, -value if higher_is_better else value, planner)
 
     return sorted(table, key=sort_key)
+
+
+def _finite_metric_value(metrics: Mapping[str, object], metric: str) -> float | None:
+    """Return a finite numeric metric value, or ``None`` when unavailable."""
+    raw_value = metrics.get(metric)
+    if raw_value is None or isinstance(raw_value, bool):
+        return None
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return value
 
 
 def _rank_vector(order: list[str], planners: list[str]) -> list[int]:
@@ -91,14 +108,14 @@ def count_rank_flips(order_a: list[str], order_b: list[str]) -> int:
 
 
 def metric_drift(
-    nominal: Mapping[str, Mapping[str, float]],
-    axis: Mapping[str, Mapping[str, float]],
+    nominal: Mapping[str, Mapping[str, object]],
+    axis: Mapping[str, Mapping[str, object]],
     metrics: Iterable[str],
 ) -> dict[str, float]:
     """Return mean absolute relative drift per metric (axis vs nominal).
 
     Drift for one planner/metric is ``|axis - nominal| / max(|nominal|, 1)``,
-    averaged across planners present in both tables.
+    averaged across planners present in both tables with finite numeric values.
 
     Returns:
         Mapping of metric name to mean absolute relative drift.
@@ -109,11 +126,11 @@ def metric_drift(
         for planner, nominal_metrics in nominal.items():
             if planner not in axis:
                 continue
-            base = nominal_metrics.get(metric)
-            current = axis[planner].get(metric)
+            base = _finite_metric_value(nominal_metrics, metric)
+            current = _finite_metric_value(axis[planner], metric)
             if base is None or current is None:
                 continue
-            denom = abs(base) if base != 0 else 1.0
+            denom = max(abs(base), 1.0)
             relatives.append(abs(current - base) / denom)
         drift[metric] = sum(relatives) / len(relatives) if relatives else 0.0
     return drift
@@ -176,8 +193,8 @@ class FidelitySensitivityReport:
 
 
 def analyze_fidelity_sensitivity(
-    nominal_table: Mapping[str, Mapping[str, float]],
-    axis_tables: Mapping[str, Mapping[str, Mapping[str, float]]],
+    nominal_table: Mapping[str, Mapping[str, object]],
+    axis_tables: Mapping[str, Mapping[str, Mapping[str, object]]],
     *,
     primary_metric: str,
     higher_is_better: bool = True,

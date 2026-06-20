@@ -39,6 +39,27 @@ def test_rank_planners_lower_is_better() -> None:
     assert rank_planners(table, "collision_rate", higher_is_better=False) == ["p_a", "p_b"]
 
 
+def test_rank_planners_sorts_missing_and_invalid_values_last() -> None:
+    """Missing, non-numeric, and non-finite metric values sort last deterministically."""
+    table = {
+        "valid_b": {"success_rate": 0.6},
+        "missing": {},
+        "invalid_text": {"success_rate": "not-a-number"},
+        "nan": {"success_rate": float("nan")},
+        "valid_a": {"success_rate": 0.9},
+        "inf": {"success_rate": float("inf")},
+    }
+
+    assert rank_planners(table, "success_rate", higher_is_better=True) == [
+        "valid_a",
+        "valid_b",
+        "inf",
+        "invalid_text",
+        "missing",
+        "nan",
+    ]
+
+
 def test_kendall_tau_identical_and_reversed() -> None:
     """Identical order gives 1.0, reversed gives -1.0, singletons give 1.0."""
     assert kendall_tau(["a", "b", "c"], ["a", "b", "c"]) == 1.0
@@ -57,6 +78,32 @@ def test_metric_drift_relative_change() -> None:
     """Drift is the mean absolute relative change per metric."""
     nominal = {"p": {"m": 1.0}}
     axis = {"p": {"m": 1.5}}
+    assert metric_drift(nominal, axis, ["m"]) == {"m": 0.5}
+
+
+def test_metric_drift_uses_documented_unit_floor_denominator() -> None:
+    """Sub-unit nominal values use max(abs(nominal), 1.0) as the denominator."""
+    nominal = {"p": {"success_rate": 0.02}}
+    axis = {"p": {"success_rate": 0.04}}
+    assert metric_drift(nominal, axis, ["success_rate"]) == {"success_rate": 0.02}
+
+
+def test_metric_drift_skips_missing_invalid_and_non_finite_values() -> None:
+    """Drift ignores rows that cannot produce a finite numeric comparison."""
+    nominal = {
+        "valid": {"m": 1.0},
+        "missing_axis_metric": {"m": 1.0},
+        "nan": {"m": float("nan")},
+        "text": {"m": "bad"},
+        "inf_axis": {"m": 1.0},
+    }
+    axis = {
+        "valid": {"m": 1.5},
+        "missing_axis_metric": {},
+        "nan": {"m": 1.0},
+        "text": {"m": 1.0},
+        "inf_axis": {"m": float("inf")},
+    }
     assert metric_drift(nominal, axis, ["m"]) == {"m": 0.5}
 
 

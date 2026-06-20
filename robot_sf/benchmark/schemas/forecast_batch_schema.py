@@ -7,15 +7,12 @@ interface for schema validation and metadata extraction.
 """
 
 import json
-import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import jsonschema
 from jsonschema import Draft202012Validator
-
-logger = logging.getLogger(__name__)
 
 
 class ForecastBatchSchema:

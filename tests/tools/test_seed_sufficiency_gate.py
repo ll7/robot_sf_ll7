@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
+from scripts.tools.campaign_result_store import write_result_store
 from scripts.tools.seed_sufficiency_gate import SeedGateInput, decide_seed_gate, main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_seed_gate_escalates_when_uncertainty_exceeds_target() -> None:
@@ -73,3 +78,41 @@ def test_seed_gate_cli_ignores_extra_input_keys(tmp_path) -> None:
     )
 
     assert main(["--input-json", str(input_json)]) == 0
+
+
+def test_seed_gate_cli_reads_canonical_result_store(tmp_path: Path) -> None:
+    """Result-store scheduling should not require hand-authored gate input JSON."""
+    result_store = tmp_path / "result-store"
+    write_result_store(
+        result_store,
+        [
+            {
+                "run_id": "run-a",
+                "episode_id": "run-a-001",
+                "planner": "orca",
+                "scenario_id": "crossing",
+                "scenario_family": "crossing",
+                "seed": 5,
+                "row_status": "native",
+                "artifact_uri": "wandb://robot-sf/run-a/episodes/run-a-001.jsonl",
+                "artifact_sha256": "a" * 64,
+            }
+        ],
+        study_id="issue-3160-seed-gate",
+        command="uv run python scripts/tools/seed_sufficiency_gate.py --result-store ...",
+        analysis={
+            "seed_sufficiency_gate": {
+                "schedule": "s5",
+                "ci_half_width": 0.2,
+                "target_ci_half_width": 0.1,
+            }
+        },
+    )
+    output_json = tmp_path / "decision.json"
+
+    assert main(["--result-store", str(result_store), "--output-json", str(output_json)]) == 0
+
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert payload["source"] == "campaign_result_store.analysis_json"
+    assert payload["input"]["invalid_row_count"] == 0
+    assert payload["decision"]["decision"] == "escalate"

@@ -9,7 +9,12 @@ import jsonschema
 import pytest
 
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
+from robot_sf.nav.map_config import (
+    InfrastructureZone,
+    MapDefinition,
+    SinglePedestrianDefinition,
+    serialize_map,
+)
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
@@ -53,6 +58,21 @@ def _obstacle(
     return Obstacle([(min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y)])
 
 
+def _infrastructure_zone(
+    zone_id: str,
+    zone_type: str,
+    *,
+    allowed_actor_types: tuple[str, ...] = ("pedestrian",),
+) -> InfrastructureZone:
+    """Return a restricted infrastructure zone crossing the default straight route."""
+    return InfrastructureZone(
+        id=zone_id,
+        zone_type=zone_type,
+        vertices=[(4.5, 1.2), (7.5, 1.2), (7.5, 2.8), (4.5, 2.8)],
+        allowed_actor_types=allowed_actor_types,
+    )
+
+
 def _map(
     route_points: list[tuple[float, float]],
     *,
@@ -60,6 +80,7 @@ def _map(
     height: float = 8.0,
     obstacles: list[Obstacle] | None = None,
     pedestrians: list[SinglePedestrianDefinition] | None = None,
+    infrastructure_zones: list[InfrastructureZone] | None = None,
 ) -> MapDefinition:
     """Build a minimal map definition around one robot route."""
     route = GlobalRoute(
@@ -82,6 +103,7 @@ def _map(
         ped_crowded_zones=[],
         ped_routes=[],
         single_pedestrians=pedestrians or [],
+        infrastructure_zones=infrastructure_zones or [],
     )
 
 
@@ -164,6 +186,94 @@ def test_dynamic_crossing_is_hard_but_solvable() -> None:
         pedestrians=[SinglePedestrianDefinition(id="p0", start=(5.0, 0.5), goal=(5.0, 4.0))],
     )
     assert _classify(crossing) == HARD_BUT_SOLVABLE
+
+
+@pytest.mark.parametrize(
+    ("zone_id", "zone_type"),
+    [
+        ("ped_only_cut", "pedestrian_only"),
+        ("stair_exit", "stairs"),
+        ("signal_crossing", "signalized_crossing_zone"),
+    ],
+)
+def test_restricted_infrastructure_zone_rejects_illegal_amv_traversal(
+    zone_id: str,
+    zone_type: str,
+) -> None:
+    """AMV routes through pedestrian-only infrastructure fail closed."""
+
+    certificate = certify_map_definition(
+        _map(
+            [(2.0, 2.0), (10.0, 2.0)],
+            infrastructure_zones=[_infrastructure_zone(zone_id, zone_type)],
+        ),
+        robot_config=DifferentialDriveSettings(radius=0.4),
+    )
+
+    assert certificate.classification == INVALID
+    assert any("illegal_amv_infrastructure_traversal" in reason for reason in certificate.reasons)
+    route_checks = certificate.route_certificates[0].checks["infrastructure"]
+    assert route_checks["illegal_amv_zone_ids"] == [zone_id]
+
+
+def test_amv_allowed_infrastructure_zone_remains_certifiable() -> None:
+    """Infrastructure metadata does not reject routes through AMV-allowed zones."""
+
+    allowed = _map(
+        [(2.0, 2.0), (10.0, 2.0)],
+        infrastructure_zones=[
+            _infrastructure_zone(
+                "shared_lane",
+                "shared_space_lane",
+                allowed_actor_types=("pedestrian", "amv"),
+            )
+        ],
+    )
+
+    certificate = certify_map_definition(
+        allowed,
+        robot_config=DifferentialDriveSettings(radius=0.4),
+    )
+
+    assert certificate.classification == VALID
+    route_checks = certificate.route_certificates[0].checks["infrastructure"]
+    assert route_checks["intersected_zone_ids"] == ["shared_lane"]
+    assert route_checks["illegal_amv_zone_ids"] == []
+
+
+def test_serialized_map_infrastructure_zones_feed_certification() -> None:
+    """YAML/JSON map payloads can carry infrastructure semantics into certification."""
+
+    map_def = serialize_map(
+        {
+            "x_margin": [0.0, 12.0],
+            "y_margin": [0.0, 8.0],
+            "obstacles": [],
+            "robot_spawn_zones": [[(1.8, 1.8), (2.2, 1.8), (2.2, 2.2)]],
+            "robot_goal_zones": [[(9.8, 1.8), (10.2, 1.8), (10.2, 2.2)]],
+            "ped_spawn_zones": [],
+            "ped_goal_zones": [],
+            "ped_crowded_zones": [],
+            "robot_routes": [{"spawn_id": 0, "goal_id": 0, "waypoints": [(2.0, 2.0), (10.0, 2.0)]}],
+            "ped_routes": [],
+            "infrastructure_zones": [
+                {
+                    "id": "pedestrian_exit_a",
+                    "zone_type": "pedestrian_exit",
+                    "vertices": [(4.5, 1.2), (7.5, 1.2), (7.5, 2.8), (4.5, 2.8)],
+                    "allowed_actor_types": ["pedestrian"],
+                }
+            ],
+        }
+    )
+
+    certificate = certify_map_definition(
+        map_def,
+        robot_config=DifferentialDriveSettings(radius=0.4),
+    )
+
+    assert certificate.classification == INVALID
+    assert certificate.route_certificates[0].checks["infrastructure"]["zone_count"] == 1
 
 
 @pytest.mark.parametrize(

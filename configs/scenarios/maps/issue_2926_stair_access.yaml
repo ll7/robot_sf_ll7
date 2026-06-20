@@ -1,0 +1,27 @@
+x_margin: [0.0, 12.0]
+y_margin: [0.0, 8.0]
+obstacles: []
+robot_spawn_zones:
+  - [[1.8, 1.8], [2.2, 1.8], [2.2, 2.2]]
+robot_goal_zones:
+  - [[9.8, 1.8], [10.2, 1.8], [10.2, 2.2]]
+ped_spawn_zones: []
+ped_goal_zones: []
+ped_crowded_zones: []
+robot_routes:
+  - spawn_id: 0
+    goal_id: 0
+    waypoints:
+      - [2.0, 2.0]
+      - [10.0, 2.0]
+ped_routes: []
+infrastructure_zones:
+  - id: stair_access
+    zone_type: stairs
+    vertices:
+      - [4.5, 1.2]
+      - [7.5, 1.2]
+      - [7.5, 2.8]
+      - [4.5, 2.8]
+    allowed_actor_types: [pedestrian]
+    note: Stairs are nontraversable for AMV routes.

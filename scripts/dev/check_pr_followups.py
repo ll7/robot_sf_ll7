@@ -19,6 +19,19 @@ from pathlib import Path
 
 ISSUE_RE = re.compile(r"(?:#|/issues/)(\d+)\b")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
+CLOSING_KEYWORD_RE = re.compile(
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+`?(?:#\d+|https?://\S+/issues/\d+)",
+    re.IGNORECASE,
+)
+RESIDUAL_SCOPE_RE = re.compile(
+    r"\b("
+    r"partial(?:ly)?|diagnostic[- ]only|blocked|degraded|residual scope|remaining work|"
+    r"still (?:needs|requires|missing)|deferred work|follow[- ]up (?:needed|required)|"
+    r"not (?:benchmark|paper)[- ](?:strength|facing|evidence)"
+    r")\b",
+    re.IGNORECASE,
+)
+WAIVER_RE = re.compile(r"\b(?:maintainer\s+)?waiver\b", re.IGNORECASE)
 EMPTY_OR_PLACEHOLDER = {
     "",
     "-",
@@ -65,9 +78,43 @@ def _is_empty_or_placeholder(text: str) -> bool:
 
 def _is_no_issue_reason(text: str) -> bool:
     value = _clean_value(text).lower()
-    if value in {"none", "no", "n/a", "na", "not applicable"}:
-        return True
-    return value.startswith(("none ", "none -", "none:", "na ", "na -", "n/a ", "n/a -"))
+    prefixes = ("none", "no", "n/a", "na", "not applicable")
+    for prefix in prefixes:
+        if value.startswith(f"{prefix} - ") or value.startswith(f"{prefix}: "):
+            return bool(value.removeprefix(prefix).lstrip(" -:").strip())
+    return False
+
+
+def _remove_section(body: str, heading: str) -> str:
+    """Return body text with a named Markdown section removed."""
+    target = _normalize_label(heading)
+    matches = list(HEADING_RE.finditer(body))
+    for index, match in enumerate(matches):
+        level, title = match.groups()
+        if _normalize_label(title) != target:
+            continue
+        section_end = len(body)
+        for next_match in matches[index + 1 :]:
+            if len(next_match.group(1)) <= len(level):
+                section_end = next_match.start()
+                break
+        return f"{body[: match.start()]}\n{body[section_end:]}"
+    return body
+
+
+def _has_closing_keyword(body: str) -> bool:
+    """Return true when a PR body declares issue-closing intent."""
+    return CLOSING_KEYWORD_RE.search(body) is not None
+
+
+def _has_residual_scope_outside_followups(body: str) -> bool:
+    """Return true when body text outside Follow-Up Issues declares residual scope."""
+    return RESIDUAL_SCOPE_RE.search(_remove_section(body, "Follow-Up Issues")) is not None
+
+
+def _has_explicit_maintainer_waiver(body: str, issue_value: str) -> bool:
+    """Return true when residual closure is explicitly waived."""
+    return WAIVER_RE.search(f"{body}\n{issue_value}") is not None
 
 
 def _extract_section(body: str, heading: str) -> str:
@@ -182,7 +229,25 @@ def analyze_body(body: str, *, source: str, require_open_issues: bool = False) -
             issue_state_errors=(),
             message="Follow-Up Issues section not found.",
         )
+    residual_closure = _has_closing_keyword(body) and _has_residual_scope_outside_followups(body)
     if _is_empty_or_placeholder(deferred):
+        if (
+            residual_closure
+            and not linked_issues
+            and not _has_explicit_maintainer_waiver(body, issue_value)
+        ):
+            return FollowupReport(
+                status="residual_scope_without_followup",
+                source=source,
+                deferred_work="",
+                linked_issues=(),
+                explicit_no_issue_reason="",
+                issue_state_errors=(),
+                message=(
+                    "PR closes an issue while declaring residual scope outside Follow-Up Issues; "
+                    "link an open follow-up issue or add an explicit maintainer waiver."
+                ),
+            )
         return FollowupReport(
             status="ok",
             source=source,
@@ -211,6 +276,16 @@ def analyze_body(body: str, *, source: str, require_open_issues: bool = False) -
             explicit_no_issue_reason="",
             issue_state_errors=(),
             message="Deferred work has linked follow-up issue(s).",
+        )
+    if residual_closure and _has_explicit_maintainer_waiver(body, issue_value):
+        return FollowupReport(
+            status="ok",
+            source=source,
+            deferred_work=deferred,
+            linked_issues=(),
+            explicit_no_issue_reason=issue_value,
+            issue_state_errors=(),
+            message="Residual scope is covered by an explicit maintainer waiver.",
         )
     if _is_no_issue_reason(issue_value):
         return FollowupReport(
@@ -284,6 +359,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     parser.add_argument(
+        "--require-body",
+        action="store_true",
+        help="Fail closed when no PR body source is available.",
+    )
+    parser.add_argument(
         "--require-open-issues",
         action="store_true",
         help="Verify linked follow-up issues are open with gh issue view.",
@@ -297,19 +377,22 @@ def main(argv: list[str] | None = None) -> int:
     body, source = _load_body(args)
     if body is None:
         report = FollowupReport(
-            status="skipped",
+            status="missing_body" if args.require_body else "skipped",
             source=source,
             deferred_work="",
             linked_issues=(),
             explicit_no_issue_reason="",
             issue_state_errors=(),
-            message="No PR body source configured.",
+            message=(
+                "No PR body source configured; provide --body-file, PR_READY_PR_BODY_FILE, "
+                "or a pull_request GITHUB_EVENT_PATH."
+            ),
         )
         if args.json:
             print(json.dumps(report.__dict__, sort_keys=True))
         else:
             print(_format_report(report))
-        return 0
+        return 2 if args.require_body else 0
 
     require_open = args.require_open_issues or os.environ.get(
         "PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES", ""
@@ -318,10 +401,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(report.__dict__, sort_keys=True))
     else:
-        failing_statuses = {"missing_followup", "missing_section", "issue_state_error"}
+        failing_statuses = {
+            "missing_followup",
+            "missing_section",
+            "issue_state_error",
+            "residual_scope_without_followup",
+        }
         stream = sys.stderr if report.status in failing_statuses else sys.stdout
         print(_format_report(report), file=stream)
-    return 2 if report.status in {"missing_followup", "missing_section", "issue_state_error"} else 0
+    return (
+        2
+        if report.status
+        in {
+            "missing_followup",
+            "missing_section",
+            "issue_state_error",
+            "residual_scope_without_followup",
+        }
+        else 0
+    )
 
 
 if __name__ == "__main__":

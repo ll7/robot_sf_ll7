@@ -1,0 +1,41 @@
+schema_version: experiment-record.v2
+experiment_id: issue_3193_closed_loop_forecast_falsification
+issue: 3193
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/3193
+question: >
+  When does better pedestrian forecasting actually improve Robot SF closed-loop local navigation
+  under same-seed evaluation?
+hypothesis: >
+  Open-loop forecast improvements over constant velocity will not support paper-facing navigation
+  claims unless at least one non-oracle forecast variant also improves closed-loop success, safety,
+  progress, and false-positive stopping under the frozen same-seed protocol.
+config:
+  - configs/benchmarks/issue_3059_research_engine_suite_v0.yaml
+  - docs/context/paper_closed_loop_forecast_falsification.md
+command: |
+  uv run python scripts/tools/validate_experiment_registry.py
+  # Child execution is intentionally deferred to #2915, #2904, #2916, and #2966.
+inputs:
+  - path: docs/context/paper_closed_loop_forecast_falsification.md
+  - path: docs/context/issue_2864_forecast_lane_synthesis.md
+  - path: docs/context/issue_2966_planner_consumed_forecast_slice.md
+  - path: configs/benchmarks/issue_3059_research_engine_suite_v0.yaml
+outputs:
+  - path: docs/context/paper_closed_loop_forecast_falsification.md
+    evidence_role: protocol_frozen_synthesis
+expected_artifacts:
+  - name: open_loop_baseline_ladder
+    path: output/experiments/issue_2915_forecast_baseline_ladder/result_store/
+  - name: risk_eligibility_denominator_report
+    path: output/experiments/issue_2904_forecast_risk_eligibility/result_store/
+  - name: closed_loop_coupling_gate
+    path: output/experiments/issue_2916_closed_loop_coupling_gate/result_store/
+  - name: planner_consumed_forecast_slice
+    path: output/experiments/issue_2966_planner_consumed_forecast_slice/result_store/
+evidence_grade: proposal
+paper_relevance: paper_candidate
+state: protocol_frozen
+notes: >
+  This card freezes the #3193 paper-plan protocol only. It is not a result card and does not make
+  output/ artifacts durable. Child issues must create their own result stores, durable references,
+  row-status accounting, and claim-review records before any paper-facing claim is promoted.

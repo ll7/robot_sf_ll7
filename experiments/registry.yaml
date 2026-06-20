@@ -15,3 +15,4 @@ records:
   - issue_1585_amv_actuation_provenance_lane.yaml
   - issue_2128_heldout_family_transfer_pilot.yaml
   - issue_2135_seed_sufficiency_followup.yaml
+  - issue_3193_closed_loop_forecast_falsification.yaml

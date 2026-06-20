@@ -335,11 +335,11 @@ entries:
     area: benchmark_evidence
   - path: docs/context/issue_3170_amv_feasibility_ranking_stress.md
     status: evidence
-    freshness: current
+    freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_3170_amv_feasibility_ranking_stress_2026-06-20/summary.json
     status: evidence
-    freshness: current
+    freshness: evidence
     area: benchmark_evidence
   - path: docs/context/issue_2522_why_first_diagnostics.md
     status: current
@@ -1220,6 +1220,10 @@ entries:
     area: predictive_planner
   - path: docs/context/issue_2929_forecast_workflow_synthesis.md
     status: current
+    freshness: maintained
+    area: predictive_planner
+  - path: docs/context/paper_closed_loop_forecast_falsification.md
+    status: proposal
     freshness: maintained
     area: predictive_planner
   - path: docs/context/issue_2941_native_forecast_replay.md

@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.dev import check_pr_followups
 from scripts.dev.check_pr_followups import analyze_body
 
@@ -64,6 +66,78 @@ def test_analyze_body_accepts_explicit_no_issue_reason() -> None:
 
     assert report.status == "ok"
     assert report.explicit_no_issue_reason == "NA - reviewer verification only"
+
+
+@pytest.mark.parametrize("issues", ["none", "no", "NA", "not applicable"])
+def test_analyze_body_rejects_bare_no_followup_disposition(issues: str) -> None:
+    """Bare NA/none/no values do not explain why deferred work needs no issue."""
+    report = analyze_body(
+        _body(
+            deferred="No additional work beyond reviewer verification.",
+            issues=issues,
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "missing_followup"
+    assert "without a linked issue" in report.message
+
+
+def test_analyze_body_detects_residual_scope_outside_followup_section() -> None:
+    """Closing PRs cannot hide residual work in other sections."""
+    body = """## Summary
+Closes `#2993`.
+
+## Validation / Proof
+This is diagnostic-only and leaves the broader vector-env matrix as remaining work.
+
+## Follow-Up Issues
+- Deferred work: none
+- Issues opened for follow-up: NA - no follow-up needed
+"""
+
+    report = analyze_body(body, source="fixture")
+
+    assert report.status == "residual_scope_without_followup"
+    assert "declaring residual scope" in report.message
+
+
+def test_analyze_body_allows_residual_scope_with_linked_followup_issue() -> None:
+    """Residual-scope closure is allowed when an open follow-up is declared."""
+    body = """## Summary
+Closes #2993.
+
+## Validation / Proof
+This is diagnostic-only and leaves the broader vector-env matrix as remaining work.
+
+## Follow-Up Issues
+- Deferred work: Broader vector-env matrix remains.
+- Issues opened for follow-up: #3165
+"""
+
+    report = analyze_body(body, source="fixture")
+
+    assert report.status == "ok"
+    assert report.linked_issues == ("#3165",)
+
+
+def test_analyze_body_allows_residual_scope_with_explicit_maintainer_waiver() -> None:
+    """Maintainer waiver language is the explicit escape hatch."""
+    body = """## Summary
+Closes #2993.
+
+## Validation / Proof
+This is diagnostic-only and leaves remaining work.
+
+## Follow-Up Issues
+- Deferred work: Remaining work is intentionally waived.
+- Issues opened for follow-up: NA - maintainer waiver for this closure boundary
+"""
+
+    report = analyze_body(body, source="fixture")
+
+    assert report.status == "ok"
+    assert "waiver" in report.explicit_no_issue_reason
 
 
 def test_analyze_body_rejects_closed_followup_issue(monkeypatch) -> None:
@@ -167,3 +241,21 @@ def test_cli_fails_for_deferred_work_without_disposition(tmp_path: Path) -> None
 
     assert result.returncode == 2
     assert "status=missing_followup" in result.stderr
+
+
+def test_cli_require_body_fails_closed_without_pr_body_source(monkeypatch) -> None:
+    """Final readiness should not silently skip missing PR body input."""
+    monkeypatch.delenv("PR_READY_PR_BODY_FILE", raising=False)
+    monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
+    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--require-body"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "status=missing_body" in result.stdout

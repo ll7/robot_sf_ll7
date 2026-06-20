@@ -386,7 +386,7 @@ def _make_vec_finetuning_env(config: PPOFineTuningConfig) -> DummyVecEnv | Subpr
         _describe_num_envs_resolution(config),
     )
     if worker_mode == "subproc":
-        return SubprocVecEnv(env_fns)
+        return SubprocVecEnv(env_fns, start_method="spawn")
     return DummyVecEnv(env_fns)
 
 

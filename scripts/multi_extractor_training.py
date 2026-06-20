@@ -251,10 +251,7 @@ def _get_vec_env_config(
 
     if worker_mode == "vectorized":
         vec_env_cls = SubprocVecEnv
-        if sys.platform == "darwin":
-            vec_kwargs: dict[str, Any] | None = {"start_method": "spawn"}
-        else:
-            vec_kwargs = None
+        vec_kwargs: dict[str, Any] | None = {"start_method": "spawn"}
         n_envs = num_envs
     else:
         vec_env_cls = DummyVecEnv

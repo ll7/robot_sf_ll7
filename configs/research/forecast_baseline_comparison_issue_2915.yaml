@@ -1,0 +1,53 @@
+schema_version: forecast_baseline_comparison_config.v1
+issue: 2915
+evidence_tier: analysis_only
+
+scenario_families:
+  - corridor_interaction
+  - crossing_proxy
+  - bottleneck
+  - occluded_emergence
+  - signalized_crossing
+  - goal_directed_crossing
+  - waiting_with_intent_change
+  - route_conflict_goal
+  - dense_pedestrian_interaction
+
+seeds:
+  - 111
+  - 2868
+
+horizons_s:
+  - 0.5
+  - 1.0
+
+observation_history_steps: 2
+sample_stride_steps: 3
+max_batches_per_trace: 3
+
+baselines:
+  - cv
+  - semantic
+  - interaction_aware
+
+metrics:
+  primary:
+    - miss_rate
+    - calibration_error
+    - collision_relevant_forecast_error
+    - planner_relevant_risk_error
+  secondary:
+    - ade
+    - fde
+  miss_threshold_m: 1.0
+  collision_distance_m: 0.8
+  risk_distance_m: 1.5
+  confidence_level: 0.95
+
+output:
+  evidence_dir: docs/context/evidence/issue_2915_forecast_baselines_2026-06-20
+  forecast_jsonl_dir: docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/forecast_batches
+  comparison_table: docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/comparison_table.csv
+  comparison_report_json: docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/comparison_report.json
+  comparison_report_md: docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/comparison_report.md
+  summary_json: docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/summary.json

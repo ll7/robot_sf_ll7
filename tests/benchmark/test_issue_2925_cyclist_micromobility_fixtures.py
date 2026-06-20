@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import yaml
 
-from robot_sf.benchmark.map_runner import (
+from robot_sf.benchmark.map_runner_trace import (
     _fast_bicycle_actor_summary,
     _single_pedestrian_vru_metadata,
     _trace_pedestrians,

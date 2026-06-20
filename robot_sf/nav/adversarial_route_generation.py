@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import math
 import random
 from dataclasses import dataclass
@@ -571,8 +570,9 @@ def optimize_route_set(
     Returns:
         OptimizationResult: Best candidate and optimizer diagnostics.
     """
+    # Optuna uses the stdlib logging module internally; its own verbosity API is the
+    # canonical way to silence it (no Loguru equivalent for third-party stdlib loggers).
     optuna.logging.set_verbosity(optuna.logging.WARNING)
-    logging.getLogger("optuna").setLevel(logging.WARNING)
     sampler = optuna.samplers.TPESampler(seed=config.seed)
     study = optuna.create_study(direction="maximize", sampler=sampler)
     candidate_by_trial: dict[int, CandidateRouteSet] = {}

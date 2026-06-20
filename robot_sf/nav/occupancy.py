@@ -11,21 +11,19 @@ segments/pedestrians. It works for small numbers of obstacles/agents, but is not
 large maps or dense crowds.
 """
 
-import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import numba
 import numpy as np
+from loguru import logger
 
 from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.types import Circle2D, Line2D, RobotPose, Vec2D
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
-
-logger = logging.getLogger(__name__)
 
 # Squared-length cutoff below which a segment is treated as degenerate (a point).
 # Reaching the quadratic step with a == 0 would make the discriminant check trivially
@@ -213,7 +211,7 @@ def circle_collides_any_lines(circle: Circle2D, segments: Iterable[Line2D] | np.
             try:
                 s_x, s_y, e_x, e_y = seg  # type: ignore[misc]
             except (TypeError, ValueError):
-                logger.debug("Skipping unparseable segment at index %s: %r", idx, seg)
+                logger.debug(f"Skipping unparseable segment at index {idx}: {seg!r}")
                 continue
         if is_circle_line_intersection(circle, ((s_x, s_y), (e_x, e_y))):
             return True

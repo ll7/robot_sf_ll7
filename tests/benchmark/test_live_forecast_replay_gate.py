@@ -528,6 +528,22 @@ class TestGateReport:
         assert set(report["variant_results"]) == set(FORECAST_VARIANTS)
         assert report["provenance"]["variants"] == list(FORECAST_VARIANTS)
 
+    def test_full_matrix_replay_policy_freezes_brake_distance(
+        self, dense_trace: SimulationTraceExport
+    ) -> None:
+        """Non-none variants should not change replay braking thresholds."""
+
+        report = run_live_forecast_replay_gate(dense_trace, variants=FORECAST_VARIANTS)
+        brake_distances = {
+            result["replay_policy_params"]["brake_distance_m"]
+            for variant, result in report["variant_results"].items()
+            if variant != "none"
+        }
+
+        assert brake_distances == {3.0}
+        assert report["provenance"]["replay_policy"] == "frozen_forecast_brake_replay"
+        assert report["provenance"]["replay_brake_distance_m"] == 3.0
+
     def test_report_markdown_contains_classification(
         self, dense_trace: SimulationTraceExport
     ) -> None:

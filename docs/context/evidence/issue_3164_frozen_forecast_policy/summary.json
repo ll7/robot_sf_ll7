@@ -1,0 +1,729 @@
+{
+  "claim_boundary": "Frozen-policy diagnostic evidence for planner-consumed forecast replay across scenario-diverse existing trace fixtures. The forecast variant changes while replay control/braking parameters stay fixed. This is not paper-grade evidence, and it does not claim forecast variant superiority.\n",
+  "fixture_count": 4,
+  "generated_at_utc": "2026-06-20T07:05:00Z",
+  "interpretation": "Frozen-policy diagnostic evidence only: the suite exercises full forecast variants across scenario-diverse replay fixtures with shared replay braking. In this minimal forecast-brake replay, non-none variants may still collapse to identical closed-loop signatures; such a result is evidence that prior apparent differences were policy-threshold-confounded, not benchmark-strength or paper-grade planner evidence.",
+  "issue": 3164,
+  "manifest": "configs/benchmarks/issue_3146_forecast_replay_fixture_suite.yaml",
+  "max_native_non_none_closed_loop_signature_count": 1,
+  "replay_policy": {
+    "frozen_brake_distance_m": 3.0,
+    "policy_control": "frozen",
+    "variant_forecast_risk_distance_m": {
+      "cv": 3.0,
+      "interaction_aware": 2.0,
+      "risk_filtered": 1.5,
+      "semantic": 2.5
+    }
+  },
+  "repo_head": "b4b663ff1",
+  "row_status_summary": {
+    "degraded": 1,
+    "native": 3
+  },
+  "rows": [
+    {
+      "caveats": [
+        "Non-none variants use a minimal forecast-brake replay policy with a frozen brake distance shared across forecast variants, not a production planner.  The gate proves the forecast can influence closed-loop metrics but does not prove benefit in a full planner stack.",
+        "Open-loop forecast metrics are computed from a single frame per trace by default.",
+        "Full-matrix expansion is gated by the run classification; only native runs should expand to the full variant matrix."
+      ],
+      "classification_reason": "cv forecast produces closed-loop metrics that differ from the integrated no-forecast baseline",
+      "execution_mode": "native",
+      "fixture_id": "crossing_goal_directed",
+      "non_none_closed_loop_signature_count": 1,
+      "row_classification": "native",
+      "same_seed_deltas": {
+        "cv": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 12,
+          "min_distance_m": 0.17053883435227246,
+          "near_miss": 0,
+          "progress_m": -0.22,
+          "stop_yield_timing_steps": 12
+        },
+        "interaction_aware": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 12,
+          "min_distance_m": 0.17053883435227246,
+          "near_miss": 0,
+          "progress_m": -0.22,
+          "stop_yield_timing_steps": 12
+        },
+        "risk_filtered": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 12,
+          "min_distance_m": 0.17053883435227246,
+          "near_miss": 0,
+          "progress_m": -0.22,
+          "stop_yield_timing_steps": 12
+        },
+        "semantic": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 12,
+          "min_distance_m": 0.17053883435227246,
+          "near_miss": 0,
+          "progress_m": -0.22,
+          "stop_yield_timing_steps": 12
+        }
+      },
+      "scenario_family": "crossing",
+      "scenario_id": "issue_2868_goal_directed_crossing",
+      "seed": 2868,
+      "trace": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json",
+      "trace_id": "issue_2868_goal_directed_crossing_0000",
+      "variant_results": {
+        "cv": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 12,
+            "min_distance_m": 1.6720047846821493,
+            "near_miss": 0,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 3.0
+          }
+        },
+        "interaction_aware": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 12,
+            "min_distance_m": 1.6720047846821493,
+            "near_miss": 0,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 2.0
+          }
+        },
+        "none": {
+          "closed_loop_metric_source": "no_forecast_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 0,
+            "min_distance_m": 1.5014659503298768,
+            "near_miss": 0,
+            "progress_m": 0.22,
+            "reached_goal": null,
+            "replay_policy": "no_forecast_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 0.0,
+            "stop_yield_timing_steps": 0
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "not_applicable",
+          "replay_policy_params": {
+            "brake_distance_m": null
+          }
+        },
+        "risk_filtered": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 12,
+            "min_distance_m": 1.6720047846821493,
+            "near_miss": 0,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 1.5
+          }
+        },
+        "semantic": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 12,
+            "min_distance_m": 1.6720047846821493,
+            "near_miss": 0,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 2.5
+          }
+        }
+      }
+    },
+    {
+      "caveats": [
+        "Non-none variants use a minimal forecast-brake replay policy with a frozen brake distance shared across forecast variants, not a production planner.  The gate proves the forecast can influence closed-loop metrics but does not prove benefit in a full planner stack.",
+        "Open-loop forecast metrics are computed from a single frame per trace by default.",
+        "Full-matrix expansion is gated by the run classification; only native runs should expand to the full variant matrix."
+      ],
+      "classification_reason": "cv forecast produces closed-loop metrics that differ from the integrated no-forecast baseline",
+      "execution_mode": "native",
+      "fixture_id": "corridor_route_conflict",
+      "non_none_closed_loop_signature_count": 1,
+      "row_classification": "native",
+      "same_seed_deltas": {
+        "cv": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 11,
+          "min_distance_m": 0.16358393965194007,
+          "near_miss": -3,
+          "progress_m": -0.165,
+          "stop_yield_timing_steps": 12
+        },
+        "interaction_aware": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 11,
+          "min_distance_m": 0.16358393965194007,
+          "near_miss": -3,
+          "progress_m": -0.165,
+          "stop_yield_timing_steps": 12
+        },
+        "risk_filtered": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 11,
+          "min_distance_m": 0.16358393965194007,
+          "near_miss": -3,
+          "progress_m": -0.165,
+          "stop_yield_timing_steps": 12
+        },
+        "semantic": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 11,
+          "min_distance_m": 0.16358393965194007,
+          "near_miss": -3,
+          "progress_m": -0.165,
+          "stop_yield_timing_steps": 12
+        }
+      },
+      "scenario_family": "corridor_route_conflict",
+      "scenario_id": "issue_2868_route_conflict_goal",
+      "seed": 2868,
+      "trace": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json",
+      "trace_id": "issue_2868_route_conflict_goal_0000",
+      "variant_results": {
+        "cv": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 11,
+            "min_distance_m": 1.4611296999240007,
+            "near_miss": 1,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 3.0
+          }
+        },
+        "interaction_aware": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 11,
+            "min_distance_m": 1.4611296999240007,
+            "near_miss": 1,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 2.0
+          }
+        },
+        "none": {
+          "closed_loop_metric_source": "no_forecast_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 0,
+            "min_distance_m": 1.2975457602720606,
+            "near_miss": 4,
+            "progress_m": 0.165,
+            "reached_goal": null,
+            "replay_policy": "no_forecast_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 0.0,
+            "stop_yield_timing_steps": 0
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "not_applicable",
+          "replay_policy_params": {
+            "brake_distance_m": null
+          }
+        },
+        "risk_filtered": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 11,
+            "min_distance_m": 1.4611296999240007,
+            "near_miss": 1,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 1.5
+          }
+        },
+        "semantic": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 11,
+            "min_distance_m": 1.4611296999240007,
+            "near_miss": 1,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 2.5
+          }
+        }
+      }
+    },
+    {
+      "caveats": [
+        "Non-none variants use a minimal forecast-brake replay policy with a frozen brake distance shared across forecast variants, not a production planner.  The gate proves the forecast can influence closed-loop metrics but does not prove benefit in a full planner stack.",
+        "Open-loop forecast metrics are computed from a single frame per trace by default.",
+        "Full-matrix expansion is gated by the run classification; only native runs should expand to the full variant matrix."
+      ],
+      "classification_reason": "cv forecast produces closed-loop metrics that differ from the integrated no-forecast baseline",
+      "execution_mode": "native",
+      "fixture_id": "dense_bottleneck_stress",
+      "non_none_closed_loop_signature_count": 1,
+      "row_classification": "native",
+      "same_seed_deltas": {
+        "cv": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 20,
+          "min_distance_m": 0.514721390378336,
+          "near_miss": -17,
+          "progress_m": -0.545,
+          "stop_yield_timing_steps": 16
+        },
+        "interaction_aware": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 20,
+          "min_distance_m": 0.514721390378336,
+          "near_miss": -17,
+          "progress_m": -0.545,
+          "stop_yield_timing_steps": 16
+        },
+        "risk_filtered": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 20,
+          "min_distance_m": 0.514721390378336,
+          "near_miss": -17,
+          "progress_m": -0.545,
+          "stop_yield_timing_steps": 16
+        },
+        "semantic": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 20,
+          "min_distance_m": 0.514721390378336,
+          "near_miss": -17,
+          "progress_m": -0.545,
+          "stop_yield_timing_steps": 16
+        }
+      },
+      "scenario_family": "dense_bottleneck",
+      "scenario_id": "dense_pedestrian_stress",
+      "seed": 2765,
+      "trace": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/dense_pedestrian_stress_episode_0000.json",
+      "trace_id": "issue_2765_dense_pedestrian_stress_seed2765_ep0000",
+      "variant_results": {
+        "cv": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 20,
+            "min_distance_m": 1.5005332385522154,
+            "near_miss": 0,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.9,
+            "stop_yield_timing_s": 2.0,
+            "stop_yield_timing_steps": 20
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 3.0
+          }
+        },
+        "interaction_aware": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 20,
+            "min_distance_m": 1.5005332385522154,
+            "near_miss": 0,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.9,
+            "stop_yield_timing_s": 2.0,
+            "stop_yield_timing_steps": 20
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 2.0
+          }
+        },
+        "none": {
+          "closed_loop_metric_source": "no_forecast_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 0,
+            "min_distance_m": 0.9858118481738795,
+            "near_miss": 17,
+            "progress_m": 0.545,
+            "reached_goal": null,
+            "replay_policy": "no_forecast_replay",
+            "runtime_s": 1.9,
+            "stop_yield_timing_s": 0.4,
+            "stop_yield_timing_steps": 4
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "not_applicable",
+          "replay_policy_params": {
+            "brake_distance_m": null
+          }
+        },
+        "risk_filtered": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 20,
+            "min_distance_m": 1.5005332385522154,
+            "near_miss": 0,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.9,
+            "stop_yield_timing_s": 2.0,
+            "stop_yield_timing_steps": 20
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 1.5
+          }
+        },
+        "semantic": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 20,
+            "min_distance_m": 1.5005332385522154,
+            "near_miss": 0,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.9,
+            "stop_yield_timing_s": 2.0,
+            "stop_yield_timing_steps": 20
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 2.5
+          }
+        }
+      }
+    },
+    {
+      "caveats": [
+        "Non-none variants use a minimal forecast-brake replay policy with a frozen brake distance shared across forecast variants, not a production planner.  The gate proves the forecast can influence closed-loop metrics but does not prove benefit in a full planner stack.",
+        "Open-loop forecast metrics are computed from a single frame per trace by default.",
+        "Full-matrix expansion is gated by the run classification; only native runs should expand to the full variant matrix."
+      ],
+      "classification_reason": "native live path components are present but cv closed-loop metrics match the integrated no-forecast baseline, so cv does not affect replay behavior",
+      "execution_mode": "degraded",
+      "fixture_id": "signalized_crossing_degraded",
+      "non_none_closed_loop_signature_count": 1,
+      "row_classification": "degraded",
+      "same_seed_deltas": {
+        "cv": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 0,
+          "min_distance_m": 0.0,
+          "near_miss": 0,
+          "progress_m": 0.0,
+          "stop_yield_timing_steps": 0
+        },
+        "interaction_aware": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 0,
+          "min_distance_m": 0.0,
+          "near_miss": 0,
+          "progress_m": 0.0,
+          "stop_yield_timing_steps": 0
+        },
+        "risk_filtered": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 0,
+          "min_distance_m": 0.0,
+          "near_miss": 0,
+          "progress_m": 0.0,
+          "stop_yield_timing_steps": 0
+        },
+        "semantic": {
+          "collision": {
+            "baseline": false,
+            "changed": false,
+            "value": false
+          },
+          "false_positive_stops": 0,
+          "min_distance_m": 0.0,
+          "near_miss": 0,
+          "progress_m": 0.0,
+          "stop_yield_timing_steps": 0
+        }
+      },
+      "scenario_family": "signalized_crossing",
+      "scenario_id": "issue_2868_signalized_crossing",
+      "seed": 2868,
+      "trace": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json",
+      "trace_id": "issue_2868_signalized_crossing_0000",
+      "variant_results": {
+        "cv": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 4,
+            "min_distance_m": 1.0,
+            "near_miss": 8,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 3.0
+          }
+        },
+        "interaction_aware": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 4,
+            "min_distance_m": 1.0,
+            "near_miss": 8,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 2.0
+          }
+        },
+        "none": {
+          "closed_loop_metric_source": "no_forecast_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 4,
+            "min_distance_m": 1.0,
+            "near_miss": 8,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "no_forecast_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "not_applicable",
+          "replay_policy_params": {
+            "brake_distance_m": null
+          }
+        },
+        "risk_filtered": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 4,
+            "min_distance_m": 1.0,
+            "near_miss": 8,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 1.5
+          }
+        },
+        "semantic": {
+          "closed_loop_metric_source": "forecast_brake_replay",
+          "closed_loop_metrics": {
+            "collision": false,
+            "false_positive_stops": 4,
+            "min_distance_m": 1.0,
+            "near_miss": 8,
+            "progress_m": 0.0,
+            "reached_goal": null,
+            "replay_policy": "forecast_brake_replay",
+            "runtime_s": 1.1,
+            "stop_yield_timing_s": 1.2000000000000002,
+            "stop_yield_timing_steps": 12
+          },
+          "closed_loop_replay_error": null,
+          "forecast_metrics_status": "ok",
+          "replay_policy_params": {
+            "brake_distance_m": 3.0,
+            "forecast_risk_distance_m": 2.5
+          }
+        }
+      }
+    }
+  ],
+  "scenario_family_count": 4,
+  "schema_version": "forecast-replay-fixture-suite-summary.v0.1",
+  "status": "passed",
+  "validation_errors": [],
+  "variants": [
+    "none",
+    "cv",
+    "semantic",
+    "interaction_aware",
+    "risk_filtered"
+  ]
+}

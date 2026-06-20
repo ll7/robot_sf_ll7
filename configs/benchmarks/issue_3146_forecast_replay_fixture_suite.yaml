@@ -1,9 +1,10 @@
-schema_version: forecast-replay-fixture-suite.v0.1
-issue: 3146
+schema_version: forecast-replay-fixture-suite.v0.2
+issue: 3164
 claim_boundary: >
-  Diagnostic smoke evidence for planner-consumed forecast replay across
-  scenario-diverse existing trace fixtures. This is not benchmark-strengthening
-  or paper-grade evidence, and it does not claim forecast variant superiority.
+  Frozen-policy diagnostic evidence for planner-consumed forecast replay across
+  scenario-diverse existing trace fixtures. The forecast variant changes while
+  replay control/braking parameters stay fixed. This is not paper-grade
+  evidence, and it does not claim forecast variant superiority.
 
 variants:
   - none
@@ -17,7 +18,9 @@ replay_policy:
   full_matrix: true
   row_classification_policy: fail_closed
   degraded_or_blocked_success: false
-  diagnostic_brake_distance_m:
+  policy_control: frozen
+  frozen_brake_distance_m: 3.0
+  variant_forecast_risk_distance_m:
     cv: 3.0
     semantic: 2.5
     interaction_aware: 2.0
@@ -63,4 +66,5 @@ summary_contract:
     - variant_results
     - same_seed_deltas
     - caveats
-  required_native_non_none_signature_count: 2
+  minimum_native_non_none_signature_count: 1
+  report_native_non_none_signature_count: true

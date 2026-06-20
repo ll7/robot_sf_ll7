@@ -9,8 +9,10 @@ forecast variant matrix.
 
 Issue #2941 adds a minimal ``ProbabilisticPredictor`` baseline implementation
 and a forecast-brake replay policy so non-none variants can influence
-closed-loop metrics.  This is still a smoke proof of forecast coupling, not a
-claim that the variants improve a production planner.
+closed-loop metrics.  Issue #3164 freezes the replay policy controls across
+forecast variants so closed-loop differences are not confounded by
+variant-specific brake thresholds.  This is still a smoke proof of forecast
+coupling, not a claim that the variants improve a production planner.
 """
 
 from __future__ import annotations
@@ -98,7 +100,8 @@ DEFAULT_NEAR_MISS_DISTANCE_M: float = 1.5
 DEFAULT_STOP_SPEED_MPS: float = 0.05
 DEFAULT_PROGRESS_GOAL_PROXIMITY_M: float = 1.0
 DEFAULT_RISK_DISTANCE_M: float = 3.0
-DEFAULT_VARIANT_RISK_DISTANCE_M: dict[str, float] = {
+DEFAULT_REPLAY_BRAKE_DISTANCE_M: float = 3.0
+DEFAULT_VARIANT_FORECAST_RISK_DISTANCE_M: dict[str, float] = {
     "cv": 3.0,
     "semantic": 2.5,
     "interaction_aware": 2.0,
@@ -116,8 +119,9 @@ class LiveForecastReplayGateConfig:
     stop_speed_mps: float = DEFAULT_STOP_SPEED_MPS
     progress_goal_proximity_m: float = DEFAULT_PROGRESS_GOAL_PROXIMITY_M
     risk_distance_m: float = DEFAULT_RISK_DISTANCE_M
+    replay_brake_distance_m: float = DEFAULT_REPLAY_BRAKE_DISTANCE_M
     variant_risk_distance_m: dict[str, float] = field(
-        default_factory=lambda: dict(DEFAULT_VARIANT_RISK_DISTANCE_M)
+        default_factory=lambda: dict(DEFAULT_VARIANT_FORECAST_RISK_DISTANCE_M)
     )
     observation_adapter: ForecastObservationAdapter = field(
         default_factory=OracleFullStateForecastAdapter
@@ -649,14 +653,22 @@ def _predictor_for_replay_variant(
         variant=variant,
         horizons_s=config.horizons_s,
         dt_s=dt_s,
-        risk_distance_m=_risk_distance_for_variant(variant, config),
+        risk_distance_m=_forecast_risk_distance_for_variant(variant, config),
     )
 
 
-def _risk_distance_for_variant(variant: str, config: LiveForecastReplayGateConfig) -> float:
-    """Return the diagnostic brake distance for a forecast variant."""
+def _forecast_risk_distance_for_variant(
+    variant: str, config: LiveForecastReplayGateConfig
+) -> float:
+    """Return the forecast-model risk distance for a forecast variant."""
 
     return float(config.variant_risk_distance_m.get(variant, config.risk_distance_m))
+
+
+def _replay_brake_distance(config: LiveForecastReplayGateConfig) -> float:
+    """Return the frozen replay-policy brake distance shared by forecast variants."""
+
+    return float(config.replay_brake_distance_m)
 
 
 def _frame_step_dt_s(
@@ -681,8 +693,9 @@ def run_variant_closed_loop_replay(
     forecast braking disabled.  Other variants instantiate a
     :class:`BaselineProbabilisticPredictor`, query it at each step, and override
     the recorded linear speed with zero when any predicted pedestrian mean comes
-    within the configured variant-specific diagnostic brake distance of the
-    robot.
+    within the configured replay brake distance of the robot.  The brake
+    distance is intentionally shared by all forecast variants so the predictor
+    is the independent variable and the replay control policy is frozen.
 
     The policy is intentionally minimal: it proves the forecast can influence
     closed-loop metrics without claiming that the brake heuristic is a good
@@ -706,7 +719,7 @@ def run_variant_closed_loop_replay(
 
     dt_s = _trace_dt_s(trace)
     predictor = _predictor_for_replay_variant(variant, config, dt_s)
-    brake_distance_m = _risk_distance_for_variant(variant, config)
+    brake_distance_m = _replay_brake_distance(config)
 
     initial_robot = trace.frames[0].robot
     robot_position = np.asarray(initial_robot.get("position", [0.0, 0.0]), dtype=float)
@@ -1117,7 +1130,7 @@ def _build_variant_result(
         trace,
         variant,
         horizons_s=feasible_horizons,
-        risk_distance_m=_risk_distance_for_variant(variant, config),
+        risk_distance_m=_forecast_risk_distance_for_variant(variant, config),
         observation_adapter=config.observation_adapter,
     )
     forecast_step = batch.metadata.get("step_index", 0)
@@ -1164,7 +1177,10 @@ def _build_variant_result(
         "closed_loop_metrics": closed_loop_metrics,
         "closed_loop_metric_source": closed_loop_source,
         "closed_loop_replay_error": replay_error,
-        "replay_policy_params": {"brake_distance_m": _risk_distance_for_variant(variant, config)},
+        "replay_policy_params": {
+            "brake_distance_m": _replay_brake_distance(config),
+            "forecast_risk_distance_m": _forecast_risk_distance_for_variant(variant, config),
+        },
     }
 
 
@@ -1228,13 +1244,14 @@ def run_live_forecast_replay_gate(
         "schema_version": LIVE_FORECAST_REPLAY_GATE_SCHEMA_VERSION,
         "issue": LIVE_FORECAST_REPLAY_GATE_ISSUE,
         "claim_boundary": (
-            "Issue #2941 native forecast-variant replay.  The gate evaluates the none "
-            "and cv forecast variants on the same recorded trace using a minimal "
-            "forecast-aware brake replay policy.  A BaselineProbabilisticPredictor "
-            "implementation and a forecast_variant config key are now present, so the "
-            "run is classified as native when cv closed-loop metrics differ from the "
-            "integrated no-forecast baseline, and degraded when they match.  It does not claim "
-            "that cv improves safety, success, or runtime in a full planner stack."
+            "Issue #3164 frozen-policy forecast-variant replay.  The gate evaluates "
+            "forecast variants on the same recorded trace with a shared replay brake "
+            "distance so forecast variant is the primary independent variable.  A "
+            "BaselineProbabilisticPredictor implementation and a forecast_variant config "
+            "key are now present, so the run is classified as native when cv closed-loop "
+            "metrics differ from the integrated no-forecast baseline, and degraded when "
+            "they match.  It does not claim that any variant improves safety, success, "
+            "or runtime in a full planner stack."
         ),
         "provenance": {
             "trace_id": trace.trace_id,
@@ -1247,15 +1264,18 @@ def run_live_forecast_replay_gate(
             "requested_horizons_s": list(config.horizons_s),
             "horizons_s": list(feasible_horizons),
             "variants": list(variants),
+            "replay_policy": "frozen_forecast_brake_replay",
+            "replay_brake_distance_m": _replay_brake_distance(config),
         },
         "native_path_eligibility": eligibility,
         "required_metrics": list(REQUIRED_METRICS),
         "baseline_closed_loop_metrics": dict(baseline_metrics),
         "variant_results": variant_results,
         "limitations": [
-            "Non-none variants use a minimal forecast-brake replay policy, not a production "
-            "planner.  The gate proves the forecast can influence closed-loop metrics but "
-            "does not prove benefit in a full planner stack.",
+            "Non-none variants use a minimal forecast-brake replay policy with a frozen "
+            "brake distance shared across forecast variants, not a production planner.  "
+            "The gate proves the forecast can influence closed-loop metrics but does not "
+            "prove benefit in a full planner stack.",
             "Open-loop forecast metrics are computed from a single frame per trace by default.",
             "Full-matrix expansion is gated by the run classification; only native runs "
             "should expand to the full variant matrix.",

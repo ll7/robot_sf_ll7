@@ -13,6 +13,16 @@ Related surfaces:
 - Smoke runner: `scripts/tools/run_adversarial_manifest_smoke.py`
 - Evidence: `docs/context/evidence/issue_2562_adversarial_manifest_smoke/summary.json`
 
+## Current Command Surface
+
+Issue [`#3265`](https://github.com/ll7/robot_sf_ll7/issues/3265) adds an opt-in
+pre-planner certification gate to the smoke runner: `--require-candidate-certification`. When
+enabled, the runner writes an `adversarial_candidate_quality.v1` payload before materialization,
+records the payload path and applied policy in `candidate_certification`, and blocks rejected
+batches before planner execution. `--allow-rejected-candidates-diagnostic` is the explicit
+diagnostic-only override; certification status stays separate from `planner_runs` and
+post-execution smoke classification.
+
 ## Result
 
 Issue #2562 adds the first planner-facing smoke for `adversarial_scenario_manifest.v1`. The runner
@@ -87,7 +97,8 @@ tests passed with 2 tests, and Ruff check passed.
 
 ## Follow-Up Direction
 
-The next useful step is a certification or replay-determinism gate for selected manifest candidates
-before treating any generated case as more than development stress input. If the adapter-mode
-`social_force` collision signal looks interesting, rerun with a native/comparable planner pair or a
-larger certified candidate packet before making any planner interpretation.
+The certification gate now exists for generated candidate batches. The next useful step is a
+replay-determinism or larger certified-packet run before treating any generated case as more than
+development stress input. If the adapter-mode `social_force` collision signal looks interesting,
+rerun with a native/comparable planner pair or a larger certified candidate packet before making any
+planner interpretation.

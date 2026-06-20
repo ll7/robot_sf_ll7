@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D
@@ -309,3 +310,307 @@ def test_run_smoke_only_materializes_valid_manifests(
     assert payload["result_classification"] == "smoke_passed"
     assert payload["materialized"]["selected_valid_candidates"] == [{"scenario_seed": 7}]
     assert run_batch_calls == [str(output_dir / "materialized_matrix.yaml")]
+
+
+def _base_smoke_args(
+    tmp_path: Path,
+    *,
+    template: Path,
+    space: Path,
+    output_dir: Path,
+    require_candidate_certification: bool = True,
+    allow_rejected_candidates_diagnostic: bool = False,
+    min_batch_validity_rate: float | None = None,
+) -> argparse.Namespace:
+    return argparse.Namespace(
+        search_space=space,
+        scenario_template=template,
+        count=1,
+        seed=42,
+        max_valid=2,
+        output_dir=output_dir,
+        summary_json=tmp_path / "summary.json",
+        schema=_SCHEMA,
+        generator_family="random",
+        planner=["goal"],
+        horizon=12,
+        dt=0.1,
+        workers=1,
+        require_candidate_certification=require_candidate_certification,
+        candidate_certification_json=None,
+        candidate_certification_reference_manifest=None,
+        min_batch_validity_rate=min_batch_validity_rate,
+        allow_duplicate_candidates=False,
+        allow_rejected_candidates_diagnostic=allow_rejected_candidates_diagnostic,
+    )
+
+
+def _generated_counts(
+    *,
+    total: int,
+    valid: int,
+    invalid: int = 0,
+    degenerate: int = 0,
+) -> dict[str, Any]:
+    return {
+        "total_candidates": total,
+        "valid": valid,
+        "invalid": invalid,
+        "degenerate": degenerate,
+        "rejection_reasons": {},
+    }
+
+
+def test_run_smoke_records_accepted_candidate_certification(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Accepted certification writes its payload and records policy provenance."""
+    template = tmp_path / "template.yaml"
+    space = tmp_path / "space.yaml"
+    output_dir = tmp_path / "output"
+    _write_template(template)
+    _write_space(space)
+    run_batch_calls: list[str] = []
+
+    monkeypatch.setattr(
+        smoke,
+        "generate_manifests",
+        lambda *_args, **_kwargs: (
+            [build_manifest(_smoke_candidate())],
+            _generated_counts(total=1, valid=1),
+        ),
+    )
+    monkeypatch.setattr(
+        smoke,
+        "_materialize_matrix",
+        lambda *_args, **_kwargs: (
+            output_dir / "materialized_matrix.yaml",
+            [{"scenario_seed": 7}],
+        ),
+    )
+
+    def fake_run_batch(**kwargs: Any) -> dict[str, Any]:
+        run_batch_calls.append(str(kwargs.get("scenarios_or_path")))
+        Path(kwargs["out_path"]).write_text("", encoding="utf-8")
+        return {"status": "success", "total_jobs": 1, "written": 1, "failed_jobs": 0}
+
+    monkeypatch.setattr(smoke, "run_batch", fake_run_batch)
+    args = _base_smoke_args(
+        tmp_path,
+        template=template,
+        space=space,
+        output_dir=output_dir,
+        min_batch_validity_rate=1.0,
+    )
+
+    payload = smoke.run_smoke(args)
+
+    certification = payload["candidate_certification"]
+    assert certification["status"] == "accepted"
+    assert certification["schema_version"] == "adversarial_candidate_quality.v1"
+    assert certification["applied_policy"]["min_batch_validity_rate"] == 1.0
+    assert certification["diagnostic_override"] is False
+    assert run_batch_calls == [str(output_dir / "materialized_matrix.yaml")]
+    certification_payload = json.loads(
+        Path(certification["payload_path"]).read_text(encoding="utf-8")
+    )
+    assert certification_payload["schema_version"] == "adversarial_candidate_quality.v1"
+    assert certification_payload["batch_accepted"] is True
+
+
+def test_run_smoke_fail_closes_rejected_candidate_certification(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Rejected certification blocks materialization and planner execution."""
+    template = tmp_path / "template.yaml"
+    space = tmp_path / "space.yaml"
+    output_dir = tmp_path / "output"
+    _write_template(template)
+    _write_space(space)
+    valid_manifest = build_manifest(_smoke_candidate())
+    invalid_manifest = AdversarialScenarioManifest(
+        validation=ValidationRecord(status=ManifestCategory.INVALID),
+    )
+
+    monkeypatch.setattr(
+        smoke,
+        "generate_manifests",
+        lambda *_args, **_kwargs: (
+            [valid_manifest, invalid_manifest],
+            _generated_counts(total=2, valid=1, invalid=1),
+        ),
+    )
+    monkeypatch.setattr(
+        smoke,
+        "_materialize_matrix",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("materialization should be blocked")
+        ),
+    )
+    monkeypatch.setattr(
+        smoke,
+        "run_batch",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("planner should be blocked")),
+    )
+    args = _base_smoke_args(
+        tmp_path,
+        template=template,
+        space=space,
+        output_dir=output_dir,
+        min_batch_validity_rate=1.0,
+    )
+
+    payload = smoke.run_smoke(args)
+
+    assert payload["result_classification"] == "candidate_certification_rejected"
+    assert payload["planner_runs"] == []
+    assert payload["materialized"]["matrix_path"] is None
+    certification = payload["candidate_certification"]
+    assert certification["status"] == "rejected"
+    assert certification["batch_accepted"] is False
+    assert certification["accepted_count"] == 1
+    assert certification["rejected_count"] == 1
+
+
+def test_run_smoke_diagnostic_override_allows_rejected_certification(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Explicit diagnostic override keeps pre-planner status separate from planner status."""
+    template = tmp_path / "template.yaml"
+    space = tmp_path / "space.yaml"
+    output_dir = tmp_path / "output"
+    _write_template(template)
+    _write_space(space)
+    valid_manifest = build_manifest(_smoke_candidate())
+    invalid_manifest = AdversarialScenarioManifest(
+        validation=ValidationRecord(status=ManifestCategory.INVALID),
+    )
+    materialized_inputs: list[list[AdversarialScenarioManifest]] = []
+    run_batch_calls: list[str] = []
+
+    monkeypatch.setattr(
+        smoke,
+        "generate_manifests",
+        lambda *_args, **_kwargs: (
+            [valid_manifest, invalid_manifest],
+            _generated_counts(total=2, valid=1, invalid=1),
+        ),
+    )
+
+    def fake_materialize_matrix(
+        materialized: list[AdversarialScenarioManifest],
+        **_kwargs: Any,
+    ) -> tuple[Path, list[dict[str, Any]]]:
+        materialized_inputs.append(materialized)
+        matrix_path = output_dir / "materialized_matrix.yaml"
+        matrix_path.write_text("scenarios: []\n", encoding="utf-8")
+        return matrix_path, [{"scenario_seed": 7}]
+
+    def fake_run_batch(**kwargs: Any) -> dict[str, Any]:
+        run_batch_calls.append(str(kwargs.get("scenarios_or_path")))
+        Path(kwargs["out_path"]).write_text("", encoding="utf-8")
+        return {"status": "success", "total_jobs": 1, "written": 1, "failed_jobs": 0}
+
+    monkeypatch.setattr(smoke, "_materialize_matrix", fake_materialize_matrix)
+    monkeypatch.setattr(smoke, "run_batch", fake_run_batch)
+    args = _base_smoke_args(
+        tmp_path,
+        template=template,
+        space=space,
+        output_dir=output_dir,
+        allow_rejected_candidates_diagnostic=True,
+        min_batch_validity_rate=1.0,
+    )
+
+    payload = smoke.run_smoke(args)
+
+    assert payload["candidate_certification"]["status"] == "diagnostic_override"
+    assert payload["candidate_certification"]["diagnostic_override"] is True
+    assert payload["result_classification"] == "smoke_passed"
+    assert payload["planner_runs"][0]["exit_code"] == 0
+    assert materialized_inputs == [[valid_manifest]]
+    assert run_batch_calls == [str(output_dir / "materialized_matrix.yaml")]
+
+
+def test_run_smoke_does_not_materialize_duplicate_valid_candidates(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Certification decisions filter duplicate-valid candidates before materialization."""
+    template = tmp_path / "template.yaml"
+    space = tmp_path / "space.yaml"
+    output_dir = tmp_path / "output"
+    _write_template(template)
+    _write_space(space)
+    first_manifest = build_manifest(_smoke_candidate())
+    duplicate_manifest = build_manifest(_smoke_candidate())
+    materialized_inputs: list[list[AdversarialScenarioManifest]] = []
+
+    monkeypatch.setattr(
+        smoke,
+        "generate_manifests",
+        lambda *_args, **_kwargs: (
+            [first_manifest, duplicate_manifest],
+            _generated_counts(total=2, valid=2),
+        ),
+    )
+
+    def fake_materialize_matrix(
+        materialized: list[AdversarialScenarioManifest],
+        **_kwargs: Any,
+    ) -> tuple[Path, list[dict[str, Any]]]:
+        materialized_inputs.append(materialized)
+        matrix_path = output_dir / "materialized_matrix.yaml"
+        matrix_path.write_text("scenarios: []\n", encoding="utf-8")
+        return matrix_path, [{"scenario_seed": 7}]
+
+    monkeypatch.setattr(smoke, "_materialize_matrix", fake_materialize_matrix)
+    monkeypatch.setattr(
+        smoke,
+        "run_batch",
+        lambda **kwargs: {
+            "status": "success",
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "out_path": str(kwargs["out_path"]),
+        },
+    )
+    args = _base_smoke_args(
+        tmp_path,
+        template=template,
+        space=space,
+        output_dir=output_dir,
+    )
+
+    payload = smoke.run_smoke(args)
+
+    assert payload["candidate_certification"]["status"] == "accepted"
+    assert payload["candidate_certification"]["rejection_counts"] == {"duplicate": 1}
+    assert payload["candidate_certification"]["accepted_count"] == 1
+    assert materialized_inputs == [[first_manifest]]
+
+
+@pytest.mark.parametrize("threshold", ["nan", "-0.1", "1.1", "inf"])
+def test_parser_rejects_invalid_batch_validity_thresholds(threshold: str) -> None:
+    """The smoke CLI should reject invalid certification thresholds at parse time."""
+    parser = smoke.build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "--search-space",
+                "space.yaml",
+                "--scenario-template",
+                "template.yaml",
+                "--output-dir",
+                "output",
+                "--summary-json",
+                "summary.json",
+                "--min-batch-validity-rate",
+                threshold,
+            ]
+        )

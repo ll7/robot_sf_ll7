@@ -8,7 +8,7 @@ Analysis-only diagnostic evidence. This compares deterministic forecast baseline
 
 - Issue: #2915
 - Generated at UTC: `2026-06-20T21:50:00Z`
-- Git HEAD: `4df0cdf09bfcd5f5dabd73acd1ce747b8307cc69`
+- Git HEAD: `bf81a40e62be7975afe1a6dff432cfeb6c887c51`
 - Config: `configs/research/forecast_baseline_comparison_issue_2915.yaml`
 - Command: `scripts/benchmark/run_forecast_baseline_comparison.py --config configs/research/forecast_baseline_comparison_issue_2915.yaml --date 2026-06-20 --generated-at-utc 2026-06-20T21:50:00Z`
 - Evidence tier: `analysis_only`

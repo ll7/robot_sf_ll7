@@ -14,7 +14,7 @@
     "docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/forecast_batches/interaction_aware.forecast_batch.v1.jsonl"
   ],
   "generated_at_utc": "2026-06-20T21:50:00Z",
-  "git_head": "4df0cdf09bfcd5f5dabd73acd1ce747b8307cc69",
+  "git_head": "bf81a40e62be7975afe1a6dff432cfeb6c887c51",
   "git_status_short_at_generation": [],
   "issue": 2915,
   "learned_predictor_gap": "diagnostic residual gap remains; do not unblock learned predictor promotion without broader fixed-scope trace coverage",
@@ -27,15 +27,27 @@
   },
   "missing_selected_families": [
     {
+      "family": "bottleneck",
+      "reason": "insufficient_frames"
+    },
+    {
+      "family": "crossing_proxy",
+      "reason": "limited_no_pedestrian_motion"
+    },
+    {
       "family": "dense_pedestrian_interaction",
       "reason": "no durable trace fixture available"
     }
   ],
-  "row_status_counts": {
+  "raw_row_status_counts": {
     "evaluated": 21,
     "insufficient_frames": 3,
     "limited_no_pedestrian_motion": 3,
     "not_available": 3
+  },
+  "row_status_counts": {
+    "evaluated": 18,
+    "not_available": 9
   },
   "scenario_families": [
     "corridor_interaction",
@@ -848,5 +860,25 @@
         "planner_relevant_risk_error"
       ]
     }
-  }
+  },
+  "trace_missing_selected_families": [
+    {
+      "family": "dense_pedestrian_interaction",
+      "reason": "no durable trace fixture available"
+    }
+  ],
+  "unavailable_selected_families": [
+    {
+      "family": "bottleneck",
+      "reason": "insufficient_frames"
+    },
+    {
+      "family": "crossing_proxy",
+      "reason": "limited_no_pedestrian_motion"
+    },
+    {
+      "family": "dense_pedestrian_interaction",
+      "reason": "no durable trace fixture available"
+    }
+  ]
 }

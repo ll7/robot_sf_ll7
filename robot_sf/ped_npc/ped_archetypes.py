@@ -17,8 +17,11 @@ values; this is mechanism evidence, not benchmark or realism evidence.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -124,12 +127,82 @@ def assign_archetype_speed_factors(
     Returns:
         Float array of shape ``(n,)`` with each pedestrian's desired-speed factor.
     """
+    labels = assign_archetype_labels(n, composition, seed=seed)
+    return np.asarray([speed_factors[label] for label in labels], dtype=float)
+
+
+def assign_archetype_labels(
+    n: int,
+    composition: dict[str, float],
+    *,
+    seed: int | None = None,
+) -> np.ndarray:
+    """Return a length-``n`` array of sampled archetype labels.
+
+    The label order matches :func:`assign_archetype_speed_factors` for the same
+    ``n``, composition, and seed, so downstream reports can join per-pedestrian
+    labels to speed factors without re-sampling.
+
+    Returns:
+        String array of shape ``(n,)`` with each pedestrian's archetype label.
+    """
     if n <= 0:
-        return np.empty(0, dtype=float)
+        return np.empty(0, dtype=str)
     counts = allocate_archetype_counts(n, composition)
-    factors = np.concatenate(
-        [np.full(count, speed_factors[name], dtype=float) for name, count in counts.items()]
-    )
+    labels = np.concatenate([np.full(count, name, dtype=object) for name, count in counts.items()])
     rng = np.random.default_rng(seed)
-    rng.shuffle(factors)
-    return factors
+    rng.shuffle(labels)
+    return labels.astype(str)
+
+
+def build_archetype_population_report(
+    *,
+    n: int,
+    composition: dict[str, float],
+    speed_factors: dict[str, float],
+    initial_speed: float,
+    seed: int | None = None,
+) -> dict[str, Any]:
+    """Build a deterministic, no-result report for one population composition.
+
+    Returns:
+        JSON-serializable summary of intended and realized composition counts,
+        desired-speed factors, and initial-speed assumptions.
+    """
+    validate_composition(composition, speed_factors)
+    labels = assign_archetype_labels(n, composition, seed=seed)
+    factors = np.asarray([speed_factors[label] for label in labels], dtype=float)
+    counts = {name: int(np.count_nonzero(labels == name)) for name in composition}
+    realized_total = max(1, int(n))
+    return {
+        "schema_version": "pedestrian-archetype-population-report.v1",
+        "status": "composition_report_only",
+        "claim_boundary": (
+            "No benchmark, realism, or planner-ranking claim. This report only "
+            "records deterministic population composition and speed-factor "
+            "assumptions for later smoke/campaign runs."
+        ),
+        "population_size": int(n),
+        "seed": seed,
+        "initial_speed_m_s": float(initial_speed),
+        "archetypes": {
+            name: {
+                "intended_fraction": float(composition[name]),
+                "realized_count": counts[name],
+                "realized_fraction": float(counts[name] / realized_total) if n > 0 else 0.0,
+                "desired_speed_factor": float(speed_factors[name]),
+                "initial_speed_m_s": float(initial_speed * speed_factors[name]),
+            }
+            for name in sorted(composition)
+        },
+        "assignment_order_sha1": _assignment_digest(labels.tolist()),
+        "speed_factor_mean": float(np.mean(factors)) if factors.size else 0.0,
+        "speed_factor_min": float(np.min(factors)) if factors.size else 0.0,
+        "speed_factor_max": float(np.max(factors)) if factors.size else 0.0,
+    }
+
+
+def _assignment_digest(labels: list[str]) -> str:
+    """Return a stable digest for the sampled label order."""
+    encoded = json.dumps(labels, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha1(encoded).hexdigest()[:12]

@@ -64,6 +64,17 @@ Dynamic checks:
 - static single pedestrians whose start position blocks the inflated robot route corridor classify
   the scenario as `dynamically_overconstrained`.
 
+Infrastructure checks:
+
+- map definitions may include optional `infrastructure_zones` metadata for public-space semantics
+  such as `pedestrian_only`, `stairs`, `pedestrian_exit`, `signalized_crossing_zone`, or
+  `shared_space_lane`,
+- each infrastructure zone names its polygon vertices and `allowed_actor_types`,
+- robot/AMV routes that intersect a zone whose allowed actors do not include `amv`, `robot`,
+  `vehicle`, or `all` fail closed as `invalid`,
+- these zones are certification-only metadata and do not change simulator physics, obstacle
+  collision, route planning, or benchmark execution by themselves.
+
 Scenario difficulty and planner residual analysis from
 [`docs/context/issue_692_scenario_difficulty_analysis.md`](./context/issue_692_scenario_difficulty_analysis.md)
 is linked as diagnostic evidence only. It is not treated as a replacement for validity or

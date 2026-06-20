@@ -1,6 +1,7 @@
 # Issue #3169 Map-Runner Split Completion
 
 Related issue: [#3169](https://github.com/ll7/robot_sf_ll7/issues/3169)
+Related PR: [#3180](https://github.com/ll7/robot_sf_ll7/pull/3180)
 
 ## Current Decision
 

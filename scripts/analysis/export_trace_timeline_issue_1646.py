@@ -89,8 +89,7 @@ def build_simulation_timeline(input_path: Path) -> dict[str, Any]:
         "coordinate_frame": trace.coordinate_frame,
         "units": trace.units,
         "frames": [
-            _timeline_frame(frame, frame_index=index)
-            for index, frame in enumerate(trace.frames)
+            _timeline_frame(frame, frame_index=index) for index, frame in enumerate(trace.frames)
         ],
         "events": [
             event

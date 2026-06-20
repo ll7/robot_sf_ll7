@@ -1157,14 +1157,25 @@ class OccupancyGrid:
             RuntimeError: If grid has not been generated yet
 
         Example:
+            >>> from robot_sf.nav.occupancy_grid import GridChannel, GridConfig, OccupancyGrid
+            >>> config = GridConfig(
+            ...     resolution=0.1,
+            ...     width=10.0,
+            ...     height=10.0,
+            ...     channels=[
+            ...         GridChannel.OBSTACLES,
+            ...         GridChannel.PEDESTRIANS,
+            ...         GridChannel.ROBOT,
+            ...     ],
+            ... )
             >>> grid = OccupancyGrid(config)
-            >>> grid.generate(obstacles=obs, pedestrians=peds, robot_pose=pose)
+            >>> _ = grid.generate(obstacles=[], pedestrians=[], robot_pose=((5.0, 5.0), 0.0))
             >>> obs_array = grid.to_observation()
             >>> obs_array.shape  # (num_channels, height, width)
-            (3, 200, 200)
+            (3, 100, 100)
             >>> obs_array.dtype
             dtype('float32')
-            >>> (obs_array.min(), obs_array.max())
+            >>> float(obs_array.min()), float(obs_array.max())
             (0.0, 1.0)
 
         Notes:

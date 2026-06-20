@@ -91,28 +91,92 @@ def _speed(action: dict[str, float]) -> float:
     return float(action.get("v", 0.0))
 
 
-def _run_mechanism_probe(ammv_config_path: Path) -> dict[str, Any]:
-    """Run a deterministic close-agent probe that exposes AMMV metadata."""
-    dt = 0.1
-    robot_radius = 0.3
-    agent_radius = 0.3
-    steps = 20
-    close_clearance_threshold_m = 0.5
+def _mechanism_probe_spec(probe_name: str) -> dict[str, Any]:
+    """Return a deterministic direct-mechanism probe specification."""
+    probes: dict[str, dict[str, Any]] = {
+        "issue_2168_close_front_agent_probe": {
+            "description": "Close static pedestrian in front of the robot.",
+            "seed": 42,
+            "steps": 20,
+            "dt": 0.1,
+            "close_clearance_threshold_m": 0.5,
+            "robot": {
+                "position": [0.0, 0.0],
+                "velocity": [1.0, 0.0],
+                "goal": [4.0, 0.0],
+                "radius": 0.3,
+            },
+            "agents": [
+                {
+                    "position": [0.3, 0.1],
+                    "velocity": [0.0, 0.0],
+                    "radius": 0.3,
+                }
+            ],
+        },
+        "issue_3202_anticipatory_crossing_probe": {
+            "description": (
+                "Near-field crossing pedestrian at the robot path conflict point; "
+                "direct SocialForcePlanner diagnostic only."
+            ),
+            "seed": 3202,
+            "steps": 24,
+            "dt": 0.1,
+            "close_clearance_threshold_m": 0.5,
+            "robot": {
+                "position": [0.0, 0.0],
+                "velocity": [1.0, 0.0],
+                "goal": [4.0, 0.0],
+                "radius": 0.3,
+            },
+            "agents": [
+                {
+                    "position": [0.34, 0.18],
+                    "velocity": [0.0, -0.45],
+                    "radius": 0.3,
+                }
+            ],
+        },
+    }
+    if probe_name not in probes:
+        choices = ", ".join(sorted(probes))
+        raise ValueError(f"Unknown mechanism probe '{probe_name}'. Expected one of: {choices}")
+    return probes[probe_name]
+
+
+def _min_robot_agent_clearance(
+    robot_pos: list[float],
+    agents: list[dict[str, Any]],
+    *,
+    robot_radius: float,
+) -> float:
+    """Return the minimum clearance between the robot and configured agents."""
+    clearances = []
+    for agent in agents:
+        agent_radius = float(agent.get("radius", 0.3))
+        clearances.append(
+            math.dist(robot_pos, list(agent["position"])) - robot_radius - agent_radius
+        )
+    return min(clearances) if clearances else float("inf")
+
+
+def _run_mechanism_probe(
+    ammv_config_path: Path,
+    *,
+    probe_name: str = "issue_2168_close_front_agent_probe",
+) -> dict[str, Any]:
+    """Run a deterministic direct probe that exposes AMMV metadata."""
+    spec = _mechanism_probe_spec(probe_name)
+    dt = float(spec["dt"])
+    steps = int(spec["steps"])
+    close_clearance_threshold_m = float(spec["close_clearance_threshold_m"])
+    robot_spec = dict(spec["robot"])
+    robot_radius = float(robot_spec.get("radius", 0.3))
+    agents = [dict(agent) for agent in spec["agents"]]
     obs = Observation(
         dt=dt,
-        robot={
-            "position": [0.0, 0.0],
-            "velocity": [1.0, 0.0],
-            "goal": [4.0, 0.0],
-            "radius": robot_radius,
-        },
-        agents=[
-            {
-                "position": [0.3, 0.1],
-                "velocity": [0.0, 0.0],
-                "radius": agent_radius,
-            }
-        ],
+        robot=robot_spec,
+        agents=agents,
         obstacles=[],
     )
     planners = {
@@ -121,8 +185,8 @@ def _run_mechanism_probe(ammv_config_path: Path) -> dict[str, Any]:
     }
     traces: dict[str, dict[str, Any]] = {}
     for name, planner in planners.items():
-        robot_pos = [0.0, 0.0]
-        robot_vel = [1.0, 0.0]
+        robot_pos = list(robot_spec["position"])
+        robot_vel = list(robot_spec["velocity"])
         speeds: list[float] = []
         lateral_velocities: list[float] = []
         clearances: list[float] = []
@@ -134,8 +198,8 @@ def _run_mechanism_probe(ammv_config_path: Path) -> dict[str, Any]:
                 robot={
                     "position": robot_pos,
                     "velocity": robot_vel,
-                    "goal": [4.0, 0.0],
-                    "radius": robot_radius,
+                    "goal": robot_spec["goal"],
+                    "radius": robot_spec.get("radius", 0.3),
                 },
                 agents=obs.agents,
                 obstacles=[],
@@ -145,8 +209,10 @@ def _run_mechanism_probe(ammv_config_path: Path) -> dict[str, Any]:
             vy = float(action.get("vy", 0.0))
             robot_pos = [robot_pos[0] + vx * dt, robot_pos[1] + vy * dt]
             robot_vel = [vx, vy]
-            clearance = (
-                math.dist(robot_pos, obs.agents[0]["position"]) - robot_radius - agent_radius
+            clearance = _min_robot_agent_clearance(
+                robot_pos,
+                agents,
+                robot_radius=robot_radius,
             )
             metadata = planner.get_metadata()
             speeds.append(_speed(action))
@@ -168,25 +234,35 @@ def _run_mechanism_probe(ammv_config_path: Path) -> dict[str, Any]:
         }
     default = traces["default_social_force"]
     ammv = traces["ammv_social_force"]
+    paired_delta = {
+        "mean_robot_speed_mps": ammv["mean_robot_speed_mps"] - default["mean_robot_speed_mps"],
+        "max_abs_lateral_velocity_mps": (
+            ammv["max_abs_lateral_velocity_mps"] - default["max_abs_lateral_velocity_mps"]
+        ),
+        "final_robot_lateral_offset_m": (
+            ammv["final_robot_lateral_offset_m"] - default["final_robot_lateral_offset_m"]
+        ),
+        "min_robot_ped_clearance_m": (
+            ammv["min_robot_ped_clearance_m"] - default["min_robot_ped_clearance_m"]
+        ),
+    }
+    behavioral_delta_found = any(abs(value) > 1e-9 for value in paired_delta.values())
+    ammv_force_activated = ammv["max_ammv_force_magnitude"] > 0.0
+    verdict = (
+        "behavioral_delta_found"
+        if behavioral_delta_found and ammv_force_activated
+        else "no_behavioral_delta_found"
+    )
     return {
-        "name": "issue_2168_close_front_agent_probe",
-        "seed": 42,
+        "name": probe_name,
+        "description": spec["description"],
+        "seed": int(spec["seed"]),
         "steps": steps,
         "dt": dt,
         "status": "diagnostic",
         "traces": traces,
-        "paired_delta": {
-            "mean_robot_speed_mps": ammv["mean_robot_speed_mps"] - default["mean_robot_speed_mps"],
-            "max_abs_lateral_velocity_mps": (
-                ammv["max_abs_lateral_velocity_mps"] - default["max_abs_lateral_velocity_mps"]
-            ),
-            "final_robot_lateral_offset_m": (
-                ammv["final_robot_lateral_offset_m"] - default["final_robot_lateral_offset_m"]
-            ),
-            "min_robot_ped_clearance_m": (
-                ammv["min_robot_ped_clearance_m"] - default["min_robot_ped_clearance_m"]
-            ),
-        },
+        "paired_delta": paired_delta,
+        "verdict": verdict,
         "unsupported_requested_fields": {
             "pedestrian_lateral_deviation": (
                 "unsupported: SocialForcePlanner is a robot planner and does not update pedestrian "
@@ -212,11 +288,13 @@ def _redacted_benchmark_command(
     scenario_config: Path,
     output_label: str,
     ammv_config: Path | None = None,
+    base_seed: int = 111,
+    horizon: int = 100,
 ) -> str:
     command = (
         "uv run robot_sf_bench run --matrix "
         f"{scenario_config.as_posix()} --out <{output_label}> "
-        "--base-seed 111 --repeats 1 --horizon 100 --dt 0.1 --record-forces "
+        f"--base-seed {base_seed} --repeats 1 --horizon {horizon} --dt 0.1 --record-forces "
         "--no-video --video-renderer none --algo social_force "
     )
     if ammv_config is not None:
@@ -236,7 +314,7 @@ def _write_outputs(summary: dict[str, Any], output_dir: Path) -> None:
     readme_path.write_text(
         "\n".join(
             [
-                "# Issue #2168 AMMV-Aware Social Force Pair Diagnostic 2026-06-03",
+                f"# {summary['title']}",
                 "",
                 "This evidence pack records a local diagnostic, not benchmark-strength or",
                 "paper-facing evidence. The benchmark probe ran the same single scenario",
@@ -262,17 +340,27 @@ def _write_outputs(summary: dict[str, Any], output_dir: Path) -> None:
                 f"`{mechanism['traces']['ammv_social_force']['max_ammv_force_magnitude']:.6f}`.",
                 "- AMMV max intrusion count: "
                 f"`{mechanism['traces']['ammv_social_force']['max_intrusion_count']}`.",
+                f"- Verdict: `{mechanism['verdict']}`.",
+                "- Mean speed delta: "
+                f"`{mechanism['paired_delta']['mean_robot_speed_mps']:.6f}` m/s.",
+                "- Max lateral-velocity delta: "
+                f"`{mechanism['paired_delta']['max_abs_lateral_velocity_mps']:.6f}` m/s.",
+                "- Min robot-pedestrian clearance delta: "
+                f"`{mechanism['paired_delta']['min_robot_ped_clearance_m']:.6f}` m.",
                 "- Final robot lateral-offset delta: "
                 f"`{mechanism['paired_delta']['final_robot_lateral_offset_m']:.6f}` m.",
                 "",
                 "## Interpretation",
                 "",
-                "The named benchmark slice produced identical ordinary metrics for the two",
-                "planner configurations and timed out without collisions in all rows. The",
-                "episode records did not surface AMMV force metadata. The direct mechanism",
-                "probe shows the AMMV force term can activate, but pedestrian lateral",
-                "deviation and speed adaptation are unsupported by this robot-planner-only",
-                "probe. Classify this result as diagnostic only.",
+                "The named benchmark slice is contextual diagnostic output. The direct",
+                "mechanism probe is the AMMV-specific same-seed comparison surface because",
+                "it runs `SocialForcePlanner` directly and exposes AMMV force diagnostics.",
+                "Pedestrian lateral deviation and speed adaptation remain unsupported by",
+                "this robot-planner-only probe. Classify this result as diagnostic only.",
+                "",
+                "## Limitations",
+                "",
+                *[f"- {limitation}" for limitation in summary["limitations"]],
                 "",
             ]
         ),
@@ -285,6 +373,25 @@ def _write_outputs(summary: dict[str, Any], output_dir: Path) -> None:
     checksums_path.write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
 
 
+def _infer_scenario_id(
+    *,
+    default_records: list[dict[str, Any]],
+    ammv_records: list[dict[str, Any]],
+    fallback: Path,
+) -> str:
+    """Infer a compact scenario identifier from paired episode records."""
+    scenario_ids = {
+        str(record.get("scenario_id"))
+        for record in default_records + ammv_records
+        if record.get("scenario_id") is not None
+    }
+    if len(scenario_ids) == 1:
+        return next(iter(scenario_ids))
+    if scenario_ids:
+        return ",".join(sorted(scenario_ids))
+    return fallback.stem
+
+
 def main() -> int:
     """Run the paired diagnostic and write the tracked summary pack."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -293,17 +400,58 @@ def main() -> int:
     parser.add_argument("--ammv-config", required=True, type=Path)
     parser.add_argument("--scenario-config", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument(
+        "--mechanism-probe",
+        default="issue_2168_close_front_agent_probe",
+        choices=sorted(
+            [
+                "issue_2168_close_front_agent_probe",
+                "issue_3202_anticipatory_crossing_probe",
+            ]
+        ),
+    )
+    parser.add_argument("--base-seed", type=int, default=111)
+    parser.add_argument("--horizon", type=int, default=100)
+    parser.add_argument(
+        "--schema-version", default="issue_2168_ammv_social_force_pair_diagnostic.v1"
+    )
+    parser.add_argument(
+        "--title",
+        default="Issue #2168 AMMV-Aware Social Force Pair Diagnostic 2026-06-03",
+    )
+    parser.add_argument("--scenario-id")
     args = parser.parse_args()
 
     default_records = _read_jsonl(args.default_jsonl)
     ammv_records = _read_jsonl(args.ammv_jsonl)
+    scenario_id = args.scenario_id or _infer_scenario_id(
+        default_records=default_records,
+        ammv_records=ammv_records,
+        fallback=args.scenario_config,
+    )
+    limitations = [
+        "One selected diagnostic slice only; no benchmark-strength or paper-facing claim.",
+        "Benchmark runner episode records did not surface AMMV force/intrusion metadata.",
+        "Both planner rows ran in adapter mode under differential-drive benchmark execution.",
+        "Pedestrian lateral deviation and speed adaptation are unsupported by the direct robot-planner mechanism probe.",
+    ]
+    if args.mechanism_probe == "issue_3202_anticipatory_crossing_probe":
+        limitations.append(
+            "`scripts/validation/run_multi_amv_smoke.py` is not used because it is a "
+            "multi-robot goal-controller smoke, not a default-vs-AMMV Social Force harness."
+        )
+        limitations.append(
+            "The direct probe resolves #3202 as diagnostic mechanism evidence; it does not "
+            "promote AMMV to benchmark-valid comparison evidence."
+        )
     summary = {
-        "schema_version": "issue_2168_ammv_social_force_pair_diagnostic.v1",
+        "schema_version": args.schema_version,
+        "title": args.title,
         "classification": "diagnostic",
         "benchmark_evidence": False,
         "paper_facing": False,
         "git_head": _git_head(),
-        "scenario_id": "classic_head_on_corridor_low",
+        "scenario_id": scenario_id,
         "scenario_config": args.scenario_config.as_posix(),
         "ammv_config": args.ammv_config.as_posix(),
         "commands": {
@@ -318,6 +466,8 @@ def main() -> int:
                 _redacted_benchmark_command(
                     scenario_config=args.scenario_config,
                     output_label="worktree-local-default-jsonl",
+                    base_seed=args.base_seed,
+                    horizon=args.horizon,
                 )
             ),
             "ammv_run": (
@@ -325,6 +475,8 @@ def main() -> int:
                     scenario_config=args.scenario_config,
                     output_label="worktree-local-ammv-jsonl",
                     ammv_config=args.ammv_config,
+                    base_seed=args.base_seed,
+                    horizon=args.horizon,
                 )
             ),
         },
@@ -340,13 +492,11 @@ def main() -> int:
                 ammv_records,
             ),
         },
-        "mechanism_probe": _run_mechanism_probe(args.ammv_config),
-        "limitations": [
-            "One selected diagnostic slice only; no benchmark-strength or paper-facing claim.",
-            "Benchmark runner episode records did not surface AMMV force/intrusion metadata.",
-            "Both planner rows ran in adapter mode under differential-drive benchmark execution.",
-            "Pedestrian lateral deviation and speed adaptation are unsupported by the direct robot-planner mechanism probe.",
-        ],
+        "mechanism_probe": _run_mechanism_probe(
+            args.ammv_config,
+            probe_name=args.mechanism_probe,
+        ),
+        "limitations": limitations,
     }
     _write_outputs(summary, args.output_dir)
     print(json.dumps({"output_dir": args.output_dir.as_posix(), "classification": "diagnostic"}))

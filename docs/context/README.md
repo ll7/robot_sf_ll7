@@ -183,6 +183,10 @@ knowledge, not every transient iteration detail.
   [checksums](evidence/issue_2686_release_0_0_2_table_bundle/checksums.sha256))
 * Issue #2689 Release Evidence Handoff Snapshot:
   [issue_2689_release_evidence_handoff_2026_06_15.md](issue_2689_release_evidence_handoff_2026_06_15.md)
+* Issue #3205 Release Evidence Snapshot Contract:
+  [issue_3205_release_evidence_snapshot_contract.md](issue_3205_release_evidence_snapshot_contract.md)
+  records the dry-runable release evidence manifest gate, fail-closed missing-input behavior,
+  DOI-ready metadata fields, and current diagnostic-only artifact-catalog proof.
 * Issue #2536 simulator-speed candidate discovery:
   [issue_2536_speed_discovery.md](issue_2536_speed_discovery.md)
 * Issue #2531 AMV trace-boundary decision:

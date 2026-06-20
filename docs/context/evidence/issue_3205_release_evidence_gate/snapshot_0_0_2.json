@@ -1,0 +1,47 @@
+{
+  "schema_version": "release_evidence_snapshot.v1",
+  "status": "PASS",
+  "release_tag": "0.0.2",
+  "release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2",
+  "doi": "10.5281/zenodo.19563812",
+  "source_commit": "f7ebdcae2375d085e925213197a75a386e26a79c",
+  "reference_manifest": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
+  "artifact_spec": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_spec.json",
+  "archive": {
+    "archive_name": "paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz",
+    "expected_sha256": "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90",
+    "actual_sha256": "64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90",
+    "match": true
+  },
+  "artifacts": [
+    {
+      "artifact_id": "tab_release_failure_count_slices",
+      "tracked_sha256": "e1472337a4596a68b8dbf490bb3c348ccb1338002f655258b61f3202d4d63af9",
+      "reproduced_sha256": "e1472337a4596a68b8dbf490bb3c348ccb1338002f655258b61f3202d4d63af9",
+      "match": true,
+      "fallback_degraded_summary": "Use with the release 0.0.2 scoped-planner caveat and preserve unavailable/excluded planner limitations in surrounding prose."
+    },
+    {
+      "artifact_id": "tab_results_overview",
+      "tracked_sha256": "dea2f932ad01ddbc7c31f9d2af552204f11854c683e34444fc3982174a97d684",
+      "reproduced_sha256": "dea2f932ad01ddbc7c31f9d2af552204f11854c683e34444fc3982174a97d684",
+      "match": true,
+      "fallback_degraded_summary": "Release 0.0.2 is scoped to seven planners and excludes socnav_bench because licensed SocNavBench assets were not staged; fallback/degraded status must remain visible."
+    },
+    {
+      "artifact_id": "tab_robot_sf_release_planner_results",
+      "tracked_sha256": "ac9c306ae7e73e6d0691887721239028867a8ca3e1eb6a7254feb5e07cb929fa",
+      "reproduced_sha256": "ac9c306ae7e73e6d0691887721239028867a8ca3e1eb6a7254feb5e07cb929fa",
+      "match": true,
+      "fallback_degraded_summary": "The scoped release excludes socnav_bench and records ORCA/SACADRL prerequisite policy as fallback while preserving readiness fields in the table."
+    }
+  ],
+  "reproduced_artifact_count": 3,
+  "expected_artifact_count": 3,
+  "failures": [],
+  "policy": {
+    "reproduction_scope": "regenerate promoted tables from released canonical rows; does not re-run the benchmark campaign",
+    "fail_closed": true,
+    "fallback_or_degraded_is_not_success": true
+  }
+}

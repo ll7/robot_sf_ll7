@@ -151,6 +151,11 @@ records that the available multi-scenario, multi-seed AMMV/default evidence is f
 the actuation-aware ranking signal remains one-scenario/one-seed only, so no general AMV
 feasibility ranking claim is justified yet.
 
+Recent AMV paired actuation feasibility slice: [issue_3181_amv_feasibility_ranking.md](issue_3181_amv_feasibility_ranking.md)
+records a 2-scenario x 2-seed synthetic diagnostic comparison where the actuation-aware variant
+reduced or tied command clipping, but success stayed zero and no benchmark-strength or paper-facing
+ranking claim is supported.
+
 Recent pedestrian-density runtime smoke: [issue_3200_density_runtime_smoke_summary.json](evidence/issue_3200_density_runtime_smoke_summary.json)
 records the diagnostic-only same-seed smoke over top coverage-novel and lowest-novelty comparator
 rows. All four rows ended `horizon_exhausted`; no benchmark or paper-facing density claim is

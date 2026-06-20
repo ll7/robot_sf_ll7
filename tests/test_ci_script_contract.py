@@ -7,9 +7,9 @@ handle both forms as cheap success paths: exit 0, print usage to stdout,
 and return before sourcing common_setup.sh or invoking heavy dependencies
 (uv, ruff, pytest, gh, etc.).
 
-Covered scripts (8 total):
+Covered scripts (9 total):
   pr_ready_check.sh, gh_comment.sh, run_worktree_shared_venv.sh,
-  run_tests_parallel.sh, run_ci_local.sh, ci_driver.sh,
+  run_tests_parallel.sh, run_xdist_race_validation.sh, run_ci_local.sh, ci_driver.sh,
   check_runtime_requirements.sh, check_carla_runtime.sh
 
 Also covered (in tests/dev/): ci_step_timer.sh
@@ -37,6 +37,7 @@ CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 GH_COMMENT = ROOT / "scripts" / "dev" / "gh_comment.sh"
 PYPROJECT = ROOT / "pyproject.toml"
 RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
+RUN_XDIST_RACE_VALIDATION = ROOT / "scripts" / "dev" / "run_xdist_race_validation.sh"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
 RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
@@ -136,6 +137,56 @@ def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> Non
     ) in result.stderr
     assert "Resolved pytest-xdist workers" not in result.stderr
     assert "resolve_pytest_workers.py" not in result.stderr
+
+
+def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
+    """The stress route should force high xdist concurrency and scan shared outputs."""
+
+    script_text = RUN_XDIST_RACE_VALIDATION.read_text(encoding="utf-8")
+
+    assert 'workers="${XDIST_RACE_WORKERS:-32}"' in script_text
+    assert 'export PYTEST_NUM_WORKERS="$workers"' in script_text
+    assert 'export PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}"' in script_text
+    assert 'export PYTEST_FAST_FAIL="${PYTEST_FAST_FAIL:-0}"' in script_text
+    assert 'export PYTEST_ORDER_MODE="${PYTEST_ORDER_MODE:-none}"' in script_text
+    assert "run_compact_validation.py" in script_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" "${pytest_args[@]}"' in script_text
+    assert "check_xdist_race_artifacts.py" in script_text
+    assert "--baseline-json" in script_text
+
+
+def test_xdist_race_validation_rejects_invalid_worker_value() -> None:
+    """Invalid stress worker counts should fail before running uv or pytest."""
+
+    result = subprocess.run(
+        [str(RUN_XDIST_RACE_VALIDATION), "--workers", "12bad", "tests/dev"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--workers must be a positive integer or 'auto'." in result.stderr
+    assert "uv run" not in result.stderr
+
+
+def test_xdist_race_validation_rejects_missing_option_value() -> None:
+    """Stress wrapper options should fail cleanly when the value is omitted."""
+
+    result = subprocess.run(
+        [str(RUN_XDIST_RACE_VALIDATION), "--workers"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--workers requires a non-empty value." in result.stderr
+    assert "shift" not in result.stderr
 
 
 def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:
@@ -612,6 +663,7 @@ HELP_COVERED_SCRIPTS = [
     GH_COMMENT,
     RUN_WORKTREE_SHARED_VENV,
     RUN_TESTS_PARALLEL,
+    RUN_XDIST_RACE_VALIDATION,
     RUN_CI_LOCAL,
     CI_DRIVER,
     CHECK_RUNTIME_REQUIREMENTS,
@@ -747,6 +799,27 @@ def test_run_tests_parallel_help_does_not_invoke_pytest(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "Usage:" in result.stdout
     assert "COVERAGE_FILE" in result.stdout
+    assert "uv should not be called" not in result.stderr
+
+
+def test_run_xdist_race_validation_help_does_not_invoke_pytest(tmp_path: Path) -> None:
+    """run_xdist_race_validation.sh --help exits 0 before invoking uv."""
+    repo, script_dir, env = _make_help_fixture_repo(
+        tmp_path,
+        ("run_xdist_race_validation.sh", "common_setup.sh"),
+    )
+    result = subprocess.run(
+        [str(script_dir / "run_xdist_race_validation.sh"), "--help"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "XDIST_RACE_WORKERS" in result.stdout
     assert "uv should not be called" not in result.stderr
 
 

@@ -1,3 +1,13 @@
+# Simulation-fidelity sensitivity contract (bounded #3207 child).
+#
+# This file intentionally carries two compatible surfaces:
+# - launch-packet metadata consumed by robot_sf.benchmark.fidelity_sensitivity;
+# - analysis-contract metadata consumed by robot_sf.benchmark.fidelity_rank_stability.
+#
+# These axes vary INTERNAL simulator fidelity assumptions to measure planner-
+# ranking stability. This is not benchmark evidence, sensor-realism evidence,
+# sim-to-real evidence, or a paper-facing planner-ranking result until the sweep
+# is run and promoted through a compact evidence bundle.
 schema_version: fidelity-sensitivity.v1
 issue: 3207
 study_id: issue_3207_fidelity_sensitivity_v1
@@ -123,3 +133,39 @@ result_contract:
   caveat_rule: >
     Any axis with a rank_flip_count greater than zero must be reported as a validity-boundary
     caveat and calibration candidate before paper-facing benchmark use.
+
+# Metric whose ranking defines the paper-facing planner comparison.
+primary_metric: success_rate
+higher_is_better: true
+
+# Metrics whose drift is reported per axis (absolute relative change vs nominal).
+drift_metrics:
+  - success_rate
+  - collision_rate
+  - min_clearance
+
+# Reference (nominal) fidelity used for current benchmark reporting.
+nominal:
+  description: nominal benchmark fidelity configuration (current reporting baseline)
+
+# >= 3 bounded fidelity perturbation axes. `values` are swept by the parent
+# campaign; the analysis tool consumes the resulting per-axis metric tables.
+fidelity_axes:
+  timestep:
+    description: integration timestep (seconds) for the physics/SFM update
+    nominal: 0.1
+    values: [0.05, 0.1, 0.2]
+  sfm_params:
+    description: multiplicative scaling of social-force interaction strength
+    nominal: 1.0
+    values: [0.8, 1.0, 1.2]
+  observation_noise:
+    description: additive sensor/observation noise standard deviation
+    nominal: 0.0
+    values: [0.0, 0.05, 0.1]
+
+decision_rule: >
+  If the planner ranking is stable across all axes (no rank flips), record the
+  validity boundary as benchmark-strengthening. Any ranking-flipping axis is a
+  required reporting caveat and a candidate calibration target before paper-facing
+  use.

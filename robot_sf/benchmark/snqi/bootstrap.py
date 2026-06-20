@@ -14,6 +14,8 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from robot_sf.benchmark.rank_metrics import rank_by, spearman
+
 __all__ = ["bootstrap_stability"]
 
 
@@ -62,7 +64,8 @@ def bootstrap_stability(
 
     baseline_means = {group: _mean(scores) for group, scores in grouped.items()}
     baseline_ordering = _ordering(baseline_means)
-    baseline_ranks = _rank_vector(baseline_ordering, baseline_means)
+    baseline_ranks_by_group = rank_by(baseline_means, higher_is_better=True, tie_abs_tol=1e-12)
+    baseline_ranks = [baseline_ranks_by_group[group] for group in baseline_ordering]
     correlations: list[float] = []
     sampled_orderings: list[list[str]] = []
     for _ in range(samples):
@@ -71,8 +74,14 @@ def bootstrap_stability(
         }
         sample_ordering = _ordering(sample_means)
         sampled_orderings.append(sample_ordering)
-        sample_ranks = _rank_vector(baseline_ordering, sample_means)
-        correlations.append(_spearman(baseline_ranks, sample_ranks))
+        sample_ranks_by_group = rank_by(sample_means, higher_is_better=True, tie_abs_tol=1e-12)
+        sample_ranks = [sample_ranks_by_group[group] for group in baseline_ordering]
+        correlation = spearman(baseline_ranks, sample_ranks, degenerate=None, tie_abs_tol=1e-12)
+        correlations.append(
+            float(correlation)
+            if correlation is not None
+            else (1.0 if baseline_ranks == sample_ranks else 0.0)
+        )
 
     raw_mean = _mean(correlations)
     normalized = (raw_mean + 1.0) / 2.0
@@ -157,45 +166,6 @@ def _mean(values: Iterable[float]) -> float:
 def _ordering(means: Mapping[str, float]) -> list[str]:
     """Return deterministic descending SNQI ordering."""
     return sorted(means, key=lambda group: (-float(means[group]), group))
-
-
-def _rank_vector(ordering: list[str], means: Mapping[str, float]) -> list[float]:
-    """Return average ranks for groups in baseline-ordering order."""
-    sorted_groups = _ordering(means)
-    ranks_by_group: dict[str, float] = {}
-    position = 0
-    while position < len(sorted_groups):
-        group = sorted_groups[position]
-        value = float(means[group])
-        end = position + 1
-        while end < len(sorted_groups) and math.isclose(
-            float(means[sorted_groups[end]]),
-            value,
-            rel_tol=0.0,
-            abs_tol=1e-12,
-        ):
-            end += 1
-        average_rank = (position + 1 + end) / 2.0
-        for tied_group in sorted_groups[position:end]:
-            ranks_by_group[tied_group] = average_rank
-        position = end
-    return [ranks_by_group[group] for group in ordering]
-
-
-def _spearman(left: list[float], right: list[float]) -> float:
-    """Return Spearman correlation for two rank vectors."""
-    if len(left) != len(right) or len(left) < 2:
-        raise ValueError("Spearman correlation requires equal vectors with at least two entries")
-    left_mean = _mean(left)
-    right_mean = _mean(right)
-    left_centered = [value - left_mean for value in left]
-    right_centered = [value - right_mean for value in right]
-    numerator = sum(a * b for a, b in zip(left_centered, right_centered, strict=True))
-    left_norm = math.sqrt(sum(value * value for value in left_centered))
-    right_norm = math.sqrt(sum(value * value for value in right_centered))
-    if left_norm == 0.0 or right_norm == 0.0:
-        return 1.0 if left == right else 0.0
-    return float(numerator / (left_norm * right_norm))
 
 
 def _clamp01(value: float) -> float:

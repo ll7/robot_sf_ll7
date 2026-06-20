@@ -14,6 +14,8 @@ from typing import Any
 
 import matplotlib
 
+from robot_sf.benchmark.rank_metrics import rank_order
+
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 
@@ -210,7 +212,12 @@ def _build_rank_rows(campaigns: list[dict[str, Any]], *, rank_metric: str) -> li
     rows: list[dict[str, Any]] = []
     for campaign in campaigns:
         values = _planner_metric_values(campaign, rank_metric)
-        ranks = _rank_values(values, higher_is_better=_higher_is_better(rank_metric))
+        ranks = {
+            planner: index + 1
+            for index, planner in enumerate(
+                rank_order(values, higher_is_better=_higher_is_better(rank_metric))
+            )
+        }
         for planner_key in sorted(values):
             previous_rank = previous_ranks.get(planner_key)
             rank = ranks[planner_key]
@@ -319,29 +326,10 @@ def _family_planner_values(campaign: dict[str, Any], metric: str) -> dict[str, d
     }
 
 
-def _rank_values(values: dict[str, float], *, higher_is_better: bool) -> dict[str, int]:
-    """Assign deterministic competition ranks."""
-
-    ordered = sorted(
-        values,
-        key=lambda planner: (
-            -values[planner] if higher_is_better else values[planner],
-            planner,
-        ),
-    )
-    return {planner: index + 1 for index, planner in enumerate(ordered)}
-
-
 def _winner(values: dict[str, float], *, higher_is_better: bool) -> str:
     """Return the deterministic winning planner for a value mapping."""
 
-    return sorted(
-        values,
-        key=lambda planner: (
-            -values[planner] if higher_is_better else values[planner],
-            planner,
-        ),
-    )[0]
+    return rank_order(values, higher_is_better=higher_is_better)[0]
 
 
 def _metric_summary(row: dict[str, Any], metric: str) -> dict[str, Any]:

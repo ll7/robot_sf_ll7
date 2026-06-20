@@ -20,7 +20,7 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from scipy.stats import kendalltau
+from robot_sf.benchmark.rank_metrics import kendall_tau as _shared_kendall_tau
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -66,12 +66,6 @@ def _finite_metric_value(metrics: Mapping[str, object], metric: str) -> float | 
     return value
 
 
-def _rank_vector(order: list[str], planners: list[str]) -> list[int]:
-    """Return each planner's positional rank within ``order``."""
-    position = {planner: index for index, planner in enumerate(order)}
-    return [position[planner] for planner in planners]
-
-
 def kendall_tau(order_a: list[str], order_b: list[str]) -> float:
     """Return Kendall tau between two orderings of the same planners.
 
@@ -81,10 +75,7 @@ def kendall_tau(order_a: list[str], order_b: list[str]) -> float:
     Returns:
         Kendall tau-b rank correlation in ``[-1.0, 1.0]``.
     """
-    planners = sorted(order_a)
-    if len(planners) < 2:
-        return 1.0
-    tau = kendalltau(_rank_vector(order_a, planners), _rank_vector(order_b, planners)).statistic
+    tau = _shared_kendall_tau(order_a, order_b, degenerate=1.0)
     if tau is None or math.isnan(tau):
         return 1.0
     return float(tau)

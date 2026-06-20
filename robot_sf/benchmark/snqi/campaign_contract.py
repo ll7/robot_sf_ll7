@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.rank_metrics import spearman
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi, normalize_metric
 
 if TYPE_CHECKING:
@@ -223,53 +224,14 @@ def compute_baseline_stats_from_episodes(
     return sanitized, warnings
 
 
-def _rank(values: Sequence[float]) -> list[float]:
-    """Return one-based tie-aware ranks for Spearman correlation.
-
-    Returns:
-        list[float]: Ranks in the original value order, averaging ties.
-    """
-    indexed = sorted(enumerate(values), key=lambda item: item[1])
-    ranks = [0.0] * len(values)
-    i = 0
-    while i < len(indexed):
-        j = i
-        while j + 1 < len(indexed) and indexed[j + 1][1] == indexed[i][1]:
-            j += 1
-        avg_rank = (i + j + 2) / 2.0
-        for k in range(i, j + 1):
-            ranks[indexed[k][0]] = avg_rank
-        i = j + 1
-    return ranks
-
-
-def _pearson(x: Sequence[float], y: Sequence[float]) -> float:
-    """Compute Pearson correlation over two numeric sequences.
-
-    Returns:
-        float: Correlation coefficient, or ``0.0`` for degenerate inputs.
-    """
-    if len(x) != len(y) or len(x) < 2:
-        return 0.0
-    mx = sum(x) / len(x)
-    my = sum(y) / len(y)
-    cov = sum((a - mx) * (b - my) for a, b in zip(x, y, strict=False))
-    vx = sum((a - mx) ** 2 for a in x)
-    vy = sum((b - my) ** 2 for b in y)
-    if vx <= 0.0 or vy <= 0.0:
-        return 0.0
-    return float(cov / math.sqrt(vx * vy))
-
-
 def spearman_correlation(x: Sequence[float], y: Sequence[float]) -> float:
     """Compute Spearman rank correlation without SciPy dependency.
 
     Returns:
         Correlation coefficient in ``[-1, 1]``.
     """
-    if len(x) != len(y) or len(x) < 2:
-        return 0.0
-    return _pearson(_rank(list(x)), _rank(list(y)))
+    result = spearman(x, y, degenerate=0.0)
+    return float(result)
 
 
 def _target_quality(row: Mapping[str, Any]) -> float:

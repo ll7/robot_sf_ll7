@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from robot_sf.benchmark.rank_metrics import spearman_from_rank_maps
 from robot_sf.benchmark.scenario_difficulty import (
     _build_seed_index,
     _difficulty_weighted_score,
@@ -24,7 +25,6 @@ from robot_sf.benchmark.scenario_difficulty import (
     _safe_float,
     _scenario_family,
     _seed_field,
-    _spearman_rank_correlation,
     _verified_simple_assessment,
     build_scenario_difficulty_analysis,
 )
@@ -538,13 +538,7 @@ def test_planner_quality_and_selection_helpers_cover_sparse_inputs() -> None:
     assert reason == "all planners (fallback: no eligible core set)"
     assert selected[0]["planner_key"] == "goal"
 
-    assert (
-        _spearman_rank_correlation(
-            [{"planner_key": "goal"}],
-            [{"planner_key": "goal"}],
-        )
-        is None
-    )
+    assert spearman_from_rank_maps({"goal": 1}, {"goal": 1}, degenerate=None) is None
 
 
 def test_benchmark_success_and_consensus_filters_cover_failure_modes() -> None:

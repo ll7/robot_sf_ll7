@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.rank_metrics import rank_by, spearman_from_rank_maps
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -168,25 +170,10 @@ def _normalized_ranks(
     """
     if not values_by_key:
         return {}
-    if higher_is_harder:
-        ordered = sorted(values_by_key.items(), key=lambda item: (item[1], item[0]))
-    else:
-        ordered = sorted(values_by_key.items(), key=lambda item: (-item[1], item[0]))
-    if len(ordered) == 1:
-        return {ordered[0][0]: 0.0}
-
-    out: dict[str, float] = {}
-    start = 0
-    while start < len(ordered):
-        end = start + 1
-        while end < len(ordered) and ordered[end][1] == ordered[start][1]:
-            end += 1
-        average_rank = (start + end - 1) / 2.0
-        normalized = float(average_rank / (len(ordered) - 1))
-        for key, _value in ordered[start:end]:
-            out[key] = normalized
-        start = end
-    return out
+    if len(values_by_key) == 1:
+        return {next(iter(values_by_key)): 0.0}
+    ranks = rank_by(values_by_key, higher_is_better=not higher_is_harder)
+    return {key: float((rank - 1.0) / (len(values_by_key) - 1)) for key, rank in ranks.items()}
 
 
 def _planner_row_index(planner_rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -468,34 +455,6 @@ def _planner_quality_rows(
     return output
 
 
-def _spearman_rank_correlation(
-    full_rows: Sequence[Mapping[str, Any]],
-    subset_rows: Sequence[Mapping[str, Any]],
-) -> float | None:
-    """Compare planner ordering between full and subset summary rows.
-
-    Returns:
-        float | None: Spearman rank correlation, or ``None`` with fewer than two
-        overlapping planner keys.
-    """
-    full_ranks = {
-        str(row.get("planner_key")): index + 1
-        for index, row in enumerate(full_rows)
-        if isinstance(row.get("planner_key"), str)
-    }
-    subset_ranks = {
-        str(row.get("planner_key")): index + 1
-        for index, row in enumerate(subset_rows)
-        if isinstance(row.get("planner_key"), str)
-    }
-    common = sorted(set(full_ranks) & set(subset_ranks))
-    n = len(common)
-    if n < 2:
-        return None
-    d_squared = sum((full_ranks[key] - subset_ranks[key]) ** 2 for key in common)
-    return float(1.0 - ((6.0 * d_squared) / (n * (n * n - 1))))
-
-
 def _planner_selection_rows(
     scenario_rows: Sequence[Mapping[str, Any]],
     planner_index: Mapping[str, Mapping[str, Any]],
@@ -571,7 +530,17 @@ def _verified_simple_assessment(
     ]
     full_planner_rows = _planner_quality_rows(selected_full_rows)
     subset_planner_rows = _planner_quality_rows(selected_subset_rows)
-    rank_correlation = _spearman_rank_correlation(full_planner_rows, subset_planner_rows)
+    full_ranks = {
+        str(row.get("planner_key")): index + 1
+        for index, row in enumerate(full_planner_rows)
+        if isinstance(row.get("planner_key"), str)
+    }
+    subset_ranks = {
+        str(row.get("planner_key")): index + 1
+        for index, row in enumerate(subset_planner_rows)
+        if isinstance(row.get("planner_key"), str)
+    }
+    rank_correlation = spearman_from_rank_maps(full_ranks, subset_ranks, degenerate=None)
 
     full_noise = _mean(
         _safe_float(row.get("seed_success_ci_half_width")) for row in selected_full_rows

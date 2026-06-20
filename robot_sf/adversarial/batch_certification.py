@@ -58,6 +58,7 @@ def _load_batch_records(
     records, _ = _load_records(manifest_paths, None, reference_path)
     return records
 
+
 ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA = "adversarial_candidate_quality.v1"
 
 # Pre-planner rejection reason codes.

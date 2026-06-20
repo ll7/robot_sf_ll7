@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the `robot_sf/py.typed` marker and `Typing :: Typed` classifier so downstream type checkers
+  can consume the package's inline annotations under PEP 561.
 * Added the issue-1556 synthetic AMV actuation stress slice: the new
   `configs/benchmarks/issue_1556_amv_actuation_stress_slice_v0.yaml` config stays
   non-paper-facing and differential-drive-only, camera-ready campaign manifests/reports now carry

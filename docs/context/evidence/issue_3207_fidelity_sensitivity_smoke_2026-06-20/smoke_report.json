@@ -1,0 +1,508 @@
+{
+  "baseline_variant": "dt_0_10_clean",
+  "claim_boundary": "diagnostic_smoke_not_benchmark_evidence: summarizes a small local same-scenario fidelity sensitivity smoke. It can show wiring, metric drift, and rank-stability calculation behavior, but it does not establish planner ranking, simulator realism, sim-to-real validity, or paper-facing benchmark evidence.",
+  "comparisons_vs_baseline": {
+    "dt_0_05_clean": {
+      "metric_drift_by_planner": {
+        "simple_policy": {
+          "collisions": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          },
+          "mean_distance": {
+            "absolute_delta": 0.3824748416850623,
+            "baseline": 6.031899657212961,
+            "relative_delta": 0.06340868771377818,
+            "variant": 6.414374498898023
+          },
+          "min_distance": {
+            "absolute_delta": 0.9251121423326207,
+            "baseline": 5.2542652496529145,
+            "relative_delta": 0.1760687933281883,
+            "variant": 6.179377391985535
+          },
+          "robot_ped_within_5m_frac": {
+            "absolute_delta": -0.09166666666666667,
+            "baseline": 0.425,
+            "relative_delta": -0.21568627450980393,
+            "variant": 0.3333333333333333
+          },
+          "success": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          }
+        },
+        "social_force": {
+          "collisions": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          },
+          "mean_distance": {
+            "absolute_delta": 0.3453636366862831,
+            "baseline": 5.8710512452696895,
+            "relative_delta": 0.0588248377093528,
+            "variant": 6.216414881955973
+          },
+          "min_distance": {
+            "absolute_delta": 1.1754288389702534,
+            "baseline": 4.736144535558522,
+            "relative_delta": 0.24818263677243074,
+            "variant": 5.911573374528776
+          },
+          "robot_ped_within_5m_frac": {
+            "absolute_delta": -0.25833333333333336,
+            "baseline": 0.5916666666666667,
+            "relative_delta": -0.4366197183098592,
+            "variant": 0.3333333333333333
+          },
+          "success": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          }
+        }
+      },
+      "rank_stability": {
+        "baseline_order": [
+          "simple_policy",
+          "social_force"
+        ],
+        "kendall_tau_vs_baseline": 1.0,
+        "rank_flip_count": 0,
+        "ranking_flipped": false,
+        "stable_by_tau_threshold": true,
+        "variant_order": [
+          "simple_policy",
+          "social_force"
+        ]
+      }
+    },
+    "dt_0_10_noise": {
+      "metric_drift_by_planner": {
+        "simple_policy": {
+          "collisions": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          },
+          "mean_distance": {
+            "absolute_delta": -6.926896887193834e-07,
+            "baseline": 6.031899657212961,
+            "relative_delta": -1.1483773406128588e-07,
+            "variant": 6.031898964523272
+          },
+          "min_distance": {
+            "absolute_delta": 5.9331055832778645e-05,
+            "baseline": 5.2542652496529145,
+            "relative_delta": 1.1291979565877061e-05,
+            "variant": 5.254324580708747
+          },
+          "robot_ped_within_5m_frac": {
+            "absolute_delta": 0.0,
+            "baseline": 0.425,
+            "relative_delta": 0.0,
+            "variant": 0.425
+          },
+          "success": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          }
+        },
+        "social_force": {
+          "collisions": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          },
+          "mean_distance": {
+            "absolute_delta": 0.0028911597853511495,
+            "baseline": 5.8710512452696895,
+            "relative_delta": 0.0004924432890413892,
+            "variant": 5.873942405055041
+          },
+          "min_distance": {
+            "absolute_delta": 0.0043829726924684564,
+            "baseline": 4.736144535558522,
+            "relative_delta": 0.0009254305183386011,
+            "variant": 4.740527508250991
+          },
+          "robot_ped_within_5m_frac": {
+            "absolute_delta": 0.0,
+            "baseline": 0.5916666666666667,
+            "relative_delta": 0.0,
+            "variant": 0.5916666666666667
+          },
+          "success": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          }
+        }
+      },
+      "rank_stability": {
+        "baseline_order": [
+          "simple_policy",
+          "social_force"
+        ],
+        "kendall_tau_vs_baseline": 1.0,
+        "rank_flip_count": 0,
+        "ranking_flipped": false,
+        "stable_by_tau_threshold": true,
+        "variant_order": [
+          "simple_policy",
+          "social_force"
+        ]
+      }
+    },
+    "dt_0_20_clean": {
+      "metric_drift_by_planner": {
+        "simple_policy": {
+          "collisions": {
+            "absolute_delta": 0.3333333333333333,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.3333333333333333
+          },
+          "mean_distance": {
+            "absolute_delta": -0.5916112794716222,
+            "baseline": 6.031899657212961,
+            "relative_delta": -0.09808042459130963,
+            "variant": 5.440288377741338
+          },
+          "min_distance": {
+            "absolute_delta": -2.362859476304279,
+            "baseline": 5.2542652496529145,
+            "relative_delta": -0.4497031200433523,
+            "variant": 2.8914057733486356
+          },
+          "robot_ped_within_5m_frac": {
+            "absolute_delta": 0.025925925925925963,
+            "baseline": 0.425,
+            "relative_delta": 0.061002178649237564,
+            "variant": 0.45092592592592595
+          },
+          "success": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          }
+        },
+        "social_force": {
+          "collisions": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          },
+          "mean_distance": {
+            "absolute_delta": -0.5453640065737941,
+            "baseline": 5.8710512452696895,
+            "relative_delta": -0.09289035026107026,
+            "variant": 5.325687238695895
+          },
+          "min_distance": {
+            "absolute_delta": -2.067317603557641,
+            "baseline": 4.736144535558522,
+            "relative_delta": -0.4364979970599328,
+            "variant": 2.6688269320008815
+          },
+          "robot_ped_within_5m_frac": {
+            "absolute_delta": -0.12500000000000006,
+            "baseline": 0.5916666666666667,
+            "relative_delta": -0.2112676056338029,
+            "variant": 0.4666666666666666
+          },
+          "success": {
+            "absolute_delta": 0.0,
+            "baseline": 0.0,
+            "relative_delta": null,
+            "variant": 0.0
+          }
+        }
+      },
+      "rank_stability": {
+        "baseline_order": [
+          "simple_policy",
+          "social_force"
+        ],
+        "kendall_tau_vs_baseline": 1.0,
+        "rank_flip_count": 0,
+        "ranking_flipped": false,
+        "stable_by_tau_threshold": true,
+        "variant_order": [
+          "simple_policy",
+          "social_force"
+        ]
+      }
+    }
+  },
+  "date": "2026-06-20",
+  "git_head": "40702550",
+  "inputs": {
+    "dt_0_05_clean": {
+      "simple_policy": "worktree-local ignored artifact summarized in this report (dt_0_05_clean_simple_policy.jsonl)",
+      "social_force": "worktree-local ignored artifact summarized in this report (dt_0_05_clean_social_force.jsonl)"
+    },
+    "dt_0_10_clean": {
+      "simple_policy": "worktree-local ignored artifact summarized in this report (dt_0_10_clean_simple_policy.jsonl)",
+      "social_force": "worktree-local ignored artifact summarized in this report (dt_0_10_clean_social_force.jsonl)"
+    },
+    "dt_0_10_noise": {
+      "simple_policy": "worktree-local ignored artifact summarized in this report (dt_0_10_noise_simple_policy.jsonl)",
+      "social_force": "worktree-local ignored artifact summarized in this report (dt_0_10_noise_social_force.jsonl)"
+    },
+    "dt_0_20_clean": {
+      "simple_policy": "worktree-local ignored artifact summarized in this report (dt_0_20_clean_simple_policy.jsonl)",
+      "social_force": "worktree-local ignored artifact summarized in this report (dt_0_20_clean_social_force.jsonl)"
+    }
+  },
+  "issue": 3207,
+  "planner_count": 2,
+  "planner_summaries": {
+    "dt_0_05_clean": {
+      "simple_policy": {
+        "episode_count": 3,
+        "metrics": {
+          "counts": {
+            "collisions": 3,
+            "mean_distance": 3,
+            "min_distance": 3,
+            "robot_ped_within_5m_frac": 3,
+            "success": 3
+          },
+          "means": {
+            "collisions": 0.0,
+            "mean_distance": 6.414374498898023,
+            "min_distance": 6.179377391985535,
+            "robot_ped_within_5m_frac": 0.3333333333333333,
+            "success": 0.0
+          }
+        },
+        "scenario_ids": [
+          "classic_cross_trap_low"
+        ],
+        "seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "social_force": {
+        "episode_count": 3,
+        "metrics": {
+          "counts": {
+            "collisions": 3,
+            "mean_distance": 3,
+            "min_distance": 3,
+            "robot_ped_within_5m_frac": 3,
+            "success": 3
+          },
+          "means": {
+            "collisions": 0.0,
+            "mean_distance": 6.216414881955973,
+            "min_distance": 5.911573374528776,
+            "robot_ped_within_5m_frac": 0.3333333333333333,
+            "success": 0.0
+          }
+        },
+        "scenario_ids": [
+          "classic_cross_trap_low"
+        ],
+        "seeds": [
+          101,
+          102,
+          103
+        ]
+      }
+    },
+    "dt_0_10_clean": {
+      "simple_policy": {
+        "episode_count": 3,
+        "metrics": {
+          "counts": {
+            "collisions": 3,
+            "mean_distance": 3,
+            "min_distance": 3,
+            "robot_ped_within_5m_frac": 3,
+            "success": 3
+          },
+          "means": {
+            "collisions": 0.0,
+            "mean_distance": 6.031899657212961,
+            "min_distance": 5.2542652496529145,
+            "robot_ped_within_5m_frac": 0.425,
+            "success": 0.0
+          }
+        },
+        "scenario_ids": [
+          "classic_cross_trap_low"
+        ],
+        "seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "social_force": {
+        "episode_count": 3,
+        "metrics": {
+          "counts": {
+            "collisions": 3,
+            "mean_distance": 3,
+            "min_distance": 3,
+            "robot_ped_within_5m_frac": 3,
+            "success": 3
+          },
+          "means": {
+            "collisions": 0.0,
+            "mean_distance": 5.8710512452696895,
+            "min_distance": 4.736144535558522,
+            "robot_ped_within_5m_frac": 0.5916666666666667,
+            "success": 0.0
+          }
+        },
+        "scenario_ids": [
+          "classic_cross_trap_low"
+        ],
+        "seeds": [
+          101,
+          102,
+          103
+        ]
+      }
+    },
+    "dt_0_10_noise": {
+      "simple_policy": {
+        "episode_count": 3,
+        "metrics": {
+          "counts": {
+            "collisions": 3,
+            "mean_distance": 3,
+            "min_distance": 3,
+            "robot_ped_within_5m_frac": 3,
+            "success": 3
+          },
+          "means": {
+            "collisions": 0.0,
+            "mean_distance": 6.031898964523272,
+            "min_distance": 5.254324580708747,
+            "robot_ped_within_5m_frac": 0.425,
+            "success": 0.0
+          }
+        },
+        "scenario_ids": [
+          "classic_cross_trap_low"
+        ],
+        "seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "social_force": {
+        "episode_count": 3,
+        "metrics": {
+          "counts": {
+            "collisions": 3,
+            "mean_distance": 3,
+            "min_distance": 3,
+            "robot_ped_within_5m_frac": 3,
+            "success": 3
+          },
+          "means": {
+            "collisions": 0.0,
+            "mean_distance": 5.873942405055041,
+            "min_distance": 4.740527508250991,
+            "robot_ped_within_5m_frac": 0.5916666666666667,
+            "success": 0.0
+          }
+        },
+        "scenario_ids": [
+          "classic_cross_trap_low"
+        ],
+        "seeds": [
+          101,
+          102,
+          103
+        ]
+      }
+    },
+    "dt_0_20_clean": {
+      "simple_policy": {
+        "episode_count": 3,
+        "metrics": {
+          "counts": {
+            "collisions": 3,
+            "mean_distance": 3,
+            "min_distance": 3,
+            "robot_ped_within_5m_frac": 3,
+            "success": 3
+          },
+          "means": {
+            "collisions": 0.3333333333333333,
+            "mean_distance": 5.440288377741338,
+            "min_distance": 2.8914057733486356,
+            "robot_ped_within_5m_frac": 0.45092592592592595,
+            "success": 0.0
+          }
+        },
+        "scenario_ids": [
+          "classic_cross_trap_low"
+        ],
+        "seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "social_force": {
+        "episode_count": 3,
+        "metrics": {
+          "counts": {
+            "collisions": 3,
+            "mean_distance": 3,
+            "min_distance": 3,
+            "robot_ped_within_5m_frac": 3,
+            "success": 3
+          },
+          "means": {
+            "collisions": 0.0,
+            "mean_distance": 5.325687238695895,
+            "min_distance": 2.6688269320008815,
+            "robot_ped_within_5m_frac": 0.4666666666666666,
+            "success": 0.0
+          }
+        },
+        "scenario_ids": [
+          "classic_cross_trap_low"
+        ],
+        "seeds": [
+          101,
+          102,
+          103
+        ]
+      }
+    }
+  },
+  "ranking": {
+    "higher_is_better": true,
+    "metric": "min_distance",
+    "min_tau": 0.8
+  },
+  "schema_version": "issue_3207_fidelity_sensitivity_diagnostic_smoke.v1",
+  "status": "diagnostic_smoke",
+  "variant_count": 4
+}

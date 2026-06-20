@@ -1,0 +1,94 @@
+{
+  "axes": [
+    {
+      "baseline_variant": "dt_0_10_nominal",
+      "key": "integration_timestep",
+      "rationale": "Detect whether planner rankings depend on the simulator integration step.",
+      "variant_count": 3
+    },
+    {
+      "baseline_variant": "homogeneous_standard_nominal",
+      "key": "social_force_speed_archetypes",
+      "rationale": "Detect whether pedestrian speed heterogeneity changes ranking stability.",
+      "variant_count": 3
+    },
+    {
+      "baseline_variant": "none_nominal",
+      "key": "observation_noise",
+      "rationale": "Detect whether ranking stability depends on non-calibrated robustness noise.",
+      "variant_count": 3
+    },
+    {
+      "baseline_variant": "radius_0_40_nominal",
+      "key": "clearance_radius",
+      "rationale": "Detect whether planner rankings are brittle to collision/proxemic radius assumptions.",
+      "variant_count": 3
+    }
+  ],
+  "axis_count": 4,
+  "claim_boundary": "Protocol and metric contract only. This config defines deliberate simulation-fidelity sensitivity probes and the rank-stability/drift outputs required before benchmark claims can state a validity boundary. It is not benchmark evidence, sensor-realism evidence, sim-to-real evidence, or a paper-facing planner-ranking result until the sweep is run and promoted through a compact evidence bundle.\n",
+  "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
+  "date": "2026-06-20",
+  "fixed_scope": {
+    "planner_groups": [
+      "orca",
+      "default_social_force",
+      "hybrid_rule_v0_minimal"
+    ],
+    "scenario_set": "configs/benchmarks/paper_experiment_matrix_v1.yaml",
+    "seeds": [
+      111,
+      112,
+      113
+    ]
+  },
+  "git_head": "c553e797c",
+  "issue": 3207,
+  "metrics": [
+    {
+      "direction": "higher_is_better",
+      "name": "snqi"
+    },
+    {
+      "direction": "higher_is_better",
+      "name": "success"
+    },
+    {
+      "direction": "lower_is_better",
+      "name": "collisions"
+    },
+    {
+      "direction": "lower_is_better",
+      "name": "near_misses"
+    },
+    {
+      "direction": "lower_is_better",
+      "name": "time_to_goal_norm"
+    }
+  ],
+  "next_command_template": "uv run python scripts/<fidelity_sweep>.py --config configs/research/fidelity_sensitivity_v1.yaml --out output/fidelity_sensitivity/",
+  "ranking": {
+    "higher_is_better": true,
+    "metric": "snqi",
+    "rank_flip_requires_caveat": true,
+    "stability_min_kendall_tau": 0.8
+  },
+  "result_contract": {
+    "caveat_rule": "Any axis with a rank_flip_count greater than zero must be reported as a validity-boundary caveat and calibration candidate before paper-facing benchmark use.\n",
+    "required_outputs": [
+      "axis",
+      "variant",
+      "planner",
+      "seed",
+      "scenario_id",
+      "metric_values",
+      "rank_metric",
+      "kendall_tau_vs_baseline",
+      "rank_flip_count",
+      "per_metric_drift_vs_baseline"
+    ]
+  },
+  "schema_version": "fidelity-sensitivity-launch-packet.v1",
+  "status": "launch_packet_only",
+  "study_id": "issue_3207_fidelity_sensitivity_v1"
+}

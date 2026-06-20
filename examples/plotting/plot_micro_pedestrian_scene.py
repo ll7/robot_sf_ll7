@@ -19,8 +19,8 @@ Usage:
     uv run python examples/plotting/plot_micro_pedestrian_scene.py
 
 Expected Output:
-    - PDF (vector, LaTeX-friendly): output/figures/micro_pedestrian_simulation.pdf
-    - PNG (300 DPI fallback):       output/figures/micro_pedestrian_simulation.png
+    - PDF (vector, LaTeX-friendly): output/plots/micro_pedestrian_simulation.pdf
+    - PNG (300 DPI fallback):       output/plots/micro_pedestrian_simulation.png
 
 Limitations:
     - The robot/goal are overlaid as a schematic ego agent; only the pedestrians
@@ -145,7 +145,11 @@ def main() -> None:
     robot_pos = np.array([5.4, 2.3])
     robot_goal = np.array([8.8, 7.2])
     robot_heading = robot_goal - robot_pos
-    robot_heading = robot_heading / np.linalg.norm(robot_heading)
+    robot_heading_norm = np.linalg.norm(robot_heading)
+    if robot_heading_norm > 0:
+        robot_heading = robot_heading / robot_heading_norm
+    else:
+        robot_heading = np.zeros_like(robot_heading)
     robot_speed = 1.0  # m/s
 
     fig, ax = plt.subplots(figsize=(7.0, 5.2))
@@ -223,12 +227,12 @@ def main() -> None:
     for spine in ("top", "right"):
         ax.spines[spine].set_visible(False)
 
-    out_pdf = resolve_artifact_path(Path("output/figures/micro_pedestrian_simulation.pdf"))
+    out_pdf = resolve_artifact_path(Path("plots/micro_pedestrian_simulation.pdf"))
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(str(out_pdf))
     print(f"Wrote {out_pdf}")
 
-    out_png = resolve_artifact_path(Path("output/figures/micro_pedestrian_simulation.png"))
+    out_png = resolve_artifact_path(Path("plots/micro_pedestrian_simulation.png"))
     fig.savefig(str(out_png), dpi=300)
     print(f"Wrote {out_png}")
 

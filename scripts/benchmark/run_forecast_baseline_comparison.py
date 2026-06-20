@@ -515,6 +515,40 @@ def _row_metadata_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
     return summary
 
 
+def _status_counts(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Return counts by row_status for a row collection."""
+    return {
+        status: sum(1 for row in rows if row["row_status"] == status)
+        for status in sorted({str(row["row_status"]) for row in rows})
+    }
+
+
+def _unavailable_selected_families(
+    aggregates: Sequence[Mapping[str, Any]],
+    rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, str]]:
+    """Return selected scenario families with no evaluated aggregate row."""
+    unavailable: list[dict[str, str]] = []
+    for family in sorted({str(row["scenario_family"]) for row in aggregates}):
+        family_aggregates = [row for row in aggregates if row["scenario_family"] == family]
+        if any(row.get("row_status") == "evaluated" for row in family_aggregates):
+            continue
+        reasons = sorted(
+            {
+                str(row.get("exclusion_reason") or row.get("row_status") or "not_available")
+                for row in rows
+                if row["scenario_family"] == family
+            }
+        )
+        unavailable.append(
+            {
+                "family": family,
+                "reason": "; ".join(reasons) if reasons else "no evaluated baseline rows",
+            }
+        )
+    return unavailable
+
+
 def _strongest_by_family(
     aggregates: Sequence[Mapping[str, Any]], config: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -700,6 +734,7 @@ def run(
         for item in MISSING_FAMILIES
         if item["family"] in set(config.get("scenario_families", []))
     ]
+    unavailable_selected = _unavailable_selected_families(aggregates, rows)
     summary = {
         "issue": int(config.get("issue", 2915)),
         "evidence_tier": str(config.get("evidence_tier", "analysis_only")),
@@ -712,12 +747,12 @@ def run(
         "baselines": baselines,
         "scenario_families": list(config.get("scenario_families", [])),
         "selected_trace_count": len(candidates),
-        "row_status_counts": {
-            status: sum(1 for row in rows if row["row_status"] == status)
-            for status in sorted({str(row["row_status"]) for row in rows})
-        },
+        "row_status_counts": _status_counts(aggregates),
+        "raw_row_status_counts": _status_counts(rows),
         "metadata_summary": _row_metadata_summary(rows),
-        "missing_selected_families": missing_selected,
+        "missing_selected_families": unavailable_selected,
+        "trace_missing_selected_families": missing_selected,
+        "unavailable_selected_families": unavailable_selected,
         "strongest_by_family": strongest,
         "learned_predictor_gap": (
             "diagnostic residual gap remains; do not unblock learned predictor promotion "

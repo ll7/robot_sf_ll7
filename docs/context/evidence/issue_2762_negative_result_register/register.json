@@ -67,7 +67,11 @@
         "docs/context/evidence/issue_3201_observation_noise_live_smoke/summary.json",
         "docs/context/evidence/issue_3201_observation_noise_live_smoke/README.md"
       ],
-      "recommended_next_action": "Follow-up #3233: author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.",
+      "recommended_next_action": "Completed by follow-up #3233: the deterministic near-field fixture and same-seed clean-vs-perturbed comparison are recorded in docs/context/evidence/issue_3233_near_field_observation_noise/. Do not repeat the weak dense_stress live candidate for this claim boundary.",
+      "successor_evidence_pointer": [
+        "docs/context/evidence/issue_3233_near_field_observation_noise/summary.json",
+        "docs/context/evidence/issue_3233_near_field_observation_noise/README.md"
+      ],
       "linked_issues": [3201, 3233, 2749, 3067, 2777],
       "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.",
       "created_at": "2026-06-20"

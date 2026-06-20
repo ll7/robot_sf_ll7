@@ -5,9 +5,9 @@ stages:
   stress_slice:
     scenario_matrix: ../scenarios/sets/issue_3201_pedestrian_dominated_observation_noise.yaml
     scenario_filter:
-      - dense_pedestrian_stress
+      - issue_3233_near_field_observation_noise
     seed_list:
-      - 2765
+      - 3233
     benchmark_profile: experimental
     horizon: 50
     dt: 0.1

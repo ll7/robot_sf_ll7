@@ -1712,7 +1712,7 @@ entries:
     area: benchmark_evidence
   - path: docs/context/issue_3184_distributional_disruption_metrics.md
     status: proposal
-    freshness: current
+    freshness: maintained
     area: benchmark_evidence
   - path: docs/context/issue_3062_campaign_manifest_flow.md
     status: proposal

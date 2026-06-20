@@ -90,7 +90,7 @@ def test_timestep_episode_cap_preserves_horizon_duration() -> None:
         del args, kwargs
         return SimpleNamespace(
             sim_config=SimpleNamespace(
-                max_sim_steps=1000,
+                max_sim_steps=180,
                 sim_time_in_secs=18.0,
                 time_per_step_in_secs=0.1,
                 ped_radius=0.3,

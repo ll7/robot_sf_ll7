@@ -342,10 +342,7 @@ def run_episode(
     )
     apply_variant(config, variant, seed=seed)
     variant_dt = float(config.sim_config.time_per_step_in_secs)
-    max_steps = min(
-        int(config.sim_config.max_sim_steps),
-        max(1, math.ceil(target_duration / variant_dt)),
-    )
+    max_steps = max(1, math.ceil(target_duration / variant_dt))
     env = make_robot_env(config=config, seed=seed, debug=False)
     rng = np.random.default_rng(_stable_seed(seed, variant.key, planner_name))
     planner = _planner(planner_name, config, seed=seed)

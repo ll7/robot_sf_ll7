@@ -93,6 +93,8 @@ knowledge, not every transient iteration detail.
 * Issue #2946 mechanism-evidence figure pack: [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
+* Skill Consolidation Audit Issue #3189 2026-06-20:
+  [skill_consolidation_audit_2026-06-20.md](skill_consolidation_audit_2026-06-20.md)
 * Issue #1181/#1191 ML-Intern Bounded Assistant Assessment and Codex-Native Workflow Extraction:
   [issue_1181_ml_intern_experiment_assistant.md](issue_1181_ml_intern_experiment_assistant.md)
 * Route-clearance certification: [issue_1105_route_clearance_certification.md](issue_1105_route_clearance_certification.md)

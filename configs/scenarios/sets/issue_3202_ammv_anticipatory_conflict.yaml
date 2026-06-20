@@ -1,0 +1,38 @@
+## Issue #3202 AMMV anticipatory-conflict diagnostic fixture.
+#
+# Purpose:
+#   Pin a tiny same-seed fixture where a pedestrian waits near the robot route
+#   and then crosses, giving AMMV-aware Social Force a concrete close-agent
+#   anticipatory-conflict surface to compare against default Social Force.
+#
+# Evidence boundary:
+#   Diagnostic-only local smoke input. This is not benchmark-strength evidence,
+#   not planner ranking, and not a paper-facing AMMV claim unless follow-up rows
+#   demonstrate a behavioral divergence regime with durable provenance.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../single/issue_2527_waiting_then_crossing.yaml
+
+select_scenarios:
+  - issue_2527_waiting_then_crossing
+
+scenario_overrides_by_name:
+  issue_2527_waiting_then_crossing:
+    seeds: [3202]
+    simulation_config:
+      max_episode_steps: 160
+      ped_density: 0.0
+    metadata:
+      archetype: waiting_then_crossing_anticipatory_conflict
+      density: diagnostic_single_actor
+      flow: crossing
+      behavior: waiting_then_crossing
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/3202
+      diagnostic_role: ammv_anticipatory_conflict_default_pair
+      evidence_tier: diagnostic_smoke
+      claim_boundary: >
+        Same-seed default-vs-AMMV Social Force probe over an authored
+        waiting-then-crossing pedestrian route. Diagnostic only; not
+        benchmark-strength AMMV evidence, planner ranking, or paper-facing
+        behavior-model validation.

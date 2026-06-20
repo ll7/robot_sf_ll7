@@ -150,6 +150,10 @@ Recent evidence-catalog backlog: [issue_3014_evidence_catalog_backlog.md](issue_
 records the 2026-06-19 full evidence-catalog hygiene scan, 116 uncovered tracked evidence bundles
 or files, and the bounded split strategy for future Issue #3014 catalog cleanup PRs.
 
+Recent map-runner split completion: [issue_3169_map_runner_split_completion.md](issue_3169_map_runner_split_completion.md)
+records the current ownership boundary for map-runner episode execution, batch planning,
+serial/parallel execution, completed-summary assembly, and temporary private compatibility aliases.
+
 ## Context-Pack Manifests
 
 Generated packs are temporary artifacts and should stay under ignored paths such as

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import time
@@ -14,7 +15,7 @@ import pytest
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark import map_runner
+from robot_sf.benchmark import map_runner, map_runner_episode
 from robot_sf.benchmark.map_runner import (
     _accumulate_batch_metadata,
     _apply_planner_selector_v2_context,
@@ -199,6 +200,21 @@ def test_map_batch_plan_builds_worker_fixed_params(tmp_path: Path) -> None:
     assert fixed_params["latency_stress_profile"] == {"name": "latency"}
     assert fixed_params["latency_stress_metrics"] == {"held_action_ratio": "not_available"}
     assert fixed_params["record_simulation_step_trace"] is True
+
+
+def test_map_runner_execution_boundaries_stay_extracted() -> None:
+    """Map-runner should keep episode and batch execution in owned helper modules."""
+    wrapper_source = inspect.getsource(map_runner._run_map_episode)
+
+    assert map_runner._execute_map_episode is map_runner_episode.run_map_episode
+    assert map_runner._execute_map_jobs.__module__ == "robot_sf.benchmark.map_runner_batch_runner"
+    assert map_runner._build_seed_jobs.__module__ == "robot_sf.benchmark.map_runner_batch_plan"
+    assert (
+        map_runner._build_completed_batch_summary.__module__
+        == "robot_sf.benchmark.map_runner_batch_summary"
+    )
+    assert "_execute_map_episode(" in wrapper_source
+    assert "for step_idx in range" not in wrapper_source
 
 
 def test_parse_algo_config_rejects_local_output_model_path(tmp_path: Path) -> None:

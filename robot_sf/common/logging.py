@@ -13,7 +13,7 @@ Key Features:
 Usage (in scripts/examples):
     >>> from robot_sf.common.logging import configure_logging
     >>> from loguru import logger
-    >>> configure_logging(verbose=args.verbose)
+    >>> configure_logging(verbose=True)
     >>> logger.info("Processing started")
 
 Usage (in modules):

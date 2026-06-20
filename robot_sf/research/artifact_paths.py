@@ -22,10 +22,14 @@ Path Structure:
         ├── bc_pretrain.yaml
         └── ppo_finetune.yaml
 
-Usage:
-    >>> from robot_sf.research.artifact_paths import ensure_report_tree
-    >>> paths = ensure_report_tree("my_experiment")
-    >>> paths["report"]  # Path("output/research_reports/.../report.md")
+Usage (creates directories under ``output/research_reports/`` as a side effect):
+
+```python
+from robot_sf.research.artifact_paths import ensure_report_tree
+
+paths = ensure_report_tree("my_experiment")
+paths["report"]  # Path("output/research_reports/.../report.md")
+```
 """
 
 from __future__ import annotations
@@ -69,8 +73,8 @@ def generate_report_id(experiment_name: str) -> str:
         Report ID in format: YYYYMMDD_HHMMSS_<experiment_name_sanitized>
 
     Example:
-        >>> generate_report_id("BC Ablation Study")
-        '20251121_143022_bc_ablation_study'
+        >>> generate_report_id("BC Ablation Study")  # doctest: +ELLIPSIS
+        '..._bc_ablation_study'
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     sanitized = experiment_name.lower().replace(" ", "_").replace("-", "_")

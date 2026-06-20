@@ -11,7 +11,13 @@ import yaml
 from robot_sf.adversarial.config import CandidateSpec, Pose2D
 from robot_sf.adversarial.manifest_quality import (
     MANIFEST_QUALITY_SCHEMA_VERSION,
+    _collect_paths,
+    _control_vector,
     _load_records,
+    _read_text_jsonl,
+    _safe_float,
+    _safe_int,
+    _safe_rate,
     load_adversarial_manifest_quality_records,
     summarize_adversarial_manifest_quality,
     summarize_adversarial_manifest_quality_records,
@@ -73,6 +79,115 @@ def _write_manifest_without_schema(path: Path, controls: dict, status: str) -> N
         yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
+
+
+def test_safe_coercion_helpers_reject_invalid_values() -> None:
+    """Safe coercion helpers normalize finite numeric inputs and reject ambiguous values."""
+    assert _safe_float("1.25") == 1.25
+    assert _safe_float(None) is None
+    assert _safe_float("not-a-number") is None
+    assert _safe_float(float("inf")) is None
+    assert _safe_float(float("nan")) is None
+
+    assert _safe_int(3) == 3
+    assert _safe_int("4.0") == 4
+    assert _safe_int(True) is None
+    assert _safe_int(None) is None
+    assert _safe_int("4.2") is None
+    assert _safe_int(float("nan")) is None
+
+    assert _safe_rate(1, 0) == 0.0
+    assert _safe_rate(1, 3) == 0.333333
+
+
+def test_jsonl_reader_ignores_missing_malformed_and_non_object_rows(tmp_path: Path) -> None:
+    """Planner smoke JSONL loading must tolerate partial or malformed diagnostic logs."""
+    assert _read_text_jsonl(tmp_path / "missing.jsonl") == []
+
+    jsonl_path = tmp_path / "episodes.jsonl"
+    jsonl_path.write_text(
+        "\n".join(
+            [
+                "",
+                '{"status": "success"}',
+                "not-json",
+                '["not", "an", "object"]',
+                '{"metrics": {"near_misses": 1}}',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert _read_text_jsonl(jsonl_path) == [
+        {"status": "success"},
+        {"metrics": {"near_misses": 1}},
+    ]
+
+
+def test_collect_paths_reports_bad_inputs_and_discovers_yaml(tmp_path: Path) -> None:
+    """Path collection should fail clearly for bad inputs and recurse over YAML manifests."""
+    with pytest.raises(FileNotFoundError, match="Manifest input missing"):
+        _collect_paths([tmp_path / "missing"])
+
+    text_file = tmp_path / "not_manifest.txt"
+    text_file.write_text("not yaml", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"must use \.yml or \.yaml"):
+        _collect_paths([text_file])
+
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    with pytest.raises(ValueError, match="No manifest files discovered"):
+        _collect_paths([empty_dir])
+
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    yaml_path = nested / "a.yaml"
+    yml_path = nested / "b.yml"
+    yaml_path.write_text("{}", encoding="utf-8")
+    yml_path.write_text("{}", encoding="utf-8")
+
+    assert _collect_paths([tmp_path]) == [yaml_path, yml_path]
+
+
+def test_control_vector_rejects_missing_or_non_finite_controls() -> None:
+    """Perturbation vectors should be omitted when controls are incomplete or non-finite."""
+    controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+
+    assert _control_vector("not-a-mapping") is None
+    assert _control_vector({**controls, "spawn_time_s": "nan"}) is None
+
+    incomplete = dict(controls)
+    del incomplete["goal"]
+    assert _control_vector(incomplete) is None
+
+
+def test_load_records_captures_parse_error_and_hash_fallback(tmp_path: Path) -> None:
+    """Record loading should keep bad manifests visible and compute hashes when omitted."""
+    controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    fallback_hash_path = tmp_path / "fallback_hash.yaml"
+    payload = _manifest_payload(controls, "valid")
+    del payload["validation"]["normalized_control_hash"]
+    fallback_hash_path.write_text(
+        yaml.safe_dump(payload, sort_keys=False),
+        encoding="utf-8",
+    )
+    bad_path = tmp_path / "bad.yaml"
+    bad_path.write_text(
+        yaml.safe_dump({"candidate_controls": [], "validation": {"status": "valid"}}),
+        encoding="utf-8",
+    )
+
+    records, parse_errors = _load_records(
+        [fallback_hash_path, bad_path],
+        reference_vector=None,
+    )
+
+    assert len(records) == 2
+    assert records[0].status == "valid"
+    assert records[0].normalized_control_hash is not None
+    assert records[1].status == "invalid"
+    assert records[1].parse_error is not None
+    assert parse_errors == [f"{bad_path.as_posix()}: candidate_controls missing or not a mapping"]
 
 
 def test_summarize_manifest_rates_and_novelty(tmp_path: Path) -> None:
@@ -324,6 +439,54 @@ def test_aggregate_episode_count_preserves_written_zero(tmp_path: Path) -> None:
     assert planner.failure_yield == 0.0
 
 
+def test_planner_summary_handles_missing_runs_empty_rows_and_missing_metrics(
+    tmp_path: Path,
+) -> None:
+    """Planner diagnostics should expose unavailable and partial smoke-summary inputs."""
+    controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    _write_manifest(tmp_path / "a.yaml", controls, "valid")
+
+    no_runs_summary = tmp_path / "no_runs.json"
+    no_runs_summary.write_text("{}", encoding="utf-8")
+    no_runs_result = summarize_adversarial_manifest_quality(
+        [tmp_path / "a.yaml"],
+        smoke_summary_json=no_runs_summary,
+    )
+    assert no_runs_result.planner_outcomes is not None
+    assert no_runs_result.planner_outcomes.available is False
+    assert no_runs_result.planner_outcomes.planners == []
+
+    empty_rows = tmp_path / "empty_rows.jsonl"
+    empty_rows.write_text("", encoding="utf-8")
+    missing_rows_summary = tmp_path / "missing_rows.json"
+    missing_rows_summary.write_text(
+        json.dumps(
+            {
+                "planner_runs": [
+                    {"planner": "empty", "out_path": empty_rows.name, "total_jobs": 3},
+                    {"planner": "no_metrics", "total_jobs": 4},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = summarize_adversarial_manifest_quality(
+        [tmp_path / "a.yaml"],
+        smoke_summary_json=missing_rows_summary,
+    )
+
+    assert result.planner_outcomes is not None
+    assert result.planner_outcomes.available is False
+    empty_planner, missing_metrics_planner = result.planner_outcomes.planners
+    assert empty_planner.source == "no_rows"
+    assert empty_planner.episodes == 3
+    assert empty_planner.failure_yield == 0.0
+    assert missing_metrics_planner.source == "planner_summary_missing_rows"
+    assert missing_metrics_planner.episodes == 4
+    assert missing_metrics_planner.failure_yield is None
+
+
 def test_manifest_quality_cli_writes_output_json(tmp_path: Path) -> None:
     controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
     _write_manifest(tmp_path / "a.yaml", controls, "valid")
@@ -337,3 +500,21 @@ def test_manifest_quality_cli_writes_output_json(tmp_path: Path) -> None:
     assert loaded["schema_version"] == MANIFEST_QUALITY_SCHEMA_VERSION
     assert loaded["manifest_count"] == 1
     assert loaded["rates"]["validity_rate"] == 1.0
+
+
+def test_manifest_quality_cli_prints_json_and_reports_errors(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI mode should print summaries to stdout and convert input errors to exit code 1."""
+    controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    _write_manifest(tmp_path / "a.yaml", controls, "valid")
+
+    assert quality_cli_main([str(tmp_path / "a.yaml")]) == 0
+    stdout = capsys.readouterr().out
+    assert json.loads(stdout)["manifest_count"] == 1
+
+    assert quality_cli_main([str(tmp_path / "missing.yaml")]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Manifest input missing" in captured.err

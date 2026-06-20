@@ -56,6 +56,9 @@ def test_load_fixture_as_typed_odd_contract() -> None:
     ]
     assert contract.speed_limits.max_robot_speed_mps == pytest.approx(2.5)
     assert contract.pedestrian_density.density_bins == ["low", "medium", "high"]
+    assert contract.observation.observation_quality is not None
+    assert contract.observation.observation_quality.false_negative_rate == 0.0
+    assert contract.observation.observation_quality.range_limit_m is None
     assert "safety_certification" in contract.claim_boundaries.non_claims
 
     jsonschema.validate(contract.to_dict(), load_odd_contract_schema())
@@ -88,6 +91,14 @@ def test_invalid_odd_contract_sections_fail_closed_with_json_paths() -> None:
             ),
             "/claim_boundaries/evidence_status",
             "certified",
+        ),
+        (
+            lambda candidate: candidate["observation"]["observation_quality"].__setitem__(
+                "false_negative_rate",
+                1.2,
+            ),
+            "/observation/observation_quality/false_negative_rate",
+            "maximum of 1",
         ),
     ]
 

@@ -12,6 +12,7 @@ from robot_sf.benchmark.forecast_batch import (
     CoordinateFrame,
     ForecastBatch,
     ForecastBatchProvenance,
+    ObservationQuality,
     load_forecast_batch,
     save_forecast_batch,
     validate_forecast_batch,
@@ -65,6 +66,23 @@ def _batch_dict() -> dict[str, object]:
     ).to_dict()
 
 
+def _observation_quality_dict(**overrides: object) -> dict[str, object]:
+    """Build valid observation-quality metadata for ForecastBatch tests."""
+    data: dict[str, object] = {
+        "visibility": ["simulator_declared_visibility"],
+        "occlusion": ["none_unless_declared"],
+        "latency_s": 0.0,
+        "dropout_probability": 0.0,
+        "range_limit_m": None,
+        "angular_noise_std_rad": 0.0,
+        "false_negative_rate": 0.0,
+        "false_positive_rate": 0.0,
+        "notes": "Diagnostic benchmark metadata only; not hardware calibration.",
+    }
+    data.update(overrides)
+    return data
+
+
 def test_forecast_batch_deterministic_round_trip(tmp_path) -> None:
     """Deterministic forecasts should serialize and reload with provenance intact."""
     batch = ForecastBatch.from_dict(_batch_dict())
@@ -78,6 +96,20 @@ def test_forecast_batch_deterministic_round_trip(tmp_path) -> None:
     assert loaded.provenance.frame.units == "m"
     assert loaded.forecasts[0].deterministic is not None
     assert loaded.forecasts[0].deterministic.shape == (2, 2)
+
+
+def test_forecast_batch_observation_quality_round_trip() -> None:
+    """Forecast provenance can carry observation-quality assumptions."""
+    batch = ForecastBatch.from_dict(_batch_dict())
+    batch.provenance.observation_quality = ObservationQuality.from_dict(
+        _observation_quality_dict(false_negative_rate=0.25)
+    )
+
+    loaded = ForecastBatch.from_dict(batch.to_dict())
+
+    assert loaded.provenance.observation_quality is not None
+    assert loaded.provenance.observation_quality.false_negative_rate == 0.25
+    assert loaded.provenance.observation_quality.notes.startswith("Diagnostic")
 
 
 def test_forecast_batch_sampled_modes_round_trip() -> None:
@@ -288,6 +320,7 @@ def test_forecast_batch_rejects_duplicate_forecast_actor_ids() -> None:
         ("frame", {"name": "", "units": "m", "axes": ["x", "y"]}, "frame.name"),
         ("actor_mask", [1, True], "actor_mask"),
         ("actor_mask_metadata", {}, "actor_mask_metadata"),
+        ("observation_quality", {"visibility": ["sim"]}, "observation_quality"),
     ],
 )
 def test_forecast_batch_rejects_missing_required_provenance(

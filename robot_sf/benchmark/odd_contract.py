@@ -12,6 +12,8 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.observation_quality import ObservationQuality
+
 ODD_CONTRACT_SCHEMA_VERSION = "odd_contract.v1"
 ODD_CONTRACT_SCHEMA_FILE = Path(__file__).with_name("schemas") / "odd_contract.v1.json"
 
@@ -60,6 +62,7 @@ class OddObservationEnvelope:
 
     observation_modes: list[str]
     sensor_assumptions: list[str]
+    observation_quality: ObservationQuality | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +109,8 @@ class OddContract:
         """
 
         payload = asdict(self)
+        if payload["observation"].get("observation_quality") is None:
+            payload["observation"].pop("observation_quality")
         if not payload["extensions"]:
             payload.pop("extensions")
         return payload
@@ -302,6 +307,11 @@ def _contract_from_payload(payload: Mapping[str, Any]) -> OddContract:
         observation=OddObservationEnvelope(
             observation_modes=list(observation["observation_modes"]),
             sensor_assumptions=list(observation["sensor_assumptions"]),
+            observation_quality=(
+                ObservationQuality.from_dict(observation["observation_quality"])
+                if "observation_quality" in observation
+                else None
+            ),
         ),
         exclusions=list(payload["exclusions"]),
         claim_boundaries=OddClaimBoundaries(
@@ -339,6 +349,7 @@ def _json_pointer(path_elems: Iterable[Any]) -> str:
 __all__ = [
     "ODD_CONTRACT_SCHEMA_FILE",
     "ODD_CONTRACT_SCHEMA_VERSION",
+    "ObservationQuality",
     "OddAgentEnvelope",
     "OddClaimBoundaries",
     "OddContract",

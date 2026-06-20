@@ -1,0 +1,107 @@
+{
+  "schema_version": "issue_3170_amv_feasibility_ranking_stress_synthesis.v1",
+  "issue": 3170,
+  "created_at": "2026-06-20",
+  "classification": "diagnostic_only_inconclusive",
+  "claim_boundary": "stress-slice synthesis from tracked compact artifacts; not benchmark-strength, paper-facing, or hardware-calibrated AMV ranking evidence",
+  "source_artifacts": [
+    {
+      "path": "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/summary.json",
+      "role": "broadest existing paired AMMV/default multi-scenario, multi-seed slice"
+    },
+    {
+      "path": "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/candidate_pair_comparison.csv",
+      "role": "per-scenario and per-seed paired comparison table"
+    },
+    {
+      "path": "docs/context/evidence/issue_2432_ammv_trace_selection_2026-06-06/summary.json",
+      "role": "single-scenario predecessor showing frame-identical AMMV/default rows"
+    },
+    {
+      "path": "docs/context/evidence/issue_2224_amv_actuation_ranking_2026-06-04/comparison.json",
+      "role": "one-scenario, one-seed actuation-aware feasibility ordering predecessor"
+    },
+    {
+      "path": "docs/context/issue_2446_amv_feasibility_ranking.md",
+      "role": "diagnostic-only actuation feasibility ranking synthesis that triggered the generalization audit"
+    }
+  ],
+  "available_multi_scenario_ammv_default_evidence": {
+    "candidate_pairs_compared": 15,
+    "scenarios_compared": [
+      "classic_bottleneck_medium",
+      "classic_cross_trap_low",
+      "classic_doorway_high",
+      "classic_head_on_corridor_medium",
+      "classic_overtaking_medium"
+    ],
+    "seeds_by_scenario": {
+      "classic_bottleneck_medium": [
+        131,
+        132,
+        133
+      ],
+      "classic_cross_trap_low": [
+        101,
+        102,
+        103
+      ],
+      "classic_doorway_high": [
+        141,
+        142,
+        143
+      ],
+      "classic_head_on_corridor_medium": [
+        111,
+        112,
+        113
+      ],
+      "classic_overtaking_medium": [
+        121,
+        122,
+        123
+      ]
+    },
+    "non_identical_pairs_found": 0,
+    "max_episode_metric_abs_delta": 0.0,
+    "max_per_frame_abs_delta": 0.0,
+    "selected_action_max_abs_delta": 0.0,
+    "ammv_force_vectors_max_abs_delta": 0.0,
+    "zero_event_exact_95_upper_bound_non_identical_pair_rate": 0.18103627252208465,
+    "zero_event_rule_of_three_upper_bound_non_identical_pair_rate": 0.2
+  },
+  "prior_actuation_aware_ranking_evidence": {
+    "source_issue": 2446,
+    "source_artifact": "docs/context/evidence/issue_2224_amv_actuation_ranking_2026-06-04/comparison.json",
+    "scenario": "classic_cross_trap_high",
+    "seed_count": 1,
+    "episodes_per_candidate": 1,
+    "baseline_candidate": "hybrid_rule_v3_fast_progress",
+    "intervention_candidate": "actuation_aware_hybrid_rule_v0",
+    "command_clip_fraction_delta_intervention_minus_baseline": -0.0875,
+    "success_rate_delta_intervention_minus_baseline": 0.0,
+    "classification": "diagnostic_direction_only"
+  },
+  "decision": {
+    "ranking_claim_supported": false,
+    "reason": "Existing multi-scenario paired AMMV/default rows expose no mechanism or outcome differences, while the actuation-aware feasibility ordering remains limited to one scenario and one seed.",
+    "stop_rule": "stop as diagnostic-only; do not claim a general AMV feasibility ranking until direct actuation-aware paired rows exist across scenario families and seeds",
+    "disagreement_cases": [
+      {
+        "type": "evidence_scope_disagreement",
+        "summary": "The only nonzero feasibility-ordering signal is a one-scenario, one-seed actuation-aware slice; the broader multi-scenario AMMV/default slice is frame-identical and cannot rank mechanisms."
+      },
+      {
+        "type": "mechanism_metadata_limit",
+        "summary": "Tracked compact AMMV/default rows include frame and force-vector deltas, but all are zero; they do not expose a discriminating actuation-aware mechanism signal."
+      }
+    ],
+    "follow_up_issue": "https://github.com/ll7/robot_sf_ll7/issues/3181"
+  },
+  "validation": [
+    "Parsed tracked issue_2434 summary.json for row counts, scenario families, seeds, and zero-delta maxima.",
+    "Inspected tracked issue_2434 candidate_pair_comparison.csv for required scenario, seed, status, metric, and mechanism-delta fields.",
+    "Inspected tracked issue_2224 comparison.json and docs/context/issue_2446_amv_feasibility_ranking.md for the one-scenario actuation-aware predecessor boundary."
+  ]
+}
+

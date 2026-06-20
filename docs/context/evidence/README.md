@@ -206,6 +206,9 @@ Policy caveats:
 - `issue_2434_ammv_scenario_sweep_2026-06-06/`: compact five-family AMMV/default episode-metric
   screen showing the selected classic close-interaction adapter slice still has no non-identical
   pair.
+- `issue_3170_amv_feasibility_ranking_stress_2026-06-20/`: compact diagnostic synthesis showing
+  that the broadest tracked multi-scenario AMMV/default evidence is frame-identical while the
+  nonzero actuation-aware feasibility signal remains a one-scenario/one-seed slice.
 - `issue_2704_progress_gated_topology_successor/`: compact paired topology diagnostic summary
   showing the progress-gated primary-route reselection successor runs but remains a `revise`
   result, with unchanged route progress and `horizon_exhausted` outcome on the canonical h160

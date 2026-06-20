@@ -1120,6 +1120,10 @@ knowledge, not every transient iteration detail.
 * [Issue #2446 AMV Actuation Feasibility Ranking](issue_2446_amv_feasibility_ranking.md)
   classifies actuation feasibility as a diagnostic secondary ranking signal for the matched AMV
   actuation-smoke pair without upgrading it to planner-improvement or benchmark evidence.
+* [Issue #3170 AMV Feasibility Ranking Stress Synthesis](issue_3170_amv_feasibility_ranking_stress.md)
+  compares that one-scenario actuation-aware signal against the broader tracked AMMV/default
+  multi-scenario slice, finds the broader slice frame-identical, and keeps the ranking claim
+  diagnostic-only pending direct actuation-aware multi-scenario evidence.
 * [Issue #2440 AMV Timeout Closure](issue_2440_amv_timeout_closure.md)
   closes the timeout-driver classification as `feasibility_improved_but_route_blocked` and keeps
   actuation-aware scoring diagnostic-only for planner improvement.

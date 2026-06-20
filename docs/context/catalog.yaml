@@ -333,6 +333,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_3170_amv_feasibility_ranking_stress.md
+    status: evidence
+    freshness: current
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3170_amv_feasibility_ranking_stress_2026-06-20/summary.json
+    status: evidence
+    freshness: current
+    area: benchmark_evidence
   - path: docs/context/issue_2522_why_first_diagnostics.md
     status: current
     freshness: evidence

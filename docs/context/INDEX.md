@@ -146,6 +146,11 @@ records the diagnostic-only conclusion that actuation feasibility is a secondary
 the matched AMV actuation-smoke pair, not planner-improvement, benchmark, hardware-calibration, or
 paper-facing evidence.
 
+Recent AMV feasibility ranking stress synthesis: [issue_3170_amv_feasibility_ranking_stress.md](issue_3170_amv_feasibility_ranking_stress.md)
+records that the available multi-scenario, multi-seed AMMV/default evidence is frame-identical and
+the actuation-aware ranking signal remains one-scenario/one-seed only, so no general AMV
+feasibility ranking claim is justified yet.
+
 Recent evidence-catalog backlog: [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
 records the 2026-06-19 full evidence-catalog hygiene scan, 116 uncovered tracked evidence bundles
 or files, and the bounded split strategy for future Issue #3014 catalog cleanup PRs.

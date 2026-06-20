@@ -55,6 +55,11 @@ def _durable_input_ref(path: Path) -> str:
     return path.as_posix()
 
 
+def _mapping(value: Any) -> dict[str, Any]:
+    """Return ``value`` as a mapping, treating explicit JSON null as empty."""
+    return value if isinstance(value, dict) else {}
+
+
 def _number(value: Any) -> float | None:
     """Normalize scalar numeric values for delta comparison."""
     if value is None or value == "" or isinstance(value, bool):
@@ -68,8 +73,8 @@ def _number(value: Any) -> float | None:
 
 def _metric_delta(clean: dict[str, Any], perturbed: dict[str, Any]) -> dict[str, Any]:
     """Return per-metric values and deltas for known scalar metrics."""
-    clean_metrics = clean.get("metrics", {})
-    perturbed_metrics = perturbed.get("metrics", {})
+    clean_metrics = _mapping(clean.get("metrics"))
+    perturbed_metrics = _mapping(perturbed.get("metrics"))
     deltas: dict[str, Any] = {}
     for metric in DEFAULT_METRICS:
         clean_value = clean_metrics.get(metric)
@@ -104,8 +109,8 @@ def _status_delta(clean: dict[str, Any], perturbed: dict[str, Any]) -> dict[str,
 
 def _noise_stats_delta(clean: dict[str, Any], perturbed: dict[str, Any]) -> dict[str, Any]:
     """Compare observation-noise counters."""
-    clean_stats = clean.get("observation_noise_stats", {})
-    perturbed_stats = perturbed.get("observation_noise_stats", {})
+    clean_stats = _mapping(clean.get("observation_noise_stats"))
+    perturbed_stats = _mapping(perturbed.get("observation_noise_stats"))
     keys = sorted(set(clean_stats) | set(perturbed_stats))
     return {
         key: {
@@ -226,8 +231,8 @@ def _load_trace(path: Path) -> dict[str, Any]:
 
 def _trace_progress_delta(clean: dict[str, Any], perturbed: dict[str, Any]) -> dict[str, Any]:
     """Compare high-level progress summaries from step diagnostics."""
-    clean_summary = clean.get("progress_summary", {})
-    perturbed_summary = perturbed.get("progress_summary", {})
+    clean_summary = _mapping(clean.get("progress_summary"))
+    perturbed_summary = _mapping(perturbed.get("progress_summary"))
     deltas: dict[str, Any] = {}
     for field in TRACE_PROGRESS_FIELDS:
         clean_value = clean_summary.get(field)
@@ -250,7 +255,7 @@ def _trace_progress_delta(clean: dict[str, Any], perturbed: dict[str, Any]) -> d
 
 def _trace_command_summary(trace: dict[str, Any]) -> list[Any]:
     """Return the selected policy-command sequence."""
-    return [row.get("policy_command") for row in trace.get("steps", [])]
+    return [_mapping(row).get("policy_command") for row in trace.get("steps", [])]
 
 
 def _trace_observation_summary(trace: dict[str, Any]) -> dict[str, Any]:
@@ -261,7 +266,7 @@ def _trace_observation_summary(trace: dict[str, Any]) -> dict[str, Any]:
     profiles: set[str] = set()
     evidence_classes: set[str] = set()
     for row in trace.get("steps", []):
-        meta = row.get("observation_perturbation", {})
+        meta = _mapping(_mapping(row).get("observation_perturbation"))
         missed_total += int(meta.get("missed_actor_count", 0) or 0)
         occluded_total += int(meta.get("occluded_actor_count", 0) or 0)
         observed_counts.append(int(meta.get("observed_actor_count", 0) or 0))
@@ -328,7 +333,7 @@ def build_trace_report(clean_trace_path: Path, perturbed_trace_path: Path) -> di
     clean_observation = _trace_observation_summary(clean)
     perturbed_observation = _trace_observation_summary(perturbed)
     observation_changed = clean_observation != perturbed_observation
-    closest = _number(clean.get("progress_summary", {}).get("closest_robot_ped_distance"))
+    closest = _number(_mapping(clean.get("progress_summary")).get("closest_robot_ped_distance"))
     return {
         "schema_version": SCHEMA_VERSION,
         "issue": 3201,

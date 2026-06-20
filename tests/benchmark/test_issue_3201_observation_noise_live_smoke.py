@@ -149,6 +149,30 @@ def test_comparator_classifies_observation_only_delta(tmp_path: Path) -> None:
     assert report["classification"]["label"] == "observation_only_delta"
 
 
+def test_comparator_treats_null_metric_maps_as_empty(tmp_path: Path) -> None:
+    """Explicit JSON null maps should not crash comparison."""
+    clean = tmp_path / "clean.jsonl"
+    perturbed = tmp_path / "perturbed.jsonl"
+    row = {
+        "scenario_id": "dense_pedestrian_stress",
+        "seed": 2765,
+        "status": "success",
+        "termination_reason": "success",
+        "steps": 10,
+        "horizon": 20,
+        "outcome": {"route_complete": True},
+        "metrics": None,
+        "observation_noise_stats": None,
+    }
+    _write_jsonl(clean, row)
+    _write_jsonl(perturbed, row)
+
+    report = _load_script().build_report(clean, perturbed)
+
+    assert report["metric_delta"]["success"]["delta"] is None
+    assert report["classification"]["label"] == "null_policy_insensitive"
+
+
 def test_comparator_cli_writes_json_and_markdown(tmp_path: Path) -> None:
     """CLI writes compact durable artifacts."""
     clean = tmp_path / "clean.jsonl"
@@ -244,6 +268,25 @@ def test_trace_comparator_classifies_observation_only_scenario_too_weak(tmp_path
     assert report["classification"]["label"] == "observation_only_scenario_too_weak"
     assert report["observation_summary"]["changed"] is True
     assert report["command_summary"]["sequence_changed"] is False
+
+
+def test_trace_comparator_treats_null_trace_maps_as_empty(tmp_path: Path) -> None:
+    """Explicit null progress or perturbation maps should be treated as absent metadata."""
+    clean_trace = tmp_path / "clean_trace.json"
+    perturbed_trace = tmp_path / "perturbed_trace.json"
+    payload = {
+        "scenario_id": "dense_pedestrian_stress",
+        "seed": 2765,
+        "progress_summary": None,
+        "steps": [{"policy_command": [1.0, 0.0], "observation_perturbation": None}],
+    }
+    clean_trace.write_text(json.dumps(payload), encoding="utf-8")
+    perturbed_trace.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = _load_script().build_trace_report(clean_trace, perturbed_trace)
+
+    assert report["progress_delta"]["steps_observed"]["changed"] is False
+    assert report["classification"]["label"] == "null_policy_insensitive"
 
 
 def test_trace_comparator_cli_writes_trace_markdown(tmp_path: Path) -> None:

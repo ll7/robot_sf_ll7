@@ -1,0 +1,4 @@
+parameter,classification,authored_n,authored_min,authored_median,authored_max,trace_n,trace_min,trace_median,trace_max,ks_distance,wasserstein_like_distance,proposal
+pedestrian_density,too_broad,8,0.02,0.03,0.12,1,0.02,0.02,0.02,0.75,0.040095,Split authored `pedestrian_density` stress variants into a centered trace-aligned family near median 0.02 plus a separately labeled stress/extreme family.
+pedestrian_speed,too_broad,25,-0.25,0.5,2,2,0.8,1.1,1.4,0.64,0.623267,Split authored `pedestrian_speed` stress variants into a centered trace-aligned family near median 1.1 plus a separately labeled stress/extreme family.
+timing_offset_s,too_extreme,28,-0.5,1,1,4,0,1,2,0.5,0.649208,Add a `timing_offset_s_centered_trace_probe` family around trace median 1.0 and keep out-of-support authored variants labeled diagnostic stress only.

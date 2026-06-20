@@ -135,6 +135,8 @@ knowledge, not every transient iteration detail.
   [issue_1509_carla_native_fixture_certification.md](issue_1509_carla_native_fixture_certification.md)
 * Issue #2276 CARLA parity lane decision:
   [issue_2276_carla_parity_lane_decision.md](issue_2276_carla_parity_lane_decision.md)
+* Issue #3028 external simulator bridge preflight:
+  [issue_3028_external_simulator_bridge_preflight.md](issue_3028_external_simulator_bridge_preflight.md)
 * Issue #1894 SLURM job finalizer:
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #2232 planner mechanism transfer benchmark protocol:

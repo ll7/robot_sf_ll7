@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,10 @@ def select_candidate_rows(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Select top novelty rows plus redundant or lowest-novelty comparator rows."""
     rows_raw = coverage_report.get("scenario_rows")
+    if rows_raw is None:
+        rows_raw = []
+    if not isinstance(rows_raw, list):
+        raise ValueError("coverage report scenario_rows must be a list")
     rows = [dict(row) for row in rows_raw if isinstance(row, Mapping)]
     if top_k <= 0:
         raise ValueError("top_k must be positive")
@@ -49,25 +54,22 @@ def select_candidate_rows(
 
     novel = sorted(
         (row for row in rows if row.get("recommendation") == "retain_or_investigate"),
-        key=lambda row: (-float(row.get("novelty_score", 0.0)), str(row.get("scenario_id", ""))),
+        key=lambda row: (-_novelty_score(row), _scenario_id_from_row(row)),
     )[:top_k]
     if len(novel) < top_k:
         raise ValueError("coverage report does not contain enough novel candidates")
 
-    novel_ids = {str(row.get("scenario_id")) for row in novel}
+    novel_ids = {_scenario_id_from_row(row) for row in novel}
     redundant = sorted(
         (row for row in rows if row.get("recommendation") == "merge_or_drop"),
-        key=lambda row: (float(row.get("novelty_score", 0.0)), str(row.get("scenario_id", ""))),
+        key=lambda row: (_novelty_score(row), _scenario_id_from_row(row)),
     )[:top_k]
     comparator_source = "merge_or_drop"
     if len(redundant) < top_k:
         comparator_source = "lowest_novelty_fallback"
         redundant = sorted(
-            (row for row in rows if str(row.get("scenario_id")) not in novel_ids),
-            key=lambda row: (
-                float(row.get("novelty_score", 0.0)),
-                str(row.get("scenario_id", "")),
-            ),
+            (row for row in rows if _scenario_id_from_row(row) not in novel_ids),
+            key=lambda row: (_novelty_score(row), _scenario_id_from_row(row)),
         )[:top_k]
     if len(redundant) < top_k:
         raise ValueError("coverage report does not contain enough comparator candidates")
@@ -94,6 +96,28 @@ def select_candidate_rows(
             else None
         ),
     }
+
+
+def _scenario_id_from_row(row: Mapping[str, Any]) -> str:
+    """Return a stable scenario id from a coverage row."""
+    value = row.get("scenario_id")
+    return str(value).strip() if value is not None else ""
+
+
+def _novelty_score(row: Mapping[str, Any]) -> float:
+    """Return a finite novelty score, defaulting missing values to zero."""
+    value = row.get("novelty_score", 0.0)
+    if value is None:
+        return 0.0
+    try:
+        score = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"invalid novelty_score for {row.get('scenario_id')!r}: {value!r}"
+        ) from exc
+    if not math.isfinite(score):
+        raise ValueError(f"invalid novelty_score for {row.get('scenario_id')!r}: {value!r}")
+    return score
 
 
 def classify_failure_semantics(
@@ -272,10 +296,13 @@ def run_smoke_episode(
 def run_density_smoke(args: argparse.Namespace) -> dict[str, Any]:
     """Run the selected density runtime smoke and return a JSON payload."""
     coverage = json.loads(args.coverage_json.read_text(encoding="utf-8"))
+    if not isinstance(coverage, Mapping):
+        raise ValueError("coverage JSON must contain an object")
     selected_rows, selection_summary = select_candidate_rows(coverage, top_k=int(args.top_k))
     scenarios = {
         _scenario_id(scenario): dict(scenario)
         for scenario in load_scenarios(args.matrix, base_dir=args.matrix)
+        if isinstance(scenario, Mapping)
     }
 
     row_payloads: list[dict[str, Any]] = []
@@ -351,7 +378,11 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     """Run CLI."""
     args = _build_parser().parse_args()
-    payload = run_density_smoke(args)
+    try:
+        payload = run_density_smoke(args)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     print(

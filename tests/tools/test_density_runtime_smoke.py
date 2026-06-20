@@ -49,6 +49,34 @@ def test_select_candidate_rows_uses_lowest_novelty_when_no_redundant_rows() -> N
     assert selected[-1]["selection_group"] == "redundant_comparator"
 
 
+def test_select_candidate_rows_rejects_malformed_rows() -> None:
+    """Malformed coverage payloads should fail with clear ValueErrors."""
+    try:
+        select_candidate_rows({"scenario_rows": "not-a-list"}, top_k=1)
+    except ValueError as exc:
+        assert "scenario_rows must be a list" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for non-list scenario_rows")
+
+    try:
+        select_candidate_rows(
+            {
+                "scenario_rows": [
+                    {
+                        "scenario_id": "novel_bad",
+                        "novelty_score": "not-a-score",
+                        "recommendation": "retain_or_investigate",
+                    }
+                ]
+            },
+            top_k=1,
+        )
+    except ValueError as exc:
+        assert "invalid novelty_score" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for malformed novelty_score")
+
+
 def test_classify_failure_semantics_precedence() -> None:
     """Collision and success take precedence over diagnostic stall labels."""
     assert (

@@ -1,0 +1,182 @@
+{
+  "analysis_base_commit": "145bc244f70a1f33e444508c5f37659f304a00ff",
+  "claim_boundary": "analysis_only_repository_prior_gap; no planner ranking, benchmark superiority, real-world representativeness, or dataset-backed prior claim",
+  "classification_counts": {
+    "representative": 0,
+    "too_broad": 2,
+    "too_extreme": 1,
+    "too_narrow": 0
+  },
+  "comparison_count": 3,
+  "comparisons": [
+    {
+      "authored": {
+        "max": 0.12,
+        "median": 0.03,
+        "min": 0.02,
+        "n": 8,
+        "q05": 0.019999999999999997,
+        "q25": 0.0275,
+        "q75": 0.12,
+        "q95": 0.12,
+        "range": 0.09999999999999999
+      },
+      "authored_source_keys": [
+        "density_delta",
+        "max_abs_density_delta",
+        "max_ped_density",
+        "max_pedestrian_density",
+        "max_pedestrian_density_delta"
+      ],
+      "authored_source_paths": [
+        "configs/scenarios/perturbations/issue_1610_pedestrian_density_offset_pilot_v1.yaml"
+      ],
+      "classification": "too_broad",
+      "classification_rationale": "trace-derived samples are point-like while authored range spans wider",
+      "comparison_caveat": "Repository-authored config values and repository-trace-derived config/summary values may mix offsets, caps, and realized values within a canonical parameter family; use classifications as gap-finding proposals only.",
+      "ks_distance": 0.75,
+      "parameter": "pedestrian_density",
+      "proposal": "Split authored `pedestrian_density` stress variants into a centered trace-aligned family near median 0.02 plus a separately labeled stress/extreme family.",
+      "trace_derived": {
+        "max": 0.02,
+        "median": 0.02,
+        "min": 0.02,
+        "n": 1,
+        "q05": 0.02,
+        "q25": 0.02,
+        "q75": 0.02,
+        "q95": 0.02,
+        "range": 0.0
+      },
+      "trace_source_keys": [
+        "ped_density"
+      ],
+      "trace_source_paths": [
+        "configs/scenarios/templates/crossing_ttc.yaml"
+      ],
+      "wasserstein_like_distance": 0.04009504950495049
+    },
+    {
+      "authored": {
+        "max": 2.0,
+        "median": 0.5,
+        "min": -0.25,
+        "n": 25,
+        "q05": 0.25,
+        "q25": 0.5,
+        "q75": 2.0,
+        "q95": 2.0,
+        "range": 2.25
+      },
+      "authored_source_keys": [
+        "max_abs_speed_delta_m_s",
+        "max_single_pedestrian_speed_delta_m_s",
+        "max_single_pedestrian_speed_m_s",
+        "max_speed_m_s",
+        "speed_delta_m_s"
+      ],
+      "authored_source_paths": [
+        "configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml",
+        "configs/scenarios/perturbations/issue_1610_ped_speed_pilot_v1.yaml"
+      ],
+      "classification": "too_broad",
+      "classification_rationale": "authored range is substantially wider than trace-derived support",
+      "comparison_caveat": "Repository-authored config values and repository-trace-derived config/summary values may mix offsets, caps, and realized values within a canonical parameter family; use classifications as gap-finding proposals only.",
+      "ks_distance": 0.64,
+      "parameter": "pedestrian_speed",
+      "proposal": "Split authored `pedestrian_speed` stress variants into a centered trace-aligned family near median 1.1 plus a separately labeled stress/extreme family.",
+      "trace_derived": {
+        "max": 1.4,
+        "median": 1.1,
+        "min": 0.8,
+        "n": 2,
+        "q05": 0.83,
+        "q25": 0.9500000000000001,
+        "q75": 1.2499999999999998,
+        "q95": 1.3699999999999999,
+        "range": 0.5999999999999999
+      },
+      "trace_source_keys": [
+        "pedestrian_speed_mps"
+      ],
+      "trace_source_paths": [
+        "configs/adversarial/crossing_ttc_space.yaml"
+      ],
+      "wasserstein_like_distance": 0.6232673267326733
+    },
+    {
+      "authored": {
+        "max": 1.0,
+        "median": 1.0,
+        "min": -0.5,
+        "n": 28,
+        "q05": -0.1499999999999999,
+        "q25": 0.5,
+        "q75": 1.0,
+        "q95": 1.0,
+        "range": 1.5
+      },
+      "authored_source_keys": [
+        "dt_s",
+        "max_abs_dt_s",
+        "max_abs_wait_delta_s",
+        "max_start_delay_offset_s",
+        "max_wait_duration_offset_s",
+        "wait_delta_s"
+      ],
+      "authored_source_paths": [
+        "configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml",
+        "configs/scenarios/perturbations/issue_1610_ped_timing_phase_pilot_v1.yaml",
+        "configs/scenarios/perturbations/issue_1610_ped_wait_duration_pilot_v1.yaml"
+      ],
+      "classification": "too_extreme",
+      "classification_rationale": "authored range extends beyond trace-derived support without broad mismatch",
+      "comparison_caveat": "Repository-authored config values and repository-trace-derived config/summary values may mix offsets, caps, and realized values within a canonical parameter family; use classifications as gap-finding proposals only.",
+      "ks_distance": 0.5,
+      "parameter": "timing_offset_s",
+      "proposal": "Add a `timing_offset_s_centered_trace_probe` family around trace median 1.0 and keep out-of-support authored variants labeled diagnostic stress only.",
+      "trace_derived": {
+        "max": 2.0,
+        "median": 1.0,
+        "min": 0.0,
+        "n": 4,
+        "q05": 0.0,
+        "q25": 0.0,
+        "q75": 2.0,
+        "q95": 2.0,
+        "range": 2.0
+      },
+      "trace_source_keys": [
+        "pedestrian_delay_s",
+        "spawn_time_s"
+      ],
+      "trace_source_paths": [
+        "configs/adversarial/crossing_ttc_space.yaml"
+      ],
+      "wasserstein_like_distance": 0.6492079207920791
+    }
+  ],
+  "dataset_comparison_deferral": "Dataset-backed SDD/ETH/AMV scenario-prior comparison is explicitly deferred to #3161.",
+  "evidence_tier": "analysis_only",
+  "files": {
+    "comparison_csv": "docs/context/evidence/issue_2919_scenario_prior_gap_2026-06-21/parameter_comparisons.csv",
+    "markdown_report": "docs/context/evidence/issue_2919_scenario_prior_gap_2026-06-21/scenario_prior_gap_report.md",
+    "summary_json": "docs/context/evidence/issue_2919_scenario_prior_gap_2026-06-21/summary.json"
+  },
+  "issue": 2919,
+  "no_planner_ranking": "No planner ranking, benchmark superiority, or real-world representativeness is inferred.",
+  "registry_path": "configs/research/scenario_prior_cards_issue_2917.yaml",
+  "sample_count": 123,
+  "schema_version": "scenario_prior_gap_issue_2919.v1",
+  "skipped_non_machine_readable_sources": [
+    "authored_scenario_contract_priors: docs/scenario_contracts.md",
+    "authored_scenario_contract_priors: docs/scenario_perturbation_manifest.md",
+    "adversarial_search_generated_scenario_prior: robot_sf/adversarial/scenario_manifest.py",
+    "adversarial_search_generated_scenario_prior: scripts/tools/generate_adversarial_scenario_manifests.py",
+    "adversarial_search_generated_scenario_prior: tests/adversarial/test_adversarial_search.py",
+    "adversarial_search_generated_scenario_prior: tests/adversarial/test_adversarial_scenario_manifest.py",
+    "counterfactual_scenario_pair_mechanism_prior: scripts/tools/create_counterfactual_scenario_pair.py",
+    "counterfactual_scenario_pair_mechanism_prior: docs/context/issue_2547_counterfactual_mechanism_taxonomy.md",
+    "counterfactual_scenario_pair_mechanism_prior: tests/tools/test_create_counterfactual_scenario_pair.py"
+  ]
+}

@@ -98,6 +98,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2919_scenario_prior_gap_2026-06-21/`: analysis-only authored-vs-repository-trace-derived
+  scenario-prior gap report from the Issue #2917 card registry. It compares pedestrian density,
+  pedestrian speed, and timing-offset parameter families, emits scenario-family proposals, and
+  explicitly defers dataset-backed SDD/ETH/AMV comparison to #3161. Not planner-ranking,
+  benchmark-superiority, or real-world representativeness evidence.
 - `issue_2924_counterfactual_pair_2026-06-21/`: analysis-only counterfactual pair
   runner evidence for a matched prediction-risk fixture. It records invariant enforcement,
   mechanism-trace activation delta, `min_clearance_m` outcome delta, and diagnostic trace panels.

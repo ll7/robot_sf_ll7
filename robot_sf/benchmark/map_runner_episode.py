@@ -278,31 +278,31 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     single_pedestrian_vru_metadata = _single_pedestrian_vru_metadata(scenario)
 
     env = make_robot_env(config=config, seed=int(seed), debug=False)
-    obs, _ = env.reset(seed=int(seed))
-    if callable(planner_bind_env):
-        planner_bind_env(env)
-    if callable(planner_reset):
-        planner_reset(seed=int(seed))
-
-    robot_positions: list[np.ndarray] = []
-    ped_positions: list[np.ndarray] = []
-    ped_forces: list[np.ndarray] = []
-    reached_goal_step: int | None = None
-    termination_reason = "max_steps"
-    collision_seen = False
-    ped_collision_seen = False
-    obstacle_collision_seen = False
-    robot_collision_seen = False
-    timeout_seen = False
-
-    map_def = None
-    goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
-    initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
-    initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
-    previous_trace_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
-    previous_trace_ped_pos: np.ndarray | None = None
-    previous_trace_heading = _observation_heading(obs)
     try:
+        obs, _ = env.reset(seed=int(seed))
+        if callable(planner_bind_env):
+            planner_bind_env(env)
+        if callable(planner_reset):
+            planner_reset(seed=int(seed))
+
+        robot_positions: list[np.ndarray] = []
+        ped_positions: list[np.ndarray] = []
+        ped_forces: list[np.ndarray] = []
+        reached_goal_step: int | None = None
+        termination_reason = "max_steps"
+        collision_seen = False
+        ped_collision_seen = False
+        obstacle_collision_seen = False
+        robot_collision_seen = False
+        timeout_seen = False
+
+        map_def = None
+        goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
+        initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
+        previous_trace_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
+        previous_trace_ped_pos: np.ndarray | None = None
+        previous_trace_heading = _observation_heading(obs)
         for step_idx in range(horizon_val):
             policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
             merge_observation_noise_stats(noise_stats, step_noise_stats)

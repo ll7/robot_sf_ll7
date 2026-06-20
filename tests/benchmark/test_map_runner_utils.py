@@ -2568,6 +2568,52 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "infeasible_rate" in feasibility
 
 
+def test_run_map_episode_closes_env_when_reset_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Episode execution should close environments even when reset raises."""
+
+    class _FailingResetEnv:
+        """Environment stub that fails during reset after construction."""
+
+        closed = False
+
+        def reset(self, seed: int | None = None):
+            """Raise after accepting reset propagation from map-runner code."""
+            del seed
+            raise RuntimeError("reset failed")
+
+        def close(self) -> None:
+            """Record cleanup from map-runner code."""
+            self.closed = True
+
+    env = _FailingResetEnv()
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: env,
+    )
+
+    with pytest.raises(RuntimeError, match="reset failed"):
+        _run_map_episode(
+            {"name": "reset_failure", "simulation_config": {"max_episode_steps": 1}},
+            seed=1,
+            horizon=None,
+            dt=0.1,
+            record_forces=True,
+            snqi_weights=None,
+            snqi_baseline=None,
+            algo="goal",
+            algo_config_path=None,
+            scenario_path=Path("."),
+        )
+
+    assert env.closed is True
+
+
 def test_run_map_episode_records_synthetic_actuation_metrics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

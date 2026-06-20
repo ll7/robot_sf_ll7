@@ -1,0 +1,121 @@
+{
+  "calibration_report": "docs/context/evidence/issue_2904_forecast_risk_eligibility_2026-06-20/calibration_report.json",
+  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "diagnostic_weight": 5.0,
+  "issue": 2869,
+  "modes": [
+    {
+      "false_positive": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "forecast_risk_weight": 0.0,
+      "high_risk": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "mode": "no_risk",
+      "reason": "baseline forecast_risk_weight=0",
+      "status": "available",
+      "uses_calibration_filter": false
+    },
+    {
+      "false_positive": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "forecast_risk_weight": 5.0,
+      "high_risk": {
+        "forecast_penalty": 5.0,
+        "progress_proxy": 0.2,
+        "selected_proposal": "risk_dwa",
+        "shield_stop_count": 0,
+        "speed": 0.2
+      },
+      "mode": "raw_risk",
+      "reason": "diagnostic unfiltered forecast risk",
+      "status": "available",
+      "uses_calibration_filter": false
+    },
+    {
+      "false_positive": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "forecast_risk_weight": 5.0,
+      "high_risk": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "mode": "calibration_filtered",
+      "reason": "calibration report contains risk-scoring-eligible rows",
+      "status": "available",
+      "uses_calibration_filter": true
+    },
+    {
+      "false_positive": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "forecast_risk_weight": 5.0,
+      "high_risk": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "mode": "actor_class_aware",
+      "reason": "per-actor-class calibration rows available",
+      "status": "available",
+      "uses_calibration_filter": true
+    },
+    {
+      "false_positive": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "forecast_risk_weight": 5.0,
+      "high_risk": {
+        "forecast_penalty": 0.0,
+        "progress_proxy": 1.0,
+        "selected_proposal": "goal",
+        "shield_stop_count": 0,
+        "speed": 1.0
+      },
+      "mode": "observation_tier_aware",
+      "reason": "cross-tier calibration rows available: ['deployable_observation', 'deployable_tracked']",
+      "status": "available",
+      "uses_calibration_filter": true
+    }
+  ],
+  "recommendation": "diagnostic_only",
+  "recommendation_rationale": "Calibration-filtered rows are available in the input report, but this tool remains a deterministic diagnostic comparison rather than benchmark evidence. Use it only to decide whether a same-seed benchmark comparison is now warranted.",
+  "schema_version": "forecast_risk_calibration_filter.diagnostic_comparison.v1",
+  "tradeoffs": {
+    "false_positive_stopping_avoided": true,
+    "false_positive_unnecessary_slowdown_count": 0,
+    "route_progress_tradeoff": 0.8
+  }
+}

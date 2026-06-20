@@ -1,0 +1,71 @@
+{
+  "aggregate_rows": [
+    {
+      "actor_class": "bicycle",
+      "denominator": 8,
+      "dt_s": 0.5,
+      "horizon_s": 1.0,
+      "metric": "mean_coverage",
+      "observation_tier": "deployable_observation",
+      "scenario_id": "motion_rich_bicycle_low",
+      "semantic_metadata_present": "present",
+      "status": "ok",
+      "value": 0.88
+    },
+    {
+      "actor_class": "bicycle",
+      "denominator": 8,
+      "dt_s": 0.5,
+      "horizon_s": 1.0,
+      "metric": "mean_likelihood",
+      "observation_tier": "deployable_observation",
+      "scenario_id": "motion_rich_bicycle_low",
+      "semantic_metadata_present": "present",
+      "status": "ok",
+      "value": -1.5
+    },
+    {
+      "actor_class": "bicycle",
+      "denominator": 8,
+      "dt_s": 0.5,
+      "horizon_s": 1.0,
+      "metric": "mean_expected_ade",
+      "observation_tier": "deployable_observation",
+      "scenario_id": "motion_rich_bicycle_low",
+      "semantic_metadata_present": "present",
+      "status": "ok",
+      "value": 0.31
+    },
+    {
+      "actor_class": "bicycle",
+      "denominator": 0,
+      "dt_s": 0.5,
+      "horizon_s": 1.0,
+      "metric": "mean_minade@k",
+      "observation_tier": "deployable_observation",
+      "scenario_id": "motion_rich_bicycle_low",
+      "semantic_metadata_present": "present",
+      "status": "unavailable",
+      "value": null
+    }
+  ],
+  "artifact_input": {
+    "command": "durable bicycle metric fixture for issue #2904 forecast-risk eligibility",
+    "generated_at_utc": "2026-06-20T00:00:00+00:00",
+    "issue": 2904,
+    "source": "tests/fixtures/benchmark/forecast_risk_eligibility/metric_bicycle_deployable_observation.json"
+  },
+  "provenance": {
+    "dt_s": 0.5,
+    "horizons_s": [
+      1.0
+    ],
+    "observation_tier": "deployable_observation",
+    "predictor_family": "probabilistic_cv",
+    "predictor_id": "probabilistic-baseline-bicycle-observation-fixture",
+    "scenario_family": "motion_rich_bicycle",
+    "scenario_id": "motion_rich_bicycle_low",
+    "semantic_metadata_present": "present"
+  },
+  "schema_version": "ForecastMetrics.v1"
+}

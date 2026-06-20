@@ -81,6 +81,18 @@ class TestModeAvailability:
         assert status == "available"
         assert "eligible" in reason
 
+    def test_calibration_filtered_available_with_canonical_eligibility_token(self) -> None:
+        """The gate recognizes the canonical ``eligible_analysis_only`` token (issue #2904).
+
+        ``build_forecast_calibration_report`` only ever emits ``eligible_analysis_only`` for
+        eligible rows; the legacy ``{"eligible", "calibrated"}`` set never matched it, leaving
+        the ``calibration_filtered`` mode permanently blocked for real reports.
+        """
+        rows = [{"risk_scoring_eligibility": "eligible_analysis_only"}]
+        status, reason = validator._mode_availability("calibration_filtered", rows)
+        assert status == "available"
+        assert "risk-scoring-eligible rows" in reason
+
     def test_actor_class_aware_blocked_when_unavailable(self) -> None:
         """actor_class_aware is blocked when all rows have actor_class unavailable."""
         rows = [{"actor_class": "unavailable"}]

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Added durable issue-2904 forecast-risk eligibility fixtures
+  (`tests/fixtures/benchmark/forecast_risk_eligibility/`) and the regenerated
+  `ForecastCalibrationReport.v1` evidence bundle under
+  `docs/context/evidence/issue_2904_forecast_risk_eligibility_2026-06-20/`. The pedestrian
+  (`deployable_tracked`) and bicycle (`deployable_observation`) fixtures yield calibrated,
+  risk-scoring-eligible reliability rows so the forecast-risk calibration filter's
+  `calibration_filtered`, `actor_class_aware`, and `observation_tier_aware` modes are no longer
+  blocked for lack of eligible rows: the calibration report recommendation flips from
+  `wait`/blocked to `continue`/analysis-only and the filter's overall recommendation flips from
+  `wait` to `diagnostic_only`. Fixtures and evidence are diagnostic/analysis-only and do not change
+  `_risk_scoring_eligibility`, calibration thresholds, or planner risk coupling (#2904).
+
+### Fixed
+
+* Fixed `scripts/validation/validate_forecast_risk_calibration_filter.py` so its
+  `_any_eligible_for_risk_scoring` gate recognizes the canonical `eligible_analysis_only` token
+  emitted by `build_forecast_calibration_report`. The gate previously matched only the legacy
+  `{"eligible", "calibrated"}` strings, which the report never emits, leaving the
+  `calibration_filtered` mode permanently blocked for every real calibration report regardless of
+  eligible rows. Legacy tokens are retained for backward compatibility (#2904).
+
 ### Changed
 
 * Removed redundant Black/autopep8 formatter configuration and the unused Black optional

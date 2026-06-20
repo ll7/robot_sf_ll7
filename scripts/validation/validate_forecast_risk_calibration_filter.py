@@ -114,8 +114,14 @@ def _load_calibration_report(path: Path) -> dict[str, Any]:
 
 
 def _any_eligible_for_risk_scoring(rows: list[dict[str, Any]]) -> bool:
-    """Return True if at least one row is eligible for forecast-risk scoring."""
-    eligible = {"eligible", "calibrated"}
+    """Return True if at least one row is eligible for forecast-risk scoring.
+
+    Recognizes the eligibility vocabulary emitted by
+    :func:`robot_sf.benchmark.forecast_calibration_report._risk_scoring_eligibility`
+    (canonical token ``eligible_analysis_only``) as well as the legacy ``eligible`` /
+    ``calibrated`` tokens kept for backward compatibility.
+    """
+    eligible = {"eligible", "calibrated", "eligible_analysis_only"}
     return any(str(row.get("risk_scoring_eligibility", "")) in eligible for row in rows)
 
 

@@ -17,6 +17,7 @@ scenario pair and generating traces lives with parent issue #2924; pair-manifest
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -115,7 +116,10 @@ def _metric_value(result: Mapping[str, Any], metric: str) -> float:
     metrics = result.get("metrics")
     if not isinstance(metrics, Mapping) or metric not in metrics:
         raise ValueError(f"result.metrics is missing required metric {metric!r}")
-    return float(metrics[metric])
+    value = float(metrics[metric])
+    if not math.isfinite(value):
+        raise ValueError(f"metric {metric!r} value {value} is not finite")
+    return value
 
 
 def _direction_matches(delta: float, expected_direction: str, tolerance: float) -> bool:
@@ -134,7 +138,7 @@ def evaluate_counterfactual_pair(
     intervention: Mapping[str, Any],
     hypothesis: PairHypothesis,
     *,
-    min_outcome_delta: float = 0.0,
+    min_outcome_delta: float | None = None,
 ) -> PairResult:
     """Evaluate a baseline/intervention pair against a mechanism hypothesis.
 
@@ -151,6 +155,11 @@ def evaluate_counterfactual_pair(
     Returns:
         A :class:`PairResult` with the activation/outcome deltas and verdict.
     """
+    if min_outcome_delta is None:
+        min_outcome_delta = 0.0
+    elif min_outcome_delta < 0.0:
+        raise ValueError(f"min_outcome_delta must be non-negative (got {min_outcome_delta})")
+
     baseline_activated = _activated(baseline)
     intervention_activated = _activated(intervention)
     outcome_baseline = _metric_value(baseline, hypothesis.outcome_metric)

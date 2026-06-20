@@ -72,6 +72,23 @@ def test_min_outcome_delta_threshold() -> None:
     assert big.verdict == VERDICT_SURVIVED  # +0.10 > 0.05 threshold
 
 
+def test_min_outcome_delta_none_uses_zero_threshold() -> None:
+    """An omitted threshold sentinel uses the same zero threshold as the default."""
+    result = evaluate_counterfactual_pair(
+        _result(False, 0.40), _result(True, 0.41), _HYP, min_outcome_delta=None
+    )
+    assert result.verdict == VERDICT_SURVIVED
+    assert result.outcome_delta == pytest.approx(0.01)
+
+
+def test_negative_min_outcome_delta_raises() -> None:
+    """Negative thresholds are rejected instead of changing comparison semantics."""
+    with pytest.raises(ValueError, match="min_outcome_delta must be non-negative"):
+        evaluate_counterfactual_pair(
+            _result(False, 0.30), _result(True, 0.50), _HYP, min_outcome_delta=-0.1
+        )
+
+
 def test_decrease_direction() -> None:
     """A decrease hypothesis survives when the metric drops."""
     hyp = PairHypothesis(
@@ -92,6 +109,14 @@ def test_missing_fields_raise() -> None:
         evaluate_counterfactual_pair(
             {"mechanism_activated": False, "metrics": {}}, _result(True, 0.5), _HYP
         )
+
+
+def test_non_finite_metric_raises() -> None:
+    """Non-finite metric values are rejected before verdict calculation."""
+    with pytest.raises(ValueError, match="not finite"):
+        evaluate_counterfactual_pair(_result(False, float("nan")), _result(True, 0.5), _HYP)
+    with pytest.raises(ValueError, match="not finite"):
+        evaluate_counterfactual_pair(_result(False, 0.3), _result(True, float("inf")), _HYP)
 
 
 def test_to_dict_schema() -> None:

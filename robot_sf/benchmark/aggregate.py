@@ -437,6 +437,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     }
     metrics = dict(rec.get("metrics") or {})
     fq = metrics.pop("force_quantiles", {}) or {}
+    metrics.pop("distributional_disruption", None)
     ped_impact = metrics.pop("pedestrian_impact", {}) or {}
     social_acceptability = metrics.pop("social_acceptability", {}) or {}
     human_interaction_proxy = metrics.pop("human_interaction_proxy", {}) or {}

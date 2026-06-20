@@ -13,6 +13,7 @@ from robot_sf.benchmark import metrics as metrics_mod
 from robot_sf.benchmark.metrics import (
     METRIC_NAMES,
     EpisodeData,
+    build_distributional_disruption_block,
     collision_count,
     collisions,
     compute_all_metrics,
@@ -1551,3 +1552,130 @@ def test_all_paper_metrics_smoke():
         result = func(ep, **kwargs)
         # Should return float or NaN (both are float type)
         assert isinstance(result, float), f"{func.__name__} did not return float"
+
+
+def test_distributional_disruption_metric_block() -> None:
+    """Distributional disruption reports supported cohorts and explicit omissions."""
+    robot_pos = np.array([[0.0, 0.0], [0.5, 0.0], [1.0, 0.0]])
+    robot_vel = np.array([[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]])
+    robot_acc = np.array([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])
+
+    peds_pos = np.zeros((3, 5, 2))
+    peds_pos[:, 0, :] = np.array([[0.0, 0.0], [0.2, 0.0], [0.4, 0.0]])
+    peds_pos[:, 1, :] = np.array([[0.0, 0.0], [0.3, 0.0], [0.6, 0.0]])
+    peds_pos[:, 2, :] = np.array([[0.0, 0.0], [0.7, 0.0], [1.4, 0.0]])
+    peds_pos[:, 3, :] = np.array([[0.0, 0.0], [0.8, 0.0], [1.6, 0.0]])
+    peds_pos[:, 4, :] = np.array([[0.0, 0.0], [1.1, 0.0], [2.2, 0.0]])
+
+    data = EpisodeData(
+        robot_pos=robot_pos,
+        robot_vel=robot_vel,
+        robot_acc=robot_acc,
+        peds_pos=peds_pos,
+        ped_forces=np.zeros((3, 5, 2)),
+        goal=np.array([10.0, 0.0]),
+        dt=0.5,
+        reached_goal_step=2,
+    )
+
+    control_peds_pos = np.zeros((3, 5, 2))
+    control_peds_pos[:, 0, :] = np.array([[0.0, 0.0], [0.3, 0.0], [0.6, 0.0]])
+    control_peds_pos[:, 1, :] = np.array([[0.0, 0.0], [0.4, 0.0], [0.8, 0.0]])
+    control_peds_pos[:, 2, :] = np.array([[0.0, 0.0], [0.7, 0.0], [1.4, 0.0]])
+    control_peds_pos[:, 3, :] = np.array([[0.0, 0.0], [0.8, 0.0], [1.6, 0.0]])
+    control_peds_pos[:, 4, :] = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]])
+
+    control_data = EpisodeData(
+        robot_pos=robot_pos,
+        robot_vel=robot_vel,
+        robot_acc=robot_acc,
+        peds_pos=control_peds_pos,
+        ped_forces=np.zeros((3, 5, 2)),
+        goal=np.array([10.0, 0.0]),
+        dt=0.5,
+    )
+
+    block = build_distributional_disruption_block(data, control_data, min_support=2)
+    computed = compute_all_metrics(data, horizon=3, control_data=control_data)
+
+    assert block["schema_version"] == "distributional-disruption.v1"
+    assert computed["distributional_disruption"]["support_counts"] == block["support_counts"]
+    assert computed["distributional_disruption"]["cohort_metrics"] == block["cohort_metrics"]
+    assert "claim_boundary" in block
+    assert "baseline_condition" in block
+    assert "cohort_definitions" in block
+    assert "units" in block
+    assert block["metric_definitions"]["displacement_mean_m"]["denominator"] == (
+        "matched timesteps per pedestrian, then supported pedestrians per cohort"
+    )
+    assert block["metric_definitions"]["delay_mean_s"]["denominator"] == (
+        "supported pedestrians per cohort"
+    )
+    assert block["support_counts"] == {
+        "slow_speed_tier": 2,
+        "fast_speed_tier": 2,
+        "extreme_speed_tier": 1,
+    }
+
+    assert "slow_speed_tier" in block["cohort_metrics"]
+    slow_metrics = block["cohort_metrics"]["slow_speed_tier"]
+    assert "displacement_mean_m" in slow_metrics
+    assert "delay_mean_s" in slow_metrics
+
+    assert math.isclose(slow_metrics["displacement_mean_m"], 0.1)
+    assert math.isclose(slow_metrics["delay_mean_s"], 0.0)
+
+    assert "fast_speed_tier" in block["cohort_metrics"]
+    fast_metrics = block["cohort_metrics"]["fast_speed_tier"]
+    assert math.isclose(fast_metrics["displacement_mean_m"], 0.0)
+    assert math.isclose(fast_metrics["delay_mean_s"], 0.0)
+
+    assert "extreme_speed_tier" not in block["cohort_metrics"]
+    assert block["missing_data"]["extreme_speed_tier"]["status"] == "under_supported"
+    assert block["missing_data"]["extreme_speed_tier"]["support_count"] == 1
+    assert block["missing_data"]["extreme_speed_tier"]["minimum_support"] == 2
+
+    forbidden = [
+        "fairness",
+        "equity",
+        "bias",
+        "protected attribute",
+        "demographic group",
+        "disparate impact",
+    ]
+    for key, val in block.items():
+        if key in ["claim_boundary", "non_claims"]:
+            continue
+        for word in forbidden:
+            assert word not in str(key).lower()
+            assert word not in str(val).lower()
+
+
+def test_distributional_disruption_missing_control_is_explicit() -> None:
+    """Distributional disruption omits aggregates when the control trace is unavailable."""
+    episode = _make_episode(T=3, K=2)
+
+    block = build_distributional_disruption_block(episode, None, min_support=2)
+
+    assert block["support_counts"] == {
+        "slow_speed_tier": 0,
+        "fast_speed_tier": 0,
+        "extreme_speed_tier": 0,
+    }
+    assert block["cohort_metrics"] == {}
+    assert {missing["status"] for missing in block["missing_data"].values()} == {"unavailable"}
+
+
+def test_post_process_metrics_preserves_empty_distributional_disruption_schema_fields() -> None:
+    """Required empty schema dictionaries should survive metric sanitization."""
+    episode = _make_episode(T=3, K=2)
+    raw = {
+        "distributional_disruption": build_distributional_disruption_block(episode, None),
+        "success": 1.0,
+    }
+
+    metrics = post_process_metrics(raw, snqi_weights=None, snqi_baseline=None)
+
+    block = metrics["distributional_disruption"]
+    assert block["cohort_metrics"] == {}
+    assert block["missing_data"]["slow_speed_tier"]["status"] == "unavailable"

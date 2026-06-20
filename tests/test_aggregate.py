@@ -503,6 +503,43 @@ def test_compute_aggregates_flattens_human_interaction_proxy_block() -> None:
     assert metrics["pedestrian_path_deviation_proxy_m"]["mean"] == pytest.approx(0.3)
 
 
+def test_flatten_metrics_keeps_distributional_disruption_nested_out_of_scalar_rows() -> None:
+    """Distributional disruption is a schema block, not a scalar aggregate metric."""
+    record = {
+        "episode_id": "ep-1",
+        "scenario_id": "sc-1",
+        "seed": 1,
+        "metrics": {
+            "success": True,
+            "distributional_disruption": {
+                "schema_version": "distributional-disruption.v1",
+                "claim_boundary": "Diagnostic simulation measure only.",
+                "baseline_condition": "control_run_without_robot",
+                "cohort_definitions": {
+                    "slow_speed_tier": "Pedestrians with average control speed <= 1.0 m/s",
+                },
+                "units": {"displacement_mean_m": "meters"},
+                "metric_definitions": {
+                    "displacement_mean_m": {
+                        "formula": "mean_t ||robot_present_position_t - control_position_t||",
+                        "denominator": "matched timesteps per pedestrian",
+                    },
+                },
+                "support_counts": {"slow_speed_tier": 2},
+                "cohort_metrics": {"slow_speed_tier": {"displacement_mean_m": 0.1}},
+                "missing_data": {},
+                "non_claims": "Diagnostic simulation proxies only.",
+            },
+        },
+    }
+
+    flat = flatten_metrics(record)
+
+    assert "distributional_disruption" not in flat
+    assert "claim_boundary" not in flat
+    assert flat["success"] is True
+
+
 def _paired_contrast_records() -> list[dict]:
     """Build synthetic records with a planted paired effect for group B over group A."""
     values_a = [1.0, 2.0, 3.0, 4.0, 5.0]

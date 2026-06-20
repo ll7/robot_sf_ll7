@@ -290,3 +290,73 @@ def test_episode_validator_rejects_legacy_collision_alias_drift() -> None:
     }
     with pytest.raises(jsonschema.ValidationError, match="collision_event=false"):
         validate_episode(record, schema)
+
+
+def test_episode_schema_validates_distributional_disruption_block() -> None:
+    """The distributional disruption metric block should validate successfully."""
+    schema = _load_schema()
+    record = {
+        "episode_id": "e_dist_disruption",
+        "version": "v1",
+        "scenario_id": "sc_dist_disruption",
+        "seed": 123,
+        "metrics": {
+            "collisions": 0,
+            "near_misses": 0,
+            "distributional_disruption": {
+                "schema_version": "distributional-disruption.v1",
+                "claim_boundary": (
+                    "These metrics are diagnostic simulation measures for analyzing per-subgroup "
+                    "displacement and inconvenience distribution in controlled settings. "
+                    "They do not represent real-world ethical outcomes."
+                ),
+                "baseline_condition": "control_run_without_robot",
+                "cohort_definitions": {
+                    "slow_speed_tier": "Pedestrians with average control speed <= 1.0 m/s",
+                    "fast_speed_tier": "Pedestrians with average control speed > 1.0 m/s and <= 1.8 m/s",
+                    "extreme_speed_tier": "Pedestrians with average control speed > 1.8 m/s",
+                },
+                "units": {"displacement_mean_m": "meters", "delay_mean_s": "seconds"},
+                "metric_definitions": {
+                    "displacement_mean_m": {
+                        "formula": "mean_t ||robot_present_position_t - control_position_t||",
+                        "denominator": (
+                            "matched timesteps per pedestrian, then supported pedestrians per cohort"
+                        ),
+                    },
+                    "delay_mean_s": {
+                        "formula": (
+                            "max(0, robot_present_path_length - control_path_length) / "
+                            "max(control_mean_speed, 0.1)"
+                        ),
+                        "denominator": "supported pedestrians per cohort",
+                    },
+                },
+                "support_counts": {
+                    "slow_speed_tier": 2,
+                    "fast_speed_tier": 3,
+                    "extreme_speed_tier": 0,
+                },
+                "cohort_metrics": {
+                    "slow_speed_tier": {"displacement_mean_m": 0.15, "delay_mean_s": 0.5},
+                    "fast_speed_tier": {"displacement_mean_m": 0.08, "delay_mean_s": 0.2},
+                },
+                "missing_data": {
+                    "extreme_speed_tier": {"status": "missing", "reason": "No samples available"}
+                },
+                "non_claims": (
+                    "We make no claims regarding real-world fairness, equity, bias, "
+                    "protected attributes, demographic groups, or disparate impact. "
+                    "These measures are diagnostic simulation proxies only."
+                ),
+            },
+        },
+        "termination_reason": "max_steps",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        "integrity": {"contradictions": []},
+    }
+    jsonschema.validate(instance=record, schema=schema)

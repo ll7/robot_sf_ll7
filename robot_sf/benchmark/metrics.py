@@ -2490,6 +2490,7 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 
 # --- Orchestrator ---
 METRIC_NAMES: list[str] = [
+    "distributional_disruption",
     "success",
     "time_to_goal_norm",
     "time_to_goal_norm_success_only",
@@ -2551,6 +2552,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     ped_impact_window_steps: int = 5,
     social_proxemic_radius_m: float = 1.2,
     human_proxy_yield_speed_mps: float = 0.15,
+    control_data: EpisodeData | None = None,
 ) -> dict[str, Any]:
     """Compute all defined metrics for an episode and return them as a mapping.
 
@@ -2575,6 +2577,8 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
         social_proxemic_radius_m: Personal-space radius used by exploratory social acceptability
             metrics when ``experimental_ped_impact`` is enabled.
         human_proxy_yield_speed_mps: Robot speed threshold used to detect proxy yielding.
+        control_data: Optional robot-absent/control trajectory used to compute the schema-backed
+            ``distributional_disruption`` block.
 
     Returns:
         dict[str, Any]: Mapping from metric name (e.g., ``success``, ``force_q50``,
@@ -2702,6 +2706,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
                 yield_speed_mps=human_proxy_yield_speed_mps,
             )
         )
+    values["distributional_disruption"] = build_distributional_disruption_block(data, control_data)
     return values
 
 
@@ -2902,17 +2907,215 @@ def _attach_human_interaction_proxy_block(metrics: dict[str, Any]) -> None:
     }
 
 
+def _distributional_disruption_static_fields() -> dict[str, Any]:
+    """Return fixed schema fields for the distributional disruption block."""
+    return {
+        "schema_version": "distributional-disruption.v1",
+        "claim_boundary": (
+            "These metrics are diagnostic simulation measures for analyzing per-subgroup "
+            "displacement and inconvenience distribution in controlled settings. "
+            "They do not represent real-world ethical outcomes."
+        ),
+        "baseline_condition": "control_run_without_robot",
+        "cohort_definitions": {
+            "slow_speed_tier": "Pedestrians with average control speed <= 1.0 m/s",
+            "fast_speed_tier": "Pedestrians with average control speed > 1.0 m/s and <= 1.8 m/s",
+            "extreme_speed_tier": "Pedestrians with average control speed > 1.8 m/s",
+        },
+        "units": {
+            "displacement_mean_m": "meters",
+            "delay_mean_s": "seconds",
+        },
+        "metric_definitions": {
+            "displacement_mean_m": {
+                "formula": "mean_t ||robot_present_position_t - control_position_t||",
+                "denominator": (
+                    "matched timesteps per pedestrian, then supported pedestrians per cohort"
+                ),
+            },
+            "delay_mean_s": {
+                "formula": (
+                    "max(0, robot_present_path_length - control_path_length) / "
+                    "max(control_mean_speed, 0.1)"
+                ),
+                "denominator": "supported pedestrians per cohort",
+            },
+        },
+        "non_claims": (
+            "We make no claims regarding real-world fairness, equity, bias, "
+            "protected attributes, demographic groups, or disparate impact. "
+            "These measures are diagnostic simulation proxies only."
+        ),
+    }
+
+
+def _distributional_disruption_empty_counts() -> dict[str, int]:
+    """Return zeroed support counts for the supported observable speed-tier cohorts."""
+    return {
+        "slow_speed_tier": 0,
+        "fast_speed_tier": 0,
+        "extreme_speed_tier": 0,
+    }
+
+
+def _distributional_disruption_missing_block(status: str, reason: str) -> dict[str, Any]:
+    """Return a block with all cohorts explicitly marked as missing or unavailable."""
+    static_fields = _distributional_disruption_static_fields()
+    return {
+        **static_fields,
+        "support_counts": _distributional_disruption_empty_counts(),
+        "cohort_metrics": {},
+        "missing_data": {
+            cohort: {"status": status, "reason": reason}
+            for cohort in static_fields["cohort_definitions"]
+        },
+    }
+
+
+def _pedestrian_control_speed(control_pos: np.ndarray, dt: float) -> float:
+    """Return mean pedestrian speed for a control trajectory."""
+    if len(control_pos) < 2 or dt <= 0:
+        return 0.0
+    diffs = np.diff(control_pos, axis=0)
+    speeds = np.linalg.norm(diffs, axis=-1) / dt
+    return float(np.mean(speeds))
+
+
+def _speed_tier_cohort(avg_control_speed: float) -> str:
+    """Map an observable control speed to the distributional cohort label.
+
+    Returns:
+        Distributional speed-tier cohort key.
+    """
+    if avg_control_speed <= 1.0:
+        return "slow_speed_tier"
+    if avg_control_speed <= 1.8:
+        return "fast_speed_tier"
+    return "extreme_speed_tier"
+
+
+def _trajectory_path_length(positions: np.ndarray) -> float:
+    """Return the cumulative path length for one pedestrian trajectory."""
+    if len(positions) < 2:
+        return 0.0
+    return float(np.sum(np.linalg.norm(np.diff(positions, axis=0), axis=-1)))
+
+
+def _distributional_disruption_sample(
+    data: EpisodeData,
+    control_data: EpisodeData,
+    ped_index: int,
+    matched_len: int,
+) -> tuple[str, float, float]:
+    """Return cohort, displacement, and delay proxy for one matched pedestrian."""
+    control_pos = control_data.peds_pos[:, ped_index, :]
+    avg_control_speed = _pedestrian_control_speed(control_pos, control_data.dt)
+    cohort = _speed_tier_cohort(avg_control_speed)
+
+    displacement = 0.0
+    if matched_len > 0:
+        dists = np.linalg.norm(
+            data.peds_pos[:matched_len, ped_index, :]
+            - control_data.peds_pos[:matched_len, ped_index, :],
+            axis=-1,
+        )
+        displacement = float(np.mean(dists))
+
+    present_path_len = _trajectory_path_length(data.peds_pos[:, ped_index, :])
+    control_path_len = _trajectory_path_length(control_pos)
+    delay = max(0.0, (present_path_len - control_path_len) / max(0.1, avg_control_speed))
+    return cohort, displacement, delay
+
+
+def build_distributional_disruption_block(
+    data: EpisodeData,
+    control_data: EpisodeData | None = None,
+    min_support: int = 2,
+) -> dict[str, Any]:
+    """Build a schema-backed distributional disruption metric block.
+
+    Args:
+        data: Robot-present episode data.
+        control_data: Optional control (robot-absent) episode data.
+        min_support: Minimum support count to compute cohort metrics.
+
+    Returns:
+        Structured block matching the distributional-disruption.v1 schema.
+    """
+    if control_data is None:
+        return _distributional_disruption_missing_block(
+            "unavailable",
+            "No control trace provided",
+        )
+
+    static_fields = _distributional_disruption_static_fields()
+    cohort_definitions = static_fields["cohort_definitions"]
+    support_counts = _distributional_disruption_empty_counts()
+    cohort_metrics: dict[str, dict[str, float]] = {}
+    missing_data: dict[str, dict[str, str | int]] = {}
+
+    if data.peds_pos.ndim < 3 or control_data.peds_pos.ndim < 3:
+        return _distributional_disruption_missing_block(
+            "missing",
+            "Pedestrian traces are unavailable or malformed",
+        )
+
+    num_peds = min(data.peds_pos.shape[1], control_data.peds_pos.shape[1])
+    matched_len = min(data.peds_pos.shape[0], control_data.peds_pos.shape[0])
+    cohort_displacements = {cohort: [] for cohort in cohort_definitions}
+    cohort_delays = {cohort: [] for cohort in cohort_definitions}
+
+    for ped_index in range(num_peds):
+        cohort, displacement, delay = _distributional_disruption_sample(
+            data,
+            control_data,
+            ped_index,
+            matched_len,
+        )
+        support_counts[cohort] += 1
+        cohort_displacements[cohort].append(displacement)
+        cohort_delays[cohort].append(delay)
+
+    for cohort in cohort_definitions:
+        count = support_counts[cohort]
+        if count >= min_support:
+            cohort_metrics[cohort] = {
+                "displacement_mean_m": float(np.mean(cohort_displacements[cohort])),
+                "delay_mean_s": float(np.mean(cohort_delays[cohort])),
+            }
+        elif count > 0:
+            missing_data[cohort] = {
+                "status": "under_supported",
+                "reason": f"Fewer than {min_support} samples (support count: {count})",
+                "support_count": count,
+                "minimum_support": min_support,
+            }
+        else:
+            missing_data[cohort] = {
+                "status": "missing",
+                "reason": "No samples available",
+            }
+
+    return {
+        **static_fields,
+        "support_counts": support_counts,
+        "cohort_metrics": cohort_metrics,
+        "missing_data": missing_data,
+    }
+
+
 def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     """Remove NaN/inf metric entries to keep JSON serialization clean.
 
     Returns:
         Cleaned metrics dictionary with NaN/inf values removed.
     """
+    preserve_empty_dict_keys = {"cohort_metrics", "missing_data"}
     clean: dict[str, Any] = {}
     for key, val in metrics.items():
         if isinstance(val, dict):
             nested = _sanitize_metrics(val)
-            if nested:
+            if nested or key in preserve_empty_dict_keys:
                 clean[key] = nested
             continue
         if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
@@ -2930,6 +3133,7 @@ __all__ = [
     "agent_collisions",
     "aggregated_time",
     "avg_speed",
+    "build_distributional_disruption_block",
     "clearing_distance_avg",
     "clearing_distance_min",
     "collision_count",

@@ -832,6 +832,105 @@
                         }
                     },
                     "additionalProperties": true
+                },
+                "distributional_disruption": {
+                    "type": "object",
+                    "description": "Schema-backed distributional disruption metric block for observable cohort comparison.",
+                    "required": [
+                        "schema_version",
+                        "claim_boundary",
+                        "baseline_condition",
+                        "cohort_definitions",
+                        "units",
+                        "metric_definitions",
+                        "support_counts",
+                        "cohort_metrics",
+                        "missing_data",
+                        "non_claims"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "distributional-disruption.v1"
+                        },
+                        "claim_boundary": {
+                            "type": "string"
+                        },
+                        "baseline_condition": {
+                            "type": "string"
+                        },
+                        "cohort_definitions": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        },
+                        "units": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        },
+                        "metric_definitions": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "required": ["formula", "denominator"],
+                                "properties": {
+                                    "formula": {
+                                        "type": "string"
+                                    },
+                                    "denominator": {
+                                        "type": "string"
+                                    }
+                                },
+                                "additionalProperties": false
+                            }
+                        },
+                        "support_counts": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer",
+                                "minimum": 0
+                            }
+                        },
+                        "cohort_metrics": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "type": "number"
+                                }
+                            }
+                        },
+                        "missing_data": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "required": ["status", "reason"],
+                                "properties": {
+                                    "status": {
+                                        "type": "string"
+                                    },
+                                    "reason": {
+                                        "type": "string"
+                                    },
+                                    "support_count": {
+                                        "type": "integer",
+                                        "minimum": 0
+                                    },
+                                    "minimum_support": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                    }
+                                },
+                                "additionalProperties": false
+                            }
+                        },
+                        "non_claims": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false
                 }
             },
             "additionalProperties": {

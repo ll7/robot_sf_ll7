@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -35,11 +36,25 @@ def _load_launch_packet_builder() -> ModuleType:
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load builder module from {module_path}")
     module = importlib.util.module_from_spec(spec)
+    sys.modules["fidelity_sensitivity_smoke_report_builder"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_smoke_report_builder() -> ModuleType:
+    module_path = REPO_ROOT / "scripts" / "benchmark" / "build_fidelity_sensitivity_smoke_report.py"
+    spec = importlib.util.spec_from_file_location(
+        "fidelity_sensitivity_smoke_report_builder", module_path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load builder module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
 launch_packet_builder = _load_launch_packet_builder()
+smoke_report_builder = _load_smoke_report_builder()
 
 
 def test_load_repo_config_validates_three_or_more_axes() -> None:
@@ -164,3 +179,53 @@ def test_builder_git_head_handles_missing_git(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(launch_packet_builder.subprocess, "run", missing_git)
 
     assert launch_packet_builder._git_head() == "unknown"
+
+
+def test_smoke_report_builder_detects_rank_flip() -> None:
+    """Diagnostic smoke summaries should reuse the rank-stability contract."""
+    result_sets = {
+        "dt_0_10": {
+            "simple_policy": [{"metrics": {"min_distance": 3.0}, "seed": 101}],
+            "social_force": [{"metrics": {"min_distance": 2.0}, "seed": 101}],
+        },
+        "dt_0_20": {
+            "simple_policy": [{"metrics": {"min_distance": 1.0}, "seed": 101}],
+            "social_force": [{"metrics": {"min_distance": 4.0}, "seed": 101}],
+        },
+    }
+
+    report = smoke_report_builder.build_report(
+        result_sets,
+        inputs={},
+        options=smoke_report_builder.SmokeReportOptions(
+            baseline_variant="dt_0_10",
+            ranking_metric="min_distance",
+            higher_is_better=True,
+            git_head="abc1234",
+            date="2026-06-20",
+        ),
+    )
+
+    stability = report["comparisons_vs_baseline"]["dt_0_20"]["rank_stability"]
+    assert report["status"] == "diagnostic_smoke"
+    assert stability["ranking_flipped"] is True
+    assert stability["kendall_tau_vs_baseline"] == pytest.approx(-1.0)
+
+
+def test_smoke_report_builder_requires_matching_planners() -> None:
+    """Each variant must compare the same planner set as the baseline."""
+    result_sets = {
+        "dt_0_10": {"simple_policy": [{"metrics": {"min_distance": 3.0}}]},
+        "dt_0_20": {"social_force": [{"metrics": {"min_distance": 4.0}}]},
+    }
+
+    with pytest.raises(ValueError, match="do not match baseline planners"):
+        smoke_report_builder.build_report(
+            result_sets,
+            inputs={},
+            options=smoke_report_builder.SmokeReportOptions(
+                baseline_variant="dt_0_10",
+                ranking_metric="min_distance",
+                higher_is_better=True,
+            ),
+        )

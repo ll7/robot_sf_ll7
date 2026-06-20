@@ -23,6 +23,12 @@ CLAIM_BOUNDARY = (
     "sensitivity probes and rank-stability/drift metrics; does not establish planner "
     "ranking, sensor realism, sim-to-real validity, or paper-facing benchmark evidence."
 )
+DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY = (
+    "diagnostic_smoke_not_benchmark_evidence: summarizes a small local same-scenario "
+    "fidelity sensitivity smoke. It can show wiring, metric drift, and rank-stability "
+    "calculation behavior, but it does not establish planner ranking, simulator realism, "
+    "sim-to-real validity, or paper-facing benchmark evidence."
+)
 
 
 def load_fidelity_sensitivity_config(path: str | Path) -> dict[str, Any]:
@@ -366,6 +372,7 @@ def _require_non_empty_list(mapping: Mapping[str, Any], key: str) -> None:
 
 __all__ = [
     "CLAIM_BOUNDARY",
+    "DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY",
     "SCHEMA_VERSION",
     "build_launch_packet",
     "build_rank_stability_summary",

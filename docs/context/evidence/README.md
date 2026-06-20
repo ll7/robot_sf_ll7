@@ -165,6 +165,10 @@ Policy caveats:
 - `issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/`: launch-packet-only simulation
   fidelity sensitivity contract for #3207. Defines the tracked config, fidelity axes, required
   rank-stability and metric-drift outputs, and no-evidence boundary before any sweep is run.
+- `issue_3207_fidelity_sensitivity_smoke_2026-06-20/`: diagnostic-only two-planner live smoke for
+  #3207 over the same compact scenario surface. It materializes rank-stability and metric-drift
+  calculations across clean timestep variants and the existing observation-noise smoke profile; it
+  is not benchmark-strength planner-ranking, sensor-realism, or sim-to-real evidence.
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that
   support the v1 raw-success leader and v2 strict-gate promotion decision.
 - `issue_1023_scenario_horizons_preflight_2026-05-06/`: compact preflight artifacts for the

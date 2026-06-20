@@ -189,19 +189,30 @@ def apply_derived_issue_label_updates(
         )
     rate_limit = _read_rate_limit(runner)
     remaining = rate_limit.get("remaining")
-    if isinstance(remaining, int) and remaining < min_rate_limit_remaining:
+    if not isinstance(remaining, int):
+        raise RuntimeError(
+            "refusing to apply label updates; unable to determine GitHub core rate limit remaining"
+        )
+    if remaining < min_rate_limit_remaining:
         raise RuntimeError(
             f"refusing to apply label updates; GitHub core rate limit remaining "
             f"{remaining} < {min_rate_limit_remaining}"
         )
 
     applied: list[dict[str, Any]] = []
+    error_to_raise: Exception | None = None
     for update in updates:
         command = _issue_label_edit_command(update)
-        result = runner(command)
-        stdout = getattr(result, "stdout", "")
-        stderr = getattr(result, "stderr", "")
-        returncode = int(getattr(result, "returncode", 1))
+        try:
+            result = runner(command)
+            stdout = getattr(result, "stdout", "")
+            stderr = getattr(result, "stderr", "")
+            returncode = int(getattr(result, "returncode", 1))
+        except Exception as exc:
+            stdout = ""
+            stderr = str(exc)
+            returncode = 1
+            error_to_raise = exc
         applied.append(
             {
                 "issue": update["issue"],
@@ -214,11 +225,13 @@ def apply_derived_issue_label_updates(
                 "stderr": stderr,
             }
         )
-        if returncode != 0:
-            raise RuntimeError(
+        if returncode != 0 and error_to_raise is None:
+            error_to_raise = RuntimeError(
                 f"gh issue edit failed for issue #{update['issue']} with {returncode}: "
                 f"{(stderr or stdout).strip()}"
             )
+        if error_to_raise is not None:
+            break
 
     audit = {
         "schema_version": "experiment-state-label-apply.v1",
@@ -226,11 +239,13 @@ def apply_derived_issue_label_updates(
         "max_writes": max_writes,
         "min_rate_limit_remaining": min_rate_limit_remaining,
         "rate_limit": rate_limit,
-        "applied_count": len(applied),
+        "applied_count": sum(1 for entry in applied if entry["returncode"] == 0),
         "applied": applied,
     }
     audit_log_path.parent.mkdir(parents=True, exist_ok=True)
     audit_log_path.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if error_to_raise is not None:
+        raise error_to_raise
     return audit
 
 
@@ -448,7 +463,14 @@ def _read_rate_limit(gh_runner: Any) -> dict[str, Any]:
         payload = json.loads(stdout or "{}")
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"gh api rate_limit returned invalid JSON: {exc}") from exc
-    core = payload.get("resources", {}).get("core", {})
+    if not isinstance(payload, dict):
+        payload = {}
+    resources = payload.get("resources")
+    if not isinstance(resources, dict):
+        resources = {}
+    core = resources.get("core")
+    if not isinstance(core, dict):
+        core = {}
     return {
         "remaining": core.get("remaining"),
         "limit": core.get("limit"),

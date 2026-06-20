@@ -758,6 +758,91 @@ def test_apply_derived_issue_label_updates_rejects_non_state_labels(tmp_path: Pa
         raise AssertionError("expected non-state label rejection")
 
 
+def test_apply_derived_issue_label_updates_fails_closed_without_rate_limit(
+    tmp_path: Path,
+) -> None:
+    """Indeterminate rate-limit payloads must not allow GitHub mutations."""
+
+    report = {
+        "findings": [
+            {
+                "kind": "derived_issue_label_update",
+                "record": "label.yaml",
+                "issue": 1475,
+                "labels_to_add": ["state:ready"],
+                "labels_to_remove": ["state:running"],
+            }
+        ]
+    }
+    commands: list[list[str]] = []
+
+    def fake_gh(args: list[str]) -> SimpleNamespace:
+        commands.append(args)
+        return SimpleNamespace(
+            returncode=0, stdout=json.dumps({"resources": {"core": {}}}), stderr=""
+        )
+
+    try:
+        apply_derived_issue_label_updates(
+            report,
+            max_writes=1,
+            audit_log_path=tmp_path / "audit.json",
+            gh_runner=fake_gh,
+        )
+    except RuntimeError as exc:
+        assert "unable to determine GitHub core rate limit remaining" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected indeterminate rate-limit rejection")
+
+    assert commands == [["api", "rate_limit"]]
+    assert not (tmp_path / "audit.json").exists()
+
+
+def test_apply_derived_issue_label_updates_writes_audit_before_write_failure(
+    tmp_path: Path,
+) -> None:
+    """Partial GitHub write failures should leave a local audit trail."""
+
+    report = {
+        "findings": [
+            {
+                "kind": "derived_issue_label_update",
+                "record": "label.yaml",
+                "issue": 1475,
+                "labels_to_add": ["state:ready"],
+                "labels_to_remove": ["state:running"],
+            }
+        ]
+    }
+
+    def fake_gh(args: list[str]) -> SimpleNamespace:
+        if args == ["api", "rate_limit"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"resources": {"core": {"remaining": 100, "limit": 5000}}}),
+                stderr="",
+            )
+        return SimpleNamespace(returncode=2, stdout="", stderr="permission denied")
+
+    try:
+        apply_derived_issue_label_updates(
+            report,
+            max_writes=1,
+            audit_log_path=tmp_path / "audit.json",
+            gh_runner=fake_gh,
+        )
+    except RuntimeError as exc:
+        assert "gh issue edit failed for issue #1475" in str(exc)
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("expected GitHub write failure")
+
+    audit = json.loads((tmp_path / "audit.json").read_text())
+    assert audit["applied_count"] == 0
+    assert audit["applied"][0]["issue"] == 1475
+    assert audit["applied"][0]["returncode"] == 2
+    assert audit["applied"][0]["stderr"] == "permission denied"
+
+
 def test_main_apply_labels_requires_explicit_report_snapshot_and_write_cap(
     tmp_path: Path,
     monkeypatch,

@@ -91,8 +91,8 @@ class SchemaReference:
 
             return schema
 
-        except Exception as e:
-            logger.exception(f"Failed to load schema from {full_path}: {e}")
+        except Exception:
+            logger.exception(f"Failed to load schema from {full_path}")
             raise
 
     def _resolve_schema_path(self) -> Path:

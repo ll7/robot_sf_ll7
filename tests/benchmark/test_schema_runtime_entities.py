@@ -15,18 +15,18 @@ ROOT = Path(__file__).resolve().parents[2]
 EPISODE_SCHEMA_PATH = ROOT / "robot_sf" / "benchmark" / "schemas" / "episode.schema.v1.json"
 
 
-def _schema_dict(**overrides: object) -> dict[str, object]:
+def _schema_dict(*, version: str = "v1", **overrides: object) -> dict[str, object]:
     schema: dict[str, object] = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://example.test/episode.schema.v1.json",
-        "title": "RobotSF Benchmark Episode (v1)",
+        "$id": f"https://example.test/episode.schema.{version}.json",
+        "title": f"RobotSF Benchmark Episode ({version})",
         "type": "object",
         "properties": {
             "episode_id": {"type": "string"},
             "scenario_id": {"type": "string"},
             "seed": {"type": "integer"},
             "metrics": {"type": "object"},
-            "version": {"const": "v1"},
+            "version": {"const": version},
         },
         "required": ["episode_id", "scenario_id", "seed", "metrics"],
     }
@@ -252,11 +252,13 @@ def test_episode_schema_accessors_validation_and_identity(tmp_path: Path) -> Non
     assert schema != object()
     assert hash(schema) == hash(same_content)
 
-    future_path = _write_schema(tmp_path / "episode.schema.v2.json", _schema_dict())
+    future_path = _write_schema(tmp_path / "episode.schema.v2.json", _schema_dict(version="v2"))
     future_schema = EpisodeSchema(future_path)
-    future_schema._version = "v2"
     assert future_schema.is_backward_compatible_with(schema) is True
 
-    invalid_version = EpisodeSchema(future_path)
-    invalid_version._version = "unknown"
+    invalid_version_path = _write_schema(
+        tmp_path / "episode.schema.unknown.json",
+        _schema_dict(version="unknown"),
+    )
+    invalid_version = EpisodeSchema(invalid_version_path)
     assert invalid_version.is_backward_compatible_with(schema) is False

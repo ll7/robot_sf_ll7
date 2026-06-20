@@ -2,9 +2,9 @@
 
 **Purpose**: synthesis/planning aid; not new benchmark, paper, dissertation, or safety evidence.
 
-Generated: 2026-06-15  | Schema: dissertation_gap_report.v1
+Generated: 2026-06-20  | Schema: dissertation_gap_report.v1
 
-Sources: ledger #2760 (7 rows), register #2762 (3 entries)
+Sources: ledger #2760 (7 rows), register #2762 (4 entries)
 
 ## Supported (release-backed, current)
 
@@ -75,6 +75,14 @@ Sources: ledger #2760 (7 rows), register #2762 (3 entries)
 - **Allowed wording / boundary**: Diagnostic-only, not benchmark or paper evidence. Confirms perturbation infrastructure works; does not measure behavioral degradation.
 - **Caveat**: Diagnostic-only, not benchmark or paper evidence. Confirms perturbation infrastructure works; does not measure behavioral degradation.
 - **Claim gap / reason**: All progress, risk, and planner metrics are identical between baseline and perception-limited. The single pedestrian is too far from the robot to influence planner decisions; the planner is dominated by static obstacle clearance. Perturbation plumbing is confirmed working (occlusion masking active, 1 missed detection at step 15) but no behavioral degradation is measurable.
+
+### issue-3201-observation-noise-live-dense-stress [register]
+
+- **Tier/Classification**: diagnostic_only
+- **Promotion step or reason**: Author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.
+- **Allowed wording / boundary**: Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.
+- **Caveat**: Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.
+- **Claim gap / reason**: Perturbation plumbing activated (179 missed actor observations; observed actor count dropped from 17 to 5-12), but selected commands, progress/risk summary, collision flags, and closest-distance metrics were identical. The live scenario candidate did not satisfy the intended near-field pedestrian-dominated condition.
 
 ### issue-2760-dissertation-evidence-ledger-diagnostic-rows [register]
 

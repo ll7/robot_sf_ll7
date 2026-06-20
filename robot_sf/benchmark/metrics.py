@@ -3110,11 +3110,12 @@ def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Cleaned metrics dictionary with NaN/inf values removed.
     """
+    preserve_empty_dict_keys = {"cohort_metrics", "missing_data"}
     clean: dict[str, Any] = {}
     for key, val in metrics.items():
         if isinstance(val, dict):
             nested = _sanitize_metrics(val)
-            if nested:
+            if nested or key in preserve_empty_dict_keys:
                 clean[key] = nested
             continue
         if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):

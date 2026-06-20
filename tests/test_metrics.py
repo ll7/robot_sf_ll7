@@ -1664,3 +1664,18 @@ def test_distributional_disruption_missing_control_is_explicit() -> None:
     }
     assert block["cohort_metrics"] == {}
     assert {missing["status"] for missing in block["missing_data"].values()} == {"unavailable"}
+
+
+def test_post_process_metrics_preserves_empty_distributional_disruption_schema_fields() -> None:
+    """Required empty schema dictionaries should survive metric sanitization."""
+    episode = _make_episode(T=3, K=2)
+    raw = {
+        "distributional_disruption": build_distributional_disruption_block(episode, None),
+        "success": 1.0,
+    }
+
+    metrics = post_process_metrics(raw, snqi_weights=None, snqi_baseline=None)
+
+    block = metrics["distributional_disruption"]
+    assert block["cohort_metrics"] == {}
+    assert block["missing_data"]["slow_speed_tier"]["status"] == "unavailable"

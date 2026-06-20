@@ -153,10 +153,11 @@ knowledge, not every transient iteration detail.
   [issue_3142_fast_pysf_force_optimization.md](issue_3142_fast_pysf_force_optimization.md)
   records the bounded semantics-preserving force-computation cleanup, diagnostic performance
   boundary, and tracked compact summary.
-* Issue #3146 forecast replay fixture suite:
+* Issue #3146/#3164 forecast replay fixture suite:
   [issue_3146_forecast_replay_fixture_suite.md](issue_3146_forecast_replay_fixture_suite.md)
-  records the scenario-diverse diagnostic forecast replay suite, full variant matrix row
-  classifications, and tracked evidence summary.
+  records the scenario-diverse frozen-policy diagnostic forecast replay suite, full variant
+  matrix row classifications, tracked #3164 evidence summary, and the negative result that
+  non-`none` variants collapse under shared replay braking.
 * Issue #3014 Evidence Catalog Backlog 2026-06-19:
   [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
   records the current uncovered evidence-bundle count and split strategy for catalog cleanup.

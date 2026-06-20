@@ -49,11 +49,14 @@ def test_load_archetypes_rejects_missing_factor(tmp_path: Path) -> None:
         load_archetypes(bad)
 
 
-def test_load_archetypes_rejects_nonpositive_factor(tmp_path: Path) -> None:
-    """A non-positive speed factor is rejected."""
+@pytest.mark.parametrize("factor", ["0", ".nan", ".inf", "-.inf"])
+def test_load_archetypes_rejects_nonpositive_or_nonfinite_factor(
+    tmp_path: Path, factor: str
+) -> None:
+    """A non-positive or non-finite speed factor is rejected."""
     bad = tmp_path / "bad.yaml"
-    bad.write_text("archetypes:\n  x:\n    desired_speed_factor: 0\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="must be > 0"):
+    bad.write_text(f"archetypes:\n  x:\n    desired_speed_factor: {factor}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="finite and > 0"):
         load_archetypes(bad)
 
 
@@ -69,7 +72,9 @@ def test_validate_composition_accepts_valid() -> None:
     ("composition", "match"),
     [
         ({"a": 0.5, "b": 0.4}, "sum to 1.0"),
-        ({"a": 0.0, "b": 1.0}, "must be > 0"),
+        ({"a": 0.0, "b": 1.0}, "finite and > 0"),
+        ({"a": float("nan"), "b": 1.0}, "finite and > 0"),
+        ({"a": float("inf"), "b": 1.0}, "finite and > 0"),
         ({"missing": 1.0}, "unknown archetypes"),
         ({}, "non-empty"),
     ],
@@ -96,6 +101,12 @@ def test_allocate_counts_is_deterministic() -> None:
     """Allocation is deterministic for the same inputs."""
     comp = {"a": 0.5, "b": 0.3, "c": 0.2}
     assert allocate_archetype_counts(13, comp) == allocate_archetype_counts(13, comp)
+
+
+def test_allocate_counts_rejects_empty_positive_population() -> None:
+    """Positive allocations require a non-empty composition."""
+    with pytest.raises(ValueError, match="non-empty"):
+        allocate_archetype_counts(1, {})
 
 
 def test_assign_speed_factors_distribution_and_determinism() -> None:

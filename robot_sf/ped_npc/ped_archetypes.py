@@ -17,6 +17,7 @@ values; this is mechanism evidence, not benchmark or realism evidence.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
@@ -50,8 +51,10 @@ def load_archetypes(path: str | Path) -> dict[str, float]:
         if not isinstance(spec, dict) or "desired_speed_factor" not in spec:
             raise ValueError(f"archetype '{name}' must define 'desired_speed_factor'")
         factor = float(spec["desired_speed_factor"])
-        if factor <= 0:
-            raise ValueError(f"archetype '{name}' desired_speed_factor must be > 0 (got {factor})")
+        if not math.isfinite(factor) or factor <= 0:
+            raise ValueError(
+                f"archetype '{name}' desired_speed_factor must be finite and > 0 (got {factor})"
+            )
         factors[str(name)] = factor
     return factors
 
@@ -70,10 +73,13 @@ def validate_composition(
     missing = [name for name in composition if name not in speed_factors]
     if missing:
         raise ValueError(f"composition references unknown archetypes: {sorted(missing)}")
-    for name, frac in composition.items():
-        if frac <= 0:
-            raise ValueError(f"composition fraction for '{name}' must be > 0 (got {frac})")
-    total = float(sum(composition.values()))
+    fractions = {name: float(frac) for name, frac in composition.items()}
+    for name, frac in fractions.items():
+        if not math.isfinite(frac) or frac <= 0:
+            raise ValueError(
+                f"composition fraction for '{name}' must be finite and > 0 (got {frac})"
+            )
+    total = float(sum(fractions.values()))
     if abs(total - 1.0) > _COMPOSITION_SUM_TOL:
         raise ValueError(f"composition fractions must sum to 1.0 (got {total})")
 
@@ -89,6 +95,8 @@ def allocate_archetype_counts(n: int, composition: dict[str, float]) -> dict[str
     """
     if n <= 0:
         return dict.fromkeys(composition, 0)
+    if not composition:
+        raise ValueError("archetype_composition must be non-empty when allocating pedestrians")
     raw = {name: frac * n for name, frac in composition.items()}
     counts = {name: int(np.floor(value)) for name, value in raw.items()}
     remainder = n - sum(counts.values())

@@ -38,7 +38,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def _load_example_compositions(path: Path) -> dict[str, dict[str, float]]:
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if payload is None:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a mapping at top level")
     compositions = payload.get("example_compositions")
     if not isinstance(compositions, dict) or not compositions:
         raise ValueError(f"{path} must define non-empty example_compositions")
@@ -52,7 +56,7 @@ def _load_example_compositions(path: Path) -> dict[str, dict[str, float]]:
 
 def _format_markdown(summary: dict[str, Any]) -> str:
     lines = [
-        "# Issue #3206 Pedestrian Archetype Reporting Packet",
+        f"# Issue #3206 Pedestrian Archetype Reporting Packet ({summary['evidence_date']})",
         "",
         f"- Status: `{summary['status']}`",
         f"- Config: `{summary['config_path']}`",
@@ -100,6 +104,7 @@ def main() -> int:
     summary = {
         "schema_version": "pedestrian-archetype-reporting-packet.v1",
         "status": "composition_report_only",
+        "evidence_date": "2026-06-20",
         "config_path": args.config,
         "population_size": args.population_size,
         "claim_boundary": (

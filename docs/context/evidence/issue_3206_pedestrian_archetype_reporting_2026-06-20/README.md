@@ -1,4 +1,4 @@
-# Issue #3206 Pedestrian Archetype Reporting Packet
+# Issue #3206 Pedestrian Archetype Reporting Packet (2026-06-20)
 
 - Status: `composition_report_only`
 - Config: `configs/research/pedestrian_archetypes_v1.yaml`

@@ -605,15 +605,19 @@ def _summarize_planner_run_from_aggregates(
     )
 
 
-def summarize_adversarial_manifest_quality(
+def load_adversarial_manifest_quality_records(
     manifest_inputs: list[str | Path],
     *,
     reference_manifest: str | Path | None = None,
-    smoke_summary_json: str | Path | None = None,
-) -> ManifestsQualitySummary:
-    """Return a compact quality summary for a batch of manifests."""
-    input_paths = [Path(path) for path in manifest_inputs]
-    manifest_paths = _collect_paths(input_paths)
+) -> list[ManifestQualityRecord]:
+    """Load manifest quality records from files or directories.
+
+    This is the public record-loading entry point for consumers that need the
+    per-candidate status/hash rows without depending on private parser helpers.
+    A reference manifest, when provided, is used for perturbation distances and
+    excluded from the returned candidate records.
+    """
+    manifest_paths = _collect_paths([Path(path) for path in manifest_inputs])
     reference_vector: tuple[float, ...] | None = None
     reference_manifest_path = None
     if reference_manifest is not None:
@@ -626,7 +630,17 @@ def summarize_adversarial_manifest_quality(
                 f"{reference_manifest_path}"
             )
 
-    records, parse_errors = _load_records(manifest_paths, reference_vector, reference_manifest_path)
+    records, _ = _load_records(manifest_paths, reference_vector, reference_manifest_path)
+    return records
+
+
+def summarize_adversarial_manifest_quality_records(
+    records: list[ManifestQualityRecord],
+    *,
+    reference_manifest: str | Path | None = None,
+    smoke_summary_json: str | Path | None = None,
+) -> ManifestsQualitySummary:
+    """Return a compact quality summary from already-loaded manifest records."""
     status_counts = Counter(record.status for record in records)
     valid = status_counts.get("valid", 0)
     invalid = status_counts.get("invalid", 0)
@@ -643,11 +657,12 @@ def summarize_adversarial_manifest_quality(
     planner_outcomes = _summarize_planner_outcomes(
         Path(smoke_summary_json) if smoke_summary_json is not None else None
     )
+    reference_manifest_path = Path(reference_manifest) if reference_manifest is not None else None
 
     return ManifestsQualitySummary(
         input_paths=sorted({record.path for record in records}),
         manifest_count=total,
-        parse_failures=len(parse_errors),
+        parse_failures=sum(1 for record in records if record.parse_error is not None),
         status_counts=dict(status_counts),
         validity_rate=_safe_rate(valid, total),
         invalid_rate=_safe_rate(invalid, total),
@@ -665,6 +680,24 @@ def summarize_adversarial_manifest_quality(
         perturbation_min=perturbation_min,
         perturbation_max=perturbation_max,
         planner_outcomes=planner_outcomes,
+    )
+
+
+def summarize_adversarial_manifest_quality(
+    manifest_inputs: list[str | Path],
+    *,
+    reference_manifest: str | Path | None = None,
+    smoke_summary_json: str | Path | None = None,
+) -> ManifestsQualitySummary:
+    """Return a compact quality summary for a batch of manifests."""
+    records = load_adversarial_manifest_quality_records(
+        manifest_inputs,
+        reference_manifest=reference_manifest,
+    )
+    return summarize_adversarial_manifest_quality_records(
+        records,
+        reference_manifest=reference_manifest,
+        smoke_summary_json=smoke_summary_json,
     )
 
 

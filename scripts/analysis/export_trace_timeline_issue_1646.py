@@ -178,8 +178,11 @@ def _mapping_slot(planner: Mapping[str, Any], *keys: str) -> dict[str, Any]:
 def _optional_mapping_slot(planner: Mapping[str, Any], *keys: str) -> dict[str, Any] | None:
     """Return the first mapping-valued slot for ``keys``, or ``None`` when unavailable."""
 
-    value = _mapping_slot(planner, *keys)
-    return value or None
+    for key in keys:
+        value = planner.get(key)
+        if isinstance(value, Mapping):
+            return dict(value)
+    return None
 
 
 def _collision_slot(planner: Mapping[str, Any]) -> dict[str, Any]:
@@ -211,6 +214,7 @@ def _timeline_event(frame: SimulationTraceFrame, *, frame_index: int) -> dict[st
         "event_type": event_type,
         "frame_index": frame_index,
         "step": frame.step,
+        "time_s": frame.time_s,
     }
 
 

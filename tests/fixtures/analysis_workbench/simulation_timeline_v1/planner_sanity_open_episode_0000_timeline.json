@@ -5,19 +5,22 @@
       "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0000",
       "event_type": "step",
       "frame_index": 0,
-      "step": 1
+      "step": 1,
+      "time_s": 1.0
     },
     {
       "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0001",
       "event_type": "step",
       "frame_index": 1,
-      "step": 2
+      "step": 2,
+      "time_s": 2.0
     },
     {
       "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0002",
       "event_type": "step",
       "frame_index": 2,
-      "step": 3
+      "step": 3,
+      "time_s": 3.0
     }
   ],
   "evidence_boundary": "analysis_workbench_only",

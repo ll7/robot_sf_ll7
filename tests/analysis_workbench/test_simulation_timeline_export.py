@@ -79,6 +79,22 @@ def test_materialized_timeline_fixture_regenerates_from_trace_export() -> None:
     assert [frame["step"] for frame in materialized["frames"]] == [1, 2, 3]
 
 
+def test_simulation_timeline_preserves_explicit_empty_optional_slots(
+    tmp_path: Path,
+) -> None:
+    """Explicit empty planner mappings should stay explicit instead of becoming null."""
+
+    trace_payload = json.loads(TRACE_FIXTURE_PATH.read_text(encoding="utf-8"))
+    trace_payload["frames"][0]["planner"]["policy"] = {}
+    source = tmp_path / "trace.json"
+    source.write_text(json.dumps(trace_payload), encoding="utf-8")
+
+    timeline = build_simulation_timeline(source)
+
+    assert timeline["frames"][0]["state"]["policy"] == {}
+    assert timeline["frames"][1]["state"]["policy"] is None
+
+
 def test_simulation_timeline_schema_rejects_missing_required_shape() -> None:
     """The schema should fail closed when required top-level fields are absent."""
 
@@ -122,11 +138,22 @@ def test_export_trace_timeline_cli_writes_valid_artifact(tmp_path: Path) -> None
     assert result.returncode == 0, result.stderr
     assert output_path.exists()
     payload = json.loads(output_path.read_text(encoding="utf-8"))
-    Draft202012Validator(json.loads(SIMULATION_TIMELINE_SCHEMA_FILE.read_text())).validate(
-        payload
-    )
+    schema = json.loads(SIMULATION_TIMELINE_SCHEMA_FILE.read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(payload)
     assert payload["timeline_id"] == "fixture_trace_001-timeline"
     assert payload["events"] == [
-        {"event_id": "frame-0000-start", "event_type": "start", "frame_index": 0, "step": 0},
-        {"event_id": "frame-0001-advance", "event_type": "advance", "frame_index": 1, "step": 1},
+        {
+            "event_id": "frame-0000-start",
+            "event_type": "start",
+            "frame_index": 0,
+            "step": 0,
+            "time_s": 0.0,
+        },
+        {
+            "event_id": "frame-0001-advance",
+            "event_type": "advance",
+            "frame_index": 1,
+            "step": 1,
+            "time_s": 0.1,
+        },
     ]

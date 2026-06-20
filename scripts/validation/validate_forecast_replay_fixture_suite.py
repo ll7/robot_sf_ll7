@@ -42,6 +42,17 @@ SIGNATURE_METRICS = (
 )
 
 
+def _try_float(value: Any) -> float | None:
+    """Return a float for numeric manifest/result values, or None when invalid."""
+
+    if isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _config_from_manifest(manifest: dict[str, Any]) -> LiveForecastReplayGateConfig:
     """Build a replay-gate config from the suite manifest policy controls."""
 
@@ -57,15 +68,24 @@ def _config_from_manifest(manifest: dict[str, Any]) -> LiveForecastReplayGateCon
 
     config_kwargs: dict[str, Any] = {}
     if frozen_brake_distance is not None:
-        config_kwargs["replay_brake_distance_m"] = float(frozen_brake_distance)
+        parsed_distance = _try_float(frozen_brake_distance)
+        if parsed_distance is None:
+            raise ValueError("replay_policy.frozen_brake_distance_m must be numeric")
+        config_kwargs["replay_brake_distance_m"] = parsed_distance
 
     forecast_risk_distances = replay_policy.get("variant_forecast_risk_distance_m")
     if forecast_risk_distances is not None:
         if not isinstance(forecast_risk_distances, dict):
             raise ValueError("replay_policy.variant_forecast_risk_distance_m must be a mapping")
-        config_kwargs["variant_risk_distance_m"] = {
-            str(variant): float(distance) for variant, distance in forecast_risk_distances.items()
-        }
+        parsed_forecast_distances: dict[str, float] = {}
+        for variant, distance in forecast_risk_distances.items():
+            parsed_distance = _try_float(distance)
+            if parsed_distance is None:
+                raise ValueError(
+                    "replay_policy.variant_forecast_risk_distance_m values must be numeric"
+                )
+            parsed_forecast_distances[str(variant)] = parsed_distance
+        config_kwargs["variant_risk_distance_m"] = parsed_forecast_distances
 
     return LiveForecastReplayGateConfig(**config_kwargs)
 
@@ -147,17 +167,27 @@ def _non_none_closed_loop_signature_count(report: dict[str, Any]) -> int:
     return len(signatures)
 
 
-def _non_none_brake_distances(row: dict[str, Any]) -> set[float]:
-    """Return non-none replay brake distances recorded in a suite row."""
+def _non_none_brake_distances(row: dict[str, Any]) -> tuple[set[float], list[str]]:
+    """Return non-none replay brake distances and malformed-row errors."""
 
     distances: set[float] = set()
+    errors: list[str] = []
     for variant, result in row.get("variant_results", {}).items():
         if variant == "none":
             continue
         params = result.get("replay_policy_params", {}) if isinstance(result, dict) else {}
+        if not isinstance(params, dict):
+            errors.append(f"{row['fixture_id']} {variant} replay_policy_params must be a mapping")
+            continue
         if "brake_distance_m" in params:
-            distances.add(float(params["brake_distance_m"]))
-    return distances
+            distance = _try_float(params["brake_distance_m"])
+            if distance is None:
+                errors.append(f"{row['fixture_id']} {variant} brake_distance_m must be numeric")
+                continue
+            distances.add(distance)
+        else:
+            errors.append(f"{row['fixture_id']} {variant} missing brake_distance_m")
+    return distances, errors
 
 
 def _validate_frozen_policy_contract(
@@ -174,13 +204,19 @@ def _validate_frozen_policy_contract(
     if expected_brake_distance is None or isinstance(expected_brake_distance, dict):
         errors.append("frozen_brake_distance_m must be a scalar")
         return errors
+    expected_brake_distance_float = _try_float(expected_brake_distance)
+    if expected_brake_distance_float is None:
+        errors.append("frozen_brake_distance_m must be numeric")
+        return errors
 
-    expected_brake_distance = float(expected_brake_distance)
     for row in rows:
         if row["row_classification"] == "blocked":
             continue
-        distances = _non_none_brake_distances(row)
-        if distances != {expected_brake_distance}:
+        distances, row_errors = _non_none_brake_distances(row)
+        errors.extend(row_errors)
+        if row_errors:
+            continue
+        if distances != {expected_brake_distance_float}:
             errors.append(
                 f"{row['fixture_id']} non-none variants do not share frozen brake distance"
             )

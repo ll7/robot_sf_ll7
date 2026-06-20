@@ -82,6 +82,60 @@ def test_suite_validation_rejects_variant_specific_replay_braking() -> None:
     assert any("do not share frozen brake distance" in error for error in errors)
 
 
+def test_suite_validation_rejects_non_numeric_frozen_brake_distance() -> None:
+    """Malformed scalar policy controls should become validation errors."""
+
+    manifest = {
+        "replay_policy": {
+            "policy_control": "frozen",
+            "frozen_brake_distance_m": "not-a-number",
+        },
+        "summary_contract": {},
+        "fixtures": [],
+    }
+
+    errors = validate_forecast_replay_fixture_suite._validate_summary(manifest, [])
+
+    assert "frozen_brake_distance_m must be numeric" in errors
+
+
+def test_suite_validation_rejects_malformed_replay_policy_params() -> None:
+    """Malformed row replay params should fail closed instead of raising."""
+
+    manifest = {
+        "replay_policy": {
+            "policy_control": "frozen",
+            "frozen_brake_distance_m": 3.0,
+        },
+        "summary_contract": {
+            "required_fixture_count": 1,
+            "required_distinct_scenario_families": 1,
+            "required_variant_count": 3,
+            "minimum_native_non_none_signature_count": 0,
+        },
+        "fixtures": [{"fixture_id": "malformed_fixture", "expected_execution_mode": "native"}],
+    }
+    rows = [
+        {
+            "fixture_id": "malformed_fixture",
+            "scenario_family": "crossing",
+            "row_classification": "native",
+            "execution_mode": "native",
+            "variant_results": {
+                "none": {"replay_policy_params": {"brake_distance_m": None}},
+                "cv": {"replay_policy_params": "bad-shape"},
+                "semantic": {"replay_policy_params": {"brake_distance_m": "bad"}},
+            },
+            "non_none_closed_loop_signature_count": 1,
+        }
+    ]
+
+    errors = validate_forecast_replay_fixture_suite._validate_summary(manifest, rows)
+
+    assert any("cv replay_policy_params must be a mapping" in error for error in errors)
+    assert any("semantic brake_distance_m must be numeric" in error for error in errors)
+
+
 def test_cli_writes_compact_summary(tmp_path) -> None:
     """The CLI should write reviewable JSON and Markdown evidence."""
 

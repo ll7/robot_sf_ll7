@@ -1,0 +1,40 @@
+schema_version: counterfactual_pair.v1
+pair_id: issue_2924_prediction_risk_occluded_emergence
+description: Analysis-only matched pair for prediction-risk activation on tracked occluded-emergence fixtures.
+evidence_tier: analysis_only
+claim_boundary: analysis_only_not_benchmark_or_paper_grade_evidence
+invariant_fields:
+  scenario: issue_2924_prediction_risk_occluded_emergence
+  seed: 111
+  planner: hybrid_rule_v0_minimal
+  artifact: issue_2924_prediction_risk_pair_fixture.v1
+baseline_config:
+  config_id: baseline_occluded_emergence
+  result_path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/baseline_result.json
+  mechanism_trace_path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/baseline_mechanism_trace.json
+  trace_export_path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/baseline_trace_export.json
+  invariant_fields:
+    scenario: issue_2924_prediction_risk_occluded_emergence
+    seed: 111
+    planner: hybrid_rule_v0_minimal
+    artifact: issue_2924_prediction_risk_pair_fixture.v1
+intervention_config:
+  config_id: intervention_left_close_occluded_emergence
+  result_path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/intervention_result.json
+  mechanism_trace_path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/intervention_mechanism_trace.json
+  trace_export_path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/intervention_trace_export.json
+  invariant_fields:
+    scenario: issue_2924_prediction_risk_occluded_emergence
+    seed: 111
+    planner: hybrid_rule_v0_minimal
+    artifact: issue_2924_prediction_risk_pair_fixture.v1
+expected_mechanism: prediction_risk_gating
+expected_metric_direction:
+  metric: min_clearance_m
+  direction: increase
+  min_delta: 0.05
+  rationale: Prediction-risk activation is expected to increase closest clearance in the intervention fixture.
+diagnostic_limitations:
+  - Analysis-only tracked fixture comparison; no live benchmark or planner-superiority claim.
+  - The artifact invariant names the durable fixture family, while each side uses a different compact trace export path for panel rendering.
+  - Trace panels are visual diagnostics and are not paper-grade evidence.

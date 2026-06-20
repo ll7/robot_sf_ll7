@@ -55,6 +55,24 @@
       "created_at": "2026-06-13"
     },
     {
+      "id": "issue-3201-observation-noise-live-dense-stress",
+      "hypothesis": "A pedestrian-dominated live smoke fixture makes observation perturbations produce a same-seed planner behavior delta after the issue #2749 distant-pedestrian null.",
+      "tested_artifact": "hybrid_rule_v0_minimal step diagnostics with clean vs bounded-Gaussian/missed-detection pedestrian observations",
+      "scenario": "dense_pedestrian_stress live scenario matrix candidate, seed 2765, horizon 20. The live environment resolved 17 pedestrians but closest robot-pedestrian distance was 6.999m.",
+      "comparator": "Same-seed clean observation trace with ideal_state pedestrian observations",
+      "result_classification": "diagnostic_only",
+      "failure_mode": "scenario_too_weak",
+      "why_failed_or_inconclusive": "Perturbation plumbing activated (179 missed actor observations; observed actor count dropped from 17 to 5-12), but selected commands, progress/risk summary, collision flags, and closest-distance metrics were identical. The live scenario candidate did not satisfy the intended near-field pedestrian-dominated condition.",
+      "evidence_pointer": [
+        "docs/context/evidence/issue_3201_observation_noise_live_smoke/summary.json",
+        "docs/context/evidence/issue_3201_observation_noise_live_smoke/README.md"
+      ],
+      "recommended_next_action": "Author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.",
+      "linked_issues": [3201, 2749, 3067, 2777],
+      "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.",
+      "created_at": "2026-06-20"
+    },
+    {
       "id": "issue-2760-dissertation-evidence-ledger-diagnostic-rows",
       "hypothesis": "The dissertation evidence ledger synthesizes all current thesis-area evidence into a claim-ready format.",
       "tested_artifact": "Ledger rows for topology_guidance, signalized_behavior, observation_robustness, prediction, pedestrian_density_stress, and exported_tables.",

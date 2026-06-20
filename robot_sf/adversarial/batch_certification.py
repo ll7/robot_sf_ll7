@@ -20,10 +20,16 @@ makes no planner benchmark claim.
 
 from __future__ import annotations
 
+import argparse
+import json
+import math
+import sys
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 from robot_sf.adversarial.manifest_quality import (
     EVIDENCE_BOUNDARY,
@@ -63,6 +69,23 @@ class BatchCertificationPolicy:
     reject_duplicates: bool = True
     min_batch_validity_rate: float | None = None
 
+    def __post_init__(self) -> None:
+        """Validate policy values that affect emitted certification payloads."""
+        if self.min_batch_validity_rate is None:
+            return
+        if not math.isfinite(self.min_batch_validity_rate):
+            raise ValueError("min_batch_validity_rate must be finite")
+        if not 0.0 <= self.min_batch_validity_rate <= 1.0:
+            raise ValueError("min_batch_validity_rate must be between 0 and 1")
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-safe policy settings used by a certification run."""
+        return {
+            "reject_statuses": list(self.reject_statuses),
+            "reject_duplicates": self.reject_duplicates,
+            "min_batch_validity_rate": self.min_batch_validity_rate,
+        }
+
 
 @dataclass(frozen=True)
 class CandidateCertification:
@@ -100,6 +123,7 @@ class BatchCertification:
     rejection_counts: dict[str, int]
     validity_rate: float
     candidates: list[CandidateCertification]
+    policy: BatchCertificationPolicy
     quality_summary: ManifestsQualitySummary | None = None
 
     def to_dict(self) -> dict[str, object]:
@@ -118,6 +142,7 @@ class BatchCertification:
             "rejected_count": self.rejected_count,
             "validity_rate": self.validity_rate,
             "rejection_counts": dict(self.rejection_counts),
+            "policy": self.policy.to_dict(),
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
         if self.quality_summary is not None:
@@ -185,6 +210,7 @@ def certify_records(
         rejection_counts=dict(rejection_counts),
         validity_rate=validity_rate,
         candidates=candidates,
+        policy=policy,
     )
 
 
@@ -215,3 +241,84 @@ def certify_candidate_batch(
         reference_manifest=reference_manifest,
     )
     return replace(certification, quality_summary=summary)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build a CLI parser for the pre-planner batch-certification gate."""
+    parser = argparse.ArgumentParser(
+        description="Certify adversarial candidate batches before planner execution."
+    )
+    parser.add_argument(
+        "manifests",
+        nargs="+",
+        type=Path,
+        help="Candidate manifest YAML files and/or directories.",
+    )
+    parser.add_argument(
+        "--reference-manifest",
+        type=Path,
+        default=None,
+        help="Optional reference manifest used for perturbation-distance provenance.",
+    )
+    parser.add_argument(
+        "--min-batch-validity-rate",
+        type=float,
+        default=None,
+        help="Optional batch-level minimum validity rate required to accept the batch.",
+    )
+    parser.add_argument(
+        "--allow-duplicates",
+        action="store_true",
+        help="Keep later duplicate control hashes instead of rejecting them.",
+    )
+    parser.add_argument(
+        "--skip-quality-summary",
+        action="store_true",
+        help="Skip embedding the manifest-quality provenance summary in the output payload.",
+    )
+    parser.add_argument(
+        "--output-json",
+        type=Path,
+        default=None,
+        help="Write JSON output to this path; if omitted, print to stdout.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point.
+
+    Exit codes:
+        0: batch accepted.
+        1: input/IO/parse error.
+        2: batch rejected by the certification gate.
+    """
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    policy = BatchCertificationPolicy(
+        reject_duplicates=not args.allow_duplicates,
+        min_batch_validity_rate=args.min_batch_validity_rate,
+    )
+    try:
+        certification = certify_candidate_batch(
+            manifest_inputs=[*args.manifests],
+            policy=policy,
+            reference_manifest=args.reference_manifest,
+            include_quality_summary=not args.skip_quality_summary,
+        )
+        payload = certification.to_dict()
+        text = json.dumps(payload, indent=2, sort_keys=True)
+        output = text
+        if args.output_json is not None:
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            args.output_json.write_text(text + "\n", encoding="utf-8")
+            output = args.output_json.as_posix()
+        sys.stdout.write(f"{output}\n")
+        return 0 if certification.accepted else 2
+    except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
+        sys.stderr.write(f"Error: {exc}\n")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

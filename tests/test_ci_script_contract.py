@@ -172,6 +172,23 @@ def test_xdist_race_validation_rejects_invalid_worker_value() -> None:
     assert "uv run" not in result.stderr
 
 
+def test_xdist_race_validation_rejects_missing_option_value() -> None:
+    """Stress wrapper options should fail cleanly when the value is omitted."""
+
+    result = subprocess.run(
+        [str(RUN_XDIST_RACE_VALIDATION), "--workers"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--workers requires a non-empty value." in result.stderr
+    assert "shift" not in result.stderr
+
+
 def test_ci_driver_typecheck_phase_is_explicitly_advisory() -> None:
     """Typecheck phase should report findings without becoming a merge gate."""
 

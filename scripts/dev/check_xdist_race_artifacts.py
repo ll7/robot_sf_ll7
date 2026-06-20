@@ -119,9 +119,11 @@ def _classify_violations(
     baseline_paths: set[str],
     run_id: str,
     allowed_prefixes: list[str],
+    scan_paths: list[Path],
 ) -> list[ArtifactViolation]:
     """Classify new suspicious files produced during the stress run."""
     isolated_prefix = f"output/tmp/xdist-race/{run_id}"
+    scanned_prefixes = [path.as_posix() for path in scan_paths]
     violations: list[ArtifactViolation] = []
     for path, record in sorted(records.items()):
         is_new = path not in baseline_paths
@@ -152,7 +154,7 @@ def _classify_violations(
                 )
             )
         if not any(_is_under(path, prefix) for prefix in allowed_prefixes) and not any(
-            _is_under(path, scan_prefix.as_posix()) for scan_prefix in DEFAULT_SCAN_PATHS
+            _is_under(path, scan_prefix) for scan_prefix in scanned_prefixes
         ):
             violations.append(
                 ArtifactViolation(
@@ -185,6 +187,7 @@ def scan_xdist_race_artifacts(
         baseline_paths=baseline_paths,
         run_id=run_id,
         allowed_prefixes=effective_prefixes,
+        scan_paths=paths,
     )
     return {
         "schema": SCHEMA_VERSION,

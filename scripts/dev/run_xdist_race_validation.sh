@@ -33,6 +33,15 @@ if [[ "$#" -gt 0 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
   exit 0
 fi
 
+require_option_value() {
+  local option="$1"
+  local value="${2:-}"
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "$option requires a non-empty value." >&2
+    exit 2
+  fi
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 
@@ -45,14 +54,17 @@ pytest_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workers)
+      require_option_value "$1" "${2:-}"
       workers="${2:-}"
       shift 2
       ;;
     --timeout-seconds)
+      require_option_value "$1" "${2:-}"
       timeout_seconds="${2:-}"
       shift 2
       ;;
     --artifact-dir)
+      require_option_value "$1" "${2:-}"
       artifact_dir="${2:-}"
       shift 2
       ;;

@@ -1,0 +1,125 @@
+schema_version: fidelity-sensitivity.v1
+issue: 3207
+study_id: issue_3207_fidelity_sensitivity_v1
+status: launch_packet
+
+claim_boundary: >
+  Protocol and metric contract only. This config defines deliberate simulation-fidelity
+  sensitivity probes and the rank-stability/drift outputs required before benchmark claims
+  can state a validity boundary. It is not benchmark evidence, sensor-realism evidence,
+  sim-to-real evidence, or a paper-facing planner-ranking result until the sweep is run
+  and promoted through a compact evidence bundle.
+
+baseline:
+  key: nominal_fidelity
+  benchmark_config: configs/benchmarks/paper_experiment_matrix_v1.yaml
+  interpretation: current_nominal_benchmark_fidelity
+
+fixed_scope:
+  scenario_set: configs/benchmarks/paper_experiment_matrix_v1.yaml
+  seeds: [111, 112, 113]
+  planner_groups:
+    - orca
+    - default_social_force
+    - hybrid_rule_v0_minimal
+
+ranking:
+  metric: snqi
+  higher_is_better: true
+  stability_min_kendall_tau: 0.8
+  rank_flip_requires_caveat: true
+
+metrics:
+  - name: snqi
+    direction: higher_is_better
+  - name: success
+    direction: higher_is_better
+  - name: collisions
+    direction: lower_is_better
+  - name: near_misses
+    direction: lower_is_better
+  - name: time_to_goal_norm
+    direction: lower_is_better
+
+axes:
+  - key: integration_timestep
+    rationale: Detect whether planner rankings depend on the simulator integration step.
+    variants:
+      - key: dt_0_05
+        patch:
+          dt: 0.05
+      - key: dt_0_10_nominal
+        baseline: true
+        patch:
+          dt: 0.10
+      - key: dt_0_20
+        patch:
+          dt: 0.20
+  - key: social_force_speed_archetypes
+    rationale: Detect whether pedestrian speed heterogeneity changes ranking stability.
+    variants:
+      - key: homogeneous_standard_nominal
+        baseline: true
+        patch:
+          pedestrian_archetypes:
+            standard: 1.0
+      - key: mixed_balanced
+        patch:
+          pedestrian_archetypes:
+            cautious: 0.34
+            standard: 0.33
+            hurried: 0.33
+      - key: rush_hour
+        patch:
+          pedestrian_archetypes:
+            cautious: 0.20
+            standard: 0.30
+            hurried: 0.50
+  - key: observation_noise
+    rationale: Detect whether ranking stability depends on non-calibrated robustness noise.
+    variants:
+      - key: none_nominal
+        baseline: true
+        observation_noise:
+          profile: none
+      - key: pose_heading_low
+        observation_noise:
+          profile: pose_heading_low
+          pose_noise_std_m: 0.05
+          heading_noise_std_rad: 0.03
+      - key: pedestrian_dropout_low
+        observation_noise:
+          profile: pedestrian_dropout_low
+          pedestrian_false_negative_prob: 0.10
+  - key: clearance_radius
+    rationale: Detect whether planner rankings are brittle to collision/proxemic radius assumptions.
+    variants:
+      - key: radius_0_40_nominal
+        baseline: true
+        patch:
+          sim_config:
+            ped_radius: 0.40
+      - key: radius_0_30
+        patch:
+          sim_config:
+            ped_radius: 0.30
+      - key: radius_0_50
+        patch:
+          sim_config:
+            ped_radius: 0.50
+
+result_contract:
+  required_outputs:
+    - axis
+    - variant
+    - planner
+    - seed
+    - scenario_id
+    - metric_values
+    - rank_metric
+    - kendall_tau_vs_baseline
+    - rank_flip_count
+    - per_metric_drift_vs_baseline
+  caveat_rule: >
+    Any axis with a rank_flip_count greater than zero must be reported as a validity-boundary
+    caveat and calibration candidate before paper-facing benchmark use.

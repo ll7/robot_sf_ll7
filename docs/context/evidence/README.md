@@ -162,6 +162,9 @@ Policy caveats:
   changed planner-input pedestrian observations, but commands and progress/risk summaries stayed
   identical because the live scenario remained outside the intended 2 m near-field target. Not
   benchmark or sensor-realism evidence.
+- `issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/`: launch-packet-only simulation
+  fidelity sensitivity contract for #3207. Defines the tracked config, fidelity axes, required
+  rank-stability and metric-drift outputs, and no-evidence boundary before any sweep is run.
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that
   support the v1 raw-success leader and v2 strict-gate promotion decision.
 - `issue_1023_scenario_horizons_preflight_2026-05-06/`: compact preflight artifacts for the

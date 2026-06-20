@@ -1,0 +1,246 @@
+{
+  "schema_version": "issue_2927_observation_quality_live_smoke.v1",
+  "issue": 2927,
+  "claim_boundary": "Smoke/diagnostic live step-diagnostics evidence only. The report attaches bounded simulator observation-quality metadata to an existing same-seed near-field live replay summary and reports safety effects from that smoke. It is not paper-grade, benchmark-strength planner superiority evidence, or hardware-calibrated sensor realism.",
+  "source_live_smoke": {
+    "summary_path": "docs/context/evidence/issue_3233_near_field_observation_noise/summary.json",
+    "schema_version": "issue_3201_observation_noise_live_smoke.v1",
+    "issue": 3201,
+    "classification": {
+      "label": "non_null_behavior_delta",
+      "rationale": "Same-seed clean and perturbed live traces differ in selected commands or progress/risk summary fields."
+    }
+  },
+  "scenario": {
+    "clean": "issue_3233_near_field_observation_noise",
+    "perturbed": "issue_3233_near_field_observation_noise",
+    "same_scenario": true
+  },
+  "seed": {
+    "clean": 3233,
+    "perturbed": 3233,
+    "same_seed": true
+  },
+  "execution_boundary": {
+    "mode": "live_step_diagnostics_summary",
+    "evidence_status": "smoke evidence",
+    "near_field_threshold_m": 2.0,
+    "clean_closest_robot_ped_distance_m": 1.4515750296008105,
+    "near_field_satisfied": true,
+    "fallback_rows": [],
+    "degraded_rows": [],
+    "not_available_rows": [
+      {
+        "row": "false_positive_actor_injection",
+        "reason": "not modeled by the source live-smoke perturbation",
+        "classification": "explicitly_excluded"
+      }
+    ]
+  },
+  "observation_quality": {
+    "clean": {
+      "schema_version": "observation_quality.v1",
+      "fields": {
+        "visibility": [
+          "live_step_diagnostics_simulated_pedestrians"
+        ],
+        "occlusion": [
+          "not_modeled_in_this_smoke"
+        ],
+        "latency_s": 0.0,
+        "dropout_probability": 0.0,
+        "range_limit_m": null,
+        "angular_noise_std_rad": 0.0,
+        "false_negative_rate": 0.0,
+        "false_positive_rate": 0.0,
+        "notes": "clean diagnostic simulator observation-quality metadata only; not hardware-calibrated sensor realism."
+      }
+    },
+    "perturbed": {
+      "schema_version": "observation_quality.v1",
+      "fields": {
+        "visibility": [
+          "live_step_diagnostics_simulated_pedestrians"
+        ],
+        "occlusion": [
+          "not_modeled_in_this_smoke"
+        ],
+        "latency_s": 0.0,
+        "dropout_probability": 0.5,
+        "range_limit_m": null,
+        "angular_noise_std_rad": 0.0,
+        "false_negative_rate": 0.5,
+        "false_positive_rate": 0.0,
+        "notes": "perturbed diagnostic simulator observation-quality metadata only; not hardware-calibrated sensor realism."
+      }
+    }
+  },
+  "observation_summary": {
+    "clean": {
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 0,
+      "min_observed_actor_count": 1,
+      "max_observed_actor_count": 1,
+      "noise_profiles": [
+        "none"
+      ],
+      "evidence_classes": [
+        "ideal_state"
+      ]
+    },
+    "perturbed": {
+      "missed_actor_observations_total": 3,
+      "occluded_actor_observations_total": 0,
+      "min_observed_actor_count": 0,
+      "max_observed_actor_count": 1,
+      "noise_profiles": [
+        "bounded_gaussian"
+      ],
+      "evidence_classes": [
+        "perception_limited"
+      ]
+    },
+    "changed": true
+  },
+  "command_summary": {
+    "clean_first": [
+      0.3,
+      0.0
+    ],
+    "perturbed_first": [
+      1.2,
+      0.4431303704642192
+    ],
+    "clean_last": [
+      0.6,
+      0.0
+    ],
+    "perturbed_last": [
+      0.0,
+      0.0
+    ],
+    "sequence_changed": true
+  },
+  "progress_delta": {
+    "steps_observed": {
+      "clean": 50,
+      "perturbed": 6,
+      "delta": -44.0,
+      "changed": true
+    },
+    "initial_goal_distance": {
+      "clean": 2.000001,
+      "perturbed": 2.000001,
+      "delta": 0.0,
+      "changed": false
+    },
+    "final_goal_distance": {
+      "clean": 12.468645089252165,
+      "perturbed": 14.480990556613484,
+      "delta": 2.0123454673613193,
+      "changed": true
+    },
+    "best_goal_distance": {
+      "clean": 2.000001,
+      "perturbed": 2.000001,
+      "delta": 0.0,
+      "changed": false
+    },
+    "net_goal_progress": {
+      "clean": -10.468644089252166,
+      "perturbed": -12.480989556613483,
+      "delta": -2.0123454673613175,
+      "changed": true
+    },
+    "best_goal_progress": {
+      "clean": 0.0,
+      "perturbed": 0.0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "progress_step_count": {
+      "clean": 49,
+      "perturbed": 5,
+      "delta": -44.0,
+      "changed": true
+    },
+    "regression_step_count": {
+      "clean": 1,
+      "perturbed": 1,
+      "delta": 0.0,
+      "changed": false
+    },
+    "stagnant_step_count": {
+      "clean": 0,
+      "perturbed": 0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "longest_stagnant_run": {
+      "clean": 0,
+      "perturbed": 0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "closest_robot_ped_distance": {
+      "clean": 1.4515750296008105,
+      "perturbed": 1.395304852291646,
+      "delta": -0.056270177309164504,
+      "changed": true
+    },
+    "closest_robot_ped_step": {
+      "clean": 25,
+      "perturbed": 5,
+      "delta": -20.0,
+      "changed": true
+    },
+    "collision_flag_counts": {
+      "clean": {
+        "pedestrian": 0,
+        "obstacle": 0,
+        "robot": 0
+      },
+      "perturbed": {
+        "pedestrian": 1,
+        "obstacle": 0,
+        "robot": 0
+      },
+      "delta": null,
+      "changed": true
+    }
+  },
+  "safety_effects": {
+    "false_negative": {
+      "effect": "non_null_behavior_delta_with_false_negative_perturbation",
+      "missed_actor_observations_delta": 3,
+      "occluded_actor_observations_delta": 0,
+      "collision_delta": {
+        "obstacle": {
+          "clean": 0,
+          "perturbed": 0,
+          "delta": 0
+        },
+        "pedestrian": {
+          "clean": 0,
+          "perturbed": 1,
+          "delta": 1
+        },
+        "robot": {
+          "clean": 0,
+          "perturbed": 0,
+          "delta": 0
+        }
+      },
+      "rationale": "The perturbed live row removed or occluded pedestrian observations. Behavior/progress fields changed in the same-seed comparison."
+    },
+    "false_positive": {
+      "effect": "not_available_excluded",
+      "false_positive_actor_rows": 0,
+      "rationale": "The source live smoke did not inject false-positive actors. False-positive safety effects are explicitly excluded rather than treated as successful evidence."
+    }
+  },
+  "classification": {
+    "label": "non_null_behavior_delta",
+    "rationale": "Same-seed clean and perturbed live traces differ in selected commands or progress/risk summary fields."
+  }
+}

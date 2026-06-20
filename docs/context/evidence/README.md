@@ -166,6 +166,11 @@ Policy caveats:
   changed planner-input pedestrian observations, but commands and progress/risk summaries stayed
   identical because the live scenario remained outside the intended 2 m near-field target. Not
   benchmark or sensor-realism evidence.
+- `issue_2927_observation_quality_live_smoke/`: smoke/diagnostic observation-quality wrapper over
+  the committed near-field live step-diagnostics summary. It attaches validated
+  `observation_quality.v1` metadata, reports false-negative safety effects, and explicitly excludes
+  false-positive actor rows as not available; not planner-superiority or hardware-calibrated sensor
+  evidence.
 - `issue_3206_pedestrian_archetype_reporting_2026-06-20/`: composition-report-only packet for
   the shipped pedestrian speed-archetype MVP. Records deterministic counts, speed factors, and
   no-result boundaries for later homogeneous-vs-heterogeneous smoke runs.

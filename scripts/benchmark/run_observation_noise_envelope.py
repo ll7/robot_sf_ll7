@@ -27,12 +27,15 @@ from robot_sf.benchmark.observation_perturbation import (
     ObservationPerturbationState,
     perturb_ground_truth,
 )
+from robot_sf.benchmark.observation_quality import ObservationQuality
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURE_PATH = (
     REPO_ROOT / "tests/fixtures/analysis_workbench/simulation_trace_export_v1/"
     "occluded_emergence_episode_0000.json"
 )
+OBSERVATION_QUALITY_SCHEMA_VERSION = "observation_quality.v1"
+TRACE_DT_S = 0.1
 
 CONDITIONS: dict[str, dict[str, Any]] = {
     "noop": {"description": "No perturbation applied (baseline)."},
@@ -286,6 +289,34 @@ def _spec_summary(spec: ObservationPerturbationSpec) -> dict[str, Any]:
         "delay_steps": spec.delay_steps,
         "noise_profile": spec.noise_profile,
         "is_noop": spec.is_noop,
+        "observation_quality": _observation_quality_group(spec),
+    }
+
+
+def _observation_quality_group(spec: ObservationPerturbationSpec) -> dict[str, Any]:
+    """Return the bounded observation-quality field group for one perturbation spec."""
+
+    quality = ObservationQuality(
+        visibility=["trace_fixture_observed_pedestrians"],
+        occlusion=(
+            ["explicit_occlusion_mask"]
+            if spec.occlusion_mask is not None
+            else ["fixture_declared_visibility_boundary"]
+        ),
+        latency_s=float(spec.delay_steps) * TRACE_DT_S,
+        dropout_probability=float(spec.missed_detection_probability),
+        range_limit_m=None,
+        angular_noise_std_rad=0.0,
+        false_negative_rate=float(spec.missed_detection_probability),
+        false_positive_rate=0.0,
+        notes=(
+            "Diagnostic simulator observation-quality metadata only; "
+            "not hardware-calibrated sensor realism."
+        ),
+    )
+    return {
+        "schema_version": OBSERVATION_QUALITY_SCHEMA_VERSION,
+        "fields": quality.to_dict(),
     }
 
 

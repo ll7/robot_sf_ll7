@@ -1,0 +1,56 @@
+{
+  "homogeneous_standard": {
+    "avg_speed": {
+      "mean": 0.9795916847173137
+    },
+    "collisions": {
+      "mean": 0.0
+    },
+    "energy": {
+      "mean": 4.650305773024978
+    },
+    "mean_distance": {
+      "mean": 4.749983020094316
+    },
+    "min_distance": {
+      "mean": 3.2255220900031887
+    },
+    "robot_ped_within_5m_frac": {
+      "mean": 0.5708333333333333
+    },
+    "success": {
+      "mean": 0.0
+    }
+  },
+  "mixed_balanced": {
+    "avg_speed": {
+      "mean": 0.9795916847173137
+    },
+    "collisions": {
+      "mean": 0.0
+    },
+    "energy": {
+      "mean": 4.650305773024978
+    },
+    "mean_distance": {
+      "mean": 5.705592807446085
+    },
+    "min_distance": {
+      "mean": 5.0100017932340135
+    },
+    "robot_ped_within_5m_frac": {
+      "mean": 0.041666666666666664
+    },
+    "success": {
+      "mean": 0.0
+    }
+  },
+  "delta_mixed_minus_homogeneous": {
+    "collisions": 0.0,
+    "mean_distance": 0.9556097873517695,
+    "min_distance": 1.7844797032308248,
+    "robot_ped_within_5m_frac": -0.5291666666666667,
+    "success": 0.0
+  },
+  "schema_version": "issue-3206-heterogeneous-pedestrian-smoke.v1"
+}

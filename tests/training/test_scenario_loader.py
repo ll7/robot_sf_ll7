@@ -248,6 +248,25 @@ scenario_overrides_by_name:
     }
 
 
+def test_build_robot_config_applies_archetype_simulation_overrides(tmp_path: Path) -> None:
+    """Scenario YAML can carry pedestrian archetype composition into runtime config."""
+    scenario = {
+        "name": "archetype-runtime-smoke",
+        "simulation_config": {
+            "ped_density": 0.08,
+            "archetype_composition": {"cautious": 0.5, "hurried": 0.5},
+            "archetype_speed_factors": {"cautious": 0.7, "hurried": 1.4},
+            "archetype_seed": 3206,
+        },
+    }
+
+    config = build_robot_config_from_scenario(scenario, scenario_path=tmp_path / "scenario.yaml")
+
+    assert config.sim_config.archetype_composition == {"cautious": 0.5, "hurried": 0.5}
+    assert config.sim_config.archetype_speed_factors == {"cautious": 0.7, "hurried": 1.4}
+    assert config.sim_config.archetype_seed == 3206
+
+
 def test_load_scenarios_allows_duplicate_names_outside_named_overrides(
     tmp_path: Path,
 ) -> None:

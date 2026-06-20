@@ -172,6 +172,9 @@ class Simulator:
             route_spawn_jitter_frac=self.config.route_spawn_jitter_frac,
             route_spawn_seed=self.config.route_spawn_seed,
             reset_follow_route_at_start=self.config.peds_reset_follow_route_at_start,
+            archetype_composition=self.config.archetype_composition,
+            archetype_speed_factors=self.config.archetype_speed_factors,
+            archetype_seed=self.config.archetype_seed,
         )
         self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
             pysf_config.scene_config.tau,
@@ -439,6 +442,9 @@ class PedSimulator(Simulator):
             route_spawn_jitter_frac=self.config.route_spawn_jitter_frac,
             route_spawn_seed=self.config.route_spawn_seed,
             reset_follow_route_at_start=self.config.peds_reset_follow_route_at_start,
+            archetype_composition=self.config.archetype_composition,
+            archetype_speed_factors=self.config.archetype_speed_factors,
+            archetype_seed=self.config.archetype_seed,
         )
         self.pysf_state, self.groups, self.peds_behaviors = populate_simulation(
             pysf_config.scene_config.tau,

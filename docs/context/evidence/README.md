@@ -162,6 +162,9 @@ Policy caveats:
   changed planner-input pedestrian observations, but commands and progress/risk summaries stayed
   identical because the live scenario remained outside the intended 2 m near-field target. Not
   benchmark or sensor-realism evidence.
+- `issue_3206_pedestrian_archetype_reporting_2026-06-20/`: composition-report-only packet for
+  the shipped pedestrian speed-archetype MVP. Records deterministic counts, speed factors, and
+  no-result boundaries for later homogeneous-vs-heterogeneous smoke runs.
 - `issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/`: launch-packet-only simulation
   fidelity sensitivity contract for #3207. Defines the tracked config, fidelity axes, required
   rank-stability and metric-drift outputs, and no-evidence boundary before any sweep is run.
@@ -464,3 +467,9 @@ Policy caveats:
   remain unchanged.
   claim_boundary=analysis_only_not_navigation_evidence. Not a safety, closed-loop, benchmark,
   or paper-facing claim.
+- `issue_3206_heterogeneous_pedestrian_smoke_2026-06-20/`: smoke-only paired
+  homogeneous-vs-mixed pedestrian composition run on classic crossing with three seeds per
+  condition. It proves the archetype composition scenario knob reaches benchmark runtime and can
+  produce reviewable metric deltas. The distributional-disruption blocks are present but not
+  computable because the smoke has no control trace support. Not benchmark-strength evidence,
+  planner ranking, real-world fairness evidence, or a real-world pedestrian-behavior realism claim.

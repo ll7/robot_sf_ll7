@@ -1,0 +1,184 @@
+{
+  "baseline_condition": "homogeneous_standard",
+  "claim_boundary": "diagnostic_smoke_not_benchmark_evidence: summarizes a tiny homogeneous-vs-mixed pedestrian composition smoke. It records metric deltas and distributional-metric readiness limits; it does not establish pedestrian realism, real-world fairness, planner ranking, or a limitation-replacement decision.",
+  "conditions": {
+    "homogeneous_standard": {
+      "distributional_disruption": {
+        "block_count": 3,
+        "limitation": "Distributional-disruption blocks are present, but all support counts are zero. The current smoke did not provide the control trace required for per-cohort displacement or delay support.",
+        "missing_reasons": {
+          "extreme_speed_tier": {
+            "No control trace provided": 3
+          },
+          "fast_speed_tier": {
+            "No control trace provided": 3
+          },
+          "slow_speed_tier": {
+            "No control trace provided": 3
+          }
+        },
+        "status": "not_computable",
+        "support_counts": {
+          "extreme_speed_tier": 0,
+          "fast_speed_tier": 0,
+          "slow_speed_tier": 0
+        }
+      },
+      "episode_count": 3,
+      "metrics": {
+        "collisions": {
+          "count": 3,
+          "mean": 0.0
+        },
+        "mean_distance": {
+          "count": 3,
+          "mean": 4.749983020094316
+        },
+        "min_distance": {
+          "count": 3,
+          "mean": 3.2255220900031887
+        },
+        "robot_ped_within_5m_frac": {
+          "count": 3,
+          "mean": 0.5708333333333333
+        },
+        "success": {
+          "count": 3,
+          "mean": 0.0
+        }
+      },
+      "planned_archetype_population": {
+        "archetype_seed": 3206,
+        "composition": {
+          "standard": 1.0
+        },
+        "realized_counts_status": "not_recorded_in_episode_rows",
+        "speed_factors": {
+          "cautious": 0.7,
+          "hurried": 1.4,
+          "standard": 1.0
+        }
+      },
+      "scenario_ids": [
+        "issue_3206_classic_crossing_homogeneous"
+      ],
+      "seeds": [
+        101,
+        102,
+        103
+      ]
+    },
+    "mixed_balanced": {
+      "distributional_disruption": {
+        "block_count": 3,
+        "limitation": "Distributional-disruption blocks are present, but all support counts are zero. The current smoke did not provide the control trace required for per-cohort displacement or delay support.",
+        "missing_reasons": {
+          "extreme_speed_tier": {
+            "No control trace provided": 3
+          },
+          "fast_speed_tier": {
+            "No control trace provided": 3
+          },
+          "slow_speed_tier": {
+            "No control trace provided": 3
+          }
+        },
+        "status": "not_computable",
+        "support_counts": {
+          "extreme_speed_tier": 0,
+          "fast_speed_tier": 0,
+          "slow_speed_tier": 0
+        }
+      },
+      "episode_count": 3,
+      "metrics": {
+        "collisions": {
+          "count": 3,
+          "mean": 0.0
+        },
+        "mean_distance": {
+          "count": 3,
+          "mean": 5.705592807446085
+        },
+        "min_distance": {
+          "count": 3,
+          "mean": 5.0100017932340135
+        },
+        "robot_ped_within_5m_frac": {
+          "count": 3,
+          "mean": 0.041666666666666664
+        },
+        "success": {
+          "count": 3,
+          "mean": 0.0
+        }
+      },
+      "planned_archetype_population": {
+        "archetype_seed": 3206,
+        "composition": {
+          "cautious": 0.34,
+          "hurried": 0.33,
+          "standard": 0.33
+        },
+        "realized_counts_status": "not_recorded_in_episode_rows",
+        "speed_factors": {
+          "cautious": 0.7,
+          "hurried": 1.4,
+          "standard": 1.0
+        }
+      },
+      "scenario_ids": [
+        "issue_3206_classic_crossing_mixed"
+      ],
+      "seeds": [
+        101,
+        102,
+        103
+      ]
+    }
+  },
+  "delta_variant_minus_baseline": {
+    "collisions": {
+      "absolute_delta": 0.0,
+      "baseline": 0.0,
+      "relative_delta": null,
+      "variant": 0.0
+    },
+    "mean_distance": {
+      "absolute_delta": 0.9556097873517695,
+      "baseline": 4.749983020094316,
+      "relative_delta": 0.20118172703126733,
+      "variant": 5.705592807446085
+    },
+    "min_distance": {
+      "absolute_delta": 1.7844797032308248,
+      "baseline": 3.2255220900031887,
+      "relative_delta": 0.5532374770464091,
+      "variant": 5.0100017932340135
+    },
+    "robot_ped_within_5m_frac": {
+      "absolute_delta": -0.5291666666666667,
+      "baseline": 0.5708333333333333,
+      "relative_delta": -0.9270072992700731,
+      "variant": 0.041666666666666664
+    },
+    "success": {
+      "absolute_delta": 0.0,
+      "baseline": 0.0,
+      "relative_delta": null,
+      "variant": 0.0
+    }
+  },
+  "inputs": {
+    "episodes_jsonl": "worktree-local ignored artifact summarized in this report (episodes.jsonl)",
+    "raw_episodes_committed": false
+  },
+  "issue": 3206,
+  "per_archetype_distributional_status": "not_computable_from_current_smoke",
+  "schema_version": "issue_3206_heterogeneous_pedestrian_smoke_report.v1",
+  "source_episode_git_hashes": [
+    "5dd029bd2b5672dc846b5a138077712a2f393ff4"
+  ],
+  "status": "diagnostic_smoke_report",
+  "variant_condition": "mixed_balanced"
+}

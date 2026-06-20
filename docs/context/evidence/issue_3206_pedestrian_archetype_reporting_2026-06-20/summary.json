@@ -1,0 +1,101 @@
+{
+  "claim_boundary": "No benchmark, realism, or planner-ranking claim. This packet only records deterministic composition assumptions for the shipped speed-archetype MVP.",
+  "config_path": "configs/research/pedestrian_archetypes_v1.yaml",
+  "evidence_date": "2026-06-20",
+  "population_size": 30,
+  "reports": {
+    "homogeneous_standard": {
+      "archetypes": {
+        "standard": {
+          "desired_speed_factor": 1.0,
+          "initial_speed_m_s": 0.5,
+          "intended_fraction": 1.0,
+          "realized_count": 30,
+          "realized_fraction": 1.0
+        }
+      },
+      "assignment_order_sha1": "d445fb25af0e",
+      "claim_boundary": "No benchmark, realism, or planner-ranking claim. This report only records deterministic population composition and speed-factor assumptions for later smoke/campaign runs.",
+      "initial_speed_m_s": 0.5,
+      "population_size": 30,
+      "schema_version": "pedestrian-archetype-population-report.v1",
+      "seed": 3206,
+      "speed_factor_max": 1.0,
+      "speed_factor_mean": 1.0,
+      "speed_factor_min": 1.0,
+      "status": "composition_report_only"
+    },
+    "mixed_balanced": {
+      "archetypes": {
+        "cautious": {
+          "desired_speed_factor": 0.7,
+          "initial_speed_m_s": 0.35,
+          "intended_fraction": 0.34,
+          "realized_count": 10,
+          "realized_fraction": 0.3333333333333333
+        },
+        "hurried": {
+          "desired_speed_factor": 1.4,
+          "initial_speed_m_s": 0.7,
+          "intended_fraction": 0.33,
+          "realized_count": 10,
+          "realized_fraction": 0.3333333333333333
+        },
+        "standard": {
+          "desired_speed_factor": 1.0,
+          "initial_speed_m_s": 0.5,
+          "intended_fraction": 0.33,
+          "realized_count": 10,
+          "realized_fraction": 0.3333333333333333
+        }
+      },
+      "assignment_order_sha1": "50feea1c23ac",
+      "claim_boundary": "No benchmark, realism, or planner-ranking claim. This report only records deterministic population composition and speed-factor assumptions for later smoke/campaign runs.",
+      "initial_speed_m_s": 0.5,
+      "population_size": 30,
+      "schema_version": "pedestrian-archetype-population-report.v1",
+      "seed": 3206,
+      "speed_factor_max": 1.4,
+      "speed_factor_mean": 1.033333333333333,
+      "speed_factor_min": 0.7,
+      "status": "composition_report_only"
+    },
+    "rush_hour": {
+      "archetypes": {
+        "cautious": {
+          "desired_speed_factor": 0.7,
+          "initial_speed_m_s": 0.35,
+          "intended_fraction": 0.2,
+          "realized_count": 6,
+          "realized_fraction": 0.2
+        },
+        "hurried": {
+          "desired_speed_factor": 1.4,
+          "initial_speed_m_s": 0.7,
+          "intended_fraction": 0.5,
+          "realized_count": 15,
+          "realized_fraction": 0.5
+        },
+        "standard": {
+          "desired_speed_factor": 1.0,
+          "initial_speed_m_s": 0.5,
+          "intended_fraction": 0.3,
+          "realized_count": 9,
+          "realized_fraction": 0.3
+        }
+      },
+      "assignment_order_sha1": "6b37896db37d",
+      "claim_boundary": "No benchmark, realism, or planner-ranking claim. This report only records deterministic population composition and speed-factor assumptions for later smoke/campaign runs.",
+      "initial_speed_m_s": 0.5,
+      "population_size": 30,
+      "schema_version": "pedestrian-archetype-population-report.v1",
+      "seed": 3206,
+      "speed_factor_max": 1.4,
+      "speed_factor_mean": 1.1400000000000001,
+      "speed_factor_min": 0.7,
+      "status": "composition_report_only"
+    }
+  },
+  "schema_version": "pedestrian-archetype-reporting-packet.v1",
+  "status": "composition_report_only"
+}

@@ -18,7 +18,9 @@ from robot_sf.nav.navigation import get_prepared_obstacles
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 from robot_sf.ped_npc.ped_archetypes import (
     allocate_archetype_counts,
+    assign_archetype_labels,
     assign_archetype_speed_factors,
+    build_archetype_population_report,
     load_archetypes,
     validate_composition,
 )
@@ -124,10 +126,43 @@ def test_assign_speed_factors_distribution_and_determinism() -> None:
     assert np.array_equal(out, assign_archetype_speed_factors(n, comp, factors_map, seed=7))
 
 
+def test_assign_labels_align_with_speed_factors() -> None:
+    """Label assignment should preserve the sampled order used by speed factors."""
+    comp = {"cautious": 0.5, "hurried": 0.5}
+    factors_map = {"cautious": 0.7, "hurried": 1.4}
+
+    labels = assign_archetype_labels(8, comp, seed=11)
+    factors = assign_archetype_speed_factors(8, comp, factors_map, seed=11)
+
+    assert labels.shape == (8,)
+    assert factors.tolist() == [factors_map[label] for label in labels]
+    assert set(labels.tolist()) == {"cautious", "hurried"}
+
+
 def test_assign_speed_factors_empty_population() -> None:
     """Zero pedestrians yields an empty factor array."""
     out = assign_archetype_speed_factors(0, {"a": 1.0}, {"a": 1.0}, seed=1)
     assert out.shape == (0,)
+
+
+def test_build_archetype_population_report_is_no_result_contract() -> None:
+    """Population reports should summarize assumptions without benchmark claims."""
+    report = build_archetype_population_report(
+        n=10,
+        composition={"cautious": 0.4, "standard": 0.3, "hurried": 0.3},
+        speed_factors={"cautious": 0.7, "standard": 1.0, "hurried": 1.4},
+        initial_speed=0.5,
+        seed=3206,
+    )
+
+    assert report["schema_version"] == "pedestrian-archetype-population-report.v1"
+    assert report["status"] == "composition_report_only"
+    assert "No benchmark" in report["claim_boundary"]
+    assert report["population_size"] == 10
+    assert report["archetypes"]["cautious"]["realized_count"] == 4
+    assert report["archetypes"]["hurried"]["initial_speed_m_s"] == pytest.approx(0.7)
+    assert report["speed_factor_min"] == pytest.approx(0.7)
+    assert report["speed_factor_max"] == pytest.approx(1.4)
 
 
 # --- PedSpawnConfig validation -------------------------------------------

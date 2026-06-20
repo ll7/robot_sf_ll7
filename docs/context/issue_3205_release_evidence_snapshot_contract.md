@@ -1,7 +1,9 @@
 # Issue #3205 Release Evidence Snapshot Contract
 
 Issue: [#3205](https://github.com/ll7/robot_sf_ll7/issues/3205)
-Status: first dry-runable contract slice; not benchmark evidence by itself.
+Status: diagnostic-only.
+
+This is the first dry-runable contract slice; it is not benchmark evidence by itself.
 
 ## Purpose
 

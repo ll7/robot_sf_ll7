@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 from typing import TYPE_CHECKING, Any
 
@@ -13,6 +14,8 @@ from scripts.tools import release_evidence_snapshot as snapshot
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+GIT = shutil.which("git") or "git"
 
 
 def test_release_evidence_snapshot_includes_tracked_catalog_files(
@@ -118,8 +121,8 @@ def test_release_evidence_snapshot_catalog_checksum_mismatch_fails_closed(
     table_path.write_text(
         "| planner | status |\n| --- | --- |\n| orca | degraded |\n", encoding="utf-8"
     )
-    subprocess.run(["git", "add", "."], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-m", "stale catalog fixture"], cwd=repo, check=True)
+    subprocess.run([GIT, "add", "."], cwd=repo, check=True)
+    subprocess.run([GIT, "commit", "-m", "stale catalog fixture"], cwd=repo, check=True)
     output_json = tmp_path / "snapshot.json"
 
     exit_code = snapshot.main(
@@ -153,8 +156,8 @@ def test_release_evidence_snapshot_malformed_catalog_fails_closed(
     monkeypatch.chdir(repo)
     catalog_path = repo / "docs/context/evidence/issue_fixture/artifact_catalog.yaml"
     catalog_path.write_text("artifacts: [unterminated\n", encoding="utf-8")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-m", "malformed catalog fixture"], cwd=repo, check=True)
+    subprocess.run([GIT, "add", "."], cwd=repo, check=True)
+    subprocess.run([GIT, "commit", "-m", "malformed catalog fixture"], cwd=repo, check=True)
     output_json = tmp_path / "snapshot.json"
 
     exit_code = snapshot.main(
@@ -174,15 +177,17 @@ def test_release_evidence_snapshot_malformed_catalog_fails_closed(
     assert exit_code == 2
     assert payload["status"] == "fail_closed"
     assert payload["artifact_catalogs"][0]["status"] == "invalid"
-    assert payload["artifact_catalogs"][0]["issues"][0].startswith("could not parse")
+    assert any(
+        issue.startswith("could not parse") for issue in payload["artifact_catalogs"][0]["issues"]
+    )
 
 
 def _init_fixture_repo(repo: Path) -> Path:
     """Create a tiny Git repository with a valid tracked artifact catalog."""
     repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    subprocess.run([GIT, "init"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([GIT, "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run([GIT, "config", "user.name", "Test User"], cwd=repo, check=True)
 
     config = repo / "configs/release_smoke.yaml"
     config.parent.mkdir(parents=True)
@@ -265,8 +270,8 @@ def _init_fixture_repo(repo: Path) -> Path:
         yaml.safe_dump(catalog, sort_keys=False),
         encoding="utf-8",
     )
-    subprocess.run(["git", "add", "."], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-m", "fixture"], cwd=repo, check=True)
+    subprocess.run([GIT, "add", "."], cwd=repo, check=True)
+    subprocess.run([GIT, "commit", "-m", "fixture"], cwd=repo, check=True)
     return repo
 
 

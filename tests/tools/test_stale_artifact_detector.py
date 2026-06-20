@@ -256,6 +256,64 @@ def test_load_manifest_supports_json_and_single_mapping(tmp_path: Path) -> None:
     assert entries == [{"artifact_id": "one"}]
 
 
+def test_scan_manifest_supports_dissertation_artifact_bundle(tmp_path: Path) -> None:
+    """Dissertation bundles expose payload artifacts through their nested manifest rows."""
+    artifact_path = tmp_path / "payload" / "artifacts" / "table.md"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("table", encoding="utf-8")
+    checksum = hashlib.sha256(b"table").hexdigest()
+    manifest = tmp_path / "artifact_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "dissertation_artifact_bundle.v1",
+                "artifacts": [
+                    {
+                        "artifact_id": "table",
+                        "output_path": "artifacts/table.md",
+                        "sha256": checksum,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = detector.scan_manifest(manifest)
+
+    assert report.exit_code == 0
+    assert report.results[0].artifact_id == "table"
+    assert report.results[0].state == detector.ArtifactState.HISTORICAL_VALID
+    assert report.results[0].checksum_actual == checksum
+
+
+def test_scan_manifest_marks_dissertation_bundle_missing_payload_stale(tmp_path: Path) -> None:
+    """Dissertation bundle rows still fail closed when the tracked payload is absent."""
+    manifest = tmp_path / "artifact_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "dissertation_artifact_bundle.v1",
+                "artifacts": [
+                    {
+                        "artifact_id": "missing-table",
+                        "output_path": "artifacts/missing.md",
+                        "sha256": "0" * 64,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = detector.scan_manifest(manifest)
+
+    assert report.exit_code == 1
+    assert report.results[0].artifact_id == "missing-table"
+    assert report.results[0].state == detector.ArtifactState.STALE_NEEDS_REFRESH
+    assert "output payload referenced artifact file is missing" in report.results[0].reasons
+
+
 def test_scan_manifest_reports_parse_failure_as_stale(tmp_path: Path) -> None:
     """Manifest load failures produce a non-clean stale report."""
     manifest = tmp_path / "manifest.json"

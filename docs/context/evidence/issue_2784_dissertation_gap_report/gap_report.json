@@ -94,15 +94,15 @@
     {
       "area": "exported_tables",
       "entry_id": null,
-      "bucket": "remove_weaken",
-      "promotion_step_or_reason": "stale artifact refresh: payload file recovery or re-export from a fresh campaign is required before any reuse.",
+      "bucket": "blocked",
+      "promotion_step_or_reason": "invalid campaign repair: fix or intentionally scope the PPO observation-contract failure and SNQI contract caveat, then rerun a fresh bounded campaign before any benchmark or Results wording.",
       "source": "ledger",
       "source_issue": 1023,
-      "evidence_tier": "non-claimable",
+      "evidence_tier": "diagnostic",
       "result_classification": null,
-      "allowed_wording_or_boundary": "do-not-use",
-      "caveat": "The claim matrix reports missing payload files for both artifacts, and the stale-artifact detector classifies the bundle manifest as stale. The tables remain historical tracked evidence and do not establish new benchmark claims.",
-      "claim_gap_or_reason": "Requires payload file recovery or re-export before any reuse."
+      "allowed_wording_or_boundary": "Payload-complete scenario-horizon dissertation table exports exist for discussion/provenance only; the fresh campaign preserved the PPO partial-failure row and does not establish benchmark-success, ranking, or Results-chapter evidence.",
+      "caveat": "The Issue #3203 campaign exited 2 with evidence_status invalid: 8 successful evidence rows, 1 unexpected failed PPO row (144/144 serial-worker jobs failed from missing dict observation keys), and SNQI contract status fail under warn enforcement. Preserve the PPO row as failed/degraded evidence, not benchmark success.",
+      "claim_gap_or_reason": "Payload absence is resolved, but the tables remain diagnostic/provenance artifacts until the PPO observation contract and SNQI contract caveats are repaired or explicitly scoped out by a new issue contract."
     },
     {
       "area": null,
@@ -134,7 +134,7 @@
       "area": null,
       "entry_id": "issue-3201-observation-noise-live-dense-stress",
       "bucket": "negative_revise_only",
-      "promotion_step_or_reason": "Follow-up #3233: author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.",
+      "promotion_step_or_reason": "Completed by follow-up #3233: the deterministic near-field fixture and same-seed clean-vs-perturbed comparison are recorded in docs/context/evidence/issue_3233_near_field_observation_noise/. Do not repeat the weak dense_stress live candidate for this claim boundary.",
       "source": "register",
       "source_issue": 3201,
       "evidence_tier": null,
@@ -154,7 +154,7 @@
       "result_classification": "diagnostic_only",
       "allowed_wording_or_boundary": "Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.",
       "caveat": "Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.",
-      "claim_gap_or_reason": "Four of six areas are classified as diagnostic-tier evidence (topology, signalized behavior, prediction, pedestrian density). One area (observation robustness) is release-backed but is a contract/provenance layer only. One area (exported tables) is stale/non-claimable. No row supports Results-chapter wording without qualification."
+      "claim_gap_or_reason": "Five of seven ledger rows are diagnostic-tier or blocked evidence (topology, signalized behavior, prediction, pedestrian density, exported tables). One area (observation robustness) is release-backed but is a contract/provenance layer only. The exported-tables payload gap is resolved, but the Issue #3203 rerun remains invalid as benchmark-success evidence because PPO partial-failed and SNQI contract status failed. No row supports Results-chapter wording without qualification."
     }
   ],
   "claim_boundaries": [

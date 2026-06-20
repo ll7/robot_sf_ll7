@@ -82,32 +82,27 @@
     },
     {
       "area": "exported_tables",
-      "claim": "Two historical scenario-horizon tables were exported into a dissertation bundle, but the payload files are missing and the tables remain historical tracked evidence.",
-      "artifact_status": "stale",
-      "evidence_tier": "non-claimable",
-      "allowed_wording": "do-not-use",
-      "caveat": "The claim matrix reports missing payload files for both artifacts, and the stale-artifact detector classifies the bundle manifest as stale. The tables remain historical tracked evidence and do not establish new benchmark claims.",
-      "source_issues": [1023, 2542],
-      "dissertation_chapter": "N/A (blocked)",
-      "claim_gap": "Requires payload file recovery or re-export before any reuse.",
-      "evidence_promotion_path": "stale artifact refresh: payload file recovery or re-export from a fresh campaign is required before any reuse."
+      "claim": "Two scenario-horizon tables were re-exported into a dissertation bundle with payload files, manifest entries, and checksums from a fresh bounded Issue #3203 campaign, but the campaign is invalid as benchmark-success evidence.",
+      "artifact_status": "current",
+      "evidence_tier": "diagnostic",
+      "allowed_wording": "Payload-complete scenario-horizon dissertation table exports exist for discussion/provenance only; the fresh campaign preserved the PPO partial-failure row and does not establish benchmark-success, ranking, or Results-chapter evidence.",
+      "caveat": "The Issue #3203 campaign exited 2 with evidence_status invalid: 8 successful evidence rows, 1 unexpected failed PPO row (144/144 serial-worker jobs failed from missing dict observation keys), and SNQI contract status fail under warn enforcement. Preserve the PPO row as failed/degraded evidence, not benchmark success.",
+      "source_issues": [1023, 2542, 3203],
+      "dissertation_chapter": "Discussion, Limitations",
+      "claim_gap": "Payload absence is resolved, but the tables remain diagnostic/provenance artifacts until the PPO observation contract and SNQI contract caveats are repaired or explicitly scoped out by a new issue contract.",
+      "evidence_promotion_path": "invalid campaign repair: fix or intentionally scope the PPO observation-contract failure and SNQI contract caveat, then rerun a fresh bounded campaign before any benchmark or Results wording."
     }
   ],
   "stale_artifact_summary": [
     {
       "artifact_id": "tab_issue_1023_campaign_table",
-      "state": "non-claimable",
-      "reason": "Missing payload file"
+      "state": "historical-valid",
+      "reason": "Payload checksum matches; dissertation bundle schema is historical/non-current for the stale-artifact detector."
     },
     {
       "artifact_id": "tab_issue_1023_scenario_family_breakdown",
-      "state": "non-claimable",
-      "reason": "Missing payload file"
-    },
-    {
-      "artifact_id": "unnamed",
-      "state": "stale-needs-refresh",
-      "reason": "Output artifact missing output path"
+      "state": "historical-valid",
+      "reason": "Payload checksum matches; dissertation bundle schema is historical/non-current for the stale-artifact detector."
     }
   ],
   "reuse_recommendations": {
@@ -117,7 +112,7 @@
     "prediction_supported": "Methods, Outlook only. Use the forecast-lane scaffold evidence (artifacts, adapters, metrics, baselines, transferability tooling, conformal pilots, and coupling gates) to describe infrastructure readiness. Do not cite as safety/progress results.",
     "prediction_unsupported": "Discussion/Outlook only. Do not claim forecast-driven safety, progress, or transfer gains until transfer-aware closed-loop planner evidence is published with explicit false-positive and regression accounting.",
     "pedestrian_density_stress": "Methods/Limitations only. Use coverage entropy to describe scenario curation discipline. Do not cite as runtime stress or planner-ranking evidence.",
-    "exported_tables": "Blocked. Do not use until payload files are recovered or re-exported."
+    "exported_tables": "Discussion/Limitations only. Use as payload-complete table provenance with the Issue #3203 invalid-campaign caveat; do not cite as benchmark-success or ranking evidence."
   },
   "claim_boundaries": [
     "This ledger is a synthesis/dissertation-planning aid. It does not produce new benchmark evidence, paper-facing results, or safety claims.",

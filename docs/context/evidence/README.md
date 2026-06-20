@@ -166,10 +166,10 @@ Policy caveats:
   the shipped pedestrian speed-archetype MVP. Records deterministic counts, speed factors, and
   no-result boundaries for later homogeneous-vs-heterogeneous smoke runs.
 - `issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/`: launch-packet-only simulation
-  fidelity sensitivity contract for #3207. Defines the tracked config, fidelity axes, required
+  fidelity sensitivity contract for Issue #3207. Defines the tracked config, fidelity axes, required
   rank-stability and metric-drift outputs, and no-evidence boundary before any sweep is run.
 - `issue_3207_fidelity_sensitivity_smoke_2026-06-20/`: diagnostic-only two-planner live smoke for
-  #3207 over the same compact scenario surface. It materializes rank-stability and metric-drift
+  Issue #3207 over the same compact scenario surface. It materializes rank-stability and metric-drift
   calculations across clean timestep variants and the existing observation-noise smoke profile; it
   is not benchmark-strength planner-ranking, sensor-realism, or sim-to-real evidence.
 - `issue_3233_near_field_observation_noise/`: diagnostic-only same-seed clean vs perturbed
@@ -187,6 +187,10 @@ Policy caveats:
   paper-facing scenario-horizon benchmark config.
 - `issue_1023_scenario_horizons_local_full_2026-05-06/`: compact local non-Slurm full-campaign
   artifacts, analyzer output, and fixed-vs-scenario comparison for issue #1023.
+- `issue_2542_dissertation_export_bundle/`: compact dissertation table bundle refreshed by
+  Issue #3203 with tracked scenario-horizon table payloads, manifest, checksums, and durable compact
+  source snapshots. The source campaign exited invalid because PPO partial-failed and SNQI contract
+  status was `fail`; use only for discussion/provenance, not benchmark-success or ranking claims.
 - `issue_1045_h500_solvability_mechanisms_2026-05-07/`: aggregate mechanism classification for
   h500 fixed-timeout relief, including explicit trace-required boundaries for wait-then-go claims.
 - `issue_1111_carla_setup_smoke_2026-05-18/`: compact setup-only CARLA T1 oracle smoke evidence

@@ -3,7 +3,7 @@
 Issue: [#3193](https://github.com/ll7/robot_sf_ll7/issues/3193)
 Parent lane: [#2835](https://github.com/ll7/robot_sf_ll7/issues/2835)
 Experiment card:
-[`experiments/issue_3193_closed_loop_forecast_falsification.yaml`](../../experiments/issue_3193_closed_loop_forecast_falsification.yaml)
+[`experiments/issue_3193_closed_loop_forecast_falsification.yaml`](experiments/issue_3193_closed_loop_forecast_falsification.yaml)
 
 Status: protocol-frozen synthesis plan. This note creates no benchmark result,
 no planner-ranking claim, and no paper-facing empirical evidence.

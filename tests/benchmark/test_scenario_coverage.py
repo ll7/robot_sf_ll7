@@ -132,6 +132,29 @@ def test_station_platform_pack_report_uses_existing_distinct_probe_metadata() ->
     assert "wait_behavior" in waiting["distinct_features"]
 
 
+def test_load_scenario_matrix_skips_empty_yaml_documents(tmp_path: Path) -> None:
+    """Multi-document YAML matrices may include empty documents from separators."""
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        """
+---
+---
+name: valid_doc
+map_file: maps/svg_maps/classic_station_platform.svg
+simulation_config:
+  ped_density: 0.02
+seeds: [1]
+---
+""",
+        encoding="utf-8",
+    )
+
+    scenarios = load_scenario_matrix(matrix)
+
+    assert len(scenarios) == 1
+    assert scenarios[0]["name"] == "valid_doc"
+
+
 def test_build_scenario_coverage_report_handles_minimal_legacy_rows() -> None:
     """Minimal legacy scenario rows should still produce an explicit diagnostic report."""
     report = build_scenario_coverage_report(

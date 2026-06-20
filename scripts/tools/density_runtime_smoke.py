@@ -89,7 +89,10 @@ def select_candidate_rows(
         "novel_count": len(novel),
         "comparator_count": len(redundant),
         "comparator_source": comparator_source,
-        "coverage_redundant_count": int(summary_map.get("redundant_count", 0)),
+        "coverage_redundant_count": _optional_int(
+            summary_map.get("redundant_count"),
+            field_name="summary.redundant_count",
+        ),
         "caveat": (
             "No merge_or_drop rows were available; used lowest-novelty rows as comparators."
             if comparator_source == "lowest_novelty_fallback"
@@ -102,6 +105,16 @@ def _scenario_id_from_row(row: Mapping[str, Any]) -> str:
     """Return a stable scenario id from a coverage row."""
     value = row.get("scenario_id")
     return str(value).strip() if value is not None else ""
+
+
+def _optional_int(value: Any, *, field_name: str) -> int:
+    """Return an integer for optional numeric report fields, treating null as zero."""
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid {field_name}: {value!r}") from exc
 
 
 def _novelty_score(row: Mapping[str, Any]) -> float:
@@ -308,7 +321,10 @@ def run_density_smoke(args: argparse.Namespace) -> dict[str, Any]:
     row_payloads: list[dict[str, Any]] = []
     missing: list[str] = []
     for selected in selected_rows:
-        scenario_id = str(selected.get("scenario_id"))
+        scenario_id = _scenario_id_from_row(selected)
+        if not scenario_id:
+            missing.append("<missing scenario_id>")
+            continue
         scenario = scenarios.get(scenario_id)
         if scenario is None:
             missing.append(scenario_id)
@@ -340,7 +356,10 @@ def run_density_smoke(args: argparse.Namespace) -> dict[str, Any]:
         status = "blocked"
     failure_counts: dict[str, int] = {}
     for row in row_payloads:
-        key = str(row.get("failure_semantics", "unknown"))
+        raw_semantics = row.get("failure_semantics")
+        key = raw_semantics.strip() if isinstance(raw_semantics, str) else "unknown"
+        if not key:
+            key = "unknown"
         failure_counts[key] = failure_counts.get(key, 0) + 1
     return {
         "schema_version": SCHEMA_VERSION,

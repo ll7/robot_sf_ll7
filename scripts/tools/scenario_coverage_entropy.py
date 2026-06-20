@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from robot_sf.benchmark.scenario_coverage import (
@@ -24,10 +25,19 @@ def load_scenario_matrix(path: str | Path) -> list[dict]:
 
     scenario_path = Path(path)
     with scenario_path.open("r", encoding="utf-8") as handle:
-        docs = list(yaml.safe_load_all(handle))
+        raw_docs = list(yaml.safe_load_all(handle))
+    docs = [doc for doc in raw_docs if doc is not None]
     if not docs:
         raise ValueError(f"Scenario matrix '{scenario_path}' is empty.")
-    if len(docs) > 1:
+    if len(raw_docs) > 1:
+        invalid_docs = [
+            index for index, scenario in enumerate(docs) if not isinstance(scenario, Mapping)
+        ]
+        if invalid_docs:
+            raise ValueError(
+                f"Scenario matrix '{scenario_path}' contains non-object YAML documents: "
+                f"{invalid_docs}"
+            )
         return [dict(scenario) for scenario in docs]
     return [dict(scenario) for scenario in load_scenarios(scenario_path, base_dir=scenario_path)]
 

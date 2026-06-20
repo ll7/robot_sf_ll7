@@ -154,6 +154,7 @@ class Simulator:
     peds_have_obstacle_forces: bool
     # Last pedestrian force vectors used to step the simulation (K,2)
     last_ped_forces: np.ndarray = field(init=False, repr=False)
+    _initial_pysf_states: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self):
         """Initialize simulator components after dataclass construction.
@@ -215,8 +216,16 @@ class Simulator:
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self._initial_pysf_states = self.pysf_state.pysf_states().copy()
         self.reset_state()
-        for behavior in self.peds_behaviors:
+
+    def _reset_social_force_state(self) -> None:
+        """Restore pedestrian physics state for a fresh deterministic episode reset."""
+        initial_states = getattr(self, "_initial_pysf_states", None)
+        if initial_states is not None:
+            self.pysf_state.pysf_states()[...] = initial_states
+        self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        for behavior in getattr(self, "peds_behaviors", ()):
             behavior.reset()
 
     @property
@@ -268,6 +277,7 @@ class Simulator:
         their destination goal. Updates are necessary for episodic reset
         or continuous replay scenarios.
         """
+        self._reset_social_force_state()
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
@@ -467,10 +477,9 @@ class PedSimulator(Simulator):
         ]
 
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self._initial_pysf_states = self.pysf_state.pysf_states().copy()
 
         self.reset_state()
-        for behavior in self.peds_behaviors:
-            behavior.reset()
 
     @property
     def ped_pos(self):
@@ -532,6 +541,7 @@ class PedSimulator(Simulator):
         the ego pedestrian at a random valid location 10-15 units away
         from the first robot.
         """
+        self._reset_social_force_state()
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination

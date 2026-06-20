@@ -321,10 +321,11 @@ class EnvironmentFactory:
         )  # type: ignore[return-value]
 
     @staticmethod
-    def create_multi_robot_env(
+    def create_multi_robot_env(  # noqa: PLR0913
         config: MultiRobotConfig | None = None,
         *,
         num_robots: int,
+        seed: int | None = None,
         reward_func: Callable | None,
         debug: bool,
         recording_enabled: bool = False,
@@ -340,6 +341,7 @@ class EnvironmentFactory:
         Args:
             config: MultiRobotConfig instance; defaults to standard if None.
             num_robots: Number of robot agents in the environment.
+            seed: Deterministic seed applied before environment construction.
             reward_func: Custom reward function for agents; internal default if None.
             debug: Enable visual debug features and view creation.
             recording_enabled: Master gate for per-robot recording.
@@ -354,9 +356,10 @@ class EnvironmentFactory:
             config = MultiRobotConfig()
         if config.num_robots != num_robots:
             config.num_robots = num_robots
+        _apply_global_seed(seed)
         MultiRobotEnv = _load_multi_robot_env()
 
-        return MultiRobotEnv(
+        env = MultiRobotEnv(
             env_config=config,
             reward_func=reward_func,
             debug=debug,
@@ -366,6 +369,8 @@ class EnvironmentFactory:
             video_path=video_path,
             video_fps=video_fps,
         )  # type: ignore[return-value]
+        env.applied_seed = seed
+        return env  # type: ignore[return-value]
 
 
 def _validate_and_log_config(config: Any) -> None:
@@ -923,10 +928,11 @@ def _apply_global_seed(seed: int | None) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def make_multi_robot_env(
+def make_multi_robot_env(  # noqa: PLR0913
     num_robots: int = 2,
     *,
     config: MultiRobotConfig | None = None,
+    seed: int | None = None,
     reward_func: Callable | None = None,
     debug: bool = False,
     recording_enabled: bool = False,
@@ -946,6 +952,9 @@ def make_multi_robot_env(
         Number of robot agents to spawn in the environment (default: 2).
     config : MultiRobotConfig | None
         Optional multi-robot configuration; default instance created if ``None``.
+    seed : int | None
+        Deterministic seed (Python random, NumPy, PyTorch, hash seed). Stored on
+        the returned environment and passed through reset metadata.
     reward_func : Callable | None
         Custom reward function applied to each agent; falls back to internal default.
     debug : bool
@@ -967,6 +976,7 @@ def make_multi_robot_env(
     return EnvironmentFactory.create_multi_robot_env(
         config=config,
         num_robots=num_robots,
+        seed=seed,
         reward_func=reward_func,
         debug=debug,
         recording_enabled=recording_enabled,

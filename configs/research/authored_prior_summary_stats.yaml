@@ -1,0 +1,23 @@
+schema_version: authored-prior-summary-stats.v1
+name: authored_prior_summary_stats
+issue: 3192
+status: scaffold_awaiting_population
+claim_boundary: >
+  Numeric summary of the authored / repository-configured scenario priors, expressed in the same
+  keys as external_prior_reference_stats.yaml so the divergence tool can compare like-for-like.
+  Values must be derived from tracked scenario contracts / config bounds (see
+  configs/research/scenario_prior_cards_issue_2917.yaml). Leave null until derived; the tool then
+  reports those statistics as not-comparable rather than guessing.
+
+# Derive these from tracked authored scenario parameter bounds; do not invent values.
+datasets:
+  sdd:
+    pedestrian_speed_mean_mps: null
+    crowd_density_persons_per_m2: null
+    interaction_rate_per_minute: null
+  eth_ucy_family:
+    pedestrian_speed_mean_mps: null
+    crowd_density_persons_per_m2: null
+  amv_command_response:
+    max_linear_speed_mps: null
+    max_linear_accel_mps2: null

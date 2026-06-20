@@ -1,0 +1,108 @@
+{
+  "schema_version": "external-prior-divergence-report.v1",
+  "evidence_tier": "analysis_only",
+  "thresholds": {
+    "sufficient_relative_divergence": 0.25,
+    "material_relative_divergence": 0.5
+  },
+  "claim_boundary": "Compares authored priors to published summary statistics only. Not a realism claim, not planner ranking, and not a substitute for a raw-data pilot where one is genuinely needed. Uncited reference statistics are reported not-comparable, never as agreement.",
+  "datasets": [
+    {
+      "key": "sdd",
+      "name": "Stanford Drone Dataset",
+      "verdict": "inconclusive-need-pilot",
+      "comparable_count": 0,
+      "not_comparable_count": 3,
+      "comparisons": [
+        {
+          "key": "pedestrian_speed_mean_mps",
+          "unit": "m/s",
+          "reference_value": null,
+          "authored_value": null,
+          "source_citation": "NEEDS_CITATION",
+          "status": "not-comparable",
+          "relative_divergence": null,
+          "reason": "reference value uncited (NEEDS_CITATION)"
+        },
+        {
+          "key": "crowd_density_persons_per_m2",
+          "unit": "persons/m^2",
+          "reference_value": null,
+          "authored_value": null,
+          "source_citation": "NEEDS_CITATION",
+          "status": "not-comparable",
+          "relative_divergence": null,
+          "reason": "reference value uncited (NEEDS_CITATION)"
+        },
+        {
+          "key": "interaction_rate_per_minute",
+          "unit": "1/min",
+          "reference_value": null,
+          "authored_value": null,
+          "source_citation": "NEEDS_CITATION",
+          "status": "not-comparable",
+          "relative_divergence": null,
+          "reason": "reference value uncited (NEEDS_CITATION)"
+        }
+      ]
+    },
+    {
+      "key": "eth_ucy_family",
+      "name": "ETH/UCY pedestrian trajectory family",
+      "verdict": "inconclusive-need-pilot",
+      "comparable_count": 0,
+      "not_comparable_count": 2,
+      "comparisons": [
+        {
+          "key": "pedestrian_speed_mean_mps",
+          "unit": "m/s",
+          "reference_value": null,
+          "authored_value": null,
+          "source_citation": "NEEDS_CITATION",
+          "status": "not-comparable",
+          "relative_divergence": null,
+          "reason": "reference value uncited (NEEDS_CITATION)"
+        },
+        {
+          "key": "crowd_density_persons_per_m2",
+          "unit": "persons/m^2",
+          "reference_value": null,
+          "authored_value": null,
+          "source_citation": "NEEDS_CITATION",
+          "status": "not-comparable",
+          "relative_divergence": null,
+          "reason": "reference value uncited (NEEDS_CITATION)"
+        }
+      ]
+    },
+    {
+      "key": "amv_command_response",
+      "name": "AMV command-response actuation traces",
+      "verdict": "inconclusive-need-pilot",
+      "comparable_count": 0,
+      "not_comparable_count": 2,
+      "comparisons": [
+        {
+          "key": "max_linear_speed_mps",
+          "unit": "m/s",
+          "reference_value": null,
+          "authored_value": null,
+          "source_citation": "NEEDS_CITATION",
+          "status": "not-comparable",
+          "relative_divergence": null,
+          "reason": "reference value uncited (NEEDS_CITATION)"
+        },
+        {
+          "key": "max_linear_accel_mps2",
+          "unit": "m/s^2",
+          "reference_value": null,
+          "authored_value": null,
+          "source_citation": "NEEDS_CITATION",
+          "status": "not-comparable",
+          "relative_divergence": null,
+          "reason": "reference value uncited (NEEDS_CITATION)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+# Crossing-conflict hard-case predictive mixing spec for issue #3214.
+#
+# Scope boundary: this is launch/config/tooling only. It does not publish a
+# retrained checkpoint, hard-seed benchmark evidence, or a model-improvement
+# claim. A later SLURM training run must record its own dataset summary,
+# checkpoint provenance, and closed-loop benchmark evidence before making any
+# result claim.
+
+profile_id: crossing_conflict_hardcase_repeat_v1
+issue: "#3214"
+scope: launch_config_tooling_only
+claim_boundary: >
+  Launch/config/tooling only: no retrained checkpoint, no hard-seed benchmark
+  evidence, and no predictive model-improvement claim.
+
+weighting:
+  rule: repeat_hardcase_rows
+  hardcase_family: crossing_conflict
+  hardcase_repeat: 8
+  shuffle_seed: 3214
+
+compatibility_contract:
+  require_feature_schema_json_for_ego_conditioned: true
+  require_matching_predictive_feature_schema: true
+  require_matching_ego_motion_channel_producer: true
+  summary_fields:
+    - base_count
+    - hard_case_count
+    - output_count
+    - weighting_profile
+    - weighting_rule
+    - shuffle_seed
+    - feature_compatibility

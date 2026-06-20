@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import yaml
 
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_FEATURE_DIM,
@@ -17,20 +18,94 @@ from robot_sf.planner.obstacle_features import (
     predictive_ego_motion_channel_producer_key,
 )
 
+DEFAULT_HARDCASE_REPEAT = 2
+DEFAULT_SHUFFLE_SEED = 42
+DEFAULT_WEIGHTING_PROFILE_ID = "cli_hardcase_repeat_v1"
+
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for dataset mixing."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-dataset", type=Path, required=True)
     parser.add_argument("--hardcase-dataset", type=Path, required=True)
-    parser.add_argument("--hardcase-repeat", type=int, default=2)
+    parser.add_argument("--hardcase-repeat", type=int)
+    parser.add_argument(
+        "--weighting-spec",
+        type=Path,
+        help=(
+            "Optional YAML/JSON spec describing the hard-case weighting profile. "
+            "Explicit --hardcase-repeat and --shuffle-seed values override spec values."
+        ),
+    )
     parser.add_argument(
         "--output",
         type=Path,
         default=Path("output/tmp/predictive_planner/datasets/predictive_rollouts_mixed_v1.npz"),
     )
-    parser.add_argument("--shuffle-seed", type=int, default=42)
+    parser.add_argument("--shuffle-seed", type=int)
     return parser.parse_args()
+
+
+def _read_weighting_spec(path: Path) -> dict[str, Any]:
+    """Read a hard-case weighting spec from YAML or JSON and return a mapping."""
+    with path.open(encoding="utf-8") as handle:
+        if path.suffix.lower() == ".json":
+            payload = json.load(handle)
+        else:
+            payload = yaml.safe_load(handle)
+    if not isinstance(payload, dict):
+        raise TypeError(f"Weighting spec must be a mapping: {path}")
+    return payload
+
+
+def _resolve_weighting_profile(args: argparse.Namespace) -> dict[str, Any]:
+    """Resolve CLI/spec weighting into one deterministic profile summary."""
+    spec_path = getattr(args, "weighting_spec", None)
+    spec = _read_weighting_spec(spec_path) if spec_path is not None else {}
+    weighting = spec.get("weighting", {})
+    if not isinstance(weighting, dict):
+        raise TypeError(f"weighting must be a mapping in weighting spec: {spec_path}")
+
+    rule = str(weighting.get("rule") or "repeat_hardcase_rows")
+    if rule != "repeat_hardcase_rows":
+        raise ValueError(
+            f"Unsupported hard-case weighting rule {rule!r}; expected 'repeat_hardcase_rows'."
+        )
+
+    hardcase_repeat_raw = (
+        args.hardcase_repeat
+        if getattr(args, "hardcase_repeat", None) is not None
+        else weighting.get("hardcase_repeat", DEFAULT_HARDCASE_REPEAT)
+    )
+    shuffle_seed_raw = (
+        args.shuffle_seed
+        if getattr(args, "shuffle_seed", None) is not None
+        else weighting.get("shuffle_seed", DEFAULT_SHUFFLE_SEED)
+    )
+    hardcase_repeat = int(hardcase_repeat_raw)
+    shuffle_seed = int(shuffle_seed_raw)
+    if hardcase_repeat < 1:
+        raise ValueError("--hardcase-repeat must be >= 1")
+
+    profile_id = str(
+        spec.get("profile_id") or weighting.get("profile_id") or DEFAULT_WEIGHTING_PROFILE_ID
+    )
+    hardcase_family = str(weighting.get("hardcase_family") or "unspecified")
+    claim_boundary = str(
+        spec.get("claim_boundary")
+        or "launch/config/tooling only; no retrained checkpoint, hard-seed benchmark evidence, "
+        "or model-improvement claim"
+    )
+    return {
+        "profile_id": profile_id,
+        "spec_path": str(spec_path) if spec_path is not None else None,
+        "rule": rule,
+        "hardcase_repeat": hardcase_repeat,
+        "hardcase_family": hardcase_family,
+        "shuffle_seed": shuffle_seed,
+        "claim_boundary": claim_boundary,
+        "source": "weighting_spec" if spec_path is not None else "cli_defaults",
+    }
 
 
 def _load_optional_feature_schema_metadata(raw: Any, *, path: Path) -> dict[str, Any] | None:
@@ -188,8 +263,7 @@ def _load_npz(
 def main() -> int:
     """Create mixed dataset and write metadata sidecar."""
     args = parse_args()
-    if int(args.hardcase_repeat) < 1:
-        raise ValueError("--hardcase-repeat must be >= 1")
+    weighting_profile = _resolve_weighting_profile(args)
 
     base_state, base_target, base_mask, base_target_mask, base_feature_schema = _load_npz(
         args.base_dataset
@@ -217,13 +291,35 @@ def main() -> int:
         base_input_dim=int(base_state.shape[2]),
         hardcase_input_dim=int(hard_state.shape[2]),
     )
+    feature_compatibility = {
+        "status": "compatible",
+        "base_input_dim": int(base_state.shape[2]),
+        "hardcase_input_dim": int(hard_state.shape[2]),
+        "feature_schema_required": bool(
+            _is_ego_conditioned_schema(base_feature_schema, input_dim=int(base_state.shape[2]))
+            or _is_ego_conditioned_schema(
+                hard_feature_schema,
+                input_dim=int(hard_state.shape[2]),
+            )
+        ),
+        "feature_schema_present": {
+            "base": base_feature_schema is not None,
+            "hardcase": hard_feature_schema is not None,
+        },
+        "feature_schema_contract": (
+            _feature_schema_contract(mixed_feature_schema)
+            if mixed_feature_schema is not None
+            else None
+        ),
+        "ego_motion_channel_producer": producer_summary,
+    }
     feature_schema_json = (
         json.dumps(mixed_feature_schema, sort_keys=True)
         if mixed_feature_schema is not None
         else None
     )
 
-    hard_rep = int(args.hardcase_repeat)
+    hard_rep = int(weighting_profile["hardcase_repeat"])
     state = np.concatenate([base_state, np.repeat(hard_state, hard_rep, axis=0)], axis=0)
     target = np.concatenate([base_target, np.repeat(hard_target, hard_rep, axis=0)], axis=0)
     mask = np.concatenate([base_mask, np.repeat(hard_mask, hard_rep, axis=0)], axis=0)
@@ -232,7 +328,7 @@ def main() -> int:
         axis=0,
     )
 
-    rng = np.random.default_rng(int(args.shuffle_seed))
+    rng = np.random.default_rng(int(weighting_profile["shuffle_seed"]))
     idx = np.arange(state.shape[0])
     rng.shuffle(idx)
     state = state[idx]
@@ -257,14 +353,20 @@ def main() -> int:
     summary = {
         "base_dataset": str(args.base_dataset),
         "hardcase_dataset": str(args.hardcase_dataset),
+        "base_count": int(base_state.shape[0]),
+        "hard_case_count": int(hard_state.shape[0]),
+        "output_count": int(state.shape[0]),
         "hardcase_repeat": hard_rep,
         "num_base_samples": int(base_state.shape[0]),
         "num_hardcase_samples": int(hard_state.shape[0]),
         "num_output_samples": int(state.shape[0]),
+        "weighting_profile": weighting_profile["profile_id"],
+        "weighting_rule": weighting_profile,
         "active_agent_ratio": float(np.mean(mask)),
         "active_target_ratio": float(np.mean(target_mask)),
-        "shuffle_seed": int(args.shuffle_seed),
+        "shuffle_seed": int(weighting_profile["shuffle_seed"]),
         "output": str(args.output),
+        "feature_compatibility": feature_compatibility,
         "feature_schema": mixed_feature_schema,
         "feature_schema_json": feature_schema_json,
         "ego_motion_channel_producer": producer_summary,

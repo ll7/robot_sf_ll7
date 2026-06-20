@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,30 @@ VERDICT_MATERIAL = "raw-data-materially-changes-scope"
 VERDICT_INCONCLUSIVE = "inconclusive-need-pilot"
 
 _NEEDS_CITATION = "NEEDS_CITATION"
+
+
+def _coerce_finite_float(value: Any, *, field: str, dataset_key: str, stat_key: str) -> float:
+    """Return a finite float or raise an actionable fail-closed input error."""
+    try:
+        coerced = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{field} value for dataset '{dataset_key}' statistic '{stat_key}' must be numeric; "
+            f"got {value!r}."
+        ) from exc
+    if not math.isfinite(coerced):
+        raise ValueError(
+            f"{field} value for dataset '{dataset_key}' statistic '{stat_key}' must be finite; "
+            f"got {value!r}. Use null to mark the statistic not-comparable until a finite value is "
+            "available."
+        )
+    return coerced
+
+
+def _validate_threshold(value: float, *, name: str) -> None:
+    """Reject non-finite CLI thresholds before classification uses them."""
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite; got {value!r}.")
 
 
 def _is_cited(stat: dict[str, Any]) -> bool:
@@ -78,6 +103,8 @@ def compute_report(
     material_threshold: float = 0.5,
 ) -> dict[str, Any]:
     """Compute the per-dataset divergence report from reference and authored statistics."""
+    _validate_threshold(sufficient_threshold, name="sufficient_threshold")
+    _validate_threshold(material_threshold, name="material_threshold")
     authored_datasets = authored.get("datasets", {})
     datasets_report: list[dict[str, Any]] = []
 
@@ -95,8 +122,20 @@ def compute_report(
                 status, divergence = "not-comparable", None
                 reason = "no authored value for this statistic"
             else:
+                authored_float = _coerce_finite_float(
+                    authored_value,
+                    field="authored",
+                    dataset_key=key,
+                    stat_key=stat_key,
+                )
+                reference_float = _coerce_finite_float(
+                    stat["value"],
+                    field="reference",
+                    dataset_key=key,
+                    stat_key=stat_key,
+                )
                 status = "comparable"
-                divergence = _relative_divergence(float(authored_value), float(stat["value"]))
+                divergence = _relative_divergence(authored_float, reference_float)
                 reason = None
             comparisons.append(
                 {
@@ -165,14 +204,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the divergence CLI and print the report; always exit 0 (analysis-only)."""
-    args = _build_parser().parse_args(argv)
-    report = compute_report(
-        _load_yaml(args.reference),
-        _load_yaml(args.authored),
-        sufficient_threshold=args.sufficient_threshold,
-        material_threshold=args.material_threshold,
-    )
+    """Run the divergence CLI and print the report."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    try:
+        report = compute_report(
+            _load_yaml(args.reference),
+            _load_yaml(args.authored),
+            sufficient_threshold=args.sufficient_threshold,
+            material_threshold=args.material_threshold,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
     rendered = json.dumps(report, indent=2)
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)

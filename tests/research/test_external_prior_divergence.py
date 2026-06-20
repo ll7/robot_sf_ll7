@@ -9,6 +9,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOL_PATH = _REPO_ROOT / "scripts" / "tools" / "external_prior_divergence.py"
 
@@ -71,6 +73,55 @@ def test_missing_authored_value_is_not_comparable():
     report = epd.compute_report(ref, authored)
     assert report["datasets"][0]["comparisons"][0]["status"] == "not-comparable"
     assert report["datasets"][0]["verdict"] == epd.VERDICT_INCONCLUSIVE
+
+
+def test_non_finite_authored_value_fails_closed():
+    """Comparable statistics must reject non-finite authored values before metric output."""
+    ref = _reference(1.30, "Robicquet et al. 2016, Table 2")
+    authored = {"datasets": {"sdd": {"pedestrian_speed_mean_mps": float("nan")}}}
+
+    with pytest.raises(ValueError, match="authored value.*must be finite"):
+        epd.compute_report(ref, authored)
+
+
+def test_non_finite_cited_reference_value_fails_closed():
+    """Comparable statistics must reject non-finite cited references before metric output."""
+    ref = _reference(float("inf"), "Robicquet et al. 2016, Table 2")
+    authored = {"datasets": {"sdd": {"pedestrian_speed_mean_mps": 1.34}}}
+
+    with pytest.raises(ValueError, match="reference value.*must be finite"):
+        epd.compute_report(ref, authored)
+
+
+def test_cli_rejects_non_finite_values_without_writing_report(tmp_path: Path, capsys):
+    """The CLI must exit fail-closed instead of writing NaN/Inf metrics."""
+    reference = tmp_path / "reference.yaml"
+    authored = tmp_path / "authored.yaml"
+    out = tmp_path / "report.json"
+    reference.write_text(
+        """
+datasets:
+  - key: sdd
+    statistics:
+      - key: pedestrian_speed_mean_mps
+        value: .inf
+        source_citation: Robicquet et al. 2016, Table 2
+"""
+    )
+    authored.write_text(
+        """
+datasets:
+  sdd:
+    pedestrian_speed_mean_mps: 1.34
+"""
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        epd.main(["--reference", str(reference), "--authored", str(authored), "--out", str(out)])
+
+    assert exc_info.value.code == 2
+    assert "reference value" in capsys.readouterr().err
+    assert not out.exists()
 
 
 def test_scaffold_configs_yield_inconclusive(tmp_path: Path):

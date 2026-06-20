@@ -78,6 +78,20 @@ def test_report_has_required_top_level_keys() -> None:
     assert "conditions" in report
     assert len(report["conditions"]) == 7
     assert "summary" in report
+    assert "safety_effects" in report["summary"]
+    assert (
+        report["summary"]["safety_effects"]["missed_detection_only"]["false_positive"]["effect"]
+        == "not_modeled"
+    )
+
+
+def test_report_issue_follows_repro_issue() -> None:
+    """Generated reports should not hard-code the legacy issue number."""
+    mod = _load_script()
+
+    report = mod._build_report([], {}, {"issue": 2927})
+
+    assert report["issue"] == 2927
 
 
 def test_condition_report_shape() -> None:
@@ -102,6 +116,9 @@ def test_condition_report_shape() -> None:
         assert "closest_distance_m" in result
         assert "stop_yield_feasibility" in result
         assert "action_proxy_changes" in result
+        assert "safety_effects" in result
+        assert "false_negative" in result["safety_effects"]
+        assert "false_positive" in result["safety_effects"]
         assert "classification" in result
 
 
@@ -155,6 +172,8 @@ def test_missed_detection_never_observed() -> None:
     )
     assert result["first_observed_step"] is None
     assert result["classification"]["label"] == "scenario_too_weak"
+    assert result["safety_effects"]["false_negative"]["effect"] == "full_miss_or_occlusion"
+    assert result["safety_effects"]["false_positive"]["effect"] == "not_modeled"
 
 
 def test_occlusion_only_never_observed() -> None:
@@ -281,6 +300,9 @@ def test_markdown_report_contains_caveats() -> None:
 
     assert "Not paper-facing benchmark proof" in md
     assert "Diagnostic" in md
+    assert "False-negative safety effect" in md
+    assert "False-positive safety effect" in md
+    assert "False-positive actors are not injected" in md
 
 
 def test_spec_summary_fields() -> None:

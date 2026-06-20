@@ -195,6 +195,67 @@
         },
         "sensor_assumptions": {
           "$ref": "#/$defs/string_list"
+        },
+        "observation_quality": {
+          "$ref": "#/$defs/observation_quality"
+        }
+      }
+    },
+    "observation_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Simulator observation-quality assumptions for diagnostic benchmark evidence. This is not hardware-calibrated sensor performance.",
+      "required": [
+        "visibility",
+        "occlusion",
+        "latency_s",
+        "dropout_probability",
+        "range_limit_m",
+        "angular_noise_std_rad",
+        "false_negative_rate",
+        "false_positive_rate",
+        "notes"
+      ],
+      "properties": {
+        "visibility": {
+          "$ref": "#/$defs/string_list"
+        },
+        "occlusion": {
+          "$ref": "#/$defs/string_list"
+        },
+        "latency_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "dropout_probability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "range_limit_m": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "angular_noise_std_rad": {
+          "type": "number",
+          "minimum": 0
+        },
+        "false_negative_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "false_positive_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

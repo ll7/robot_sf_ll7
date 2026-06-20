@@ -58,6 +58,20 @@ contracts:
       sensor_assumptions:
         - Perfect simulator state may be used unless a scenario or benchmark config declares observation noise.
         - Visibility and occlusion filters must be declared separately when they are part of the claim.
+      observation_quality:
+        visibility:
+          - simulator_declared_visibility
+          - scenario_declared_occlusion
+        occlusion:
+          - none_unless_scenario_declares_occlusion
+          - perturbation_manifest_required_for_occlusion_claims
+        latency_s: 0.0
+        dropout_probability: 0.0
+        range_limit_m: null
+        angular_noise_std_rad: 0.0
+        false_negative_rate: 0.0
+        false_positive_rate: 0.0
+        notes: Benchmark metadata only; not hardware-calibrated sensor performance.
     exclusions:
       - public-road autonomy
       - wet_or_icy_surface_dynamics

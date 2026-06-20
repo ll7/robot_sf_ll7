@@ -243,7 +243,7 @@ def evaluate_condition(
         occluded_counts=occluded_counts,
     )
 
-    return {
+    result = {
         "condition": condition_name,
         "description": condition_cfg["description"],
         "spec": _spec_summary(spec),
@@ -272,6 +272,8 @@ def evaluate_condition(
         "action_proxy_changes": _action_proxy_summary(action_proxies),
         "classification": classification,
     }
+    result["safety_effects"] = _safety_effect_summary(result)
+    return result
 
 
 def _spec_summary(spec: ObservationPerturbationSpec) -> dict[str, Any]:
@@ -368,6 +370,46 @@ def _classify_condition(
     }
 
 
+def _safety_effect_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """Summarize false-negative and false-positive safety effects honestly."""
+
+    missed_total = int(result["missed_actor_observations_total"])
+    occluded_total = int(result["occluded_actor_observations_total"])
+    delay_steps = result["response_delay_steps"]
+    if result["first_observed_step"] is None and (missed_total > 0 or occluded_total > 0):
+        false_negative_effect = "full_miss_or_occlusion"
+        false_negative_rationale = (
+            "The actor never reached the observed state after the fixture visibility boundary."
+        )
+    elif delay_steps is not None and delay_steps > 0:
+        false_negative_effect = "delayed_detection"
+        false_negative_rationale = (
+            f"The actor reached the observed state {delay_steps} steps after first visibility."
+        )
+    elif missed_total > 0 or occluded_total > 0:
+        false_negative_effect = "partial_observation_loss"
+        false_negative_rationale = "Some actor observations were missed or occluded."
+    else:
+        false_negative_effect = "none_observed"
+        false_negative_rationale = "No missed or occluded actor observations were recorded."
+
+    return {
+        "false_negative": {
+            "effect": false_negative_effect,
+            "missed_actor_observations_total": missed_total,
+            "occluded_actor_observations_total": occluded_total,
+            "rationale": false_negative_rationale,
+        },
+        "false_positive": {
+            "effect": "not_modeled",
+            "rationale": (
+                "This perturbation path does not inject false-positive actors; false-positive "
+                "effects are explicitly not available from this diagnostic report."
+            ),
+        },
+    }
+
+
 def _action_proxy_summary(action_proxies: list[dict[str, Any]]) -> dict[str, Any]:
     """Summarize stored-trace action proxies without embedding every action."""
     if not action_proxies:
@@ -387,11 +429,14 @@ def _build_report(
     results: list[dict[str, Any]],
     fixture_meta: dict[str, Any],
     repro: dict[str, Any],
+    *,
+    issue: int | None = None,
 ) -> dict[str, Any]:
     """Build the full JSON report."""
+    issue_id = int(issue if issue is not None else repro.get("issue", 2755))
     return {
         "schema_version": "observation_noise_envelope.v1",
-        "issue": 2755,
+        "issue": issue_id,
         "claim_boundary": (
             "Diagnostic trace-derived evidence only. Not paper-facing benchmark proof. "
             "Evaluates near-field observation-noise robustness on a single "
@@ -403,6 +448,7 @@ def _build_report(
         "summary": {
             "total_conditions": len(results),
             "classifications": {r["condition"]: r["classification"]["label"] for r in results},
+            "safety_effects": {r["condition"]: r["safety_effects"] for r in results},
         },
     }
 
@@ -458,6 +504,9 @@ def _generate_markdown(
         lines.append(
             f"- **Yield feasible (first observed):** {fy['yield_feasible_first_observed']}"
         )
+        effects = r["safety_effects"]
+        lines.append(f"- **False-negative safety effect:** `{effects['false_negative']['effect']}`")
+        lines.append(f"- **False-positive safety effect:** `{effects['false_positive']['effect']}`")
         cl = r["classification"]
         lines.append(f"- **Classification:** `{cl['label']}`")
         lines.append(f"  - {cl['rationale']}")
@@ -477,6 +526,7 @@ def _generate_markdown(
             "",
             "- Single deterministic fixture (seed=111), single scenario family.",
             "- No live planner replay; action proxies are from the stored trace, not re-executed.",
+            "- False-positive actors are not injected by this diagnostic perturbation path.",
             "- Stop/yield feasibility is from fixture metadata, not re-derived.",
             "- Not paper-facing benchmark evidence.",
         ]
@@ -495,6 +545,12 @@ def main() -> None:
         type=str,
         default="docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13",
         help="Output directory for evidence artifacts.",
+    )
+    parser.add_argument(
+        "--issue",
+        type=int,
+        default=2755,
+        help="Issue number to record in generated provenance.",
     )
     args = parser.parse_args()
 
@@ -525,9 +581,11 @@ def main() -> None:
         f"uv run python scripts/benchmark/run_observation_noise_envelope.py "
         f"--output-dir {args.output_dir}"
     )
+    if args.issue != 2755:
+        command = f"{command} --issue {args.issue}"
 
     repro = {
-        "issue": 2755,
+        "issue": args.issue,
         "generated_at_utc": generated_at,
         "command": command,
         "repo_head": repo_head,
@@ -538,7 +596,7 @@ def main() -> None:
         result = evaluate_condition(name, cfg, frames, first_visible_step)
         results.append(result)
 
-    report = _build_report(results, fixture_meta, repro)
+    report = _build_report(results, fixture_meta, repro, issue=args.issue)
 
     json_path = output_dir / "summary.json"
     with open(json_path, "w", encoding="utf-8") as fh:

@@ -17,6 +17,8 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.observation_quality import ObservationQuality
+
 FORECAST_BATCH_SCHEMA_VERSION = "ForecastBatch.v1"
 
 
@@ -92,6 +94,17 @@ def _normalize_actor_classes(value: object, actor_ids: list[str]) -> dict[str, s
         for actor_id, actor_class in classes.items()
         if actor_class is not None
     }
+
+
+def _normalize_observation_quality(value: object) -> ObservationQuality | None:
+    """Return validated optional observation-quality metadata."""
+
+    if value is None:
+        return None
+    try:
+        return ObservationQuality.from_dict(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"observation_quality: {exc}") from exc
 
 
 def _contains_oracle_key(value: object) -> bool:
@@ -176,6 +189,7 @@ class ForecastBatchProvenance:
     timestamp: str
     oracle_state: bool = False
     actor_classes: dict[str, str] = field(default_factory=dict)
+    observation_quality: ObservationQuality | None = None
 
     def __post_init__(self) -> None:
         """Fail closed on missing provenance or inconsistent actor masks."""
@@ -217,6 +231,7 @@ class ForecastBatchProvenance:
         self.feature_schema = _require_mapping("feature_schema", self.feature_schema)
         if not self.feature_schema:
             raise ValueError("feature_schema is required")
+        self.observation_quality = _normalize_observation_quality(self.observation_quality)
         self.oracle_state = bool(self.oracle_state)
         if (
             _contains_oracle_key(self.feature_schema)
@@ -251,6 +266,7 @@ class ForecastBatchProvenance:
             actor_mask_metadata=data.get("actor_mask_metadata", {}),
             feature_schema=data.get("feature_schema", {}),
             actor_classes=data.get("actor_classes", {}),
+            observation_quality=data.get("observation_quality"),
             oracle_state=bool(data.get("oracle_state", False)),
         )
 
@@ -517,6 +533,7 @@ __all__ = [
     "CoordinateFrame",
     "ForecastBatch",
     "ForecastBatchProvenance",
+    "ObservationQuality",
     "load_forecast_batch",
     "save_forecast_batch",
     "validate_forecast_batch",

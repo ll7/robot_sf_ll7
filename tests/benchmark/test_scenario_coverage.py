@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.scenario_coverage import (
     build_scenario_coverage_report,
     scenario_coverage_report_markdown,
     write_scenario_coverage_report,
 )
+from scripts.tools.scenario_coverage_entropy import load_scenario_matrix
 
 
 def _scenario(
@@ -130,6 +130,29 @@ def test_station_platform_pack_report_uses_existing_distinct_probe_metadata() ->
     assert waiting["metadata"]["distinct_coverage_probe"]["compare_against"]
     assert waiting["recommendation"] == "retain_or_investigate"
     assert "wait_behavior" in waiting["distinct_features"]
+
+
+def test_load_scenario_matrix_skips_empty_yaml_documents(tmp_path: Path) -> None:
+    """Multi-document YAML matrices may include empty documents from separators."""
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        """
+---
+---
+name: valid_doc
+map_file: maps/svg_maps/classic_station_platform.svg
+simulation_config:
+  ped_density: 0.02
+seeds: [1]
+---
+""",
+        encoding="utf-8",
+    )
+
+    scenarios = load_scenario_matrix(matrix)
+
+    assert len(scenarios) == 1
+    assert scenarios[0]["name"] == "valid_doc"
 
 
 def test_build_scenario_coverage_report_handles_minimal_legacy_rows() -> None:

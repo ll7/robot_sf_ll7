@@ -151,6 +151,11 @@ records that the available multi-scenario, multi-seed AMMV/default evidence is f
 the actuation-aware ranking signal remains one-scenario/one-seed only, so no general AMV
 feasibility ranking claim is justified yet.
 
+Recent pedestrian-density runtime smoke: [issue_3200_density_runtime_smoke_summary.json](evidence/issue_3200_density_runtime_smoke_summary.json)
+records the diagnostic-only same-seed smoke over top coverage-novel and lowest-novelty comparator
+rows. All four rows ended `horizon_exhausted`; no benchmark or paper-facing density claim is
+promoted.
+
 Recent evidence-catalog backlog: [issue_3014_evidence_catalog_backlog.md](issue_3014_evidence_catalog_backlog.md)
 records the 2026-06-19 full evidence-catalog hygiene scan, 116 uncovered tracked evidence bundles
 or files, and the bounded split strategy for future Issue #3014 catalog cleanup PRs.

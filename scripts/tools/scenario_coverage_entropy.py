@@ -5,13 +5,41 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
-from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.benchmark.scenario_coverage import (
     build_scenario_coverage_report,
     write_scenario_coverage_report,
 )
+from robot_sf.training.scenario_loader import load_scenarios
+from robot_sf.training.task_bundles import is_task_bundle_reference
+
+
+def load_scenario_matrix(path: str | Path) -> list[dict]:
+    """Load scenario rows without importing benchmark runtime planners."""
+    if is_task_bundle_reference(path):
+        return [dict(scenario) for scenario in load_scenarios(path)]
+
+    import yaml
+
+    scenario_path = Path(path)
+    with scenario_path.open("r", encoding="utf-8") as handle:
+        raw_docs = list(yaml.safe_load_all(handle))
+    docs = [doc for doc in raw_docs if doc is not None]
+    if not docs:
+        raise ValueError(f"Scenario matrix '{scenario_path}' is empty.")
+    if len(raw_docs) > 1:
+        invalid_docs = [
+            index for index, scenario in enumerate(docs) if not isinstance(scenario, Mapping)
+        ]
+        if invalid_docs:
+            raise ValueError(
+                f"Scenario matrix '{scenario_path}' contains non-object YAML documents: "
+                f"{invalid_docs}"
+            )
+        return [dict(scenario) for scenario in docs]
+    return [dict(scenario) for scenario in load_scenarios(scenario_path, base_dir=scenario_path)]
 
 
 def parse_args() -> argparse.Namespace:

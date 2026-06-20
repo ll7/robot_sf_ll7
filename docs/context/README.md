@@ -1105,6 +1105,9 @@ knowledge, not every transient iteration detail.
 * [Issue #2458 Human-Interaction Proxy Metrics](issue_2458_human_interaction_proxy_metrics.md)
   defines the schema-backed `human-interaction-proxy.v1` block, simulation-proxy formulas, and
   claim boundary for human-centered mechanism-report reductions.
+* [Issue #3184 Distributional Disruption Metric Contract](issue_3184_distributional_disruption_metrics.md)
+  defines observable simulation-state cohorts, candidate distributional disruption formulas,
+  prohibited terminology, non-claims, and the evidence gate before any implementation PR.
 * [Issue #2456 AMV Local Navigation Evaluation Suite (proposal)](issue_2456_amv_local_nav_evaluation_suite.md)
   defines the proposed AMV local navigation suite structure with eight evaluation dimensions,
   evidence-boundary classification, and related issue links.

@@ -147,8 +147,9 @@ def kendall_tau_from_orders(baseline_order: Sequence[str], variant_order: Sequen
     concordant = 0
     discordant = 0
     for i, item_i in enumerate(left):
-        for item_j in left[i + 1 :]:
-            baseline_delta = i - left.index(item_j)
+        for j in range(i + 1, n):
+            item_j = left[j]
+            baseline_delta = i - j
             variant_delta = right_rank[item_i] - right_rank[item_j]
             if baseline_delta * variant_delta > 0:
                 concordant += 1
@@ -226,6 +227,7 @@ def build_launch_packet(
     *,
     config_path: str,
     git_head: str,
+    date: str | None = None,
 ) -> dict[str, Any]:
     """Build a compact launch-packet summary for issue #3207.
 
@@ -234,6 +236,7 @@ def build_launch_packet(
     """
     validated = validate_fidelity_sensitivity_config(config)
     axes = validated["axes"]
+    claim_boundary = validated.get("claim_boundary")
     return {
         "schema_version": "fidelity-sensitivity-launch-packet.v1",
         "issue": int(validated.get("issue", 3207)),
@@ -241,7 +244,8 @@ def build_launch_packet(
         "status": "launch_packet_only",
         "config_path": config_path,
         "git_head": git_head,
-        "claim_boundary": str(validated.get("claim_boundary") or CLAIM_BOUNDARY),
+        "date": date,
+        "claim_boundary": str(claim_boundary) if claim_boundary is not None else CLAIM_BOUNDARY,
         "axis_count": len(axes),
         "axes": [
             {
@@ -270,8 +274,10 @@ def format_launch_packet_markdown(packet: Mapping[str, Any]) -> str:
         Markdown report text.
     """
     axes = packet["axes"]
+    issue = packet.get("issue", 3207)
+    date_suffix = f" {packet['date']}" if packet.get("date") else ""
     lines = [
-        "# Issue #3207 Fidelity Sensitivity Launch Packet",
+        f"# Issue #{issue} Fidelity Sensitivity Launch Packet{date_suffix}",
         "",
         f"- Status: `{packet['status']}`",
         f"- Study: `{packet['study_id']}`",

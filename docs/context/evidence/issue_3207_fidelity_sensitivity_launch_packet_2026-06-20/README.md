@@ -1,9 +1,9 @@
-# Issue #3207 Fidelity Sensitivity Launch Packet
+# Issue #3207 Fidelity Sensitivity Launch Packet 2026-06-20
 
 - Status: `launch_packet_only`
 - Study: `issue_3207_fidelity_sensitivity_v1`
 - Config: `configs/research/fidelity_sensitivity_v1.yaml`
-- Git head: `ef1759cb`
+- Git head: `c553e797c`
 - Claim boundary: Protocol and metric contract only. This config defines deliberate simulation-fidelity sensitivity probes and the rank-stability/drift outputs required before benchmark claims can state a validity boundary. It is not benchmark evidence, sensor-realism evidence, sim-to-real evidence, or a paper-facing planner-ranking result until the sweep is run and promoted through a compact evidence bundle.
 
 

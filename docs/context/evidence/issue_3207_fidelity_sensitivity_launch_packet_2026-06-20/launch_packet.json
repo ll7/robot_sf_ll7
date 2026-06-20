@@ -28,6 +28,7 @@
   "axis_count": 4,
   "claim_boundary": "Protocol and metric contract only. This config defines deliberate simulation-fidelity sensitivity probes and the rank-stability/drift outputs required before benchmark claims can state a validity boundary. It is not benchmark evidence, sensor-realism evidence, sim-to-real evidence, or a paper-facing planner-ranking result until the sweep is run and promoted through a compact evidence bundle.\n",
   "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
+  "date": "2026-06-20",
   "fixed_scope": {
     "planner_groups": [
       "orca",
@@ -41,7 +42,7 @@
       113
     ]
   },
-  "git_head": "ef1759cb",
+  "git_head": "c553e797c",
   "issue": 3207,
   "metrics": [
     {

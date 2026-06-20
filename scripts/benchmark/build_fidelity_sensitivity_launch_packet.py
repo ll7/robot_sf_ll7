@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 from pathlib import Path
 
@@ -14,18 +15,28 @@ from robot_sf.benchmark.fidelity_sensitivity import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def _git_head() -> str:
-    result = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=5,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return "unknown"
     return result.stdout.strip() if result.returncode == 0 else "unknown"
+
+
+def _iso_date_from_output_dir(output_dir: str) -> str | None:
+    """Extract an ISO calendar date from an output directory path."""
+    match = ISO_DATE_RE.search(output_dir)
+    return match.group(0) if match else None
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,7 +59,12 @@ def main() -> int:
     """CLI entry point."""
     args = parse_args()
     config = load_fidelity_sensitivity_config(REPO_ROOT / args.config)
-    packet = build_launch_packet(config, config_path=args.config, git_head=_git_head())
+    packet = build_launch_packet(
+        config,
+        config_path=args.config,
+        git_head=_git_head(),
+        date=_iso_date_from_output_dir(args.output_dir),
+    )
     write_launch_packet(packet, REPO_ROOT / args.output_dir)
     print(f"wrote {args.output_dir}")
     return 0

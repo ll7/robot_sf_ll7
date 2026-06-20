@@ -1027,7 +1027,7 @@ knowledge, not every transient iteration detail.
   [Issue #2428 AMMV mechanism trace panels](evidence/issue_2428_mechanism_trace_panels_2026-06-06/README.md),
   [Issue #2432 AMMV trace selection evidence](evidence/issue_2432_ammv_trace_selection_2026-06-06/README.md),
   [Issue #2434 AMMV scenario sweep evidence](evidence/issue_2434_ammv_scenario_sweep_2026-06-06/README.md),
-  [Issue #3207 fidelity sensitivity launch packet](evidence/issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/README.md),
+  [Issue #3207 Fidelity Sensitivity Launch Packet 2026-06-20](evidence/issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/README.md),
   and the
   [May 4 camera-ready all-planners evidence](evidence/camera_ready_all_planners_2026-05-04/README.md).
 

@@ -5,6 +5,46 @@ description: >
   state ledger. Entries become runnable only after they are marked ready_to_submit and pass
   scripts/dev/submit_training_jobs.py gates.
 entries:
+  - id: issue-3254-crossing-conflict-predictive
+    status: planned
+    issue: 3254
+    objective: >
+      Prepare the crossing-conflict weighted predictive retraining run using the
+      #3214 hard-case weighting spec, without claiming a checkpoint or benchmark
+      result until the SLURM run and evaluation evidence exist.
+    config: configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml
+    launcher: SLURM/Auxme/predictive_training_pipeline.sl
+    target:
+      cluster: auxme
+      host: licca
+      launcher_note: >
+        Public launcher is a private-operations-overlay stub in this checkout;
+        keep this queue entry planned until the private launcher path is
+        available on a SLURM-capable host.
+    resources:
+      gpus: 1
+      cpus: 8
+      memory: 32G
+      walltime: 1-12:00:00
+    seeds:
+      - 42
+    output_root: output/slurm/issue3254-crossing-conflict-predictive
+    log_path: output/slurm/%j-issue3254-crossing-conflict-predictive.out
+    priority_reason: >
+      Issue #3254 is the evidence-producing follow-up for #3214; this row is a
+      launch packet placeholder for the full predictive pipeline config that
+      references the crossing-conflict weighting spec. Claim boundary:
+      prepare-only, no retrained checkpoint, benchmark result, or model-improvement
+      claim.
+    auto_submit: false
+    job_name: gse-3254-crossing-conflict-predictive
+    wrapper: scripts/dev/sbatch_use_max_time.sh
+    wrapper_args:
+      - --time
+      - 1-12:00:00
+    sbatch_args:
+      - --output=output/slurm/%j-issue3254-crossing-conflict-predictive.out
+
   - id: issue-1977-bc-warm-start-ppo
     status: planned
     issue: 1977

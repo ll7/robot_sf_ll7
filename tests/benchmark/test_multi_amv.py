@@ -22,7 +22,9 @@ from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.gym_env.unified_config import MultiRobotConfig, RobotSimulationConfig
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_multi_amv_smoke import (
+    _apply_campaign_status,
     _multi_robot_config_from_scenario,
+    _read_jsonl,
     build_multi_amv_episode_record,
 )
 
@@ -291,3 +293,255 @@ def test_multi_amv_inter_robot_metrics_flatten_for_aggregates() -> None:
     assert aggregates["goal_controller_smoke"]["inter_robot_collision_events"][
         "mean"
     ] == pytest.approx(0.0)
+
+
+def _actuation_record(
+    *,
+    scenario_id: str,
+    seed: int,
+    variant: str,
+    clip: float,
+    success: float = 0.0,
+    readiness_status: str = "native",
+    availability_status: str = "available",
+    execution_mode: str = "native",
+) -> dict[str, object]:
+    """Build a compact actuation-ranking fixture record."""
+    return {
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "algo": variant,
+        "readiness_status": readiness_status,
+        "availability_status": availability_status,
+        "execution_mode": execution_mode,
+        "termination_reason": "timeout_low_progress",
+        "metrics": {
+            "success": success,
+            "collisions": 0.0,
+            "command_clip_fraction": clip,
+            "yaw_rate_saturation_fraction": 0.0,
+            "signed_braking_peak_m_s2": -2.0,
+        },
+        "final_route_progress_m": 10.0,
+        "final_distance_to_goal_m": 3.0,
+    }
+
+
+def test_paired_actuation_feasibility_ranking_keeps_diagnostic_boundary() -> None:
+    """Ranking summary should expose paired mechanism fields without overclaiming."""
+    from robot_sf.benchmark.multi_amv import paired_actuation_feasibility_ranking
+
+    records = []
+    for scenario_id in ("classic_cross_trap_high", "classic_bottleneck_high"):
+        for seed in (101, 102):
+            records.extend(
+                [
+                    _actuation_record(
+                        scenario_id=scenario_id,
+                        seed=seed,
+                        variant="hybrid_rule_v3_fast_progress",
+                        clip=0.30,
+                    ),
+                    _actuation_record(
+                        scenario_id=scenario_id,
+                        seed=seed,
+                        variant="actuation_aware_hybrid_rule_v0",
+                        clip=0.20,
+                    ),
+                ]
+            )
+
+    summary = paired_actuation_feasibility_ranking(
+        records,
+        baseline_variant="hybrid_rule_v3_fast_progress",
+        intervention_variant="actuation_aware_hybrid_rule_v0",
+    )
+
+    assert summary["schema_version"] == "paired-amv-actuation-feasibility-ranking.v1"
+    assert summary["classification"] == "bounded_diagnostic_feasibility_direction"
+    assert summary["ranking_supported"] is True
+    assert summary["claim_boundary"].startswith("diagnostic-only")
+    assert summary["uncertainty"]["paired_rows"] == 4
+    assert summary["uncertainty"]["scenario_count"] == 2
+    assert summary["uncertainty"]["seed_count"] == 2
+    assert summary["uncertainty"]["command_clip_delta_mean"] == pytest.approx(-0.10)
+    assert summary["pairs"][0]["baseline"]["command_clip_fraction"] == pytest.approx(0.30)
+    assert summary["pairs"][0]["intervention"]["command_clip_fraction"] == pytest.approx(0.20)
+    assert summary["pairs"][0]["disagreement_cases"][0]["type"] == "feasibility_success_divergence"
+
+
+def test_paired_actuation_feasibility_ranking_excludes_fallback_rows() -> None:
+    """Fallback/degraded rows should fail closed and keep the result inconclusive."""
+    from robot_sf.benchmark.multi_amv import paired_actuation_feasibility_ranking
+
+    summary = paired_actuation_feasibility_ranking(
+        [
+            _actuation_record(
+                scenario_id="classic_cross_trap_high",
+                seed=101,
+                variant="hybrid_rule_v3_fast_progress",
+                clip=0.30,
+            ),
+            _actuation_record(
+                scenario_id="classic_cross_trap_high",
+                seed=101,
+                variant="actuation_aware_hybrid_rule_v0",
+                clip=0.20,
+                readiness_status="fallback",
+            ),
+        ],
+        baseline_variant="hybrid_rule_v3_fast_progress",
+        intervention_variant="actuation_aware_hybrid_rule_v0",
+    )
+
+    assert summary["classification"] == "diagnostic_only_inconclusive"
+    assert summary["ranking_supported"] is False
+    assert summary["excluded_rows"] == [
+        {
+            "scenario_id": "classic_cross_trap_high",
+            "seed": 101,
+            "variant": "actuation_aware_hybrid_rule_v0",
+            "reason": "readiness_status=fallback",
+        }
+    ]
+    assert summary["incomplete_pairs"][0]["missing_variants"] == ["actuation_aware_hybrid_rule_v0"]
+
+
+def test_paired_actuation_feasibility_ranking_excludes_partial_failure_alias() -> None:
+    """Partial-failure status aliases should be excluded from diagnostic ranking support."""
+    from robot_sf.benchmark.multi_amv import paired_actuation_feasibility_ranking
+
+    summary = paired_actuation_feasibility_ranking(
+        [
+            _actuation_record(
+                scenario_id="classic_cross_trap_high",
+                seed=101,
+                variant="hybrid_rule_v3_fast_progress",
+                clip=0.30,
+            ),
+            {
+                **_actuation_record(
+                    scenario_id="classic_cross_trap_high",
+                    seed=101,
+                    variant="actuation_aware_hybrid_rule_v0",
+                    clip=0.20,
+                ),
+                "status": "partial_failure",
+            },
+        ],
+        baseline_variant="hybrid_rule_v3_fast_progress",
+        intervention_variant="actuation_aware_hybrid_rule_v0",
+    )
+
+    assert summary["classification"] == "diagnostic_only_inconclusive"
+    assert summary["ranking_supported"] is False
+    assert summary["excluded_rows"][0]["reason"] == "status=partial_failure"
+
+
+def test_paired_actuation_feasibility_ranking_excludes_missing_status_fields() -> None:
+    """Raw episode rows without campaign status metadata should fail closed."""
+    from robot_sf.benchmark.multi_amv import paired_actuation_feasibility_ranking
+
+    raw_baseline = _actuation_record(
+        scenario_id="classic_cross_trap_high",
+        seed=101,
+        variant="hybrid_rule_v3_fast_progress",
+        clip=0.30,
+    )
+    for key in ("readiness_status", "availability_status", "execution_mode"):
+        raw_baseline.pop(key)
+    raw_baseline["algorithm_metadata"] = {"planner_kinematics": {"execution_mode": "adapter"}}
+
+    summary = paired_actuation_feasibility_ranking(
+        [
+            raw_baseline,
+            _actuation_record(
+                scenario_id="classic_cross_trap_high",
+                seed=101,
+                variant="actuation_aware_hybrid_rule_v0",
+                clip=0.20,
+            ),
+        ],
+        baseline_variant="hybrid_rule_v3_fast_progress",
+        intervention_variant="actuation_aware_hybrid_rule_v0",
+    )
+
+    assert summary["classification"] == "diagnostic_only_inconclusive"
+    assert summary["ranking_supported"] is False
+    assert summary["excluded_rows"][0]["reason"] == "readiness_status="
+
+
+def test_actuation_ranking_campaign_status_enrichment_restores_explicit_statuses() -> None:
+    """Campaign planner rows should annotate raw episode rows before ranking."""
+    from robot_sf.benchmark.multi_amv import paired_actuation_feasibility_ranking
+
+    raw_records = []
+    for scenario_id in ("classic_cross_trap_high", "classic_bottleneck_high"):
+        for seed in (101, 102):
+            baseline = _actuation_record(
+                scenario_id=scenario_id,
+                seed=seed,
+                variant="hybrid_rule_local_planner",
+                clip=0.30,
+            )
+            baseline["algorithm_metadata"] = {
+                "algorithm": "hybrid_rule_local_planner",
+                "config": {
+                    "planner_variant": "hybrid_rule_v3_teb_like_rollout",
+                    "max_linear_speed": 3.0,
+                    "max_linear_accel": 3.0,
+                },
+                "planner_kinematics": {"execution_mode": "adapter"},
+            }
+            intervention = _actuation_record(
+                scenario_id=scenario_id,
+                seed=seed,
+                variant="actuation_aware_hybrid_rule_v0",
+                clip=0.20,
+            )
+            for record in (baseline, intervention):
+                for key in ("readiness_status", "availability_status", "execution_mode"):
+                    record.pop(key)
+            raw_records.extend([baseline, intervention])
+
+    enriched = _apply_campaign_status(
+        raw_records,
+        {
+            "planner_rows": [
+                {
+                    "planner_key": "hybrid_rule_v3_fast_progress",
+                    "algo": "hybrid_rule_local_planner",
+                    "status": "ok",
+                    "readiness_status": "adapter",
+                    "availability_status": "available",
+                    "execution_mode": "adapter",
+                },
+                {
+                    "planner_key": "actuation_aware_hybrid_rule_v0",
+                    "algo": "actuation_aware_hybrid_rule_v0",
+                    "status": "ok",
+                    "readiness_status": "adapter",
+                    "availability_status": "available",
+                    "execution_mode": "adapter",
+                },
+            ]
+        },
+    )
+    summary = paired_actuation_feasibility_ranking(
+        enriched,
+        baseline_variant="hybrid_rule_v3_fast_progress",
+        intervention_variant="actuation_aware_hybrid_rule_v0",
+    )
+
+    assert summary["classification"] == "bounded_diagnostic_feasibility_direction"
+    assert summary["ranking_supported"] is True
+    assert summary["excluded_rows"] == []
+
+
+def test_read_jsonl_rejects_non_object_records(tmp_path: Path) -> None:
+    """Ranking CLI JSONL reader should reject malformed non-object rows."""
+    path = tmp_path / "records.jsonl"
+    path.write_text("[]\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not a JSON object"):
+        _read_jsonl(path)

@@ -20,6 +20,7 @@ from robot_sf.benchmark.multi_amv import (
     inter_robot_metrics,
     multi_amv_episode_extension,
     multi_amv_settings_from_scenario,
+    paired_actuation_feasibility_ranking,
 )
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import status_from_termination_reason
@@ -208,6 +209,84 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read JSON objects from a JSONL file."""
+    records: list[dict[str, Any]] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"{path}:{line_number} is not a JSON object")
+        records.append(payload)
+    return records
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    """Read a JSON object from ``path``."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    return payload
+
+
+def _planner_status_lookup(campaign_summary: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Build planner status lookup keys from a camera-ready campaign summary."""
+    lookup: dict[str, dict[str, str]] = {}
+    planner_rows = campaign_summary.get("planner_rows")
+    if not isinstance(planner_rows, list):
+        return lookup
+    for row in planner_rows:
+        if not isinstance(row, dict):
+            continue
+        status = {
+            "status": str(row.get("status", "")),
+            "readiness_status": str(row.get("readiness_status", "")),
+            "availability_status": str(row.get("availability_status", "")),
+            "execution_mode": str(row.get("execution_mode", "")),
+        }
+        for key in ("planner_key", "algo"):
+            value = row.get(key)
+            if isinstance(value, str) and value.strip():
+                lookup[value.strip()] = status
+    return lookup
+
+
+def _apply_campaign_status(
+    records: list[dict[str, Any]], campaign_summary: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Annotate episode records with campaign-level planner status fields."""
+    lookup = _planner_status_lookup(campaign_summary)
+    annotated_records: list[dict[str, Any]] = []
+    for record in records:
+        annotated = dict(record)
+        candidates = [
+            annotated.get("planner_key"),
+            annotated.get("algo"),
+        ]
+        metadata = annotated.get("algorithm_metadata")
+        if isinstance(metadata, dict):
+            candidates.extend(
+                [
+                    metadata.get("planner_key"),
+                    metadata.get("canonical_algorithm"),
+                    metadata.get("algorithm"),
+                ]
+            )
+        for candidate in candidates:
+            if not isinstance(candidate, str):
+                continue
+            status = lookup.get(candidate.strip())
+            if status is None:
+                continue
+            for key, value in status.items():
+                if value and not annotated.get(key):
+                    annotated[key] = value
+            break
+        annotated_records.append(annotated)
+    return annotated_records
+
+
 def _write_episode_jsonl(path: Path, record: dict[str, Any], *, schema_path: Path) -> None:
     """Validate and write one canonical episode record as JSONL."""
     violations = validate_episode_success_integrity(record)
@@ -272,8 +351,8 @@ def write_outputs(
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scenario", type=Path, required=True)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--scenario", type=Path)
+    parser.add_argument("--out", type=Path)
     parser.add_argument("--episodes-out", type=Path)
     parser.add_argument("--aggregates-out", type=Path)
     parser.add_argument("--report-out", type=Path)
@@ -283,12 +362,63 @@ def parse_args() -> argparse.Namespace:
         default=Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
     )
     parser.add_argument("--horizon", type=int, default=40)
+    parser.add_argument(
+        "--actuation-ranking-episodes",
+        type=Path,
+        action="append",
+        help="Optional episode JSONL to summarize as a paired actuation-feasibility ranking.",
+    )
+    parser.add_argument(
+        "--actuation-ranking-out",
+        type=Path,
+        help="Output JSON for --actuation-ranking-episodes.",
+    )
+    parser.add_argument(
+        "--actuation-ranking-campaign-summary",
+        type=Path,
+        help="Optional camera-ready campaign_summary.json used to stamp planner-row statuses.",
+    )
+    parser.add_argument(
+        "--baseline-variant",
+        default="hybrid_rule_v3_fast_progress",
+        help="Baseline variant key for actuation ranking mode.",
+    )
+    parser.add_argument(
+        "--intervention-variant",
+        default="actuation_aware_hybrid_rule_v0",
+        help="Intervention variant key for actuation ranking mode.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     """Run the multi-AMV smoke CLI."""
     args = parse_args()
+    if args.actuation_ranking_episodes is not None:
+        if args.actuation_ranking_out is None:
+            raise ValueError(
+                "--actuation-ranking-out is required with --actuation-ranking-episodes"
+            )
+        records = [
+            record
+            for episodes_path in args.actuation_ranking_episodes
+            for record in _read_jsonl(episodes_path)
+        ]
+        if args.actuation_ranking_campaign_summary is not None:
+            records = _apply_campaign_status(
+                records,
+                _read_json(args.actuation_ranking_campaign_summary),
+            )
+        summary = paired_actuation_feasibility_ranking(
+            records,
+            baseline_variant=args.baseline_variant,
+            intervention_variant=args.intervention_variant,
+        )
+        _write_json(args.actuation_ranking_out, summary)
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return
+    if args.scenario is None or args.out is None:
+        raise ValueError("--scenario and --out are required unless actuation ranking mode is used")
     if args.horizon < 1:
         raise ValueError("--horizon must be >= 1")
     record = run_smoke(scenario_path=args.scenario, horizon=args.horizon)

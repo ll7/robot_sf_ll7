@@ -59,17 +59,24 @@ The only disagreement is across evidence surfaces:
 - #2434 has broader scenario/seed pairing but no observed mechanism or outcome
   difference.
 
+## Successor Update
+
+Issue [#3181](https://github.com/ll7/robot_sf_ll7/issues/3181) now has a small direct successor
+slice:
+[issue_3181_amv_feasibility_ranking.md](issue_3181_amv_feasibility_ranking.md). The local
+2-scenario x 2-seed synthetic diagnostic run found a bounded command-clipping direction for
+`actuation_aware_hybrid_rule_v0` versus `hybrid_rule_v3_fast_progress`, with no fallback/degraded
+rows. The result remains diagnostic-only: success stayed zero, one paired row collided in both
+variants, and one row traded clipping improvement against worse final progress.
+
 ## Next Step
 
 Issue [#3181](https://github.com/ll7/robot_sf_ll7/issues/3181) tracks the
-smallest direct successor: run or stage a paired multi-scenario, multi-seed
-actuation-aware AMV feasibility slice comparing the actuation-aware candidate
-against its baseline with fixed non-variant parameters.
+smallest direct successor and should now be interpreted through the #3181 note above rather than as
+an unrun gap.
 
-That successor needs terminal metrics plus mechanism fields such as command
-clipping, yaw/braking saturation, progress, timeout mode, and disagreement
-cases. Until that exists, #2446 should remain a one-slice diagnostic signal, not
-a planner-ranking or paper-facing AMV claim.
+#2446 remains a one-slice diagnostic predecessor; #3181 adds a small paired diagnostic direction,
+but still no planner-ranking or paper-facing AMV claim.
 
 ## Evidence Artifact
 

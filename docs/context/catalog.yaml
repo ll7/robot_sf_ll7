@@ -345,6 +345,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/issue_3181_amv_feasibility_ranking.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3181_amv_feasibility_ranking_2026-06-20/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2522_why_first_diagnostics.md
     status: current
     freshness: evidence

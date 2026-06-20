@@ -204,6 +204,9 @@ Policy caveats:
 - `issue_2224_amv_actuation_ranking_2026-06-04/`: compact matched `amv_actuation_smoke`
   comparison showing `actuation_aware_hybrid_rule_v0` reduced command clipping versus
   `hybrid_rule_v3_fast_progress` on one smoke row, while both candidates still timed out.
+- `issue_3181_amv_feasibility_ranking_2026-06-20/`: compact 2-scenario x 2-seed paired
+  diagnostic slice showing the actuation-aware variant reduced or tied command clipping, while
+  success stayed zero and the result remains non-paper-facing.
 - `issue_2259_amv_clipping_success_boundary_2026-06-05/`: compact parent-lane synthesis for
   Issue #2259, separating synthetic command-feasibility improvement from unchanged navigation
   success and keeping calibrated AMV actuation blocked.

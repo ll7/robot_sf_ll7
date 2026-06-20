@@ -18,6 +18,7 @@ from scripts.tools.campaign_result_store import (
     read_parquet_frame,
     validate_result_store,
 )
+from scripts.tools.seed_sufficiency_gate import seed_gate_payload_from_result_store
 
 SCHEMA_VERSION = "campaign-comparison-report.v1"
 BENCHMARK_VALID_ROW_STATUSES = frozenset({"native", "adapter"})
@@ -60,6 +61,11 @@ def _finite_float(value: Any) -> float | None:
 def _load_summary(result_store: Path) -> dict[str, Any]:
     """Read the canonical result-store summary payload."""
     return json.loads((result_store / "summary.json").read_text(encoding="utf-8"))
+
+
+def _load_analysis(result_store: Path) -> dict[str, Any]:
+    """Read the canonical result-store analysis payload."""
+    return json.loads((result_store / "analysis.json").read_text(encoding="utf-8"))
 
 
 def _load_episode_frame(result_store: Path) -> pd.DataFrame:
@@ -187,6 +193,16 @@ def _row_status_section(frame: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+def _seed_gate_section(
+    result_store: Path,
+    analysis: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Build an optional seed-sufficiency scheduling decision from result-store inputs."""
+    if analysis.get("seed_sufficiency_gate") is None:
+        return None
+    return seed_gate_payload_from_result_store(result_store)
+
+
 def _visual_summary(planner_rows: list[dict[str, Any]], metrics: list[str]) -> list[dict[str, Any]]:
     """Build compact bar-summary payloads for Markdown rendering."""
     summaries: list[dict[str, Any]] = []
@@ -287,6 +303,7 @@ def build_report(
     """Build a comparison report payload from a campaign result store."""
     frame = _load_episode_frame(result_store)
     summary = _load_summary(result_store)
+    analysis = _load_analysis(result_store)
     metrics = _available_metrics(frame)
     planner_rows = _summarize_groups(frame, group_fields=("planner",), metrics=metrics)
     scenario_family_rows = _summarize_groups(
@@ -315,6 +332,7 @@ def build_report(
         "scenario_family_summaries": scenario_family_rows,
         "metric_visual_summaries": _visual_summary(planner_rows, metrics),
         "statistical_hooks": _statistical_hooks(planner_rows, metrics, min_sample=min_sample),
+        "seed_sufficiency_gate": _seed_gate_section(result_store, analysis),
         "limitations": [
             "confidence intervals are normal-approximation descriptive intervals, not a "
             "significance claim",
@@ -405,6 +423,20 @@ def build_markdown(payload: dict[str, Any]) -> str:
             )
     else:
         lines.append("| NA | NA | NA | NA | underpowered | no comparable metric pairs |")
+    seed_gate = payload.get("seed_sufficiency_gate")
+    if isinstance(seed_gate, dict):
+        decision = seed_gate.get("decision", {})
+        lines.extend(
+            [
+                "",
+                "## Seed Sufficiency Gate",
+                "",
+                f"- Decision: `{decision.get('decision', 'unknown')}`",
+                f"- Current schedule: `{decision.get('current_schedule', 'unknown')}`",
+                f"- Next schedule: `{decision.get('next_schedule') or 'NA'}`",
+                f"- Reason: {decision.get('reason', 'unknown')}",
+            ]
+        )
     lines.extend(["", "## Limitations", ""])
     for limitation in payload.get("limitations", []):
         lines.append(f"- {limitation}")
@@ -420,12 +452,26 @@ def _write_outputs(payload: dict[str, Any], *, output_json: Path, output_md: Pat
     output_md.write_text(build_markdown(payload), encoding="utf-8")
 
 
+def _write_seed_gate_output(payload: dict[str, Any], output_json: Path) -> None:
+    """Write the optional seed-gate scheduling decision artifact."""
+    seed_gate = payload.get("seed_sufficiency_gate")
+    if not isinstance(seed_gate, dict):
+        raise ValueError("result store analysis.json does not declare seed_sufficiency_gate")
+    output_json.parent.mkdir(parents=True, exist_ok=True)
+    output_json.write_text(json.dumps(seed_gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--result-store", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-md", type=Path, required=True)
+    parser.add_argument(
+        "--seed-gate-output-json",
+        type=Path,
+        help="Optional durable seed-sufficiency decision JSON derived from the result store.",
+    )
     parser.add_argument(
         "--input-label",
         default=None,
@@ -467,6 +513,12 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
     _write_outputs(payload, output_json=args.output_json, output_md=args.output_md)
+    if args.seed_gate_output_json is not None:
+        try:
+            _write_seed_gate_output(payload, args.seed_gate_output_json)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
     return 0
 
 

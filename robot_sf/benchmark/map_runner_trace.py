@@ -246,6 +246,9 @@ def _single_pedestrian_vru_metadata(scenario: dict[str, Any]) -> list[dict[str, 
                 "actor_radius_m": actor_radius_m,
                 "robot_radius_m": robot_radius_m,
                 "interaction_role": str(vru.get("interaction_role") or "fast_moving_vru"),
+                "interaction_class": str(
+                    vru.get("interaction_class") or vru.get("interaction_role") or "fast_moving_vru"
+                ),
                 "diagnostic_metric_subset": [
                     str(item)
                     for item in (
@@ -604,6 +607,7 @@ def _vru_trace_payload(
         "pedestrian_id": metadata["pedestrian_id"],
         "actor_type": metadata["actor_type"],
         "interaction_role": metadata["interaction_role"],
+        "interaction_class": metadata.get("interaction_class", metadata["interaction_role"]),
         "claim_boundary": metadata["claim_boundary"],
         payload_key: diagnostics,
     }

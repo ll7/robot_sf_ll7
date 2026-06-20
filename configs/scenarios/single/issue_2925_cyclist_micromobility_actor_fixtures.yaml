@@ -1,0 +1,296 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: issue_2925_cyclist_crossing
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 180
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    speed_m_s: 5.4
+    trajectory:
+    - - 8.0
+      - 16.0
+    - - 14.0
+      - 10.0
+    - - 20.0
+      - 4.0
+    metadata:
+      fast_bicycle_actor:
+        schema_version: fast-bicycle-actor.v1
+        actor_type: bicycle
+        speed_m_s: 5.4
+        acceleration_m_s2: 1.2
+        actor_radius_m: 0.45
+        robot_radius_m: 0.3
+        interaction_class: crossing
+        interaction_role: oblique_crossing_fast_bicycle
+        diagnostic_metric_subset: &cyclist_proxy_metrics
+        - relative_closing_speed_m_s
+        - time_to_conflict_zone_s
+        - clearance_m
+        - pass_overtake_state
+        - interaction_class
+        claim_boundary: &proxy_claim_boundary >
+          Authored cyclist and fast-micromobility proxy metadata only; not a full cyclist
+          dynamics model, calibrated cyclist realism evidence, or planner-ranking benchmark
+          evidence.
+  robot_config: {}
+  metadata:
+    purpose: Diagnostic cyclist-like crossing fixture for fast-micromobility proxy smoke tests.
+    behavior: cyclist_proxy_crossing
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: "2925"
+      parameters: &base_generation_parameters
+        density: low
+        obstacle: open
+        groups: 0.0
+        speed_var: high
+        goal_topology: point
+        repeats: 1
+        preset: manual_cyclist_micromobility_proxy
+        id: issue_2925_cyclist_crossing
+        flow: cross
+        robot_context: embedded
+    initial_difficulty: &medium_initial_difficulty
+      schema_version: scenario_initial_difficulty.v1
+      score: 0.54
+      band: medium
+      components:
+        density: 0.18
+        flow: 0.3
+        obstacle: 0.0
+        speed_var: 0.06
+        goal_topology: 0.0
+        groups: 0.0
+        crowding: 0.0008333333333333333
+      n_agents: 1
+      area: 60.0
+    authoring: &authoring_boundary
+      status: draft
+      template: francis2023-single-pedestrian-cyclist-micromobility-proxy
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/2925
+      benchmark_evidence: false
+    cyclist_micromobility_actor:
+      schema_version: cyclist-micromobility-fixture.v1
+      case: crossing
+      interaction_class: crossing
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      claim_boundary: *proxy_claim_boundary
+      required_metrics: *cyclist_proxy_metrics
+  seeds:
+  - 2925
+- name: issue_2925_cyclist_overtaking
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 180
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    speed_m_s: 6.1
+    trajectory:
+    - - 8.0
+      - 8.2
+    - - 11.4
+      - 10.2
+    - - 14.8
+      - 12.2
+    metadata:
+      fast_bicycle_actor:
+        schema_version: fast-bicycle-actor.v1
+        actor_type: bicycle
+        speed_m_s: 6.1
+        acceleration_m_s2: 1.0
+        actor_radius_m: 0.45
+        robot_radius_m: 0.3
+        interaction_class: overtaking
+        interaction_role: cyclist_overtakes_robot_left
+        diagnostic_metric_subset: *cyclist_proxy_metrics
+        claim_boundary: *proxy_claim_boundary
+  robot_config: {}
+  metadata:
+    purpose: Diagnostic cyclist-like overtaking fixture for fast-micromobility proxy smoke tests.
+    behavior: cyclist_proxy_overtaking
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: "2926"
+      parameters:
+        <<: *base_generation_parameters
+        id: issue_2925_cyclist_overtaking
+        flow: merge
+        robot_context: behind
+    initial_difficulty: *medium_initial_difficulty
+    authoring: *authoring_boundary
+    cyclist_micromobility_actor:
+      schema_version: cyclist-micromobility-fixture.v1
+      case: overtaking
+      interaction_class: overtaking
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      claim_boundary: *proxy_claim_boundary
+      required_metrics: *cyclist_proxy_metrics
+  seeds:
+  - 2926
+- name: issue_2925_cyclist_same_direction
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 180
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    speed_m_s: 4.6
+    trajectory:
+    - - 7.0
+      - 12.0
+    - - 12.0
+      - 12.1
+    - - 17.0
+      - 12.2
+    metadata:
+      fast_bicycle_actor:
+        schema_version: fast-bicycle-actor.v1
+        actor_type: bicycle
+        speed_m_s: 4.6
+        acceleration_m_s2: 0.5
+        actor_radius_m: 0.45
+        robot_radius_m: 0.3
+        interaction_class: same_direction
+        interaction_role: same_direction_cyclist_ahead
+        diagnostic_metric_subset: *cyclist_proxy_metrics
+        claim_boundary: *proxy_claim_boundary
+  robot_config: {}
+  metadata:
+    purpose: Diagnostic same-direction cyclist-like fixture for proxy smoke tests.
+    behavior: cyclist_proxy_same_direction
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: "2927"
+      parameters:
+        <<: *base_generation_parameters
+        id: issue_2925_cyclist_same_direction
+        flow: uni
+        robot_context: embedded
+    initial_difficulty: *medium_initial_difficulty
+    authoring: *authoring_boundary
+    cyclist_micromobility_actor:
+      schema_version: cyclist-micromobility-fixture.v1
+      case: same_direction
+      interaction_class: same_direction
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      claim_boundary: *proxy_claim_boundary
+      required_metrics: *cyclist_proxy_metrics
+  seeds:
+  - 2927
+- name: issue_2925_cyclist_opposite_direction
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 180
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    speed_m_s: 5.8
+    trajectory:
+    - - 18.0
+      - 9.5
+    - - 13.5
+      - 10.0
+    - - 9.0
+      - 10.5
+    metadata:
+      fast_bicycle_actor:
+        schema_version: fast-bicycle-actor.v1
+        actor_type: bicycle
+        speed_m_s: 5.8
+        acceleration_m_s2: 0.8
+        actor_radius_m: 0.45
+        robot_radius_m: 0.3
+        interaction_class: opposite_direction
+        interaction_role: opposite_direction_cyclist_pass_by
+        diagnostic_metric_subset: *cyclist_proxy_metrics
+        claim_boundary: *proxy_claim_boundary
+  robot_config: {}
+  metadata:
+    purpose: Diagnostic opposite-direction cyclist-like fixture for proxy smoke tests.
+    behavior: cyclist_proxy_opposite_direction
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: "2928"
+      parameters:
+        <<: *base_generation_parameters
+        id: issue_2925_cyclist_opposite_direction
+        flow: bi
+        robot_context: embedded
+    initial_difficulty: *medium_initial_difficulty
+    authoring: *authoring_boundary
+    cyclist_micromobility_actor:
+      schema_version: cyclist-micromobility-fixture.v1
+      case: opposite_direction
+      interaction_class: opposite_direction
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      claim_boundary: *proxy_claim_boundary
+      required_metrics: *cyclist_proxy_metrics
+  seeds:
+  - 2928
+- name: issue_2925_cyclist_occluded_emergence
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+  simulation_config:
+    max_episode_steps: 180
+    ped_density: 0.0
+  single_pedestrians:
+  - id: h1
+    goal: null
+    speed_m_s: 5.2
+    trajectory:
+    - - 9.0
+      - 15.5
+    - - 12.0
+      - 12.0
+    - - 16.0
+      - 7.5
+    metadata:
+      fast_bicycle_actor:
+        schema_version: fast-bicycle-actor.v1
+        actor_type: bicycle
+        speed_m_s: 5.2
+        acceleration_m_s2: 1.3
+        actor_radius_m: 0.45
+        robot_radius_m: 0.3
+        interaction_class: occluded_emergence
+        interaction_role: occluded_cyclist_emerges_crossing
+        diagnostic_metric_subset: *cyclist_proxy_metrics
+        occlusion_context: authored_occlusion_proxy_only
+        claim_boundary: *proxy_claim_boundary
+  robot_config: {}
+  metadata:
+    purpose: Diagnostic occluded-emergence cyclist-like fixture for proxy smoke tests.
+    behavior: cyclist_proxy_occluded_emergence
+    generation_profile:
+      schema_version: scenario_generation_params.v1
+      seed_signature: "2929"
+      parameters:
+        <<: *base_generation_parameters
+        id: issue_2925_cyclist_occluded_emergence
+        flow: cross
+        obstacle: open
+        robot_context: embedded
+    initial_difficulty: *medium_initial_difficulty
+    authoring: *authoring_boundary
+    cyclist_micromobility_actor:
+      schema_version: cyclist-micromobility-fixture.v1
+      case: occluded_emergence
+      interaction_class: occluded_emergence
+      status: diagnostic_metadata_only
+      benchmark_evidence: false
+      occlusion_context: authored_occlusion_proxy_only
+      claim_boundary: *proxy_claim_boundary
+      required_metrics: *cyclist_proxy_metrics
+  seeds:
+  - 2929

@@ -83,7 +83,7 @@ Units: dimensionless ratio.
 Denominator: valid paired pedestrians in cohort `c`; `epsilon_m` must be
 recorded. If both `path_length_robot(p)` and `path_length_control(p)` are zero,
 the pair should be treated as no detour increase (`0.0`) or omitted with an
-explicit `missing_reason`; it must not produce a large ratio solely from the
+explicit `missing_reason`; it must not produce a ratio artifact solely from the
 epsilon denominator.
 
 ### Distributional Spread

@@ -22,6 +22,7 @@ pedestrian-filled environments.
 | Browse runnable examples | [`examples/README.md`](examples/README.md) |
 | Find architecture, benchmark, and workflow docs | [`docs/README.md`](docs/README.md) |
 | Follow the contributor workflow | [`docs/dev_guide.md`](docs/dev_guide.md) |
+| Contribute docs, planners, scenarios, or fixes | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Review repository conventions for agents and contributors | [`AGENTS.md`](AGENTS.md) |
 | See the public Zenodo-backed release artifact | [DOI 10.5281/zenodo.19563812](https://doi.org/10.5281/zenodo.19563812) |
 | Trace upstream lineage and citations | [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md) |
@@ -97,6 +98,25 @@ For host packages, optional capabilities, and a fuller setup walkthrough, see
   [10.5281/zenodo.19563812](https://doi.org/10.5281/zenodo.19563812). For benchmark-specific
   semantics and caveats, follow the benchmark docs linked from `docs/README.md`.
 
+## Dissertation and academic use
+
+This repository is used as the Robot SF evidence base for dissertation work on scenario-based
+safety validation for autonomous micromobility vehicles. If you are:
+
+- **Reviewing the dissertation**: use the public release artifact DOI above and the repository tag
+  named by the dissertation or artifact metadata. The dissertation repository maps claims to Robot
+  SF evidence and reproduction steps.
+
+- **Reproducing benchmark results**: clone this repository, check out the release tag or commit
+  specified by the artifact, and follow the [Quickstart](#quickstart) plus the benchmark section in
+  [`docs/README.md`](docs/README.md).
+
+- **Building on this work**: use [`CONTRIBUTING.md`](CONTRIBUTING.md) and
+  [`docs/contributing_planner.md`](docs/contributing_planner.md) for current extension paths.
+
+- **Citing this work**: use the DOI badge above (`10.5281/zenodo.19563812`) for the release
+  artifact unless the paper or dissertation specifies a newer artifact.
+
 ## Development workflow
 
 Use the development guide as the source of truth for contributor commands. The common local flow is:
@@ -110,6 +130,39 @@ BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 
 If you are contributing through an agent workflow or want the repository-specific automation rules,
 start with [`AGENTS.md`](AGENTS.md).
+
+## Contributing
+
+Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution types,
+PR expectations, and extension pathways. Before starting work:
+
+1. Check [`AGENTS.md`](AGENTS.md) for agent-specific workflow guidance.
+2. Read [`docs/dev_guide.md`](docs/dev_guide.md) for local setup and validation.
+3. Run tests locally with `scripts/dev/run_tests_parallel.sh`.
+4. Run the final gate with `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
+
+For substantial changes, please open an issue first to discuss the approach.
+
+## Extending robot_sf
+
+The framework is designed to be extended. Common extension points:
+
+### Adding a New Planner
+
+Planner adapters usually live under [`robot_sf/planner/`](robot_sf/planner/), with metadata and
+benchmark wiring described in [`docs/contributing_planner.md`](docs/contributing_planner.md).
+
+### Adding Scenario Families
+
+Scenario definitions live under [`configs/scenarios/`](configs/scenarios/). See
+[`docs/benchmark_suites.md`](docs/benchmark_suites.md), [`docs/scenario_zoo/index.md`](docs/scenario_zoo/index.md),
+and [`examples/README.md`](examples/README.md) for how to load and customize scenarios.
+
+### Custom Maps
+
+Maps are SVG files under [`maps/svg_maps/`](maps/svg_maps/) and related map assets under
+[`maps/`](maps/). To add a new map, create valid SVG geometry, update the relevant map/scenario
+config, and test with `examples/quickstart/03_custom_map.py`.
 
 ## Acknowledgments and provenance
 

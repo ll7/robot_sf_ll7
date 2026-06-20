@@ -50,6 +50,7 @@ def _campaign(
     ci_half_width: float,
     goal_successes: int,
     orca_successes: int,
+    orca_status: str = "valid",
 ) -> Path:
     """Create a compact campaign fixture with two planners and two scenario families."""
 
@@ -77,6 +78,7 @@ def _campaign(
                     "scenario_family": "family_a",
                     "planner_key": "orca",
                     "kinematics": "differential_drive",
+                    "row_status": orca_status,
                     "seed_count": seed_count,
                     "summary": {
                         "success": {"mean": orca_successes / seed_count, "ci_half_width": 0.1},
@@ -101,6 +103,7 @@ def _campaign(
                     "scenario_family": "family_b",
                     "planner_key": "orca",
                     "kinematics": "differential_drive",
+                    "row_status": orca_status,
                     "seed_count": seed_count,
                     "summary": {
                         "success": {"mean": 0.0, "ci_half_width": 0.1},
@@ -157,6 +160,7 @@ def test_analyze_seed_sufficiency_reports_stable_case(tmp_path: Path) -> None:
     assert payload["schema_version"] == "seed_sufficiency_analysis.v1"
     assert payload["summary"]["ranking_instability_rows"] == 0
     assert payload["summary"]["advisory_campaigns"] == []
+    assert payload["headline_rank_stability_contract"]["label"] == "blocked_pending_s20_s30"
     assert any(
         row["scenario_family"] == "family_a"
         and row["scenario_id"] == "family_a_s1"
@@ -164,6 +168,8 @@ def test_analyze_seed_sufficiency_reports_stable_case(tmp_path: Path) -> None:
         for row in payload["outcome_counts"]
     )
     assert (tmp_path / "out" / "seed_sufficiency_analysis.json").exists()
+    assert (tmp_path / "out" / "headline_rank_stability_contract.json").exists()
+    assert (tmp_path / "out" / "headline_rank_stability_pairwise.csv").exists()
     assert (tmp_path / "out" / "planner_rank_stability.csv").exists()
     assert (tmp_path / "out" / "seed_sufficiency_summary.md").exists()
     assert (tmp_path / "out" / "fig_seed_interval_width.png").exists()
@@ -199,6 +205,135 @@ def test_analyze_seed_sufficiency_flags_unstable_and_underpowered(tmp_path: Path
     assert "single-seed" in (tmp_path / "out" / "seed_sufficiency_summary.md").read_text(
         encoding="utf-8"
     )
+
+
+def test_headline_contract_blocks_non_promotable_rows(tmp_path: Path) -> None:
+    """Fallback/degraded/not-available rows should be excluded from headline promotion."""
+
+    durable = tmp_path / "durable_s20"
+    durable.mkdir()
+    (durable / "manifest.json").write_text("{}", encoding="utf-8")
+    campaign = _campaign(
+        tmp_path / "s20",
+        seed_count=20,
+        goal_snqi=0.7,
+        orca_snqi=0.8,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=19,
+        orca_status="fallback",
+    )
+
+    payload = analyze_seed_sufficiency(
+        [campaign],
+        tmp_path / "out",
+        headline_required_durable_roots=(durable,),
+    )
+
+    contract = payload["headline_rank_stability_contract"]
+    assert contract["label"] == "row_status_exclusions_present"
+    assert contract["promotion_allowed"] is False
+    assert contract["row_status_exclusions"][0]["row_status"] == "fallback"
+
+    partial_failure_campaign = _campaign(
+        tmp_path / "partial_failure_s20",
+        seed_count=20,
+        goal_snqi=0.7,
+        orca_snqi=0.8,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=19,
+        orca_status="partial_failure",
+    )
+    partial_failure_payload = analyze_seed_sufficiency(
+        [partial_failure_campaign],
+        tmp_path / "partial_failure_out",
+        headline_required_durable_roots=(durable,),
+    )
+    assert (
+        partial_failure_payload["headline_rank_stability_contract"]["label"]
+        == "row_status_exclusions_present"
+    )
+
+
+def test_headline_contract_s20_stable_and_rank_flip_labels(tmp_path: Path) -> None:
+    """Synthetic S20-style roots should classify pairwise rank stability deterministically."""
+
+    durable = tmp_path / "durable_s20"
+    durable.mkdir()
+    (durable / "manifest.json").write_text("{}", encoding="utf-8")
+    s20 = _campaign(
+        tmp_path / "s20",
+        seed_count=20,
+        goal_snqi=0.7,
+        orca_snqi=0.4,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=10,
+    )
+    s30 = _campaign(
+        tmp_path / "s30",
+        seed_count=30,
+        goal_snqi=0.72,
+        orca_snqi=0.41,
+        ci_half_width=0.02,
+        goal_successes=27,
+        orca_successes=14,
+    )
+    flip_s30 = _campaign(
+        tmp_path / "s30_flip",
+        seed_count=30,
+        goal_snqi=0.2,
+        orca_snqi=0.8,
+        ci_half_width=0.02,
+        goal_successes=12,
+        orca_successes=27,
+    )
+
+    stable_payload = analyze_seed_sufficiency(
+        [s20, s30],
+        tmp_path / "stable_out",
+        headline_required_durable_roots=(durable,),
+    )
+    flip_payload = analyze_seed_sufficiency(
+        [s20, flip_s30],
+        tmp_path / "flip_out",
+        headline_required_durable_roots=(durable,),
+    )
+
+    stable_contract = stable_payload["headline_rank_stability_contract"]
+    flip_contract = flip_payload["headline_rank_stability_contract"]
+    assert stable_contract["label"] == "stable"
+    assert stable_contract["promotion_allowed"] is True
+    assert stable_contract["pairwise"][0]["rank_label"] == "stable"
+    assert flip_contract["label"] == "rank_flip_detected"
+    assert flip_contract["promotion_allowed"] is False
+    assert flip_contract["pairwise"][0]["rank_label"] == "rank_flip"
+    assert flip_contract["pairwise"][0]["kendall_tau"] == -1.0
+
+
+def test_headline_contract_blocks_missing_durable_roots(tmp_path: Path) -> None:
+    """Absent required S20/S30 roots should fail closed even with enough synthetic seeds."""
+
+    campaign = _campaign(
+        tmp_path / "s20",
+        seed_count=20,
+        goal_snqi=0.7,
+        orca_snqi=0.4,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=10,
+    )
+
+    payload = analyze_seed_sufficiency(
+        [campaign],
+        tmp_path / "out",
+        headline_required_durable_roots=(tmp_path / "missing_s20",),
+    )
+
+    contract = payload["headline_rank_stability_contract"]
+    assert contract["label"] == "blocked_pending_s20_s30"
+    assert contract["missing_durable_roots"] == [str(tmp_path / "missing_s20")]
 
 
 def test_main_writes_requested_outputs(tmp_path: Path) -> None:

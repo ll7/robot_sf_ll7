@@ -1,0 +1,52 @@
+schema_version: external-prior-reference-stats.v1
+name: external_prior_reference_stats
+issue: 3192
+status: scaffold_awaiting_citations
+benchmark_evidence: false
+claim_boundary: >
+  Published summary statistics for licensed external datasets, used only to de-risk the
+  external-data dependency by comparing against authored priors. No raw or redistributed data.
+  Every numeric value MUST carry a real source_citation (paper + table/figure). Until then
+  values stay null and source_citation stays NEEDS_CITATION, so the divergence tool reports
+  every such statistic as not-comparable (fail-closed honesty).
+
+# Populate `value` and `source_citation` only from published, citable summary statistics.
+# Do NOT download or redistribute licensed annotations to fill these in.
+datasets:
+  - key: sdd
+    name: Stanford Drone Dataset
+    statistics:
+      - key: pedestrian_speed_mean_mps
+        value: null
+        unit: m/s
+        source_citation: NEEDS_CITATION
+      - key: crowd_density_persons_per_m2
+        value: null
+        unit: persons/m^2
+        source_citation: NEEDS_CITATION
+      - key: interaction_rate_per_minute
+        value: null
+        unit: 1/min
+        source_citation: NEEDS_CITATION
+  - key: eth_ucy_family
+    name: ETH/UCY pedestrian trajectory family
+    statistics:
+      - key: pedestrian_speed_mean_mps
+        value: null
+        unit: m/s
+        source_citation: NEEDS_CITATION
+      - key: crowd_density_persons_per_m2
+        value: null
+        unit: persons/m^2
+        source_citation: NEEDS_CITATION
+  - key: amv_command_response
+    name: AMV command-response actuation traces
+    statistics:
+      - key: max_linear_speed_mps
+        value: null
+        unit: m/s
+        source_citation: NEEDS_CITATION
+      - key: max_linear_accel_mps2
+        value: null
+        unit: m/s^2
+        source_citation: NEEDS_CITATION

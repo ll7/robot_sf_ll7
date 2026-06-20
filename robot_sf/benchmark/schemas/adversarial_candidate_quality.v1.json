@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/adversarial_candidate_quality.v1.json",
+  "title": "RobotSF Adversarial Candidate Quality Summary (v1)",
+  "description": "Pre-planner certification summary for adversarial candidate batches. This is a generator-quality gate, not planner benchmark evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_boundary",
+    "batch_accepted",
+    "total",
+    "accepted_count",
+    "rejected_count",
+    "validity_rate",
+    "rejection_counts",
+    "policy",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "adversarial_candidate_quality.v1"
+    },
+    "evidence_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "batch_accepted": {
+      "type": "boolean"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "accepted_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rejected_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "validity_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "rejection_counts": {
+      "type": "object",
+      "propertyNames": {
+        "enum": ["invalid", "degenerate", "duplicate"]
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reject_statuses", "reject_duplicates", "min_batch_validity_rate"],
+      "properties": {
+        "reject_statuses": {
+          "type": "array",
+          "items": {
+            "enum": ["invalid", "degenerate", "duplicate"]
+          },
+          "minItems": 1
+        },
+        "reject_duplicates": {
+          "type": "boolean"
+        },
+        "min_batch_validity_rate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/candidate_decision"
+      }
+    },
+    "quality_summary": {
+      "type": "object",
+      "required": ["schema_version"],
+      "properties": {
+        "schema_version": {
+          "const": "adversarial_manifest_quality_summary.v1"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "candidate_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "path", "status", "accepted", "reasons"],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": ["valid", "invalid", "degenerate"]
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "enum": ["invalid", "degenerate", "duplicate"]
+          }
+        }
+      }
+    }
+  }
+}

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import jsonschema
+import pytest
 import yaml
 
 from robot_sf.adversarial import manifest_quality
@@ -13,9 +16,20 @@ from robot_sf.adversarial.batch_certification import (
     certify_candidate_batch,
     certify_records,
 )
+from robot_sf.adversarial.batch_certification import (
+    main as batch_cli_main,
+)
 from robot_sf.adversarial.config import CandidateSpec, Pose2D
 from robot_sf.adversarial.manifest_quality import ManifestQualityRecord
 from robot_sf.adversarial.scenario_manifest import compute_control_hash
+
+_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "robot_sf"
+    / "benchmark"
+    / "schemas"
+    / "adversarial_candidate_quality.v1.json"
+)
 
 
 def _record(status: str, *, path: str, control_hash: str | None = None) -> ManifestQualityRecord:
@@ -101,6 +115,26 @@ def test_batch_validity_gate_rejects_low_quality_batch() -> None:
     assert next(c for c in result.candidates if c.path == "a").accepted is True
 
 
+def test_payload_records_non_default_policy() -> None:
+    """Non-default gate policy is part of the emitted provenance payload."""
+    records = [
+        _record("valid", path="a", control_hash="dup"),
+        _record("valid", path="b", control_hash="dup"),
+    ]
+    policy = BatchCertificationPolicy(
+        reject_duplicates=False,
+        min_batch_validity_rate=0.75,
+    )
+
+    payload = certify_records(records, policy).to_dict()
+
+    assert payload["policy"] == {
+        "reject_statuses": ["invalid", "degenerate"],
+        "reject_duplicates": False,
+        "min_batch_validity_rate": 0.75,
+    }
+
+
 def test_empty_batch_is_not_accepted() -> None:
     """An empty batch produces a well-formed, non-accepted result."""
     result = certify_records([])
@@ -115,6 +149,11 @@ def test_to_dict_emits_candidate_quality_v1() -> None:
     payload = result.to_dict()
     assert payload["schema_version"] == ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA
     assert "evidence_boundary" in payload
+    assert payload["policy"] == {
+        "reject_statuses": ["invalid", "degenerate"],
+        "reject_duplicates": True,
+        "min_batch_validity_rate": None,
+    }
     assert payload["total"] == 1
     assert payload["candidates"][0]["path"] == "a"
 
@@ -224,3 +263,63 @@ def test_certify_records_without_quality_summary(tmp_path: Path) -> None:
     result = certify_candidate_batch([tmp_path], include_quality_summary=False)
     assert result.quality_summary is None
     assert "quality_summary" not in result.to_dict()
+
+
+def test_candidate_quality_payload_validates_against_schema(tmp_path: Path) -> None:
+    """The emitted payload should validate against the canonical v1 schema."""
+    _write_manifest(tmp_path / "a.yaml", _controls(0.0), "valid")
+    _write_manifest(tmp_path / "b.yaml", _controls(1.0), "invalid")
+
+    payload = certify_candidate_batch([tmp_path]).to_dict()
+    schema = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+    jsonschema.Draft202012Validator(schema).validate(payload)
+
+
+def test_batch_certification_cli_writes_output_json_and_exits_zero(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An accepted batch writes the summary JSON and exits successfully."""
+    _write_manifest(tmp_path / "a.yaml", _controls(0.0), "valid")
+    output_json = tmp_path / "candidate_quality.json"
+
+    exit_code = batch_cli_main([str(tmp_path), "--output-json", str(output_json)])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out.strip() == output_json.as_posix()
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA
+    assert payload["batch_accepted"] is True
+
+
+def test_batch_certification_cli_rejects_bad_batch_with_gate_exit_code(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A rejected batch still writes diagnostics but returns a non-zero gate exit code."""
+    _write_manifest(tmp_path / "bad.yaml", _controls(0.0), "degenerate")
+    output_json = tmp_path / "candidate_quality.json"
+
+    exit_code = batch_cli_main([str(tmp_path), "--output-json", str(output_json)])
+
+    assert exit_code == 2
+    assert capsys.readouterr().out.strip() == output_json.as_posix()
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert payload["batch_accepted"] is False
+    assert payload["rejection_counts"] == {"degenerate": 1}
+
+
+def test_batch_certification_cli_reports_malformed_yaml_without_traceback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Malformed YAML should be a bounded input error, not a traceback."""
+    (tmp_path / "bad.yaml").write_text("candidate_controls: [\n", encoding="utf-8")
+
+    exit_code = batch_cli_main([str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("Error: ")

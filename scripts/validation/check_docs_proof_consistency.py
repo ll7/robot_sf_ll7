@@ -570,21 +570,42 @@ def _evidence_bundle_key(tracked_path: Path) -> Path:
     return _EVIDENCE_DIR / parts[0] if parts else tracked_path
 
 
-def _evidence_catalog_coverage_diagnostics(
-    *,
+def evidence_bundle_members(repo_root: Path) -> dict[Path, list[Path]]:
+    """Group tracked ``docs/context/evidence/`` files by their evidence-bundle key.
+
+    The returned mapping uses :func:`_evidence_bundle_key` for grouping, so each
+    key is either an immediate subdirectory of ``docs/context/evidence/`` (a
+    bundle) or a standalone file directly under it.  Member lists are sorted for
+    deterministic downstream consumption (for example, representative-file
+    selection in ``scripts/tools/catalog_evidence.py``).  This is shared,
+    importable discovery state, not a duplicate of the checker's scan logic.
+    """
+    members: dict[Path, list[Path]] = {}
+    for tracked_path in _tracked_evidence_files(repo_root):
+        if not _is_within_dir(tracked_path, _EVIDENCE_DIR):
+            continue
+        members.setdefault(_evidence_bundle_key(tracked_path), []).append(tracked_path)
+    for member_list in members.values():
+        member_list.sort()
+    return members
+
+
+def uncovered_evidence_bundles(
     repo_root: Path,
+    *,
     catalog_path: Path = _CONTEXT_CATALOG,
-) -> list[Diagnostic]:
-    """Report evidence bundles or files with no catalog entry in docs/context/catalog.yaml.
+) -> list[Path]:
+    """Return sorted evidence-bundle keys that have no catalog entry covering them.
 
-    Each immediate subdirectory under ``docs/context/evidence/`` is treated as
-    an *evidence bundle*.  A bundle is considered *covered* when the catalog
-    contains at least one entry whose path is at or below the bundle root.
-    Loose files directly under ``docs/context/evidence/`` are checked
-    individually.  Directories with no tracked files are ignored.
+    Each immediate subdirectory under ``docs/context/evidence/`` is treated as an
+    *evidence bundle*.  A bundle is *covered* when the catalog contains at least
+    one entry whose path is at or below the bundle root.  Loose files directly
+    under ``docs/context/evidence/`` are checked individually.  Directories with
+    no tracked files are ignored.
 
-    This function is designed for explicit ``--check-evidence-catalog`` runs
-    and does not modify or interact with the diff-scoped default checks.
+    This is the single source of truth for "what counts as an uncataloged
+    anchor"; both the ``--check-evidence-catalog`` diagnostics here and the
+    ``catalog_evidence.py`` proposer consume it so they cannot diverge.
     """
     full_catalog_path = repo_root / catalog_path
     catalog_paths: set[Path] = set()
@@ -595,31 +616,40 @@ def _evidence_catalog_coverage_diagnostics(
             payload = None
         catalog_paths = _catalog_paths_from_payload(payload)
 
-    tracked = _tracked_evidence_files(repo_root)
-    if not tracked:
+    bundle_keys = evidence_bundle_members(repo_root).keys()
+    if not bundle_keys:
         return []
 
-    # Group tracked files by their evidence bundle key.
-    bundle_keys: set[Path] = set()
-    for tracked_path in tracked:
-        if _is_within_dir(tracked_path, _EVIDENCE_DIR):
-            bundle_keys.add(_evidence_bundle_key(tracked_path))
-
-    diagnostics: list[Diagnostic] = []
+    uncovered: list[Path] = []
     for bundle_key in sorted(bundle_keys):
         covered = any(_is_within_dir(p, bundle_key) for p in catalog_paths)
         if not covered:
-            diagnostics.append(
-                Diagnostic(
-                    path=catalog_path,
-                    message=(
-                        f"tracked evidence has no catalog entry: {bundle_key.as_posix()}"
-                        " — add at least one entry under this path in"
-                        f" {catalog_path.as_posix()}"
-                    ),
-                )
-            )
-    return diagnostics
+            uncovered.append(bundle_key)
+    return uncovered
+
+
+def _evidence_catalog_coverage_diagnostics(
+    *,
+    repo_root: Path,
+    catalog_path: Path = _CONTEXT_CATALOG,
+) -> list[Diagnostic]:
+    """Report evidence bundles or files with no catalog entry in docs/context/catalog.yaml.
+
+    Thin diagnostic wrapper over :func:`uncovered_evidence_bundles`.  Designed for
+    explicit ``--check-evidence-catalog`` runs; it does not modify or interact
+    with the diff-scoped default checks.
+    """
+    return [
+        Diagnostic(
+            path=catalog_path,
+            message=(
+                f"tracked evidence has no catalog entry: {bundle_key.as_posix()}"
+                " — add at least one entry under this path in"
+                f" {catalog_path.as_posix()}"
+            ),
+        )
+        for bundle_key in uncovered_evidence_bundles(repo_root, catalog_path=catalog_path)
+    ]
 
 
 def _validation_phrase_diagnostics(path: Path, text: str) -> list[Diagnostic]:

@@ -76,6 +76,28 @@ Use small PRs with explicit evidence-family boundaries:
 5. Do not delete or rewrite benchmark or paper-facing evidence without checking the linked note,
    issue, PR, and claim boundary.
 
+## Automation (Issue #3187)
+
+`scripts/tools/catalog_evidence.py` drains this backlog in bulk instead of four anchors per PR. It
+reuses the checker's anchor discovery
+(`scripts.validation.check_docs_proof_consistency.uncovered_evidence_bundles`), infers
+`status`/`freshness`/`area` from deterministic heuristics, and routes anything it cannot classify
+with confidence to an explicit `needs-human-review` list rather than guessing:
+
+```bash
+uv run python scripts/tools/catalog_evidence.py                 # dry-run unified-diff preview
+uv run python scripts/tools/catalog_evidence.py --json-output output/catalog_proposal.json
+uv run python scripts/tools/catalog_evidence.py --apply         # append additive rows
+```
+
+Safety properties (covered by `tests/tools/test_catalog_evidence.py`): proposals use only canonical
+catalog vocabulary; every auto-proposed row references a checker-clean evidence file (no `output/`
+or absolute local paths), so a bulk `--apply` keeps the catalog gate green; `--apply` is additive
+only (existing rows are preserved byte-for-byte) and idempotent (a covered bundle is never
+re-proposed). A 2026-06-20 dry run over the live backlog classified 66 of 93 anchors confidently and
+routed 27 to human review (ambiguous area, or evidence files that reference `output/`/local paths).
+The remaining review items and the bulk apply itself are the next bounded step under this issue.
+
 ## Validation
 
 Use the normal diff gate for each bounded cleanup PR:

@@ -85,7 +85,7 @@ def test_draft_only_boundary_and_caveats_are_explicit(tmp_path) -> None:
 
 
 def test_stale_and_negative_rows_weaken_table_status(tmp_path) -> None:
-    """Stale or negative rows should remain visible as blockers."""
+    """Historical, stale, or negative rows should remain visible as blockers."""
     markdown_path, _summary_path = generate_table_candidates(
         sources=_default_sources(),
         output_dir=tmp_path,
@@ -94,7 +94,7 @@ def test_stale_and_negative_rows_weaken_table_status(tmp_path) -> None:
 
     assert "tab_issue_1023_campaign_table" in markdown
     assert "non-claimable" in markdown
-    assert "stale-needs-refresh" in markdown
+    assert "historical-valid" in markdown
     assert "Predictive Planner v2 | negative" in markdown
     assert "CARLA Replay Parity | blocked" in markdown
 

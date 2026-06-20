@@ -3,20 +3,20 @@
     {
       "artifact_id": "tab_issue_1023_campaign_table",
       "source_path": "campaign_table.md",
-      "source_artifact": "tracked compact evidence table from docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports",
-      "caption_draft": "Scenario-horizon campaign table preserved from the tracked Issue #1023 evidence pack.",
-      "claim_boundary": "Dissertation export smoke only; the table remains historical tracked evidence and does not establish a new benchmark claim.",
+      "source_artifact": "fresh bounded issue #3203 scenario-horizon campaign reports/campaign_table.md; original config/seeds reconstructed from issue #1023 provenance",
+      "caption_draft": "Scenario-horizon campaign table re-exported from the Issue #3203 bounded rerun, preserving the failed PPO row and invalid campaign-evidence caveat.",
+      "claim_boundary": "Payload-complete dissertation export only; the fresh campaign exited invalid and does not establish a new benchmark claim.",
       "recommended_manuscript_use": "discussion",
-      "fallback_degraded_summary": "Use only with the original Issue #1023 caveats; fallback, skipped, or unavailable rows must stay visible when present."
+      "fallback_degraded_summary": "Use only with the Issue #3203 caveat: campaign exit code 2, evidence_status invalid, PPO partial-failure from missing dict observation keys, and SNQI contract fail under warn enforcement must stay visible."
     },
     {
       "artifact_id": "tab_issue_1023_scenario_family_breakdown",
       "source_path": "scenario_family_breakdown.md",
-      "source_artifact": "tracked compact evidence table from docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports",
-      "caption_draft": "Scenario-family breakdown table preserved from the tracked Issue #1023 evidence pack.",
-      "claim_boundary": "Dissertation export smoke only; the table remains historical tracked evidence and does not establish a new benchmark claim.",
+      "source_artifact": "fresh bounded issue #3203 scenario-horizon campaign reports/scenario_family_breakdown.md; original config/seeds reconstructed from issue #1023 provenance",
+      "caption_draft": "Scenario-family breakdown table re-exported from the Issue #3203 bounded rerun, preserving the invalid campaign-evidence caveat.",
+      "claim_boundary": "Payload-complete dissertation export only; the fresh campaign exited invalid and does not establish a new benchmark claim.",
       "recommended_manuscript_use": "discussion",
-      "fallback_degraded_summary": "Use only with the original Issue #1023 caveats; fallback, skipped, or unavailable rows must stay visible when present."
+      "fallback_degraded_summary": "Use only with the Issue #3203 caveat: campaign exit code 2, evidence_status invalid, PPO partial-failure from missing dict observation keys, and SNQI contract fail under warn enforcement must stay visible."
     }
   ]
 }

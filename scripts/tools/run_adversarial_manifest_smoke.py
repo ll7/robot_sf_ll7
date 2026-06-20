@@ -15,6 +15,11 @@ from typing import Any
 
 import yaml
 
+from robot_sf.adversarial.batch_certification import (
+    ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA,
+    BatchCertificationPolicy,
+    certify_candidate_batch,
+)
 from robot_sf.adversarial.config import SearchSpaceConfig
 from robot_sf.adversarial.materialize import (
     materialize_manifest_route_overrides,
@@ -40,6 +45,7 @@ EVIDENCE_BOUNDARY = (
     "smoke-only: generated cases are uncategorized development stress tests; this run does not "
     "establish adversarial coverage, planner weakness, leaderboard standing, or paper-facing claims."
 )
+DEFAULT_CANDIDATE_CERTIFICATION_JSON = "candidate_certification.json"
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
@@ -139,6 +145,78 @@ def _valid_manifests(
         for manifest in manifests
         if manifest.validation is not None and manifest.validation.status is ManifestCategory.VALID
     ]
+
+
+def _candidate_certification_policy(args: argparse.Namespace) -> BatchCertificationPolicy:
+    """Build the pre-planner candidate-certification policy from CLI arguments."""
+
+    return BatchCertificationPolicy(
+        reject_duplicates=not bool(getattr(args, "allow_duplicate_candidates", False)),
+        min_batch_validity_rate=getattr(args, "min_batch_validity_rate", None),
+    )
+
+
+def _bounded_unit_interval(value: str) -> float:
+    """Parse a finite float constrained to the unit interval."""
+
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a finite float between 0 and 1") from exc
+    if not math.isfinite(parsed) or not 0.0 <= parsed <= 1.0:
+        raise argparse.ArgumentTypeError("must be a finite float between 0 and 1")
+    return parsed
+
+
+def _candidate_certification_output_path(args: argparse.Namespace, output_dir: Path) -> Path:
+    """Resolve where the certification payload should be written."""
+
+    configured = getattr(args, "candidate_certification_json", None)
+    if configured is None:
+        return output_dir / DEFAULT_CANDIDATE_CERTIFICATION_JSON
+    return Path(configured)
+
+
+def _run_candidate_certification(
+    args: argparse.Namespace,
+    *,
+    manifest_dir: Path,
+    output_dir: Path,
+) -> dict[str, Any]:
+    """Certify generated candidates and write the pre-planner gate artifact."""
+
+    output_path = _candidate_certification_output_path(args, output_dir)
+    policy = _candidate_certification_policy(args)
+    reference_manifest = getattr(args, "candidate_certification_reference_manifest", None)
+    certification = certify_candidate_batch(
+        [manifest_dir],
+        policy=policy,
+        reference_manifest=reference_manifest,
+    )
+    payload = certification.to_dict()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    diagnostic_override = bool(getattr(args, "allow_rejected_candidates_diagnostic", False))
+    return {
+        "schema_version": ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA,
+        "payload_path": output_path.as_posix(),
+        "status": "accepted"
+        if certification.accepted
+        else "diagnostic_override"
+        if diagnostic_override
+        else "rejected",
+        "batch_accepted": certification.accepted,
+        "diagnostic_override": diagnostic_override and not certification.accepted,
+        "applied_policy": policy.to_dict(),
+        "total": certification.total,
+        "accepted_count": certification.accepted_count,
+        "rejected_count": certification.rejected_count,
+        "accepted_candidate_paths": [
+            candidate.path for candidate in certification.candidates if candidate.accepted
+        ],
+        "validity_rate": certification.validity_rate,
+        "rejection_counts": dict(certification.rejection_counts),
+    }
 
 
 def _materialize_matrix(
@@ -430,12 +508,37 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
         encoding="utf-8",
     )
     manifest_rows = _write_manifest_batch(manifests, output_dir=output_dir)
-    selected = _valid_manifests(manifests)[: args.max_valid]
+    candidate_certification: dict[str, Any] = {
+        "status": "not_required",
+        "batch_accepted": None,
+        "diagnostic_override": False,
+    }
+    if bool(getattr(args, "require_candidate_certification", False)):
+        candidate_certification = _run_candidate_certification(
+            args,
+            manifest_dir=output_dir / "manifests",
+            output_dir=output_dir,
+        )
+    certification_blocks_planners = (
+        candidate_certification["status"] == "rejected"
+        and not candidate_certification["diagnostic_override"]
+    )
+    if bool(getattr(args, "require_candidate_certification", False)):
+        accepted_paths = set(candidate_certification.get("accepted_candidate_paths", []))
+        selected = [
+            manifest
+            for manifest, row in zip(manifests, manifest_rows, strict=True)
+            if row["path"] in accepted_paths
+            and manifest.validation is not None
+            and manifest.validation.status is ManifestCategory.VALID
+        ][: args.max_valid]
+    else:
+        selected = _valid_manifests(manifests)[: args.max_valid]
 
     planner_runs: list[dict[str, Any]] = []
     matrix_path: Path | None = None
     materialized_rows: list[dict[str, Any]] = []
-    if selected:
+    if selected and not certification_blocks_planners:
         matrix_path, materialized_rows = _materialize_matrix(
             selected,
             scenario_template=scenario_template,
@@ -454,7 +557,11 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
                 )
             )
 
-    result_classification = _classify_smoke_result(generation, selected, planner_runs)
+    result_classification = (
+        "candidate_certification_rejected"
+        if certification_blocks_planners
+        else _classify_smoke_result(generation, selected, planner_runs)
+    )
     payload = {
         "schema_version": SUMMARY_SCHEMA_VERSION,
         "evidence_classification": EVIDENCE_CLASSIFICATION,
@@ -466,6 +573,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
         },
         "source": source.to_dict(),
         "generation": generation,
+        "candidate_certification": candidate_certification,
         "manifests": manifest_rows,
         "materialized": {
             "matrix_path": matrix_path.as_posix() if matrix_path is not None else None,
@@ -525,6 +633,42 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--horizon", type=int, default=60)
     parser.add_argument("--dt", type=float, default=0.1)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument(
+        "--require-candidate-certification",
+        action="store_true",
+        help="Certify generated candidate manifests before materialization or planner execution.",
+    )
+    parser.add_argument(
+        "--candidate-certification-json",
+        type=Path,
+        default=None,
+        help=(
+            "Path for the adversarial_candidate_quality.v1 payload. Defaults to "
+            f"<output-dir>/{DEFAULT_CANDIDATE_CERTIFICATION_JSON}."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-certification-reference-manifest",
+        type=Path,
+        default=None,
+        help="Optional reference manifest used for certification perturbation provenance.",
+    )
+    parser.add_argument(
+        "--min-batch-validity-rate",
+        type=_bounded_unit_interval,
+        default=None,
+        help="Optional candidate-batch validity rate required before planner execution.",
+    )
+    parser.add_argument(
+        "--allow-duplicate-candidates",
+        action="store_true",
+        help="Do not reject repeated normalized control hashes during candidate certification.",
+    )
+    parser.add_argument(
+        "--allow-rejected-candidates-diagnostic",
+        action="store_true",
+        help="Continue the smoke run after a rejected certification and mark it diagnostic-only.",
+    )
     return parser
 
 

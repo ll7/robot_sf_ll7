@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover - dependency is present in repo env
 
 SCHEMA_VERSION = "stale_artifact_detector.v1"
 CURRENT_ARTIFACT_SCHEMA = "artifact_catalog.v1"
+DISSERTATION_ARTIFACT_BUNDLE_SCHEMA = "dissertation_artifact_bundle.v1"
 BLOCKING_MARKERS = {
     "blocked",
     "blocked-for-manuscript-use",
@@ -337,6 +338,34 @@ def load_manifest(path: Path) -> list[Any]:
             raise RuntimeError("PyYAML is required for YAML manifests")
         payload = yaml.safe_load(text)
 
+    if (
+        isinstance(payload, dict)
+        and payload.get("schema_version") == DISSERTATION_ARTIFACT_BUNDLE_SCHEMA
+    ):
+        artifacts = payload.get("artifacts")
+        if not isinstance(artifacts, list):
+            return [payload]
+        entries: list[Any] = []
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                entries.append(artifact)
+                continue
+            digest = _as_text(artifact.get("sha256"))
+            output_path = _as_text(artifact.get("output_path"))
+            entries.append(
+                {
+                    "artifact_id": artifact.get("artifact_id"),
+                    "schema_version": payload.get("schema_version"),
+                    "sha256": digest,
+                    "outputs": {
+                        "payload": {
+                            "path": f"payload/{output_path}" if output_path else None,
+                            "sha256": digest,
+                        }
+                    },
+                }
+            )
+        return entries
     if isinstance(payload, dict):
         return [payload]
     if isinstance(payload, list):

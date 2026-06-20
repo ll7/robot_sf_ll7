@@ -670,6 +670,22 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2542_dissertation_export_bundle/payload/artifacts/tab_issue_1023_campaign_table.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2542_dissertation_export_bundle/payload/artifacts/tab_issue_1023_scenario_family_breakdown.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-06-20/reports/campaign_table.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-06-20/reports/scenario_family_breakdown.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_2686_release_0_0_2_table_bundle.md
     status: current
     freshness: evidence

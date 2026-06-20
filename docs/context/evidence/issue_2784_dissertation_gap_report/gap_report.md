@@ -50,6 +50,14 @@ Sources: ledger #2760 (7 rows), register #2762 (4 entries)
 - **Caveat**: Forecast coupling and transfer diagnostics currently show mixed or insufficient evidence (#2843 revise recommendation; mixed baseline-point results in #2781; transferability matrix is not a safety proof).
 - **Claim gap / reason**: Requires transfer-aware transferability campaigns with false-positive accounting, non-regression on success/progress, and statistical uncertainty before any safety/progress claim.
 
+### exported_tables [ledger]
+
+- **Tier/Classification**: diagnostic
+- **Promotion step or reason**: invalid campaign repair: fix or intentionally scope the PPO observation-contract failure and SNQI contract caveat, then rerun a fresh bounded campaign before any benchmark or Results wording.
+- **Allowed wording / boundary**: Payload-complete scenario-horizon dissertation table exports exist for discussion/provenance only; the fresh campaign preserved the PPO partial-failure row and does not establish benchmark-success, ranking, or Results-chapter evidence.
+- **Caveat**: The Issue #3203 campaign exited 2 with evidence_status invalid: 8 successful evidence rows, 1 unexpected failed PPO row (144/144 serial-worker jobs failed from missing dict observation keys), and SNQI contract status fail under warn enforcement. Preserve the PPO row as failed/degraded evidence, not benchmark success.
+- **Claim gap / reason**: Payload absence is resolved, but the tables remain diagnostic/provenance artifacts until the PPO observation contract and SNQI contract caveats are repaired or explicitly scoped out by a new issue contract.
+
 ## Negative / Revise-Only
 
 ### pedestrian_density_stress [ledger]
@@ -79,7 +87,7 @@ Sources: ledger #2760 (7 rows), register #2762 (4 entries)
 ### issue-3201-observation-noise-live-dense-stress [register]
 
 - **Tier/Classification**: diagnostic_only
-- **Promotion step or reason**: Follow-up #3233: author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.
+- **Promotion step or reason**: Completed by follow-up #3233: the deterministic near-field fixture and same-seed clean-vs-perturbed comparison are recorded in docs/context/evidence/issue_3233_near_field_observation_noise/. Do not repeat the weak dense_stress live candidate for this claim boundary.
 - **Allowed wording / boundary**: Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.
 - **Caveat**: Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.
 - **Claim gap / reason**: Perturbation plumbing activated (179 missed actor observations; observed actor count dropped from 17 to 5-12), but selected commands, progress/risk summary, collision flags, and closest-distance metrics were identical. The live scenario candidate did not satisfy the intended near-field pedestrian-dominated condition.
@@ -90,17 +98,11 @@ Sources: ledger #2760 (7 rows), register #2762 (4 entries)
 - **Promotion step or reason**: Use the ledger as a planning aid to identify which thesis areas need new experiments before Results wording is possible. Do not cite any current row as benchmark-strength evidence.
 - **Allowed wording / boundary**: Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.
 - **Caveat**: Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.
-- **Claim gap / reason**: Four of six areas are classified as diagnostic-tier evidence (topology, signalized behavior, prediction, pedestrian density). One area (observation robustness) is release-backed but is a contract/provenance layer only. One area (exported tables) is stale/non-claimable. No row supports Results-chapter wording without qualification.
+- **Claim gap / reason**: Five of seven ledger rows are diagnostic-tier or blocked evidence (topology, signalized behavior, prediction, pedestrian density, exported tables). One area (observation robustness) is release-backed but is a contract/provenance layer only. The exported-tables payload gap is resolved, but the Issue #3203 rerun remains invalid as benchmark-success evidence because PPO partial-failed and SNQI contract status failed. No row supports Results-chapter wording without qualification.
 
 ## Remove / Weaken
 
-### exported_tables [ledger]
-
-- **Tier/Classification**: non-claimable
-- **Promotion step or reason**: stale artifact refresh: payload file recovery or re-export from a fresh campaign is required before any reuse.
-- **Allowed wording / boundary**: do-not-use
-- **Caveat**: The claim matrix reports missing payload files for both artifacts, and the stale-artifact detector classifies the bundle manifest as stale. The tables remain historical tracked evidence and do not establish new benchmark claims.
-- **Claim gap / reason**: Requires payload file recovery or re-export before any reuse.
+No gaps in this bucket.
 
 ## Claim Boundaries
 

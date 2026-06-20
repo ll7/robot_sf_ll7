@@ -27,9 +27,8 @@ from typing import TYPE_CHECKING
 
 from robot_sf.adversarial.manifest_quality import (
     EVIDENCE_BOUNDARY,
-    _collect_paths,
-    _load_records,
-    summarize_adversarial_manifest_quality,
+    load_adversarial_manifest_quality_records,
+    summarize_adversarial_manifest_quality_records,
 )
 
 if TYPE_CHECKING:
@@ -37,26 +36,6 @@ if TYPE_CHECKING:
         ManifestQualityRecord,
         ManifestsQualitySummary,
     )
-
-
-def _load_batch_records(
-    manifest_inputs: list[str | Path],
-    reference_manifest: str | Path | None,
-) -> list[ManifestQualityRecord]:
-    """Parse a manifest batch into quality records, reusing the shared parser.
-
-    The gate only needs each candidate's ``status`` and ``normalized_control_hash``,
-    so the perturbation reference vector is not required here (that is computed by
-    :func:`summarize_adversarial_manifest_quality` for provenance). A reference
-    manifest, when given, is still excluded from the candidate set.
-
-    Returns:
-        One :class:`ManifestQualityRecord` per discovered candidate manifest.
-    """
-    manifest_paths = _collect_paths([Path(path) for path in manifest_inputs])
-    reference_path = Path(reference_manifest) if reference_manifest is not None else None
-    records, _ = _load_records(manifest_paths, None, reference_path)
-    return records
 
 
 ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA = "adversarial_candidate_quality.v1"
@@ -224,11 +203,15 @@ def certify_candidate_batch(
     Returns:
         A :class:`BatchCertification` (optionally carrying the quality summary).
     """
-    records = _load_batch_records(manifest_inputs, reference_manifest)
+    records = load_adversarial_manifest_quality_records(
+        manifest_inputs,
+        reference_manifest=reference_manifest,
+    )
     certification = certify_records(records, policy)
     if not include_quality_summary:
         return certification
-    summary = summarize_adversarial_manifest_quality(
-        manifest_inputs, reference_manifest=reference_manifest
+    summary = summarize_adversarial_manifest_quality_records(
+        records,
+        reference_manifest=reference_manifest,
     )
     return replace(certification, quality_summary=summary)

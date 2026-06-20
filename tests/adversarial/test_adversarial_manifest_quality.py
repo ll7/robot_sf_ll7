@@ -12,7 +12,9 @@ from robot_sf.adversarial.config import CandidateSpec, Pose2D
 from robot_sf.adversarial.manifest_quality import (
     MANIFEST_QUALITY_SCHEMA_VERSION,
     _load_records,
+    load_adversarial_manifest_quality_records,
     summarize_adversarial_manifest_quality,
+    summarize_adversarial_manifest_quality_records,
 )
 from robot_sf.adversarial.manifest_quality import main as quality_cli_main
 from robot_sf.adversarial.scenario_manifest import compute_control_hash
@@ -97,6 +99,20 @@ def test_summarize_manifest_rates_and_novelty(tmp_path: Path) -> None:
     assert result.unique_hash_count == 3
     assert result.novelty_rate == 0.75
     assert result.duplicate_rate == 0.25
+
+
+def test_public_record_loader_feeds_summary_without_path_reload(tmp_path: Path) -> None:
+    controls_a = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    controls_b = _candidate_controls(start_x=1.5, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    _write_manifest(tmp_path / "a.yaml", controls_a, "valid")
+    _write_manifest(tmp_path / "b.yaml", controls_b, "invalid")
+
+    records = load_adversarial_manifest_quality_records([tmp_path])
+    result = summarize_adversarial_manifest_quality_records(records)
+
+    assert result.manifest_count == 2
+    assert result.status_counts == {"valid": 1, "invalid": 1}
+    assert result.validity_rate == 0.5
 
 
 def test_missing_manifest_schema_version_stays_none(tmp_path: Path) -> None:

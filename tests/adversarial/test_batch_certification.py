@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from robot_sf.adversarial import manifest_quality
 from robot_sf.adversarial.batch_certification import (
     ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA,
     BatchCertificationPolicy,
@@ -172,6 +173,29 @@ def test_certify_candidate_batch_end_to_end(tmp_path: Path) -> None:
     # The quality summary is embedded for provenance.
     assert result.quality_summary is not None
     assert result.to_dict()["quality_summary"]["manifest_count"] == 4
+
+
+def test_certify_candidate_batch_reuses_loaded_records_for_summary(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The default embedded quality summary should not re-read candidate manifests."""
+    _write_manifest(tmp_path / "a.yaml", _controls(0.0), "valid")
+    _write_manifest(tmp_path / "b.yaml", _controls(1.0), "valid")
+
+    loaded_paths: list[Path] = []
+    original_load_yaml_mapping = manifest_quality._load_yaml_mapping
+
+    def counting_load_yaml_mapping(path: Path) -> dict:
+        loaded_paths.append(path)
+        return original_load_yaml_mapping(path)
+
+    monkeypatch.setattr(manifest_quality, "_load_yaml_mapping", counting_load_yaml_mapping)
+
+    result = certify_candidate_batch([tmp_path])
+
+    assert result.quality_summary is not None
+    assert result.quality_summary.manifest_count == 2
+    assert sorted(path.name for path in loaded_paths) == ["a.yaml", "b.yaml"]
 
 
 def test_certify_with_reference_manifest_computes_perturbation(tmp_path: Path) -> None:

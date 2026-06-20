@@ -23,7 +23,9 @@ from robot_sf.adversarial.manifest_quality import (
     ManifestsQualitySummary,
     PlannerOutcome,
     PlannerOutcomeSummary,
+    load_adversarial_manifest_quality_records,
     summarize_adversarial_manifest_quality,
+    summarize_adversarial_manifest_quality_records,
 )
 from robot_sf.adversarial.materialize import (
     materialize_manifest_route_overrides,
@@ -97,6 +99,7 @@ __all__ = [
     "certify_records",
     "compute_control_hash",
     "generate_manifests",
+    "load_adversarial_manifest_quality_records",
     "materialize_manifest_route_overrides",
     "materialize_manifest_scenario_payload",
     "materialize_manifest_single_pedestrian_override",
@@ -106,6 +109,7 @@ __all__ = [
     "run_adversarial_search",
     "run_seed_sensitivity",
     "summarize_adversarial_manifest_quality",
+    "summarize_adversarial_manifest_quality_records",
     "validate_candidate_manifest",
     "validate_manifest_payload",
     "validate_multi_ped_runtime_plausibility",

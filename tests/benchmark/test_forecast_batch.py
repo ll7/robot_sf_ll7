@@ -135,6 +135,21 @@ def test_forecast_batch_observation_quality_rejects_scalar_string_lists(field: s
         validate_forecast_batch(data)
 
 
+@pytest.mark.parametrize("field", ["visibility", "occlusion"])
+def test_forecast_batch_observation_quality_rejects_non_string_list_items(field: str) -> None:
+    """Observation-quality list fields should not coerce malformed item types."""
+    data = _batch_dict()
+    provenance = copy.deepcopy(data["provenance"])
+    assert isinstance(provenance, dict)
+    provenance["observation_quality"] = _observation_quality_dict(
+        **{field: ["simulator_declared_visibility", 1]}
+    )
+    data["provenance"] = provenance
+
+    with pytest.raises(ValueError, match=field):
+        validate_forecast_batch(data)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

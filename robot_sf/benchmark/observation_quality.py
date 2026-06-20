@@ -17,7 +17,9 @@ def _require_string_list(name: str, value: object) -> list[str]:
 
     if not isinstance(value, (list, tuple)) or len(value) == 0:
         raise ValueError(f"{name} must be a non-empty list")
-    normalized = [str(item).strip() for item in value]
+    if any(not isinstance(item, str) for item in value):
+        raise ValueError(f"{name} entries must be strings")
+    normalized = [item.strip() for item in value]
     if any(not item for item in normalized):
         raise ValueError(f"{name} entries must be non-empty strings")
     return normalized

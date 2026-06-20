@@ -2,7 +2,7 @@
 
 - Status: `actual_campaign_slice`
 - Evidence classification: `bounded_actual_slice`
-- Git head: `dc523cd90`
+- Git head: `17a409502`
 - Git worktree dirty at generation: `True`
 - Raw rows: `output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-20/episode_rows.jsonl`
 - Claim boundary: bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF episodes for a compact two-planner local fidelity-sensitivity slice. It measures internal sensitivity on this slice only; it is not simulator-realism, sim-to-real, paper-facing planner-ranking, or full #3207 acceptance evidence.
@@ -15,7 +15,7 @@
 - Seeds: `111, 112, 113`
 - Planners: `baseline_social_force, goal_seek`
 - Limitation: local torch/rvo2-independent slice uses two non-learned planners; full config fixed_scope planners remain future work.
-- Result caveats: `ranking_stability_is_on_bounded_two_planner_slice_only, full_fixed_scope_planners_not_run, all_observed_success_rates_zero, some_observed_collision_rates_one`
+- Result caveats: `ranking_stability_is_on_bounded_two_planner_slice_only, full_fixed_scope_planners_not_run, all_observed_success_rates_zero, all_observed_collision_rates_one`
 
 ## Rank Stability
 

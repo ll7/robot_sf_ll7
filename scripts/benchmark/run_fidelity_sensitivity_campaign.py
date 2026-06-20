@@ -219,9 +219,9 @@ def apply_variant(config: Any, variant: VariantSpec, *, seed: int) -> None:
     """Apply one runtime-bound fidelity variant to an environment config."""
     if variant.runtime_binding == "sim_config.time_per_step_in_secs":
         dt_value = float(variant.patch["dt"])
-        original_steps = int(config.sim_config.max_sim_steps)
+        original_duration = float(config.sim_config.sim_time_in_secs)
         config.sim_config.time_per_step_in_secs = dt_value
-        config.sim_config.sim_time_in_secs = float(original_steps) * dt_value
+        config.sim_config.sim_time_in_secs = original_duration
     elif variant.runtime_binding == "sim_config.ped_radius":
         config.sim_config.ped_radius = float(variant.patch["sim_config"]["ped_radius"])
     elif variant.runtime_binding == "sim_config.archetype_composition":
@@ -312,6 +312,18 @@ def _env_action(env: Any, command: Mapping[str, float]) -> np.ndarray:
     )
 
 
+def _surface_clearances(env: Any) -> np.ndarray:
+    """Return robot-pedestrian surface clearances for the current simulator state."""
+    ped_positions = np.asarray(env.simulator.ped_pos, dtype=float)
+    if ped_positions.size == 0:
+        return np.asarray([], dtype=float)
+    robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+    center_distances = np.linalg.norm(ped_positions - robot_pos, axis=1)
+    robot_radius = float(env.simulator.robots[0].config.radius)
+    ped_radius = float(env.env_config.sim_config.ped_radius)
+    return center_distances - robot_radius - ped_radius
+
+
 def run_episode(
     scenario: Mapping[str, Any],
     *,
@@ -323,8 +335,17 @@ def run_episode(
 ) -> dict[str, Any]:
     """Run one actual simulator episode and return a compact row."""
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    baseline_dt = float(config.sim_config.time_per_step_in_secs)
+    target_duration = min(
+        float(horizon) * baseline_dt,
+        float(config.sim_config.sim_time_in_secs),
+    )
     apply_variant(config, variant, seed=seed)
-    max_steps = min(int(horizon), int(config.sim_config.max_sim_steps))
+    variant_dt = float(config.sim_config.time_per_step_in_secs)
+    max_steps = min(
+        int(config.sim_config.max_sim_steps),
+        max(1, math.ceil(target_duration / variant_dt)),
+    )
     env = make_robot_env(config=config, seed=seed, debug=False)
     rng = np.random.default_rng(_stable_seed(seed, variant.key, planner_name))
     planner = _planner(planner_name, config, seed=seed)
@@ -345,11 +366,9 @@ def run_episode(
             command = planner.step(obs)
             _obs, _reward, terminated, _truncated, info = env.step(_env_action(env, command))
             steps = step_idx + 1
-            ped_positions = np.asarray(env.simulator.ped_pos, dtype=float)
-            robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
-            if ped_positions.size:
-                distances = np.linalg.norm(ped_positions - robot_pos, axis=1)
-                clearances.append(float(np.min(distances)))
+            surface_clearances = _surface_clearances(env)
+            if surface_clearances.size:
+                clearances.append(float(np.min(surface_clearances)))
             meta = info.get("meta", {}) if isinstance(info, dict) else {}
             near_misses += int(float(meta.get("near_misses", 0.0) or 0.0) > 0.0)
             comfort_exposure.append(float(meta.get("comfort_exposure", 0.0) or 0.0))
@@ -363,11 +382,12 @@ def run_episode(
 
     meta = info.get("meta", {}) if isinstance(info, dict) else {}
     collision = bool(info.get("collision", False)) if isinstance(info, dict) else False
-    success = (
+    route_success = (
         bool(info.get("is_success", False) or info.get("success", False))
         if isinstance(info, dict)
         else False
     )
+    success = route_success and not collision
     min_clearance = min(clearances) if clearances else None
     return {
         "variant": variant.key,
@@ -381,6 +401,7 @@ def run_episode(
         "steps": int(steps),
         "terminated": bool(terminated),
         "success": success,
+        "route_success": route_success,
         "collision": collision,
         "metrics": {
             "success_rate": 1.0 if success else 0.0,
@@ -599,7 +620,11 @@ def write_outputs(
     with (evidence_dir / "planner_variant_metrics.csv").open(
         "w", encoding="utf-8", newline=""
     ) as handle:
-        writer = csv.DictWriter(handle, fieldnames=["variant", "planner", *METRICS])
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["variant", "planner", *METRICS],
+            lineterminator="\n",
+        )
         writer.writeheader()
         for variant, by_planner in sorted(report["aggregates"].items()):
             for planner, metrics in sorted(by_planner.items()):

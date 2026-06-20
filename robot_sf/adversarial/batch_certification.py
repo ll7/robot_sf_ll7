@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -67,6 +68,15 @@ class BatchCertificationPolicy:
     reject_statuses: tuple[str, ...] = (REASON_INVALID, REASON_DEGENERATE)
     reject_duplicates: bool = True
     min_batch_validity_rate: float | None = None
+
+    def __post_init__(self) -> None:
+        """Validate policy values that affect emitted certification payloads."""
+        if self.min_batch_validity_rate is None:
+            return
+        if not math.isfinite(self.min_batch_validity_rate):
+            raise ValueError("min_batch_validity_rate must be finite")
+        if not 0.0 <= self.min_batch_validity_rate <= 1.0:
+            raise ValueError("min_batch_validity_rate must be between 0 and 1")
 
     def to_dict(self) -> dict[str, object]:
         """Return JSON-safe policy settings used by a certification run."""

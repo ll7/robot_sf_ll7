@@ -115,6 +115,13 @@ def test_batch_validity_gate_rejects_low_quality_batch() -> None:
     assert next(c for c in result.candidates if c.path == "a").accepted is True
 
 
+@pytest.mark.parametrize("threshold", [-0.1, 1.1, float("nan"), float("inf")])
+def test_policy_rejects_invalid_batch_validity_thresholds(threshold: float) -> None:
+    """Batch-level validity thresholds must stay schema-compatible probabilities."""
+    with pytest.raises(ValueError, match="min_batch_validity_rate"):
+        BatchCertificationPolicy(min_batch_validity_rate=threshold)
+
+
 def test_payload_records_non_default_policy() -> None:
     """Non-default gate policy is part of the emitted provenance payload."""
     records = [

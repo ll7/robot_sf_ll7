@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import pytest
 import yaml
 
 from scripts.tools.build_research_status_view import (
+    SuiteFamily,
+    _load_suite_families,
+    _scenario_seed_pair,
     build_research_status_view,
     main,
     render_markdown,
@@ -70,6 +74,47 @@ def _episode(
         "artifact_uri": f"wandb://robot-sf/{run_id}/{planner}/{scenario_id}/{seed}.jsonl",
         "artifact_sha256": "a" * 64,
     }
+
+
+def test_suite_family_loader_ignores_null_scenarios_and_rejects_null_family() -> None:
+    """Suite denominators should not promote null values to literal identifiers."""
+    cleaned = _load_suite_families(
+        {
+            "scenario_families": [
+                {
+                    "family_id": " static_obstacle_detour ",
+                    "scenario_ids": [
+                        None,
+                        "",
+                        "single_obstacle_circle",
+                        float("nan"),
+                        " line_wall_detour ",
+                    ],
+                }
+            ]
+        }
+    )
+
+    assert cleaned == [
+        SuiteFamily(
+            family_id="static_obstacle_detour",
+            scenario_ids=("single_obstacle_circle", "line_wall_detour"),
+        )
+    ]
+    with pytest.raises(ValueError, match="family_id and scenario_ids"):
+        _load_suite_families(
+            {"scenario_families": [{"family_id": None, "scenario_ids": ["single_obstacle_circle"]}]}
+        )
+
+
+def test_scenario_seed_pair_ignores_invalid_seed_values() -> None:
+    """Invalid row seeds should not raise while coverage pairs are assembled."""
+    assert _scenario_seed_pair("single_obstacle_circle", "not-an-int") is None
+    assert _scenario_seed_pair("single_obstacle_circle", None) is None
+    assert _scenario_seed_pair("single_obstacle_circle", 1.5) is None
+    assert _scenario_seed_pair("single_obstacle_circle", float("nan")) is None
+    assert _scenario_seed_pair(None, 1) is None
+    assert _scenario_seed_pair("single_obstacle_circle", "1") == ("single_obstacle_circle", 1)
 
 
 def test_view_aggregates_complete_valid_coverage_with_seed_budget(tmp_path: Path) -> None:
@@ -264,7 +309,7 @@ def test_cli_accepts_documented_markdown_alias(tmp_path: Path) -> None:
     assert "# Research Status Coverage View" in output_md.read_text(encoding="utf-8")
 
 
-def test_view_ignores_null_planner_ids_and_bad_seed_pairs(tmp_path: Path) -> None:
+def test_view_ignores_null_planner_ids_and_bad_scenario_seed_pairs(tmp_path: Path) -> None:
     """Null metadata should not become literal coverage identifiers."""
     suite_config = tmp_path / "suite.yaml"
     planner_matrix = tmp_path / "planner_matrix.yaml"
@@ -274,7 +319,7 @@ def test_view_ignores_null_planner_ids_and_bad_seed_pairs(tmp_path: Path) -> Non
         yaml.safe_dump(
             {
                 "schema_version": "planner-readiness-matrix.v1",
-                "rows": [{"planner_id": None}, {"planner_id": "orca"}],
+                "rows": [{"planner_id": None}, {"planner_id": ""}, {"planner_id": "orca"}],
             },
             sort_keys=False,
         ),
@@ -295,10 +340,23 @@ def test_view_ignores_null_planner_ids_and_bad_seed_pairs(tmp_path: Path) -> Non
                 seed=2,
             ),
         },
+        {
+            **_episode(
+                planner="orca",
+                scenario_family="static_obstacle_detour",
+                scenario_id="single_obstacle_circle",
+                seed=2,
+            ),
+        },
     ]
     write_result_store(result_store, rows, study_id="fixture", command="fixture command")
     episode_frame = read_parquet_frame(result_store / "episodes.parquet")
+    episode_frame["seed"] = episode_frame["seed"].astype(object)
     episode_frame.loc[episode_frame["scenario_id"] == "line_wall_detour", "seed"] = float("nan")
+    duplicate_valid_scenario = (episode_frame["scenario_id"] == "single_obstacle_circle") & (
+        episode_frame["seed"] == 2
+    )
+    episode_frame.loc[duplicate_valid_scenario, "scenario_id"] = None
     episode_frame.to_parquet(result_store / "episodes.parquet", index=False)
 
     payload = build_research_status_view(
@@ -308,6 +366,7 @@ def test_view_ignores_null_planner_ids_and_bad_seed_pairs(tmp_path: Path) -> Non
     )
 
     assert "None" not in payload["planners"]
+    assert "" not in payload["planners"]
     cell = payload["coverage_matrix"]["orca"]["static_obstacle_detour"]
     assert cell["valid_pair_count"] == 1
     assert cell["coverage_status"] == "fail_closed_denominator_invalid"

@@ -9,6 +9,7 @@ import math
 import re
 import sys
 from dataclasses import dataclass
+from numbers import Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +27,7 @@ VALID_COVERAGE_STATUSES = frozenset({"native", "adapter"})
 FAIL_CLOSED_STATUSES = frozenset({"fallback", "degraded"})
 EXCLUDED_OR_LIMITED_STATUSES = frozenset({"diagnostic_only", "unavailable", "failed"})
 DATE_PATTERN = re.compile(r"(?P<date>\d{4}-\d{2}-\d{2})")
+NULL_IDENTIFIER_TEXT = frozenset({"", "none", "null", "nan", "<na>"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,11 +347,11 @@ def _load_suite_families(payload: dict[str, Any]) -> list[SuiteFamily]:
     """Load scenario-family denominators from the suite config."""
     families: list[SuiteFamily] = []
     for item in payload.get("scenario_families", []) or []:
-        family_id = str(item.get("family_id", "")).strip()
+        family_id = _clean_identifier(item.get("family_id"))
         scenario_ids = tuple(
-            str(value)
+            scenario_id
             for value in item.get("scenario_ids", []) or []
-            if value is not None and str(value).strip()
+            if (scenario_id := _clean_identifier(value)) is not None
         )
         if not family_id or not scenario_ids:
             raise ValueError("suite scenario_families entries require family_id and scenario_ids")
@@ -362,20 +364,37 @@ def _load_suite_families(payload: dict[str, Any]) -> list[SuiteFamily]:
 def _known_planners(payload: dict[str, Any], frame: pd.DataFrame) -> list[str]:
     """Return the known planner set plus any observed unregistered planners."""
     planners = {
-        str(row.get("planner_id", "")).strip()
+        planner_id
         for row in payload.get("rows", []) or []
-        if row.get("planner_id") is not None and str(row.get("planner_id", "")).strip()
+        if isinstance(row, dict) and (planner_id := _clean_identifier(row.get("planner_id")))
     }
-    observed = {str(value).strip() for value in frame["planner"].dropna().tolist()}
-    planners.update(value for value in observed if value)
+    observed = {
+        planner_id
+        for value in frame["planner"].tolist()
+        if (planner_id := _clean_identifier(value)) is not None
+    }
+    planners.update(observed)
     if not planners:
         raise ValueError("planner matrix does not define rows[].planner_id")
     return sorted(planners)
 
 
+def _clean_identifier(value: Any) -> str | None:
+    """Return a non-null, stripped identifier string."""
+    if value is None:
+        return None
+    if isinstance(value, Real) and not isinstance(value, bool) and not math.isfinite(float(value)):
+        return None
+    text = str(value).strip()
+    if text.lower() in NULL_IDENTIFIER_TEXT:
+        return None
+    return text
+
+
 def _scenario_seed_pair(scenario_id: Any, seed: Any) -> tuple[str, int] | None:
     """Return a valid scenario/seed pair, skipping null or non-finite values."""
-    if scenario_id is None or str(scenario_id).strip() == "":
+    scenario = _clean_identifier(scenario_id)
+    if scenario is None:
         return None
     try:
         seed_float = float(seed)
@@ -383,7 +402,7 @@ def _scenario_seed_pair(scenario_id: Any, seed: Any) -> tuple[str, int] | None:
         return None
     if not math.isfinite(seed_float) or not seed_float.is_integer():
         return None
-    return str(scenario_id), int(seed_float)
+    return scenario, int(seed_float)
 
 
 def _status_counts(rows: pd.DataFrame) -> dict[str, int]:

@@ -86,6 +86,7 @@ def register_sensor(name: str, factory: SensorFactory, *, override: bool = False
     def lidar_factory(config):
         return LidarSensor(config)
 
+
     register_sensor("lidar", lidar_factory)
     ```
     """

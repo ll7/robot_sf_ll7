@@ -5,13 +5,10 @@ This module provides functions for loading schemas from canonical locations
 with caching and version validation.
 """
 
-import logging
 import re
 from typing import Any
 
 from .schema_reference import SchemaReference
-
-logger = logging.getLogger(__name__)
 
 # Default schema reference for episode schemas
 DEFAULT_EPISODE_SCHEMA_REF = SchemaReference(

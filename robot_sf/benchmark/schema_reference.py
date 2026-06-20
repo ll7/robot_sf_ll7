@@ -5,14 +5,13 @@ This module provides the SchemaReference entity that manages runtime loading
 of schemas from canonical locations with caching to improve performance.
 """
 
-import logging
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 import robot_sf
 from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
-
-logger = logging.getLogger(__name__)
 
 
 class SchemaReference:
@@ -66,8 +65,10 @@ class SchemaReference:
         """
         # Check cache first
         if self._cache_key in self._schema_cache:
-            logger.debug("Schema loaded from cache: %s", self._cache_key)
-            return self._schema_cache[self._cache_key]
+            logger.debug(f"Schema loaded from cache: {self._cache_key}")
+            schema = self._schema_cache[self._cache_key]
+            self._loaded_schema = schema
+            return schema
 
         # Resolve the full path
         full_path = self._resolve_schema_path()
@@ -75,7 +76,7 @@ class SchemaReference:
         try:
             # Load the schema
             schema = EpisodeSchema(full_path)
-            logger.debug("Schema loaded from file: %s", full_path)
+            logger.debug(f"Schema loaded from file: {full_path}")
 
             # Validate version matches expected
             if schema.version != self.version:
@@ -91,7 +92,7 @@ class SchemaReference:
             return schema
 
         except Exception as e:
-            logger.exception("Failed to load schema from %s: %s", full_path, e)
+            logger.exception(f"Failed to load schema from {full_path}: {e}")
             raise
 
     def _resolve_schema_path(self) -> Path:

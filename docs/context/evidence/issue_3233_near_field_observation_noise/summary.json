@@ -1,0 +1,180 @@
+{
+  "schema_version": "issue_3201_observation_noise_live_smoke.v1",
+  "issue": 3201,
+  "claim_boundary": "Diagnostic same-seed local smoke only. This retests the issue #2749 observation-noise null with a pedestrian-dominated candidate surface; it is not benchmark-strength or hardware-calibrated sensor evidence.",
+  "inputs": {
+    "clean_trace_json": "worktree-local ignored artifact summarized in this report (validation/issue-3233-near-field/clean_step/trace.json)",
+    "perturbed_trace_json": "worktree-local ignored artifact summarized in this report (validation/issue-3233-near-field/perturbed_step/trace.json)"
+  },
+  "scenario": {
+    "clean": "issue_3233_near_field_observation_noise",
+    "perturbed": "issue_3233_near_field_observation_noise",
+    "same_scenario": true
+  },
+  "seed": {
+    "clean": 3233,
+    "perturbed": 3233,
+    "same_seed": true
+  },
+  "observation_perturbation_config": {
+    "clean": {
+      "position_noise_std_m": 0.0,
+      "position_noise_bound_m": 0.0,
+      "missed_detection_probability": 0.0,
+      "occlusion_distance_m": null,
+      "delay_steps": 0,
+      "seed": null
+    },
+    "perturbed": {
+      "position_noise_std_m": 0.3,
+      "position_noise_bound_m": 0.6,
+      "missed_detection_probability": 0.5,
+      "occlusion_distance_m": null,
+      "delay_steps": 0,
+      "seed": 3201
+    }
+  },
+  "observation_summary": {
+    "clean": {
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 0,
+      "min_observed_actor_count": 1,
+      "max_observed_actor_count": 1,
+      "noise_profiles": [
+        "none"
+      ],
+      "evidence_classes": [
+        "ideal_state"
+      ]
+    },
+    "perturbed": {
+      "missed_actor_observations_total": 3,
+      "occluded_actor_observations_total": 0,
+      "min_observed_actor_count": 0,
+      "max_observed_actor_count": 1,
+      "noise_profiles": [
+        "bounded_gaussian"
+      ],
+      "evidence_classes": [
+        "perception_limited"
+      ]
+    },
+    "changed": true
+  },
+  "near_field_target": {
+    "threshold_m": 2.0,
+    "clean_closest_robot_ped_distance_m": 1.4515750296008105,
+    "satisfied": true
+  },
+  "command_summary": {
+    "clean_first": [
+      0.3,
+      0.0
+    ],
+    "perturbed_first": [
+      1.2,
+      0.4431303704642192
+    ],
+    "clean_last": [
+      0.6,
+      0.0
+    ],
+    "perturbed_last": [
+      0.0,
+      0.0
+    ],
+    "sequence_changed": true
+  },
+  "progress_delta": {
+    "steps_observed": {
+      "clean": 50,
+      "perturbed": 6,
+      "delta": -44.0,
+      "changed": true
+    },
+    "initial_goal_distance": {
+      "clean": 2.000001,
+      "perturbed": 2.000001,
+      "delta": 0.0,
+      "changed": false
+    },
+    "final_goal_distance": {
+      "clean": 12.468645089252165,
+      "perturbed": 14.480990556613484,
+      "delta": 2.0123454673613193,
+      "changed": true
+    },
+    "best_goal_distance": {
+      "clean": 2.000001,
+      "perturbed": 2.000001,
+      "delta": 0.0,
+      "changed": false
+    },
+    "net_goal_progress": {
+      "clean": -10.468644089252166,
+      "perturbed": -12.480989556613483,
+      "delta": -2.0123454673613175,
+      "changed": true
+    },
+    "best_goal_progress": {
+      "clean": 0.0,
+      "perturbed": 0.0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "progress_step_count": {
+      "clean": 49,
+      "perturbed": 5,
+      "delta": -44.0,
+      "changed": true
+    },
+    "regression_step_count": {
+      "clean": 1,
+      "perturbed": 1,
+      "delta": 0.0,
+      "changed": false
+    },
+    "stagnant_step_count": {
+      "clean": 0,
+      "perturbed": 0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "longest_stagnant_run": {
+      "clean": 0,
+      "perturbed": 0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "closest_robot_ped_distance": {
+      "clean": 1.4515750296008105,
+      "perturbed": 1.395304852291646,
+      "delta": -0.056270177309164504,
+      "changed": true
+    },
+    "closest_robot_ped_step": {
+      "clean": 25,
+      "perturbed": 5,
+      "delta": -20.0,
+      "changed": true
+    },
+    "collision_flag_counts": {
+      "clean": {
+        "pedestrian": 0,
+        "obstacle": 0,
+        "robot": 0
+      },
+      "perturbed": {
+        "pedestrian": 1,
+        "obstacle": 0,
+        "robot": 0
+      },
+      "delta": null,
+      "changed": true
+    }
+  },
+  "classification": {
+    "label": "non_null_behavior_delta",
+    "rationale": "Same-seed clean and perturbed live traces differ in selected commands or progress/risk summary fields."
+  }
+}

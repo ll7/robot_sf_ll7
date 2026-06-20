@@ -165,6 +165,11 @@ Policy caveats:
 - `issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/`: launch-packet-only simulation
   fidelity sensitivity contract for #3207. Defines the tracked config, fidelity axes, required
   rank-stability and metric-drift outputs, and no-evidence boundary before any sweep is run.
+- `issue_3233_near_field_observation_noise/`: diagnostic-only same-seed clean vs perturbed
+  step-diagnostics replay on a deterministic near-field live fixture. The clean baseline reached
+  1.45 m closest robot-pedestrian distance and selected low-speed commands under dynamic-collision
+  pressure; the perturbed run changed command sequence/progress and ended with a pedestrian
+  collision. Not benchmark or sensor-realism evidence.
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that
   support the v1 raw-success leader and v2 strict-gate promotion decision.
 - `issue_1023_scenario_horizons_preflight_2026-05-06/`: compact preflight artifacts for the

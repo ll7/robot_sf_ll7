@@ -429,11 +429,14 @@ def _build_report(
     results: list[dict[str, Any]],
     fixture_meta: dict[str, Any],
     repro: dict[str, Any],
+    *,
+    issue: int | None = None,
 ) -> dict[str, Any]:
     """Build the full JSON report."""
+    issue_id = int(issue if issue is not None else repro.get("issue", 2755))
     return {
         "schema_version": "observation_noise_envelope.v1",
-        "issue": 2755,
+        "issue": issue_id,
         "claim_boundary": (
             "Diagnostic trace-derived evidence only. Not paper-facing benchmark proof. "
             "Evaluates near-field observation-noise robustness on a single "
@@ -543,6 +546,12 @@ def main() -> None:
         default="docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13",
         help="Output directory for evidence artifacts.",
     )
+    parser.add_argument(
+        "--issue",
+        type=int,
+        default=2755,
+        help="Issue number to record in generated provenance.",
+    )
     args = parser.parse_args()
 
     output_dir = REPO_ROOT / args.output_dir
@@ -572,9 +581,11 @@ def main() -> None:
         f"uv run python scripts/benchmark/run_observation_noise_envelope.py "
         f"--output-dir {args.output_dir}"
     )
+    if args.issue != 2755:
+        command = f"{command} --issue {args.issue}"
 
     repro = {
-        "issue": 2755,
+        "issue": args.issue,
         "generated_at_utc": generated_at,
         "command": command,
         "repo_head": repo_head,
@@ -585,7 +596,7 @@ def main() -> None:
         result = evaluate_condition(name, cfg, frames, first_visible_step)
         results.append(result)
 
-    report = _build_report(results, fixture_meta, repro)
+    report = _build_report(results, fixture_meta, repro, issue=args.issue)
 
     json_path = output_dir / "summary.json"
     with open(json_path, "w", encoding="utf-8") as fh:

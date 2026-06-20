@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 
 import numpy as np
 import pytest
@@ -110,6 +111,44 @@ def test_forecast_batch_observation_quality_round_trip() -> None:
     assert loaded.provenance.observation_quality is not None
     assert loaded.provenance.observation_quality.false_negative_rate == 0.25
     assert loaded.provenance.observation_quality.notes.startswith("Diagnostic")
+
+
+@pytest.mark.parametrize("field", ["visibility", "occlusion"])
+def test_forecast_batch_observation_quality_rejects_scalar_string_lists(field: str) -> None:
+    """Observation-quality list fields should not accept scalar strings."""
+    data = _batch_dict()
+    provenance = copy.deepcopy(data["provenance"])
+    assert isinstance(provenance, dict)
+    provenance["observation_quality"] = _observation_quality_dict(
+        **{field: "simulator_declared_visibility"}
+    )
+    data["provenance"] = provenance
+
+    with pytest.raises(ValueError, match=field):
+        validate_forecast_batch(data)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("latency_s", math.nan),
+        ("latency_s", math.inf),
+        ("range_limit_m", math.inf),
+        ("angular_noise_std_rad", -math.inf),
+    ],
+)
+def test_forecast_batch_observation_quality_rejects_non_finite_numbers(
+    field: str, value: float
+) -> None:
+    """Observation-quality numeric metadata should be finite on typed paths."""
+    data = _batch_dict()
+    provenance = copy.deepcopy(data["provenance"])
+    assert isinstance(provenance, dict)
+    provenance["observation_quality"] = _observation_quality_dict(**{field: value})
+    data["provenance"] = provenance
+
+    with pytest.raises(ValueError, match=field):
+        validate_forecast_batch(data)
 
 
 def test_forecast_batch_sampled_modes_round_trip() -> None:

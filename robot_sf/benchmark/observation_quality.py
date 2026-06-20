@@ -7,6 +7,7 @@ sensor-certification claims.
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -39,8 +40,8 @@ def _require_non_negative_float(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name} must be a number")
     normalized = float(value)
-    if normalized < 0.0:
-        raise ValueError(f"{name} must be >= 0")
+    if not math.isfinite(normalized) or normalized < 0.0:
+        raise ValueError(f"{name} must be a finite number >= 0")
     return normalized
 
 
@@ -120,8 +121,8 @@ class ObservationQuality:
         if not isinstance(data, dict):
             raise ValueError("observation_quality must be an object")
         return cls(
-            visibility=list(data.get("visibility", [])),
-            occlusion=list(data.get("occlusion", [])),
+            visibility=data.get("visibility", []),
+            occlusion=data.get("occlusion", []),
             latency_s=data.get("latency_s"),
             dropout_probability=data.get("dropout_probability"),
             range_limit_m=data.get("range_limit_m"),

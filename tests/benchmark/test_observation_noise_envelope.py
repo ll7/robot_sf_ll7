@@ -85,6 +85,15 @@ def test_report_has_required_top_level_keys() -> None:
     )
 
 
+def test_report_issue_follows_repro_issue() -> None:
+    """Generated reports should not hard-code the legacy issue number."""
+    mod = _load_script()
+
+    report = mod._build_report([], {}, {"issue": 2927})
+
+    assert report["issue"] == 2927
+
+
 def test_condition_report_shape() -> None:
     """Each condition result has all required fields."""
     mod = _load_script()

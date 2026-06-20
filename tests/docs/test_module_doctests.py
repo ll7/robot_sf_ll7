@@ -1,9 +1,9 @@
 """Execute docstring doctests for a curated allowlist of pure ``robot_sf`` modules.
 
-``robot_sf/`` ships ~179 ``>>>`` doctest example lines across 23 modules, but nothing
-executes them: ``pyproject.toml`` does not enable ``--doctest-modules`` and no test
-collects them, so the examples can silently drift from the real API with no CI signal
-(issue #3210).
+``robot_sf/`` ships many ``>>>`` doctest example lines across 23 modules, but
+``pyproject.toml`` does not enable blanket ``--doctest-modules`` collection. Without
+this curated runner, examples can silently drift from the real API with no CI signal
+(issues #3210 and #3247).
 
 A blanket ``--doctest-modules`` is intentionally *not* used: it would import heavy,
 side-effecting modules (``robot_sf/sim/simulator.py``, ``robot_sf/benchmark/metrics.py``,
@@ -37,9 +37,14 @@ DOCTEST_OPTIONFLAGS = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
 # Curated allowlist: pure, lightweight modules with deterministic, passing doctests.
 DOCTEST_MODULES = [
     "robot_sf.common.logging",
-    "robot_sf.research.logging_config",
-    "robot_sf.research.artifact_paths",
     "robot_sf.maps.verification.logging",
+    "robot_sf.nav.obstacle",
+    "robot_sf.nav.occupancy_grid",
+    "robot_sf.nav.occupancy_grid_rasterization",
+    "robot_sf.nav.occupancy_grid_utils",
+    "robot_sf.research.artifact_paths",
+    "robot_sf.research.logging_config",
+    "robot_sf.sensor.fusion_adapter",
     "robot_sf.sensor.registry",
 ]
 
@@ -48,16 +53,12 @@ DOCTEST_MODULES = [
 # candidates for a future faithful cleanup pass that converts illustrative examples to
 # fenced ``python`` blocks or makes them deterministic.
 #
-#   robot_sf.benchmark.metrics           - heavy import (tensorflow/torch), ~8s; no real doctests
-#   robot_sf.benchmark.utils             - file IO (ensure_directory) + env-dependent (fast-demo cap)
+#   robot_sf.benchmark.metrics           - heavy import (tensorflow/torch); inline comments only
+#   robot_sf.benchmark.utils             - heavy import + file IO + env-dependent fast-demo example
 #   robot_sf.common.matplotlib_utils     - matplotlib figure side effects
 #   robot_sf.gym_env.robot_env           - constructs a Gym env (sim startup)
 #   robot_sf.maps.osm_zones_config       - illustrative pseudocode + YAML file IO
 #   robot_sf.maps.verification           - package __init__ illustrative example
-#   robot_sf.nav.obstacle                - illustrative pseudocode (undefined rect/obstacle)
-#   robot_sf.nav.occupancy_grid          - illustrative array/grid pseudocode
-#   robot_sf.nav.occupancy_grid_rasterization - illustrative array pseudocode
-#   robot_sf.nav.occupancy_grid_utils    - illustrative array pseudocode
 #   robot_sf.nav.svg_map_parser          - illustrative pseudocode + map file IO
 #   robot_sf.ped_npc.ped_population       - illustrative pseudocode
 #   robot_sf.planner.classic_global_planner - illustrative pseudocode
@@ -73,17 +74,12 @@ EXCLUDED_MODULES = {
     "robot_sf.gym_env.robot_env",
     "robot_sf.maps.osm_zones_config",
     "robot_sf.maps.verification",
-    "robot_sf.nav.obstacle",
-    "robot_sf.nav.occupancy_grid",
-    "robot_sf.nav.occupancy_grid_rasterization",
-    "robot_sf.nav.occupancy_grid_utils",
     "robot_sf.nav.svg_map_parser",
     "robot_sf.ped_npc.ped_population",
     "robot_sf.planner.classic_global_planner",
     "robot_sf.research",
     "robot_sf.research.metadata",
     "robot_sf.research.schema_loader",
-    "robot_sf.sensor.fusion_adapter",
     "robot_sf.sim.simulator",
 }
 

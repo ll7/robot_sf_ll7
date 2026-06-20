@@ -84,12 +84,11 @@ def create_sensors_from_config(sensor_configs: list[dict[str, Any]]) -> list[Sen
     Examples
     --------
     >>> configs = [
-    ...     {"type": "lidar", "range": 10.0, "num_rays": 64},
-    ...     {"type": "camera", "resolution": (640, 480)},
+    ...     {"type": "dummy_constant", "value": 1.0},
     ... ]
     >>> sensors = create_sensors_from_config(configs)
     >>> len(sensors)
-    2
+    1
     """
     sensors = []
 
@@ -149,7 +148,7 @@ def validate_sensor_configs(sensor_configs: list[dict[str, Any]]) -> list[str]:
 
     Examples
     --------
-    >>> configs = [{"type": "lidar"}, {"missing": "type"}]
+    >>> configs = [{"type": "dummy_constant"}, {"missing": "type"}]
     >>> errors = validate_sensor_configs(configs)
     >>> len(errors)
     1

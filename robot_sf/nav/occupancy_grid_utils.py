@@ -57,6 +57,7 @@ def world_to_grid_indices(
         - Col index increases rightward (X+ in world → col+ in grid)
 
     Example:
+        >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> row, col = world_to_grid_indices(5.0, 5.0, config, 0.0, 0.0)
         >>> row, col
@@ -116,10 +117,11 @@ def grid_indices_to_world(
         - Returns center of the cell at (row, col)
 
     Example:
+        >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> x, y = grid_indices_to_world(50, 50, config, 0.0, 0.0)
-        >>> x, y
-        (5.0, 5.0)
+        >>> round(x, 2), round(y, 2)
+        (5.05, 5.05)
     """
     if not (0 <= row < config.grid_height):
         raise ValueError(f"Row index {row} out of bounds [0, {config.grid_height - 1}]")
@@ -156,6 +158,7 @@ def is_within_grid(
         True if coordinates are within grid bounds, False otherwise
 
     Example:
+        >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> is_within_grid(5.0, 5.0, config, 0.0, 0.0)
         True
@@ -189,10 +192,9 @@ def world_to_ego(
         - Ego frame: X+ forward, Y+ left, origin at robot center
 
     Example:
-        >>> import math
-        >>> pose = RobotPose(x=1.0, y=2.0, theta=0.0)
+        >>> pose = ((1.0, 2.0), 0.0)
         >>> ego_x, ego_y = world_to_ego(2.0, 2.0, pose)
-        >>> ego_x, ego_y
+        >>> round(float(ego_x), 1), round(float(ego_y), 1)
         (1.0, 0.0)
     """
     robot_x, robot_y, theta = _extract_pose(robot_pose)
@@ -231,9 +233,9 @@ def ego_to_world(
         - Rotation: θ = robot_pose.theta (forward rotation)
 
     Example:
-        >>> pose = RobotPose(x=1.0, y=2.0, theta=0.0)
+        >>> pose = ((1.0, 2.0), 0.0)
         >>> world_x, world_y = ego_to_world(1.0, 0.0, pose)
-        >>> world_x, world_y
+        >>> round(float(world_x), 1), round(float(world_y), 1)
         (2.0, 2.0)
     """
     robot_x, robot_y, theta = _extract_pose(robot_pose)
@@ -267,6 +269,7 @@ def get_grid_bounds(
         Tuple of (min_x, max_x, min_y, max_y) in world frame
 
     Example:
+        >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> bounds = get_grid_bounds(config, 0.0, 0.0)
         >>> bounds
@@ -300,9 +303,10 @@ def clip_to_grid(
         Tuple of clipped (world_x, world_y)
 
     Example:
+        >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> x, y = clip_to_grid(15.0, 5.0, config, 0.0, 0.0)
-        >>> x, y
+        >>> float(x), float(y)
         (10.0, 5.0)
     """
     min_x, max_x, min_y, max_y = get_grid_bounds(config, grid_origin_x, grid_origin_y)
@@ -344,15 +348,16 @@ def get_affected_cells(
         - Centers outside grid are clamped for iteration, closest point checked for overlap
 
     Example:
+        >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> # Circle fully inside
         >>> cells = get_affected_cells(5.0, 5.0, 0.3, config)
-        >>> len(cells)  # Approx π * 3² = ~28 cells
-        28
+        >>> len(cells)
+        36
         >>> # Circle center outside but overlapping
         >>> cells2 = get_affected_cells(10.5, 5.0, 1.0, config)
-        >>> len(cells2)  # Partial overlap
-        15
+        >>> len(cells2)
+        78
     """
     if radius <= 0:
         return []

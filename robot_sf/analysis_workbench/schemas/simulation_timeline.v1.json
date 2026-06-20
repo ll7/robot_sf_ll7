@@ -30,8 +30,7 @@
       "required": ["schema_version", "trace_id", "source"],
       "properties": {
         "schema_version": {
-          "type": "string",
-          "minLength": 1
+          "const": "simulation_trace_export.v1"
         },
         "trace_id": {
           "type": "string",

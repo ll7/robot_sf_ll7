@@ -206,7 +206,9 @@ def _timeline_event(frame: SimulationTraceFrame, *, frame_index: int) -> dict[st
     if not event_type:
         return None
     event_id = frame.planner.get("event_id")
-    if not isinstance(event_id, str) or not event_id:
+    if isinstance(event_id, str):
+        event_id = event_id.strip()
+    if not event_id:
         event_id = f"frame-{frame_index:04d}-{_slug(event_type)}"
     return {
         "event_id": event_id,

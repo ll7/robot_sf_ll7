@@ -95,6 +95,19 @@ def test_simulation_timeline_preserves_explicit_empty_optional_slots(
     assert timeline["frames"][1]["state"]["policy"] is None
 
 
+def test_simulation_timeline_normalizes_blank_event_ids(tmp_path: Path) -> None:
+    """Whitespace-only source event IDs should use deterministic fallback IDs."""
+
+    trace_payload = json.loads(TRACE_FIXTURE_PATH.read_text(encoding="utf-8"))
+    trace_payload["frames"][0]["planner"]["event_id"] = "  "
+    source = tmp_path / "trace.json"
+    source.write_text(json.dumps(trace_payload), encoding="utf-8")
+
+    timeline = build_simulation_timeline(source)
+
+    assert timeline["events"][0]["event_id"] == "frame-0000-start"
+
+
 def test_simulation_timeline_schema_rejects_missing_required_shape() -> None:
     """The schema should fail closed when required top-level fields are absent."""
 
@@ -113,6 +126,22 @@ def test_simulation_timeline_schema_rejects_missing_required_shape() -> None:
     assert any(error.validator == "required" and "timeline_id" in error.message for error in errors)
     assert any(
         error.validator == "required" and "source_trace" in error.message for error in errors
+    )
+
+
+def test_simulation_timeline_schema_rejects_wrong_source_schema_version() -> None:
+    """Timeline provenance should fail closed for non-trace-export sources."""
+
+    schema = load_simulation_timeline_schema()
+    timeline = build_simulation_timeline(TRACE_FIXTURE_PATH)
+    timeline["source_trace"]["schema_version"] = "other_trace.v1"
+
+    errors = list(Draft202012Validator(schema).iter_errors(timeline))
+
+    assert any(
+        list(error.absolute_path) == ["source_trace", "schema_version"]
+        and error.validator == "const"
+        for error in errors
     )
 
 

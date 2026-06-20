@@ -101,3 +101,18 @@ def test_workflow_uv_cache_paths_match_setup_uv_cache_dir() -> None:
         assert expected_archive in workflow_text, workflow_path
         assert expected_wheels in workflow_text, workflow_path
         assert "~/.cache/uv" not in workflow_text, workflow_path
+
+
+def test_perf_nightly_runs_xdist_race_validation_route() -> None:
+    """Nightly performance workflow should include the scheduled xdist stress lane."""
+    workflow_text = (_repo_root() / ".github/workflows/perf-nightly.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Run xdist race validation" in workflow_text
+    assert 'XDIST_RACE_WORKERS: "32"' in workflow_text
+    assert 'XDIST_RACE_TIMEOUT_SECONDS: "7200"' in workflow_text
+    assert "PYTEST_XDIST_DIST: worksteal" in workflow_text
+    assert "scripts/dev/run_xdist_race_validation.sh" in workflow_text
+    assert "Upload xdist race validation artifacts" in workflow_text
+    assert "path: output/validation/xdist-race/" in workflow_text

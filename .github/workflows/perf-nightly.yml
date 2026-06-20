@@ -60,6 +60,21 @@ jobs:
         if: always()
         run: bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-post-sync"
 
+      - name: Run xdist race validation
+        env:
+          XDIST_RACE_WORKERS: "32"
+          XDIST_RACE_TIMEOUT_SECONDS: "7200"
+          PYTEST_XDIST_DIST: worksteal
+        run: scripts/dev/run_xdist_race_validation.sh
+
+      - name: Upload xdist race validation artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: xdist-race-validation
+          path: output/validation/xdist-race/
+          if-no-files-found: warn
+
       - name: Restore trend history cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:

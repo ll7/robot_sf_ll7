@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.rank_metrics import kendall_tau_by_value, spearman_by_value
+
 _SEED_METRICS: tuple[str, ...] = (
     "success",
     "collisions",
@@ -432,110 +434,6 @@ def _aggregate_metric_means(
     }
 
 
-def _rank_values(
-    values: dict[tuple[str, str], float], *, higher_is_better: bool
-) -> dict[tuple[str, str], float]:
-    """Assign average ranks to planner values with tie handling.
-
-    Returns:
-        Mapping from planner key to rank.
-    """
-    ordered = sorted(
-        values.items(),
-        key=lambda item: (-item[1] if higher_is_better else item[1], item[0][0], item[0][1]),
-    )
-    ranks: dict[tuple[str, str], float] = {}
-    index = 0
-    while index < len(ordered):
-        value = ordered[index][1]
-        tie_end = index + 1
-        while tie_end < len(ordered) and ordered[tie_end][1] == value:
-            tie_end += 1
-        average_rank = (index + 1 + tie_end) / 2.0
-        for tied_index in range(index, tie_end):
-            ranks[ordered[tied_index][0]] = average_rank
-        index = tie_end
-    return ranks
-
-
-def _pearson(xs: list[float], ys: list[float]) -> float | None:
-    """Compute Pearson correlation for paired values.
-
-    Returns:
-        Correlation coefficient, or ``None`` for insufficient/constant data.
-    """
-    if len(xs) != len(ys) or len(xs) < 2:
-        return None
-    x_mean = sum(xs) / len(xs)
-    y_mean = sum(ys) / len(ys)
-    x_centered = [value - x_mean for value in xs]
-    y_centered = [value - y_mean for value in ys]
-    numerator = sum(x * y for x, y in zip(x_centered, y_centered, strict=True))
-    x_den = math.sqrt(sum(x * x for x in x_centered))
-    y_den = math.sqrt(sum(y * y for y in y_centered))
-    if x_den <= 1e-12 or y_den <= 1e-12:
-        return None
-    return float(numerator / (x_den * y_den))
-
-
-def _spearman(
-    base_values: dict[tuple[str, str], float],
-    candidate_values: dict[tuple[str, str], float],
-    *,
-    higher_is_better: bool,
-) -> float | None:
-    """Compute Spearman rank correlation for paired planner metrics.
-
-    Returns:
-        Rank correlation, or ``None`` when unavailable.
-    """
-    common = sorted(set(base_values) & set(candidate_values))
-    if len(common) < 2:
-        return None
-    base_ranks = _rank_values(
-        {key: base_values[key] for key in common},
-        higher_is_better=higher_is_better,
-    )
-    candidate_ranks = _rank_values(
-        {key: candidate_values[key] for key in common},
-        higher_is_better=higher_is_better,
-    )
-    return _pearson([base_ranks[key] for key in common], [candidate_ranks[key] for key in common])
-
-
-def _kendall_tau(
-    base_values: dict[tuple[str, str], float],
-    candidate_values: dict[tuple[str, str], float],
-    *,
-    higher_is_better: bool,
-) -> float | None:
-    """Compute Kendall tau over common planner metric values.
-
-    Returns:
-        Kendall tau, or ``None`` when there are no comparable pairs.
-    """
-    common = sorted(set(base_values) & set(candidate_values))
-    if len(common) < 2:
-        return None
-    concordant = 0
-    discordant = 0
-    multiplier = 1.0 if higher_is_better else -1.0
-    for index, left in enumerate(common):
-        for right in common[index + 1 :]:
-            base_delta = multiplier * (base_values[left] - base_values[right])
-            candidate_delta = multiplier * (candidate_values[left] - candidate_values[right])
-            if abs(base_delta) <= 1e-12 or abs(candidate_delta) <= 1e-12:
-                continue
-            if base_delta * candidate_delta > 0:
-                concordant += 1
-            else:
-                discordant += 1
-    total = concordant + discordant
-    if total == 0:
-        return None
-    return float((concordant - discordant) / total)
-
-
 def _ranking_stability(
     base_planner_rows: dict[tuple[str, str], dict[str, Any]],
     candidate_planner_rows: dict[tuple[str, str], dict[str, Any]],
@@ -585,8 +483,19 @@ def _ranking_stability(
             ),
         )
     ]
-    tau = _kendall_tau(base_values, candidate_values, higher_is_better=higher_is_better)
-    rho = _spearman(base_values, candidate_values, higher_is_better=higher_is_better)
+    tau = kendall_tau_by_value(
+        base_values,
+        candidate_values,
+        higher_is_better=higher_is_better,
+        degenerate=None,
+        tie_abs_tol=1e-12,
+    )
+    rho = spearman_by_value(
+        base_values,
+        candidate_values,
+        higher_is_better=higher_is_better,
+        degenerate=None,
+    )
     status = "insufficient_data"
     if tau is not None:
         status = "stable" if tau >= min_tau else "unstable"

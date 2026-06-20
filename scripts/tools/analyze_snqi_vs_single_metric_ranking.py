@@ -28,7 +28,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.snqi.campaign_contract import spearman_correlation
+from robot_sf.benchmark.rank_metrics import (
+    kendall_tau,
+    rank_order,
+    spearman_from_order,
+    top_tied,
+)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -101,7 +106,9 @@ def _load_planner_rows(campaign_root: Path, *, core_only: bool) -> list[dict[str
     return rows
 
 
-def _rank_by(rows: list[dict[str, Any]], *, key: str, ascending: bool) -> tuple[list[str], bool]:
+def _metric_order_and_top_tie(
+    rows: list[dict[str, Any]], *, key: str, ascending: bool
+) -> tuple[list[str], bool]:
     """Return the planner_key ranking and whether the top raw value is tied.
 
     ``ascending=True`` means smaller raw value is better (e.g. collisions);
@@ -110,85 +117,55 @@ def _rank_by(rows: list[dict[str, Any]], *, key: str, ascending: bool) -> tuple[
     ``top_tied`` lets consumers distinguish real winner disagreements from
     alphabetical tie-breaking.
     """
-    indexed = list(rows)
-    indexed.sort(
-        key=lambda row: (row[key] if ascending else -row[key], row["planner_key"]),
-    )
-    if not indexed:
+    values = {str(row["planner_key"]): float(row[key]) for row in rows}
+    if not values:
         return [], False
-    best_value = indexed[0][key]
-    top_tied = sum(math.isclose(row[key], best_value, abs_tol=1e-12) for row in indexed) > 1
-    return [row["planner_key"] for row in indexed], top_tied
-
-
-def _kendall_tau(order_a: list[str], order_b: list[str]) -> float:
-    """Kendall tau between two rankings of the same planner set.
-
-    Computed directly from the rank indices so we avoid depending on SciPy.
-    Returns 0.0 when fewer than two planners are present.
-    """
-    if len(order_a) < 2 or set(order_a) != set(order_b):
-        return 0.0
-    index_b = {planner: idx for idx, planner in enumerate(order_b)}
-    ranks_a = list(range(len(order_a)))
-    ranks_b = [index_b[planner] for planner in order_a]
-    concordant = 0
-    discordant = 0
-    n = len(order_a)
-    for i in range(n):
-        for j in range(i + 1, n):
-            diff_a = ranks_a[i] - ranks_a[j]
-            diff_b = ranks_b[i] - ranks_b[j]
-            product = diff_a * diff_b
-            if product > 0:
-                concordant += 1
-            elif product < 0:
-                discordant += 1
-    total = concordant + discordant
-    if total == 0:
-        return 0.0
-    return (concordant - discordant) / total
-
-
-def _spearman_rank(order_a: list[str], order_b: list[str]) -> float:
-    """Spearman rho between two planner orderings."""
-    if len(order_a) < 2 or set(order_a) != set(order_b):
-        return 0.0
-    index_b = {planner: idx for idx, planner in enumerate(order_b)}
-    x = list(range(len(order_a)))
-    y = [index_b[planner] for planner in order_a]
-    return spearman_correlation(x, y)
+    higher_is_better = not ascending
+    return (
+        [str(planner) for planner in rank_order(values, higher_is_better=higher_is_better)],
+        top_tied(values, higher_is_better=higher_is_better, tie_abs_tol=1e-12),
+    )
 
 
 def _build_analysis(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Build the cross-ranking comparison payload."""
-    snqi_order, snqi_top_tied = _rank_by(rows, key="snqi_mean", ascending=False)
-    success_order, success_top_tied = _rank_by(rows, key="success_mean", ascending=False)
-    collisions_order, collisions_top_tied = _rank_by(rows, key="collisions_mean", ascending=True)
-    near_misses_order, near_misses_top_tied = _rank_by(rows, key="near_misses_mean", ascending=True)
+    snqi_order, snqi_top_tied = _metric_order_and_top_tie(rows, key="snqi_mean", ascending=False)
+    success_order, success_top_tied = _metric_order_and_top_tie(
+        rows, key="success_mean", ascending=False
+    )
+    collisions_order, collisions_top_tied = _metric_order_and_top_tie(
+        rows, key="collisions_mean", ascending=True
+    )
+    near_misses_order, near_misses_top_tied = _metric_order_and_top_tie(
+        rows, key="near_misses_mean", ascending=True
+    )
     comparisons = {
         "success_mean": {
             "description": "Ranking by mean success (higher is better).",
             "order": success_order,
             "top_tied": success_top_tied,
-            "kendall_tau_vs_snqi": _kendall_tau(snqi_order, success_order),
-            "spearman_rho_vs_snqi": _spearman_rank(snqi_order, success_order),
+            "kendall_tau_vs_snqi": kendall_tau(snqi_order, success_order, degenerate=0.0),
+            "spearman_rho_vs_snqi": spearman_from_order(snqi_order, success_order, degenerate=0.0),
             "winner_agrees_with_snqi": success_order[0] == snqi_order[0],
         },
         "collisions_mean": {
             "description": "Ranking by mean collisions (lower is better).",
             "order": collisions_order,
             "top_tied": collisions_top_tied,
-            "kendall_tau_vs_snqi": _kendall_tau(snqi_order, collisions_order),
-            "spearman_rho_vs_snqi": _spearman_rank(snqi_order, collisions_order),
+            "kendall_tau_vs_snqi": kendall_tau(snqi_order, collisions_order, degenerate=0.0),
+            "spearman_rho_vs_snqi": spearman_from_order(
+                snqi_order, collisions_order, degenerate=0.0
+            ),
             "winner_agrees_with_snqi": collisions_order[0] == snqi_order[0],
         },
         "near_misses_mean": {
             "description": "Ranking by mean near-misses (lower is better).",
             "order": near_misses_order,
             "top_tied": near_misses_top_tied,
-            "kendall_tau_vs_snqi": _kendall_tau(snqi_order, near_misses_order),
-            "spearman_rho_vs_snqi": _spearman_rank(snqi_order, near_misses_order),
+            "kendall_tau_vs_snqi": kendall_tau(snqi_order, near_misses_order, degenerate=0.0),
+            "spearman_rho_vs_snqi": spearman_from_order(
+                snqi_order, near_misses_order, degenerate=0.0
+            ),
             "winner_agrees_with_snqi": near_misses_order[0] == snqi_order[0],
         },
     }

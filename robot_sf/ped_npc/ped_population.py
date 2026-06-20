@@ -39,6 +39,7 @@ from shapely.prepared import PreparedGeometry
 
 from robot_sf.common.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
 from robot_sf.nav.map_config import GlobalRoute
+from robot_sf.ped_npc.ped_archetypes import assign_archetype_speed_factors, validate_composition
 from robot_sf.ped_npc.ped_behavior import (
     CrowdedZoneBehavior,
     FollowRouteBehavior,
@@ -139,6 +140,13 @@ class PedSpawnConfig:
     route_spawn_jitter_frac: float = 0.0
     route_spawn_seed: int | None = None
     reset_follow_route_at_start: bool = False
+    # Optional heterogeneous behavior archetypes (issue #3230). When
+    # ``archetype_composition`` is None (the default), spawning is homogeneous and
+    # byte-identical to the prior behavior. When set, each pedestrian's initial
+    # speed is multiplied by its sampled archetype ``desired_speed_factor``.
+    archetype_composition: dict[str, float] | None = None
+    archetype_speed_factors: dict[str, float] | None = None
+    archetype_seed: int | None = None
 
     def __post_init__(self):
         """
@@ -157,6 +165,12 @@ class PedSpawnConfig:
             )
         if self.route_spawn_jitter_frac < 0:
             raise ValueError("route_spawn_jitter_frac must be >= 0")
+        if self.archetype_composition is not None:
+            if self.archetype_speed_factors is None:
+                raise ValueError(
+                    "archetype_speed_factors must be provided when archetype_composition is set"
+                )
+            validate_composition(self.archetype_composition, self.archetype_speed_factors)
 
 
 def sample_route(
@@ -521,6 +535,20 @@ def populate_ped_routes(  # noqa: PLR0915
             ped_states[ped_ids, 4:6] = group_goal
 
             num_unassigned_peds -= num_peds_in_group
+
+    # Optional behavior heterogeneity (issue #3230): scale each pedestrian's
+    # initial velocity magnitude by its sampled archetype desired-speed factor.
+    # The spawn direction is preserved (only the magnitude changes). This is a
+    # no-op when no composition is configured, so the homogeneous default output
+    # is byte-identical to the prior behavior.
+    if config.archetype_composition and total_num_peds > 0:
+        speed_factors = assign_archetype_speed_factors(
+            total_num_peds,
+            config.archetype_composition,
+            config.archetype_speed_factors,
+            seed=config.archetype_seed,
+        )
+        ped_states[:, 2:4] *= speed_factors[:, np.newaxis]
 
     return ped_states, groups, route_assignments, initial_sections
 

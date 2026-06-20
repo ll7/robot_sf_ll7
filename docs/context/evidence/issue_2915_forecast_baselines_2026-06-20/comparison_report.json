@@ -1,0 +1,2543 @@
+{
+  "aggregates": [
+    {
+      "baseline": "cv",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "baseline": "interaction_aware",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "baseline": "semantic",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "ade": 0.05060846568931593,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evaluated_rows": 2,
+      "excluded_rows": 0,
+      "fde": 0.07693663848497238,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.0,
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction"
+    },
+    {
+      "ade": 0.07949928954877997,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evaluated_rows": 2,
+      "excluded_rows": 0,
+      "fde": 0.11391100018251157,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.0,
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction"
+    },
+    {
+      "ade": 0.05060846568931593,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evaluated_rows": 2,
+      "excluded_rows": 0,
+      "fde": 0.07693663848497238,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.0,
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction"
+    },
+    {
+      "baseline": "cv",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "crossing_proxy"
+    },
+    {
+      "baseline": "interaction_aware",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "crossing_proxy"
+    },
+    {
+      "baseline": "semantic",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "crossing_proxy"
+    },
+    {
+      "baseline": "cv",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "dense_pedestrian_interaction"
+    },
+    {
+      "baseline": "interaction_aware",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "dense_pedestrian_interaction"
+    },
+    {
+      "baseline": "semantic",
+      "evaluated_rows": 0,
+      "excluded_rows": 1,
+      "row_status": "not_available",
+      "scenario_family": "dense_pedestrian_interaction"
+    },
+    {
+      "ade": 8.723180907769087e-17,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 1.1102230246251565e-16,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "goal_directed_crossing"
+    },
+    {
+      "ade": 8.723180907769087e-17,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 1.1102230246251565e-16,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "goal_directed_crossing"
+    },
+    {
+      "ade": 0.09000000000000001,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.12,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "goal_directed_crossing"
+    },
+    {
+      "ade": 1.9134525613804783e-17,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.045454545454545456,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 2.312964634635743e-17,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.045454545454545456,
+      "row_status": "evaluated",
+      "scenario_family": "occluded_emergence"
+    },
+    {
+      "ade": 1.9134525613804783e-17,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.045454545454545456,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 2.312964634635743e-17,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.045454545454545456,
+      "row_status": "evaluated",
+      "scenario_family": "occluded_emergence"
+    },
+    {
+      "ade": 1.9134525613804783e-17,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.045454545454545456,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 2.312964634635743e-17,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.045454545454545456,
+      "row_status": "evaluated",
+      "scenario_family": "occluded_emergence"
+    },
+    {
+      "ade": 9.912705577010326e-18,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.0,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "route_conflict_goal"
+    },
+    {
+      "ade": 9.912705577010326e-18,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.0,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "route_conflict_goal"
+    },
+    {
+      "ade": 0.08077747210701756,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.10770329614269006,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "route_conflict_goal"
+    },
+    {
+      "ade": 3.172065784643304e-17,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.0,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "signalized_crossing"
+    },
+    {
+      "ade": 3.172065784643304e-17,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.0,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "signalized_crossing"
+    },
+    {
+      "ade": 0.27,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.41999999999999993,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 1.0,
+      "row_status": "evaluated",
+      "scenario_family": "signalized_crossing"
+    },
+    {
+      "ade": 0.285,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.7857142857142857,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.44999999999999996,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.7857142857142857,
+      "row_status": "evaluated",
+      "scenario_family": "waiting_with_intent_change"
+    },
+    {
+      "ade": 0.285,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.7857142857142857,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.44999999999999996,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.7857142857142857,
+      "row_status": "evaluated",
+      "scenario_family": "waiting_with_intent_change"
+    },
+    {
+      "ade": 0.2978571428571428,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.7857142857142857,
+      "evaluated_rows": 1,
+      "excluded_rows": 0,
+      "fde": 0.44999999999999996,
+      "miss_rate": 0.0,
+      "planner_relevant_risk_error": 0.7857142857142857,
+      "row_status": "evaluated",
+      "scenario_family": "waiting_with_intent_change"
+    }
+  ],
+  "rows": [
+    {
+      "actor_class_counts": "{\"pedestrian\": 40}",
+      "ade": 0.05060846568931593,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.07693663848497238,
+      "forecast_evaluable_samples": 30.0,
+      "frame_count": 20,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 40, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "default_social_force",
+      "planner_relevant_risk_error": 0.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 30.0, \"count_ade_1s\": 20.0, \"count_calibration_error_0.5s\": 30.0, \"count_calibration_error_1s\": 20.0, \"count_collision_relevance_error_0.5s\": 30.0, \"count_collision_relevance_error_1s\": 20.0, \"count_log_likelihood_0.5s\": 30.0, \"count_log_likelihood_1s\": 20.0, \"count_mahalanobis_dist_0.5s\": 30.0, \"count_mahalanobis_dist_1s\": 20.0, \"count_miss_rate_0.5s\": 30.0, \"count_miss_rate_1s\": 20.0, \"count_negative_log_likelihood_0.5s\": 30.0, \"count_negative_log_likelihood_1s\": 20.0, \"count_within_95ci_0.5s\": 30.0, \"count_within_95ci_1s\": 20.0, \"forecast_evaluable_samples\": 30.0, \"mean_ade_0.5s\": 0.024280292893659475, \"mean_ade_1s\": 0.07693663848497238, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.0, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -1.2676793071505172, \"mean_log_likelihood_1s\": -1.952169154331188, \"mean_mahalanobis_dist_0.5s\": 0.032373723858212626, \"mean_mahalanobis_dist_1s\": 0.07327298903330705, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.2676793071505172, \"mean_negative_log_likelihood_1s\": 1.952169154331188, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 40.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 40.0}",
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "trace_label": "default_social_force",
+      "trace_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 40}",
+      "ade": 0.05060846568931593,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.07693663848497238,
+      "forecast_evaluable_samples": 30.0,
+      "frame_count": 20,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 40, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "default_social_force",
+      "planner_relevant_risk_error": 0.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 30.0, \"count_ade_1s\": 20.0, \"count_calibration_error_0.5s\": 30.0, \"count_calibration_error_1s\": 20.0, \"count_collision_relevance_error_0.5s\": 30.0, \"count_collision_relevance_error_1s\": 20.0, \"count_log_likelihood_0.5s\": 30.0, \"count_log_likelihood_1s\": 20.0, \"count_mahalanobis_dist_0.5s\": 30.0, \"count_mahalanobis_dist_1s\": 20.0, \"count_miss_rate_0.5s\": 30.0, \"count_miss_rate_1s\": 20.0, \"count_negative_log_likelihood_0.5s\": 30.0, \"count_negative_log_likelihood_1s\": 20.0, \"count_within_95ci_0.5s\": 30.0, \"count_within_95ci_1s\": 20.0, \"forecast_evaluable_samples\": 30.0, \"mean_ade_0.5s\": 0.024280292893659475, \"mean_ade_1s\": 0.07693663848497238, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.0, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -1.7902984833666435, \"mean_log_likelihood_1s\": -2.4700745388210485, \"mean_mahalanobis_dist_0.5s\": 0.024902864506317405, \"mean_mahalanobis_dist_1s\": 0.0563638377179285, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.7902984833666435, \"mean_negative_log_likelihood_1s\": 2.4700745388210485, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 40.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 40.0}",
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "trace_label": "default_social_force",
+      "trace_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 40}",
+      "ade": 0.07949928954877997,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.11391100018251157,
+      "forecast_evaluable_samples": 30.0,
+      "frame_count": 20,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 40, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "default_social_force",
+      "planner_relevant_risk_error": 0.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 30.0, \"count_ade_1s\": 20.0, \"count_calibration_error_0.5s\": 30.0, \"count_calibration_error_1s\": 20.0, \"count_collision_relevance_error_0.5s\": 30.0, \"count_collision_relevance_error_1s\": 20.0, \"count_log_likelihood_0.5s\": 30.0, \"count_log_likelihood_1s\": 20.0, \"count_mahalanobis_dist_0.5s\": 30.0, \"count_mahalanobis_dist_1s\": 20.0, \"count_miss_rate_0.5s\": 30.0, \"count_miss_rate_1s\": 20.0, \"count_negative_log_likelihood_0.5s\": 30.0, \"count_negative_log_likelihood_1s\": 20.0, \"count_within_95ci_0.5s\": 30.0, \"count_within_95ci_1s\": 20.0, \"forecast_evaluable_samples\": 30.0, \"mean_ade_0.5s\": 0.04508757891504835, \"mean_ade_1s\": 0.11391100018251157, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.0, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -0.7254422593998882, \"mean_log_likelihood_1s\": -1.3500783901433155, \"mean_mahalanobis_dist_0.5s\": 0.07902840684369933, \"mean_mahalanobis_dist_1s\": 0.14783581671341245, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.7254422593998882, \"mean_negative_log_likelihood_1s\": 1.3500783901433155, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 40.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 40.0}",
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "trace_label": "default_social_force",
+      "trace_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/default_social_force_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 40}",
+      "ade": 0.05060846568931593,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.07693663848497238,
+      "forecast_evaluable_samples": 30.0,
+      "frame_count": 20,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 40, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "ammv_social_force",
+      "planner_relevant_risk_error": 0.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 30.0, \"count_ade_1s\": 20.0, \"count_calibration_error_0.5s\": 30.0, \"count_calibration_error_1s\": 20.0, \"count_collision_relevance_error_0.5s\": 30.0, \"count_collision_relevance_error_1s\": 20.0, \"count_log_likelihood_0.5s\": 30.0, \"count_log_likelihood_1s\": 20.0, \"count_mahalanobis_dist_0.5s\": 30.0, \"count_mahalanobis_dist_1s\": 20.0, \"count_miss_rate_0.5s\": 30.0, \"count_miss_rate_1s\": 20.0, \"count_negative_log_likelihood_0.5s\": 30.0, \"count_negative_log_likelihood_1s\": 20.0, \"count_within_95ci_0.5s\": 30.0, \"count_within_95ci_1s\": 20.0, \"forecast_evaluable_samples\": 30.0, \"mean_ade_0.5s\": 0.024280292893659475, \"mean_ade_1s\": 0.07693663848497238, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.0, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -1.2676793071505172, \"mean_log_likelihood_1s\": -1.952169154331188, \"mean_mahalanobis_dist_0.5s\": 0.032373723858212626, \"mean_mahalanobis_dist_1s\": 0.07327298903330705, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.2676793071505172, \"mean_negative_log_likelihood_1s\": 1.952169154331188, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 40.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 40.0}",
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "trace_label": "ammv_social_force",
+      "trace_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 40}",
+      "ade": 0.05060846568931593,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.07693663848497238,
+      "forecast_evaluable_samples": 30.0,
+      "frame_count": 20,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 40, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "ammv_social_force",
+      "planner_relevant_risk_error": 0.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 30.0, \"count_ade_1s\": 20.0, \"count_calibration_error_0.5s\": 30.0, \"count_calibration_error_1s\": 20.0, \"count_collision_relevance_error_0.5s\": 30.0, \"count_collision_relevance_error_1s\": 20.0, \"count_log_likelihood_0.5s\": 30.0, \"count_log_likelihood_1s\": 20.0, \"count_mahalanobis_dist_0.5s\": 30.0, \"count_mahalanobis_dist_1s\": 20.0, \"count_miss_rate_0.5s\": 30.0, \"count_miss_rate_1s\": 20.0, \"count_negative_log_likelihood_0.5s\": 30.0, \"count_negative_log_likelihood_1s\": 20.0, \"count_within_95ci_0.5s\": 30.0, \"count_within_95ci_1s\": 20.0, \"forecast_evaluable_samples\": 30.0, \"mean_ade_0.5s\": 0.024280292893659475, \"mean_ade_1s\": 0.07693663848497238, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.0, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -1.7902984833666435, \"mean_log_likelihood_1s\": -2.4700745388210485, \"mean_mahalanobis_dist_0.5s\": 0.024902864506317405, \"mean_mahalanobis_dist_1s\": 0.0563638377179285, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.7902984833666435, \"mean_negative_log_likelihood_1s\": 2.4700745388210485, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 40.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 40.0}",
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "trace_label": "ammv_social_force",
+      "trace_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 40}",
+      "ade": 0.07949928954877997,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.11391100018251157,
+      "forecast_evaluable_samples": 30.0,
+      "frame_count": 20,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 40, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "ammv_social_force",
+      "planner_relevant_risk_error": 0.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 30.0, \"count_ade_1s\": 20.0, \"count_calibration_error_0.5s\": 30.0, \"count_calibration_error_1s\": 20.0, \"count_collision_relevance_error_0.5s\": 30.0, \"count_collision_relevance_error_1s\": 20.0, \"count_log_likelihood_0.5s\": 30.0, \"count_log_likelihood_1s\": 20.0, \"count_mahalanobis_dist_0.5s\": 30.0, \"count_mahalanobis_dist_1s\": 20.0, \"count_miss_rate_0.5s\": 30.0, \"count_miss_rate_1s\": 20.0, \"count_negative_log_likelihood_0.5s\": 30.0, \"count_negative_log_likelihood_1s\": 20.0, \"count_within_95ci_0.5s\": 30.0, \"count_within_95ci_1s\": 20.0, \"forecast_evaluable_samples\": 30.0, \"mean_ade_0.5s\": 0.04508757891504835, \"mean_ade_1s\": 0.11391100018251157, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.0, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -0.7254422593998882, \"mean_log_likelihood_1s\": -1.3500783901433155, \"mean_mahalanobis_dist_0.5s\": 0.07902840684369933, \"mean_mahalanobis_dist_1s\": 0.14783581671341245, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.7254422593998882, \"mean_negative_log_likelihood_1s\": 1.3500783901433155, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 40.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 40.0}",
+      "row_status": "evaluated",
+      "scenario_family": "corridor_interaction",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "trace_label": "ammv_social_force",
+      "trace_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 5}",
+      "baseline": "cv",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "limited_no_pedestrian_motion",
+      "frame_count": 5,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 5, \"signal_metadata_records\": 0}",
+      "planner_id": "orca",
+      "row_status": "limited_no_pedestrian_motion",
+      "scenario_family": "crossing_proxy",
+      "scenario_id": "crossing_proxy",
+      "seed": 111,
+      "trace_label": "synthetic_crossing_proxy_orca",
+      "trace_path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 5}",
+      "baseline": "semantic",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "limited_no_pedestrian_motion",
+      "frame_count": 5,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 5, \"signal_metadata_records\": 0}",
+      "planner_id": "orca",
+      "row_status": "limited_no_pedestrian_motion",
+      "scenario_family": "crossing_proxy",
+      "scenario_id": "crossing_proxy",
+      "seed": 111,
+      "trace_label": "synthetic_crossing_proxy_orca",
+      "trace_path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 5}",
+      "baseline": "interaction_aware",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "limited_no_pedestrian_motion",
+      "frame_count": 5,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 5, \"signal_metadata_records\": 0}",
+      "planner_id": "orca",
+      "row_status": "limited_no_pedestrian_motion",
+      "scenario_family": "crossing_proxy",
+      "scenario_id": "crossing_proxy",
+      "seed": 111,
+      "trace_label": "synthetic_crossing_proxy_orca",
+      "trace_path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 2}",
+      "baseline": "cv",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "insufficient_frames",
+      "frame_count": 2,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 2, \"signal_metadata_records\": 0}",
+      "planner_id": "hybrid_rule_v0_minimal",
+      "row_status": "insufficient_frames",
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111,
+      "trace_label": "minimal_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 2}",
+      "baseline": "semantic",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "insufficient_frames",
+      "frame_count": 2,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 2, \"signal_metadata_records\": 0}",
+      "planner_id": "hybrid_rule_v0_minimal",
+      "row_status": "insufficient_frames",
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111,
+      "trace_label": "minimal_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 2}",
+      "baseline": "interaction_aware",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "insufficient_frames",
+      "frame_count": 2,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 2, \"signal_metadata_records\": 0}",
+      "planner_id": "hybrid_rule_v0_minimal",
+      "row_status": "insufficient_frames",
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111,
+      "trace_label": "minimal_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 16}",
+      "ade": 1.9134525613804783e-17,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.045454545454545456,
+      "evidence_tier": "analysis_only",
+      "fde": 2.312964634635743e-17,
+      "forecast_evaluable_samples": 11.0,
+      "frame_count": 16,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 16, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 0.045454545454545456,
+      "raw_metrics": "{\"count_ade_0.5s\": 11.0, \"count_ade_1s\": 6.0, \"count_calibration_error_0.5s\": 11.0, \"count_calibration_error_1s\": 6.0, \"count_collision_relevance_error_0.5s\": 11.0, \"count_collision_relevance_error_1s\": 6.0, \"count_log_likelihood_0.5s\": 11.0, \"count_log_likelihood_1s\": 6.0, \"count_mahalanobis_dist_0.5s\": 11.0, \"count_mahalanobis_dist_1s\": 6.0, \"count_miss_rate_0.5s\": 11.0, \"count_miss_rate_1s\": 6.0, \"count_negative_log_likelihood_0.5s\": 11.0, \"count_negative_log_likelihood_1s\": 6.0, \"count_within_95ci_0.5s\": 11.0, \"count_within_95ci_1s\": 6.0, \"forecast_evaluable_samples\": 11.0, \"mean_ade_0.5s\": 1.5139404881252134e-17, \"mean_ade_1s\": 2.312964634635743e-17, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.09090909090909091, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -1.2625129215057833, \"mean_log_likelihood_1s\": -1.935457394748209, \"mean_mahalanobis_dist_0.5s\": 2.0185873175002847e-17, \"mean_mahalanobis_dist_1s\": 2.2028234615578508e-17, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.2625129215057833, \"mean_negative_log_likelihood_1s\": 1.935457394748209, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 16.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 16.0}",
+      "row_status": "evaluated",
+      "scenario_family": "occluded_emergence",
+      "scenario_id": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "trace_label": "deterministic_occluded_emergence",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 16}",
+      "ade": 1.9134525613804783e-17,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.045454545454545456,
+      "evidence_tier": "analysis_only",
+      "fde": 2.312964634635743e-17,
+      "forecast_evaluable_samples": 11.0,
+      "frame_count": 16,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 16, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 0.045454545454545456,
+      "raw_metrics": "{\"count_ade_0.5s\": 11.0, \"count_ade_1s\": 6.0, \"count_calibration_error_0.5s\": 11.0, \"count_calibration_error_1s\": 6.0, \"count_collision_relevance_error_0.5s\": 11.0, \"count_collision_relevance_error_1s\": 6.0, \"count_log_likelihood_0.5s\": 11.0, \"count_log_likelihood_1s\": 6.0, \"count_mahalanobis_dist_0.5s\": 11.0, \"count_mahalanobis_dist_1s\": 6.0, \"count_miss_rate_0.5s\": 11.0, \"count_miss_rate_1s\": 6.0, \"count_negative_log_likelihood_0.5s\": 11.0, \"count_negative_log_likelihood_1s\": 6.0, \"count_within_95ci_0.5s\": 11.0, \"count_within_95ci_1s\": 6.0, \"forecast_evaluable_samples\": 11.0, \"mean_ade_0.5s\": 1.5139404881252134e-17, \"mean_ade_1s\": 2.312964634635743e-17, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.09090909090909091, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -1.7872414504407663, \"mean_log_likelihood_1s\": -2.4601859236831913, \"mean_mahalanobis_dist_0.5s\": 1.5527594750002187e-17, \"mean_mahalanobis_dist_1s\": 1.694479585813731e-17, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.7872414504407663, \"mean_negative_log_likelihood_1s\": 2.4601859236831913, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 16.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 16.0}",
+      "row_status": "evaluated",
+      "scenario_family": "occluded_emergence",
+      "scenario_id": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "trace_label": "deterministic_occluded_emergence",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 16}",
+      "ade": 1.9134525613804783e-17,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.045454545454545456,
+      "evidence_tier": "analysis_only",
+      "fde": 2.312964634635743e-17,
+      "forecast_evaluable_samples": 11.0,
+      "frame_count": 16,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": false, \"intent_metadata_records\": 0, \"metadata_presence\": \"absent\", \"pedestrian_observations\": 16, \"signal_metadata_records\": 0}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 0.045454545454545456,
+      "raw_metrics": "{\"count_ade_0.5s\": 11.0, \"count_ade_1s\": 6.0, \"count_calibration_error_0.5s\": 11.0, \"count_calibration_error_1s\": 6.0, \"count_collision_relevance_error_0.5s\": 11.0, \"count_collision_relevance_error_1s\": 6.0, \"count_log_likelihood_0.5s\": 11.0, \"count_log_likelihood_1s\": 6.0, \"count_mahalanobis_dist_0.5s\": 11.0, \"count_mahalanobis_dist_1s\": 6.0, \"count_miss_rate_0.5s\": 11.0, \"count_miss_rate_1s\": 6.0, \"count_negative_log_likelihood_0.5s\": 11.0, \"count_negative_log_likelihood_1s\": 6.0, \"count_within_95ci_0.5s\": 11.0, \"count_within_95ci_1s\": 6.0, \"forecast_evaluable_samples\": 11.0, \"mean_ade_0.5s\": 1.5139404881252134e-17, \"mean_ade_1s\": 2.312964634635743e-17, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.09090909090909091, \"mean_collision_relevance_error_1s\": 0.0, \"mean_log_likelihood_0.5s\": -0.4515827052894547, \"mean_log_likelihood_1s\": -1.1245271785318804, \"mean_mahalanobis_dist_0.5s\": 3.027880976250427e-17, \"mean_mahalanobis_dist_1s\": 3.304235192336776e-17, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.4515827052894547, \"mean_negative_log_likelihood_1s\": 1.1245271785318804, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 16.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 16.0}",
+      "row_status": "evaluated",
+      "scenario_family": "occluded_emergence",
+      "scenario_id": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "trace_label": "deterministic_occluded_emergence",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 3.172065784643304e-17,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.0,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": true, \"intent_metadata_records\": 0, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 6.344131569286608e-17, \"mean_ade_1s\": 0.0, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -1.2625129215057835, \"mean_log_likelihood_1s\": -1.935457394748209, \"mean_mahalanobis_dist_0.5s\": 8.458842092382145e-17, \"mean_mahalanobis_dist_1s\": 0.0, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.2625129215057835, \"mean_negative_log_likelihood_1s\": 1.935457394748209, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "signalized_crossing",
+      "scenario_id": "issue_2868_signalized_crossing",
+      "seed": 2868,
+      "trace_label": "signalized_crossing_semantic_metadata",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 0.27,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.41999999999999993,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": true, \"intent_metadata_records\": 0, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 0.1200000000000001, \"mean_ade_1s\": 0.41999999999999993, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -1.0061337194315376, \"mean_log_likelihood_1s\": -1.7557645832065074, \"mean_mahalanobis_dist_0.5s\": 0.18461538461538476, \"mean_mahalanobis_dist_1s\": 0.46153846153846156, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.0061337194315376, \"mean_negative_log_likelihood_1s\": 1.7557645832065074, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "signalized_crossing",
+      "scenario_id": "issue_2868_signalized_crossing",
+      "seed": 2868,
+      "trace_label": "signalized_crossing_semantic_metadata",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 3.172065784643304e-17,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.0,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": false, \"has_signal_metadata\": true, \"intent_metadata_records\": 0, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 6.344131569286608e-17, \"mean_ade_1s\": 0.0, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -0.45158270528945466, \"mean_log_likelihood_1s\": -1.1245271785318804, \"mean_mahalanobis_dist_0.5s\": 1.2688263138573217e-16, \"mean_mahalanobis_dist_1s\": 0.0, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.45158270528945466, \"mean_negative_log_likelihood_1s\": 1.1245271785318804, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "signalized_crossing",
+      "scenario_id": "issue_2868_signalized_crossing",
+      "seed": 2868,
+      "trace_label": "signalized_crossing_semantic_metadata",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 8.723180907769087e-17,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 1.1102230246251565e-16,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 6.344131569286608e-17, \"mean_ade_1s\": 1.1102230246251565e-16, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -0.45158270528945466, \"mean_log_likelihood_1s\": -1.1245271785318804, \"mean_mahalanobis_dist_0.5s\": 1.2688263138573217e-16, \"mean_mahalanobis_dist_1s\": 1.5860328923216525e-16, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.45158270528945466, \"mean_negative_log_likelihood_1s\": 1.1245271785318804, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "goal_directed_crossing",
+      "scenario_id": "issue_2868_goal_directed_crossing",
+      "seed": 2868,
+      "trace_label": "goal_directed_crossing_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 0.09000000000000001,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.12,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 0.06000000000000002, \"mean_ade_1s\": 0.12, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -0.45878270528945475, \"mean_log_likelihood_1s\": -1.139221056082901, \"mean_mahalanobis_dist_0.5s\": 0.12000000000000004, \"mean_mahalanobis_dist_1s\": 0.17142857142857143, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.45878270528945475, \"mean_negative_log_likelihood_1s\": 1.139221056082901, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "goal_directed_crossing",
+      "scenario_id": "issue_2868_goal_directed_crossing",
+      "seed": 2868,
+      "trace_label": "goal_directed_crossing_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 8.723180907769087e-17,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 1.1102230246251565e-16,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 6.344131569286608e-17, \"mean_ade_1s\": 1.1102230246251565e-16, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -0.45158270528945466, \"mean_log_likelihood_1s\": -1.1245271785318804, \"mean_mahalanobis_dist_0.5s\": 1.2688263138573217e-16, \"mean_mahalanobis_dist_1s\": 1.5860328923216525e-16, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.45158270528945466, \"mean_negative_log_likelihood_1s\": 1.1245271785318804, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "goal_directed_crossing",
+      "scenario_id": "issue_2868_goal_directed_crossing",
+      "seed": 2868,
+      "trace_label": "goal_directed_crossing_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 0.285,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.7857142857142857,
+      "evidence_tier": "analysis_only",
+      "fde": 0.44999999999999996,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 0.7857142857142857,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 0.12000000000000004, \"mean_ade_1s\": 0.44999999999999996, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.5714285714285714, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -0.5071255624323118, \"mean_log_likelihood_1s\": -1.3320781989400436, \"mean_mahalanobis_dist_0.5s\": 0.24000000000000007, \"mean_mahalanobis_dist_1s\": 0.6428571428571429, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.5071255624323118, \"mean_negative_log_likelihood_1s\": 1.3320781989400436, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "waiting_with_intent_change",
+      "scenario_id": "issue_2868_waiting_intent_change",
+      "seed": 2868,
+      "trace_label": "waiting_intent_change_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_waiting_intent_change_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 0.2978571428571428,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.7857142857142857,
+      "evidence_tier": "analysis_only",
+      "fde": 0.44999999999999996,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 0.7857142857142857,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 0.1457142857142857, \"mean_ade_1s\": 0.44999999999999996, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.5714285714285714, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -0.5102112767180261, \"mean_log_likelihood_1s\": -1.3320781989400436, \"mean_mahalanobis_dist_0.5s\": 0.2914285714285714, \"mean_mahalanobis_dist_1s\": 0.6428571428571429, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.5102112767180261, \"mean_negative_log_likelihood_1s\": 1.3320781989400436, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "waiting_with_intent_change",
+      "scenario_id": "issue_2868_waiting_intent_change",
+      "seed": 2868,
+      "trace_label": "waiting_intent_change_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_waiting_intent_change_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 0.285,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 0.7857142857142857,
+      "evidence_tier": "analysis_only",
+      "fde": 0.44999999999999996,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 0.7857142857142857,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 0.12000000000000004, \"mean_ade_1s\": 0.44999999999999996, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 0.5714285714285714, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -0.5071255624323118, \"mean_log_likelihood_1s\": -1.3320781989400436, \"mean_mahalanobis_dist_0.5s\": 0.24000000000000007, \"mean_mahalanobis_dist_1s\": 0.6428571428571429, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.5071255624323118, \"mean_negative_log_likelihood_1s\": 1.3320781989400436, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "waiting_with_intent_change",
+      "scenario_id": "issue_2868_waiting_intent_change",
+      "seed": 2868,
+      "trace_label": "waiting_intent_change_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_waiting_intent_change_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 9.912705577010326e-18,
+      "baseline": "cv",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.0,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 1.9825411154020653e-17, \"mean_ade_1s\": 0.0, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -1.2625129215057835, \"mean_log_likelihood_1s\": -1.935457394748209, \"mean_mahalanobis_dist_0.5s\": 2.6433881538694202e-17, \"mean_mahalanobis_dist_1s\": 0.0, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.2625129215057835, \"mean_negative_log_likelihood_1s\": 1.935457394748209, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "route_conflict_goal",
+      "scenario_id": "issue_2868_route_conflict_goal",
+      "seed": 2868,
+      "trace_label": "route_conflict_goal_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 0.08077747210701756,
+      "baseline": "semantic",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.10770329614269006,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 0.05385164807134507, \"mean_ade_1s\": 0.10770329614269006, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -1.2650906992835613, \"mean_log_likelihood_1s\": -1.9407181657232657, \"mean_mahalanobis_dist_0.5s\": 0.0718021974284601, \"mean_mahalanobis_dist_1s\": 0.10257456775494292, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 1.2650906992835613, \"mean_negative_log_likelihood_1s\": 1.9407181657232657, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "route_conflict_goal",
+      "scenario_id": "issue_2868_route_conflict_goal",
+      "seed": 2868,
+      "trace_label": "route_conflict_goal_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json"
+    },
+    {
+      "actor_class_counts": "{\"pedestrian\": 12}",
+      "ade": 9.912705577010326e-18,
+      "baseline": "interaction_aware",
+      "calibration_error": 0.050000000000000044,
+      "collision_relevant_forecast_error": 1.0,
+      "evidence_tier": "analysis_only",
+      "fde": 0.0,
+      "forecast_evaluable_samples": 7.0,
+      "frame_count": 12,
+      "metadata_coverage": "{\"has_intent_metadata\": true, \"has_signal_metadata\": true, \"intent_metadata_records\": 12, \"metadata_presence\": \"present\", \"pedestrian_observations\": 12, \"signal_metadata_records\": 12}",
+      "miss_rate": 0.0,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "planner_relevant_risk_error": 1.0,
+      "raw_metrics": "{\"count_ade_0.5s\": 7.0, \"count_ade_1s\": 2.0, \"count_calibration_error_0.5s\": 7.0, \"count_calibration_error_1s\": 2.0, \"count_collision_relevance_error_0.5s\": 7.0, \"count_collision_relevance_error_1s\": 2.0, \"count_log_likelihood_0.5s\": 7.0, \"count_log_likelihood_1s\": 2.0, \"count_mahalanobis_dist_0.5s\": 7.0, \"count_mahalanobis_dist_1s\": 2.0, \"count_miss_rate_0.5s\": 7.0, \"count_miss_rate_1s\": 2.0, \"count_negative_log_likelihood_0.5s\": 7.0, \"count_negative_log_likelihood_1s\": 2.0, \"count_within_95ci_0.5s\": 7.0, \"count_within_95ci_1s\": 2.0, \"forecast_evaluable_samples\": 7.0, \"mean_ade_0.5s\": 1.9825411154020653e-17, \"mean_ade_1s\": 0.0, \"mean_calibration_error_0.5s\": 0.050000000000000044, \"mean_calibration_error_1s\": 0.050000000000000044, \"mean_collision_relevance_error_0.5s\": 1.0, \"mean_collision_relevance_error_1s\": 1.0, \"mean_log_likelihood_0.5s\": -0.45158270528945466, \"mean_log_likelihood_1s\": -1.1245271785318804, \"mean_mahalanobis_dist_0.5s\": 3.9650822308041306e-17, \"mean_mahalanobis_dist_1s\": 0.0, \"mean_miss_rate_0.5s\": 0.0, \"mean_miss_rate_1s\": 0.0, \"mean_negative_log_likelihood_0.5s\": 0.45158270528945466, \"mean_negative_log_likelihood_1s\": 1.1245271785318804, \"mean_within_95ci_0.5s\": 1.0, \"mean_within_95ci_1s\": 1.0, \"pedestrian_forecast_candidate_count\": 12.0, \"pedestrian_forecast_excluded_actor_count\": 0.0, \"pedestrian_forecast_included_actor_count\": 12.0}",
+      "row_status": "evaluated",
+      "scenario_family": "route_conflict_goal",
+      "scenario_id": "issue_2868_route_conflict_goal",
+      "seed": 2868,
+      "trace_label": "route_conflict_goal_fixture",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json"
+    },
+    {
+      "baseline": "cv",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "no durable trace fixture available",
+      "planner_id": "",
+      "row_status": "not_available",
+      "scenario_family": "dense_pedestrian_interaction",
+      "scenario_id": "dense_pedestrian_interaction",
+      "seed": "",
+      "trace_label": "",
+      "trace_path": ""
+    },
+    {
+      "baseline": "semantic",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "no durable trace fixture available",
+      "planner_id": "",
+      "row_status": "not_available",
+      "scenario_family": "dense_pedestrian_interaction",
+      "scenario_id": "dense_pedestrian_interaction",
+      "seed": "",
+      "trace_label": "",
+      "trace_path": ""
+    },
+    {
+      "baseline": "interaction_aware",
+      "evidence_tier": "analysis_only",
+      "exclusion_reason": "no durable trace fixture available",
+      "planner_id": "",
+      "row_status": "not_available",
+      "scenario_family": "dense_pedestrian_interaction",
+      "scenario_id": "dense_pedestrian_interaction",
+      "seed": "",
+      "trace_label": "",
+      "trace_path": ""
+    }
+  ],
+  "strongest_by_family": {
+    "bottleneck": {
+      "best": null,
+      "reason": "no evaluated baseline rows"
+    },
+    "corridor_interaction": {
+      "best": "cv",
+      "comparison": {
+        "baselines": [
+          "cv",
+          "interaction_aware",
+          "semantic"
+        ],
+        "best_by_metric": {
+          "ade": "cv",
+          "calibration_error": "cv",
+          "collision_relevant_forecast_error": "cv",
+          "fde": "cv",
+          "miss_rate": "cv",
+          "planner_relevant_risk_error": "cv"
+        },
+        "metrics": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error",
+          "ade",
+          "fde"
+        ],
+        "rankings": [
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "miss_rate",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "calibration_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "collision_relevant_forecast_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "planner_relevant_risk_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.028890823859464038,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "ade",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "semantic",
+              "interaction_aware"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.03697436169753919,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "fde",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "semantic",
+              "interaction_aware"
+            ]
+          }
+        ],
+        "schema_version": "forecast_baseline_comparison.v1"
+      },
+      "primary_score_order": [
+        "miss_rate",
+        "calibration_error",
+        "collision_relevant_forecast_error",
+        "planner_relevant_risk_error"
+      ]
+    },
+    "crossing_proxy": {
+      "best": null,
+      "reason": "no evaluated baseline rows"
+    },
+    "dense_pedestrian_interaction": {
+      "best": null,
+      "reason": "no evaluated baseline rows"
+    },
+    "goal_directed_crossing": {
+      "best": "cv",
+      "comparison": {
+        "baselines": [
+          "cv",
+          "interaction_aware",
+          "semantic"
+        ],
+        "best_by_metric": {
+          "ade": "cv",
+          "calibration_error": "cv",
+          "collision_relevant_forecast_error": "cv",
+          "fde": "cv",
+          "miss_rate": "cv",
+          "planner_relevant_risk_error": "cv"
+        },
+        "metrics": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error",
+          "ade",
+          "fde"
+        ],
+        "rankings": [
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "miss_rate",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "calibration_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "collision_relevant_forecast_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "planner_relevant_risk_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.08999999999999993
+            },
+            "lower_is_better": true,
+            "metric": "ade",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.11999999999999988
+            },
+            "lower_is_better": true,
+            "metric": "fde",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          }
+        ],
+        "schema_version": "forecast_baseline_comparison.v1"
+      },
+      "primary_score_order": [
+        "miss_rate",
+        "calibration_error",
+        "collision_relevant_forecast_error",
+        "planner_relevant_risk_error"
+      ]
+    },
+    "occluded_emergence": {
+      "best": "cv",
+      "comparison": {
+        "baselines": [
+          "cv",
+          "interaction_aware",
+          "semantic"
+        ],
+        "best_by_metric": {
+          "ade": "cv",
+          "calibration_error": "cv",
+          "collision_relevant_forecast_error": "cv",
+          "fde": "cv",
+          "miss_rate": "cv",
+          "planner_relevant_risk_error": "cv"
+        },
+        "metrics": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error",
+          "ade",
+          "fde"
+        ],
+        "rankings": [
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "miss_rate",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "calibration_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "collision_relevant_forecast_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "planner_relevant_risk_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "ade",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "fde",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          }
+        ],
+        "schema_version": "forecast_baseline_comparison.v1"
+      },
+      "primary_score_order": [
+        "miss_rate",
+        "calibration_error",
+        "collision_relevant_forecast_error",
+        "planner_relevant_risk_error"
+      ]
+    },
+    "route_conflict_goal": {
+      "best": "cv",
+      "comparison": {
+        "baselines": [
+          "cv",
+          "interaction_aware",
+          "semantic"
+        ],
+        "best_by_metric": {
+          "ade": "cv",
+          "calibration_error": "cv",
+          "collision_relevant_forecast_error": "cv",
+          "fde": "cv",
+          "miss_rate": "cv",
+          "planner_relevant_risk_error": "cv"
+        },
+        "metrics": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error",
+          "ade",
+          "fde"
+        ],
+        "rankings": [
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "miss_rate",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "calibration_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "collision_relevant_forecast_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "planner_relevant_risk_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.08077747210701755
+            },
+            "lower_is_better": true,
+            "metric": "ade",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.10770329614269006
+            },
+            "lower_is_better": true,
+            "metric": "fde",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          }
+        ],
+        "schema_version": "forecast_baseline_comparison.v1"
+      },
+      "primary_score_order": [
+        "miss_rate",
+        "calibration_error",
+        "collision_relevant_forecast_error",
+        "planner_relevant_risk_error"
+      ]
+    },
+    "signalized_crossing": {
+      "best": "cv",
+      "comparison": {
+        "baselines": [
+          "cv",
+          "interaction_aware",
+          "semantic"
+        ],
+        "best_by_metric": {
+          "ade": "cv",
+          "calibration_error": "cv",
+          "collision_relevant_forecast_error": "cv",
+          "fde": "cv",
+          "miss_rate": "cv",
+          "planner_relevant_risk_error": "cv"
+        },
+        "metrics": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error",
+          "ade",
+          "fde"
+        ],
+        "rankings": [
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "miss_rate",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "calibration_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "collision_relevant_forecast_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "planner_relevant_risk_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.26999999999999996
+            },
+            "lower_is_better": true,
+            "metric": "ade",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.41999999999999993
+            },
+            "lower_is_better": true,
+            "metric": "fde",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          }
+        ],
+        "schema_version": "forecast_baseline_comparison.v1"
+      },
+      "primary_score_order": [
+        "miss_rate",
+        "calibration_error",
+        "collision_relevant_forecast_error",
+        "planner_relevant_risk_error"
+      ]
+    },
+    "waiting_with_intent_change": {
+      "best": "cv",
+      "comparison": {
+        "baselines": [
+          "cv",
+          "interaction_aware",
+          "semantic"
+        ],
+        "best_by_metric": {
+          "ade": "cv",
+          "calibration_error": "cv",
+          "collision_relevant_forecast_error": "cv",
+          "fde": "cv",
+          "miss_rate": "cv",
+          "planner_relevant_risk_error": "cv"
+        },
+        "metrics": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error",
+          "ade",
+          "fde"
+        ],
+        "rankings": [
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "miss_rate",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "calibration_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "collision_relevant_forecast_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "planner_relevant_risk_error",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.012857142857142845
+            },
+            "lower_is_better": true,
+            "metric": "ade",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          },
+          {
+            "best": "cv",
+            "deltas_vs_best": {
+              "cv": 0.0,
+              "interaction_aware": 0.0,
+              "semantic": 0.0
+            },
+            "lower_is_better": true,
+            "metric": "fde",
+            "not_comparable": [],
+            "ranking": [
+              "cv",
+              "interaction_aware",
+              "semantic"
+            ]
+          }
+        ],
+        "schema_version": "forecast_baseline_comparison.v1"
+      },
+      "primary_score_order": [
+        "miss_rate",
+        "calibration_error",
+        "collision_relevant_forecast_error",
+        "planner_relevant_risk_error"
+      ]
+    }
+  },
+  "summary": {
+    "baselines": [
+      "cv",
+      "semantic",
+      "interaction_aware"
+    ],
+    "command": "scripts/benchmark/run_forecast_baseline_comparison.py --config configs/research/forecast_baseline_comparison_issue_2915.yaml --date 2026-06-20 --generated-at-utc 2026-06-20T21:50:00Z",
+    "config_path": "configs/research/forecast_baseline_comparison_issue_2915.yaml",
+    "date": "2026-06-20",
+    "evidence_tier": "analysis_only",
+    "forecast_jsonl_files": [
+      "docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/forecast_batches/cv.forecast_batch.v1.jsonl",
+      "docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/forecast_batches/semantic.forecast_batch.v1.jsonl",
+      "docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/forecast_batches/interaction_aware.forecast_batch.v1.jsonl"
+    ],
+    "generated_at_utc": "2026-06-20T21:50:00Z",
+    "git_head": "4df0cdf09bfcd5f5dabd73acd1ce747b8307cc69",
+    "git_status_short_at_generation": [],
+    "issue": 2915,
+    "learned_predictor_gap": "diagnostic residual gap remains; do not unblock learned predictor promotion without broader fixed-scope trace coverage",
+    "metadata_summary": {
+      "rows_total": 30,
+      "rows_with_intent_metadata": 9,
+      "rows_with_metadata": 12,
+      "rows_with_signal_metadata": 12,
+      "rows_without_metadata": 18
+    },
+    "missing_selected_families": [
+      {
+        "family": "dense_pedestrian_interaction",
+        "reason": "no durable trace fixture available"
+      }
+    ],
+    "row_status_counts": {
+      "evaluated": 21,
+      "insufficient_frames": 3,
+      "limited_no_pedestrian_motion": 3,
+      "not_available": 3
+    },
+    "scenario_families": [
+      "corridor_interaction",
+      "crossing_proxy",
+      "bottleneck",
+      "occluded_emergence",
+      "signalized_crossing",
+      "goal_directed_crossing",
+      "waiting_with_intent_change",
+      "route_conflict_goal",
+      "dense_pedestrian_interaction"
+    ],
+    "selected_trace_count": 9,
+    "strongest_by_family": {
+      "bottleneck": {
+        "best": null,
+        "reason": "no evaluated baseline rows"
+      },
+      "corridor_interaction": {
+        "best": "cv",
+        "comparison": {
+          "baselines": [
+            "cv",
+            "interaction_aware",
+            "semantic"
+          ],
+          "best_by_metric": {
+            "ade": "cv",
+            "calibration_error": "cv",
+            "collision_relevant_forecast_error": "cv",
+            "fde": "cv",
+            "miss_rate": "cv",
+            "planner_relevant_risk_error": "cv"
+          },
+          "metrics": [
+            "miss_rate",
+            "calibration_error",
+            "collision_relevant_forecast_error",
+            "planner_relevant_risk_error",
+            "ade",
+            "fde"
+          ],
+          "rankings": [
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "miss_rate",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "calibration_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "collision_relevant_forecast_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "planner_relevant_risk_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.028890823859464038,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "ade",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "semantic",
+                "interaction_aware"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.03697436169753919,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "fde",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "semantic",
+                "interaction_aware"
+              ]
+            }
+          ],
+          "schema_version": "forecast_baseline_comparison.v1"
+        },
+        "primary_score_order": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error"
+        ]
+      },
+      "crossing_proxy": {
+        "best": null,
+        "reason": "no evaluated baseline rows"
+      },
+      "dense_pedestrian_interaction": {
+        "best": null,
+        "reason": "no evaluated baseline rows"
+      },
+      "goal_directed_crossing": {
+        "best": "cv",
+        "comparison": {
+          "baselines": [
+            "cv",
+            "interaction_aware",
+            "semantic"
+          ],
+          "best_by_metric": {
+            "ade": "cv",
+            "calibration_error": "cv",
+            "collision_relevant_forecast_error": "cv",
+            "fde": "cv",
+            "miss_rate": "cv",
+            "planner_relevant_risk_error": "cv"
+          },
+          "metrics": [
+            "miss_rate",
+            "calibration_error",
+            "collision_relevant_forecast_error",
+            "planner_relevant_risk_error",
+            "ade",
+            "fde"
+          ],
+          "rankings": [
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "miss_rate",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "calibration_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "collision_relevant_forecast_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "planner_relevant_risk_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.08999999999999993
+              },
+              "lower_is_better": true,
+              "metric": "ade",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.11999999999999988
+              },
+              "lower_is_better": true,
+              "metric": "fde",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            }
+          ],
+          "schema_version": "forecast_baseline_comparison.v1"
+        },
+        "primary_score_order": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error"
+        ]
+      },
+      "occluded_emergence": {
+        "best": "cv",
+        "comparison": {
+          "baselines": [
+            "cv",
+            "interaction_aware",
+            "semantic"
+          ],
+          "best_by_metric": {
+            "ade": "cv",
+            "calibration_error": "cv",
+            "collision_relevant_forecast_error": "cv",
+            "fde": "cv",
+            "miss_rate": "cv",
+            "planner_relevant_risk_error": "cv"
+          },
+          "metrics": [
+            "miss_rate",
+            "calibration_error",
+            "collision_relevant_forecast_error",
+            "planner_relevant_risk_error",
+            "ade",
+            "fde"
+          ],
+          "rankings": [
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "miss_rate",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "calibration_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "collision_relevant_forecast_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "planner_relevant_risk_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "ade",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "fde",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            }
+          ],
+          "schema_version": "forecast_baseline_comparison.v1"
+        },
+        "primary_score_order": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error"
+        ]
+      },
+      "route_conflict_goal": {
+        "best": "cv",
+        "comparison": {
+          "baselines": [
+            "cv",
+            "interaction_aware",
+            "semantic"
+          ],
+          "best_by_metric": {
+            "ade": "cv",
+            "calibration_error": "cv",
+            "collision_relevant_forecast_error": "cv",
+            "fde": "cv",
+            "miss_rate": "cv",
+            "planner_relevant_risk_error": "cv"
+          },
+          "metrics": [
+            "miss_rate",
+            "calibration_error",
+            "collision_relevant_forecast_error",
+            "planner_relevant_risk_error",
+            "ade",
+            "fde"
+          ],
+          "rankings": [
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "miss_rate",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "calibration_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "collision_relevant_forecast_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "planner_relevant_risk_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.08077747210701755
+              },
+              "lower_is_better": true,
+              "metric": "ade",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.10770329614269006
+              },
+              "lower_is_better": true,
+              "metric": "fde",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            }
+          ],
+          "schema_version": "forecast_baseline_comparison.v1"
+        },
+        "primary_score_order": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error"
+        ]
+      },
+      "signalized_crossing": {
+        "best": "cv",
+        "comparison": {
+          "baselines": [
+            "cv",
+            "interaction_aware",
+            "semantic"
+          ],
+          "best_by_metric": {
+            "ade": "cv",
+            "calibration_error": "cv",
+            "collision_relevant_forecast_error": "cv",
+            "fde": "cv",
+            "miss_rate": "cv",
+            "planner_relevant_risk_error": "cv"
+          },
+          "metrics": [
+            "miss_rate",
+            "calibration_error",
+            "collision_relevant_forecast_error",
+            "planner_relevant_risk_error",
+            "ade",
+            "fde"
+          ],
+          "rankings": [
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "miss_rate",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "calibration_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "collision_relevant_forecast_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "planner_relevant_risk_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.26999999999999996
+              },
+              "lower_is_better": true,
+              "metric": "ade",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.41999999999999993
+              },
+              "lower_is_better": true,
+              "metric": "fde",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            }
+          ],
+          "schema_version": "forecast_baseline_comparison.v1"
+        },
+        "primary_score_order": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error"
+        ]
+      },
+      "waiting_with_intent_change": {
+        "best": "cv",
+        "comparison": {
+          "baselines": [
+            "cv",
+            "interaction_aware",
+            "semantic"
+          ],
+          "best_by_metric": {
+            "ade": "cv",
+            "calibration_error": "cv",
+            "collision_relevant_forecast_error": "cv",
+            "fde": "cv",
+            "miss_rate": "cv",
+            "planner_relevant_risk_error": "cv"
+          },
+          "metrics": [
+            "miss_rate",
+            "calibration_error",
+            "collision_relevant_forecast_error",
+            "planner_relevant_risk_error",
+            "ade",
+            "fde"
+          ],
+          "rankings": [
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "miss_rate",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "calibration_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "collision_relevant_forecast_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "planner_relevant_risk_error",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.012857142857142845
+              },
+              "lower_is_better": true,
+              "metric": "ade",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            },
+            {
+              "best": "cv",
+              "deltas_vs_best": {
+                "cv": 0.0,
+                "interaction_aware": 0.0,
+                "semantic": 0.0
+              },
+              "lower_is_better": true,
+              "metric": "fde",
+              "not_comparable": [],
+              "ranking": [
+                "cv",
+                "interaction_aware",
+                "semantic"
+              ]
+            }
+          ],
+          "schema_version": "forecast_baseline_comparison.v1"
+        },
+        "primary_score_order": [
+          "miss_rate",
+          "calibration_error",
+          "collision_relevant_forecast_error",
+          "planner_relevant_risk_error"
+        ]
+      }
+    }
+  }
+}

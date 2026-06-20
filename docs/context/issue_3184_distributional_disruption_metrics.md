@@ -43,6 +43,12 @@ baseline, but the baseline must be named in the output.
 For pedestrian `p`, cohort `c`, and valid paired timesteps `t` with duration
 `dt`:
 
+All metric inputs must be finite numeric values before aggregation. A future
+implementation must drop or mark any pedestrian/timestep pair containing `NaN`,
+`Inf`, or missing path/speed values and report the corresponding
+`missing_reason`; non-finite values must not propagate into cohort means,
+spreads, plot limits, or maximum-value computations.
+
 ### Speed-Loss Distance
 
 ```text
@@ -75,7 +81,10 @@ cohort_detour_ratio_increase_mean(c) = mean_p_in_c detour_ratio_increase(p)
 
 Units: dimensionless ratio.
 Denominator: valid paired pedestrians in cohort `c`; `epsilon_m` must be
-recorded.
+recorded. If both `path_length_robot(p)` and `path_length_control(p)` are zero,
+the pair should be treated as no detour increase (`0.0`) or omitted with an
+explicit `missing_reason`; it must not produce a large ratio solely from the
+epsilon denominator.
 
 ### Distributional Spread
 

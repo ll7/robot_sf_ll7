@@ -60,12 +60,13 @@ def rasterize_line_segment(
         O(max(|dx|, |dy|)) where dx, dy are grid cell distances
 
     Example:
+        >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> grid = np.zeros((100, 100))
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
-        >>> line = Line2D((1.0, 1.0), (9.0, 9.0))
+        >>> line = ((1.0, 1.0), (9.0, 9.0))
         >>> rasterize_line_segment(line, grid, config)
-        >>> np.sum(grid > 0)  # Count occupied cells
-        80
+        >>> int(np.sum(grid > 0))  # Count occupied cells
+        81
     """
     start, end = line
 
@@ -224,19 +225,20 @@ def rasterize_circle(
         bounding box intersection testing.
 
     Example:
+        >>> from robot_sf.nav.occupancy_grid import GridConfig
         >>> grid = np.zeros((100, 100))
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> # Circle fully inside
-        >>> circle = Circle2D((5.0, 5.0), 0.5)
+        >>> circle = ((5.0, 5.0), 0.5)
         >>> rasterize_circle(circle, grid, config)
-        >>> np.sum(grid > 0)  # Count occupied cells
-        ~78  # Approximately π * 5² cells
+        >>> int(np.sum(grid > 0))  # Count occupied cells
+        88
         >>> # Circle center outside but overlapping
         >>> grid2 = np.zeros((100, 100))
-        >>> circle2 = Circle2D((10.5, 5.0), 1.0)
+        >>> circle2 = ((10.5, 5.0), 1.0)
         >>> rasterize_circle(circle2, grid2, config)
-        >>> np.sum(grid2 > 0)  # Some cells from overlap
-        15
+        >>> int(np.sum(grid2 > 0))  # Some cells from overlap
+        78
     """
     center, radius = circle
 

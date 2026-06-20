@@ -18,7 +18,7 @@ Typical usage:
     obstacle = Obstacle([(0, 0), (10, 0), (10, 10), (0, 10)])
 
     # Create from SVG rectangle
-    rect = SvgRectangle(x=5, y=5, width=20, height=15)
+    rect = SvgRectangle(x=5, y=5, width=20, height=15, label="wall", id_="wall-1")
     obstacle = obstacle_from_svgrectangle(rect)
 """
 
@@ -241,7 +241,7 @@ def obstacle_from_svgrectangle(svg_rectangle: SvgRectangle) -> Obstacle:
         and four edge line segments.
 
     Example:
-        >>> rect = SvgRectangle(x=10, y=20, width=50, height=30)
+        >>> rect = SvgRectangle(x=10, y=20, width=50, height=30, label="wall", id_="wall-1")
         >>> obstacle = obstacle_from_svgrectangle(rect)
         >>> len(obstacle.vertices)
         4

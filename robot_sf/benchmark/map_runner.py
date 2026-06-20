@@ -76,7 +76,16 @@ from robot_sf.benchmark.map_runner_batch_summary import (
 from robot_sf.benchmark.map_runner_batch_summary import (
     build_completed_batch_summary as _build_completed_batch_summary,
 )
+from robot_sf.benchmark.map_runner_env import (
+    apply_active_observation_mode_to_env_config as _apply_active_observation_mode_to_env_config,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_env import (
+    apply_policy_env_observation_overrides as _apply_policy_env_observation_overrides,  # noqa: F401 - compatibility re-export.
+)
 from robot_sf.benchmark.map_runner_env import build_env_config as _build_env_config
+from robot_sf.benchmark.map_runner_env import (
+    validate_sensor_fusion_adapter_config as _validate_sensor_fusion_adapter_config,  # noqa: F401 - compatibility re-export.
+)
 from robot_sf.benchmark.map_runner_episode import run_map_episode as _execute_map_episode
 from robot_sf.benchmark.map_runner_identity import (
     _compute_map_episode_id,
@@ -129,10 +138,18 @@ from robot_sf.benchmark.map_runner_provenance import (
 )
 from robot_sf.benchmark.map_runner_trace import (
     _command_action_payload,  # noqa: F401 - compatibility re-export.
+    _cyclist_like_vru_summary,  # noqa: F401 - compatibility re-export.
+    _episode_metadata_for_signal_metrics,  # noqa: F401 - compatibility re-export.
+    _fast_bicycle_actor_summary,  # noqa: F401 - compatibility re-export.
+    _intent_conditioned_behavior_summary,  # noqa: F401 - compatibility re-export.
+    _observation_heading,  # noqa: F401 - compatibility re-export.
     _scenario_id,
     _signal_state_for_metric_metadata,  # noqa: F401 - compatibility re-export for tests.
     _signal_state_promotion_contract,  # noqa: F401 - compatibility re-export for tests.
     _signal_state_proxy_wrapper,  # noqa: F401 - compatibility re-export for tests.
+    _single_pedestrian_intent_metadata,  # noqa: F401 - compatibility re-export.
+    _single_pedestrian_vru_metadata,  # noqa: F401 - compatibility re-export.
+    _trace_pedestrians,  # noqa: F401 - compatibility re-export.
 )
 from robot_sf.benchmark.map_runner_worker import execute_map_job as _execute_map_job
 from robot_sf.benchmark.metrics import compute_all_metrics, post_process_metrics

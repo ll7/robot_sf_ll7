@@ -30,7 +30,6 @@ dependencies = [
     "toml>=0.10.2",
     "shimmy>=1.0.0,<2.0.0",
     "moviepy>=2.0.0",
-    "pysocialforce",
     "jsonschema>=4.23.0",
     "shapely>=2.1.2",
     "networkx>=2.8,<3.0",
@@ -115,23 +114,19 @@ packages = [
     { include = "examples" },
     { include = "third_party" },
 ]
-
-[tool.hatch.build.targets.wheel]
-packages = [
-    "robot_sf",
-    "robot_sf_carla_bridge",
-    "examples",
-    "third_party",
-]
 include = ["examples/**"]
 
 [tool.hatchling.build.targets.wheel.shared-data]
 "robot_sf/maps" = "robot_sf/maps"
 
+[tool.hatch.build.targets.wheel.force-include]
+"fast-pysf/pysocialforce" = "pysocialforce"
+
 [tool.hatchling.build.targets.sdist]
 include = [
     "/robot_sf",
     "/robot_sf_carla_bridge",
+    "/fast-pysf/pysocialforce",
     "/examples",
     "/third_party",
     "/README.md",
@@ -143,7 +138,9 @@ exclude = [
     "/.git",
     "/.pytest_cache",
     "/__pycache__",
-    "/fast-pysf",
+    "/fast-pysf/tests",
+    "/fast-pysf/examples",
+    "/fast-pysf/benchmarks",
 ]
 
 [tool.hatch.metadata]

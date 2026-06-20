@@ -16,7 +16,7 @@ from robot_sf.common.types import Vec2D
 from robot_sf.nav.free_space_sampling import sample_free_points_in_bounds
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.ped_npc.ped_zone import sample_zone
-from robot_sf.planner import PlanningError
+from robot_sf.planner.classic_global_planner import PlanningError
 from robot_sf.planner.visibility_planner import PlanningFailedError
 
 _PLANNER_RETRY_ATTEMPTS = 5

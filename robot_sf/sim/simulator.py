@@ -221,9 +221,11 @@ class Simulator:
 
     def _reset_social_force_state(self) -> None:
         """Restore pedestrian physics state for a fresh deterministic episode reset."""
-        self.pysf_state.pysf_states()[...] = self._initial_pysf_states
+        initial_states = getattr(self, "_initial_pysf_states", None)
+        if initial_states is not None:
+            self.pysf_state.pysf_states()[...] = initial_states
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
-        for behavior in self.peds_behaviors:
+        for behavior in getattr(self, "peds_behaviors", ()):
             behavior.reset()
 
     @property

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Removed redundant Black/autopep8 formatter configuration and the unused Black optional
+  development dependency; Ruff format remains the canonical formatter.
 * Extended the issue-1515 hybrid-evidence matrix validator with an opt-in git-history proof path:
   default validation still only checks `commit_artifact` shape plus provenance pointers, while
   `scripts/validation/validate_hybrid_evidence_matrix.py --check-git-history` now additionally fails

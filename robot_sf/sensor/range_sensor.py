@@ -130,7 +130,8 @@ class LidarScannerSettings:
         num_rays: Number of equally spaced scalar range readings per scan.
         scan_noise: Two probabilities ``[loss, corruption]``. Loss replaces a
             ray with ``max_scan_dist``; corruption scales the clipped range by a
-            random factor in ``[0, 1)``.
+            random factor in ``[0, 1)``. Set this to ``[0.0, 0.0]`` when running
+            Gymnasium's deterministic environment checker.
         scan_noise_array: Cached ndarray derived from ``scan_noise``, allocated
             once at settings init to avoid per-scan array creation.
         detect_other_robots: When true, dynamic objects exposed by the

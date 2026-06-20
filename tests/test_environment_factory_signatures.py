@@ -29,7 +29,11 @@ from robot_sf.gym_env.environment_factory import (
 from robot_sf.gym_env.multi_robot_env import MultiRobotEnv
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.robot_env_with_image import RobotEnvWithImage
-from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
+from robot_sf.gym_env.unified_config import (
+    MultiRobotConfig,
+    PedestrianSimulationConfig,
+    RobotSimulationConfig,
+)
 
 
 def _param_names(func):
@@ -381,6 +385,44 @@ def test_make_multi_robot_env_signature_explicit():
     """Multi-robot env factory exposes robot-count and config parameters."""
     params = _param_names(make_multi_robot_env)
     assert "num_robots" in params and "config" in params
+    assert "seed" in params
+
+
+def test_multi_robot_factory_applies_seed(monkeypatch):
+    """Multi-robot factory should share the public factory seed contract."""
+    applied = {}
+
+    class FakeMultiRobotEnv:
+        """Minimal multi-robot env stub for seed propagation assertions."""
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.applied_seed = None
+
+    monkeypatch.setattr(
+        environment_factory_module,
+        "_apply_global_seed",
+        lambda seed: applied.setdefault("seed", seed),
+    )
+    monkeypatch.setattr(
+        environment_factory_module,
+        "_load_multi_robot_env",
+        lambda: FakeMultiRobotEnv,
+    )
+
+    config = MultiRobotConfig(num_robots=2)
+    env = EnvironmentFactory.create_multi_robot_env(
+        config=config,
+        num_robots=2,
+        seed=123,
+        reward_func=None,
+        debug=False,
+    )
+
+    assert isinstance(env, FakeMultiRobotEnv)
+    assert applied["seed"] == 123
+    assert env.applied_seed == 123
+    assert env.kwargs["env_config"] is config
 
 
 def test_make_crowd_sim_env_signature_explicit():

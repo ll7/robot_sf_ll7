@@ -12,11 +12,9 @@ It also defines the action and observation spaces for the robot.
 
 import hashlib
 import json
-import random
 import time
 import uuid
 from collections.abc import Callable
-from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -31,10 +29,12 @@ from robot_sf.common.types import Line2D
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.env_util import (
+    global_reset_seed,
     init_collision_and_sensors,
     init_spaces,
     make_grid_observation_spaces,
     prepare_pedestrian_actions,
+    reset_episode_counter_for_seed,
 )
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reset_metadata import build_reset_metadata
@@ -70,28 +70,6 @@ _TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
 _ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
 _GridObstacleCacheKey = tuple[int, int, int]
 _GridObstacleCacheValue = tuple[list[Line2D], list[ShapelyPolygon]]
-
-
-@contextmanager
-def _temporary_global_reset_seed(seed: int | None):
-    """Temporarily seed legacy global RNGs used by route sampling during reset.
-
-    This scope is intentionally narrow and restores caller-owned RNG state afterward, but
-    it still assumes resets do not run concurrently in the same Python process.
-    """
-    if seed is None:
-        yield
-        return
-
-    random_state = random.getstate()
-    numpy_state = np.random.get_state()
-    random.seed(int(seed))
-    np.random.seed(int(seed))
-    try:
-        yield
-    finally:
-        random.setstate(random_state)
-        np.random.set_state(numpy_state)
 
 
 # Helper to compute a stable, short hash for env_config
@@ -936,7 +914,7 @@ class RobotEnv(BaseEnv):
         if seed is not None:
             self.applied_seed = int(seed)
 
-        with _temporary_global_reset_seed(seed):
+        with global_reset_seed(seed):
             super().reset(seed=seed, options=options)
             self._telemetry_episode_id += 1
             # Reset last_action
@@ -944,6 +922,7 @@ class RobotEnv(BaseEnv):
             # Reset internal simulator state
             self.simulator.reset_state()
             # Reset the environment's state and return the initial observation
+            reset_episode_counter_for_seed(self.state, seed)
             obs = self.state.reset()
             self._prime_snqi_proxy_state()
 

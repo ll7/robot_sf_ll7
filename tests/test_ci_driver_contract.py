@@ -5,14 +5,18 @@ from __future__ import annotations
 import re
 import shlex
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import yaml
+from packaging.requirements import Requirement
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
+PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
@@ -131,6 +135,11 @@ def _workflow_jobs() -> dict[str, Any]:
     return workflow.get("jobs", {})
 
 
+def _pyproject() -> dict[str, Any]:
+    """Return parsed project metadata."""
+    return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
     """Capture all phase arguments from one workflow run stanza."""
 
@@ -207,6 +216,43 @@ def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> N
     assert any("wheel_install_smoke.sh" in run_block for run_block in wheel_smoke_run_blocks)
     assert "needs" not in workflow["jobs"]["wheel-smoke-install"]
     assert "wheel-smoke-install" in workflow["jobs"]["ci"]["needs"]
+
+
+def test_wheel_install_smoke_uses_dependency_resolution_and_runtime_env_step() -> None:
+    """Wheel smoke should catch missing package metadata and core runtime dependencies."""
+    smoke_text = WHEEL_INSTALL_SMOKE.read_text(encoding="utf-8")
+
+    assert '"${PIP_BIN}" install --no-cache-dir "${WHEEL_PATH}"' in smoke_text
+    assert "--no-deps" not in smoke_text
+    assert "wheel_with_dependency_resolution" in smoke_text
+    assert "make_crowd_sim_env" in smoke_text
+    assert "env.reset(seed=123)" in smoke_text
+    assert "env.step()" in smoke_text
+    assert "PYTHONPATH= PYTHONNOUSERSITE=1" in smoke_text
+
+
+def test_wheel_install_smoke_tests_optional_extras_independently() -> None:
+    """Optional extras should be installable one at a time from the built wheel."""
+    smoke_text = WHEEL_INSTALL_SMOKE.read_text(encoding="utf-8")
+
+    assert "ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS" in smoke_text
+    assert "progress analysis analytics viz" in smoke_text
+    assert '"${extra_pip}" install --no-cache-dir "${WHEEL_PATH}[${extra}]"' in smoke_text
+    assert '"extras": json.loads(extras_status_json)' in smoke_text
+
+
+def test_wheel_metadata_vendors_compatible_fast_pysf_package() -> None:
+    """Clean wheel installs must not resolve the incompatible PyPI pysocialforce package."""
+    project = _pyproject()
+    dependency_names = {
+        Requirement(dependency).name for dependency in project["project"]["dependencies"]
+    }
+    wheel_force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    sdist_includes = project["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
+
+    assert "pysocialforce" not in dependency_names
+    assert wheel_force_include["fast-pysf/pysocialforce"] == "pysocialforce"
+    assert "/fast-pysf/pysocialforce" in sdist_includes
 
 
 def test_ci_driver_test_phase_excludes_separately_timed_examples() -> None:

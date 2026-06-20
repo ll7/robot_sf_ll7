@@ -1,4 +1,4 @@
-# Issue #3170 AMV Feasibility Ranking Stress Synthesis
+# Issue #3170 AMV Feasibility Ranking Stress Synthesis (2026-06-20)
 
 This directory contains the compact tracked evidence summary for issue #3170.
 It synthesizes existing durable AMV/AMMV artifacts rather than adding a new
@@ -16,4 +16,3 @@ The result is diagnostic-only:
 
 Follow-up issue #3181 tracks the missing direct actuation-aware multi-scenario,
 multi-seed execution slice.
-

@@ -1,4 +1,4 @@
-# Issue #3170 AMV Feasibility Ranking Stress Synthesis
+# Issue #3170 AMV Feasibility Ranking Stress Synthesis (2026-06-20)
 
 Issue: [#3170](https://github.com/ll7/robot_sf_ll7/issues/3170)
 Follow-up: [#3181](https://github.com/ll7/robot_sf_ll7/issues/3181)
@@ -75,4 +75,3 @@ a planner-ranking or paper-facing AMV claim.
 
 Compact synthesis artifact:
 [issue_3170_amv_feasibility_ranking_stress_2026-06-20/summary.json](evidence/issue_3170_amv_feasibility_ranking_stress_2026-06-20/summary.json)
-

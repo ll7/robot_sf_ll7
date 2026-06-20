@@ -1,5 +1,13 @@
 """Programmable adversarial scenario search helpers."""
 
+from robot_sf.adversarial.batch_certification import (
+    ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA,
+    BatchCertification,
+    BatchCertificationPolicy,
+    CandidateCertification,
+    certify_candidate_batch,
+    certify_records,
+)
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
@@ -56,8 +64,12 @@ from robot_sf.adversarial.seed_sensitivity import (
 )
 
 __all__ = [
+    "ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA",
     "MANIFEST_QUALITY_SCHEMA_VERSION",
     "AdversarialScenarioManifest",
+    "BatchCertification",
+    "BatchCertificationPolicy",
+    "CandidateCertification",
     "CandidateEvaluation",
     "CandidateSpec",
     "CoordinateRefinementSampler",
@@ -81,6 +93,8 @@ __all__ = [
     "ValidationRecord",
     "build_manifest",
     "build_multi_ped_adversarial_robot_config",
+    "certify_candidate_batch",
+    "certify_records",
     "compute_control_hash",
     "generate_manifests",
     "materialize_manifest_route_overrides",

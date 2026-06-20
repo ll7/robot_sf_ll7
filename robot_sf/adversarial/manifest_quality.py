@@ -605,6 +605,36 @@ def _summarize_planner_run_from_aggregates(
     )
 
 
+def load_manifest_quality_records(
+    manifest_inputs: list[str | Path],
+    *,
+    reference_manifest: str | Path | None = None,
+) -> list[ManifestQualityRecord]:
+    """Parse manifests into per-candidate quality records (status + control hash).
+
+    Public wrapper over the shared discovery/parse path so consumers such as the
+    pre-planner batch-certification gate reuse the exact ``status`` and
+    ``normalized_control_hash`` computation instead of recomputing metrics.
+
+    Returns:
+        One :class:`ManifestQualityRecord` per discovered candidate manifest.
+    """
+    manifest_paths = _collect_paths([Path(path) for path in manifest_inputs])
+    reference_vector: tuple[float, ...] | None = None
+    reference_manifest_path: Path | None = None
+    if reference_manifest is not None:
+        reference_manifest_path = Path(reference_manifest)
+        reference_payload = _load_yaml_mapping(reference_manifest_path)
+        reference_vector = _control_vector(reference_payload.get("candidate_controls"))
+        if reference_vector is None:
+            raise ValueError(
+                "reference manifest missing comparable candidate_controls: "
+                f"{reference_manifest_path}"
+            )
+    records, _ = _load_records(manifest_paths, reference_vector, reference_manifest_path)
+    return records
+
+
 def summarize_adversarial_manifest_quality(
     manifest_inputs: list[str | Path],
     *,

@@ -7,14 +7,11 @@ for schema validation and metadata extraction.
 """
 
 import json
-import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import jsonschema
-
-logger = logging.getLogger(__name__)
 
 
 class EpisodeSchema:

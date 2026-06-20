@@ -207,7 +207,7 @@ def build_completed_batch_summary(  # noqa: PLR0913
     latency_profile_metadata: dict[str, Any] | None,
     benchmark_track: str | None,
     track_schema_version: str | None,
-    schema_path: Path,
+    schema_path: str | Path,
     scenario_path: Path,
     scenarios: list[dict[str, Any]],
     algo_config_path: str | None,

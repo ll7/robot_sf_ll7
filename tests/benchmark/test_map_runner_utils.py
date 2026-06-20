@@ -50,6 +50,11 @@ from robot_sf.benchmark.map_runner import (
     _vel_and_acc,
     run_map_batch,
 )
+from robot_sf.benchmark.map_runner_batch_plan import (
+    build_seed_jobs,
+    build_worker_fixed_params,
+    resolve_batch_kinematics_tag,
+)
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -119,6 +124,81 @@ def test_parse_algo_config_validates_yaml(tmp_path: Path) -> None:
     list_path.write_text("- item\n", encoding="utf-8")
     with pytest.raises(TypeError):
         _parse_algo_config(str(list_path))
+
+
+def test_map_batch_plan_expands_kinematics_and_seed_jobs() -> None:
+    """Batch planning helpers should own pure kinematics and seed expansion."""
+    scenarios = [
+        {
+            "name": "diff",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "differential_drive"},
+            "seeds": [1, 2],
+        },
+        {
+            "name": "holo",
+            "metadata": {"supported": True},
+            "robot_config": {"type": "holonomic"},
+            "seeds": [3],
+        },
+    ]
+
+    kinematics_tag, scenario_kinematics = resolve_batch_kinematics_tag(scenarios)
+    jobs = build_seed_jobs(scenarios, suite_seeds={}, suite_key="unused")
+
+    assert kinematics_tag == "mixed"
+    assert scenario_kinematics == ["differential_drive", "holonomic"]
+    assert [(scenario["name"], seed) for scenario, seed in jobs] == [
+        ("diff", 1),
+        ("diff", 2),
+        ("holo", 3),
+    ]
+
+
+def test_map_batch_plan_builds_worker_fixed_params(tmp_path: Path) -> None:
+    """Worker fixed-param assembly should stay outside the large map-runner shell."""
+    fixed_params = build_worker_fixed_params(
+        horizon=7,
+        dt=0.2,
+        record_forces=False,
+        snqi_weights={"success": 1.0},
+        snqi_baseline={"success": {"median": 1.0}},
+        algo="goal",
+        raw_policy_cfg={"max_speed": 0.5},
+        algo_config_path="configs/algos/demo.yaml",
+        scenario_path=tmp_path / "scenarios.yaml",
+        adapter_impact_eval=True,
+        experimental_ped_impact=True,
+        ped_impact_radius_m=1.5,
+        ped_impact_window_steps=4,
+        noise_spec={"enabled": False},
+        batch_observation_mode="socnav_state",
+        observation_level="tracked_agents_no_noise",
+        benchmark_track="grid",
+        track_schema_version="track-v1",
+        actuation_profile_metadata={"name": "actuation"},
+        latency_profile_metadata={"name": "latency"},
+        latency_stress_metrics={"held_action_ratio": "not_available"},
+        record_simulation_step_trace=True,
+    )
+
+    assert fixed_params["horizon"] == 7
+    assert fixed_params["record_forces"] is False
+    assert fixed_params["algo_config"] == {"max_speed": 0.5}
+    assert fixed_params["scenario_path"] == str(tmp_path / "scenarios.yaml")
+    assert fixed_params["adapter_impact_eval"] is True
+    assert fixed_params["experimental_ped_impact"] is True
+    assert fixed_params["ped_impact_radius_m"] == pytest.approx(1.5)
+    assert fixed_params["ped_impact_window_steps"] == 4
+    assert fixed_params["observation_noise"] == {"enabled": False}
+    assert fixed_params["observation_mode"] == "socnav_state"
+    assert fixed_params["observation_level"] == "tracked_agents_no_noise"
+    assert fixed_params["benchmark_track"] == "grid"
+    assert fixed_params["track_schema_version"] == "track-v1"
+    assert fixed_params["synthetic_actuation_profile"] == {"name": "actuation"}
+    assert fixed_params["latency_stress_profile"] == {"name": "latency"}
+    assert fixed_params["latency_stress_metrics"] == {"held_action_ratio": "not_available"}
+    assert fixed_params["record_simulation_step_trace"] is True
 
 
 def test_parse_algo_config_rejects_local_output_model_path(tmp_path: Path) -> None:

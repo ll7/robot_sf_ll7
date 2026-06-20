@@ -48,6 +48,15 @@ from robot_sf.benchmark.map_runner_actions import (
 )
 from robot_sf.benchmark.map_runner_actions import stack_ped_positions as _stack_ped_positions
 from robot_sf.benchmark.map_runner_actions import vel_and_acc as _vel_and_acc
+from robot_sf.benchmark.map_runner_batch_plan import (
+    build_seed_jobs as _build_seed_jobs,
+)
+from robot_sf.benchmark.map_runner_batch_plan import (
+    build_worker_fixed_params as _build_worker_fixed_params,
+)
+from robot_sf.benchmark.map_runner_batch_plan import (
+    resolve_batch_kinematics_tag as _resolve_batch_kinematics_tag,
+)
 from robot_sf.benchmark.map_runner_batch_runner import execute_map_jobs as _execute_map_jobs
 from robot_sf.benchmark.map_runner_batch_summary import (
     WorkerMetadataBridgeUpdate as _WorkerMetadataBridgeUpdate,  # noqa: F401 - compatibility export.
@@ -59,7 +68,7 @@ from robot_sf.benchmark.map_runner_batch_summary import (
     apply_worker_metadata_bridge as _apply_worker_metadata_bridge,
 )
 from robot_sf.benchmark.map_runner_batch_summary import (
-    merge_runtime_algorithm_contract as _merge_runtime_algorithm_contract,
+    build_completed_batch_summary as _build_completed_batch_summary,
 )
 from robot_sf.benchmark.map_runner_env import (
     apply_active_observation_mode_to_env_config as _apply_active_observation_mode_to_env_config,
@@ -76,7 +85,7 @@ from robot_sf.benchmark.map_runner_identity import (
     _resolve_seed_list,
     _scenario_identity_payload,
     _scenario_with_episode_seed_defaults,
-    _select_seeds,
+    _select_seeds,  # noqa: F401 - compatibility re-export for tests.
     _suite_key,
 )
 from robot_sf.benchmark.map_runner_jsonl import write_validated_to_handle as _write_jsonl_record
@@ -3049,14 +3058,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             continue
         filtered.append(scenario)
 
-    jobs: list[tuple[dict[str, Any], int]] = []
-    scenario_kinematics = sorted({_scenario_robot_kinematics_label(sc) for sc in filtered})
-    if not scenario_kinematics:
-        kinematics_tag = "unknown"
-    elif len(scenario_kinematics) == 1:
-        kinematics_tag = scenario_kinematics[0]
-    else:
-        kinematics_tag = "mixed"
+    kinematics_tag, scenario_kinematics = _resolve_batch_kinematics_tag(filtered)
     batch_observation_mode = str(observation_mode).strip() if observation_mode is not None else None
     algo_contract = enrich_algorithm_metadata(
         algo=algo,
@@ -3078,10 +3080,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     planner_meta = algo_contract.get("planner_kinematics")
     if isinstance(planner_meta, dict):
         planner_meta["scenario_kinematics"] = scenario_kinematics
-    for scenario in filtered:
-        seeds = _select_seeds(scenario, suite_seeds=suite_seeds, suite_key=suite_key)
-        for seed in seeds:
-            jobs.append((scenario, int(seed)))
+    jobs = _build_seed_jobs(filtered, suite_seeds=suite_seeds, suite_key=suite_key)
     preflight_skipped_jobs = 0
 
     out_path = Path(out_path)
@@ -3304,38 +3303,38 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     filtered_jobs.append((sc, seed))
             jobs = filtered_jobs
 
-    fixed_params = {
-        "horizon": horizon,
-        "dt": dt,
-        "record_forces": record_forces,
-        "snqi_weights": snqi_weights,
-        "snqi_baseline": snqi_baseline,
-        "algo": algo,
-        "algo_config": raw_policy_cfg,
-        "algo_config_path": algo_config_path,
-        "scenario_path": str(scenario_path),
-        "adapter_impact_eval": bool(adapter_impact_eval),
-        "experimental_ped_impact": bool(experimental_ped_impact),
-        "ped_impact_radius_m": float(ped_impact_radius_m),
-        "ped_impact_window_steps": int(ped_impact_window_steps),
-        "observation_noise": noise_spec,
-        "observation_mode": batch_observation_mode,
-        "observation_level": observation_level,
-        "benchmark_track": benchmark_track,
-        "track_schema_version": track_schema_version,
-        "synthetic_actuation_profile": (
+    fixed_params = _build_worker_fixed_params(
+        horizon=horizon,
+        dt=dt,
+        record_forces=record_forces,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        algo=algo,
+        raw_policy_cfg=raw_policy_cfg,
+        algo_config_path=algo_config_path,
+        scenario_path=scenario_path,
+        adapter_impact_eval=adapter_impact_eval,
+        experimental_ped_impact=experimental_ped_impact,
+        ped_impact_radius_m=ped_impact_radius_m,
+        ped_impact_window_steps=ped_impact_window_steps,
+        noise_spec=noise_spec,
+        batch_observation_mode=batch_observation_mode,
+        observation_level=observation_level,
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
+        actuation_profile_metadata=(
             actuation_profile.to_metadata() if actuation_profile is not None else None
         ),
-        "latency_stress_profile": (
+        latency_profile_metadata=(
             latency_profile.to_metadata(dt=latency_metadata_dt)
             if latency_profile is not None
             else None
         ),
-        "latency_stress_metrics": (
+        latency_stress_metrics=(
             not_available_latency_metrics() if latency_profile is not None else None
         ),
-        "record_simulation_step_trace": bool(record_simulation_step_trace),
-    }
+        record_simulation_step_trace=record_simulation_step_trace,
+    )
 
     total_jobs = len(jobs)
     batch_execution = _execute_map_jobs(
@@ -3359,137 +3358,50 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     runtime_algorithm_contract = batch_execution.runtime_algorithm_contract
     feasibility_totals = batch_execution.feasibility_totals
 
-    impact_contract = algo_contract.get("adapter_impact")
-    if (
-        isinstance(impact_contract, dict)
-        and bool(impact_contract.get("requested", False))
-        and adapter_samples_seen
-    ):
-        impact_contract["native_steps"] = int(adapter_native_steps)
-        impact_contract["adapted_steps"] = int(adapter_adapted_steps)
-        total_steps = adapter_native_steps + adapter_adapted_steps
-        if total_steps > 0:
-            execution_mode = infer_execution_mode_from_counts(
-                adapter_native_steps, adapter_adapted_steps
-            )
-            impact_contract["status"] = "complete"
-            impact_contract["execution_mode"] = execution_mode
-            impact_contract["adapter_fraction"] = float(adapter_adapted_steps / total_steps)
-            algo_contract = enrich_algorithm_metadata(
-                algo=algo,
-                metadata=algo_contract,
-                execution_mode=execution_mode,
-                robot_kinematics=kinematics_tag,
-                observation_mode=active_observation_mode,
-                observation_level=active_observation_level,
-            )
-            attach_track_metadata(
-                algo_contract,
-                benchmark_track=benchmark_track,
-                track_schema_version=track_schema_version,
-                observation_level=active_observation_level,
-                observation_mode=active_observation_mode,
-            )
-        else:
-            impact_contract["status"] = "not_applicable"
-            impact_contract["adapter_fraction"] = 0.0
-
-    algo_contract = _merge_runtime_algorithm_contract(
-        algo_contract,
-        runtime_algorithm_contract,
-    )
-    preflight["algorithm_metadata_contract"] = algo_contract
-    planner_contract = algo_contract.get("planner_kinematics")
-    if isinstance(planner_contract, dict) and planner_contract.get("planner_command_space") in {
-        None,
-        "unknown",
-    }:
-        planner_contract["planner_command_space"] = _default_robot_command_space(
+    return _build_completed_batch_summary(
+        algo_contract=algo_contract,
+        runtime_algorithm_contract=runtime_algorithm_contract,
+        preflight=preflight,
+        feasibility_totals=feasibility_totals,
+        adapter_samples_seen=adapter_samples_seen,
+        adapter_native_steps=adapter_native_steps,
+        adapter_adapted_steps=adapter_adapted_steps,
+        planner_command_space_fallback=_default_robot_command_space(
             kinematics_tag,
             policy_cfg,
             robot_command_mode=robot_command_mode,
-        )
-    total_commands = int(feasibility_totals["commands_evaluated"])
-    algo_contract["kinematics_feasibility"] = {
-        "commands_evaluated": total_commands,
-        "infeasible_native_count": int(feasibility_totals["infeasible_native_count"]),
-        "projected_count": int(feasibility_totals["projected_count"]),
-        "projection_rate": (
-            float(feasibility_totals["projected_count"] / total_commands)
-            if total_commands > 0
-            else 0.0
         ),
-        "infeasible_rate": (
-            float(feasibility_totals["infeasible_native_count"] / total_commands)
-            if total_commands > 0
-            else 0.0
-        ),
-        "mean_abs_delta_linear": (
-            float(feasibility_totals["sum_abs_delta_linear"] / total_commands)
-            if total_commands > 0
-            else 0.0
-        ),
-        "mean_abs_delta_angular": (
-            float(feasibility_totals["sum_abs_delta_angular"] / total_commands)
-            if total_commands > 0
-            else 0.0
-        ),
-        "max_abs_delta_linear": float(feasibility_totals["max_abs_delta_linear"]),
-        "max_abs_delta_angular": float(feasibility_totals["max_abs_delta_angular"]),
-    }
-
-    summary = {
-        "total_jobs": total_jobs,
-        "workers": int(workers),
-        "parallel_execution": bool(workers > 1),
-        "batch_runtime_sec": batch_execution.batch_runtime_sec,
-        "written": wrote,
-        "successful_jobs": wrote,
-        "failed_jobs": len(failures),
-        "skipped_jobs": preflight_skipped_jobs,
-        "failures": failures,
-        "out_path": str(out_path),
-        "algorithm_readiness": {
-            "name": readiness.canonical_name if readiness is not None else algo,
-            "tier": readiness.tier if readiness is not None else "unknown",
-            "profile": benchmark_profile,
-        },
-        "algorithm_metadata_contract": algo_contract,
-        "preflight": preflight,
-        "observation_noise": noise_spec,
-        "observation_noise_hash": noise_hash,
-        "observation_level": active_observation_level,
-        "synthetic_actuation_profile": (
+        total_jobs=total_jobs,
+        workers=workers,
+        batch_runtime_sec=batch_execution.batch_runtime_sec,
+        wrote=wrote,
+        failures=failures,
+        preflight_skipped_jobs=preflight_skipped_jobs,
+        out_path=out_path,
+        readiness=readiness,
+        algo=algo,
+        benchmark_profile=benchmark_profile,
+        noise_spec=noise_spec,
+        noise_hash=noise_hash,
+        active_observation_mode=active_observation_mode,
+        active_observation_level=active_observation_level,
+        actuation_profile_metadata=(
             actuation_profile.to_metadata() if actuation_profile is not None else None
         ),
-        "latency_stress_profile": (
+        latency_profile_metadata=(
             latency_profile.to_metadata(dt=latency_metadata_dt)
             if latency_profile is not None
             else None
         ),
-        "latency_stress_metrics": (
-            not_available_latency_metrics() if latency_profile is not None else None
-        ),
-    }
-    if benchmark_track is not None:
-        summary["benchmark_track"] = benchmark_track
-    if track_schema_version is not None:
-        summary["track_schema_version"] = track_schema_version
-    artifact_pointer_status = "local_jsonl_present" if out_path.exists() else "not_available"
-    summary["provenance"] = _map_result_provenance(
+        benchmark_track=benchmark_track,
+        track_schema_version=track_schema_version,
         schema_path=schema_path,
         scenario_path=scenario_path,
         scenarios=filtered,
-        algo=algo,
         algo_config_path=algo_config_path,
-        benchmark_profile=benchmark_profile,
         suite_key=suite_key,
-        total_jobs=total_jobs,
-        written=wrote,
-        artifact_pointer_status=artifact_pointer_status,
+        kinematics_tag=kinematics_tag,
     )
-    summary["benchmark_availability"] = availability_payload(summary)
-    return summary
 
 
 __all__ = ["run_map_batch"]

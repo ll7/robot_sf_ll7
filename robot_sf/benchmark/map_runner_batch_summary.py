@@ -2,7 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+from robot_sf.benchmark.algorithm_metadata import (
+    enrich_algorithm_metadata,
+    infer_execution_mode_from_counts,
+)
+from robot_sf.benchmark.fallback_policy import availability_payload
+from robot_sf.benchmark.latency_stress import not_available_latency_metrics
+from robot_sf.benchmark.map_runner_provenance import map_result_provenance
+from robot_sf.benchmark.utils import attach_track_metadata
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _float_metadata_value(value: Any, default: float = 0.0) -> float:
@@ -165,3 +177,166 @@ def merge_runtime_algorithm_contract(  # noqa: C901
         _merge_mapping(upstream_reference, runtime_upstream_reference)
 
     return base_contract
+
+
+def build_completed_batch_summary(  # noqa: PLR0913
+    *,
+    algo_contract: dict[str, Any],
+    runtime_algorithm_contract: dict[str, Any],
+    preflight: dict[str, Any],
+    feasibility_totals: dict[str, float],
+    adapter_samples_seen: bool,
+    adapter_native_steps: int,
+    adapter_adapted_steps: int,
+    planner_command_space_fallback: str,
+    total_jobs: int,
+    workers: int,
+    batch_runtime_sec: float,
+    wrote: int,
+    failures: list[dict[str, Any]],
+    preflight_skipped_jobs: int,
+    out_path: Path,
+    readiness: Any,
+    algo: str,
+    benchmark_profile: str,
+    noise_spec: dict[str, Any],
+    noise_hash: str,
+    active_observation_mode: str | None,
+    active_observation_level: str | None,
+    actuation_profile_metadata: dict[str, Any] | None,
+    latency_profile_metadata: dict[str, Any] | None,
+    benchmark_track: str | None,
+    track_schema_version: str | None,
+    schema_path: Path,
+    scenario_path: Path,
+    scenarios: list[dict[str, Any]],
+    algo_config_path: str | None,
+    suite_key: str,
+    kinematics_tag: str,
+) -> dict[str, Any]:
+    """Build the final successful batch summary after all map jobs finish.
+
+    Returns:
+        Batch summary payload with metadata contracts, provenance, and availability.
+    """
+    impact_contract = algo_contract.get("adapter_impact")
+    if (
+        isinstance(impact_contract, dict)
+        and bool(impact_contract.get("requested", False))
+        and adapter_samples_seen
+    ):
+        impact_contract["native_steps"] = int(adapter_native_steps)
+        impact_contract["adapted_steps"] = int(adapter_adapted_steps)
+        total_steps = adapter_native_steps + adapter_adapted_steps
+        if total_steps > 0:
+            execution_mode = infer_execution_mode_from_counts(
+                adapter_native_steps, adapter_adapted_steps
+            )
+            impact_contract["status"] = "complete"
+            impact_contract["execution_mode"] = execution_mode
+            impact_contract["adapter_fraction"] = float(adapter_adapted_steps / total_steps)
+            algo_contract = enrich_algorithm_metadata(
+                algo=algo,
+                metadata=algo_contract,
+                execution_mode=execution_mode,
+                robot_kinematics=kinematics_tag,
+                observation_mode=active_observation_mode,
+                observation_level=active_observation_level,
+            )
+            attach_track_metadata(
+                algo_contract,
+                benchmark_track=benchmark_track,
+                track_schema_version=track_schema_version,
+                observation_level=active_observation_level,
+                observation_mode=active_observation_mode,
+            )
+        else:
+            impact_contract["status"] = "not_applicable"
+            impact_contract["adapter_fraction"] = 0.0
+
+    algo_contract = merge_runtime_algorithm_contract(
+        algo_contract,
+        runtime_algorithm_contract,
+    )
+    preflight["algorithm_metadata_contract"] = algo_contract
+    planner_contract = algo_contract.get("planner_kinematics")
+    if isinstance(planner_contract, dict) and planner_contract.get("planner_command_space") in {
+        None,
+        "unknown",
+    }:
+        planner_contract["planner_command_space"] = planner_command_space_fallback
+    total_commands = int(feasibility_totals["commands_evaluated"])
+    algo_contract["kinematics_feasibility"] = {
+        "commands_evaluated": total_commands,
+        "infeasible_native_count": int(feasibility_totals["infeasible_native_count"]),
+        "projected_count": int(feasibility_totals["projected_count"]),
+        "projection_rate": (
+            float(feasibility_totals["projected_count"] / total_commands)
+            if total_commands > 0
+            else 0.0
+        ),
+        "infeasible_rate": (
+            float(feasibility_totals["infeasible_native_count"] / total_commands)
+            if total_commands > 0
+            else 0.0
+        ),
+        "mean_abs_delta_linear": (
+            float(feasibility_totals["sum_abs_delta_linear"] / total_commands)
+            if total_commands > 0
+            else 0.0
+        ),
+        "mean_abs_delta_angular": (
+            float(feasibility_totals["sum_abs_delta_angular"] / total_commands)
+            if total_commands > 0
+            else 0.0
+        ),
+        "max_abs_delta_linear": float(feasibility_totals["max_abs_delta_linear"]),
+        "max_abs_delta_angular": float(feasibility_totals["max_abs_delta_angular"]),
+    }
+
+    summary = {
+        "total_jobs": total_jobs,
+        "workers": int(workers),
+        "parallel_execution": bool(workers > 1),
+        "batch_runtime_sec": batch_runtime_sec,
+        "written": wrote,
+        "successful_jobs": wrote,
+        "failed_jobs": len(failures),
+        "skipped_jobs": preflight_skipped_jobs,
+        "failures": failures,
+        "out_path": str(out_path),
+        "algorithm_readiness": {
+            "name": readiness.canonical_name if readiness is not None else algo,
+            "tier": readiness.tier if readiness is not None else "unknown",
+            "profile": benchmark_profile,
+        },
+        "algorithm_metadata_contract": algo_contract,
+        "preflight": preflight,
+        "observation_noise": noise_spec,
+        "observation_noise_hash": noise_hash,
+        "observation_level": active_observation_level,
+        "synthetic_actuation_profile": actuation_profile_metadata,
+        "latency_stress_profile": latency_profile_metadata,
+        "latency_stress_metrics": (
+            not_available_latency_metrics() if latency_profile_metadata is not None else None
+        ),
+    }
+    if benchmark_track is not None:
+        summary["benchmark_track"] = benchmark_track
+    if track_schema_version is not None:
+        summary["track_schema_version"] = track_schema_version
+    artifact_pointer_status = "local_jsonl_present" if out_path.exists() else "not_available"
+    summary["provenance"] = map_result_provenance(
+        schema_path=schema_path,
+        scenario_path=scenario_path,
+        scenarios=scenarios,
+        algo=algo,
+        algo_config_path=algo_config_path,
+        benchmark_profile=benchmark_profile,
+        suite_key=suite_key,
+        total_jobs=total_jobs,
+        written=wrote,
+        artifact_pointer_status=artifact_pointer_status,
+    )
+    summary["benchmark_availability"] = availability_payload(summary)
+    return summary

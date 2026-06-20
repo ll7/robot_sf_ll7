@@ -341,12 +341,12 @@ def render_entry_block(entry: ProposedEntry) -> str:
     )
 
 
-def render_dry_run(proposal: CatalogProposal) -> str:
+def render_dry_run(proposal: CatalogProposal, *, catalog_rel: Path = _CONTEXT_CATALOG) -> str:
     """Render a unified-diff-style preview of the additive ``entries:`` rows."""
     lines: list[str] = []
     if proposal.proposed:
-        lines.append(f"--- {_CONTEXT_CATALOG.as_posix()} (entries: additions)")
-        lines.append(f"+++ {_CONTEXT_CATALOG.as_posix()}")
+        lines.append(f"--- {catalog_rel.as_posix()} (entries: additions)")
+        lines.append(f"+++ {catalog_rel.as_posix()}")
         for entry in proposal.proposed:
             for block_line in render_entry_block(entry).splitlines():
                 lines.append(f"+{block_line}")
@@ -429,7 +429,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     catalog_rel = args.catalog or _CONTEXT_CATALOG
     catalog_file = catalog_rel if catalog_rel.is_absolute() else repo_root / catalog_rel
 
-    proposal = build_proposal(repo_root, catalog_path=_CONTEXT_CATALOG)
+    proposal = build_proposal(repo_root, catalog_path=catalog_rel)
 
     if args.json_output is not None:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
@@ -444,7 +444,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f" needs-human-review {len(proposal.needs_human_review)}."
         )
     else:
-        print(render_dry_run(proposal))
+        print(render_dry_run(proposal, catalog_rel=catalog_rel))
 
     return 0
 

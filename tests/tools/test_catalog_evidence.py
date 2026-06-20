@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from scripts.tools.catalog_evidence import (
+    CatalogProposal,
     ProposedEntry,
     _representative_member,
     _validate_entry_vocabulary,
@@ -23,6 +24,8 @@ from scripts.tools.catalog_evidence import (
     infer_area,
     infer_freshness,
     infer_status,
+    main,
+    render_dry_run,
     render_entry_block,
 )
 
@@ -201,6 +204,33 @@ def test_build_proposal_classifies_and_routes(tmp_path: Path) -> None:
     assert "clean" in review_bundles[dirty]
 
 
+def test_build_proposal_uses_custom_catalog_path(tmp_path: Path) -> None:
+    """A custom catalog path controls which evidence bundles are considered covered."""
+    repo = _make_git_repo(tmp_path)
+    uncovered = f"{_EVIDENCE}/issue_600_seed_uncovered_2026-01-01/summary.json"
+    covered_only_by_custom = f"{_EVIDENCE}/issue_601_seed_custom_2026-01-01/summary.json"
+    _write(repo, uncovered, '{"ok": 1}\n')
+    _write(repo, covered_only_by_custom, '{"ok": 1}\n')
+    _write(repo, "docs/context/catalog.yaml", _CATALOG_HEADER)
+    custom_catalog = Path("docs/context/custom_catalog.yaml")
+    _write(
+        repo,
+        custom_catalog.as_posix(),
+        _CATALOG_HEADER
+        + f"  - path: {covered_only_by_custom}\n"
+        + "    status: evidence\n"
+        + "    freshness: evidence\n"
+        + "    area: benchmark_evidence\n",
+    )
+    _git_add_commit(repo)
+
+    proposal = build_proposal(repo, catalog_path=custom_catalog)
+
+    proposed_paths = {entry.path for entry in proposal.proposed}
+    assert uncovered in proposed_paths
+    assert covered_only_by_custom not in proposed_paths
+
+
 def test_proposal_is_path_sorted(tmp_path: Path) -> None:
     """Proposed entries are sorted by referenced path for stable review."""
     repo = _build_sample_repo(tmp_path)
@@ -281,6 +311,62 @@ def test_render_entry_block_matches_indentation() -> None:
         "    freshness: evidence\n"
         "    area: benchmark_evidence\n"
     )
+
+
+def test_render_dry_run_uses_custom_catalog_path() -> None:
+    """The dry-run diff header names the selected catalog path."""
+    proposal = CatalogProposal(
+        proposed=[
+            ProposedEntry(
+                bundle=f"{_EVIDENCE}/issue_1_seed",
+                path=f"{_EVIDENCE}/issue_1_seed/summary.json",
+                status="evidence",
+                freshness="evidence",
+                area="benchmark_evidence",
+            )
+        ],
+        needs_human_review=[],
+    )
+
+    rendered = render_dry_run(proposal, catalog_rel=Path("docs/context/custom_catalog.yaml"))
+
+    assert rendered.splitlines()[:2] == [
+        "--- docs/context/custom_catalog.yaml (entries: additions)",
+        "+++ docs/context/custom_catalog.yaml",
+    ]
+
+
+def test_main_uses_custom_catalog_for_dry_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The CLI uses --catalog for both proposal discovery and dry-run headers."""
+    repo = _make_git_repo(tmp_path)
+    uncovered = f"{_EVIDENCE}/issue_610_seed_uncovered_2026-01-01/summary.json"
+    covered_only_by_custom = f"{_EVIDENCE}/issue_611_seed_custom_2026-01-01/summary.json"
+    _write(repo, uncovered, '{"ok": 1}\n')
+    _write(repo, covered_only_by_custom, '{"ok": 1}\n')
+    _write(repo, "docs/context/catalog.yaml", _CATALOG_HEADER)
+    custom_catalog = Path("docs/context/custom_catalog.yaml")
+    _write(
+        repo,
+        custom_catalog.as_posix(),
+        _CATALOG_HEADER
+        + f"  - path: {covered_only_by_custom}\n"
+        + "    status: evidence\n"
+        + "    freshness: evidence\n"
+        + "    area: benchmark_evidence\n",
+    )
+    _git_add_commit(repo)
+
+    assert main(["--repo-root", str(repo), "--catalog", custom_catalog.as_posix()]) == 0
+
+    output = capsys.readouterr().out
+    assert output.splitlines()[:2] == [
+        "--- docs/context/custom_catalog.yaml (entries: additions)",
+        "+++ docs/context/custom_catalog.yaml",
+    ]
+    assert uncovered in output
+    assert covered_only_by_custom not in output
 
 
 def test_validate_entry_vocabulary_rejects_non_canonical() -> None:

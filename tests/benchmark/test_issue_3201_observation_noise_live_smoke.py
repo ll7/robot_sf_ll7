@@ -36,15 +36,15 @@ def _load_script():
     return _LOADED_MOD
 
 
-def test_issue_3201_matrix_selects_dense_pedestrian_fixture() -> None:
-    """The #3201 scenario set should point at the pedestrian-dominated dense fixture."""
+def test_issue_3201_matrix_selects_near_field_fixture() -> None:
+    """The #3201 scenario set should point at the deterministic near-field fixture."""
     payload = yaml.safe_load(MATRIX_PATH.read_text(encoding="utf-8"))
 
     assert payload["schema_version"] == "robot_sf.scenario_matrix.v1"
-    assert "../single/dense_pedestrian_stress.yaml" in payload["includes"]
-    assert payload["select_scenarios"] == ["dense_pedestrian_stress"]
-    override = payload["scenario_overrides_by_name"]["dense_pedestrian_stress"]
-    assert override["seeds"] == [2765]
+    assert "../single/issue_3233_near_field_observation_noise.yaml" in payload["includes"]
+    assert payload["select_scenarios"] == ["issue_3233_near_field_observation_noise"]
+    override = payload["scenario_overrides_by_name"]["issue_3233_near_field_observation_noise"]
+    assert override["seeds"] == [3233]
     assert override["metadata"]["diagnostic_role"] == (
         "pedestrian_dominated_observation_noise_retest"
     )
@@ -266,6 +266,11 @@ def test_trace_comparator_classifies_observation_only_scenario_too_weak(tmp_path
     report = _load_script().build_trace_report(clean_trace, perturbed_trace)
 
     assert report["classification"]["label"] == "observation_only_scenario_too_weak"
+    assert report["near_field_target"] == {
+        "threshold_m": 2.0,
+        "clean_closest_robot_ped_distance_m": 7.0,
+        "satisfied": False,
+    }
     assert report["observation_summary"]["changed"] is True
     assert report["command_summary"]["sequence_changed"] is False
 
@@ -333,4 +338,7 @@ def test_trace_comparator_cli_writes_trace_markdown(tmp_path: Path) -> None:
     )
 
     assert json.loads(output_json.read_text(encoding="utf-8"))["inputs"]["clean_trace_json"]
-    assert "Progress Deltas" in output_md.read_text(encoding="utf-8")
+    markdown = output_md.read_text(encoding="utf-8")
+    assert "Near-Field Target" in markdown
+    assert "satisfied: `True`" in markdown
+    assert "Progress Deltas" in markdown

@@ -1,14 +1,14 @@
 schema_version: robot_sf.scenario_matrix.v1
 includes:
-  - ../single/dense_pedestrian_stress.yaml
+  - ../single/issue_3233_near_field_observation_noise.yaml
 select_scenarios:
-  - dense_pedestrian_stress
+  - issue_3233_near_field_observation_noise
 scenario_overrides_by_name:
-  dense_pedestrian_stress:
+  issue_3233_near_field_observation_noise:
     seeds:
-      - 2765
+      - 3233
     metadata:
-      source_issue: https://github.com/ll7/robot_sf_ll7/issues/3201
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/3233
       diagnostic_role: pedestrian_dominated_observation_noise_retest
       claim_boundary: >
         Same-seed local smoke fixture for retesting the issue #2749

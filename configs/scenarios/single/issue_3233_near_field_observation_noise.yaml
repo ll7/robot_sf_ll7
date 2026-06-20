@@ -1,0 +1,30 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: issue_3233_near_field_observation_noise
+  map_file: ../../../maps/svg_maps/issue_3233_near_field_observation_noise.svg
+  simulation_config:
+    max_episode_steps: 200
+    ped_density: 0.0
+  single_pedestrians:
+  - id: blocker
+    speed_m_s: 0.1
+    note: deterministic near-field crossing actor for observation-noise diagnostics
+  robot_config: {}
+  metadata:
+    purpose: >
+      Deterministic live near-field pedestrian fixture for same-seed
+      observation-noise sensitivity diagnostics.
+    archetype: near_field_observation_noise
+    flow: single_crossing
+    behavior: blocking_crossing
+    density: diagnostic_fixture
+    authoring:
+      status: draft
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/3233
+      benchmark_evidence: false
+      claim_boundary: >
+        Single-scenario, single-seed live fixture for observation-noise
+        plumbing and planner-sensitivity diagnostics only. Not
+        benchmark-strength or hardware-calibrated sensor evidence.
+  seeds:
+  - 3233

@@ -1,0 +1,71 @@
+{
+  "aggregate_rows": [
+    {
+      "actor_class": "pedestrian",
+      "denominator": 12,
+      "dt_s": 0.5,
+      "horizon_s": 1.0,
+      "metric": "mean_coverage",
+      "observation_tier": "deployable_tracked",
+      "scenario_id": "classic_crossing_low",
+      "semantic_metadata_present": "present",
+      "status": "ok",
+      "value": 0.91
+    },
+    {
+      "actor_class": "pedestrian",
+      "denominator": 12,
+      "dt_s": 0.5,
+      "horizon_s": 1.0,
+      "metric": "mean_likelihood",
+      "observation_tier": "deployable_tracked",
+      "scenario_id": "classic_crossing_low",
+      "semantic_metadata_present": "present",
+      "status": "ok",
+      "value": -1.2
+    },
+    {
+      "actor_class": "pedestrian",
+      "denominator": 12,
+      "dt_s": 0.5,
+      "horizon_s": 1.0,
+      "metric": "mean_expected_ade",
+      "observation_tier": "deployable_tracked",
+      "scenario_id": "classic_crossing_low",
+      "semantic_metadata_present": "present",
+      "status": "ok",
+      "value": 0.24
+    },
+    {
+      "actor_class": "pedestrian",
+      "denominator": 0,
+      "dt_s": 0.5,
+      "horizon_s": 1.0,
+      "metric": "mean_minade@k",
+      "observation_tier": "deployable_tracked",
+      "scenario_id": "classic_crossing_low",
+      "semantic_metadata_present": "present",
+      "status": "unavailable",
+      "value": null
+    }
+  ],
+  "artifact_input": {
+    "command": "durable pedestrian metric fixture for issue #2904 forecast-risk eligibility",
+    "generated_at_utc": "2026-06-20T00:00:00+00:00",
+    "issue": 2904,
+    "source": "tests/fixtures/benchmark/forecast_risk_eligibility/metric_pedestrian_deployable_tracked.json"
+  },
+  "provenance": {
+    "dt_s": 0.5,
+    "horizons_s": [
+      1.0
+    ],
+    "observation_tier": "deployable_tracked",
+    "predictor_family": "probabilistic_cv",
+    "predictor_id": "probabilistic-baseline-pedestrian-tracked-fixture",
+    "scenario_family": "classic_crossing",
+    "scenario_id": "classic_crossing_low",
+    "semantic_metadata_present": "present"
+  },
+  "schema_version": "ForecastMetrics.v1"
+}

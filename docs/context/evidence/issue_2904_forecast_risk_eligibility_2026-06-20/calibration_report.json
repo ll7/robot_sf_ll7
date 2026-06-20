@@ -1,0 +1,59 @@
+{
+  "calibration_parameters": {
+    "coverage_target": 0.9,
+    "coverage_tolerance": 0.05
+  },
+  "claim_boundary": "Calibration summaries are analysis-only evidence. They do not prove planner safety or navigation benefit, and unavailable uncertainty denominators remain limitations.",
+  "generated_at_utc": "2026-06-20T00:00:00+00:00",
+  "limitation_rows": [],
+  "recommendation": {
+    "claim_status": "analysis-only",
+    "decision": "continue",
+    "reason": "all rows have available uncertainty metrics within coverage tolerance"
+  },
+  "reliability_rows": [
+    {
+      "actor_class": "pedestrian",
+      "calibration_status": "calibrated_within_tolerance",
+      "coverage_gap": 0.010000000000000009,
+      "coverage_target": 0.9,
+      "denominator": 12,
+      "empirical_coverage": 0.91,
+      "failure_taxonomy": "none_observed",
+      "horizon_s": 1.0,
+      "likelihood": -1.2,
+      "miss_rate": null,
+      "observation_tier": "deployable_tracked",
+      "predictor_family": "probabilistic_cv",
+      "recommendation": "continue",
+      "risk_scoring_eligibility": "eligible_analysis_only",
+      "scenario_family": "classic_crossing",
+      "semantic_metadata_present": "present",
+      "sharpness_proxy": 0.24,
+      "unavailable_metrics": []
+    },
+    {
+      "actor_class": "bicycle",
+      "calibration_status": "calibrated_within_tolerance",
+      "coverage_gap": -0.020000000000000018,
+      "coverage_target": 0.9,
+      "denominator": 8,
+      "empirical_coverage": 0.88,
+      "failure_taxonomy": "none_observed",
+      "horizon_s": 1.0,
+      "likelihood": -1.5,
+      "miss_rate": null,
+      "observation_tier": "deployable_observation",
+      "predictor_family": "probabilistic_cv",
+      "recommendation": "continue",
+      "risk_scoring_eligibility": "eligible_analysis_only",
+      "scenario_family": "motion_rich_bicycle",
+      "semantic_metadata_present": "present",
+      "sharpness_proxy": 0.31,
+      "unavailable_metrics": []
+    }
+  ],
+  "report_id": "issue_2904_forecast_risk_eligibility_2026-06-20",
+  "schema_version": "ForecastCalibrationReport.v1",
+  "source_schema_version": "ForecastMetrics.v1"
+}

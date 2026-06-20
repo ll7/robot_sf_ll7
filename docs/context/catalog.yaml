@@ -1522,6 +1522,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3233_near_field_observation_noise/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3233_near_field_observation_noise/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2782_observation_noise_mechanisms/README.md
     status: evidence
     freshness: evidence

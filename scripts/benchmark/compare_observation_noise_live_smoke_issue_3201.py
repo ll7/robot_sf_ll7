@@ -365,6 +365,11 @@ def build_trace_report(clean_trace_path: Path, perturbed_trace_path: Path) -> di
             "perturbed": perturbed_observation,
             "changed": observation_changed,
         },
+        "near_field_target": {
+            "threshold_m": 2.0,
+            "clean_closest_robot_ped_distance_m": closest,
+            "satisfied": closest is not None and closest <= 2.0,
+        },
         "command_summary": {
             "clean_first": clean_commands[0] if clean_commands else None,
             "perturbed_first": perturbed_commands[0] if perturbed_commands else None,
@@ -434,6 +439,16 @@ def _markdown(report: dict[str, Any]) -> str:
 def _trace_markdown(report: dict[str, Any]) -> str:
     """Render Markdown for paired step-diagnostics traces."""
     classification = report["classification"]
+    near_field = _mapping(report.get("near_field_target"))
+    clean_closest_distance = near_field.get("clean_closest_robot_ped_distance_m")
+    near_field_caveat = (
+        f"- Clean trace closest robot-pedestrian distance: "
+        f"`{clean_closest_distance}` m "
+        f"(target <= `{near_field.get('threshold_m')}` m, "
+        f"satisfied: `{near_field.get('satisfied')}`)."
+        if clean_closest_distance is not None
+        else "- Clean trace near-field target metadata was unavailable."
+    )
     lines = [
         "# Issue #3201 Observation-Noise Live Smoke",
         "",
@@ -452,6 +467,10 @@ def _trace_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Label: `{classification['label']}`",
         f"- Rationale: {classification['rationale']}",
+        "",
+        "## Near-Field Target",
+        "",
+        near_field_caveat,
         "",
         "## Command Summary",
         "",
@@ -483,7 +502,7 @@ def _trace_markdown(report: dict[str, Any]) -> str:
             "## Caveats",
             "",
             "- One scenario, one seed, one horizon; diagnostic smoke only.",
-            "- The live scenario candidate remained outside the intended 2 m near-field threshold.",
+            near_field_caveat,
             "- Uses non-calibrated observation perturbations and makes no hardware sensor claim.",
         ]
     )

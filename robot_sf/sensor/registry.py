@@ -79,9 +79,16 @@ def register_sensor(name: str, factory: SensorFactory, *, override: bool = False
 
     Examples
     --------
-    >>> def lidar_factory(config):
-    ...     return LidarSensor(config)
-    >>> register_sensor("lidar", lidar_factory)
+    Illustrative usage (mutates the global registry, so it is shown as documentation
+    rather than an executed doctest):
+
+    ```python
+    def lidar_factory(config):
+        return LidarSensor(config)
+
+
+    register_sensor("lidar", lidar_factory)
+    ```
     """
     if name in _SENSOR_REGISTRY and not override:
         msg = f"Sensor '{name}' is already registered. Use override=True to replace."
@@ -112,8 +119,12 @@ def get_sensor(name: str) -> SensorFactory:
 
     Examples
     --------
-    >>> factory = get_sensor("lidar")
-    >>> sensor = factory(config)
+    Illustrative usage (requires a registered ``"lidar"`` sensor and a ``config``):
+
+    ```python
+    factory = get_sensor("lidar")
+    sensor = factory(config)
+    ```
     """
     if name not in _SENSOR_REGISTRY:
         known = ", ".join(sorted(_SENSOR_REGISTRY.keys()))
@@ -134,7 +145,8 @@ def list_sensors() -> dict[str, SensorFactory]:
     Examples
     --------
     >>> sensors = list_sensors()
-    >>> print(f"Available: {list(sensors.keys())}")
+    >>> isinstance(sensors, dict)
+    True
     """
     return _SENSOR_REGISTRY.copy()
 

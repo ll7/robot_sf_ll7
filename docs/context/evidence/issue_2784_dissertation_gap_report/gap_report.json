@@ -1,6 +1,6 @@
 {
   "schema_version": "dissertation_gap_report.v1",
-  "generated_at": "2026-06-15",
+  "generated_at": "2026-06-20",
   "purpose": "synthesis/planning aid; not new benchmark, paper, dissertation, or safety evidence",
   "source_ledger": {
     "path": "docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json",
@@ -10,7 +10,7 @@
   "source_register": {
     "path": "docs/context/evidence/issue_2762_negative_result_register/register.json",
     "issue": 2762,
-    "entry_count": 3
+    "entry_count": 4
   },
   "gaps": [
     {
@@ -129,6 +129,19 @@
       "allowed_wording_or_boundary": "Diagnostic-only, not benchmark or paper evidence. Confirms perturbation infrastructure works; does not measure behavioral degradation.",
       "caveat": "Diagnostic-only, not benchmark or paper evidence. Confirms perturbation infrastructure works; does not measure behavioral degradation.",
       "claim_gap_or_reason": "All progress, risk, and planner metrics are identical between baseline and perception-limited. The single pedestrian is too far from the robot to influence planner decisions; the planner is dominated by static obstacle clearance. Perturbation plumbing is confirmed working (occlusion masking active, 1 missed detection at step 15) but no behavioral degradation is measurable."
+    },
+    {
+      "area": null,
+      "entry_id": "issue-3201-observation-noise-live-dense-stress",
+      "bucket": "negative_revise_only",
+      "promotion_step_or_reason": "Follow-up #3233: author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.",
+      "source": "register",
+      "source_issue": 3201,
+      "evidence_tier": null,
+      "result_classification": "diagnostic_only",
+      "allowed_wording_or_boundary": "Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.",
+      "caveat": "Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.",
+      "claim_gap_or_reason": "Perturbation plumbing activated (179 missed actor observations; observed actor count dropped from 17 to 5-12), but selected commands, progress/risk summary, collision flags, and closest-distance metrics were identical. The live scenario candidate did not satisfy the intended near-field pedestrian-dominated condition."
     },
     {
       "area": null,

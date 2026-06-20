@@ -157,6 +157,11 @@ Policy caveats:
   perception-limited observation-noise step diagnostics for `hybrid_rule_v0_minimal` on a
   pedestrian-present stress-slice scenario; perturbation plumbing activated, but the distant
   pedestrian produced no measurable planner degradation.
+- `issue_3201_observation_noise_live_smoke/`: diagnostic-only same-seed clean vs perturbed
+  step-diagnostics replay on the `dense_pedestrian_stress` live matrix candidate. Perturbation
+  changed planner-input pedestrian observations, but commands and progress/risk summaries stayed
+  identical because the live scenario remained outside the intended 2 m near-field target. Not
+  benchmark or sensor-realism evidence.
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that
   support the v1 raw-success leader and v2 strict-gate promotion decision.
 - `issue_1023_scenario_horizons_preflight_2026-05-06/`: compact preflight artifacts for the

@@ -1,4 +1,4 @@
-# Closed-Loop Forecast Falsification Paper Plan (Frozen 2026-06-20)
+# Closed-Loop Forecast Falsification Paper Plan - Issue #3193 (2026-06-20)
 
 Issue: [#3193](https://github.com/ll7/robot_sf_ll7/issues/3193)
 Parent lane: [#2835](https://github.com/ll7/robot_sf_ll7/issues/2835)

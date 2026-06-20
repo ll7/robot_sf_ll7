@@ -145,6 +145,38 @@ def test_release_evidence_snapshot_catalog_checksum_mismatch_fails_closed(
     )
 
 
+def test_release_evidence_snapshot_malformed_catalog_fails_closed(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Malformed tracked catalogs should be reported as invalid snapshot inputs."""
+    repo = _init_fixture_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+    catalog_path = repo / "docs/context/evidence/issue_fixture/artifact_catalog.yaml"
+    catalog_path.write_text("artifacts: [unterminated\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "malformed catalog fixture"], cwd=repo, check=True)
+    output_json = tmp_path / "snapshot.json"
+
+    exit_code = snapshot.main(
+        [
+            "--source-ref",
+            "HEAD",
+            "--no-default-includes",
+            "--artifact-catalog",
+            "docs/context/evidence/issue_fixture/artifact_catalog.yaml",
+            "--no-auto-artifact-catalogs",
+            "--output-json",
+            str(output_json),
+        ]
+    )
+
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert payload["status"] == "fail_closed"
+    assert payload["artifact_catalogs"][0]["status"] == "invalid"
+    assert payload["artifact_catalogs"][0]["issues"][0].startswith("could not parse")
+
+
 def _init_fixture_repo(repo: Path) -> Path:
     """Create a tiny Git repository with a valid tracked artifact catalog."""
     repo.mkdir()

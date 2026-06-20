@@ -170,7 +170,7 @@ def _git_text(repo_root: Path, *args: str) -> str:
             stderr=subprocess.PIPE,
         )
     except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else ""
+        stderr = exc.stderr.strip() if isinstance(exc.stderr, str) else str(exc.stderr or "")
         raise SnapshotError(f"git {' '.join(args)} failed: {stderr}") from exc
 
 
@@ -179,7 +179,11 @@ def _git_bytes(repo_root: Path, *args: str) -> bytes:
     try:
         return subprocess.check_output(["git", *args], cwd=repo_root, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr.decode("utf-8", errors="replace").strip()
+        stderr = (
+            exc.stderr.decode("utf-8", errors="replace").strip()
+            if isinstance(exc.stderr, bytes)
+            else str(exc.stderr or "")
+        )
         raise SnapshotError(f"git {' '.join(args)} failed: {stderr}") from exc
 
 
@@ -244,7 +248,10 @@ def _file_entry(repo_root: Path, source_ref: str, path: str, role: str) -> dict[
 def _load_mapping_from_ref(repo_root: Path, source_ref: str, path: str) -> dict[str, Any]:
     """Load a YAML or JSON mapping from a tracked file at ``source_ref``."""
     raw = _read_blob(repo_root, source_ref, path).decode("utf-8")
-    payload = json.loads(raw) if Path(path).suffix.lower() == ".json" else yaml.safe_load(raw)
+    try:
+        payload = json.loads(raw) if Path(path).suffix.lower() == ".json" else yaml.safe_load(raw)
+    except (json.JSONDecodeError, yaml.YAMLError) as exc:
+        raise SnapshotError(f"could not parse {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise SnapshotError(f"expected mapping payload in {path}")
     return payload
@@ -577,7 +584,9 @@ def build_snapshot(  # noqa: C901
             "tag": args.tag,
             "source_commit": source_commit,
             "worktree_dirty": _dirty_worktree(root) if source_ref == "HEAD" else None,
-            "generated_at_utc": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
+            "generated_at_utc": dt.datetime.now(dt.timezone.utc)  # noqa: UP017
+            .isoformat()
+            .replace("+00:00", "Z"),
             "command": shlex.join(
                 [sys.executable, str(Path(__file__)), *getattr(args, "invoked_args", [])]
             ),

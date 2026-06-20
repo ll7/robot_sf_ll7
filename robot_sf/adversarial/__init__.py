@@ -1,5 +1,13 @@
 """Programmable adversarial scenario search helpers."""
 
+from robot_sf.adversarial.batch_certification import (
+    ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA,
+    BatchCertification,
+    BatchCertificationPolicy,
+    CandidateCertification,
+    certify_candidate_batch,
+    certify_records,
+)
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
@@ -15,7 +23,9 @@ from robot_sf.adversarial.manifest_quality import (
     ManifestsQualitySummary,
     PlannerOutcome,
     PlannerOutcomeSummary,
+    load_adversarial_manifest_quality_records,
     summarize_adversarial_manifest_quality,
+    summarize_adversarial_manifest_quality_records,
 )
 from robot_sf.adversarial.materialize import (
     materialize_manifest_route_overrides,
@@ -56,8 +66,12 @@ from robot_sf.adversarial.seed_sensitivity import (
 )
 
 __all__ = [
+    "ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA",
     "MANIFEST_QUALITY_SCHEMA_VERSION",
     "AdversarialScenarioManifest",
+    "BatchCertification",
+    "BatchCertificationPolicy",
+    "CandidateCertification",
     "CandidateEvaluation",
     "CandidateSpec",
     "CoordinateRefinementSampler",
@@ -81,8 +95,11 @@ __all__ = [
     "ValidationRecord",
     "build_manifest",
     "build_multi_ped_adversarial_robot_config",
+    "certify_candidate_batch",
+    "certify_records",
     "compute_control_hash",
     "generate_manifests",
+    "load_adversarial_manifest_quality_records",
     "materialize_manifest_route_overrides",
     "materialize_manifest_scenario_payload",
     "materialize_manifest_single_pedestrian_override",
@@ -92,6 +109,7 @@ __all__ = [
     "run_adversarial_search",
     "run_seed_sensitivity",
     "summarize_adversarial_manifest_quality",
+    "summarize_adversarial_manifest_quality_records",
     "validate_candidate_manifest",
     "validate_manifest_payload",
     "validate_multi_ped_runtime_plausibility",

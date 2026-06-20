@@ -97,6 +97,22 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1617_local_planner_repo_survey.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1677_sit_dataset_terms.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2962_blocked_external_assets.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2967_active_issue_portfolio.md
+    status: evidence
+    freshness: evidence
+    area: agent_workflow
   - path: docs/context/issue_1436_reproducibility_flaky_acceptance.md
     status: current
     freshness: policy

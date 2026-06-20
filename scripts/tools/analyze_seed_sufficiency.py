@@ -14,7 +14,7 @@ from typing import Any
 
 import matplotlib
 
-from robot_sf.benchmark.rank_metrics import rank_order
+from robot_sf.benchmark.rank_metrics import kendall_tau, rank_order
 
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
@@ -22,6 +22,19 @@ from matplotlib import pyplot as plt
 SCHEMA_VERSION = "seed_sufficiency_analysis.v1"
 DEFAULT_METRICS = ("success", "collisions", "snqi")
 LOWER_IS_BETTER = {"collisions", "collision", "near_misses", "time_to_goal", "time_to_goal_norm"}
+NON_PROMOTABLE_ROW_STATUSES = frozenset(
+    {
+        "degraded",
+        "failed",
+        "fallback",
+        "invalid",
+        "not-available",
+        "not_available",
+        "partial-failure",
+        "partial_failure",
+        "unavailable",
+    }
+)
 
 
 def analyze_seed_sufficiency(
@@ -31,6 +44,8 @@ def analyze_seed_sufficiency(
     metrics: tuple[str, ...] = DEFAULT_METRICS,
     rank_metric: str = "snqi",
     advisory_seed_threshold: int = 2,
+    headline_min_seed_budget: int = 20,
+    headline_required_durable_roots: tuple[Path, ...] = (),
 ) -> dict[str, Any]:
     """Analyze one or more campaign report folders and write output artifacts."""
 
@@ -46,6 +61,13 @@ def analyze_seed_sufficiency(
         rank_rows,
         family_rows,
         advisory_seed_threshold=advisory_seed_threshold,
+    )
+    headline_contract = _build_headline_contract(
+        campaigns,
+        metrics=metrics,
+        rank_metric=rank_metric,
+        min_seed_budget=headline_min_seed_budget,
+        required_durable_roots=headline_required_durable_roots,
     )
 
     payload = {
@@ -71,9 +93,12 @@ def analyze_seed_sufficiency(
         "planner_rank_stability": rank_rows,
         "scenario_family_instability": family_rows,
         "outcome_counts": outcome_rows,
+        "headline_rank_stability_contract": headline_contract,
         "caveats": caveats,
         "artifacts": {
             "json": "seed_sufficiency_analysis.json",
+            "headline_contract_json": "headline_rank_stability_contract.json",
+            "headline_pairwise_csv": "headline_rank_stability_pairwise.csv",
             "interval_width_csv": "seed_count_interval_width.csv",
             "planner_rank_csv": "planner_rank_stability.csv",
             "scenario_family_csv": "scenario_family_instability.csv",
@@ -85,6 +110,8 @@ def analyze_seed_sufficiency(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     _write_json(output_dir / "seed_sufficiency_analysis.json", payload)
+    _write_json(output_dir / "headline_rank_stability_contract.json", headline_contract)
+    _write_csv(output_dir / "headline_rank_stability_pairwise.csv", headline_contract["pairwise"])
     _write_csv(output_dir / "seed_count_interval_width.csv", interval_rows)
     _write_csv(output_dir / "planner_rank_stability.csv", rank_rows)
     _write_csv(output_dir / "scenario_family_instability.csv", family_rows)
@@ -211,7 +238,7 @@ def _build_rank_rows(campaigns: list[dict[str, Any]], *, rank_metric: str) -> li
     previous_ranks: dict[str, int] = {}
     rows: list[dict[str, Any]] = []
     for campaign in campaigns:
-        values = _planner_metric_values(campaign, rank_metric)
+        values = _planner_metric_values(campaign, rank_metric, eligible_only=False)
         ranks = {
             planner: index + 1
             for index, planner in enumerate(
@@ -246,7 +273,7 @@ def _build_family_instability_rows(
     previous_winners: dict[str, str] = {}
     rows: list[dict[str, Any]] = []
     for campaign in campaigns:
-        family_values = _family_planner_values(campaign, rank_metric)
+        family_values = _family_planner_values(campaign, rank_metric, eligible_only=False)
         winners = {
             family: _winner(values, higher_is_better=_higher_is_better(rank_metric))
             for family, values in family_values.items()
@@ -300,22 +327,235 @@ def _build_caveats(
     return caveats
 
 
-def _planner_metric_values(campaign: dict[str, Any], metric: str) -> dict[str, float]:
+def _build_headline_contract(
+    campaigns: list[dict[str, Any]],
+    *,
+    metrics: tuple[str, ...],
+    rank_metric: str,
+    min_seed_budget: int,
+    required_durable_roots: tuple[Path, ...],
+) -> dict[str, Any]:
+    """Build the fail-closed headline rank-stability contract payload."""
+
+    max_seed_count = max((campaign["seed_count"] for campaign in campaigns), default=0)
+    source_roots = [str(campaign["root"]) for campaign in campaigns]
+    missing_durable_roots = [
+        str(root) for root in required_durable_roots if not _durable_root_available(root)
+    ]
+    row_status_exclusions = _row_status_exclusions(campaigns)
+    pairwise_rows = _build_headline_pairwise_rows(campaigns, rank_metric=rank_metric)
+    rank_flipped = any(row["rank_label"] == "rank_flip" for row in pairwise_rows)
+    labels = _headline_labels(
+        max_seed_count=max_seed_count,
+        min_seed_budget=min_seed_budget,
+        missing_durable_roots=missing_durable_roots,
+        row_status_exclusions=row_status_exclusions,
+        rank_flipped=rank_flipped,
+    )
+    caveats = _headline_caveats(
+        labels=labels,
+        max_seed_count=max_seed_count,
+        min_seed_budget=min_seed_budget,
+        missing_durable_roots=missing_durable_roots,
+        row_status_exclusions=row_status_exclusions,
+    )
+    return {
+        "schema_version": "headline-rank-stability-contract.v1",
+        "contract_scope": "headline_rank_stability_ci_preflight",
+        "label": labels[0],
+        "labels": labels,
+        "source_roots": source_roots,
+        "seed_counts": [campaign["seed_count"] for campaign in campaigns],
+        "max_seed_count": max_seed_count,
+        "min_seed_budget": min_seed_budget,
+        "metric_names": list(metrics),
+        "rank_metric": rank_metric,
+        "required_durable_roots": [str(root) for root in required_durable_roots],
+        "missing_durable_roots": missing_durable_roots,
+        "row_status_exclusions": row_status_exclusions,
+        "pairwise": pairwise_rows,
+        "caveats": caveats,
+        "promotion_allowed": labels[0] == "stable"
+        and "row_status_exclusions_present" not in labels,
+    }
+
+
+def _build_headline_pairwise_rows(
+    campaigns: list[dict[str, Any]], *, rank_metric: str
+) -> list[dict[str, Any]]:
+    """Compare eligible planner rankings between consecutive seed schedules."""
+
+    rows: list[dict[str, Any]] = []
+    previous: dict[str, Any] | None = None
+    for campaign in campaigns:
+        values = _planner_metric_values(campaign, rank_metric, eligible_only=True)
+        ranking = [
+            str(planner)
+            for planner in rank_order(values, higher_is_better=_higher_is_better(rank_metric))
+        ]
+        if previous is not None:
+            previous_ranking = previous["ranking"]
+            comparable = len(ranking) >= 2 and set(ranking) == set(previous_ranking)
+            tau = kendall_tau(previous_ranking, ranking, degenerate=None) if comparable else None
+            rank_flip = comparable and ranking != previous_ranking
+            rows.append(
+                {
+                    "from_campaign": previous["label"],
+                    "to_campaign": campaign["label"],
+                    "from_seed_count": previous["seed_count"],
+                    "to_seed_count": campaign["seed_count"],
+                    "metric": rank_metric,
+                    "from_ranking": "|".join(previous_ranking),
+                    "to_ranking": "|".join(ranking),
+                    "kendall_tau": tau,
+                    "rank_label": "rank_flip"
+                    if rank_flip
+                    else "stable"
+                    if comparable
+                    else "not_comparable",
+                    "eligible_planner_count": len(ranking),
+                }
+            )
+        previous = {
+            "label": campaign["label"],
+            "seed_count": campaign["seed_count"],
+            "ranking": ranking,
+        }
+    return rows
+
+
+def _headline_labels(
+    *,
+    max_seed_count: int,
+    min_seed_budget: int,
+    missing_durable_roots: list[str],
+    row_status_exclusions: list[dict[str, Any]],
+    rank_flipped: bool,
+) -> list[str]:
+    """Return deterministic headline contract labels, strongest blocker first."""
+
+    labels: list[str] = []
+    if max_seed_count < min_seed_budget or missing_durable_roots:
+        labels.append("blocked_pending_s20_s30")
+    if row_status_exclusions:
+        labels.append("row_status_exclusions_present")
+    if labels:
+        return labels
+    return ["rank_flip_detected" if rank_flipped else "stable"]
+
+
+def _headline_caveats(
+    *,
+    labels: list[str],
+    max_seed_count: int,
+    min_seed_budget: int,
+    missing_durable_roots: list[str],
+    row_status_exclusions: list[dict[str, Any]],
+) -> list[str]:
+    """Render concise caveats for the headline contract."""
+
+    caveats: list[str] = []
+    if "blocked_pending_s20_s30" in labels:
+        caveats.append(
+            f"Headline ranking remains blocked until seed budget reaches at least S{min_seed_budget} "
+            f"and required durable roots are available; observed max seed count is S{max_seed_count}."
+        )
+    if missing_durable_roots:
+        caveats.append("Missing required durable roots: " + ", ".join(missing_durable_roots))
+    if row_status_exclusions:
+        statuses = sorted({str(row["row_status"]) for row in row_status_exclusions})
+        caveats.append(
+            "Rows with non-promotable statuses were excluded from headline ranking: "
+            + ", ".join(statuses)
+        )
+    if not caveats:
+        caveats.append(
+            "Synthetic or local contract output only; durable campaign evidence must still be cited separately."
+        )
+    return caveats
+
+
+def _row_status_exclusions(campaigns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return rows that are explicitly ineligible for headline promotion."""
+
+    exclusions: list[dict[str, Any]] = []
+    for campaign in campaigns:
+        for row in campaign["seed_rows"]:
+            status = _row_status(row)
+            if status not in NON_PROMOTABLE_ROW_STATUSES:
+                continue
+            exclusions.append(
+                {
+                    "campaign": campaign["label"],
+                    "source_root": str(campaign["root"]),
+                    "scenario_id": str(row.get("scenario_id", "")),
+                    "scenario_family": _scenario_family(row),
+                    "planner_key": str(row.get("planner_key", "unknown")),
+                    "row_status": status,
+                }
+            )
+    return sorted(
+        exclusions,
+        key=lambda row: (
+            row["campaign"],
+            row["scenario_id"],
+            row["planner_key"],
+            row["row_status"],
+        ),
+    )
+
+
+def _row_status(row: dict[str, Any]) -> str:
+    """Normalize row status/mode fields used to exclude non-promotable results."""
+
+    for key in (
+        "row_status",
+        "status",
+        "result_status",
+        "validity_status",
+        "readiness_status",
+        "availability_status",
+    ):
+        value = row.get(key)
+        if value not in (None, ""):
+            return str(value).strip().lower()
+    for key in ("execution_mode", "mode", "planner_mode"):
+        value = row.get(key)
+        if str(value).strip().lower() in {"fallback", "degraded"}:
+            return str(value).strip().lower()
+    return "valid"
+
+
+def _durable_root_available(root: Path) -> bool:
+    """Return whether a required durable root exists and is non-empty."""
+
+    return root.exists() and (root.is_file() or any(root.iterdir()))
+
+
+def _planner_metric_values(
+    campaign: dict[str, Any], metric: str, *, eligible_only: bool = True
+) -> dict[str, float]:
     """Aggregate one metric by planner across scenario rows."""
 
     values: dict[str, list[float]] = defaultdict(list)
     for row in campaign["seed_rows"]:
+        if eligible_only and _row_status(row) in NON_PROMOTABLE_ROW_STATUSES:
+            continue
         value = _safe_float(_metric_summary(row, metric).get("mean"))
         if value is not None:
             values[str(row.get("planner_key", "unknown"))].append(value)
     return {planner: _mean(metric_values) for planner, metric_values in sorted(values.items())}
 
 
-def _family_planner_values(campaign: dict[str, Any], metric: str) -> dict[str, dict[str, float]]:
+def _family_planner_values(
+    campaign: dict[str, Any], metric: str, *, eligible_only: bool = True
+) -> dict[str, dict[str, float]]:
     """Aggregate one metric by scenario family and planner."""
 
     grouped: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     for row in campaign["seed_rows"]:
+        if eligible_only and _row_status(row) in NON_PROMOTABLE_ROW_STATUSES:
+            continue
         value = _safe_float(_metric_summary(row, metric).get("mean"))
         if value is None:
             continue
@@ -479,6 +719,8 @@ def _build_markdown(payload: dict[str, Any]) -> str:
             "## Artifacts",
             "",
             "- `seed_count_interval_width.csv`",
+            "- `headline_rank_stability_contract.json`",
+            "- `headline_rank_stability_pairwise.csv`",
             "- `planner_rank_stability.csv`",
             "- `scenario_family_instability.csv`",
             "- `outcome_counts.csv`",
@@ -548,6 +790,22 @@ def _build_parser() -> argparse.ArgumentParser:
         default=2,
         help="Campaigns below this seed count are marked advisory.",
     )
+    parser.add_argument(
+        "--headline-min-seed-budget",
+        type=int,
+        default=20,
+        help="Minimum seed budget required before headline rank-stability can be unblocked.",
+    )
+    parser.add_argument(
+        "--headline-required-durable-root",
+        type=Path,
+        action="append",
+        default=[],
+        help=(
+            "Required durable root for headline evidence. Repeat for S20/S30 roots; "
+            "missing or empty roots emit blocked_pending_s20_s30."
+        ),
+    )
     return parser
 
 
@@ -562,6 +820,8 @@ def main(argv: list[str] | None = None) -> int:
         metrics=metrics,
         rank_metric=args.rank_metric,
         advisory_seed_threshold=args.advisory_seed_threshold,
+        headline_min_seed_budget=args.headline_min_seed_budget,
+        headline_required_durable_roots=tuple(args.headline_required_durable_root),
     )
     print(f"wrote seed sufficiency analysis: {args.output_dir}")
     print(json.dumps(payload["summary"], sort_keys=True))

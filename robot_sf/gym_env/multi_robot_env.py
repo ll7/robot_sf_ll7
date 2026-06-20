@@ -15,9 +15,11 @@ from loguru import logger
 from robot_sf.gym_env.abstract_envs import MultiAgentEnv
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.env_util import (
+    global_reset_seed,
     init_collision_and_sensors,
     init_spaces,
     prepare_pedestrian_actions,
+    reset_episode_counter_for_seed,
 )
 from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import simple_reward
@@ -28,6 +30,30 @@ from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 from robot_sf.sim.simulator import init_simulators
+
+
+def _stack_box_space(space: spaces.Box, num_agents: int) -> spaces.Box:
+    """Return a leading-agent-axis Box matching stacked per-agent observations."""
+    low = np.stack([space.low for _ in range(num_agents)]).astype(space.dtype, copy=False)
+    high = np.stack([space.high for _ in range(num_agents)]).astype(space.dtype, copy=False)
+    return spaces.Box(low=low, high=high, dtype=space.dtype)
+
+
+def _stack_observation_space(space: spaces.Space, num_agents: int) -> spaces.Space:
+    """Return the vectorized multi-agent observation space for a per-agent space."""
+    if isinstance(space, spaces.Box):
+        return _stack_box_space(space, num_agents)
+    if isinstance(space, spaces.Dict):
+        return spaces.Dict(
+            {
+                key: _stack_observation_space(child_space, num_agents)
+                for key, child_space in space.spaces.items()
+            }
+        )
+    raise TypeError(
+        "MultiRobotEnv can only vectorize Box or Dict observation spaces; "
+        f"got {type(space).__name__}."
+    )
 
 
 class MultiRobotEnv(MultiAgentEnv):
@@ -112,6 +138,10 @@ class MultiRobotEnv(MultiAgentEnv):
             low=np.array([self.single_action_space.low for _ in range(resolved_num_robots)]),
             high=np.array([self.single_action_space.high for _ in range(resolved_num_robots)]),
             dtype=self.single_action_space.low.dtype,
+        )
+        self.observation_space = _stack_observation_space(
+            self.single_observation_space,
+            resolved_num_robots,
         )
 
         # Ensure a usable reward function even if None explicitly provided
@@ -215,18 +245,21 @@ class MultiRobotEnv(MultiAgentEnv):
         Returns:
             Tuple of (observation, info) after environment reset.
         """
-        super().reset(seed=seed, options=options)
-        self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
-        obs = self.obs_worker_pool.map(lambda s: s.reset(), self.states)
+        with global_reset_seed(seed):
+            super().reset(seed=seed, options=options)
+            self.sim_worker_pool.map(lambda sim: sim.reset_state(), self.simulators)
+            for state in self.states:
+                reset_episode_counter_for_seed(state, seed)
+            obs = self.obs_worker_pool.map(lambda s: s.reset(), self.states)
 
-        obs_dict = {
-            OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
-            OBS_RAYS: np.array([o[OBS_RAYS] for o in obs]),
-        }
-        return obs_dict, self._build_reset_info(
-            map_def=self.map_def,
-            seed=getattr(self, "applied_seed", None),
-        )
+            obs_dict = {
+                OBS_DRIVE_STATE: np.array([o[OBS_DRIVE_STATE] for o in obs]),
+                OBS_RAYS: np.array([o[OBS_RAYS] for o in obs]),
+            }
+            return obs_dict, self._build_reset_info(
+                map_def=self.map_def,
+                seed=getattr(self, "applied_seed", None),
+            )
 
     def render(self, **kwargs) -> None:
         """Render the environment for each robot view."""

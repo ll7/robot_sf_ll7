@@ -1,6 +1,9 @@
 """env_util."""
 
+import random
+from contextlib import contextmanager
 from enum import Enum
+from typing import Any
 
 import numpy as np
 from gymnasium import spaces
@@ -36,6 +39,36 @@ class AgentType(Enum):
 
     ROBOT = 1
     PEDESTRIAN = 2
+
+
+@contextmanager
+def global_reset_seed(seed: int | None):
+    """Seed legacy global RNGs so same-seed resets produce deterministic episodes.
+
+    Some simulator paths still consume Python ``random`` and NumPy's module-level
+    RNG during reset. The caller-owned global RNG state is restored afterward; use
+    a deterministic sensor config such as ``scan_noise=[0.0, 0.0]`` for
+    Gymnasium's deterministic step checker.
+    """
+    if seed is None:
+        yield
+        return
+
+    random_state = random.getstate()
+    numpy_state = np.random.get_state()
+    random.seed(int(seed))
+    np.random.seed(int(seed))
+    try:
+        yield
+    finally:
+        random.setstate(random_state)
+        np.random.set_state(numpy_state)
+
+
+def reset_episode_counter_for_seed(state: Any, seed: int | None) -> None:
+    """Reset per-state episode counters for Gymnasium same-seed equivalence."""
+    if seed is not None and hasattr(state, "episode"):
+        state.episode = 0
 
 
 def _pedestrian_coords_with_ego(sim: PedSimulator) -> np.ndarray:

@@ -65,6 +65,10 @@ entries:
     status: current
     freshness: maintained
     area: agent_workflow
+  - path: docs/context/skill_consolidation_audit_2026-06-20.md
+    status: current
+    freshness: dated
+    area: agent_workflow
   - path: docs/context/issue_728_coding_agents_compatibility.md
     status: current
     freshness: policy

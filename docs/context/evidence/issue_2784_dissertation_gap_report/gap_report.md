@@ -79,7 +79,7 @@ Sources: ledger #2760 (7 rows), register #2762 (4 entries)
 ### issue-3201-observation-noise-live-dense-stress [register]
 
 - **Tier/Classification**: diagnostic_only
-- **Promotion step or reason**: Author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.
+- **Promotion step or reason**: Follow-up #3233: author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.
 - **Allowed wording / boundary**: Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.
 - **Caveat**: Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.
 - **Claim gap / reason**: Perturbation plumbing activated (179 missed actor observations; observed actor count dropped from 17 to 5-12), but selected commands, progress/risk summary, collision flags, and closest-distance metrics were identical. The live scenario candidate did not satisfy the intended near-field pedestrian-dominated condition.

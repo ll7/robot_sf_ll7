@@ -67,8 +67,8 @@
         "docs/context/evidence/issue_3201_observation_noise_live_smoke/summary.json",
         "docs/context/evidence/issue_3201_observation_noise_live_smoke/README.md"
       ],
-      "recommended_next_action": "Author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.",
-      "linked_issues": [3201, 2749, 3067, 2777],
+      "recommended_next_action": "Follow-up #3233: author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.",
+      "linked_issues": [3201, 3233, 2749, 3067, 2777],
       "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.",
       "created_at": "2026-06-20"
     },

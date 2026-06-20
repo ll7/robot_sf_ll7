@@ -134,7 +134,7 @@
       "area": null,
       "entry_id": "issue-3201-observation-noise-live-dense-stress",
       "bucket": "negative_revise_only",
-      "promotion_step_or_reason": "Author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.",
+      "promotion_step_or_reason": "Follow-up #3233: author or hydrate a deterministic live fixture whose baseline closest robot-pedestrian distance is within 2m and where the planner yields/stops because of pedestrian observations before repeating clean-vs-perturbed comparison.",
       "source": "register",
       "source_issue": 3201,
       "evidence_tier": null,

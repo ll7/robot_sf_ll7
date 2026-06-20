@@ -1530,6 +1530,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3202_ammv_anticipatory_conflict/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3202_ammv_anticipatory_conflict/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2782_observation_noise_mechanisms/README.md
     status: evidence
     freshness: evidence

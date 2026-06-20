@@ -167,6 +167,10 @@ Policy caveats:
   1.45 m closest robot-pedestrian distance and selected low-speed commands under dynamic-collision
   pressure; the perturbed run changed command sequence/progress and ended with a pedestrian
   collision. Not benchmark or sensor-realism evidence.
+- `issue_3202_ammv_anticipatory_conflict/`: diagnostic-only default-vs-AMMV Social Force
+  comparison on a waiting-then-crossing fixture plus a direct AMMV mechanism probe. Adapter rows
+  stayed identical and lacked AMMV metadata; the direct probe activated AMMV force and produced
+  speed/lateral-velocity/clearance deltas. Not benchmark or paper-facing behavior-model evidence.
 - `policy_search_h500_2026-05-06/`: h500 policy-search leader summaries and failure reports that
   support the v1 raw-success leader and v2 strict-gate promotion decision.
 - `issue_1023_scenario_horizons_preflight_2026-05-06/`: compact preflight artifacts for the

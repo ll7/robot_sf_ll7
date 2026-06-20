@@ -1,0 +1,77 @@
+## Issue #3206 heterogeneous-pedestrian smoke matrix
+#
+# Purpose:
+#   Run a tiny paired homogeneous-vs-heterogeneous pedestrian composition smoke on the same map,
+#   route-spawn seed, planner, and episode seeds. This is smoke evidence only: it proves the
+#   scenario-composition knob reaches runtime and can produce reviewable metric deltas; it is not a
+#   full benchmark campaign and does not claim real-world pedestrian-behavior realism.
+#
+# Canonical smoke command shape:
+#   robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_3206_heterogeneous_pedestrian_smoke.yaml \
+#     --out output/benchmarks/issue_3206_heterogeneous_pedestrian_smoke/episodes.jsonl \
+#     --algo simple_policy --workers 1 --horizon 80 --dt 0.1 --no-video --video-renderer none \
+#     --no-resume --benchmark-profile baseline-safe --structured-output json
+#   robot_sf_bench --quiet aggregate \
+#     --in output/benchmarks/issue_3206_heterogeneous_pedestrian_smoke/episodes.jsonl \
+#     --out output/benchmarks/issue_3206_heterogeneous_pedestrian_smoke/aggregate_by_condition.json \
+#     --group-by scenario_params.metadata.archetype_condition
+
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+  - name: issue_3206_classic_crossing_homogeneous
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      max_episode_steps: 80
+      ped_density: 0.02
+      route_spawn_distribution: spread
+      route_spawn_seed: 3206
+      max_peds_per_group: 3
+      archetype_composition:
+        standard: 1.0
+      archetype_speed_factors:
+        cautious: 0.7
+        standard: 1.0
+        hurried: 1.4
+      archetype_seed: 3206
+    robot_config: {}
+    metadata:
+      issue: 3206
+      archetype: crossing
+      archetype_condition: homogeneous_standard
+      density: low
+      evidence_tier: smoke
+      claim_boundary: >
+        Smoke-only comparison; not benchmark-strength evidence, not a planner-ranking claim,
+        and not a real-world pedestrian-behavior realism claim.
+    seeds: [101, 102, 103]
+  - name: issue_3206_classic_crossing_mixed
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      max_episode_steps: 80
+      ped_density: 0.02
+      route_spawn_distribution: spread
+      route_spawn_seed: 3206
+      max_peds_per_group: 3
+      archetype_composition:
+        cautious: 0.34
+        standard: 0.33
+        hurried: 0.33
+      archetype_speed_factors:
+        cautious: 0.7
+        standard: 1.0
+        hurried: 1.4
+      archetype_seed: 3206
+    robot_config: {}
+    metadata:
+      issue: 3206
+      archetype: crossing
+      archetype_condition: mixed_balanced
+      density: low
+      evidence_tier: smoke
+      claim_boundary: >
+        Smoke-only comparison; not benchmark-strength evidence, not a planner-ranking claim,
+        and not a real-world pedestrian-behavior realism claim.
+    seeds: [101, 102, 103]
+
+map_search_paths:
+  - ../../../maps/svg_maps

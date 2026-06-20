@@ -1958,6 +1958,9 @@ def _apply_simulation_overrides(
         "route_spawn_distribution",
         "route_spawn_jitter_frac",
         "route_spawn_seed",
+        "archetype_composition",
+        "archetype_speed_factors",
+        "archetype_seed",
     ):
         if attr in overrides:
             setattr(config.sim_config, attr, overrides[attr])

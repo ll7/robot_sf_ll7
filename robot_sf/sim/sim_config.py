@@ -60,6 +60,13 @@ class SimulationSettings:
     route_spawn_seed: int | None = None
     """Optional RNG seed for route spawn placement/jitter."""
 
+    archetype_composition: dict[str, float] | None = None
+    """Optional pedestrian behavior-archetype composition for route/crowd spawning."""
+    archetype_speed_factors: dict[str, float] | None = None
+    """Optional archetype desired-speed factors used with ``archetype_composition``."""
+    archetype_seed: int | None = None
+    """Optional RNG seed for deterministic archetype assignment."""
+
     peds_reset_follow_route_at_start: bool = False
     """Whether pedestrians following routes should reset to the start of their routes"""
     debug_without_robot_movement: bool = False

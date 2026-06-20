@@ -455,3 +455,8 @@ Policy caveats:
   remain unchanged.
   claim_boundary=analysis_only_not_navigation_evidence. Not a safety, closed-loop, benchmark,
   or paper-facing claim.
+- `issue_3206_heterogeneous_pedestrian_smoke_2026-06-20/`: smoke-only paired
+  homogeneous-vs-mixed pedestrian composition run on classic crossing with one seed. It proves the
+  archetype composition scenario knob reaches benchmark runtime and can produce reviewable metric
+  deltas. Not benchmark-strength evidence, planner ranking, or a real-world pedestrian-behavior
+  realism claim.

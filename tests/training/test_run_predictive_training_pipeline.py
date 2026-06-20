@@ -435,6 +435,31 @@ def test_pipeline_passes_resolved_weighting_spec_to_mixed_builder(
     assert "--shuffle-seed" not in mixed_builder_cmd
 
 
+def test_issue_3254_config_targets_crossing_conflict_weighting_spec() -> None:
+    """The real #3254 config should use the #3214 spec without CLI-style overrides."""
+    repo = Path(__file__).resolve().parents[2]
+    config_path = (
+        repo
+        / "configs"
+        / "training"
+        / "predictive"
+        / "predictive_crossing_conflict_weighted_issue_3254.yaml"
+    )
+
+    cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    mixing = cfg["mixing"]
+    weighting_spec = config_path.parent / mixing["weighting_spec"]
+
+    assert weighting_spec.name == "predictive_crossing_conflict_hardcase_mixing_issue_3214.yaml"
+    assert weighting_spec.is_file()
+    assert "hardcase_repeat" not in mixing
+    assert "shuffle_seed" not in mixing
+    assert cfg["base_collection"]["ego_conditioning"] is True
+    assert cfg["hardcase_collection"]["ego_conditioning"] is True
+    assert cfg["training"]["model_id"] == "predictive_crossing_conflict_weighted_issue_3254_xl_ego"
+    assert "prepare-only" in cfg["claim_boundary"].lower()
+
+
 def test_pipeline_passes_obstacle_model_family_to_collectors_and_training(
     monkeypatch,
     tmp_path: Path,

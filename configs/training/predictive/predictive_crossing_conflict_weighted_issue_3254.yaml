@@ -1,0 +1,83 @@
+# Issue #3254 crossing-conflict weighted predictive retraining config.
+#
+# This is a prepare-only launch/config surface. It intentionally references the
+# #3214 weighting spec, but it does not publish a retrained checkpoint, benchmark
+# result, or predictive model-improvement claim.
+
+experiment:
+  run_id: predictive_crossing_conflict_weighted_issue_3254
+
+claim_boundary: >
+  Prepare-only predictive retraining config for issue #3254. No retrained
+  checkpoint, hard-seed benchmark result, or model-improvement claim exists until
+  a SLURM/GPU run records checkpoint provenance and closed-loop evaluation
+  evidence against the current predictive baseline.
+
+output:
+  root: output/tmp/predictive_planner/pipeline
+
+scenarios:
+  scenario_matrix: ../../scenarios/classic_interactions.yaml
+  hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
+  planner_grid: ../../benchmarks/predictive_sweep_planner_grid_v1.yaml
+
+base_collection:
+  # Based on the current XL ego-conditioned full predictive profile.
+  seeds_per_scenario: 24
+  random_seed_base: 41000
+  max_steps: 260
+  max_agents: 24
+  horizon_steps: 12
+  max_speed: 1.2
+  ego_conditioning: true
+
+hardcase_collection:
+  # Keep the hard-suite feature layout aligned with the base collection.
+  max_steps: 300
+  max_agents: 24
+  horizon_steps: 12
+  max_speed: 1.2
+  ego_conditioning: true
+
+mixing:
+  weighting_spec: predictive_crossing_conflict_hardcase_mixing_issue_3214.yaml
+
+training:
+  model_id: predictive_crossing_conflict_weighted_issue_3254_xl_ego
+  epochs: 400
+  batch_size: 128
+  lr: 0.0002
+  weight_decay: 0.00001
+  val_split: 0.2
+  seed: 42
+  hidden_dim: 256
+  message_passing_steps: 4
+  max_val_ade: 1.0
+  max_val_fde: 1.8
+  proxy_every_epochs: 20
+  proxy_horizon: 120
+  proxy_dt: 0.1
+  proxy_workers: 1
+
+wandb:
+  enabled: true
+  project: robot_sf
+  entity: ll7
+  group: predictive-crossing-conflict-issue-3254
+  job_type: train
+  name: predictive_crossing_conflict_weighted_issue_3254
+  mode: online
+  tags:
+    - predictive
+    - crossing-conflict
+    - hardcase-weighting
+    - issue-3254
+    - xl
+    - ego-conditioned
+    - prepare-only
+
+evaluation:
+  workers: 1
+  campaign_workers: 2
+  horizon: 120
+  dt: 0.1

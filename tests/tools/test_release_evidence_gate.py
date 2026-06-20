@@ -29,7 +29,9 @@ sys.modules["release_evidence_gate"] = gate  # required so dataclasses can resol
 _spec.loader.exec_module(gate)
 
 
-def _make_source_root(root: Path, body: str = "| planner | success |\n| --- | --- |\n| ppo | 0.88 |\n") -> Path:
+def _make_source_root(
+    root: Path, body: str = "| planner | success |\n| --- | --- |\n| ppo | 0.88 |\n"
+) -> Path:
     """Create a synthetic ``payload/reports`` source root and return the reports dir."""
     reports = root / "payload" / "reports"
     reports.mkdir(parents=True)

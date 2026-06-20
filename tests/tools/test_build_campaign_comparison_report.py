@@ -15,7 +15,7 @@ from scripts.tools.build_campaign_comparison_report import (
 from scripts.tools.campaign_result_store import write_result_store
 
 
-def _write_fixture_store(path: Path) -> None:
+def _write_fixture_store(path: Path, *, analysis: dict | None = None) -> None:
     """Create a small result store with valid and limited rows."""
     fixture = Path("tests/fixtures/campaign_result_store/issue_3063_episode_rows.json")
     rows = json.loads(fixture.read_text(encoding="utf-8"))
@@ -25,6 +25,40 @@ def _write_fixture_store(path: Path) -> None:
         study_id="issue-3063-fixture",
         command="uv run python scripts/tools/build_campaign_comparison_report.py ...",
         source_commit="abc123",
+        analysis=analysis,
+    )
+
+
+def _write_native_seed_gate_store(
+    path: Path,
+    *,
+    analysis: dict,
+) -> None:
+    """Create a canonical result store with only benchmark-valid native rows."""
+    rows = [
+        {
+            "run_id": f"run-{seed}",
+            "episode_id": f"run-{seed}-001",
+            "planner": "orca",
+            "scenario_id": "crossing",
+            "scenario_family": "crossing",
+            "seed": seed,
+            "row_status": "native",
+            "artifact_uri": f"wandb://robot-sf/run-{seed}/episodes/run-{seed}-001.jsonl",
+            "artifact_sha256": str(seed) * 64,
+            "success": seed % 2 == 0,
+            "collision": False,
+            "snqi": 0.5,
+        }
+        for seed in (5, 6, 7, 8, 9)
+    ]
+    write_result_store(
+        path,
+        rows,
+        study_id="issue-3160-seed-gate-fixture",
+        command="uv run python scripts/tools/build_campaign_comparison_report.py ...",
+        source_commit="abc123",
+        analysis=analysis,
     )
 
 
@@ -46,6 +80,7 @@ def test_build_report_surfaces_uncertainty_denominators_and_caveats(tmp_path: Pa
         == "tests/fixtures/campaign_result_store/issue_3063_episode_rows.json"
     )
     assert payload["input"]["result_store"] == "transient_local_result_store"
+    assert payload["seed_sufficiency_gate"] is None
     assert payload["row_status"]["benchmark_valid_episode_count"] == 2
     assert payload["row_status"]["excluded_or_limited_episode_count"] == 2
     caveats = {row["row_status"]: row["interpretation"] for row in payload["row_status"]["caveats"]}
@@ -107,6 +142,136 @@ def test_main_writes_json_and_markdown_outputs(
         == "tests/fixtures/campaign_result_store/issue_3063_episode_rows.json"
     )
     assert "Campaign Comparison Report" in output_md.read_text(encoding="utf-8")
+
+
+def test_build_report_embeds_seed_gate_escalation_from_result_store(tmp_path: Path) -> None:
+    """Scheduling consumers should derive escalation from canonical result-store inputs."""
+    result_store = tmp_path / "result-store"
+    _write_native_seed_gate_store(
+        result_store,
+        analysis={
+            "seed_sufficiency_gate": {
+                "schedule": "s5",
+                "ci_half_width": 0.2,
+                "target_ci_half_width": 0.1,
+            }
+        },
+    )
+
+    payload = build_report(result_store, min_sample=1)
+
+    seed_gate = payload["seed_sufficiency_gate"]
+    assert seed_gate["source"] == "campaign_result_store.analysis_json"
+    assert seed_gate["input"]["invalid_row_count"] == 0
+    assert seed_gate["decision"]["decision"] == "escalate"
+    assert seed_gate["decision"]["next_schedule"] == "s10"
+
+
+def test_build_report_embeds_seed_gate_stop_from_result_store(tmp_path: Path) -> None:
+    """Stable result-store inputs should let scheduling stop without manual JSON."""
+    result_store = tmp_path / "result-store"
+    _write_native_seed_gate_store(
+        result_store,
+        analysis={
+            "seed_sufficiency_gate": {
+                "schedule": "s10",
+                "ci_half_width": 0.05,
+                "target_ci_half_width": 0.1,
+            }
+        },
+    )
+
+    payload = build_report(result_store, min_sample=1)
+
+    seed_gate = payload["seed_sufficiency_gate"]
+    assert seed_gate["decision"]["decision"] == "stop_confirmed"
+    assert seed_gate["decision"]["next_schedule"] is None
+
+
+def test_build_report_keeps_limited_rows_diagnostic_only_for_seed_gate(
+    tmp_path: Path,
+) -> None:
+    """Excluded or limited result-store rows should prevent escalation claim strength."""
+    result_store = tmp_path / "result-store"
+    _write_fixture_store(
+        result_store,
+        analysis={
+            "seed_sufficiency_gate": {
+                "schedule": "s5",
+                "ci_half_width": 0.05,
+                "target_ci_half_width": 0.1,
+            }
+        },
+    )
+
+    payload = build_report(result_store, min_sample=1)
+
+    seed_gate = payload["seed_sufficiency_gate"]
+    assert seed_gate["input"]["invalid_row_count"] == 2
+    assert seed_gate["decision"]["decision"] == "diagnostic_only"
+    assert seed_gate["decision"]["next_schedule"] is None
+
+
+def test_main_writes_seed_gate_decision_output(tmp_path: Path) -> None:
+    """CLI should record a durable seed-gate decision artifact when requested."""
+    result_store = tmp_path / "result-store"
+    _write_native_seed_gate_store(
+        result_store,
+        analysis={
+            "seed_sufficiency_gate": {
+                "schedule": "s5",
+                "ci_half_width": 0.2,
+                "target_ci_half_width": 0.1,
+            }
+        },
+    )
+    output_json = tmp_path / "report.json"
+    output_md = tmp_path / "report.md"
+    seed_gate_json = tmp_path / "seed-gate-decision.json"
+
+    assert (
+        main(
+            [
+                "--result-store",
+                str(result_store),
+                "--output-json",
+                str(output_json),
+                "--output-md",
+                str(output_md),
+                "--seed-gate-output-json",
+                str(seed_gate_json),
+            ]
+        )
+        == 0
+    )
+
+    seed_gate = json.loads(seed_gate_json.read_text(encoding="utf-8"))
+    assert seed_gate["decision"]["decision"] == "escalate"
+    assert "## Seed Sufficiency Gate" in output_md.read_text(encoding="utf-8")
+
+
+def test_main_fails_when_seed_gate_output_requested_without_store_config(
+    tmp_path: Path,
+) -> None:
+    """Seed-gate scheduling output should not fall back to ad hoc empty decisions."""
+    result_store = tmp_path / "result-store"
+    _write_fixture_store(result_store)
+
+    assert (
+        main(
+            [
+                "--result-store",
+                str(result_store),
+                "--output-json",
+                str(tmp_path / "report.json"),
+                "--output-md",
+                str(tmp_path / "report.md"),
+                "--seed-gate-output-json",
+                str(tmp_path / "seed-gate-decision.json"),
+            ]
+        )
+        == 1
+    )
 
 
 def test_main_fails_closed_for_incomplete_result_store(tmp_path: Path) -> None:

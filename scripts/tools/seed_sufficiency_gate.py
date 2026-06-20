@@ -7,9 +7,10 @@ import argparse
 import json
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 SCHEDULES = ("s5", "s10", "s20")
+BENCHMARK_VALID_ROW_STATUSES = frozenset({"native", "adapter"})
 Decision = Literal["escalate", "stop_confirmed", "diagnostic_only"]
 
 
@@ -82,10 +83,56 @@ def decide_seed_gate(inputs: SeedGateInput) -> SeedGateDecision:
     )
 
 
+def seed_gate_payload_from_result_store(result_store: Path) -> dict[str, Any]:
+    """Build a seed-sufficiency decision payload from a canonical result store."""
+    summary = json.loads((result_store / "summary.json").read_text(encoding="utf-8"))
+    analysis = json.loads((result_store / "analysis.json").read_text(encoding="utf-8"))
+    gate_payload = analysis.get("seed_sufficiency_gate")
+    if not isinstance(gate_payload, dict):
+        raise ValueError("analysis.json seed_sufficiency_gate must be a mapping")
+
+    gate_fields = {field.name for field in fields(SeedGateInput)}
+    raw_input = {key: value for key, value in gate_payload.items() if key in gate_fields}
+    raw_input["invalid_row_count"] = _invalid_row_count_from_summary(summary)
+    decision = decide_seed_gate(SeedGateInput(**raw_input))
+    return {
+        "schema_version": "campaign-seed-sufficiency-schedule.v1",
+        "source": "campaign_result_store.analysis_json",
+        "input": raw_input,
+        "decision": asdict(decision),
+    }
+
+
+def _invalid_row_count_from_summary(summary: dict[str, Any]) -> int:
+    """Return result-store rows that cannot strengthen benchmark claims."""
+    counts = summary.get("row_status_counts", {})
+    if not isinstance(counts, dict):
+        return 0
+    return sum(
+        int(count) for status, count in counts.items() if status not in BENCHMARK_VALID_ROW_STATUSES
+    )
+
+
+def _seed_gate_payload_from_input_json(input_json: Path) -> dict[str, Any]:
+    """Build a seed-sufficiency decision payload from a frozen gate input JSON."""
+    payload = json.loads(input_json.read_text(encoding="utf-8"))
+    gate_fields = {field.name for field in fields(SeedGateInput)}
+    raw_input = {key: value for key, value in payload.items() if key in gate_fields}
+    decision = decide_seed_gate(SeedGateInput(**raw_input))
+    return {
+        "schema_version": "seed-sufficiency-gate.v1",
+        "source": "seed_gate_input_json",
+        "input": raw_input,
+        "decision": asdict(decision),
+    }
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-json", type=Path, required=True, help="Seed gate input JSON.")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--input-json", type=Path, help="Seed gate input JSON.")
+    source.add_argument("--result-store", type=Path, help="Canonical campaign result-store path.")
     parser.add_argument("--output-json", type=Path, help="Optional decision JSON path.")
     return parser.parse_args(argv)
 
@@ -93,18 +140,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """Run the seed-sufficiency gate from JSON."""
     args = _parse_args(argv)
-    payload = json.loads(args.input_json.read_text(encoding="utf-8"))
-    gate_fields = {field.name for field in fields(SeedGateInput)}
-    decision = decide_seed_gate(
-        SeedGateInput(**{key: value for key, value in payload.items() if key in gate_fields})
+    result = (
+        seed_gate_payload_from_result_store(args.result_store)
+        if args.result_store is not None
+        else _seed_gate_payload_from_input_json(args.input_json)
     )
-    result = asdict(decision)
     text = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output_json is not None:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         args.output_json.write_text(text, encoding="utf-8")
     print(text, end="")
-    return 0 if decision.decision != "diagnostic_only" else 1
+    decision = result["decision"]["decision"]
+    return 0 if decision != "diagnostic_only" else 1
 
 
 if __name__ == "__main__":

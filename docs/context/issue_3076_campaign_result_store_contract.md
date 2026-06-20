@@ -51,3 +51,36 @@ git diff --check
 This slice proves fixture round-trip through Parquet and DuckDB plus fail-closed provenance checks.
 The next result-store work should connect real campaign outputs to this contract and then build
 report generation on top of the validated store, not directly from ad hoc `output/` files.
+
+## Seed-Sufficiency Scheduling Consumer
+
+Issue [#3160](https://github.com/ll7/robot_sf_ll7/issues/3160) wires the S5/S10/S20
+seed-sufficiency gate into result-store consumers. A campaign result store may declare frozen gate
+inputs under `analysis.json`:
+
+```json
+{
+  "seed_sufficiency_gate": {
+    "schedule": "s5",
+    "ci_half_width": 0.2,
+    "target_ci_half_width": 0.1,
+    "rank_flip_observed": false,
+    "heldout_delta_abs": null,
+    "heldout_delta_threshold": null
+  }
+}
+```
+
+The gate derives `invalid_row_count` from `summary.json` row-status counts so fallback, degraded,
+failed, unavailable, or diagnostic-only rows cannot silently strengthen benchmark claims. The
+canonical scheduling command is:
+
+```bash
+uv run python scripts/tools/seed_sufficiency_gate.py \
+  --result-store <campaign-result-store> \
+  --output-json <decision.json>
+```
+
+`scripts/tools/build_campaign_comparison_report.py` also records the same decision when invoked with
+`--seed-gate-output-json`, keeping the report artifact and scheduling decision tied to the same
+validated result-store input.

@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import subprocess
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
 
 from scripts.dev import submit_training_jobs
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_minimal_repo(tmp_path: Path, *, allow_slurm: bool = False) -> Path:
@@ -58,6 +56,28 @@ def _write_queue(repo: Path, payload: dict[str, Any]) -> Path:
     queue_path.parent.mkdir(parents=True, exist_ok=True)
     queue_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
     return queue_path
+
+
+def test_real_issue_3254_queue_entry_is_prepare_only() -> None:
+    """The real #3254 queue packet should validate but remain non-submittable."""
+    repo = Path(__file__).resolve().parents[2]
+
+    entries = submit_training_jobs.load_queue(
+        repo / "experiments" / "submission_queue.yaml",
+        repo_root=repo,
+    )
+    entry = next(
+        item for item in entries if item.queue_id == "issue-3254-crossing-conflict-predictive"
+    )
+
+    assert entry.status == "planned"
+    assert entry.auto_submit is False
+    assert entry.config == (
+        "configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml"
+    )
+    assert entry.launcher == "SLURM/Auxme/predictive_training_pipeline.sl"
+    assert entry.job_name == "gse-3254-crossing-conflict-predictive"
+    assert "prepare-only" in entry.priority_reason
 
 
 def test_load_queue_rejects_missing_required_field(tmp_path: Path) -> None:

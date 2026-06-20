@@ -11,7 +11,7 @@ from scripts.tools.build_research_status_view import (
     main,
     render_markdown,
 )
-from scripts.tools.campaign_result_store import write_result_store
+from scripts.tools.campaign_result_store import read_parquet_frame, write_result_store
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -262,3 +262,52 @@ def test_cli_accepts_documented_markdown_alias(tmp_path: Path) -> None:
     assert exit_code == 0
     assert output_json.exists()
     assert "# Research Status Coverage View" in output_md.read_text(encoding="utf-8")
+
+
+def test_view_ignores_null_planner_ids_and_bad_seed_pairs(tmp_path: Path) -> None:
+    """Null metadata should not become literal coverage identifiers."""
+    suite_config = tmp_path / "suite.yaml"
+    planner_matrix = tmp_path / "planner_matrix.yaml"
+    result_store = tmp_path / "result-store"
+    _write_suite_config(suite_config)
+    planner_matrix.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "planner-readiness-matrix.v1",
+                "rows": [{"planner_id": None}, {"planner_id": "orca"}],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    rows = [
+        _episode(
+            planner="orca",
+            scenario_family="static_obstacle_detour",
+            scenario_id="single_obstacle_circle",
+            seed=1,
+        ),
+        {
+            **_episode(
+                planner="orca",
+                scenario_family="static_obstacle_detour",
+                scenario_id="line_wall_detour",
+                seed=2,
+            ),
+        },
+    ]
+    write_result_store(result_store, rows, study_id="fixture", command="fixture command")
+    episode_frame = read_parquet_frame(result_store / "episodes.parquet")
+    episode_frame.loc[episode_frame["scenario_id"] == "line_wall_detour", "seed"] = float("nan")
+    episode_frame.to_parquet(result_store / "episodes.parquet", index=False)
+
+    payload = build_research_status_view(
+        result_store,
+        suite_config=suite_config,
+        planner_matrix=planner_matrix,
+    )
+
+    assert "None" not in payload["planners"]
+    cell = payload["coverage_matrix"]["orca"]["static_obstacle_detour"]
+    assert cell["valid_pair_count"] == 1
+    assert cell["coverage_status"] == "fail_closed_denominator_invalid"

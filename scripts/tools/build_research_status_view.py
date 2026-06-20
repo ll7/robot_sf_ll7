@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from dataclasses import dataclass
@@ -187,9 +188,15 @@ def _build_cell(
     }
     valid_rows = rows[rows["row_status"].astype(str).isin(VALID_COVERAGE_STATUSES)]
     valid_pairs = {
-        (str(row.scenario_id), int(row.seed)) for row in valid_rows.itertuples(index=False)
+        pair
+        for row in valid_rows.itertuples(index=False)
+        if (pair := _scenario_seed_pair(row.scenario_id, row.seed)) is not None
     }
-    present_pairs = {(str(row.scenario_id), int(row.seed)) for row in rows.itertuples(index=False)}
+    present_pairs = {
+        pair
+        for row in rows.itertuples(index=False)
+        if (pair := _scenario_seed_pair(row.scenario_id, row.seed)) is not None
+    }
     valid_seeds = sorted({seed for _, seed in valid_pairs if seed in expected_seeds})
     extra_seeds = sorted({seed for _, seed in present_pairs if seed not in expected_seeds})
     missing_pairs = sorted(expected_pairs - valid_pairs)
@@ -339,7 +346,11 @@ def _load_suite_families(payload: dict[str, Any]) -> list[SuiteFamily]:
     families: list[SuiteFamily] = []
     for item in payload.get("scenario_families", []) or []:
         family_id = str(item.get("family_id", "")).strip()
-        scenario_ids = tuple(str(value) for value in item.get("scenario_ids", []) or [])
+        scenario_ids = tuple(
+            str(value)
+            for value in item.get("scenario_ids", []) or []
+            if value is not None and str(value).strip()
+        )
         if not family_id or not scenario_ids:
             raise ValueError("suite scenario_families entries require family_id and scenario_ids")
         families.append(SuiteFamily(family_id=family_id, scenario_ids=scenario_ids))
@@ -351,15 +362,28 @@ def _load_suite_families(payload: dict[str, Any]) -> list[SuiteFamily]:
 def _known_planners(payload: dict[str, Any], frame: pd.DataFrame) -> list[str]:
     """Return the known planner set plus any observed unregistered planners."""
     planners = {
-        str(row.get("planner_id")).strip()
+        str(row.get("planner_id", "")).strip()
         for row in payload.get("rows", []) or []
-        if str(row.get("planner_id", "")).strip()
+        if row.get("planner_id") is not None and str(row.get("planner_id", "")).strip()
     }
     observed = {str(value).strip() for value in frame["planner"].dropna().tolist()}
     planners.update(value for value in observed if value)
     if not planners:
         raise ValueError("planner matrix does not define rows[].planner_id")
     return sorted(planners)
+
+
+def _scenario_seed_pair(scenario_id: Any, seed: Any) -> tuple[str, int] | None:
+    """Return a valid scenario/seed pair, skipping null or non-finite values."""
+    if scenario_id is None or str(scenario_id).strip() == "":
+        return None
+    try:
+        seed_float = float(seed)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(seed_float) or not seed_float.is_integer():
+        return None
+    return str(scenario_id), int(seed_float)
 
 
 def _status_counts(rows: pd.DataFrame) -> dict[str, int]:

@@ -120,7 +120,11 @@ if [[ "$pr_ready_final" == "1" ]]; then
   preflight_check_test_deps
 fi
 
-uv run python "$SCRIPT_DIR/check_pr_followups.py"
+followup_args=()
+if [[ "$pr_ready_final" == "1" ]]; then
+  followup_args+=(--require-body)
+fi
+uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"
 uv run python "$SCRIPT_DIR/check_fast_results_claim_map.py"
 "$SCRIPT_DIR/ruff_fix_format.sh"
 ROBOT_SF_PYTEST_COVERAGE=1 "$SCRIPT_DIR/run_tests_parallel.sh"

@@ -191,7 +191,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     script_text = PR_READY_CHECK.read_text(encoding="utf-8")
 
     expected_gates = [
-        'uv run python "$SCRIPT_DIR/check_pr_followups.py"',
+        'uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"',
         '"$SCRIPT_DIR/ruff_fix_format.sh"',
         '"$SCRIPT_DIR/run_tests_parallel.sh"',
         '"$SCRIPT_DIR/check_changed_coverage.sh"',
@@ -206,6 +206,11 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     assert freshness_call in script_text
     assert script_text.rfind(freshness_call) > max(
         script_text.rfind(gate) for gate in expected_gates
+    )
+    assert "followup_args=()" in script_text
+    assert "followup_args+=(--require-body)" in script_text
+    assert script_text.find("followup_args+=(--require-body)") < script_text.find(
+        'uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"'
     )
 
 

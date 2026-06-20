@@ -103,7 +103,7 @@ def _normalize_observation_quality(value: object) -> ObservationQuality | None:
         return None
     try:
         return ObservationQuality.from_dict(value)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise ValueError(f"observation_quality: {exc}") from exc
 
 

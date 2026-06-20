@@ -84,6 +84,13 @@ def _observation_quality_dict(**overrides: object) -> dict[str, object]:
     return data
 
 
+class _TypeErrorString:
+    """Object whose string conversion simulates a malformed parsed value."""
+
+    def __str__(self) -> str:
+        raise TypeError("cannot stringify")
+
+
 def test_forecast_batch_deterministic_round_trip(tmp_path) -> None:
     """Deterministic forecasts should serialize and reload with provenance intact."""
     batch = ForecastBatch.from_dict(_batch_dict())
@@ -148,6 +155,18 @@ def test_forecast_batch_observation_quality_rejects_non_finite_numbers(
     data["provenance"] = provenance
 
     with pytest.raises(ValueError, match=field):
+        validate_forecast_batch(data)
+
+
+def test_forecast_batch_observation_quality_wraps_type_errors() -> None:
+    """Nested observation-quality parse failures should stay ValueError at the artifact boundary."""
+    data = _batch_dict()
+    provenance = copy.deepcopy(data["provenance"])
+    assert isinstance(provenance, dict)
+    provenance["observation_quality"] = _observation_quality_dict(notes=_TypeErrorString())
+    data["provenance"] = provenance
+
+    with pytest.raises(ValueError, match="observation_quality"):
         validate_forecast_batch(data)
 
 

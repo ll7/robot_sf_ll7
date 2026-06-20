@@ -318,6 +318,31 @@ def test_spec_summary_fields() -> None:
     assert summary["position_noise_std_m"] == 0.5
 
 
+def test_spec_summary_includes_observation_quality_group() -> None:
+    """Condition specs should carry the bounded observation-quality.v1 metadata group."""
+    mod = _load_script()
+    from robot_sf.benchmark.observation_perturbation import ObservationPerturbationSpec
+    from robot_sf.benchmark.observation_quality import ObservationQuality
+
+    spec = ObservationPerturbationSpec(
+        position_noise_std_m=0.3,
+        position_noise_bound_m=0.6,
+        missed_detection_probability=0.5,
+        delay_steps=2,
+        seed=2927,
+    )
+
+    group = mod._spec_summary(spec)["observation_quality"]
+    quality = ObservationQuality.from_dict(group["fields"])
+
+    assert group["schema_version"] == "observation_quality.v1"
+    assert quality.false_negative_rate == 0.5
+    assert quality.dropout_probability == 0.5
+    assert quality.false_positive_rate == 0.0
+    assert quality.latency_s == 0.2
+    assert "hardware-calibrated" in quality.notes
+
+
 def test_script_is_importable() -> None:
     """The script can be loaded as a module without errors."""
     mod = _load_script()

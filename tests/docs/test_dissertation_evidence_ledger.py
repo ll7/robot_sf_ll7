@@ -183,15 +183,21 @@ class TestDissertationEvidenceLedger:
                     f"Row {i} ({row['area']}) promotion path must mention 'live replay'"
                 )
 
-    def test_stale_artifact_refresh_promotion_rows(self) -> None:
+    def test_exported_tables_preserve_invalid_campaign_caveat(self) -> None:
         ledger = _load_ledger()
         for i, row in enumerate(ledger["rows"]):
             if row["area"] == "exported_tables":
                 assert row["evidence_promotion_path"] is not None, (
-                    f"Row {i} ({row['area']}) should have a stale artifact refresh path"
+                    f"Row {i} ({row['area']}) should keep a promotion path for invalid evidence"
                 )
-                assert "stale artifact refresh" in row["evidence_promotion_path"].lower(), (
-                    f"Row {i} ({row['area']}) promotion path must mention 'stale artifact refresh'"
+                assert "invalid campaign repair" in row["evidence_promotion_path"].lower(), (
+                    f"Row {i} ({row['area']}) promotion path must mention invalid campaign repair"
+                )
+                assert "ppo" in row["caveat"].lower(), (
+                    f"Row {i} ({row['area']}) caveat must preserve the PPO failure"
+                )
+                assert row["evidence_tier"] == "diagnostic", (
+                    f"Row {i} ({row['area']}) must not be treated as benchmark evidence"
                 )
 
     def test_forecast_support_row_present(self) -> None:

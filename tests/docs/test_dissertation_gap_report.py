@@ -162,18 +162,18 @@ class TestSourceAccounting:
         assert buckets.get("supported", 0) == 1, (
             f"Expected 1 supported gap, got {buckets.get('supported', 0)}"
         )
-        # blocked: 4 (topology_guidance, signalized_behavior, forecast-supported,
-        # forecast-unsupported)
-        assert buckets.get("blocked", 0) == 4, (
-            f"Expected 4 blocked gaps, got {buckets.get('blocked', 0)}"
+        # blocked: 5 (topology_guidance, signalized_behavior, forecast-supported,
+        # forecast-unsupported, exported_tables invalid-campaign caveat)
+        assert buckets.get("blocked", 0) == 5, (
+            f"Expected 5 blocked gaps, got {buckets.get('blocked', 0)}"
         )
         # negative_revise_only: 5 (pedestrian_density_stress + 4 register diagnostics)
         assert buckets.get("negative_revise_only", 0) == 5, (
             f"Expected 5 negative_revise_only gaps, got {buckets.get('negative_revise_only', 0)}"
         )
-        # remove_weaken: 1 (exported_tables, non-claimable)
-        assert buckets.get("remove_weaken", 0) == 1, (
-            f"Expected 1 remove_weaken gap, got {buckets.get('remove_weaken', 0)}"
+        # remove_weaken: 0 (exported_tables now has payloads but remains blocked/diagnostic)
+        assert buckets.get("remove_weaken", 0) == 0, (
+            f"Expected 0 remove_weaken gaps, got {buckets.get('remove_weaken', 0)}"
         )
 
 

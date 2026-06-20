@@ -120,23 +120,22 @@ explicitly blocked from manuscript promotion.
 
 | Field | Value |
 |---|---|
-| **Claim** | Two historical scenario-horizon tables were exported into a dissertation bundle, but the payload files are missing and the tables remain historical tracked evidence. |
-| **Artifact status** | stale (missing payload) |
-| **Evidence tier** | non-claimable |
-| **Allowed wording** | `do-not-use` |
-| **Caveat** | The claim matrix reports missing payload files for both artifacts, and the stale-artifact detector classifies the bundle manifest as stale. The tables remain historical tracked evidence and do not establish new benchmark claims. |
-| **Source PR/issue** | [#1023](https://github.com/ll7/robot_sf_ll7/issues/1023), [#2542](issue_2542_dissertation_export_bundle.md) |
-| **Dissertation chapter** | N/A (blocked) |
-| **Claim gap** | Requires payload file recovery or re-export before any reuse. |
-| **Evidence promotion path** | **stale artifact refresh**: payload file recovery or re-export from a fresh campaign is required before any reuse. |
+| **Claim** | Two scenario-horizon tables were re-exported into a dissertation bundle with payload files, manifest entries, and checksums from a fresh bounded Issue #3203 campaign, but the campaign is invalid as benchmark-success evidence. |
+| **Artifact status** | current (payload-complete) |
+| **Evidence tier** | diagnostic |
+| **Allowed wording** | "Payload-complete scenario-horizon dissertation table exports exist for discussion/provenance only; the fresh campaign preserved the PPO partial-failure row and does not establish benchmark-success, ranking, or Results-chapter evidence." |
+| **Caveat** | The Issue #3203 campaign exited 2 with `evidence_status=invalid`: 8 successful evidence rows, 1 unexpected failed PPO row (144/144 serial-worker jobs failed from missing dict observation keys), and SNQI contract status `fail` under warn enforcement. Preserve the PPO row as failed/degraded evidence, not benchmark success. |
+| **Source PR/issue** | [#1023](https://github.com/ll7/robot_sf_ll7/issues/1023), [#2542](issue_2542_dissertation_export_bundle.md), [#3203](https://github.com/ll7/robot_sf_ll7/issues/3203) |
+| **Dissertation chapter** | Discussion, Limitations |
+| **Claim gap** | Payload absence is resolved, but the tables remain diagnostic/provenance artifacts until the PPO observation contract and SNQI contract caveats are repaired or explicitly scoped out by a new issue contract. |
+| **Evidence promotion path** | **invalid campaign repair**: fix or intentionally scope the PPO observation-contract failure and SNQI contract caveat, then rerun a fresh bounded campaign before any benchmark or Results wording. |
 
 ## Stale-Artifact Summary
 
 | Artifact | State | Reason |
 |---|---|---|
-| `tab_issue_1023_campaign_table` | non-claimable | Missing payload file |
-| `tab_issue_1023_scenario_family_breakdown` | non-claimable | Missing payload file |
-| Export bundle unnamed artifact | stale-needs-refresh | Output artifact missing output path |
+| `tab_issue_1023_campaign_table` | historical-valid | Payload checksum matches; dissertation bundle schema is historical/non-current for the stale-artifact detector. |
+| `tab_issue_1023_scenario_family_breakdown` | historical-valid | Payload checksum matches; dissertation bundle schema is historical/non-current for the stale-artifact detector. |
 
 ## Dissertation Reuse Recommendations
 
@@ -154,7 +153,9 @@ explicitly blocked from manuscript promotion.
    published with explicit false-positive and regression accounting.
 6. **Pedestrian-density stress**: Methods/Limitations only. Use coverage entropy to describe
    scenario curation discipline. Do not cite as runtime stress or planner-ranking evidence.
-7. **Exported tables**: Blocked. Do not use until payload files are recovered or re-exported.
+7. **Exported tables**: Discussion/Limitations only. Use as payload-complete table provenance
+   with the Issue #3203 invalid-campaign caveat; do not cite as benchmark-success or ranking
+   evidence.
 
 ## Claim Boundaries
 
@@ -182,6 +183,14 @@ uv run python scripts/tools/benchmark_publication_bundle.py claim-matrix \
 uv run python scripts/tools/stale_artifact_detector.py \
   docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json \
   --json-out output/issue-2760/stale_artifact_report.json
+
+# Issue #3203 fresh bounded campaign command used for the current table payloads
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml \
+  --output-root output/benchmarks/issue_3203 \
+  --campaign-id issue3203_scenario_horizons_h500_reexport_2026-06-20 \
+  --mode run \
+  --log-level INFO
 
 # JSON schema validation (targeted)
 uv run pytest tests/docs/test_dissertation_evidence_ledger.py -q

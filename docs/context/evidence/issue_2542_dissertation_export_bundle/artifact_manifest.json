@@ -1,10 +1,10 @@
 {
   "schema_version": "dissertation_artifact_bundle.v1",
-  "created_at_utc": "2026-06-11T17:01:51.146584Z",
-  "bundle_name": "issue_2542_scenario_tables",
-  "source_root": "docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports",
-  "source_commit": "64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
-  "generation_command": "uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2542_scenario_tables --artifact-spec docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_spec.json --commit 64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
+  "created_at_utc": "2026-06-20T19:38:27.742034Z",
+  "bundle_name": "issue_2542_dissertation_export_bundle",
+  "source_root": "docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-06-20/reports",
+  "source_commit": "76d84347a40c669fb878b55489a2614917399bda",
+  "generation_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml --output-root <disposable-output-root>/benchmarks/issue_3203 --campaign-id issue3203_scenario_horizons_h500_reexport_2026-06-20 --mode run --log-level INFO",
   "policy": {
     "local_output_disposable": true,
     "paper_or_benchmark_claim": "not_established_by_bundle_alone",
@@ -12,36 +12,38 @@
   },
   "totals": {
     "artifact_count": 2,
-    "total_bytes": 37742
+    "total_bytes": 50761
   },
   "artifacts": [
     {
       "artifact_id": "tab_issue_1023_campaign_table",
       "source_path": "campaign_table.md",
-      "source_artifact": "tracked compact evidence table from docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports",
+      "source_artifact": "fresh bounded issue #3203 scenario-horizon campaign reports/campaign_table.md; original config/seeds reconstructed from issue #1023 provenance",
       "output_path": "artifacts/tab_issue_1023_campaign_table.md",
-      "size_bytes": 2727,
-      "sha256": "350c10d84c9cbd3314051a2310c87bf6207aae3fbf4655688c39e31bb10a335e",
-      "source_commit": "64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
-      "generation_command": "uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2542_scenario_tables --artifact-spec docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_spec.json --commit 64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
-      "caption_draft": "Scenario-horizon campaign table preserved from the tracked Issue #1023 evidence pack.",
-      "claim_boundary": "Dissertation export smoke only; the table remains historical tracked evidence and does not establish a new benchmark claim.",
+      "size_bytes": 3842,
+      "sha256": "8ab85cf2a6ff3f1fc352d10f32374f167fb3ac5f5966afb7c7ca95d95ecce922",
+      "source_commit": "76d84347a40c669fb878b55489a2614917399bda",
+      "generation_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml --output-root <disposable-output-root>/benchmarks/issue_3203 --campaign-id issue3203_scenario_horizons_h500_reexport_2026-06-20 --mode run --log-level INFO",
+      "caption_draft": "Scenario-horizon campaign table re-exported from the Issue #3203 bounded rerun, preserving the failed PPO row and invalid campaign-evidence caveat.",
+      "claim_boundary": "Payload-complete dissertation export only; the fresh campaign exited invalid and does not establish a new benchmark claim.",
       "recommended_manuscript_use": "discussion",
-      "fallback_degraded_summary": "Use only with the original Issue #1023 caveats; fallback, skipped, or unavailable rows must stay visible when present."
+      "fallback_degraded_summary": "Use only with the Issue #3203 caveat: campaign exit code 2, evidence_status invalid, PPO partial-failure from missing dict observation keys, and SNQI contract fail under warn enforcement must stay visible.",
+      "metadata": {}
     },
     {
       "artifact_id": "tab_issue_1023_scenario_family_breakdown",
       "source_path": "scenario_family_breakdown.md",
-      "source_artifact": "tracked compact evidence table from docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports",
+      "source_artifact": "fresh bounded issue #3203 scenario-horizon campaign reports/scenario_family_breakdown.md; original config/seeds reconstructed from issue #1023 provenance",
       "output_path": "artifacts/tab_issue_1023_scenario_family_breakdown.md",
-      "size_bytes": 35015,
-      "sha256": "74de328f3f62c287654b462952a7ad6e485732a3624eef00222ce2d8e0a74efd",
-      "source_commit": "64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
-      "generation_command": "uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle --source-root docs/context/evidence/issue_1023_scenario_horizons_local_full_2026-05-06/reports --out-dir <disposable-output-root>/dissertation_export --bundle-name issue_2542_scenario_tables --artifact-spec docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_spec.json --commit 64a9c4f591a448ce68e08f0c2bcb29547dab3ab2",
-      "caption_draft": "Scenario-family breakdown table preserved from the tracked Issue #1023 evidence pack.",
-      "claim_boundary": "Dissertation export smoke only; the table remains historical tracked evidence and does not establish a new benchmark claim.",
+      "size_bytes": 46919,
+      "sha256": "f131df376285acc7bad926e01cde0b2bf6bd8f33b53a409d70dbd59e6d7796b8",
+      "source_commit": "76d84347a40c669fb878b55489a2614917399bda",
+      "generation_command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml --output-root <disposable-output-root>/benchmarks/issue_3203 --campaign-id issue3203_scenario_horizons_h500_reexport_2026-06-20 --mode run --log-level INFO",
+      "caption_draft": "Scenario-family breakdown table re-exported from the Issue #3203 bounded rerun, preserving the invalid campaign-evidence caveat.",
+      "claim_boundary": "Payload-complete dissertation export only; the fresh campaign exited invalid and does not establish a new benchmark claim.",
       "recommended_manuscript_use": "discussion",
-      "fallback_degraded_summary": "Use only with the original Issue #1023 caveats; fallback, skipped, or unavailable rows must stay visible when present."
+      "fallback_degraded_summary": "Use only with the Issue #3203 caveat: campaign exit code 2, evidence_status invalid, PPO partial-failure from missing dict observation keys, and SNQI contract fail under warn enforcement must stay visible.",
+      "metadata": {}
     }
   ]
 }

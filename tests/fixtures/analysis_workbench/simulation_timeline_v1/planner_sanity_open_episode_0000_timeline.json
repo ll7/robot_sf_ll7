@@ -1,0 +1,150 @@
+{
+  "coordinate_frame": "world",
+  "events": [
+    {
+      "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0000",
+      "event_type": "step",
+      "frame_index": 0,
+      "step": 1,
+      "time_s": 1.0
+    },
+    {
+      "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0001",
+      "event_type": "step",
+      "frame_index": 1,
+      "step": 2,
+      "time_s": 2.0
+    },
+    {
+      "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0002",
+      "event_type": "step",
+      "frame_index": 2,
+      "step": 3,
+      "time_s": 3.0
+    }
+  ],
+  "evidence_boundary": "analysis_workbench_only",
+  "frames": [
+    {
+      "frame_index": 0,
+      "state": {
+        "collision": {
+          "status": "unknown"
+        },
+        "pedestrians": [],
+        "planner_decision": {
+          "event": "step",
+          "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0000",
+          "selected_action": {
+            "angular_velocity": 0.0,
+            "linear_velocity": 0.0
+          }
+        },
+        "policy": null,
+        "reward": null,
+        "robot": {
+          "heading": 0.04605550691485405,
+          "position": [
+            3.156921863555908,
+            5.2030253410339355
+          ],
+          "velocity": [
+            0.0,
+            0.0
+          ]
+        },
+        "route": null,
+        "sensors": {}
+      },
+      "step": 1,
+      "time_s": 1.0
+    },
+    {
+      "frame_index": 1,
+      "state": {
+        "collision": {
+          "status": "unknown"
+        },
+        "pedestrians": [],
+        "planner_decision": {
+          "event": "step",
+          "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0001",
+          "selected_action": {
+            "angular_velocity": 0.06711794808506966,
+            "linear_velocity": 0.183714802839615
+          }
+        },
+        "policy": null,
+        "reward": null,
+        "robot": {
+          "heading": 0.1131734549999237,
+          "position": [
+            3.340054750442505,
+            5.2176361083984375
+          ],
+          "velocity": [
+            0.18313288688659668,
+            0.014610767364501953
+          ]
+        },
+        "route": null,
+        "sensors": {}
+      },
+      "step": 2,
+      "time_s": 2.0
+    },
+    {
+      "frame_index": 2,
+      "state": {
+        "collision": {
+          "status": "unknown"
+        },
+        "pedestrians": [],
+        "planner_decision": {
+          "event": "step",
+          "event_id": "issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000-frame-0002",
+          "selected_action": {
+            "angular_velocity": 0.006137087941169739,
+            "linear_velocity": 0.2000000755288823
+          }
+        },
+        "policy": null,
+        "reward": null,
+        "robot": {
+          "heading": 0.11931054294109344,
+          "position": [
+            3.5387051105499268,
+            5.240832328796387
+          ],
+          "velocity": [
+            0.19865036010742188,
+            0.02319622039794922
+          ]
+        },
+        "route": null,
+        "sensors": {}
+      },
+      "step": 3,
+      "time_s": 3.0
+    }
+  ],
+  "schema_version": "simulation_timeline.v1",
+  "source_trace": {
+    "schema_version": "simulation_trace_export.v1",
+    "source": {
+      "episode_id": "0",
+      "generated_by": "scripts.tools.build_simulation_trace_export from issue_1859_planner_sanity_open_trace_fixture_gen_7_ep0000.jsonl source_sha256:aae87cf69fbf",
+      "planner_id": "trace_fixture_gen",
+      "scenario_id": "planner_sanity_open",
+      "seed": 7
+    },
+    "trace_id": "planner_sanity_open-ep0-seed7-source-aae87cf6"
+  },
+  "timeline_id": "planner_sanity_open-ep0-seed7-source-aae87cf6-timeline",
+  "units": {
+    "heading": "rad",
+    "position": "m",
+    "time": "s",
+    "velocity": "m/s"
+  }
+}

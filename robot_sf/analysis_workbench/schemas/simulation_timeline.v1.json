@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/simulation_timeline.v1.json",
+  "title": "Robot SF Simulation Timeline v1",
+  "description": "Renderer-neutral timeline artifact for analysis-workbench playback and review. This schema intentionally describes ordered state and event data, not any pygame, browser, or Three.js rendering surface.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "timeline_id",
+    "source_trace",
+    "evidence_boundary",
+    "coordinate_frame",
+    "units",
+    "frames",
+    "events"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "simulation_timeline.v1"
+    },
+    "timeline_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_trace": {
+      "type": "object",
+      "description": "Provenance copied from the validated simulation_trace_export.v1 source artifact.",
+      "additionalProperties": true,
+      "required": ["schema_version", "trace_id", "source"],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["scenario_id", "seed", "planner_id", "episode_id", "generated_by"],
+          "properties": {
+            "scenario_id": {"type": "string", "minLength": 1},
+            "seed": {"type": "integer"},
+            "planner_id": {"type": "string", "minLength": 1},
+            "episode_id": {"type": "string", "minLength": 1},
+            "generated_by": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "evidence_boundary": {
+      "const": "analysis_workbench_only"
+    },
+    "coordinate_frame": {
+      "type": "string",
+      "minLength": 1
+    },
+    "units": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["position", "heading", "time", "velocity"],
+      "properties": {
+        "position": {"type": "string", "minLength": 1},
+        "heading": {"type": "string", "minLength": 1},
+        "time": {"type": "string", "minLength": 1},
+        "velocity": {"type": "string", "minLength": 1}
+      }
+    },
+    "frames": {
+      "type": "array",
+      "description": "Ordered renderer-neutral timeline frames. Ordering is produced by the converter and encoded with frame_index, step, and time_s.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["frame_index", "step", "time_s", "state"],
+        "properties": {
+          "frame_index": {"type": "integer", "minimum": 0},
+          "step": {"type": "integer", "minimum": 0},
+          "time_s": {"type": "number", "minimum": 0},
+          "state": {
+            "type": "object",
+            "description": "Per-frame internal state slots used by downstream renderers and review tools.",
+            "additionalProperties": true,
+            "required": [
+              "planner_decision",
+              "policy",
+              "sensors",
+              "reward",
+              "collision",
+              "route",
+              "robot",
+              "pedestrians"
+            ],
+            "properties": {
+              "planner_decision": {"$ref": "#/$defs/slot"},
+              "policy": {"$ref": "#/$defs/nullable_slot"},
+              "sensors": {"$ref": "#/$defs/slot"},
+              "reward": {"$ref": "#/$defs/nullable_slot"},
+              "collision": {"$ref": "#/$defs/slot"},
+              "route": {"$ref": "#/$defs/nullable_slot"},
+              "robot": {"$ref": "#/$defs/slot"},
+              "pedestrians": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/slot"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["event_id", "event_type", "frame_index", "step"],
+        "properties": {
+          "event_id": {"type": "string", "minLength": 1},
+          "event_type": {"type": "string", "minLength": 1},
+          "frame_index": {"type": "integer", "minimum": 0},
+          "step": {"type": "integer", "minimum": 0},
+          "time_s": {"type": "number", "minimum": 0}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "slot": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "nullable_slot": {
+      "anyOf": [
+        {"type": "object", "additionalProperties": true},
+        {"type": "null"}
+      ]
+    }
+  }
+}

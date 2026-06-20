@@ -294,6 +294,36 @@ def test_trace_comparator_treats_null_trace_maps_as_empty(tmp_path: Path) -> Non
     assert report["classification"]["label"] == "null_policy_insensitive"
 
 
+def test_trace_markdown_treats_missing_near_field_distance_as_unavailable() -> None:
+    """Trace Markdown should not render ``None`` as a measured distance."""
+    report = {
+        "claim_boundary": "diagnostic",
+        "inputs": {"clean_trace_json": "clean.json", "perturbed_trace_json": "perturbed.json"},
+        "scenario": {"same_scenario": True},
+        "seed": {"same_seed": True},
+        "classification": {"label": "null_policy_insensitive", "rationale": "no change"},
+        "near_field_target": {
+            "threshold_m": 2.0,
+            "clean_closest_robot_ped_distance_m": None,
+            "satisfied": False,
+        },
+        "command_summary": {
+            "sequence_changed": False,
+            "clean_first": [0.0, 0.0],
+            "clean_last": [0.0, 0.0],
+            "perturbed_first": [0.0, 0.0],
+            "perturbed_last": [0.0, 0.0],
+        },
+        "observation_summary": {"changed": False, "clean": {}, "perturbed": {}},
+        "progress_delta": {},
+    }
+
+    markdown = _load_script()._trace_markdown(report)
+
+    assert "near-field target metadata was unavailable" in markdown
+    assert "`None` m" not in markdown
+
+
 def test_trace_comparator_cli_writes_trace_markdown(tmp_path: Path) -> None:
     """Trace CLI mode writes the compact report and Markdown."""
     clean_trace = tmp_path / "clean_trace.json"

@@ -440,12 +440,13 @@ def _trace_markdown(report: dict[str, Any]) -> str:
     """Render Markdown for paired step-diagnostics traces."""
     classification = report["classification"]
     near_field = _mapping(report.get("near_field_target"))
+    clean_closest_distance = near_field.get("clean_closest_robot_ped_distance_m")
     near_field_caveat = (
         f"- Clean trace closest robot-pedestrian distance: "
-        f"`{near_field.get('clean_closest_robot_ped_distance_m')}` m "
+        f"`{clean_closest_distance}` m "
         f"(target <= `{near_field.get('threshold_m')}` m, "
         f"satisfied: `{near_field.get('satisfied')}`)."
-        if near_field
+        if clean_closest_distance is not None
         else "- Clean trace near-field target metadata was unavailable."
     )
     lines = [

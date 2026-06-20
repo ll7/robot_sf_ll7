@@ -29,12 +29,29 @@ Mention #10 outside the dependency section.
 
 Waiting for #104 and #105.
 
+## Blocked by #108
+
+Inline heading reference.
+
 ## Validation / Testing
 
 This section mentions #106 but is not a blocker.
 """
 
-    assert staleness.extract_blocker_numbers(body) == (101, 102, 107, 104, 105)
+    assert staleness.extract_blocker_numbers(body) == (101, 102, 107, 104, 105, 108)
+
+
+def test_extract_blocker_numbers_ignores_other_repository_references() -> None:
+    """Cross-repository refs should not be resolved against the selected repository."""
+
+    body = """## Depends On #201
+
+- ll7/robot_sf_ll7#202
+- other/repo#203
+- #204
+"""
+
+    assert staleness.extract_blocker_numbers(body, repo="ll7/robot_sf_ll7") == (201, 202, 204)
 
 
 def test_classify_blockers_reports_fully_partially_and_still_blocked() -> None:
@@ -84,6 +101,23 @@ def test_audit_issue_bodies_omits_issues_without_numbered_blockers() -> None:
 
     assert [result.issue.number for result in results] == [200]
     assert results[0].classification == staleness.BlockerClassification.PARTIALLY_UNBLOCKED
+
+
+def test_fetch_issue_states_keeps_missing_blockers_unknown(monkeypatch) -> None:
+    """A missing/private blocker should not abort the whole stale-blocker report."""
+
+    def fake_gh_json(args: list[str]):
+        number = int(args[2])
+        if number == 101:
+            return {"number": 101, "state": "CLOSED"}
+        raise RuntimeError("not found")
+
+    monkeypatch.setattr(staleness, "_gh_json", fake_gh_json)
+
+    assert staleness.fetch_issue_states({101, 102}, repo="owner/repo") == {
+        101: "CLOSED",
+        102: "UNKNOWN",
+    }
 
 
 def test_main_exits_nonzero_only_for_enforced_fully_unblocked(

@@ -24,7 +24,7 @@ DEPENDENCY_SECTION_TITLES = frozenset(
     }
 )
 HEADING_RE = re.compile(r"^(?P<marker>#{2,6})\s+(?P<title>.+?)\s*$", re.MULTILINE)
-ISSUE_REF_RE = re.compile(r"(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#(?P<number>[1-9]\d*)\b")
+ISSUE_REF_RE = re.compile(r"(?:(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+))?#(?P<number>[1-9]\d*)\b")
 STRIKETHROUGH_RE = re.compile(r"~~.*?~~", re.DOTALL)
 
 
@@ -62,9 +62,19 @@ class BlockerAuditResult:
 def _normalize_heading(title: str) -> str:
     """Normalize a Markdown heading for blocker-section matching."""
 
-    cleaned = re.sub(r"[:：]+$", "", title.strip())
+    cleaned = re.sub(r"[:\uff1a]+$", "", title.strip())
     cleaned = re.sub(r"[-_]+", " ", cleaned)
     return re.sub(r"\s+", " ", cleaned).casefold()
+
+
+def _is_dependency_heading(title: str) -> bool:
+    """Return whether a heading starts a blocker/dependency section."""
+
+    normalized = _normalize_heading(title)
+    return any(
+        normalized == dependency_title or normalized.startswith(f"{dependency_title} ")
+        for dependency_title in DEPENDENCY_SECTION_TITLES
+    )
 
 
 def _dependency_section_spans(body: str) -> list[tuple[int, int]]:
@@ -73,10 +83,10 @@ def _dependency_section_spans(body: str) -> list[tuple[int, int]]:
     matches = list(HEADING_RE.finditer(body))
     spans: list[tuple[int, int]] = []
     for index, match in enumerate(matches):
-        if _normalize_heading(match.group("title")) not in DEPENDENCY_SECTION_TITLES:
+        if not _is_dependency_heading(match.group("title")):
             continue
         heading_level = len(match.group("marker"))
-        section_start = match.end()
+        section_start = match.start("title")
         section_end = len(body)
         for next_match in matches[index + 1 :]:
             if len(next_match.group("marker")) <= heading_level:
@@ -86,7 +96,7 @@ def _dependency_section_spans(body: str) -> list[tuple[int, int]]:
     return spans
 
 
-def extract_blocker_numbers(body: str) -> tuple[int, ...]:
+def extract_blocker_numbers(body: str, *, repo: str = DEFAULT_REPO) -> tuple[int, ...]:
     """Extract unique non-struck-through issue numbers from dependency sections."""
 
     blocker_numbers: list[int] = []
@@ -94,6 +104,9 @@ def extract_blocker_numbers(body: str) -> tuple[int, ...]:
     for start, end in _dependency_section_spans(body):
         section = STRIKETHROUGH_RE.sub("", body[start:end])
         for match in ISSUE_REF_RE.finditer(section):
+            matched_repo = match.group("repo")
+            if matched_repo is not None and matched_repo.casefold() != repo.casefold():
+                continue
             number = int(match.group("number"))
             if number not in seen:
                 blocker_numbers.append(number)
@@ -143,12 +156,14 @@ def audit_issue_bodies(
     issues: list[IssueRef],
     issue_bodies: dict[int, str],
     blocker_states: dict[int, str],
+    *,
+    repo: str = DEFAULT_REPO,
 ) -> list[BlockerAuditResult]:
     """Audit issue bodies using already-resolved blocker states."""
 
     results: list[BlockerAuditResult] = []
     for issue in issues:
-        blocker_numbers = extract_blocker_numbers(issue_bodies.get(issue.number, ""))
+        blocker_numbers = extract_blocker_numbers(issue_bodies.get(issue.number, ""), repo=repo)
         if not blocker_numbers:
             continue
         results.append(classify_blockers(issue, blocker_numbers, blocker_states))
@@ -158,13 +173,16 @@ def audit_issue_bodies(
 def _gh_json(args: list[str], *, timeout: int = 60) -> Any:
     """Run a GitHub CLI command that returns JSON."""
 
-    result = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("gh is not installed or is not available on PATH") from exc
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise RuntimeError(f"gh {' '.join(args)} failed with {result.returncode}: {detail}")
@@ -213,17 +231,21 @@ def fetch_issue_states(numbers: set[int], *, repo: str) -> dict[int, str]:
 
     states: dict[int, str] = {}
     for number in sorted(numbers):
-        payload = _gh_json(
-            [
-                "issue",
-                "view",
-                str(number),
-                "--repo",
-                repo,
-                "--json",
-                "number,state",
-            ]
-        )
+        try:
+            payload = _gh_json(
+                [
+                    "issue",
+                    "view",
+                    str(number),
+                    "--repo",
+                    repo,
+                    "--json",
+                    "number,state",
+                ]
+            )
+        except RuntimeError:
+            states[number] = "UNKNOWN"
+            continue
         states[int(payload["number"])] = str(payload.get("state") or "UNKNOWN")
     return states
 
@@ -315,10 +337,12 @@ def main(argv: list[str] | None = None) -> int:
 
     issues, bodies = fetch_open_issues(repo=args.repo, label=args.label, limit=args.limit)
     blocker_numbers = {
-        number for body in bodies.values() for number in extract_blocker_numbers(body)
+        number
+        for body in bodies.values()
+        for number in extract_blocker_numbers(body, repo=args.repo)
     }
     blocker_states = fetch_issue_states(blocker_numbers, repo=args.repo)
-    summary = build_summary(audit_issue_bodies(issues, bodies, blocker_states))
+    summary = build_summary(audit_issue_bodies(issues, bodies, blocker_states, repo=args.repo))
 
     if args.json:
         print(json.dumps(summary, indent=2, sort_keys=True))

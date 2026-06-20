@@ -1,0 +1,703 @@
+#!/usr/bin/env python3
+"""Run a bounded actual fidelity-sensitivity campaign for issue #3207.
+
+This runner deliberately avoids the broad benchmark CLI because minimal local
+environments may not install learned-policy dependencies. It executes real
+Robot SF simulator episodes for a compact non-learned planner slice and writes
+raw JSONL under ``output/`` plus a compact evidence bundle under
+``docs/context/evidence``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import csv
+import datetime as dt
+import hashlib
+import json
+import math
+import pathlib
+import subprocess
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+import yaml
+
+from robot_sf.baselines.interface import Observation
+from robot_sf.baselines.social_force import SFPlannerConfig, SocialForcePlanner
+from robot_sf.benchmark.fidelity_rank_stability import analyze_fidelity_sensitivity
+from robot_sf.benchmark.fidelity_sensitivity import DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+SCHEMA_VERSION = "issue_3207_fidelity_sensitivity_campaign_slice.v1"
+DEFAULT_CONFIG = "configs/research/fidelity_sensitivity_v1.yaml"
+DEFAULT_SCENARIO_SET = "configs/scenarios/sets/paper_cross_kinematics_v1.yaml"
+DEFAULT_RAW_ROOT = "output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-20"
+DEFAULT_EVIDENCE_DIR = (
+    "docs/context/evidence/issue_3207_fidelity_sensitivity_actual_slice_2026-06-20"
+)
+PLANNERS = ("goal_seek", "baseline_social_force")
+METRICS = (
+    "success_rate",
+    "collision_rate",
+    "min_clearance",
+    "mean_clearance",
+    "near_miss_rate",
+    "comfort_exposure_mean",
+    "time_to_goal_norm",
+)
+CLAIM_BOUNDARY = (
+    "bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF "
+    "episodes for a compact two-planner local fidelity-sensitivity slice. It measures "
+    "internal sensitivity on this slice only; it is not simulator-realism, sim-to-real, "
+    "paper-facing planner-ranking, or full #3207 acceptance evidence."
+)
+ARCHETYPE_SPEED_FACTORS = {"cautious": 0.8, "standard": 1.0, "hurried": 1.2}
+
+
+@dataclass(frozen=True)
+class VariantSpec:
+    """Runtime-bound fidelity variant used by the compact campaign."""
+
+    axis: str
+    key: str
+    source_key: str
+    baseline: bool
+    patch: Mapping[str, Any]
+    observation_noise: Mapping[str, Any]
+    runtime_binding: str
+
+
+class GoalSeekPlanner:
+    """Deterministic goal-facing unicycle command policy."""
+
+    def __init__(self, *, max_linear_speed: float, max_angular_speed: float) -> None:
+        """Store command limits used by the goal-facing controller."""
+        self.max_linear_speed = float(max_linear_speed)
+        self.max_angular_speed = float(max_angular_speed)
+
+    def reset(self, *, seed: int | None = None) -> None:
+        """Accept a seed for interface parity."""
+        del seed
+
+    def step(self, obs: Observation) -> dict[str, float]:
+        """Return a bounded command toward the current goal."""
+        robot_pos = np.asarray(obs.robot["position"], dtype=float)
+        robot_goal = np.asarray(obs.robot["goal"], dtype=float)
+        heading = float(obs.robot.get("heading", 0.0))
+        delta = robot_goal - robot_pos
+        distance = float(np.linalg.norm(delta))
+        if distance <= 1e-6:
+            return {"v": 0.0, "omega": 0.0}
+        desired_heading = float(math.atan2(delta[1], delta[0]))
+        heading_error = _wrap_angle(desired_heading - heading)
+        angular = float(
+            np.clip(2.0 * heading_error, -self.max_angular_speed, self.max_angular_speed)
+        )
+        alignment = max(0.0, 1.0 - abs(heading_error) / math.pi)
+        linear = float(np.clip(distance * alignment, 0.0, self.max_linear_speed))
+        return {"v": linear, "omega": angular}
+
+
+def _wrap_angle(value: float) -> float:
+    """Wrap an angle to [-pi, pi]."""
+    return float((value + math.pi) % (2.0 * math.pi) - math.pi)
+
+
+def _git_head() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return "unknown"
+    return result.stdout.strip() if result.returncode == 0 else "unknown"
+
+
+def _git_status_short() -> list[str]:
+    try:
+        result = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return ["unknown"]
+    if result.returncode != 0:
+        return ["unknown"]
+    return result.stdout.splitlines()
+
+
+def _git_provenance() -> dict[str, Any]:
+    status_short = _git_status_short()
+    return {
+        "git_head": _git_head(),
+        "git_worktree_dirty": bool(status_short),
+        "git_status_short_at_generation": status_short,
+    }
+
+
+def _repo_rel(path: pathlib.Path) -> str:
+    try:
+        return path.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def load_variant_specs(
+    config: Mapping[str, Any], *, include_all_variants: bool
+) -> list[VariantSpec]:
+    """Build runtime-bound variant specs from the checked-in #3207 config."""
+    variants: list[VariantSpec] = []
+    seen_baseline = False
+    included_perturbation_axes: set[str] = set()
+    for axis in config["axes"]:
+        axis_key = str(axis["key"])
+        for raw_variant in axis["variants"]:
+            baseline = bool(raw_variant.get("baseline", False))
+            if baseline:
+                if seen_baseline:
+                    continue
+                seen_baseline = True
+            elif not include_all_variants and axis_key in included_perturbation_axes:
+                continue
+            patch = copy.deepcopy(raw_variant.get("patch") or {})
+            observation_noise = copy.deepcopy(raw_variant.get("observation_noise") or {})
+            runtime_binding = _runtime_binding(axis_key, patch, observation_noise)
+            if baseline or runtime_binding != "unsupported":
+                variants.append(
+                    VariantSpec(
+                        axis=axis_key,
+                        key=("baseline" if baseline else f"{axis_key}__{raw_variant['key']}"),
+                        source_key=str(raw_variant["key"]),
+                        baseline=baseline,
+                        patch=patch,
+                        observation_noise=observation_noise,
+                        runtime_binding=runtime_binding,
+                    )
+                )
+                if not baseline:
+                    included_perturbation_axes.add(axis_key)
+    if not any(variant.baseline for variant in variants):
+        raise ValueError("no baseline variant found in config")
+    return variants
+
+
+def _runtime_binding(
+    axis: str,
+    patch: Mapping[str, Any],
+    observation_noise: Mapping[str, Any],
+) -> str:
+    if axis == "integration_timestep" and "dt" in patch:
+        return "sim_config.time_per_step_in_secs"
+    if axis == "clearance_radius" and isinstance(patch.get("sim_config"), Mapping):
+        return "sim_config.ped_radius"
+    if axis == "social_force_speed_archetypes" and "pedestrian_archetypes" in patch:
+        return "sim_config.archetype_composition"
+    if axis == "observation_noise" and observation_noise:
+        return "planner_observation_noise"
+    return "unsupported"
+
+
+def apply_variant(config: Any, variant: VariantSpec, *, seed: int) -> None:
+    """Apply one runtime-bound fidelity variant to an environment config."""
+    if variant.runtime_binding == "sim_config.time_per_step_in_secs":
+        dt_value = float(variant.patch["dt"])
+        original_duration = float(config.sim_config.sim_time_in_secs)
+        config.sim_config.time_per_step_in_secs = dt_value
+        config.sim_config.sim_time_in_secs = original_duration
+    elif variant.runtime_binding == "sim_config.ped_radius":
+        config.sim_config.ped_radius = float(variant.patch["sim_config"]["ped_radius"])
+    elif variant.runtime_binding == "sim_config.archetype_composition":
+        config.sim_config.archetype_composition = {
+            str(key): float(value) for key, value in variant.patch["pedestrian_archetypes"].items()
+        }
+        config.sim_config.archetype_speed_factors = dict(ARCHETYPE_SPEED_FACTORS)
+        config.sim_config.archetype_seed = int(seed)
+
+
+def _build_observation(
+    env: Any, *, noise: Mapping[str, Any], rng: np.random.Generator
+) -> Observation:
+    robot = env.simulator.robots[0]
+    robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+    heading = float(robot.pose[1])
+    linear, _angular = robot.current_speed
+    robot_vel = np.array([float(linear) * math.cos(heading), float(linear) * math.sin(heading)])
+    ped_positions = np.asarray(env.simulator.ped_pos, dtype=float)
+    ped_velocities = np.asarray(
+        getattr(env.simulator, "ped_vel", np.zeros_like(ped_positions)), dtype=float
+    )
+    if ped_velocities.shape != ped_positions.shape:
+        ped_velocities = np.zeros_like(ped_positions)
+
+    pose_std = float(noise.get("pose_noise_std_m", 0.0) or 0.0)
+    heading_std = float(noise.get("heading_noise_std_rad", 0.0) or 0.0)
+    dropout = float(noise.get("pedestrian_false_negative_prob", 0.0) or 0.0)
+    observed_robot_pos = (
+        robot_pos + rng.normal(0.0, pose_std, size=2) if pose_std > 0 else robot_pos
+    )
+    observed_heading = heading + float(rng.normal(0.0, heading_std)) if heading_std > 0 else heading
+    keep_mask = np.ones((ped_positions.shape[0],), dtype=bool)
+    if dropout > 0 and keep_mask.size:
+        keep_mask = rng.random(keep_mask.shape[0]) >= dropout
+
+    agents = [
+        {
+            "position": ped_positions[idx].tolist(),
+            "velocity": ped_velocities[idx].tolist(),
+            "goal": ped_positions[idx].tolist(),
+            "radius": float(env.env_config.sim_config.ped_radius),
+        }
+        for idx in range(ped_positions.shape[0])
+        if keep_mask[idx]
+    ]
+    return Observation(
+        dt=float(env.env_config.sim_config.time_per_step_in_secs),
+        robot={
+            "position": observed_robot_pos.tolist(),
+            "velocity": robot_vel.tolist(),
+            "goal": np.asarray(env.simulator.goal_pos[0], dtype=float).tolist(),
+            "heading": observed_heading,
+            "radius": float(robot.config.radius),
+        },
+        agents=agents,
+        obstacles=[],
+    )
+
+
+def _planner(planner: str, config: Any, *, seed: int) -> Any:
+    if planner == "goal_seek":
+        return GoalSeekPlanner(
+            max_linear_speed=float(config.robot_config.max_linear_speed),
+            max_angular_speed=float(config.robot_config.max_angular_speed),
+        )
+    if planner == "baseline_social_force":
+        return SocialForcePlanner(
+            SFPlannerConfig(
+                action_space="unicycle",
+                mode="unicycle",
+                dt=float(config.sim_config.time_per_step_in_secs),
+                v_max=float(config.robot_config.max_linear_speed),
+                omega_max=float(config.robot_config.max_angular_speed),
+            ),
+            seed=seed,
+        )
+    raise ValueError(f"unsupported planner: {planner}")
+
+
+def _env_action(env: Any, command: Mapping[str, float]) -> np.ndarray:
+    current_linear, current_angular = env.simulator.robots[0].current_speed
+    desired_linear = float(command.get("v", command.get("linear", 0.0)))
+    desired_angular = float(command.get("omega", command.get("angular", 0.0)))
+    return np.array(
+        [desired_linear - float(current_linear), desired_angular - float(current_angular)],
+        dtype=float,
+    )
+
+
+def _surface_clearances(env: Any) -> np.ndarray:
+    """Return robot-pedestrian surface clearances for the current simulator state."""
+    ped_positions = np.asarray(env.simulator.ped_pos, dtype=float)
+    if ped_positions.size == 0:
+        return np.asarray([], dtype=float)
+    robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+    center_distances = np.linalg.norm(ped_positions - robot_pos, axis=1)
+    robot_radius = float(env.simulator.robots[0].config.radius)
+    ped_radius = float(env.env_config.sim_config.ped_radius)
+    return center_distances - robot_radius - ped_radius
+
+
+def run_episode(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: pathlib.Path,
+    variant: VariantSpec,
+    planner_name: str,
+    seed: int,
+    horizon: int,
+) -> dict[str, Any]:
+    """Run one actual simulator episode and return a compact row."""
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    baseline_dt = float(config.sim_config.time_per_step_in_secs)
+    target_duration = min(
+        float(horizon) * baseline_dt,
+        float(config.sim_config.sim_time_in_secs),
+    )
+    apply_variant(config, variant, seed=seed)
+    variant_dt = float(config.sim_config.time_per_step_in_secs)
+    max_steps = max(1, math.ceil(target_duration / variant_dt))
+    env = make_robot_env(config=config, seed=seed, debug=False)
+    rng = np.random.default_rng(_stable_seed(seed, variant.key, planner_name))
+    planner = _planner(planner_name, config, seed=seed)
+    reset = getattr(planner, "reset", None)
+    if callable(reset):
+        reset(seed=seed)
+
+    clearances: list[float] = []
+    near_misses = 0
+    comfort_exposure: list[float] = []
+    terminated = False
+    info: dict[str, Any] = {}
+    steps = 0
+    try:
+        env.reset(seed=seed)
+        for step_idx in range(max_steps):
+            obs = _build_observation(env, noise=variant.observation_noise, rng=rng)
+            command = planner.step(obs)
+            _obs, _reward, terminated, _truncated, info = env.step(_env_action(env, command))
+            steps = step_idx + 1
+            surface_clearances = _surface_clearances(env)
+            if surface_clearances.size:
+                clearances.append(float(np.min(surface_clearances)))
+            meta = info.get("meta", {}) if isinstance(info, dict) else {}
+            near_misses += int(float(meta.get("near_misses", 0.0) or 0.0) > 0.0)
+            comfort_exposure.append(float(meta.get("comfort_exposure", 0.0) or 0.0))
+            if terminated:
+                break
+    finally:
+        close = getattr(planner, "close", None)
+        if callable(close):
+            close()
+        env.close()
+
+    meta = info.get("meta", {}) if isinstance(info, dict) else {}
+    collision = bool(info.get("collision", False)) if isinstance(info, dict) else False
+    route_success = (
+        bool(info.get("is_success", False) or info.get("success", False))
+        if isinstance(info, dict)
+        else False
+    )
+    success = route_success and not collision
+    min_clearance = min(clearances) if clearances else None
+    return {
+        "variant": variant.key,
+        "axis": variant.axis,
+        "variant_source_key": variant.source_key,
+        "baseline_variant": variant.baseline,
+        "runtime_binding": variant.runtime_binding,
+        "planner": planner_name,
+        "scenario_id": str(scenario.get("name") or scenario.get("scenario_id") or "unknown"),
+        "seed": int(seed),
+        "steps": int(steps),
+        "terminated": bool(terminated),
+        "success": success,
+        "route_success": route_success,
+        "collision": collision,
+        "metrics": {
+            "success_rate": 1.0 if success else 0.0,
+            "collision_rate": 1.0 if collision else 0.0,
+            "min_clearance": min_clearance,
+            "mean_clearance": float(np.mean(clearances)) if clearances else None,
+            "near_miss_rate": near_misses / float(max(1, steps)),
+            "comfort_exposure_mean": float(np.mean(comfort_exposure)) if comfort_exposure else 0.0,
+            "time_to_goal_norm": steps / float(max(1, max_steps)),
+        },
+        "terminal_meta": {
+            "is_route_complete": bool(meta.get("is_route_complete", False)),
+            "is_timesteps_exceeded": bool(meta.get("is_timesteps_exceeded", False)),
+            "distance_to_goal": _finite_or_none(meta.get("distance_to_goal")),
+        },
+    }
+
+
+def _stable_seed(seed: int, *parts: str) -> int:
+    text = "::".join((str(seed), *parts))
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return int(digest[:8], 16)
+
+
+def _finite_or_none(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def aggregate_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, dict[str, float]]]:
+    """Aggregate episode rows into variant/planner metric means."""
+    summary: dict[str, dict[str, dict[str, float]]] = {}
+    for row in rows:
+        variant = str(row["variant"])
+        planner = str(row["planner"])
+        metrics = row.get("metrics")
+        if not isinstance(metrics, Mapping):
+            continue
+        bucket = summary.setdefault(variant, {}).setdefault(planner, {})
+        counts = summary.setdefault(f"{variant}__counts", {}).setdefault(planner, {})
+        for metric in METRICS:
+            value = _finite_or_none(metrics.get(metric))
+            if value is None:
+                continue
+            bucket[metric] = bucket.get(metric, 0.0) + value
+            counts[metric] = counts.get(metric, 0.0) + 1.0
+    for variant in list(summary):
+        if variant.endswith("__counts"):
+            continue
+        count_variant = summary.get(f"{variant}__counts", {})
+        for planner, metrics in summary[variant].items():
+            for metric, total in list(metrics.items()):
+                count = count_variant.get(planner, {}).get(metric, 0.0)
+                metrics[metric] = total / count if count else 0.0
+    for key in [key for key in summary if key.endswith("__counts")]:
+        del summary[key]
+    return summary
+
+
+def build_report(
+    *,
+    config: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    variants: Sequence[VariantSpec],
+    scenario_set: str,
+    horizon: int,
+    raw_rows_path: pathlib.Path,
+    git_provenance: Mapping[str, Any],
+    date: str,
+) -> dict[str, Any]:
+    """Build compact JSON evidence from actual episode rows."""
+    aggregates = aggregate_rows(rows)
+    baseline_variant = next(variant.key for variant in variants if variant.baseline)
+    axis_tables = {
+        variant.key: aggregates[variant.key]
+        for variant in variants
+        if not variant.baseline and variant.key in aggregates
+    }
+    rank_report = analyze_fidelity_sensitivity(
+        aggregates[baseline_variant],
+        axis_tables,
+        primary_metric="success_rate",
+        drift_metrics=METRICS,
+    ).to_dict()
+    all_success_rates = [
+        float(metrics.get("success_rate", 0.0))
+        for by_planner in aggregates.values()
+        for metrics in by_planner.values()
+    ]
+    all_collision_rates = [
+        float(metrics.get("collision_rate", 0.0))
+        for by_planner in aggregates.values()
+        for metrics in by_planner.values()
+    ]
+    result_caveats = [
+        "ranking_stability_is_on_bounded_two_planner_slice_only",
+        "full_fixed_scope_planners_not_run",
+    ]
+    if all_success_rates and max(all_success_rates) <= 0.0:
+        result_caveats.append("all_observed_success_rates_zero")
+    if all_collision_rates and min(all_collision_rates) >= 1.0:
+        result_caveats.append("all_observed_collision_rates_one")
+    elif all_collision_rates and max(all_collision_rates) >= 1.0:
+        result_caveats.append("some_observed_collision_rates_one")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "issue": 3207,
+        "status": "actual_campaign_slice",
+        "date": date,
+        **git_provenance,
+        "claim_boundary": CLAIM_BOUNDARY,
+        "prior_smoke_boundary": DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY,
+        "config_path": DEFAULT_CONFIG,
+        "scenario_set": scenario_set,
+        "raw_rows_path": _repo_rel(raw_rows_path),
+        "raw_output_policy": "raw JSONL remains ignored under output/",
+        "study_id": str(config.get("study_id", "issue_3207_fidelity_sensitivity_v1")),
+        "scope": {
+            "classification": "bounded_actual_slice",
+            "scenario_count": len({str(row["scenario_id"]) for row in rows}),
+            "seeds": sorted({int(row["seed"]) for row in rows}),
+            "planners": sorted({str(row["planner"]) for row in rows}),
+            "horizon": int(horizon),
+            "episode_count": len(rows),
+            "not_full_fixed_scope_reason": (
+                "local torch/rvo2-independent slice uses two non-learned planners; "
+                "full config fixed_scope planners remain future work"
+            ),
+        },
+        "variants": [
+            {
+                "axis": variant.axis,
+                "variant": variant.key,
+                "source_key": variant.source_key,
+                "baseline": variant.baseline,
+                "runtime_binding": variant.runtime_binding,
+            }
+            for variant in variants
+        ],
+        "aggregates": aggregates,
+        "rank_stability": rank_report,
+        "result_caveats": result_caveats,
+    }
+
+
+def format_markdown(report: Mapping[str, Any]) -> str:
+    """Render compact evidence Markdown."""
+    lines = [
+        f"# Issue #3207 Fidelity Sensitivity Actual Slice {report['date']}",
+        "",
+        f"- Status: `{report['status']}`",
+        f"- Evidence classification: `{report['scope']['classification']}`",
+        f"- Git head: `{report['git_head']}`",
+        f"- Git worktree dirty at generation: `{report['git_worktree_dirty']}`",
+        f"- Raw rows: `{report['raw_rows_path']}`",
+        f"- Claim boundary: {report['claim_boundary']}",
+        "",
+        "## Scope",
+        "",
+        f"- Scenario set: `{report['scenario_set']}`",
+        f"- Episodes: `{report['scope']['episode_count']}`",
+        f"- Horizon: `{report['scope']['horizon']}`",
+        f"- Seeds: `{', '.join(str(seed) for seed in report['scope']['seeds'])}`",
+        f"- Planners: `{', '.join(report['scope']['planners'])}`",
+        f"- Limitation: {report['scope']['not_full_fixed_scope_reason']}.",
+        f"- Result caveats: `{', '.join(report['result_caveats'])}`",
+        "",
+        "## Rank Stability",
+        "",
+        f"- Nominal ranking: `{', '.join(report['rank_stability']['nominal_ranking'])}`",
+        f"- Rank stable on this slice: `{report['rank_stability']['rank_stable']}`",
+        f"- Flipping variants: `{', '.join(report['rank_stability']['flipping_axes']) or 'none'}`",
+        "",
+        "| Variant | Kendall tau | Rank flips | Top-1 changed |",
+        "|---|---:|---:|---|",
+    ]
+    for axis in report["rank_stability"]["axes"]:
+        lines.append(
+            f"| `{axis['axis']}` | {float(axis['kendall_tau']):.6g} | "
+            f"{int(axis['rank_flips'])} | `{axis['top1_changed']}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "This evidence measures internal simulator-fidelity sensitivity for the bounded local slice only.",
+            "It must not be cited as simulator-realism, sim-to-real, full benchmark, or paper-facing ranking evidence.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def write_outputs(
+    *,
+    rows: Sequence[Mapping[str, Any]],
+    report: Mapping[str, Any],
+    raw_root: pathlib.Path,
+    evidence_dir: pathlib.Path,
+) -> None:
+    """Write raw ignored rows and compact tracked evidence."""
+    raw_root.mkdir(parents=True, exist_ok=True)
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    rows_path = raw_root / "episode_rows.jsonl"
+    rows_path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    (evidence_dir / "summary.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (evidence_dir / "README.md").write_text(format_markdown(report), encoding="utf-8")
+    with (evidence_dir / "planner_variant_metrics.csv").open(
+        "w", encoding="utf-8", newline=""
+    ) as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["variant", "planner", *METRICS],
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for variant, by_planner in sorted(report["aggregates"].items()):
+            for planner, metrics in sorted(by_planner.items()):
+                writer.writerow({"variant": variant, "planner": planner, **metrics})
+
+
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", default=DEFAULT_CONFIG)
+    parser.add_argument("--scenario-set", default=DEFAULT_SCENARIO_SET)
+    parser.add_argument("--raw-root", default=DEFAULT_RAW_ROOT)
+    parser.add_argument("--evidence-dir", default=DEFAULT_EVIDENCE_DIR)
+    parser.add_argument("--horizon", type=int, default=180)
+    parser.add_argument("--seed", action="append", type=int, dest="seeds")
+    parser.add_argument(
+        "--first-variant-per-axis-only",
+        action="store_true",
+        help="Run only the baseline plus the first runtime-bound perturbation per fidelity axis.",
+    )
+    parser.add_argument("--date", default=dt.datetime.now(tz=dt.UTC).date().isoformat())
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the bounded actual campaign."""
+    args = _parse_args(argv)
+    config_path = REPO_ROOT / args.config
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(config, Mapping):
+        raise ValueError(f"config must be a mapping: {config_path}")
+    scenario_path = REPO_ROOT / args.scenario_set
+    scenarios = list(load_scenarios(scenario_path))
+    if not scenarios:
+        raise ValueError(f"scenario set produced no scenarios: {scenario_path}")
+    scenario = scenarios[0]
+    seeds = tuple(args.seeds or config.get("fixed_scope", {}).get("seeds", [111, 112, 113]))
+    variants = load_variant_specs(
+        config,
+        include_all_variants=not bool(args.first_variant_per_axis_only),
+    )
+    raw_root = REPO_ROOT / args.raw_root
+    raw_rows_path = raw_root / "episode_rows.jsonl"
+
+    rows = [
+        run_episode(
+            scenario,
+            scenario_path=scenario_path,
+            variant=variant,
+            planner_name=planner,
+            seed=int(seed),
+            horizon=int(args.horizon),
+        )
+        for variant in variants
+        for planner in PLANNERS
+        for seed in seeds
+    ]
+    report = build_report(
+        config=config,
+        rows=rows,
+        variants=variants,
+        scenario_set=args.scenario_set,
+        horizon=int(args.horizon),
+        raw_rows_path=raw_rows_path,
+        git_provenance=_git_provenance(),
+        date=str(args.date),
+    )
+    write_outputs(
+        rows=rows,
+        report=report,
+        raw_root=raw_root,
+        evidence_dir=REPO_ROOT / args.evidence_dir,
+    )
+    print(f"wrote raw rows: {_repo_rel(raw_rows_path)}")
+    print(f"wrote compact evidence: {args.evidence_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

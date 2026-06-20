@@ -172,6 +172,11 @@ Policy caveats:
   Issue #3207 over the same compact scenario surface. It materializes rank-stability and metric-drift
   calculations across clean timestep variants and the existing observation-noise smoke profile; it
   is not benchmark-strength planner-ranking, sensor-realism, or sim-to-real evidence.
+- `issue_3207_fidelity_sensitivity_actual_slice_2026-06-20/`: bounded actual two-planner local
+  campaign slice for #3207 over the compact scenario surface. It runs 54 episodes across timestep,
+  pedestrian-archetype, observation-noise, and clearance-radius variants; rank order stayed stable
+  on the success-rate tie-breaker with no rank flips. This remains bounded sensitivity evidence,
+  not full fixed-scope, simulator-realism, sim-to-real, or paper-facing planner-ranking evidence.
 - `issue_3233_near_field_observation_noise/`: diagnostic-only same-seed clean vs perturbed
   step-diagnostics replay on a deterministic near-field live fixture. The clean baseline reached
   1.45 m closest robot-pedestrian distance and selected low-speed commands under dynamic-collision

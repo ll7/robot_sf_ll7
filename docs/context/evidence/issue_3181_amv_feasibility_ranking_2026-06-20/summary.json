@@ -1,0 +1,202 @@
+{
+  "baseline_variant": "hybrid_rule_v3_fast_progress",
+  "claim_boundary": "diagnostic-only; not benchmark-strength, paper-facing, or hardware-calibrated AMV evidence",
+  "classification": "bounded_diagnostic_feasibility_direction",
+  "disagreement_cases": [
+    {
+      "summary": "observed in at least one paired scenario/seed row",
+      "type": "feasibility_progress_tradeoff"
+    },
+    {
+      "summary": "observed in at least one paired scenario/seed row",
+      "type": "feasibility_success_divergence"
+    }
+  ],
+  "excluded_rows": [],
+  "incomplete_pairs": [],
+  "intervention_variant": "actuation_aware_hybrid_rule_v0",
+  "pairs": [
+    {
+      "baseline": {
+        "collisions": 0.0,
+        "command_clip_fraction": 0.35,
+        "final_distance_to_goal_m": 11.975889521581447,
+        "final_route_progress_m": -9.975888521581448,
+        "signed_braking_peak_m_s2": -2.5,
+        "success": 0.0,
+        "timeout_mode": "max_steps",
+        "variant": "hybrid_rule_v3_fast_progress",
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "deltas_intervention_minus_baseline": {
+        "collisions": 0.0,
+        "command_clip_fraction": -0.24999999999999997,
+        "final_distance_to_goal_m": -0.35207934058256996,
+        "final_route_progress_m": 0.35207934058256996,
+        "signed_braking_peak_m_s2": 0.0,
+        "success": 0.0,
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "disagreement_cases": [
+        {
+          "summary": "command clipping changed while success stayed tied",
+          "type": "feasibility_success_divergence"
+        }
+      ],
+      "intervention": {
+        "collisions": 0.0,
+        "command_clip_fraction": 0.1,
+        "final_distance_to_goal_m": 11.623810180998877,
+        "final_route_progress_m": -9.623809180998878,
+        "signed_braking_peak_m_s2": -2.5,
+        "success": 0.0,
+        "timeout_mode": "max_steps",
+        "variant": "actuation_aware_hybrid_rule_v0",
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 101
+    },
+    {
+      "baseline": {
+        "collisions": 0.0,
+        "command_clip_fraction": 0.35,
+        "final_distance_to_goal_m": 11.9886966580456,
+        "final_route_progress_m": -9.988695658045598,
+        "signed_braking_peak_m_s2": -2.5,
+        "success": 0.0,
+        "timeout_mode": "max_steps",
+        "variant": "hybrid_rule_v3_fast_progress",
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "deltas_intervention_minus_baseline": {
+        "collisions": 0.0,
+        "command_clip_fraction": -0.22499999999999998,
+        "final_distance_to_goal_m": -0.7107045691423632,
+        "final_route_progress_m": 0.7107045691423632,
+        "signed_braking_peak_m_s2": 0.0,
+        "success": 0.0,
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "disagreement_cases": [
+        {
+          "summary": "command clipping changed while success stayed tied",
+          "type": "feasibility_success_divergence"
+        }
+      ],
+      "intervention": {
+        "collisions": 0.0,
+        "command_clip_fraction": 0.125,
+        "final_distance_to_goal_m": 11.277992088903236,
+        "final_route_progress_m": -9.277991088903235,
+        "signed_braking_peak_m_s2": -2.5,
+        "success": 0.0,
+        "timeout_mode": "max_steps",
+        "variant": "actuation_aware_hybrid_rule_v0",
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 102
+    },
+    {
+      "baseline": {
+        "collisions": 0.0,
+        "command_clip_fraction": 0.2625,
+        "final_distance_to_goal_m": 3.5671358522120498,
+        "final_route_progress_m": 12.94476133239922,
+        "signed_braking_peak_m_s2": -2.5,
+        "success": 0.0,
+        "timeout_mode": "max_steps",
+        "variant": "hybrid_rule_v3_fast_progress",
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "deltas_intervention_minus_baseline": {
+        "collisions": 0.0,
+        "command_clip_fraction": -0.1625,
+        "final_distance_to_goal_m": 0.28426929241344157,
+        "final_route_progress_m": -0.2842692924134411,
+        "signed_braking_peak_m_s2": 0.0,
+        "success": 0.0,
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "disagreement_cases": [
+        {
+          "summary": "command clipping changed while success stayed tied",
+          "type": "feasibility_success_divergence"
+        },
+        {
+          "summary": "command clipping improved while final route progress worsened",
+          "type": "feasibility_progress_tradeoff"
+        }
+      ],
+      "intervention": {
+        "collisions": 0.0,
+        "command_clip_fraction": 0.1,
+        "final_distance_to_goal_m": 3.8514051446254913,
+        "final_route_progress_m": 12.66049203998578,
+        "signed_braking_peak_m_s2": -2.5,
+        "success": 0.0,
+        "timeout_mode": "max_steps",
+        "variant": "actuation_aware_hybrid_rule_v0",
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 101
+    },
+    {
+      "baseline": {
+        "collisions": 1.0,
+        "command_clip_fraction": 0.0,
+        "final_distance_to_goal_m": 16.01290323034812,
+        "final_route_progress_m": 0.0,
+        "signed_braking_peak_m_s2": 0.0,
+        "success": 0.0,
+        "timeout_mode": "collision",
+        "variant": "hybrid_rule_v3_fast_progress",
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "deltas_intervention_minus_baseline": {
+        "collisions": 0.0,
+        "command_clip_fraction": 0.0,
+        "final_distance_to_goal_m": 0.0,
+        "final_route_progress_m": 0.0,
+        "signed_braking_peak_m_s2": 0.0,
+        "success": 0.0,
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "disagreement_cases": [],
+      "intervention": {
+        "collisions": 1.0,
+        "command_clip_fraction": 0.0,
+        "final_distance_to_goal_m": 16.01290323034812,
+        "final_route_progress_m": 0.0,
+        "signed_braking_peak_m_s2": 0.0,
+        "success": 0.0,
+        "timeout_mode": "collision",
+        "variant": "actuation_aware_hybrid_rule_v0",
+        "yaw_rate_saturation_fraction": 0.0
+      },
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 102
+    }
+  ],
+  "ranking_supported": true,
+  "scenarios": [
+    "classic_bottleneck_high",
+    "classic_cross_trap_high"
+  ],
+  "schema_version": "paired-amv-actuation-feasibility-ranking.v1",
+  "seeds": [
+    101,
+    102
+  ],
+  "uncertainty": {
+    "command_clip_delta_max": 0.0,
+    "command_clip_delta_mean": -0.159375,
+    "command_clip_delta_min": -0.24999999999999997,
+    "note": "small paired diagnostic slice; uncertainty remains high below broader benchmark scale",
+    "paired_rows": 4,
+    "scenario_count": 2,
+    "seed_count": 2
+  }
+}

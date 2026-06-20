@@ -1,16 +1,14 @@
-# Issue #3206 Heterogeneous Pedestrian Smoke
+# Issue #3206 Heterogeneous Pedestrian Smoke Report
 
-Status: `smoke_complete`
-
-This packet records a tiny paired homogeneous-vs-heterogeneous pedestrian composition smoke.
-It is not a full benchmark campaign, not a planner-ranking claim, and not a real-world
-pedestrian-behavior realism claim.
+- Status: `diagnostic_smoke_report`
+- Source episode git hash(es): `5dd029bd2b5672dc846b5a138077712a2f393ff4`
+- Input rows: worktree-local ignored artifact summarized in this report (episodes.jsonl)
+- Claim boundary: diagnostic_smoke_not_benchmark_evidence: summarizes a tiny homogeneous-vs-mixed pedestrian composition smoke. It records metric deltas and distributional-metric readiness limits; it does not establish pedestrian realism, real-world fairness, planner ranking, or a limitation-replacement decision.
+- Per-archetype distributional status: `not_computable_from_current_smoke`
 
 ## Provenance
 
 - Branch: `issue-3206-archetype-reporting`
-- Source commit at run time: `95e42c514c0f00baf624084ec86e625f11c35f2a` plus the runtime wiring
-  changes in this PR branch.
 - Matrix: `configs/scenarios/sets/issue_3206_heterogeneous_pedestrian_smoke.yaml`
 - Planner: `simple_policy`
 - Horizon: `80`
@@ -27,30 +25,26 @@ scripts/dev/run_worktree_shared_venv.sh -- robot_sf_bench --quiet run \
   --algo simple_policy --workers 1 --horizon 80 --dt 0.1 --no-video --video-renderer none \
   --no-resume --benchmark-profile baseline-safe --structured-output json
 
-scripts/dev/run_worktree_shared_venv.sh -- robot_sf_bench --quiet aggregate \
-  --in output/benchmarks/issue_3206_heterogeneous_pedestrian_smoke/episodes.jsonl \
-  --out output/benchmarks/issue_3206_heterogeneous_pedestrian_smoke/aggregate_by_condition.json \
-  --group-by scenario_params.metadata.archetype_condition
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/benchmark/build_heterogeneous_pedestrian_smoke_report.py \
+  --episodes output/benchmarks/issue_3206_heterogeneous_pedestrian_smoke/episodes.jsonl \
+  --output-dir docs/context/evidence/issue_3206_heterogeneous_pedestrian_smoke_2026-06-20
 ```
 
-## Smoke Result
+## Condition Metrics
 
-| Condition | Success | Collisions | Min distance mean | Mean distance mean | Robot within 5 m frac | Interpretation |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `homogeneous_standard` | 0.0 | 0.0 | 3.226 | 4.750 | 0.571 | Timeout, no collision, route interaction exposure present. |
-| `mixed_balanced` | 0.0 | 0.0 | 5.010 | 5.706 | 0.042 | Timeout, no collision, larger clearance in this three-seed smoke. |
+| Condition | Episodes | Success | Collisions | Min distance mean | Mean distance mean | Robot within 5 m frac | Distributional status |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `homogeneous_standard` | 3 | 0.000 | 0.000 | 3.226 | 4.750 | 0.571 | `not_computable` |
+| `mixed_balanced` | 3 | 0.000 | 0.000 | 5.010 | 5.706 | 0.042 | `not_computable` |
 
-Observed deltas (`mixed_balanced - homogeneous_standard`):
+## Planned Composition
 
-- `min_distance.mean`: `+1.784`
-- `mean_distance.mean`: `+0.956`
-- `robot_ped_within_5m_frac.mean`: `-0.529`
-- `success.mean`: `0.000`
-- `collisions.mean`: `0.000`
+- `homogeneous_standard`: `{"standard": 1.0}`
+- `mixed_balanced`: `{"cautious": 0.34, "hurried": 0.33, "standard": 0.33}`
 
-## Claim Boundary
+## Distributional/Fairness Boundary
 
-This is enough to show that the homogeneous-vs-heterogeneous scenario axis reaches benchmark runtime
-and can produce reviewable metric deltas on a fixed seed.
-It is not enough to claim robust composition dependence, pedestrian realism, or planner ranking.
-A larger seed/scenario slice is required before promotion beyond smoke evidence.
+The current smoke carries `distributional_disruption` blocks, but support counts are zero
+because no control trace was provided. That means per-archetype displacement or delay
+fairness-style metrics are not computable from this smoke. The result remains useful as
+a runtime and metric-delta smoke only.

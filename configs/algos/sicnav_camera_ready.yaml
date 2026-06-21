@@ -2,7 +2,7 @@
 allow_testing_algorithms: true
 include_in_paper: false
 
-repo_root: third_party/external_mpc_repos/sicnav
+repo_root: third_party/external_repos/sicnav
 checkpoint_path: sicnav_diffusion/JMID/MID/checkpoints/jrdb_bev_0_25_multi_class_epoch16.pt
 solver: ipopt
 device: cpu

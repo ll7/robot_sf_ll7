@@ -1522,7 +1522,7 @@ def test_build_policy_sicnav_wires_external_mpc_adapter(
     monkeypatch.setattr("robot_sf.benchmark.map_runner.SICNavPlanner", _DummyPlanner)
     policy, meta = _build_policy(
         "sicnav",
-        {"repo_root": "third_party/external_mpc_repos/sicnav"},
+        {"repo_root": "third_party/external_repos/sicnav"},
         robot_kinematics="differential_drive",
     )
     linear, angular = policy(

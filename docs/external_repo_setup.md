@@ -19,9 +19,15 @@ validation command, file count, size, aggregate tree checksum, and sample file h
 
 The first registered external repository is `sicnav`, the MIT-licensed Safe Interactive Crowd
 Navigation reference implementation used by the existing SICNav wrapper. The registry pins an
-explicit upstream commit and stages from upstream until an `ll7` fork is created. DR-MPC and any
-other ad-hoc clones under `third_party/external_mpc_repos/` remain follow-up work because each
-candidate still needs a reviewed upstream URL, pinned SHA, license decision, and smoke command.
+explicit upstream commit and stages from upstream until an `ll7` fork is created. The tracked
+SICNav defaults use `third_party/external_repos/sicnav`, not the legacy
+`third_party/external_mpc_repos/sicnav` path.
+
+DR-MPC is intentionally not registered in this pipeline. GitHub metadata reported no license for
+`https://github.com/James-R-Han/DR-MPC` on 2026-06-22, so public fork, redistribution, and pinned
+local staging remain blocked. Keep DR-MPC as reference-only/source-side-first until an explicit
+license decision and source-harness proof exist. The issue #3366 audit is tracked in
+`docs/context/issue_3366_external_mpc_staging_audit.md`.
 
 ## License-Gated Fork Procedure
 

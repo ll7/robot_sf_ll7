@@ -3047,9 +3047,7 @@ def _attach_social_mini_game_block(metrics: dict[str, Any]) -> None:
         and bool(distributional_block.get("cohort_metrics"))
     )
     distributional_support_counts = (
-        distributional_block.get("support_counts")
-        if isinstance(distributional_block, dict)
-        else {}
+        distributional_block.get("support_counts") if isinstance(distributional_block, dict) else {}
     )
     if not isinstance(distributional_support_counts, dict):
         distributional_support_counts = {}

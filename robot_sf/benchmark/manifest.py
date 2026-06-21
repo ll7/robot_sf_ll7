@@ -161,7 +161,9 @@ def _validate_simulation_run_provenance(bundle: dict[str, object]) -> None:
     optional_fields = bundle.get("optional_fields")
     if not isinstance(optional_fields, dict):
         raise ValueError("Simulation-run provenance optional_fields must be a mapping")
-    missing_optionals = [field for field in _EXPLICIT_OPTIONAL_FIELDS if field not in optional_fields]
+    missing_optionals = [
+        field for field in _EXPLICIT_OPTIONAL_FIELDS if field not in optional_fields
+    ]
     if missing_optionals:
         raise ValueError(
             "Simulation-run provenance optional_fields missing explicit fields: "
@@ -172,7 +174,11 @@ def _validate_simulation_run_provenance(bundle: dict[str, object]) -> None:
         if not isinstance(collection, list):
             raise ValueError(f"Simulation-run provenance {collection_name} must be a list")
         for artifact in collection:
-            if not isinstance(artifact, dict) or not artifact.get("path") or not artifact.get("sha256"):
+            if (
+                not isinstance(artifact, dict)
+                or not artifact.get("path")
+                or not artifact.get("sha256")
+            ):
                 raise ValueError(
                     f"Simulation-run provenance {collection_name} entries require path and sha256"
                 )

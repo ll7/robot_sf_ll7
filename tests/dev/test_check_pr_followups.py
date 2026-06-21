@@ -199,7 +199,6 @@ def test_cli_reads_github_pull_request_event(tmp_path: Path, monkeypatch) -> Non
     """The CLI can read pull_request.body from a GitHub event payload."""
     monkeypatch.delenv("PR_READY_PR_BODY_FILE", raising=False)
     monkeypatch.delenv("PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES", raising=False)
-    monkeypatch.delenv("PR_READY_PR_BODY_FILE", raising=False)
     event_path = tmp_path / "event.json"
     event_path.write_text(
         json.dumps(

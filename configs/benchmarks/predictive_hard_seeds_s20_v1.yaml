@@ -1,0 +1,6 @@
+# Predictive planner larger hard-case sample S20 for issue #3342.
+# Twenty total episodes across the four #3215 crossing-conflict hard families.
+classic_cross_trap_high: [200, 201, 202, 203, 204]
+classic_cross_trap_medium: [200, 201, 202, 203, 204]
+classic_cross_trap_low: [200, 201, 202, 203, 204]
+classic_group_crossing_high: [200, 201, 202, 203, 204]

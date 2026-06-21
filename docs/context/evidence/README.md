@@ -98,6 +98,12 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3342_nearfield_turn_budget_2026-06-21/`: diagnostic-local S20 follow-up
+  for the Issue #3215 near-field turn-budget signal. It compares `baseline`,
+  `nearfield_turn`, and `nf_speedcap_only` across clean and observation-noise
+  slices with explicit success, collision, min-distance, and uncertainty fields.
+  The local S20 result does not support adopting the near-field signal; S30 is
+  configured but not run. Not benchmark-strength or paper-facing evidence.
 - `issue_2777_live_observation_noise_replay/issue_3330_seed_amplitude_grid/`: diagnostic-only
   native live replay over the #3323 near-field #2756 fixture with a predeclared 2x3 medium/high
   bounded-Gaussian perturbation grid. The grid is `medium_amplitude_sensitive`: seed 3328 is

@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.dev import check_pr_followups
-from scripts.dev.check_pr_followups import analyze_body
+from scripts.dev.check_pr_followups import analyze_body, analyze_domain_approval
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_pr_followups.py"
 
@@ -26,6 +26,35 @@ Example PR.
 """
 
 
+def _domain_body(
+    *,
+    evidence_tier: str = "targeted smoke",
+    result_classification: str = "blocker-resolution",
+    domain_section: str = "",
+) -> str:
+    return f"""## Research Result Guidance
+- Evidence tier: {evidence_tier}
+- Result classification: {result_classification}
+
+{domain_section}
+    """
+
+
+def _approved_domain_section(*, status: str = "approved", note: str = "maintainer review") -> str:
+    return f"""## Domain-Aware Approval
+- Required for this PR: yes - evidence-validity-sensitive result classification
+- Domains reviewed: evidence classification, figure eligibility
+- Status: {status}
+- Approver/review source or waiver: {note}
+- Validity checklist:
+  - Target claim/hypothesis: issue claim boundary stays diagnostic-only
+  - Comparator or split/evidence validity: existing targeted smoke proof only
+  - Fallback/degraded exclusions: fallback/degraded evidence remains excluded
+  - Claim boundary: no paper-facing benchmark claim
+  - Implementation integrity vs experimental validity: tests prove gate behavior, not result validity
+"""
+
+
 def test_analyze_body_passes_when_no_deferred_work_is_declared() -> None:
     """Empty or none deferred-work values are accepted."""
     report = analyze_body(_body(deferred="none"), source="fixture")
@@ -33,6 +62,131 @@ def test_analyze_body_passes_when_no_deferred_work_is_declared() -> None:
     assert report.status == "ok"
     assert report.deferred_work == ""
     assert report.message == "No deferred work declared."
+
+
+def test_domain_approval_not_required_for_na_or_docs_only_research_fields() -> None:
+    """Routine docs/support PRs can opt out without domain-review friction."""
+    report = analyze_domain_approval(
+        _domain_body(evidence_tier="docs-only", result_classification="NA"),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+    assert report.sensitive_terms == ()
+
+
+def test_domain_approval_required_for_non_na_research_fields() -> None:
+    """Evidence-result PR bodies need the domain approval section."""
+    report = analyze_domain_approval(_domain_body(), source="fixture")
+
+    assert report.status == "missing_domain_approval"
+    assert "Evidence tier: targeted smoke" in report.sensitive_terms
+    assert "Result classification: blocker-resolution" in report.sensitive_terms
+
+
+def test_domain_approval_accepts_approved_review_source() -> None:
+    """Approved domain-review metadata satisfies the evidence-validity gate."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section=_approved_domain_section(
+                note="maintainer review of claim boundary and fallback exclusions"
+            )
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+    assert "maintainer review" in report.approval_note
+
+
+def test_domain_approval_accepts_explicit_maintainer_waiver() -> None:
+    """A maintainer waiver is explicit enough to avoid pretending approval happened."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section=_approved_domain_section(
+                status="waived",
+                note="maintainer waiver; diagnostic-only docs update",
+            )
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+    assert "waiver" in report.approval_note
+
+
+def test_domain_approval_rejects_pending_or_placeholder_status() -> None:
+    """Pending domain review keeps a sensitive PR out of final readiness."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section="""## Domain-Aware Approval
+- Required for this PR: yes
+- Domains reviewed: experimental comparison
+- Status: pending
+- Approver/review source or waiver: waiting for domain reviewer
+- Validity checklist:
+  - Target claim/hypothesis: issue claim boundary stays diagnostic-only
+  - Comparator or split/evidence validity: existing targeted smoke proof only
+  - Fallback/degraded exclusions: fallback/degraded evidence remains excluded
+  - Claim boundary: no paper-facing benchmark claim
+  - Implementation integrity vs experimental validity: tests prove gate behavior, not result validity
+"""
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "pending_domain_approval"
+
+
+def test_domain_approval_rejects_not_approved_status() -> None:
+    """A negated approval phrase cannot satisfy the final-readiness gate."""
+    report = analyze_domain_approval(
+        _domain_body(domain_section=_approved_domain_section(status="not approved")),
+        source="fixture",
+    )
+
+    assert report.status == "invalid_domain_approval_status"
+
+
+def test_domain_approval_requires_validity_checklist_fields() -> None:
+    """Approval metadata must include the evidence-validity checklist."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section="""## Domain-Aware Approval
+- Required for this PR: yes - evidence-validity-sensitive result classification
+- Domains reviewed: experimental comparison
+- Status: approved
+- Approver/review source or waiver: maintainer review
+- Validity checklist:
+  - Target claim/hypothesis: issue claim boundary stays diagnostic-only
+  - Comparator or split/evidence validity:
+  - Fallback/degraded exclusions: fallback/degraded evidence remains excluded
+  - Claim boundary: no paper-facing benchmark claim
+  - Implementation integrity vs experimental validity: tests prove gate behavior, not result validity
+"""
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "incomplete_domain_approval"
+    assert "Comparator or split/evidence validity" in report.checklist_errors
+
+
+def test_domain_approval_rejects_not_required_for_sensitive_result() -> None:
+    """Non-NA evidence fields cannot be paired with a not-required approval claim."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section="""## Domain-Aware Approval
+- Required for this PR: no - ordinary implementation
+- Domains reviewed: NA
+- Status: not required
+- Approver/review source or waiver: NA
+"""
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "domain_approval_required"
 
 
 def test_analyze_body_requires_issue_when_deferred_work_is_declared() -> None:
@@ -242,6 +396,33 @@ def test_cli_fails_for_deferred_work_without_disposition(tmp_path: Path) -> None
 
     assert result.returncode == 2
     assert "status=missing_followup" in result.stderr
+
+
+def test_cli_fails_for_sensitive_pr_without_domain_approval(tmp_path: Path) -> None:
+    """The CLI blocks evidence-validity PR bodies that omit domain-aware approval."""
+    body_path = tmp_path / "body.md"
+    body_path.write_text(
+        """## Research Result Guidance
+- Evidence tier: targeted smoke
+- Result classification: blocker-resolution
+
+## Follow-Up Issues
+- Deferred work: none
+- Issues opened for follow-up: none
+""",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--body-file", str(body_path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "status=missing_domain_approval" in result.stderr
 
 
 def test_cli_require_body_fails_closed_without_pr_body_source(monkeypatch) -> None:

@@ -182,9 +182,7 @@ def _validate_provenance_artifact_entry(collection_name: str, artifact: object) 
             f"Simulation-run provenance {collection_name} available entries require sha256"
         )
     if status not in {"available", "missing", "not_file"}:
-        raise ValueError(
-            f"Simulation-run provenance {collection_name} artifact_status is invalid"
-        )
+        raise ValueError(f"Simulation-run provenance {collection_name} artifact_status is invalid")
 
 
 def _validate_simulation_run_provenance(bundle: dict[str, object]) -> None:

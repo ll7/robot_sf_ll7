@@ -1,27 +1,53 @@
 {
   "schema_version": "issue_2777_observation_noise_live_replay.v1",
+  "artifact_shape": "compact_summary_without_raw_traces",
   "issue": 2777,
-  "status": "fail_closed",
+  "matrix_issue": 3320,
+  "status": "live_replay",
   "classification": {
-    "label": "blocked",
-    "rationale": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    "label": "scenario_too_weak",
+    "rationale": "All seven perturbation-family live replays completed."
   },
-  "claim_boundary": "No benchmark-facing robustness claim. The command failed closed before live replay because the #2755/#2756 occluded-emergence fixture boundary could not be preserved.",
+  "claim_boundary": "Stress-slice live planner/environment replay for one scenario, one seed, and seven #2755 perturbation families. Treat as benchmark-facing only when fixture_contract.satisfied is true; otherwise diagnostic-only.",
+  "inputs": {
+    "scenario_matrix": "configs/scenarios/sets/issue_3320_occluded_emergence_live_replay.yaml",
+    "raw_trace_json": "worktree-local generated artifacts summarized here; raw docs/context/evidence/issue_2777_live_observation_noise_replay/traces/*/trace.json files were intentionally not committed",
+    "generated_funnel": "worktree-local generated artifact summarized here; generated_policy_search_funnel.yaml was intentionally not committed"
+  },
   "fixture_contract": {
     "required_source_issue": 2756,
     "required_scenario": "issue_2756_occluded_emergence",
     "required_family": "occluded_emergence/deterministic_occluded_emergence",
+    "required_seed": 111,
     "first_visible_step": 5,
     "delay_steps": 2,
     "delay_only_expected_first_observed_step": 7,
-    "scenario_matrix": "configs/scenarios/sets/issue_3201_pedestrian_dominated_observation_noise.yaml",
-    "satisfied": false,
-    "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    "scenario_matrix": "configs/scenarios/sets/issue_3320_occluded_emergence_live_replay.yaml",
+    "satisfied": true,
+    "blocker": null,
+    "matched_scenario": {
+      "name": "issue_2756_occluded_emergence",
+      "source_issue": 2756,
+      "family": "occluded_emergence",
+      "label": "deterministic_occluded_emergence",
+      "seeds": [
+        111
+      ],
+      "first_visible_step": 5,
+      "delay_steps": 2,
+      "delay_only_expected_first_observed_step": 7
+    }
+  },
+  "fixture_observation_boundary": {
+    "noop_first_observed_step": 5,
+    "delay_only_first_observed_step": 7,
+    "expected_noop_first_observed_step": 5,
+    "expected_delay_only_first_observed_step": 7
   },
   "run_config": {
     "candidate": "risk_surface_dwa_v0",
     "stage": "smoke",
-    "scenario_matrix": "configs/scenarios/sets/issue_3201_pedestrian_dominated_observation_noise.yaml",
+    "scenario_matrix": "configs/scenarios/sets/issue_3320_occluded_emergence_live_replay.yaml",
     "scenario_name": null,
     "scenario_index": 0,
     "seed": null,
@@ -34,48 +60,672 @@
   "conditions": [
     {
       "name": "noop",
-      "description": "Unperturbed live planner/environment replay.",
-      "status": "blocked",
-      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "fixture_visibility",
+          "none"
+        ]
+      },
+      "command_summary": {
+        "first": [
+          2.0,
+          0.0
+        ],
+        "last": [
+          2.0,
+          0.0
+        ]
+      },
+      "progress_summary": {
+        "net_goal_progress": -6.406017516898584,
+        "best_goal_progress": 1.4428721856717952,
+        "closest_robot_ped_distance": 21.803818559278636,
+        "closest_robot_ped_step": 49,
+        "collision_flag_counts": {
+          "pedestrian": 0,
+          "obstacle": 0,
+          "robot": 0
+        },
+        "progress_step_count": 49,
+        "regression_step_count": 1,
+        "stagnant_step_count": 0,
+        "longest_stagnant_run": 0
+      }
     },
     {
       "name": "low_noise",
-      "description": "Bounded Gaussian pedestrian-position perturbation, std=0.10 m, bound=0.20 m.",
-      "status": "blocked",
-      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "bounded_gaussian"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          2.0,
+          0.0
+        ],
+        "condition_last": [
+          2.0,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": -6.406017516898584,
+          "condition": -6.406017516898584,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 1.4428721856717952,
+          "condition": 1.4428721856717952,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 21.803818559278636,
+          "condition": 21.803818559278636,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "scenario_too_weak",
+        "rationale": "The live condition did not expose a near-field behavior difference against the no-op trace."
+      }
     },
     {
       "name": "medium_noise",
-      "description": "Bounded Gaussian pedestrian-position perturbation, std=0.30 m, bound=0.60 m.",
-      "status": "blocked",
-      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "bounded_gaussian"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          2.0,
+          0.0
+        ],
+        "condition_last": [
+          2.0,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": -6.406017516898584,
+          "condition": -6.406017516898584,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 1.4428721856717952,
+          "condition": 1.4428721856717952,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 21.803818559278636,
+          "condition": 21.803818559278636,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "scenario_too_weak",
+        "rationale": "The live condition did not expose a near-field behavior difference against the no-op trace."
+      }
     },
     {
       "name": "missed_detection_only",
-      "description": "All live pedestrians removed from planner input by missed-detection probability 1.0.",
-      "status": "blocked",
-      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": null
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 50,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 0,
+        "noise_profiles": [
+          "missed_detection"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          2.0,
+          0.0
+        ],
+        "condition_last": [
+          2.0,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": -6.406017516898584,
+          "condition": -6.406017516898584,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 1.4428721856717952,
+          "condition": 1.4428721856717952,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 21.803818559278636,
+          "condition": 21.803818559278636,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "scenario_too_weak",
+        "rationale": "The live condition did not expose a near-field behavior difference against the no-op trace."
+      }
     },
     {
       "name": "occlusion_only",
-      "description": "All live pedestrians occluded from planner input with a zero-distance occlusion gate.",
-      "status": "blocked",
-      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 45,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "occlusion_mask"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          2.0,
+          0.0
+        ],
+        "condition_last": [
+          2.0,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": -6.406017516898584,
+          "condition": -6.406017516898584,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 1.4428721856717952,
+          "condition": 1.4428721856717952,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 21.803818559278636,
+          "condition": 21.803818559278636,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "scenario_too_weak",
+        "rationale": "The live condition did not expose a near-field behavior difference against the no-op trace."
+      }
     },
     {
       "name": "delay_only",
-      "description": "Two-step delayed pedestrian observation, preserving the #2755 expected lag.",
-      "status": "blocked",
-      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 7
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "delayed_observation"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          2.0,
+          0.0
+        ],
+        "condition_last": [
+          2.0,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": -6.406017516898584,
+          "condition": -6.406017516898584,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 1.4428721856717952,
+          "condition": 1.4428721856717952,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 21.803818559278636,
+          "condition": 21.803818559278636,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "scenario_too_weak",
+        "rationale": "The live condition did not expose a near-field behavior difference against the no-op trace."
+      }
     },
     {
       "name": "combined",
-      "description": "Medium Gaussian perturbation plus full live-pedestrian occlusion.",
-      "status": "blocked",
-      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 45,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "bounded_gaussian"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          2.0,
+          0.0
+        ],
+        "condition_last": [
+          2.0,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": -6.406017516898584,
+          "condition": -6.406017516898584,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 1.4428721856717952,
+          "condition": 1.4428721856717952,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 21.803818559278636,
+          "condition": 21.803818559278636,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 49,
+          "condition": 49,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "scenario_too_weak",
+        "rationale": "The live condition did not expose a near-field behavior difference against the no-op trace."
+      }
     }
   ],
-  "blockers": [
-    "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
-  ]
+  "blockers": []
 }

@@ -1,0 +1,36 @@
+scenarios:
+- name: issue_2756_occluded_emergence
+  scenario_family: occluded_emergence
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_blind_corner.svg
+  simulation_config:
+    max_episode_steps: 160
+    ped_density: 0.0
+  observation_visibility:
+    enabled: true
+    fov_degrees: 120.0
+    max_range_m: 8.0
+    static_occlusion: true
+  single_pedestrians:
+  - id: h1
+    goal_poi: poi_h1_goal
+    metadata:
+      role: emerging_ped
+      source_issue: 2756
+  robot_config: {}
+  metadata:
+    source_issue: 2756
+    source_fixture: tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json
+    source_fixture_meta: tests/fixtures/analysis_workbench/simulation_trace_export_v1/sources/issue_2756_occluded_emergence_fixture_111_ep0000.meta.json
+    family: occluded_emergence
+    label: deterministic_occluded_emergence
+    fixture_contract:
+      first_visible_step: 5
+      delay_steps: 2
+      delay_only_expected_first_observed_step: 7
+    claim_boundary: >
+      Live diagnostics stress slice preserving the issue #2756
+      occluded-emergence fixture boundary for issue #2777 observation
+      perturbation replay. Diagnostic/stress evidence only; not paper-facing
+      benchmark evidence by itself.
+  seeds:
+  - 111

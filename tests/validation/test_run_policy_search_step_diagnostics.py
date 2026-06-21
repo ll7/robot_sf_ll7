@@ -7,6 +7,8 @@ import pytest
 from scripts.validation.run_policy_search_step_diagnostics import (
     _apply_observed_pedestrians_to_policy_obs,
     _diagnostics_stdout_payload,
+    _fixture_first_visible_step,
+    _fixture_visibility_mask,
     _format_planner_summary_lines,
     _occlusion_mask_by_distance,
     _pedestrian_state_from_sim,
@@ -226,6 +228,27 @@ def test_occlusion_mask_by_distance_marks_out_of_range_pedestrians() -> None:
     mask = _occlusion_mask_by_distance(env, positions, occlusion_distance_m=2.0)
 
     assert mask.tolist() == [False, True]
+
+
+def test_fixture_visibility_mask_hides_until_first_visible_step() -> None:
+    """Fixture metadata should become an all-hidden mask before first visibility."""
+    scenario = {"metadata": {"fixture_contract": {"first_visible_step": 5}}}
+
+    first_visible_step = _fixture_first_visible_step(scenario)
+    hidden = _fixture_visibility_mask(
+        actor_count=2,
+        step=4,
+        first_visible_step=first_visible_step,
+    )
+    visible = _fixture_visibility_mask(
+        actor_count=2,
+        step=5,
+        first_visible_step=first_visible_step,
+    )
+
+    assert first_visible_step == 5
+    assert hidden.tolist() == [False, False]
+    assert visible is None
 
 
 def test_policy_obs_uses_observed_pedestrian_payload() -> None:

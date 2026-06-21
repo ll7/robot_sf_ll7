@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -397,6 +398,45 @@ def _pedestrian_state_from_sim(env: Any) -> tuple[np.ndarray, np.ndarray, list[s
     return ped_pos, ped_vel, actor_ids
 
 
+def _fixture_first_visible_step(scenario: Mapping[str, Any]) -> int | None:
+    """Return a scenario fixture first-visible step when explicitly configured."""
+    metadata = scenario.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return None
+    fixture = metadata.get("fixture_contract")
+    if not isinstance(fixture, Mapping):
+        return None
+    value = fixture.get("first_visible_step")
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _empty_observation_snapshot() -> dict[str, Any]:
+    """Return an empty observation snapshot for delay-buffer warmup."""
+    return {
+        "positions": np.zeros((0, 2), dtype=float),
+        "velocities": np.zeros((0, 2), dtype=float),
+        "ids": [],
+    }
+
+
+def _fixture_visibility_mask(
+    *,
+    actor_count: int,
+    step: int,
+    first_visible_step: int | None,
+) -> np.ndarray | None:
+    """Return a mask that hides all actors before a fixture first-visible step."""
+    if first_visible_step is None or step >= first_visible_step:
+        return None
+    return np.zeros(max(0, int(actor_count)), dtype=bool)
+
+
 def _occlusion_mask_by_distance(
     env: Any,
     ped_pos: np.ndarray,
@@ -414,7 +454,10 @@ def _occlusion_mask_by_distance(
 
 
 def _observation_perturbation_spec(
-    args: argparse.Namespace, env: Any
+    args: argparse.Namespace,
+    env: Any,
+    *,
+    visibility_mask: np.ndarray | None = None,
 ) -> ObservationPerturbationSpec:
     """Build a per-step observation perturbation spec from CLI flags."""
     ped_pos, _ped_vel, _actor_ids = _pedestrian_state_from_sim(env)
@@ -428,6 +471,7 @@ def _observation_perturbation_spec(
             occlusion_distance_m=args.occlusion_distance_m,
         ),
         delay_steps=int(args.observation_delay_steps),
+        visibility_mask=visibility_mask,
         seed=args.observation_perturbation_seed,
     )
 
@@ -557,6 +601,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         if int(args.observation_delay_steps) > 0
         else None
     )
+    first_visible_step = _fixture_first_visible_step(scenario)
+    if observation_state is not None and first_visible_step is not None:
+        observation_state.reset(initial_obs=_empty_observation_snapshot())
     try:
         obs, _ = env.reset(seed=seed)
         if callable(planner_bind_env):
@@ -573,7 +620,16 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 min_robot_ped_dist = _obs_min_robot_ped_distance(obs)
 
             ped_pos, ped_vel, actor_ids = _pedestrian_state_from_sim(env)
-            perturbation_spec = _observation_perturbation_spec(args, env)
+            visibility_mask = _fixture_visibility_mask(
+                actor_count=len(actor_ids),
+                step=step_idx,
+                first_visible_step=first_visible_step,
+            )
+            perturbation_spec = _observation_perturbation_spec(
+                args,
+                env,
+                visibility_mask=visibility_mask,
+            )
             perturbation = perturb_ground_truth(
                 ped_pos,
                 ped_vel,
@@ -667,6 +723,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "occlusion_distance_m": args.occlusion_distance_m,
             "delay_steps": int(args.observation_delay_steps),
             "seed": args.observation_perturbation_seed,
+            "fixture_first_visible_step": first_visible_step,
         },
         "planner_summary": _json_ready(planner_summary),
         "progress_summary": _json_ready(progress_summary),

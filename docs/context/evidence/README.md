@@ -174,6 +174,11 @@ Policy caveats:
   perception-limited observation-noise step diagnostics for `hybrid_rule_v0_minimal` on a
   pedestrian-present stress-slice scenario; perturbation plumbing activated, but the distant
   pedestrian produced no measurable planner degradation.
+- `issue_2777_live_observation_noise_replay/`: diagnostic stress-slice live replay for all seven
+  #2755 perturbation families on the #2756 occluded-emergence boundary added by #3320. The wrapper
+  ran `risk_surface_dwa_v0` on `issue_2756_occluded_emergence` seed 111, preserved no-op first
+  visibility at step 5 and delay-only first observation at step 7, but remained
+  `scenario_too_weak` because commands and progress/risk summaries did not change.
 - `issue_3201_observation_noise_live_smoke/`: diagnostic-only same-seed clean vs perturbed
   step-diagnostics replay on the `dense_pedestrian_stress` live matrix candidate. Perturbation
   changed planner-input pedestrian observations, but commands and progress/risk summaries stayed

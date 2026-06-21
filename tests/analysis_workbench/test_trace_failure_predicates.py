@@ -902,6 +902,36 @@ def test_denominator_health_json_report() -> None:
     assert otnm_summary["claim_eligibility"] == "claim-ineligible"
 
 
+def test_absent_expected_slices_are_rendered_as_caveats() -> None:
+    """Markdown should identify absent matrix slices separately from zero observed predicates."""
+    trace = _build_trace(
+        trace_id="open-field-dwa-999",
+        scenario_id="open_field",
+        seed=999,
+        planner_id="dwa",
+        frames=[_frame(0, 0.0, planner_extra={"event": "step"})],
+    )
+    matrix = {
+        "schema_version": "trace_predicate_matrix.v1",
+        "name": "missing_slice_matrix",
+        "status": "rate_interpretable",
+        "matrix": {
+            "scenario_families": ["open_field"],
+            "planners": ["dwa"],
+            "seeds": [999, 1000],
+        },
+    }
+
+    payload = aggregate_trace_failure_predicate_tables([trace], matrix=matrix)
+    markdown = render_trace_failure_predicate_markdown(payload)
+
+    assert "Expected Matrix Slices Absent From Inputs" in markdown
+    assert "absent_expected_slice" in markdown
+    assert "open_field" in markdown
+    assert "1000" in markdown
+    assert "expected matrix slice is absent" in markdown
+
+
 def test_writer_persists_denominator_health_json_when_requested(tmp_path: Path) -> None:
     """The writer should persist compact denominator health JSON when requested."""
     trace = _build_trace(

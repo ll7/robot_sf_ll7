@@ -35,11 +35,13 @@ VALIDITY_STATUS_VALID = "valid"
 VALIDITY_STATUS_UNAVAILABLE_DATA = "not_available"
 VALIDITY_STATUS_NO_PREDICATE_OBSERVED = "no_predicate_observed"
 VALIDITY_STATUS_PIPELINE_FAILURE = "pipeline_failure"
+VALIDITY_STATUS_ABSENT_EXPECTED_SLICE = "absent_expected_slice"
 DENOMINATOR_HEALTH_STATUSES = (
     VALIDITY_STATUS_VALID,
     VALIDITY_STATUS_UNAVAILABLE_DATA,
     VALIDITY_STATUS_NO_PREDICATE_OBSERVED,
     VALIDITY_STATUS_PIPELINE_FAILURE,
+    VALIDITY_STATUS_ABSENT_EXPECTED_SLICE,
 )
 
 TRACE_FAILURE_PREDICATE_IDS = (
@@ -458,7 +460,6 @@ def aggregate_trace_failure_predicate_tables(
     included_trace_count = 0
     predicate_status_counts: dict[str, Counter[str]] = defaultdict(Counter)
     failed_trace_id_list = list(failed_trace_ids or [])
-
     if failed_trace_id_list:
         for _failed_id in failed_trace_id_list:
             for pred_id in TRACE_FAILURE_PREDICATE_IDS:
@@ -506,6 +507,18 @@ def aggregate_trace_failure_predicate_tables(
             predicate_status_counts,
             predicate_statuses_in_trace,
         )
+
+    expected_slices = _matrix_expected_slices(matrix, scenario_family_filter=scenario_family)
+    absent_expected_slices = _absent_expected_slice_rows(
+        expected_slices=expected_slices,
+        observed_slices=set(trace_denominators),
+        failed_trace_ids=failed_trace_id_list,
+    )
+    absent_expected_slice_count = len(absent_expected_slices)
+    _record_absent_expected_slice_statuses(
+        predicate_status_counts,
+        absent_expected_slice_count=absent_expected_slice_count,
+    )
 
     rows = [
         {
@@ -593,6 +606,8 @@ def aggregate_trace_failure_predicate_tables(
         "summary": {
             "input_trace_count": included_trace_count + len(failed_trace_id_list),
             "failed_trace_count": len(failed_trace_id_list),
+            "expected_matrix_slice_count": len(expected_slices),
+            "absent_expected_slice_count": absent_expected_slice_count,
             "scenario_family_filter": scenario_family,
             "row_count": len(rows),
         },
@@ -601,8 +616,10 @@ def aggregate_trace_failure_predicate_tables(
         "denominator_status": _aggregate_denominator_status(
             included_trace_count=included_trace_count,
             failed_trace_count=len(failed_trace_id_list),
+            absent_expected_slice_count=absent_expected_slice_count,
         ),
         "rows": rows,
+        "absent_expected_slices": absent_expected_slices,
         "zero_predicate_groups": zero_predicate_groups,
         "predicate_denominator_health": {
             pred_id: {
@@ -617,6 +634,7 @@ def aggregate_trace_failure_predicate_tables(
             "`zero_predicate_groups` preserves trace groups with valid predicate count equal to zero.",
             f"Rows with `{VALIDITY_STATUS_NO_PREDICATE_OBSERVED}` mark trace groups that had no predicate rows at all.",
             f"Rows with `{VALIDITY_STATUS_PIPELINE_FAILURE}` mark traces that failed to load.",
+            f"Rows or health counts with `{VALIDITY_STATUS_ABSENT_EXPECTED_SLICE}` mark predeclared matrix slices absent from both loaded traces and failed trace IDs.",
             "Rate claims require a predeclared benchmark matrix; do not infer rates from these diagnostic rows.",
         ],
     }
@@ -640,7 +658,140 @@ def _record_predicate_denominator_statuses(
             predicate_status_counts[pred_id][VALIDITY_STATUS_NO_PREDICATE_OBSERVED] += 1
 
 
-def _aggregate_denominator_status(*, included_trace_count: int, failed_trace_count: int) -> str:
+def _record_absent_expected_slice_statuses(
+    predicate_status_counts: dict[str, Counter[str]],
+    *,
+    absent_expected_slice_count: int,
+) -> None:
+    """Record missing matrix slices as claim-blocking predicate denominator health."""
+    if absent_expected_slice_count <= 0:
+        return
+    for pred_id in TRACE_FAILURE_PREDICATE_IDS:
+        predicate_status_counts[pred_id][VALIDITY_STATUS_ABSENT_EXPECTED_SLICE] += (
+            absent_expected_slice_count
+        )
+
+
+def _absent_expected_slice_rows(
+    *,
+    expected_slices: set[tuple[str, str, int]],
+    observed_slices: set[tuple[str, str, int]],
+    failed_trace_ids: list[str],
+) -> list[dict[str, Any]]:
+    """Return matrix slices absent from loaded traces and failed trace IDs."""
+    failed_expected_slices = _failed_expected_slices(
+        expected_slices=expected_slices,
+        failed_trace_ids=failed_trace_ids,
+    )
+    return [
+        {
+            "scenario_family": family,
+            "planner_id": planner_id,
+            "seed": seed,
+            "status": VALIDITY_STATUS_ABSENT_EXPECTED_SLICE,
+        }
+        for family, planner_id, seed in sorted(
+            expected_slices - observed_slices - failed_expected_slices
+        )
+    ]
+
+
+def _failed_expected_slices(
+    *,
+    expected_slices: set[tuple[str, str, int]],
+    failed_trace_ids: list[str],
+) -> set[tuple[str, str, int]]:
+    """Return expected slices named by failed trace IDs."""
+    return {
+        expected
+        for expected in expected_slices
+        if any(
+            _failed_trace_id_matches_slice(failed_id, expected) for failed_id in failed_trace_ids
+        )
+    }
+
+
+def _matrix_expected_slices(
+    matrix: Mapping[str, Any] | None,
+    *,
+    scenario_family_filter: str | None,
+) -> set[tuple[str, str, int]]:
+    """Return expected scenario/planner/seed slices declared by a matrix."""
+    if matrix is None:
+        return set()
+    matrix_spec = matrix.get("matrix", {})
+    if not isinstance(matrix_spec, Mapping):
+        return set()
+    scenario_families = _string_list(matrix_spec.get("scenario_families"))
+    if scenario_family_filter is not None:
+        scenario_families = [
+            family for family in scenario_families if family == scenario_family_filter
+        ]
+    planners = _string_list(matrix_spec.get("planners"))
+    seeds = _int_list(matrix_spec.get("seeds"))
+    return {
+        (scenario_family, planner_id, seed)
+        for scenario_family in scenario_families
+        for planner_id in planners
+        for seed in seeds
+    }
+
+
+def _string_list(raw_values: Any) -> list[str]:
+    """Return non-empty string values from a matrix field."""
+    if not isinstance(raw_values, list | tuple):
+        return []
+    return [str(value) for value in raw_values if value is not None and str(value)]
+
+
+def _int_list(raw_values: Any) -> list[int]:
+    """Return integer values from a matrix field."""
+    if not isinstance(raw_values, list | tuple):
+        return []
+    values: list[int] = []
+    for value in raw_values:
+        try:
+            values.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+def _failed_trace_id_matches_slice(
+    failed_trace_id: str,
+    expected_slice: tuple[str, str, int],
+) -> bool:
+    """Return whether a failed trace ID names an expected scenario/planner/seed slice."""
+    scenario_family, planner_id, seed = expected_slice
+    normalized_failed_id = _normalized_identifier(failed_trace_id)
+    expected_identifier = (
+        f"{_normalized_identifier(scenario_family)}{_normalized_identifier(planner_id)}{seed}"
+    )
+    start = 0
+    while True:
+        match_index = normalized_failed_id.find(expected_identifier, start)
+        if match_index == -1:
+            return False
+        next_char_index = match_index + len(expected_identifier)
+        if (
+            next_char_index >= len(normalized_failed_id)
+            or not normalized_failed_id[next_char_index].isdigit()
+        ):
+            return True
+        start = match_index + 1
+
+
+def _normalized_identifier(value: Any) -> str:
+    """Return a compact alphanumeric identifier for slice matching."""
+    return "".join(char for char in str(value).lower() if char.isalnum())
+
+
+def _aggregate_denominator_status(
+    *,
+    included_trace_count: int,
+    failed_trace_count: int,
+    absent_expected_slice_count: int = 0,
+) -> str:
     """Classify aggregate denominator availability for machine-readable consumers.
 
     Returns:
@@ -648,6 +799,8 @@ def _aggregate_denominator_status(*, included_trace_count: int, failed_trace_cou
     """
     if failed_trace_count > 0:
         return VALIDITY_STATUS_PIPELINE_FAILURE
+    if absent_expected_slice_count > 0:
+        return VALIDITY_STATUS_UNAVAILABLE_DATA
     if included_trace_count > 0:
         return VALIDITY_STATUS_VALID
     return VALIDITY_STATUS_UNAVAILABLE_DATA
@@ -706,6 +859,10 @@ def render_trace_failure_predicate_markdown(
     if not isinstance(zero_groups, list):
         zero_groups = []
     zero_group_rows = [row for row in zero_groups if isinstance(row, Mapping)]
+    absent_slices = table_payload.get("absent_expected_slices")
+    if not isinstance(absent_slices, list):
+        absent_slices = []
+    absent_slice_rows = [row for row in absent_slices if isinstance(row, Mapping)]
     observed_rows = [
         row
         for row in table_rows
@@ -777,6 +934,29 @@ def render_trace_failure_predicate_markdown(
                 ],
             )
         )
+    if absent_slice_rows:
+        lines.append("")
+        lines.append("### Expected Matrix Slices Absent From Inputs")
+        lines.append("")
+        lines.append(
+            _markdown_table(
+                (
+                    "scenario_family",
+                    "planner_id",
+                    "seed",
+                    "status",
+                ),
+                [
+                    (
+                        _markdown_value(row.get("scenario_family")),
+                        _markdown_value(row.get("planner_id")),
+                        _markdown_value(row.get("seed")),
+                        _markdown_value(row.get("status")),
+                    )
+                    for row in absent_slice_rows
+                ],
+            )
+        )
     lines.append("")
     lines.extend(_render_denominator_health_section(health_report))
     return "\n".join(lines).rstrip() + "\n"
@@ -793,6 +973,7 @@ def build_trace_predicate_denominator_health_report(
     summary = _read_mapping(table_payload.get("summary"), {})
     input_trace_count = int(summary.get("input_trace_count", 0) or 0)
     failed_trace_count = int(summary.get("failed_trace_count", 0) or 0)
+    absent_expected_slice_count = int(summary.get("absent_expected_slice_count", 0) or 0)
     raw_health = table_payload.get("predicate_denominator_health")
     health_by_predicate = raw_health if isinstance(raw_health, Mapping) else {}
     matrix_metadata = table_payload.get("matrix_metadata")
@@ -809,16 +990,25 @@ def build_trace_predicate_denominator_health_report(
         unavailable_count = int(counts.get(VALIDITY_STATUS_UNAVAILABLE_DATA, 0) or 0)
         no_predicate_count = int(counts.get(VALIDITY_STATUS_NO_PREDICATE_OBSERVED, 0) or 0)
         pipeline_failure_count = int(counts.get(VALIDITY_STATUS_PIPELINE_FAILURE, 0) or 0)
-        total_count = valid_count + unavailable_count + no_predicate_count + pipeline_failure_count
+        absent_slice_count = int(counts.get(VALIDITY_STATUS_ABSENT_EXPECTED_SLICE, 0) or 0)
+        total_count = (
+            valid_count
+            + unavailable_count
+            + no_predicate_count
+            + pipeline_failure_count
+            + absent_slice_count
+        )
         if total_count == 0 and input_trace_count > 0:
             no_predicate_count = max(input_trace_count - failed_trace_count, 0)
             pipeline_failure_count = failed_trace_count
-            total_count = input_trace_count
+            absent_slice_count = absent_expected_slice_count
+            total_count = input_trace_count + absent_slice_count
         claim_eligibility, allowed_wording = _predicate_claim_status(
             valid_count=valid_count,
             unavailable_count=unavailable_count,
             no_predicate_count=no_predicate_count,
             pipeline_failure_count=pipeline_failure_count,
+            absent_slice_count=absent_slice_count,
         )
         if not matrix_present:
             claim_eligibility = MATRIX_CLAIM_INELIGIBLE
@@ -829,10 +1019,12 @@ def build_trace_predicate_denominator_health_report(
             "unavailable_data_count": unavailable_count,
             "no_predicate_observed_count": no_predicate_count,
             "pipeline_failure_count": pipeline_failure_count,
+            "absent_expected_slice_count": absent_slice_count,
             "valid_ratio": _ratio(valid_count, total_count),
             "unavailable_data_ratio": _ratio(unavailable_count, total_count),
             "no_predicate_observed_ratio": _ratio(no_predicate_count, total_count),
             "pipeline_failure_ratio": _ratio(pipeline_failure_count, total_count),
+            "absent_expected_slice_ratio": _ratio(absent_slice_count, total_count),
             "claim_eligibility": claim_eligibility,
             "allowed_wording": allowed_wording,
         }
@@ -840,7 +1032,7 @@ def build_trace_predicate_denominator_health_report(
     caveats = [
         "This report is diagnostic-only and does not convert missing predicate evidence into negative findings.",
         "`no_predicate_observed` can be expected missingness; it is not evidence that a failure did not occur.",
-        "`not_available` and `pipeline_failure` weaken or block downstream figure/table claims.",
+        "`not_available`, `pipeline_failure`, and `absent_expected_slice` weaken or block downstream figure/table claims.",
     ]
     if not matrix_present:
         caveats.append(
@@ -854,10 +1046,12 @@ def build_trace_predicate_denominator_health_report(
         "summary": {
             "total_traces_processed": input_trace_count,
             "failed_trace_count": failed_trace_count,
+            "absent_expected_slice_count": absent_expected_slice_count,
             "predicate_family_count": len(TRACE_FAILURE_PREDICATE_IDS),
             "denominator_status": _aggregate_denominator_status(
                 included_trace_count=max(input_trace_count - failed_trace_count, 0),
                 failed_trace_count=failed_trace_count,
+                absent_expected_slice_count=absent_expected_slice_count,
             ),
         },
         "predicates": predicate_reports,
@@ -875,6 +1069,10 @@ def _render_denominator_health_section(denominator_health_report: Mapping[str, A
     overall_summary = denominator_health_report.get("summary", {})
     lines.append(f"- Total Traces Processed: {overall_summary.get('total_traces_processed', 0)}")
     lines.append(f"- Traces with Pipeline Failures: {overall_summary.get('failed_trace_count', 0)}")
+    lines.append(
+        "- Expected Matrix Slices Absent From Inputs: "
+        f"{overall_summary.get('absent_expected_slice_count', 0)}"
+    )
     lines.append("")
     lines.append("### Missingness Categories")
     lines.append(f"- `{VALIDITY_STATUS_VALID}`: predicate evaluated and emitted valid evidence.")
@@ -889,6 +1087,11 @@ def _render_denominator_health_section(denominator_health_report: Mapping[str, A
     lines.append(
         f"- `{VALIDITY_STATUS_PIPELINE_FAILURE}`: the trace could not be loaded or processed; "
         "dependent outputs are claim-ineligible."
+    )
+    lines.append(
+        f"- `{VALIDITY_STATUS_ABSENT_EXPECTED_SLICE}`: a scenario/planner/seed matrix slice was "
+        "absent from both loaded traces and failed trace IDs; dependent outputs are "
+        "claim-ineligible."
     )
     lines.append("")
 
@@ -913,6 +1116,8 @@ def _render_denominator_health_section(denominator_health_report: Mapping[str, A
                 f"{_markdown_float(data.get('no_predicate_observed_ratio')):.2%}",
                 _markdown_int(data.get("pipeline_failure_count")),
                 f"{_markdown_float(data.get('pipeline_failure_ratio')):.2%}",
+                _markdown_int(data.get("absent_expected_slice_count")),
+                f"{_markdown_float(data.get('absent_expected_slice_ratio')):.2%}",
                 _markdown_value(data.get("claim_eligibility")),
                 _markdown_value(data.get("allowed_wording")),
             )
@@ -933,6 +1138,8 @@ def _render_denominator_health_section(denominator_health_report: Mapping[str, A
                     "% Not Observed",
                     "Pipeline Failure",
                     "% Pipeline Fail",
+                    "Absent Expected Slice",
+                    "% Absent Slice",
                     "Claim Eligibility",
                     "Allowed Wording",
                 ),
@@ -948,6 +1155,7 @@ def _predicate_claim_status(
     unavailable_count: int,
     no_predicate_count: int,
     pipeline_failure_count: int,
+    absent_slice_count: int,
 ) -> tuple[str, str]:
     """Classify predicate-family claim eligibility from denominator health.
 
@@ -956,6 +1164,8 @@ def _predicate_claim_status(
     """
     if pipeline_failure_count > 0:
         return "claim-ineligible", "pipeline failed; do not make predicate-family claims"
+    if absent_slice_count > 0:
+        return "claim-ineligible", "expected matrix slice is absent from provided inputs"
     if valid_count == 0 and unavailable_count > 0:
         return "claim-ineligible", "required predicate evidence is unavailable"
     if valid_count == 0 and no_predicate_count > 0:

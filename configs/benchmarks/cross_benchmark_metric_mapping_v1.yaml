@@ -1,0 +1,89 @@
+schema_version: cross-benchmark-metric-mapping.v1
+issue: 3286
+claim_boundary: trace-derived wrapper smoke evidence; not simulator parity or paper-grade evidence
+status_vocabulary:
+  mapping_class:
+    - exact
+    - approximate
+    - unavailable
+  value_status:
+    - available
+    - approximate
+    - unavailable
+rows:
+  - metric_id: socnavbench.path_length_ratio
+    benchmark: SocNavBench
+    external_metric: path_length_ratio
+    robot_sf_source: socnavbench_path_length_ratio
+    units: ratio
+    denominator: straight_line_start_to_goal_distance_m
+    mapping_class: exact
+    evidence_tier: trace-derived
+    semantic_notes: >-
+      Uses the vendored SocNavBench-style path length ratio helper over the Robot SF episode
+      trajectory and goal displacement.
+  - metric_id: common.traversal_time_s
+    benchmark: Common social-navigation
+    external_metric: traversal_time
+    robot_sf_source: time_to_goal
+    units: seconds
+    denominator: episode
+    mapping_class: approximate
+    evidence_tier: trace-derived
+    semantic_notes: >-
+      Robot SF reports first goal-reaching time. External benchmark timeout and episode-stop
+      semantics may differ, so this is an approximate correspondence.
+  - metric_id: common.time_to_collision_min_s
+    benchmark: Common social-navigation
+    external_metric: time_to_collision_min
+    robot_sf_source: time_to_collision_min
+    units: seconds
+    denominator: minimum_approaching_robot_pedestrian_pair
+    mapping_class: approximate
+    evidence_tier: trace-derived
+    semantic_notes: >-
+      Computed from Robot SF robot and pedestrian trace velocities with a constant-velocity
+      approaching-pair assumption.
+  - metric_id: common.closest_pedestrian_distance_m
+    benchmark: Common social-navigation
+    external_metric: distance_to_closest_pedestrian
+    robot_sf_source: distance_to_human_min
+    units: meters
+    denominator: minimum_over_episode
+    mapping_class: exact
+    evidence_tier: trace-derived
+    semantic_notes: >-
+      Uses Robot SF center-to-center robot-pedestrian distance. Surface clearance metrics remain
+      separate because footprint conventions differ across benchmarks.
+  - metric_id: robot_sf.success_trace_predicate
+    benchmark: Robot SF
+    external_metric: success_trace_predicate
+    robot_sf_source: success
+    units: binary
+    denominator: episode
+    mapping_class: exact
+    evidence_tier: trace-derived
+    semantic_notes: >-
+      Robot SF success requires reaching the goal before the horizon and no wall, agent, or human
+      collision under Robot SF collision semantics.
+  - metric_id: socnavbench.personal_space_objective
+    benchmark: SocNavBench
+    external_metric: personal_space_objective
+    robot_sf_source: null
+    units: external_objective_units
+    denominator: external_cost_field
+    mapping_class: unavailable
+    evidence_tier: not_available
+    semantic_notes: >-
+      Robot SF traces expose distance and clearance proxies, but not the external SocNavBench
+      objective field needed for a faithful scalar wrapper.
+  - metric_id: hunavsim.human_behavior_cost
+    benchmark: HuNavSim
+    external_metric: human_behavior_cost
+    robot_sf_source: null
+    units: external_cost_units
+    denominator: external_behavior_model
+    mapping_class: unavailable
+    evidence_tier: not_available
+    semantic_notes: >-
+      Requires HuNavSim behavior-model state that is not present in Robot SF trace exports.

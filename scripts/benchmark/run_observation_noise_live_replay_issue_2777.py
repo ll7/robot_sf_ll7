@@ -41,11 +41,28 @@ REQUIRED_CONDITIONS = (
 )
 DEFAULT_CONDITION_SET = "issue_2755_default"
 ISSUE_3328_CONDITION_SET = "issue_3328_behavior_probe"
+ISSUE_3330_CONDITION_SET = "issue_3330_seed_amplitude_grid"
 ISSUE_3328_REQUIRED_CONDITIONS = (
     "noop",
     "medium_noise",
     "delay_only",
     "high_noise_3328",
+)
+ISSUE_3330_MEDIUM_CONDITIONS = (
+    "medium_noise_2755",
+    "medium_noise_3328",
+    "medium_noise_3330",
+)
+ISSUE_3330_HIGH_CONDITIONS = (
+    "high_noise_2755",
+    "high_noise_3328",
+    "high_noise_3330",
+)
+ISSUE_3330_REQUIRED_CONDITIONS = (
+    "noop",
+    "delay_only",
+    *ISSUE_3330_MEDIUM_CONDITIONS,
+    *ISSUE_3330_HIGH_CONDITIONS,
 )
 PROGRESS_FIELDS = (
     "net_goal_progress",
@@ -138,6 +155,38 @@ HIGH_NOISE_3328_CONDITION = Condition(
         "3328",
     ),
 )
+
+
+def _noise_condition(name: str, *, std_m: str, bound_m: str, seed: int) -> Condition:
+    """Return a bounded-Gaussian condition with explicit seed/amplitude metadata."""
+    amplitude = "medium" if std_m == "0.30" else "high"
+    return Condition(
+        name,
+        (
+            f"Issue #3330 {amplitude}-noise seed/amplitude grid condition, "
+            f"std={std_m} m, bound={bound_m} m, seed={seed}."
+        ),
+        (
+            "--observation-noise-std-m",
+            std_m,
+            "--observation-noise-bound-m",
+            bound_m,
+            "--observation-perturbation-seed",
+            str(seed),
+        ),
+    )
+
+
+ISSUE_3330_GRID_CONDITIONS = (
+    _CONDITION_BY_NAME["noop"],
+    _CONDITION_BY_NAME["delay_only"],
+    _noise_condition("medium_noise_2755", std_m="0.30", bound_m="0.60", seed=2755),
+    _noise_condition("medium_noise_3328", std_m="0.30", bound_m="0.60", seed=3328),
+    _noise_condition("medium_noise_3330", std_m="0.30", bound_m="0.60", seed=3330),
+    _noise_condition("high_noise_2755", std_m="1.00", bound_m="2.00", seed=2755),
+    _noise_condition("high_noise_3328", std_m="1.00", bound_m="2.00", seed=3328),
+    _noise_condition("high_noise_3330", std_m="1.00", bound_m="2.00", seed=3330),
+)
 CONDITION_SETS = {
     DEFAULT_CONDITION_SET: CONDITIONS,
     ISSUE_3328_CONDITION_SET: (
@@ -146,6 +195,7 @@ CONDITION_SETS = {
         _CONDITION_BY_NAME["delay_only"],
         HIGH_NOISE_3328_CONDITION,
     ),
+    ISSUE_3330_CONDITION_SET: ISSUE_3330_GRID_CONDITIONS,
 }
 
 
@@ -791,7 +841,7 @@ def _fail_closed_report(
     blocker: str,
 ) -> dict[str, Any]:
     """Return a fail-closed report without running live diagnostics."""
-    return {
+    report = {
         "schema_version": SCHEMA_VERSION,
         "issue": 2777,
         "status": "fail_closed",
@@ -817,6 +867,12 @@ def _fail_closed_report(
         ],
         "blockers": [blocker],
     }
+    if args.condition_set == ISSUE_3330_CONDITION_SET:
+        report["grid_interpretation"] = _issue_3330_grid_interpretation(
+            conditions=report["conditions"],
+            blockers=report["blockers"],
+        )
+    return report
 
 
 def _run_config(*, args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
@@ -880,6 +936,25 @@ def _markdown(report: dict[str, Any]) -> str:
         "blocker",
     ):
         lines.append(f"- `{key}`: `{contract.get(key)}`")
+    if report.get("grid_interpretation"):
+        interpretation = _mapping(report.get("grid_interpretation"))
+        lines.extend(
+            [
+                "",
+                "## Grid Interpretation",
+                "",
+                f"- Evidence status: `{interpretation.get('evidence_status')}`",
+                f"- Label: `{interpretation.get('label')}`",
+                f"- Summary: {interpretation.get('summary')}",
+                "- Sensitive conditions: "
+                f"`{', '.join(interpretation.get('sensitive_conditions') or []) or 'none'}`",
+                "- Medium-amplitude sensitive conditions: "
+                f"`{', '.join(interpretation.get('medium_sensitive_conditions') or []) or 'none'}`",
+                "- High-noise sensitive conditions: "
+                f"`{', '.join(interpretation.get('high_sensitive_conditions') or []) or 'none'}`",
+                f"- Limitation: {interpretation.get('limitation')}",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -1050,31 +1125,35 @@ def _attach_condition_comparisons(
     return blockers
 
 
-def _verify_issue_3328_contract_guardrails(
+def _verify_near_field_probe_contract_guardrails(
     *,
     fixture_contract: Mapping[str, Any],
+    issue_label: str,
 ) -> list[str]:
-    """Verify the static fixture-contract side of the #3328 probe."""
+    """Verify the static fixture-contract side of an opt-in near-field probe."""
     blockers: list[str] = []
     if not fixture_contract.get("satisfied"):
-        blockers.append("Issue #3328 behavior probe requires fixture_contract.satisfied=true.")
+        blockers.append(f"{issue_label} requires fixture_contract.satisfied=true.")
 
     matched = _mapping(fixture_contract.get("matched_scenario"))
     if matched.get("name") != ISSUE_2756_FIXTURE_SCENARIO:
         blockers.append(
-            "Issue #3328 behavior probe requires scenario "
+            f"{issue_label} requires scenario "
             f"{ISSUE_2756_FIXTURE_SCENARIO!r}; got {matched.get('name')!r}."
         )
     if ISSUE_2756_FIXTURE_SEED not in _int_list(matched.get("seeds")):
         blockers.append(
-            f"Issue #3328 behavior probe requires seed {ISSUE_2756_FIXTURE_SEED} "
-            f"in matrix seeds; got {matched.get('seeds')!r}."
+            f"{issue_label} requires seed {ISSUE_2756_FIXTURE_SEED} in matrix seeds; "
+            f"got {matched.get('seeds')!r}."
         )
     return blockers
 
 
-def _verify_issue_3328_trace_identity(label: str, trace: Mapping[str, Any]) -> list[str]:
-    """Verify one #3328 probe trace still names the intended scenario and seed."""
+def _verify_near_field_probe_trace_identity(
+    label: str,
+    trace: Mapping[str, Any],
+) -> list[str]:
+    """Verify one opt-in probe trace still names the intended scenario and seed."""
     blockers: list[str] = []
     if trace.get("scenario_id") != ISSUE_2756_FIXTURE_SCENARIO:
         blockers.append(
@@ -1088,20 +1167,56 @@ def _verify_issue_3328_trace_identity(label: str, trace: Mapping[str, Any]) -> l
     return blockers
 
 
-def _verify_issue_3328_near_field_trace(noop_trace: Mapping[str, Any]) -> list[str]:
-    """Verify the #3328 probe no-op trace has near-field interaction geometry."""
+def _verify_near_field_probe_trace(
+    noop_trace: Mapping[str, Any],
+    *,
+    issue_label: str,
+) -> list[str]:
+    """Verify an opt-in probe no-op trace has near-field interaction geometry."""
     closest = _mapping(noop_trace.get("progress_summary")).get("closest_robot_ped_distance")
     finite_closest = _finite_number(closest)
     if finite_closest is None:
-        return [
-            "Issue #3328 behavior probe requires a finite no-op closest_robot_ped_distance value."
-        ]
+        return [f"{issue_label} requires a finite no-op closest_robot_ped_distance value."]
     if finite_closest > 2.0:
         return [
-            "Issue #3328 behavior probe requires no-op closest_robot_ped_distance <= 2.0 m; "
-            f"observed {closest}."
+            f"{issue_label} requires no-op closest_robot_ped_distance <= 2.0 m; observed {closest}."
         ]
     return []
+
+
+def _verify_near_field_behavior_probe_guardrails(
+    *,
+    output_dir: Path,
+    fixture_contract: Mapping[str, Any],
+    issue_label: str,
+) -> list[str]:
+    """Fail closed unless an opt-in probe remains a near-field #2756 replay."""
+    blockers = _verify_near_field_probe_contract_guardrails(
+        fixture_contract=fixture_contract,
+        issue_label=issue_label,
+    )
+    try:
+        noop_trace = _load_trace(output_dir / "traces" / "noop" / "trace.json")
+        delay_trace = _load_trace(output_dir / "traces" / "delay_only" / "trace.json")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return blockers + [f"Could not verify {issue_label} guardrails: {exc}"]
+
+    for label, trace in (("noop", noop_trace), ("delay_only", delay_trace)):
+        blockers.extend(_verify_near_field_probe_trace_identity(label, trace))
+
+    noop_first_observed = _first_observed_step(noop_trace)
+    delay_first_observed = _first_observed_step(delay_trace)
+    if noop_first_observed != 5:
+        blockers.append(
+            f"{issue_label} requires no-op first observed step 5; observed {noop_first_observed}."
+        )
+    if delay_first_observed != 7:
+        blockers.append(
+            f"{issue_label} requires delay-only first observed step 7; observed "
+            f"{delay_first_observed}."
+        )
+    blockers.extend(_verify_near_field_probe_trace(noop_trace, issue_label=issue_label))
+    return blockers
 
 
 def _verify_issue_3328_behavior_probe_guardrails(
@@ -1110,30 +1225,24 @@ def _verify_issue_3328_behavior_probe_guardrails(
     fixture_contract: Mapping[str, Any],
 ) -> list[str]:
     """Fail closed unless the opt-in #3328 probe remains a near-field #2756 replay."""
-    blockers = _verify_issue_3328_contract_guardrails(fixture_contract=fixture_contract)
-    try:
-        noop_trace = _load_trace(output_dir / "traces" / "noop" / "trace.json")
-        delay_trace = _load_trace(output_dir / "traces" / "delay_only" / "trace.json")
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        return blockers + [f"Could not verify issue #3328 behavior probe guardrails: {exc}"]
+    return _verify_near_field_behavior_probe_guardrails(
+        output_dir=output_dir,
+        fixture_contract=fixture_contract,
+        issue_label="Issue #3328 behavior probe",
+    )
 
-    for label, trace in (("noop", noop_trace), ("delay_only", delay_trace)):
-        blockers.extend(_verify_issue_3328_trace_identity(label, trace))
 
-    noop_first_observed = _first_observed_step(noop_trace)
-    delay_first_observed = _first_observed_step(delay_trace)
-    if noop_first_observed != 5:
-        blockers.append(
-            "Issue #3328 behavior probe requires no-op first observed step 5; "
-            f"observed {noop_first_observed}."
-        )
-    if delay_first_observed != 7:
-        blockers.append(
-            "Issue #3328 behavior probe requires delay-only first observed step 7; "
-            f"observed {delay_first_observed}."
-        )
-    blockers.extend(_verify_issue_3328_near_field_trace(noop_trace))
-    return blockers
+def _verify_issue_3330_seed_amplitude_grid_guardrails(
+    *,
+    output_dir: Path,
+    fixture_contract: Mapping[str, Any],
+) -> list[str]:
+    """Fail closed unless the opt-in #3330 grid remains a near-field #2756 replay."""
+    return _verify_near_field_behavior_probe_guardrails(
+        output_dir=output_dir,
+        fixture_contract=fixture_contract,
+        issue_label="Issue #3330 seed/amplitude grid",
+    )
 
 
 def _verify_fixture_observation_boundary(
@@ -1197,6 +1306,98 @@ def _compact_live_conditions(conditions: list[dict[str, Any]]) -> list[dict[str,
     return compact_conditions
 
 
+def _condition_classification_label(condition: Mapping[str, Any]) -> str:
+    """Return the compact classification label for a condition row."""
+    return str(_mapping(condition.get("classification")).get("label") or "")
+
+
+def _issue_3330_grid_interpretation(
+    *,
+    conditions: list[dict[str, Any]],
+    blockers: list[str],
+) -> dict[str, Any]:
+    """Classify the #3330 seed/amplitude grid without promoting benchmark claims."""
+    by_name = {str(condition.get("name")): condition for condition in conditions}
+    missing = [name for name in ISSUE_3330_REQUIRED_CONDITIONS if name not in by_name]
+    unavailable = bool(blockers or missing) or any(
+        by_name[name].get("status") != "live_replay"
+        for name in ISSUE_3330_REQUIRED_CONDITIONS
+        if name in by_name
+    )
+    if unavailable:
+        reasons = list(blockers)
+        if missing:
+            reasons.append(f"Missing #3330 condition rows: {', '.join(missing)}.")
+        return {
+            "label": "unavailable_fail_closed",
+            "evidence_status": "diagnostic-only",
+            "summary": (
+                "Grid interpretation is unavailable/fail-closed because at least one "
+                "required live replay condition did not complete under the fixture guardrails."
+            ),
+            "sensitive_conditions": [],
+            "medium_sensitive_conditions": [],
+            "high_sensitive_conditions": [],
+            "unavailable_conditions": [
+                name
+                for name in ISSUE_3330_REQUIRED_CONDITIONS
+                if name not in by_name or by_name[name].get("status") != "live_replay"
+            ],
+            "limitation": "Diagnostic-only; no robustness claim is available.",
+            "reasons": reasons,
+        }
+
+    medium_sensitive = [
+        name
+        for name in ISSUE_3330_MEDIUM_CONDITIONS
+        if _condition_classification_label(by_name[name]) == "behavior_sensitive_diagnostic_only"
+    ]
+    high_sensitive = [
+        name
+        for name in ISSUE_3330_HIGH_CONDITIONS
+        if _condition_classification_label(by_name[name]) == "behavior_sensitive_diagnostic_only"
+    ]
+    sensitive_conditions = [*medium_sensitive, *high_sensitive]
+    if medium_sensitive:
+        label = "medium_amplitude_sensitive"
+        summary = (
+            "Diagnostic-only grid classification: medium-amplitude-sensitive because at "
+            "least one std=0.30 m, bound=0.60 m condition changed live behavior."
+        )
+    elif len(high_sensitive) == len(ISSUE_3330_HIGH_CONDITIONS):
+        label = "high_noise_persistent"
+        summary = (
+            "Diagnostic-only grid classification: high-noise persistent because all "
+            "std=1.00 m, bound=2.00 m seed conditions changed live behavior."
+        )
+    elif high_sensitive:
+        label = "mixed_seed_specific"
+        summary = (
+            "Diagnostic-only grid classification: mixed/seed-specific because behavior "
+            "changed for only a subset of high-noise seeds."
+        )
+    else:
+        label = "not_reproduced"
+        summary = (
+            "Diagnostic-only grid classification: not reproduced because the completed "
+            "seed/amplitude grid did not expose behavior-sensitive condition rows."
+        )
+    return {
+        "label": label,
+        "evidence_status": "diagnostic-only",
+        "summary": summary,
+        "sensitive_conditions": sensitive_conditions,
+        "medium_sensitive_conditions": medium_sensitive,
+        "high_sensitive_conditions": high_sensitive,
+        "unavailable_conditions": [],
+        "limitation": (
+            "One scenario and one fixture seed only; this is diagnostic behavior-probe "
+            "evidence, not a robustness, sensor-realism, or planner-superiority claim."
+        ),
+        "reasons": [],
+    }
+
+
 def _final_classification(
     *,
     blockers: list[str],
@@ -1237,8 +1438,9 @@ def _final_classification(
         {
             "label": label,
             "rationale": (
-                "All selected live replays completed. One seed is diagnostic only and "
-                "does not support a robustness, sensor-realism, or planner-superiority claim."
+                "All selected live replays completed. One scenario fixture seed is diagnostic "
+                "only and does not support a robustness, sensor-realism, or "
+                "planner-superiority claim."
             ),
         },
     )
@@ -1298,23 +1500,31 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
                 fixture_contract=fixture_contract,
             )
         )
+    if args.condition_set == ISSUE_3330_CONDITION_SET:
+        blockers.extend(
+            _verify_issue_3330_seed_amplitude_grid_guardrails(
+                output_dir=output_dir,
+                fixture_contract=fixture_contract,
+            )
+        )
     status, classification = _final_classification(
         blockers=blockers,
         fixture_contract_satisfied=bool(fixture_contract["satisfied"]),
         conditions=conditions,
     )
 
-    return {
+    compact_conditions = _compact_live_conditions(conditions)
+    report = {
         "schema_version": SCHEMA_VERSION,
         "artifact_shape": "compact_summary_without_raw_traces",
         "issue": 2777,
         "status": status,
         "classification": classification,
         "claim_boundary": (
-            "Stress-slice live planner/environment replay for one scenario, one seed, "
+            "Stress-slice live planner/environment replay for one scenario fixture seed "
             "and the selected perturbation condition set. Treat behavior-sensitive "
-            "differences as diagnostic-only from one seed; do not infer robustness, "
-            "sensor realism, or planner superiority."
+            "differences as diagnostic-only from this fixture; do not infer robustness, "
+            "sensor realism, planner superiority, or scenario-general behavior."
         ),
         "inputs": {
             "scenario_matrix": _durable_ref(scenario_matrix),
@@ -1329,9 +1539,15 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
         "fixture_contract": fixture_contract,
         "fixture_observation_boundary": _fixture_observation_boundary_summary(output_dir),
         "run_config": _run_config(args=args, output_dir=output_dir),
-        "conditions": _compact_live_conditions(conditions),
+        "conditions": compact_conditions,
         "blockers": blockers,
     }
+    if args.condition_set == ISSUE_3330_CONDITION_SET:
+        report["grid_interpretation"] = _issue_3330_grid_interpretation(
+            conditions=compact_conditions,
+            blockers=blockers,
+        )
+    return report
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -1357,7 +1573,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_CONDITION_SET,
         help=(
             "Perturbation condition set to run. The default preserves the seven #2755 "
-            "families; issue_3328_behavior_probe is an opt-in four-condition probe."
+            "families; issue_3328_behavior_probe and issue_3330_seed_amplitude_grid "
+            "are opt-in behavior probes."
         ),
     )
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
@@ -1381,6 +1598,11 @@ def main(argv: list[str] | None = None) -> int:
         != ISSUE_3328_REQUIRED_CONDITIONS
     ):
         raise RuntimeError("Issue #3328 behavior probe condition set drifted")
+    if (
+        tuple(condition.name for condition in CONDITION_SETS[ISSUE_3330_CONDITION_SET])
+        != ISSUE_3330_REQUIRED_CONDITIONS
+    ):
+        raise RuntimeError("Issue #3330 seed/amplitude grid condition set drifted")
     report = run_live_batch(args)
     _write_outputs(report, args.output_dir)
     print(

@@ -98,6 +98,12 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2777_live_observation_noise_replay/issue_3330_seed_amplitude_grid/`: diagnostic-only
+  native live replay over the #3323 near-field #2756 fixture with a predeclared 2x3 medium/high
+  bounded-Gaussian perturbation grid. The grid is `medium_amplitude_sensitive`: seed 3328 is
+  behavior-sensitive at medium amplitude, seeds 3328 and 3330 are behavior-sensitive at high
+  amplitude, and seed 2755 remains policy-insensitive. Not robustness, calibrated sensor-realism,
+  planner-superiority, paper-facing benchmark, or scenario-general evidence.
 - `issue_3294_release_claim_matrix/`: reviewable v0.1 release claim matrix assembled from
   existing release artifacts, leaderboard row-claim sidecars, release config metadata, and ODD
   coverage rows. It classifies rows as benchmark evidence, diagnostic evidence, or non-claim

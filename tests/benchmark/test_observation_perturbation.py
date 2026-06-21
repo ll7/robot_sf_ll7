@@ -9,6 +9,7 @@ from robot_sf.benchmark.observation_perturbation import (
     EVIDENCE_IDEAL,
     EVIDENCE_PERCEPTION_LIMITED,
     NOISE_PROFILE_DELAYED_OBSERVATION,
+    NOISE_PROFILE_FALSE_POSITIVE,
     NOISE_PROFILE_GAUSSIAN,
     NOISE_PROFILE_MISSED_DETECTION,
     NOISE_PROFILE_NONE,
@@ -83,6 +84,7 @@ class TestNoopSpec:
             "missed_detection_probability",
             "missed_actor_count",
             "occluded_actor_count",
+            "false_positive_actor_count",
             "delay_steps",
             "step",
             "actor_count",
@@ -256,6 +258,61 @@ class TestOcclusionMask:
             perturb_ground_truth(pos, vel, ids, spec=spec)
 
 
+class TestFalsePositiveActorInjection:
+    """False-positive actors should appear only in observed state."""
+
+    def test_false_positive_actor_is_observed_only(self) -> None:
+        """Injected actors should not modify the ground-truth payload."""
+        pos, vel, ids = _simple_actors()
+        spec = ObservationPerturbationSpec(
+            false_positive_positions=np.array([[2.0, 3.0]]),
+            false_positive_velocities=np.array([[0.0, 0.0]]),
+            false_positive_ids=["fp_close"],
+            seed=0,
+        )
+
+        result = perturb_ground_truth(pos, vel, ids, spec=spec, step=0)
+
+        assert result["metadata"]["noise_profile"] == NOISE_PROFILE_FALSE_POSITIVE
+        assert result["metadata"]["false_positive_actor_count"] == 1
+        assert result["metadata"]["actor_count"] == 3
+        assert result["metadata"]["observed_actor_count"] == 4
+        np.testing.assert_array_equal(result["ground_truth"]["positions"], pos)
+        assert result["ground_truth"]["ids"] == ids
+        np.testing.assert_array_equal(result["observed"]["positions"][-1], [2.0, 3.0])
+        np.testing.assert_array_equal(result["observed"]["velocities"][-1], [0.0, 0.0])
+        assert result["observed"]["ids"] == [*ids, "fp_close"]
+        assert result["missing_ids"] == []
+
+    def test_false_positive_defaults_zero_velocity_and_ids(self) -> None:
+        """Spec defaults should be deterministic and reviewable."""
+        pos, vel, ids = _simple_actors()
+        spec = ObservationPerturbationSpec(false_positive_positions=[[2.0, 3.0], [4.0, 5.0]])
+
+        result = perturb_ground_truth(pos, vel, ids, spec=spec, step=0)
+
+        assert result["observed"]["ids"][-2:] == ["false_positive_0", "false_positive_1"]
+        np.testing.assert_array_equal(result["observed"]["velocities"][-2:], np.zeros((2, 2)))
+        assert result["metadata"]["false_positive_actor_count"] == 2
+
+    def test_false_positive_can_combine_with_missed_detections(self) -> None:
+        """False positives should be counted separately from false negatives."""
+        pos, vel, ids = _simple_actors()
+        spec = ObservationPerturbationSpec(
+            missed_detection_probability=1.0,
+            false_positive_positions=[[9.0, 9.0]],
+            seed=0,
+        )
+
+        result = perturb_ground_truth(pos, vel, ids, spec=spec, step=0)
+
+        assert result["metadata"]["missed_actor_count"] == 3
+        assert result["metadata"]["false_positive_actor_count"] == 1
+        assert result["metadata"]["observed_actor_count"] == 1
+        assert result["observed"]["ids"] == ["false_positive_0"]
+        assert result["missing_ids"] == ids
+
+
 class TestDelayBehavior:
     """Delay buffer should lag observed state behind ground truth."""
 
@@ -312,6 +369,7 @@ class TestDelayBehavior:
         assert r1["metadata"]["delay_steps"] == 1
         assert r1["metadata"]["evidence_class"] == EVIDENCE_PERCEPTION_LIMITED
         assert r1["metadata"]["noise_profile"] == NOISE_PROFILE_DELAYED_OBSERVATION
+        assert r1["metadata"]["false_positive_actor_count"] == 0
 
     def test_delay_reports_missing_ids_from_delayed_snapshot(self) -> None:
         """Delayed results should report missing IDs from the returned observed snapshot."""
@@ -348,6 +406,27 @@ class TestSpecValidation:
         """Negative delay_steps should raise ValueError."""
         with pytest.raises(ValueError, match="delay_steps"):
             ObservationPerturbationSpec(delay_steps=-1)
+
+    def test_bad_false_positive_position_shape_raises(self) -> None:
+        """False-positive positions should be an (N, 2) array."""
+        with pytest.raises(ValueError, match="false_positive_positions"):
+            ObservationPerturbationSpec(false_positive_positions=[1.0, 2.0, 3.0])
+
+    def test_bad_false_positive_velocity_shape_raises(self) -> None:
+        """False-positive velocities must match false-positive actor count."""
+        with pytest.raises(ValueError, match="false_positive_velocities"):
+            ObservationPerturbationSpec(
+                false_positive_positions=[[1.0, 2.0]],
+                false_positive_velocities=[[0.0, 0.0], [1.0, 0.0]],
+            )
+
+    def test_bad_false_positive_id_count_raises(self) -> None:
+        """False-positive IDs must match false-positive actor count."""
+        with pytest.raises(ValueError, match="false_positive_ids"):
+            ObservationPerturbationSpec(
+                false_positive_positions=[[1.0, 2.0]],
+                false_positive_ids=["fp_0", "fp_1"],
+            )
 
 
 class TestInputValidation:

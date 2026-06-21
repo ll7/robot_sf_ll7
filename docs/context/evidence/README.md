@@ -184,6 +184,11 @@ Policy caveats:
   `observation_quality.v1` metadata, reports false-negative safety effects, and explicitly excludes
   false-positive actor rows as not available; not planner-superiority or hardware-calibrated sensor
   evidence.
+- `issue_3300_false_positive_actor_injection/`: diagnostic same-seed live step-diagnostics replay
+  adding an observed-only false-positive actor to the near-field fixture. The false-positive slice
+  changed the command sequence to repeated stop commands without collision flags over the five-step
+  smoke, while the missed-detection slice hit one pedestrian collision flag by step 3. Not
+  benchmark-strength, hardware-calibrated sensor, or paper-facing evidence.
 - `issue_3206_pedestrian_archetype_reporting_2026-06-20/`: composition-report-only packet for
   the shipped pedestrian speed-archetype MVP. Records deterministic counts, speed factors, and
   no-result boundaries for later homogeneous-vs-heterogeneous smoke runs.

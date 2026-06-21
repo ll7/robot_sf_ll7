@@ -1,0 +1,190 @@
+{
+  "schema_version": "issue_3201_observation_noise_live_smoke.v1",
+  "issue": 3300,
+  "claim_boundary": "Diagnostic same-seed local smoke for issue #3300 false-positive actor-injection. This is executable planner/environment replay evidence for one scenario, seed, planner, and five-step horizon; it is not benchmark-strength, hardware-calibrated sensor, or paper-facing evidence.",
+  "inputs": {
+    "clean_trace_json": "worktree-local ignored artifact summarized in this report (benchmarks/issue_3300_false_positive_actor_injection/clean_h5/trace.json)",
+    "perturbed_trace_json": "worktree-local ignored artifact summarized in this report (benchmarks/issue_3300_false_positive_actor_injection/missed_detection_h5/trace.json)"
+  },
+  "scenario": {
+    "clean": "issue_3233_near_field_observation_noise",
+    "perturbed": "issue_3233_near_field_observation_noise",
+    "same_scenario": true
+  },
+  "seed": {
+    "clean": 3233,
+    "perturbed": 3233,
+    "same_seed": true
+  },
+  "observation_perturbation_config": {
+    "clean": {
+      "position_noise_std_m": 0.0,
+      "position_noise_bound_m": 0.0,
+      "missed_detection_probability": 0.0,
+      "occlusion_distance_m": null,
+      "false_positive_actor_count": 0,
+      "false_positive_offset_x_m": 1.0,
+      "false_positive_offset_y_m": 0.0,
+      "false_positive_spacing_y_m": 0.5,
+      "delay_steps": 0,
+      "seed": null
+    },
+    "perturbed": {
+      "position_noise_std_m": 0.0,
+      "position_noise_bound_m": 0.0,
+      "missed_detection_probability": 1.0,
+      "occlusion_distance_m": null,
+      "false_positive_actor_count": 0,
+      "false_positive_offset_x_m": 1.0,
+      "false_positive_offset_y_m": 0.0,
+      "false_positive_spacing_y_m": 0.5,
+      "delay_steps": 0,
+      "seed": 3300
+    }
+  },
+  "observation_summary": {
+    "clean": {
+      "missed_actor_observations_total": 0,
+      "occluded_actor_observations_total": 0,
+      "false_positive_actor_observations_total": 0,
+      "min_observed_actor_count": 1,
+      "max_observed_actor_count": 1,
+      "noise_profiles": [
+        "none"
+      ],
+      "evidence_classes": [
+        "ideal_state"
+      ]
+    },
+    "perturbed": {
+      "missed_actor_observations_total": 4,
+      "occluded_actor_observations_total": 0,
+      "false_positive_actor_observations_total": 0,
+      "min_observed_actor_count": 0,
+      "max_observed_actor_count": 0,
+      "noise_profiles": [
+        "missed_detection"
+      ],
+      "evidence_classes": [
+        "perception_limited"
+      ]
+    },
+    "changed": true
+  },
+  "near_field_target": {
+    "threshold_m": 2.0,
+    "clean_closest_robot_ped_distance_m": 1.7872738570026998,
+    "satisfied": true
+  },
+  "command_summary": {
+    "clean_first": [
+      0.3,
+      0.0
+    ],
+    "perturbed_first": [
+      1.2,
+      0.4431303704642192
+    ],
+    "clean_last": [
+      0.49999999999999994,
+      -0.30000000000000004
+    ],
+    "perturbed_last": [
+      2.0,
+      0.0
+    ],
+    "sequence_changed": true
+  },
+  "progress_delta": {
+    "steps_observed": {
+      "clean": 5,
+      "perturbed": 4,
+      "delta": -1.0,
+      "changed": true
+    },
+    "initial_goal_distance": {
+      "clean": 2.000001,
+      "perturbed": 2.000001,
+      "delta": 0.0,
+      "changed": false
+    },
+    "final_goal_distance": {
+      "clean": 14.916698691335359,
+      "perturbed": 14.500850439914199,
+      "delta": -0.4158482514211599,
+      "changed": true
+    },
+    "best_goal_distance": {
+      "clean": 2.000001,
+      "perturbed": 2.000001,
+      "delta": 0.0,
+      "changed": false
+    },
+    "net_goal_progress": {
+      "clean": -12.916697691335358,
+      "perturbed": -12.500849439914198,
+      "delta": 0.4158482514211599,
+      "changed": true
+    },
+    "best_goal_progress": {
+      "clean": 0.0,
+      "perturbed": 0.0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "progress_step_count": {
+      "clean": 4,
+      "perturbed": 3,
+      "delta": -1.0,
+      "changed": true
+    },
+    "regression_step_count": {
+      "clean": 1,
+      "perturbed": 1,
+      "delta": 0.0,
+      "changed": false
+    },
+    "stagnant_step_count": {
+      "clean": 0,
+      "perturbed": 0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "longest_stagnant_run": {
+      "clean": 0,
+      "perturbed": 0,
+      "delta": 0.0,
+      "changed": false
+    },
+    "closest_robot_ped_distance": {
+      "clean": 1.7872738570026998,
+      "perturbed": 1.382334554845844,
+      "delta": -0.4049393021568557,
+      "changed": true
+    },
+    "closest_robot_ped_step": {
+      "clean": 4,
+      "perturbed": 3,
+      "delta": -1.0,
+      "changed": true
+    },
+    "collision_flag_counts": {
+      "clean": {
+        "pedestrian": 0,
+        "obstacle": 0,
+        "robot": 0
+      },
+      "perturbed": {
+        "pedestrian": 1,
+        "obstacle": 0,
+        "robot": 0
+      },
+      "delta": null,
+      "changed": true
+    }
+  },
+  "classification": {
+    "label": "non_null_behavior_delta",
+    "rationale": "Same-seed clean and perturbed live traces differ in selected commands or progress/risk summary fields."
+  }
+}

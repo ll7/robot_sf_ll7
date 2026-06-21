@@ -275,6 +275,67 @@ def test_trace_comparator_classifies_observation_only_scenario_too_weak(tmp_path
     assert report["command_summary"]["sequence_changed"] is False
 
 
+def test_trace_comparator_reports_false_positive_actor_observations(tmp_path: Path) -> None:
+    """Trace reports should count false-positive observations separately from misses."""
+    clean_trace = tmp_path / "clean_trace.json"
+    perturbed_trace = tmp_path / "perturbed_trace.json"
+    base = {
+        "scenario_id": "dense_pedestrian_stress",
+        "seed": 2765,
+        "observation_perturbation_config": {"position_noise_std_m": 0.0},
+        "progress_summary": {
+            "steps_observed": 1,
+            "closest_robot_ped_distance": 1.0,
+            "collision_flag_counts": {"pedestrian": 0, "obstacle": 0, "robot": 0},
+        },
+        "steps": [
+            {
+                "policy_command": [1.0, 0.0],
+                "observation_perturbation": {
+                    "noise_profile": "none",
+                    "evidence_class": "ideal_state",
+                    "missed_actor_count": 0,
+                    "occluded_actor_count": 0,
+                    "false_positive_actor_count": 0,
+                    "observed_actor_count": 2,
+                },
+            }
+        ],
+    }
+    perturbed = {
+        **base,
+        "observation_perturbation_config": {
+            "false_positive_actor_count": 1,
+            "false_positive_offset_x_m": 1.0,
+            "false_positive_offset_y_m": 0.0,
+        },
+        "steps": [
+            {
+                "policy_command": [1.0, 0.0],
+                "observation_perturbation": {
+                    "noise_profile": "false_positive_actor_injection",
+                    "evidence_class": "perception_limited",
+                    "missed_actor_count": 0,
+                    "occluded_actor_count": 0,
+                    "false_positive_actor_count": 1,
+                    "observed_actor_count": 3,
+                },
+            }
+        ],
+    }
+    clean_trace.write_text(json.dumps(base), encoding="utf-8")
+    perturbed_trace.write_text(json.dumps(perturbed), encoding="utf-8")
+
+    report = _load_script().build_trace_report(clean_trace, perturbed_trace)
+
+    assert report["classification"]["label"] == "observation_only_delta"
+    assert report["observation_summary"]["clean"]["false_positive_actor_observations_total"] == 0
+    assert (
+        report["observation_summary"]["perturbed"]["false_positive_actor_observations_total"] == 1
+    )
+    assert report["observation_summary"]["perturbed"]["missed_actor_observations_total"] == 0
+
+
 def test_trace_comparator_treats_null_trace_maps_as_empty(tmp_path: Path) -> None:
     """Explicit null progress or perturbation maps should be treated as absent metadata."""
     clean_trace = tmp_path / "clean_trace.json"

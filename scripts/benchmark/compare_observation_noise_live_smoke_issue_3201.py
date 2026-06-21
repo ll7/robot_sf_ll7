@@ -10,6 +10,12 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "issue_3201_observation_noise_live_smoke.v1"
+DEFAULT_ISSUE = 3201
+DEFAULT_CLAIM_BOUNDARY = (
+    "Diagnostic same-seed local smoke only. This retests the issue #2749 "
+    "observation-noise null with a pedestrian-dominated candidate surface; "
+    "it is not benchmark-strength or hardware-calibrated sensor evidence."
+)
 DEFAULT_METRICS = (
     "success",
     "min_distance",
@@ -177,7 +183,13 @@ def _classification(
     }
 
 
-def build_report(clean_path: Path, perturbed_path: Path) -> dict[str, Any]:
+def build_report(
+    clean_path: Path,
+    perturbed_path: Path,
+    *,
+    issue: int = DEFAULT_ISSUE,
+    claim_boundary: str = DEFAULT_CLAIM_BOUNDARY,
+) -> dict[str, Any]:
     """Build the compact comparison report."""
     clean = _load_single_row(clean_path)
     perturbed = _load_single_row(perturbed_path)
@@ -186,12 +198,8 @@ def build_report(clean_path: Path, perturbed_path: Path) -> dict[str, Any]:
     noise_deltas = _noise_stats_delta(clean, perturbed)
     return {
         "schema_version": SCHEMA_VERSION,
-        "issue": 3201,
-        "claim_boundary": (
-            "Diagnostic same-seed local smoke only. This retests the issue #2749 "
-            "observation-noise null with a pedestrian-dominated fixture; it is "
-            "not benchmark-strength or hardware-calibrated sensor evidence."
-        ),
+        "issue": int(issue),
+        "claim_boundary": claim_boundary,
         "inputs": {
             "clean_jsonl": _durable_input_ref(clean_path),
             "perturbed_jsonl": _durable_input_ref(perturbed_path),
@@ -262,6 +270,7 @@ def _trace_observation_summary(trace: dict[str, Any]) -> dict[str, Any]:
     """Summarize observation perturbation effects across step rows."""
     missed_total = 0
     occluded_total = 0
+    false_positive_total = 0
     observed_counts: list[int] = []
     profiles: set[str] = set()
     evidence_classes: set[str] = set()
@@ -269,12 +278,14 @@ def _trace_observation_summary(trace: dict[str, Any]) -> dict[str, Any]:
         meta = _mapping(_mapping(row).get("observation_perturbation"))
         missed_total += int(meta.get("missed_actor_count", 0) or 0)
         occluded_total += int(meta.get("occluded_actor_count", 0) or 0)
+        false_positive_total += int(meta.get("false_positive_actor_count", 0) or 0)
         observed_counts.append(int(meta.get("observed_actor_count", 0) or 0))
         profiles.add(str(meta.get("noise_profile", "")))
         evidence_classes.add(str(meta.get("evidence_class", "")))
     return {
         "missed_actor_observations_total": missed_total,
         "occluded_actor_observations_total": occluded_total,
+        "false_positive_actor_observations_total": false_positive_total,
         "min_observed_actor_count": min(observed_counts) if observed_counts else None,
         "max_observed_actor_count": max(observed_counts) if observed_counts else None,
         "noise_profiles": sorted(profile for profile in profiles if profile),
@@ -323,7 +334,13 @@ def _trace_classification(
     }
 
 
-def build_trace_report(clean_trace_path: Path, perturbed_trace_path: Path) -> dict[str, Any]:
+def build_trace_report(
+    clean_trace_path: Path,
+    perturbed_trace_path: Path,
+    *,
+    issue: int = DEFAULT_ISSUE,
+    claim_boundary: str = DEFAULT_CLAIM_BOUNDARY,
+) -> dict[str, Any]:
     """Build a compact report from paired step-diagnostics traces."""
     clean = _load_trace(clean_trace_path)
     perturbed = _load_trace(perturbed_trace_path)
@@ -336,12 +353,8 @@ def build_trace_report(clean_trace_path: Path, perturbed_trace_path: Path) -> di
     closest = _number(_mapping(clean.get("progress_summary")).get("closest_robot_ped_distance"))
     return {
         "schema_version": SCHEMA_VERSION,
-        "issue": 3201,
-        "claim_boundary": (
-            "Diagnostic same-seed local smoke only. This retests the issue #2749 "
-            "observation-noise null with a pedestrian-dominated candidate surface; "
-            "it is not benchmark-strength or hardware-calibrated sensor evidence."
-        ),
+        "issue": int(issue),
+        "claim_boundary": claim_boundary,
         "inputs": {
             "clean_trace_json": _durable_input_ref(clean_trace_path),
             "perturbed_trace_json": _durable_input_ref(perturbed_trace_path),
@@ -390,8 +403,9 @@ def build_trace_report(clean_trace_path: Path, perturbed_trace_path: Path) -> di
 def _markdown(report: dict[str, Any]) -> str:
     """Render a short Markdown summary."""
     classification = report["classification"]
+    issue = int(report.get("issue", DEFAULT_ISSUE))
     lines = [
-        "# Issue #3201 Observation-Noise Live Smoke",
+        f"# Issue #{issue} Observation-Noise Live Smoke",
         "",
         "## Claim Boundary",
         "",
@@ -439,6 +453,7 @@ def _markdown(report: dict[str, Any]) -> str:
 def _trace_markdown(report: dict[str, Any]) -> str:
     """Render Markdown for paired step-diagnostics traces."""
     classification = report["classification"]
+    issue = int(report.get("issue", DEFAULT_ISSUE))
     near_field = _mapping(report.get("near_field_target"))
     clean_closest_distance = near_field.get("clean_closest_robot_ped_distance_m")
     near_field_caveat = (
@@ -450,7 +465,7 @@ def _trace_markdown(report: dict[str, Any]) -> str:
         else "- Clean trace near-field target metadata was unavailable."
     )
     lines = [
-        "# Issue #3201 Observation-Noise Live Smoke",
+        f"# Issue #{issue} Observation-Noise Live Smoke",
         "",
         "## Claim Boundary",
         "",
@@ -519,17 +534,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--perturbed-trace-json", type=Path)
     parser.add_argument("--output-json", required=True, type=Path)
     parser.add_argument("--output-md", required=True, type=Path)
+    parser.add_argument("--issue", type=int, default=DEFAULT_ISSUE)
+    parser.add_argument("--claim-boundary", default=DEFAULT_CLAIM_BOUNDARY)
     args = parser.parse_args(argv)
 
     if args.clean_trace_json is not None:
         if args.perturbed_trace_json is None:
             parser.error("--perturbed-trace-json is required with --clean-trace-json")
-        report = build_trace_report(args.clean_trace_json, args.perturbed_trace_json)
+        report = build_trace_report(
+            args.clean_trace_json,
+            args.perturbed_trace_json,
+            issue=args.issue,
+            claim_boundary=args.claim_boundary,
+        )
         markdown = _trace_markdown(report)
     else:
         if args.perturbed_jsonl is None:
             parser.error("--perturbed-jsonl is required with --clean-jsonl")
-        report = build_report(args.clean_jsonl, args.perturbed_jsonl)
+        report = build_report(
+            args.clean_jsonl,
+            args.perturbed_jsonl,
+            issue=args.issue,
+            claim_boundary=args.claim_boundary,
+        )
         markdown = _markdown(report)
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
     args.output_md.parent.mkdir(parents=True, exist_ok=True)

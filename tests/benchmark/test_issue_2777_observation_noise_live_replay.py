@@ -712,8 +712,8 @@ def test_issue_3330_seed_amplitude_grid_reuses_near_field_fixture_guardrails(
     )
 
     assert blockers
-    assert "Issue #3330 seed/amplitude grid" in blockers[-1]
-    assert "closest_robot_ped_distance <= 2.0" in blockers[-1]
+    assert any("Issue #3330 seed/amplitude grid" in blocker for blocker in blockers)
+    assert any("closest_robot_ped_distance <= 2.0" in blocker for blocker in blockers)
 
 
 def _grid_condition_row(

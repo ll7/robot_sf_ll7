@@ -1199,7 +1199,7 @@ def _verify_near_field_behavior_probe_guardrails(
         noop_trace = _load_trace(output_dir / "traces" / "noop" / "trace.json")
         delay_trace = _load_trace(output_dir / "traces" / "delay_only" / "trace.json")
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        return blockers + [f"Could not verify {issue_label} guardrails: {exc}"]
+        return [*blockers, f"Could not verify {issue_label} guardrails: {exc}"]
 
     for label, trace in (("noop", noop_trace), ("delay_only", delay_trace)):
         blockers.extend(_verify_near_field_probe_trace_identity(label, trace))

@@ -53,6 +53,25 @@ def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _conditions(summary: dict[str, Any]) -> list[Any]:
+    """Return summary conditions when they have the expected list shape."""
+
+    value = summary.get("conditions")
+    return value if isinstance(value, list) else []
+
+
+def _has_condition_list(summary: dict[str, Any]) -> bool:
+    """Return whether summary conditions have the expected list shape."""
+
+    return isinstance(summary.get("conditions"), list)
+
+
+def _first_item(value: Any) -> Any | None:
+    """Return the first item from a sequence-like summary field."""
+
+    return value[0] if isinstance(value, (list, tuple)) and value else None
+
+
 def _number(value: Any) -> float | None:
     """Normalize finite scalar values for report calculations."""
 
@@ -80,7 +99,7 @@ def _is_native_live_summary(summary: dict[str, Any]) -> bool:
         return (
             str(summary.get("artifact_shape")) == "compact_summary_without_raw_traces"
             and str(run_config.get("condition_set")) == "issue_3330_seed_amplitude_grid"
-            and isinstance(summary.get("conditions"), list)
+            and _has_condition_list(summary)
         )
     inputs = _mapping(summary.get("inputs"))
     has_trace_inputs = "clean_trace_json" in inputs and "perturbed_trace_json" in inputs
@@ -123,11 +142,15 @@ def _source_status(summary: dict[str, Any]) -> dict[str, Any]:
                 "reason": grid.get("summary") or "grid interpretation failed closed",
             }
         if any(
-            _mapping(condition.get("behavior_change_summary")).get("command_sequence_changed")
+            _mapping(_mapping(condition).get("behavior_change_summary")).get(
+                "command_sequence_changed"
+            )
             is True
-            or _mapping(condition.get("behavior_change_summary")).get("progress_or_risk_changed")
+            or _mapping(_mapping(condition).get("behavior_change_summary")).get(
+                "progress_or_risk_changed"
+            )
             is True
-            for condition in summary.get("conditions", [])
+            for condition in _conditions(summary)
         ):
             return {
                 "usable": True,
@@ -160,7 +183,7 @@ def _collision_counts(summary: dict[str, Any]) -> dict[str, Any]:
     """Return compact collision counts from progress deltas."""
 
     if str(summary.get("schema_version")) == "issue_2777_observation_noise_live_replay.v1":
-        for condition in summary.get("conditions", []):
+        for condition in _conditions(summary):
             collision = _mapping(_mapping(condition).get("progress_delta")).get(
                 "collision_flag_counts"
             )
@@ -181,7 +204,7 @@ def _collision_counts(summary: dict[str, Any]) -> dict[str, Any]:
 def _issue_2777_closest_noop(summary: dict[str, Any]) -> float | None:
     """Return the no-op closest distance from an issue #2777 grid summary."""
 
-    conditions = summary.get("conditions", [])
+    conditions = _conditions(summary)
     noop_summary = _mapping(_mapping(conditions[0]).get("progress_summary")) if conditions else {}
     noop_distance = _number(noop_summary.get("closest_robot_ped_distance"))
     if noop_distance is not None:
@@ -202,7 +225,7 @@ def _issue_2777_command_changed(summary: dict[str, Any]) -> bool:
     return any(
         _mapping(_mapping(condition).get("behavior_change_summary")).get("command_sequence_changed")
         is True
-        for condition in summary.get("conditions", [])
+        for condition in _conditions(summary)
     )
 
 
@@ -210,7 +233,7 @@ def _issue_2777_closest_delta(summary: dict[str, Any]) -> float | None:
     """Return the largest finite closest-distance delta across conditions."""
 
     deltas: list[float] = []
-    for condition in summary.get("conditions", []):
+    for condition in _conditions(summary):
         closest = _mapping(_mapping(condition).get("progress_delta")).get(
             "closest_robot_ped_distance"
         )
@@ -242,7 +265,7 @@ def _source_row(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
             or fixture_contract.get("scenario_matrix"),
             "condition_set": run_config.get("condition_set"),
             "same_scenario": True,
-            "seed": _mapping(matched_scenario).get("seeds", [None])[0],
+            "seed": _first_item(matched_scenario.get("seeds")),
             "same_seed": True,
             "status": status["status"],
             "usable": status["usable"],

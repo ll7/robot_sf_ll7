@@ -164,6 +164,63 @@ def test_issue_2777_grid_sources_classify_failed_second_candidate(tmp_path: Path
     assert report["sources"][1]["status"] == "failed_closed"
 
 
+def test_issue_2777_grid_summary_coerces_malformed_conditions(tmp_path: Path) -> None:
+    """Malformed condition fields should fail closed instead of raising during row enrichment."""
+
+    mod = _load_script()
+    for condition_value in (None, {"bad": "shape"}):
+        payload = _issue_2777_grid_summary(
+            status="live_replay",
+            grid_label="medium_amplitude_sensitive",
+            closest=1.6,
+        )
+        payload["conditions"] = condition_value
+        source = _write(tmp_path / f"source_{condition_value is None}.json", payload)
+
+        report = mod.build_report([source], command="test")
+
+        assert report["usable_native_live_source_count"] == 0
+        assert report["sources"][0]["status"] == "failed_closed"
+        assert report["sources"][0]["closest_distance_delta_m"] is None
+        assert report["sources"][0]["collision_counts"] == {"clean": {}, "perturbed": {}}
+
+
+def test_issue_2777_grid_summary_coerces_condition_items_and_seed(tmp_path: Path) -> None:
+    """Non-mapping condition entries and malformed seed lists should not crash summaries."""
+
+    payload = _issue_2777_grid_summary(
+        status="live_replay",
+        grid_label="medium_amplitude_sensitive",
+        closest=1.6,
+    )
+    payload["fixture_contract"]["matched_scenario"]["seeds"] = None
+    payload["conditions"] = [
+        "not-a-condition-map",
+        {
+            "behavior_change_summary": {
+                "command_sequence_changed": True,
+                "progress_or_risk_changed": True,
+            },
+            "progress_delta": {
+                "closest_robot_ped_distance": {"noop": 1.6, "condition": 1.4},
+                "collision_flag_counts": {
+                    "noop": {"pedestrian": 0},
+                    "condition": {"pedestrian": 1},
+                },
+            },
+        },
+    ]
+    source = _write(tmp_path / "source.json", payload)
+
+    report = _load_script().build_report([source], command="test")
+
+    assert report["usable_native_live_source_count"] == 1
+    assert report["sources"][0]["seed"] is None
+    assert report["sources"][0]["status"] == "behavior_sensitive_grid"
+    assert report["sources"][0]["command_sequence_changed"] is True
+    assert abs(report["sources"][0]["closest_distance_delta_m"] - -0.2) < 1e-9
+
+
 def test_grid_classifies_near_field_sensitivity_as_fixture_specific(tmp_path: Path) -> None:
     """A sensitive near-field row plus a too-weak row should stay conservative."""
 

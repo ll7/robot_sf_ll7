@@ -1,0 +1,340 @@
+schema_version: scenario-prior-card-registry.v1
+name: calibrate_scenario_priors_from_traces_issue_2726
+issue: 2726
+status: partial_initial_registry
+benchmark_evidence: false
+claim_boundary: 'repository_trace_grounded_not_real_world_calibrated: this report
+  and generated prior cards are derived entirely from deterministic simulation trace
+  clusters. They do not claim real-world validity, representativeness, or generalizability
+  to real-world pedestrian behavior. Refer to issues #3161 and #2918 for real-world
+  staging and calibration requirements.'
+cards:
+- card_id: trace_cluster_bottleneck_sparse_unsignalized_nominal
+  prior_family: Repository trace cluster for bottleneck scenarios with sparse pedestrian
+    density (unsignalized, nominal)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/bottleneck_motion_rich_fixture.json
+    (trace_id: issue_2937_bottleneck_motion_rich, episode_id: issue_2937_bottleneck_motion_rich_ep0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json
+    (trace_id: fixture_trace_001, episode_id: fixture_episode_001)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[1.11, 1.12]'
+    trace_count: 2
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+- card_id: trace_cluster_crossing_sparse_signalized_nominal
+  prior_family: Repository trace cluster for crossing scenarios with sparse pedestrian
+    density (signalized, nominal)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_goal_directed_crossing_fixture_0000.json
+    (trace_id: issue_2868_goal_directed_crossing_0000, episode_id: issue_2868_goal_directed_crossing_episode_0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json
+    (trace_id: issue_2868_signalized_crossing_0000, episode_id: issue_2868_signalized_crossing_episode_0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/issue_2868_goal_directed_crossing_fixture_extended.json
+    (trace_id: issue_2868_goal_directed_crossing_0000_issue_2937_extended, episode_id:
+    issue_2868_goal_directed_crossing_episode_0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/issue_2868_signalized_crossing_fixture_extended.json
+    (trace_id: issue_2868_signalized_crossing_0000_issue_2937_extended, episode_id:
+    issue_2868_signalized_crossing_episode_0000)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[1.00, 1.67]'
+    trace_count: 4
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+- card_id: trace_cluster_crossing_sparse_unsignalized_collision
+  prior_family: Repository trace cluster for crossing scenarios with sparse pedestrian
+    density (unsignalized, collision)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/crossing_proxy_motion_rich_fixture.json
+    (trace_id: issue_2937_crossing_proxy_motion_rich, episode_id: issue_2937_crossing_proxy_motion_rich_ep0000)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[0.25, 0.25]'
+    trace_count: 1
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+- card_id: trace_cluster_general_dense_unsignalized_collision
+  prior_family: Repository trace cluster for general scenarios with dense pedestrian
+    density (unsignalized, collision)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/dense_pedestrian_stress_episode_0000.json
+    (trace_id: issue_2765_dense_pedestrian_stress_seed2765_ep0000, episode_id: dense_pedestrian_stress_ep0000)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[0.16, 0.16]'
+    trace_count: 1
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+- card_id: trace_cluster_general_sparse_signalized_nominal
+  prior_family: Repository trace cluster for general scenarios with sparse pedestrian
+    density (signalized, nominal)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_waiting_intent_change_fixture_0000.json
+    (trace_id: issue_2868_waiting_intent_change_0000, episode_id: issue_2868_waiting_intent_change_episode_0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/issue_2868_waiting_intent_change_fixture_extended.json
+    (trace_id: issue_2868_waiting_intent_change_0000_issue_2937_extended, episode_id:
+    issue_2868_waiting_intent_change_episode_0000)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[1.97, 1.97]'
+    trace_count: 2
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+- card_id: trace_cluster_general_sparse_unsignalized_near-miss
+  prior_family: Repository trace cluster for general scenarios with sparse pedestrian
+    density (unsignalized, near-miss)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/issue_2868_route_conflict_goal_fixture_extended.json
+    (trace_id: issue_2868_route_conflict_goal_0000_issue_2937_extended, episode_id:
+    issue_2868_route_conflict_goal_episode_0000)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[0.47, 0.47]'
+    trace_count: 1
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+- card_id: trace_cluster_general_sparse_unsignalized_nominal
+  prior_family: Repository trace cluster for general scenarios with sparse pedestrian
+    density (unsignalized, nominal)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_route_conflict_goal_fixture_0000.json
+    (trace_id: issue_2868_route_conflict_goal_0000, episode_id: issue_2868_route_conflict_goal_episode_0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/planner_sanity_open_episode_0000.json
+    (trace_id: planner_sanity_open-ep0-seed7-source-aae87cf6, episode_id: 0)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[1.46, 1.46]'
+    trace_count: 2
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+- card_id: trace_cluster_occluded_sparse_unsignalized_near-miss
+  prior_family: Repository trace cluster for occluded scenarios with sparse pedestrian
+    density (unsignalized, near-miss)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/occluded_emergence_episode_extended.json
+    (trace_id: issue_2756_occluded_emergence_seed111_ep0000_issue_2937_extended, episode_id:
+    issue_2756_occluded_emergence_ep0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json
+    (trace_id: issue_2756_occluded_emergence_seed111_ep0000, episode_id: issue_2756_occluded_emergence_ep0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_fast_pedestrian_episode_0000.json
+    (trace_id: issue_2780_occluded_emergence_fast_pedestrian_seed111_ep0000, episode_id:
+    issue_2780_occluded_emergence_fast_pedestrian_ep0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_late_visibility_episode_0000.json
+    (trace_id: issue_2780_occluded_emergence_late_visibility_seed111_ep0000, episode_id:
+    issue_2780_occluded_emergence_late_visibility_ep0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_left_close_episode_0000.json
+    (trace_id: issue_2780_occluded_emergence_left_close_seed111_ep0000, episode_id:
+    issue_2780_occluded_emergence_left_close_ep0000)'
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_slow_pedestrian_episode_0000.json
+    (trace_id: issue_2780_occluded_emergence_slow_pedestrian_seed111_ep0000, episode_id:
+    issue_2780_occluded_emergence_slow_pedestrian_ep0000)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[0.36, 0.72]'
+    trace_count: 6
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+- card_id: trace_cluster_occluded_sparse_unsignalized_nominal
+  prior_family: Repository trace cluster for occluded scenarios with sparse pedestrian
+    density (unsignalized, nominal)
+  classification: repository_trace_derived
+  source_type: repository_trace_derived
+  dataset_license_status: not_applicable_generated_synthetic
+  source_traces:
+  - 'tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_right_close_episode_0000.json
+    (trace_id: issue_2780_occluded_emergence_right_close_seed111_ep0000, episode_id:
+    issue_2780_occluded_emergence_right_close_ep0000)'
+  feature_extraction_method: Deterministic rule-based feature extraction and cluster
+    assignment of repository simulation trace exports. No heavy clustering or machine
+    learning applied.
+  parameter_bounds:
+    representation: scenario_prior.v1
+    units: position=m, velocity=m/s, time=s
+    enforcement: rule_based_clustering
+    min_distance_range_m: '[0.98, 0.98]'
+    trace_count: 1
+  excluded_populations:
+  - 'real-world datasets not staged in-repo (refer to #3161 for staging contracts)'
+  - 'hardware-calibrated environments (refer to #2918 for calibration context)'
+  unsupported_claims:
+  - learned_prior_realism
+  - benchmark_usefulness
+  - cross_dataset_generalization
+  - planner_performance_improvement
+  - license_safe_redistribution_of_raw_data
+  odd_conditions:
+  - repository-trace-grounded only; does not represent real-world statistics
+  - diagnostic-only cluster prior family
+  related_surfaces:
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.md
+  - docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json

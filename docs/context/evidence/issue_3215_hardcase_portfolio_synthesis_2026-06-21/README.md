@@ -57,7 +57,8 @@ compact table. Nothing was running at synthesis time.
 
 ## Suggested next step
 
-If the near-field-turn signal is worth chasing: a larger hard-seed sample (S20/S30) with the
-`nearfield_turn` / `nf_speedcap_only` configs, collision-metric emission, and an observation-noise
-slice — to decide whether it is a real (if small) effect or sampling noise. Otherwise record the
-negative result in the forecast-lane limitation text (#2835) and route effort elsewhere.
+Issue #3342 added the missing collision-rate and uncertainty fields, configured S20/S30 hard-seed
+manifests, and ran a local S20 diagnostic slice for `baseline`, `nearfield_turn`, and
+`nf_speedcap_only` across clean/noisy observation slices. That S20 result did not reproduce the
+near-field-turn signal and remains diagnostic-local, not benchmark or paper evidence. See
+`docs/context/evidence/issue_3342_nearfield_turn_budget_2026-06-21/`.

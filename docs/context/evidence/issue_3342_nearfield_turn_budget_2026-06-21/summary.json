@@ -1,0 +1,154 @@
+{
+  "status": "diagnostic_local_s20_complete",
+  "evidence_tier": "diagnostic-local, not benchmark/paper-grade",
+  "claim_boundary": "S20 local hard-seed slice only; no final adopt/safety-tradeoff decision",
+  "checkpoint": {
+    "path": "omitted_local_model_cache_path",
+    "sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+    "registry_id": "predictive_proxy_selected_v2_full",
+    "registry_release": "model/registry.yaml github_release artifact/models-2026-05-registry-v1"
+  },
+  "scenario_matrix": "configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml",
+  "seed_manifest": "configs/benchmarks/predictive_hard_seeds_s20_v1.yaml",
+  "rows": [
+    {
+      "slice": "clean",
+      "variant": "baseline",
+      "episodes": 20,
+      "success_rate": 0.2,
+      "success_rate_ci": [
+        0.08065766257979806,
+        0.41601743225189364
+      ],
+      "collision_rate": 0.8,
+      "collision_rate_ci": [
+        0.5839825677481064,
+        0.919342337420202
+      ],
+      "mean_min_distance": 3.2770142625020293,
+      "mean_min_distance_ci": [
+        2.173527174865298,
+        4.7528900634027895
+      ],
+      "collision_metric_status": "available",
+      "quality_pass_all": true,
+      "observation_noise_profile": "none"
+    },
+    {
+      "slice": "clean",
+      "variant": "nearfield_turn",
+      "episodes": 20,
+      "success_rate": 0.15,
+      "success_rate_ci": [
+        0.052368745896216595,
+        0.36041886474075696
+      ],
+      "collision_rate": 0.85,
+      "collision_rate_ci": [
+        0.6395811352592431,
+        0.9476312541037835
+      ],
+      "mean_min_distance": 3.223022387653896,
+      "mean_min_distance_ci": [
+        2.113746974840233,
+        4.716030284378409
+      ],
+      "collision_metric_status": "available",
+      "quality_pass_all": true,
+      "observation_noise_profile": "none"
+    },
+    {
+      "slice": "clean",
+      "variant": "nf_speedcap_only",
+      "episodes": 20,
+      "success_rate": 0.15,
+      "success_rate_ci": [
+        0.052368745896216595,
+        0.36041886474075696
+      ],
+      "collision_rate": 0.85,
+      "collision_rate_ci": [
+        0.6395811352592431,
+        0.9476312541037835
+      ],
+      "mean_min_distance": 3.223022387653896,
+      "mean_min_distance_ci": [
+        2.113746974840233,
+        4.716030284378409
+      ],
+      "collision_metric_status": "available",
+      "quality_pass_all": true,
+      "observation_noise_profile": "none"
+    },
+    {
+      "slice": "noisy",
+      "variant": "baseline",
+      "episodes": 20,
+      "success_rate": 0.2,
+      "success_rate_ci": [
+        0.08065766257979806,
+        0.41601743225189364
+      ],
+      "collision_rate": 0.8,
+      "collision_rate_ci": [
+        0.5839825677481064,
+        0.919342337420202
+      ],
+      "mean_min_distance": 3.276468385156705,
+      "mean_min_distance_ci": [
+        2.172626339107638,
+        4.7534622153241415
+      ],
+      "collision_metric_status": "available",
+      "quality_pass_all": true,
+      "observation_noise_profile": "robustness_smoke_v1"
+    },
+    {
+      "slice": "noisy",
+      "variant": "nearfield_turn",
+      "episodes": 20,
+      "success_rate": 0.15,
+      "success_rate_ci": [
+        0.052368745896216595,
+        0.36041886474075696
+      ],
+      "collision_rate": 0.85,
+      "collision_rate_ci": [
+        0.6395811352592431,
+        0.9476312541037835
+      ],
+      "mean_min_distance": 3.2239643411785353,
+      "mean_min_distance_ci": [
+        2.113389560557123,
+        4.718437631564268
+      ],
+      "collision_metric_status": "available",
+      "quality_pass_all": true,
+      "observation_noise_profile": "robustness_smoke_v1"
+    },
+    {
+      "slice": "noisy",
+      "variant": "nf_speedcap_only",
+      "episodes": 20,
+      "success_rate": 0.15,
+      "success_rate_ci": [
+        0.052368745896216595,
+        0.36041886474075696
+      ],
+      "collision_rate": 0.85,
+      "collision_rate_ci": [
+        0.6395811352592431,
+        0.9476312541037835
+      ],
+      "mean_min_distance": 3.2239643411785353,
+      "mean_min_distance_ci": [
+        2.113389560557123,
+        4.718437631564268
+      ],
+      "collision_metric_status": "available",
+      "quality_pass_all": true,
+      "observation_noise_profile": "robustness_smoke_v1"
+    }
+  ],
+  "interpretation": "Observed S20 local slice does not support the #3215 near-field turn signal: baseline success 0.20 vs nearfield_turn/nf_speedcap_only 0.15 in both clean and noisy slices; collision rate is 0.80 baseline vs 0.85 for both variants. Intervals are wide and overlap; treat as diagnostic negative, not final benchmark claim."
+}

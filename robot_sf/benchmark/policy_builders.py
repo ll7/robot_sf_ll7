@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass(frozen=True)
@@ -34,7 +37,7 @@ def _build_risk_dwa_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpe
     )
 
 
-_ADAPTER_POLICY_BUILDERS = {
+_ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
     "risk_dwa": _build_risk_dwa_policy_spec,
 }
 

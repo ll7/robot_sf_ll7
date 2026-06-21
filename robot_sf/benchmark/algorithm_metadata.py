@@ -11,9 +11,11 @@ from typing import Any
 from robot_sf.baselines.interface import ActionContract, ObservationContract, PlannerMetadata
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.observation_levels import (
+    OBSERVATION_LEVEL_KEYS,
     observation_level_for_mode,
     resolve_observation_level_contract,
 )
+from robot_sf.models.registry import get_registry_entry
 
 _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
@@ -136,6 +138,8 @@ _DEFAULT_OBSERVATION_SPEC: dict[str, Any] = {
         "and pedestrian state when present."
     ),
 }
+
+_DICT_STYLE_PLANNER_OBSERVATION_MODES = {"dict", "native_dict", "multi_input"}
 
 _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "goal": {
@@ -1085,6 +1089,293 @@ def resolve_observation_mode(
     return active_mode
 
 
+def _normalize_optional_string(value: Any) -> str | None:
+    """Return a stripped string or ``None`` for blank/missing values."""
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _planner_observation_modes_compatible(left: str | None, right: str | None) -> bool:
+    """Return whether two planner-side observation mode labels describe the same family."""
+    left_mode = _normalize_optional_string(left)
+    right_mode = _normalize_optional_string(right)
+    if left_mode is None or right_mode is None:
+        return True
+    left_key = left_mode.lower()
+    right_key = right_mode.lower()
+    if left_key == right_key:
+        return True
+    return (
+        left_key in _DICT_STYLE_PLANNER_OBSERVATION_MODES
+        and right_key in _DICT_STYLE_PLANNER_OBSERVATION_MODES
+    )
+
+
+def _dict_style_checkpoint_metadata_required(canonical: str, planner_mode: str | None) -> bool:
+    """Return whether a dict-style checkpoint would otherwise use the wrong default producer."""
+    normalized = _normalize_optional_string(planner_mode)
+    if normalized is None or normalized.lower() not in _DICT_STYLE_PLANNER_OBSERVATION_MODES:
+        return False
+    return resolve_observation_mode(canonical) != "socnav_state"
+
+
+def _observation_contract_from_transfer_metadata(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Return transfer-metadata observation contract when present."""
+    transfer = payload.get("transfer_benchmark")
+    if not isinstance(transfer, dict):
+        algorithm_metadata = payload.get("algorithm_metadata")
+        if isinstance(algorithm_metadata, dict):
+            transfer = algorithm_metadata.get("transfer_benchmark")
+    if not isinstance(transfer, dict):
+        return None, None
+    contract = transfer.get("observation_contract")
+    if not isinstance(contract, dict):
+        raise ValueError(
+            "malformed learned checkpoint observation metadata: "
+            "transfer_benchmark.observation_contract must be a mapping"
+        )
+    return contract, "algo_config.transfer_benchmark.observation_contract"
+
+
+def _observation_contract_from_registry(
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Return model-registry benchmark-promotion metadata when a model_id is configured."""
+    model_id = _normalize_optional_string(payload.get("model_id"))
+    if model_id is None:
+        return None, None
+    try:
+        registry_entry = get_registry_entry(model_id)
+    except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "requires learned checkpoint observation metadata but model registry lookup failed "
+            f"for model_id={model_id!r}: {exc}"
+        ) from exc
+    promotion = registry_entry.get("benchmark_promotion")
+    if not isinstance(promotion, dict):
+        return None, None
+    return promotion, "model_registry.benchmark_promotion"
+
+
+def _learned_checkpoint_observation_metadata(
+    algo_config: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Return the first supported learned-checkpoint observation metadata block."""
+    transfer_contract, transfer_source = _observation_contract_from_transfer_metadata(algo_config)
+    if transfer_contract is not None:
+        return transfer_contract, transfer_source
+
+    direct_contract = algo_config.get("observation_contract")
+    if isinstance(direct_contract, dict):
+        return direct_contract, "algo_config.observation_contract"
+    if direct_contract is not None:
+        raise ValueError(
+            "malformed learned checkpoint observation metadata: "
+            "observation_contract must be a mapping"
+        )
+
+    direct_promotion = algo_config.get("benchmark_promotion")
+    if isinstance(direct_promotion, dict):
+        return direct_promotion, "algo_config.benchmark_promotion"
+    if direct_promotion is not None:
+        raise ValueError(
+            "malformed learned checkpoint observation metadata: "
+            "benchmark_promotion must be a mapping"
+        )
+
+    return _observation_contract_from_registry(algo_config)
+
+
+def _planner_observation_mode_from_metadata(metadata: dict[str, Any]) -> str | None:
+    """Return the metadata-declared planner-side observation mode, if any."""
+    for key in ("planner_observation_mode", "observation_mode", "obs_mode"):
+        value = _normalize_optional_string(metadata.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _metadata_declares_observation_contract(metadata: dict[str, Any]) -> bool:
+    """Return whether metadata contains fields that can resolve an observation producer."""
+    for key in (
+        "observation_level",
+        "active_observation_mode",
+        "runtime_observation_mode",
+        "runner_observation_mode",
+        "observation_producer_mode",
+        "planner_observation_mode",
+        "observation_mode",
+        "obs_mode",
+    ):
+        if _normalize_optional_string(metadata.get(key)) is not None:
+            return True
+    return False
+
+
+def _active_observation_mode_from_checkpoint_metadata(
+    canonical: str,
+    metadata: dict[str, Any],
+) -> tuple[str, str | None]:
+    """Resolve the runtime observation producer declared by checkpoint metadata.
+
+    Returns:
+        Active observation mode and the raw metadata observation-level label, when present.
+    """
+    runtime_mode = None
+    for key in (
+        "active_observation_mode",
+        "runtime_observation_mode",
+        "runner_observation_mode",
+        "observation_producer_mode",
+    ):
+        runtime_mode = _normalize_optional_string(metadata.get(key))
+        if runtime_mode is not None:
+            break
+    observation_level = _normalize_optional_string(metadata.get("observation_level"))
+
+    try:
+        if runtime_mode is not None:
+            level = (
+                observation_level
+                if observation_level is not None and observation_level in OBSERVATION_LEVEL_KEYS
+                else None
+            )
+            return resolve_observation_mode(
+                canonical,
+                runtime_mode,
+                observation_level=level,
+            ), observation_level
+        if observation_level is not None and observation_level in OBSERVATION_LEVEL_KEYS:
+            return (
+                resolve_observation_mode(canonical, observation_level=observation_level),
+                observation_level,
+            )
+        if observation_level is not None:
+            return resolve_observation_mode(canonical, observation_level), observation_level
+    except ValueError as exc:
+        raise ValueError(
+            "incompatible learned checkpoint observation metadata for "
+            f"algorithm '{canonical}': {exc}"
+        ) from exc
+
+    raise ValueError(
+        "malformed learned checkpoint observation metadata: expected observation_level "
+        "or active_observation_mode"
+    )
+
+
+def resolve_learned_checkpoint_observation_contract(
+    algo: str,
+    algo_config: dict[str, Any] | None = None,
+    *,
+    observation_mode: str | None = None,
+    observation_level: str | None = None,
+) -> dict[str, Any]:
+    """Resolve the active observation producer for learned-checkpoint benchmark execution.
+
+    Explicit runner overrides win. Without overrides, dict-family checkpoint configs whose
+    algorithm default is not SocNav state must provide metadata that declares the required
+    observation contract; this prevents running those checkpoints with the wrong producer.
+
+    Returns:
+        A classification payload containing the active observation mode and metadata source.
+    """
+    canonical = canonical_algorithm_name(algo)
+    config = dict(algo_config or {})
+    config_planner_mode = _normalize_optional_string(config.get("obs_mode"))
+
+    explicit_mode = _normalize_optional_string(observation_mode)
+    explicit_level = _normalize_optional_string(observation_level)
+    if explicit_mode is not None or explicit_level is not None:
+        active_mode = resolve_observation_mode(
+            canonical,
+            explicit_mode,
+            observation_level=explicit_level,
+        )
+        if explicit_mode is not None and explicit_level is not None:
+            source = "explicit_observation_mode_and_level"
+        elif explicit_mode is not None:
+            source = "explicit_observation_mode"
+        else:
+            source = "explicit_observation_level"
+        return {
+            "status": "explicit_override",
+            "metadata_source": source,
+            "active_observation_mode": active_mode,
+            "observation_level": explicit_level,
+            "observation_level_key": (
+                explicit_level if explicit_level in OBSERVATION_LEVEL_KEYS else None
+            ),
+            "planner_observation_mode": config_planner_mode,
+        }
+
+    metadata_required = _dict_style_checkpoint_metadata_required(canonical, config_planner_mode)
+    metadata, metadata_source = _learned_checkpoint_observation_metadata(config)
+
+    if metadata is None:
+        if metadata_required:
+            raise ValueError(
+                f"Algorithm '{canonical}' with obs_mode={config_planner_mode!r} requires "
+                "learned checkpoint observation metadata; provide model registry "
+                "benchmark_promotion, transfer_benchmark.observation_contract, or an explicit "
+                "observation_mode/observation_level override."
+            )
+        active_mode = resolve_observation_mode(canonical)
+        return {
+            "status": "not_applicable",
+            "metadata_source": "algorithm_default",
+            "active_observation_mode": active_mode,
+            "observation_level": observation_level_for_mode(active_mode).key,
+            "observation_level_key": observation_level_for_mode(active_mode).key,
+            "planner_observation_mode": config_planner_mode,
+        }
+    if not _metadata_declares_observation_contract(metadata):
+        if metadata_required:
+            raise ValueError(
+                f"Algorithm '{canonical}' with obs_mode={config_planner_mode!r} requires "
+                "learned checkpoint observation metadata, but the resolved metadata source "
+                f"{metadata_source!r} does not declare observation_level or active_observation_mode."
+            )
+        active_mode = resolve_observation_mode(canonical)
+        return {
+            "status": "not_applicable",
+            "metadata_source": "algorithm_default",
+            "active_observation_mode": active_mode,
+            "observation_level": observation_level_for_mode(active_mode).key,
+            "observation_level_key": observation_level_for_mode(active_mode).key,
+            "planner_observation_mode": config_planner_mode,
+        }
+
+    metadata_planner_mode = _planner_observation_mode_from_metadata(metadata)
+    planner_mode = config_planner_mode or metadata_planner_mode
+    if not _planner_observation_modes_compatible(config_planner_mode, metadata_planner_mode):
+        raise ValueError(
+            "incompatible learned checkpoint observation metadata for "
+            f"algorithm '{canonical}': config obs_mode={config_planner_mode!r} conflicts with "
+            f"metadata planner_observation_mode={metadata_planner_mode!r}"
+        )
+
+    active_mode, metadata_level = _active_observation_mode_from_checkpoint_metadata(
+        canonical,
+        metadata,
+    )
+    return {
+        "status": "metadata_resolved",
+        "metadata_source": metadata_source,
+        "active_observation_mode": active_mode,
+        "observation_level": metadata_level or observation_level_for_mode(active_mode).key,
+        "observation_level_key": (
+            metadata_level if metadata_level in OBSERVATION_LEVEL_KEYS else None
+        )
+        or observation_level_for_mode(active_mode).key,
+        "planner_observation_mode": planner_mode,
+    }
+
+
 def _resolve_observation_metadata(
     canonical: str,
     *,
@@ -1386,5 +1677,6 @@ __all__ = [
     "infer_execution_mode_from_counts",
     "observation_spec_for_algorithm",
     "planner_contract_for_algorithm",
+    "resolve_learned_checkpoint_observation_contract",
     "resolve_observation_mode",
 ]

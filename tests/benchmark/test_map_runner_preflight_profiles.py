@@ -119,6 +119,50 @@ def test_paper_baseline_allows_ppo_when_gate_is_met(tmp_path: Path, monkeypatch)
     assert summary["algorithm_metadata_contract"]["baseline_category"] == "learning"
 
 
+def test_run_map_batch_derives_ppo_observation_mode_from_registry_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Batch metadata should use checkpoint metadata for PPO dict-observation producers."""
+    _patch_lightweight_batch(monkeypatch)
+    monkeypatch.setattr(
+        map_runner,
+        "_build_policy",
+        lambda _algo, _cfg: (lambda _obs: (0.0, 0.0), {"status": "ok"}),
+    )
+    algo_cfg_path = tmp_path / "ppo_grid.yaml"
+    algo_cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "model_id": (
+                    "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+                ),
+                "obs_mode": "dict",
+                "action_space": "unicycle",
+                "fallback_to_goal": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        tmp_path / "episodes.jsonl",
+        schema_path=SCHEMA_PATH,
+        algo="ppo",
+        benchmark_profile="experimental",
+        algo_config_path=str(algo_cfg_path),
+        resume=False,
+    )
+
+    assert summary["algorithm_metadata_contract"]["observation_spec"]["active_mode"] == (
+        "socnav_state"
+    )
+    assert summary["algorithm_metadata_contract"]["observation_level"]["key"] == (
+        "tracked_agents_no_noise"
+    )
+
+
 def test_socnav_fail_fast_policy_raises(tmp_path: Path, monkeypatch) -> None:
     """SocNav preflight policy `fail-fast` should propagate prereq failures."""
     _patch_lightweight_batch(monkeypatch)

@@ -1,4 +1,4 @@
-# Hard-case breakthrough portfolio — cross-bet synthesis (#3215)
+# Issue #3215 Hard-Case Portfolio Synthesis
 
 **Date:** 2026-06-21 · **Evidence tier:** `diagnostic` (NOT benchmark/paper-grade) · **Decision:** negative result with one narrow positive signal
 

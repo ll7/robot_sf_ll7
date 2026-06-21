@@ -2,10 +2,27 @@
 
 from __future__ import annotations
 
+import sys
+import types
 from typing import TYPE_CHECKING
 
 import pytest
 import yaml
+
+# This module tests map-runner preflight plumbing with all policy execution stubbed. The shared
+# lightweight validation venv does not include torch, but map_runner imports the experimental
+# CrowdNav_HEIGHT adapter at module import time. Provide only the marker SciPy probes during import;
+# tests that execute torch-dependent adapter code should still fail instead of silently passing.
+try:  # pragma: no cover - exercised only in optional-dependency environments
+    import torch as _torch  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover - local lightweight validation path
+    _torch_stub = types.ModuleType("torch")
+
+    class _TorchTensor:
+        """Marker class for SciPy optional torch-array detection."""
+
+    _torch_stub.Tensor = _TorchTensor
+    sys.modules["torch"] = _torch_stub
 
 from robot_sf.benchmark import map_runner
 
@@ -117,6 +134,50 @@ def test_paper_baseline_allows_ppo_when_gate_is_met(tmp_path: Path, monkeypatch)
     assert summary["written"] == 1
     assert summary["algorithm_readiness"]["profile"] == "paper-baseline"
     assert summary["algorithm_metadata_contract"]["baseline_category"] == "learning"
+
+
+def test_run_map_batch_derives_ppo_observation_mode_from_registry_metadata(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Batch metadata should use checkpoint metadata for PPO dict-observation producers."""
+    _patch_lightweight_batch(monkeypatch)
+    monkeypatch.setattr(
+        map_runner,
+        "_build_policy",
+        lambda _algo, _cfg: (lambda _obs: (0.0, 0.0), {"status": "ok"}),
+    )
+    algo_cfg_path = tmp_path / "ppo_grid.yaml"
+    algo_cfg_path.write_text(
+        yaml.safe_dump(
+            {
+                "model_id": (
+                    "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+                ),
+                "obs_mode": "dict",
+                "action_space": "unicycle",
+                "fallback_to_goal": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = map_runner.run_map_batch(
+        [_scenario()],
+        tmp_path / "episodes.jsonl",
+        schema_path=SCHEMA_PATH,
+        algo="ppo",
+        benchmark_profile="experimental",
+        algo_config_path=str(algo_cfg_path),
+        resume=False,
+    )
+
+    assert summary["algorithm_metadata_contract"]["observation_spec"]["active_mode"] == (
+        "socnav_state"
+    )
+    assert summary["algorithm_metadata_contract"]["observation_level"]["key"] == (
+        "tracked_agents_no_noise"
+    )
 
 
 def test_socnav_fail_fast_policy_raises(tmp_path: Path, monkeypatch) -> None:
@@ -402,6 +463,11 @@ def test_adapter_impact_summary_finalizes_from_worker_records(
     monkeypatch.setattr(map_runner, "validate_scenario_list", lambda _scenarios: [])
     monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
     monkeypatch.setattr(map_runner, "_write_validated", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        map_runner,
+        "_build_policy",
+        lambda _algo, _cfg: (lambda _obs: (0.0, 0.0), {"status": "ok"}),
+    )
     monkeypatch.setattr(
         map_runner,
         "_run_map_job_worker",

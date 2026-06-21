@@ -12,10 +12,9 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.algorithm_metadata import (
-    canonical_algorithm_name,
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
-    resolve_observation_mode,
+    resolve_learned_checkpoint_observation_contract,
 )
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
@@ -212,25 +211,16 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         scenario=scenario,
         seed=int(seed),
     )
-    requested_observation_mode = observation_mode
-    if (
-        requested_observation_mode is None
-        and observation_level is None
-        and canonical_algorithm_name(algo) == "ppo"
-        and str(policy_cfg.get("obs_mode", "")).strip().lower()
-        in {"dict", "native_dict", "multi_input"}
-    ):
-        # Grid/dict PPO checkpoints require the SocNav structured
-        # (occupancy-grid) observation they were trained with. The PPO spec
-        # default (sensor_fusion_state) disables the occupancy grid, so a
-        # dict-obs checkpoint would otherwise fail with "Missing required dict
-        # observation keys". Select the structured stack when none was requested.
-        requested_observation_mode = "socnav_state"
-    active_observation_mode = resolve_observation_mode(
+    learned_observation_contract = resolve_learned_checkpoint_observation_contract(
         algo,
-        requested_observation_mode,
+        policy_cfg,
+        observation_mode=observation_mode,
         observation_level=observation_level,
     )
+    active_observation_mode = str(learned_observation_contract["active_observation_mode"])
+    resolved_observation_level = observation_level
+    if resolved_observation_level is None:
+        resolved_observation_level = learned_observation_contract.get("observation_level_key")
     _apply_active_observation_mode_to_env_config(
         config,
         active_observation_mode=active_observation_mode,
@@ -260,8 +250,9 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         metadata=algo_meta,
         robot_kinematics=robot_kinematics,
         observation_mode=active_observation_mode,
-        observation_level=observation_level,
+        observation_level=resolved_observation_level,
     )
+    algo_meta["learned_checkpoint_observation_contract"] = learned_observation_contract
     active_observation_level = str(algo_meta["observation_level"]["key"])
     attach_track_metadata(
         algo_meta,

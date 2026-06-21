@@ -22,7 +22,7 @@ from robot_sf.benchmark import map_runner_policy_resolution as _policy_resolutio
 from robot_sf.benchmark import planner_command_contract as planner_commands
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
-    resolve_observation_mode,
+    resolve_learned_checkpoint_observation_contract,
 )
 from robot_sf.benchmark.algorithm_readiness import (
     BenchmarkProfile,
@@ -2436,15 +2436,32 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
 
     kinematics_tag, scenario_kinematics = _resolve_batch_kinematics_tag(filtered)
     batch_observation_mode = str(observation_mode).strip() if observation_mode is not None else None
+    raw_policy_cfg = _parse_algo_config(algo_config_path)
+    _, policy_cfg = _resolve_policy_search_candidate_runtime(
+        default_algo=algo,
+        algo_config_path=algo_config_path,
+        algo_config=raw_policy_cfg,
+        scenario={},
+    )
+    learned_observation_contract = resolve_learned_checkpoint_observation_contract(
+        algo,
+        policy_cfg,
+        observation_mode=batch_observation_mode,
+        observation_level=observation_level,
+    )
+    active_observation_mode = str(learned_observation_contract["active_observation_mode"])
+    resolved_observation_level = observation_level
+    if resolved_observation_level is None:
+        resolved_observation_level = learned_observation_contract.get("observation_level_key")
     algo_contract = enrich_algorithm_metadata(
         algo=algo,
         metadata={},
         robot_kinematics=kinematics_tag,
         adapter_impact_requested=adapter_impact_eval,
-        observation_mode=batch_observation_mode,
-        observation_level=observation_level,
+        observation_mode=active_observation_mode,
+        observation_level=resolved_observation_level,
     )
-    active_observation_mode = str(algo_contract["observation_spec"]["active_mode"])
+    algo_contract["learned_checkpoint_observation_contract"] = learned_observation_contract
     active_observation_level = str(algo_contract["observation_level"]["key"])
     attach_track_metadata(
         algo_contract,
@@ -2462,13 +2479,6 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     schema = load_schema(schema_path)
-    raw_policy_cfg = _parse_algo_config(algo_config_path)
-    _, policy_cfg = _resolve_policy_search_candidate_runtime(
-        default_algo=algo,
-        algo_config_path=algo_config_path,
-        algo_config=raw_policy_cfg,
-        scenario={},
-    )
     robot_command_mode: str | None = None
     for scenario in filtered:
         robot_cfg = scenario.get("robot_config")
@@ -2510,10 +2520,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 algo_config=raw_policy_cfg,
                 scenario=scenario,
             )
-            validation_observation_mode = resolve_observation_mode(
+            validation_observation_contract = resolve_learned_checkpoint_observation_contract(
                 validation_algo,
-                batch_observation_mode,
+                validation_cfg,
+                observation_mode=batch_observation_mode,
                 observation_level=observation_level,
+            )
+            validation_observation_mode = str(
+                validation_observation_contract["active_observation_mode"]
             )
             compatible_contract = _validate_planner_contract(
                 algo=validation_algo,
@@ -2641,16 +2655,25 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     scenario=sc,
                     seed=int(seed),
                 )
-                identity_observation_mode = resolve_observation_mode(
+                identity_observation_contract = resolve_learned_checkpoint_observation_contract(
                     identity_algo,
-                    batch_observation_mode,
+                    identity_cfg,
+                    observation_mode=batch_observation_mode,
                     observation_level=observation_level,
                 )
+                identity_observation_mode = str(
+                    identity_observation_contract["active_observation_mode"]
+                )
+                identity_observation_level = observation_level
+                if identity_observation_level is None:
+                    identity_observation_level = identity_observation_contract.get(
+                        "observation_level_key"
+                    )
                 identity_contract = enrich_algorithm_metadata(
                     algo=identity_algo,
                     metadata={},
                     observation_mode=identity_observation_mode,
-                    observation_level=observation_level,
+                    observation_level=identity_observation_level,
                 )
                 identity_observation_level = str(identity_contract["observation_level"]["key"])
                 identity_payload = _scenario_identity_payload(

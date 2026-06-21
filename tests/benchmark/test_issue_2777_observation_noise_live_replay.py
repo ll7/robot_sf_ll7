@@ -471,6 +471,19 @@ def test_issue_3328_behavior_probe_guardrails_require_near_field_fixture(
     assert blockers
     assert "closest_robot_ped_distance <= 2.0" in blockers[-1]
 
+    _write_observed_count_trace(
+        output_dir / "traces/noop/trace.json",
+        [0, 0, 0, 0, 0, 1],
+        closest=float("nan"),
+    )
+    blockers = mod._verify_issue_3328_behavior_probe_guardrails(
+        output_dir=output_dir,
+        fixture_contract=contract,
+    )
+
+    assert blockers
+    assert "finite no-op closest_robot_ped_distance" in blockers[-1]
+
 
 def test_trace_comparison_names_scenario_seed_planner_and_policy_insensitive(
     tmp_path: Path,
@@ -542,6 +555,41 @@ def test_trace_comparison_reports_behavior_change_dimensions(tmp_path: Path) -> 
     assert behavior["stop_yield_timing"]["command_stop_proxy"]["noop_first_stop_step"] == 3
     assert behavior["stop_yield_timing"]["command_stop_proxy"]["condition_first_stop_step"] is None
     assert comparison["classification"]["label"] == "behavior_sensitive_diagnostic_only"
+
+
+def test_progress_delta_treats_paired_nan_values_as_unchanged() -> None:
+    """Paired NaN summary fields should not create false behavior sensitivity."""
+    mod = _load_script()
+    noop = {"progress_summary": {"net_goal_progress": float("nan")}}
+    condition = {"progress_summary": {"net_goal_progress": float("nan")}}
+
+    delta = mod._progress_delta(noop, condition)
+
+    assert delta["net_goal_progress"]["changed"] is False
+
+
+def test_near_miss_summary_ignores_non_finite_counts() -> None:
+    """Non-finite near-miss metadata should not poison the summed comparison."""
+    mod = _load_script()
+    noop = {
+        "steps": [
+            {"meta": {"near_misses": 1}},
+            {"meta": {"near_misses": float("nan")}},
+        ]
+    }
+    condition = {
+        "steps": [
+            {"meta": {"near_misses": 1}},
+            {"meta": {"near_misses": float("inf")}},
+        ]
+    }
+
+    summary = mod._near_miss_summary(noop, condition)
+
+    assert summary["status"] == "available"
+    assert summary["noop"] == 1
+    assert summary["condition"] == 1
+    assert summary["changed"] is False
 
 
 def test_observation_totals_ignore_missing_noise_profile(tmp_path: Path) -> None:

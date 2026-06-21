@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -411,6 +412,24 @@ def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _finite_number(value: Any) -> float | None:
+    """Return a finite non-boolean number, otherwise ``None``."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _values_differ(left: Any, right: Any) -> bool:
+    """Compare report values while treating paired NaN values as unchanged."""
+    if isinstance(left, int | float) and isinstance(right, int | float):
+        left_float = float(left)
+        right_float = float(right)
+        if math.isnan(left_float) and math.isnan(right_float):
+            return False
+    return left != right
+
+
 def _commands(trace: dict[str, Any]) -> list[Any]:
     """Return selected policy commands from a diagnostics trace."""
     return [_mapping(row).get("policy_command") for row in trace.get("steps", [])]
@@ -452,7 +471,7 @@ def _progress_delta(noop: dict[str, Any], condition: dict[str, Any]) -> dict[str
         field: {
             "noop": noop_summary.get(field),
             "condition": condition_summary.get(field),
-            "changed": noop_summary.get(field) != condition_summary.get(field),
+            "changed": _values_differ(noop_summary.get(field), condition_summary.get(field)),
         }
         for field in PROGRESS_FIELDS
     }
@@ -468,9 +487,11 @@ def _near_miss_total(trace: dict[str, Any]) -> tuple[float | None, bool]:
             continue
         available = True
         try:
-            total += float(meta.get("near_misses", 0) or 0)
+            value = float(meta.get("near_misses", 0) or 0)
         except (TypeError, ValueError):
             continue
+        if math.isfinite(value):
+            total += value
     return (total if available else None), available
 
 
@@ -663,7 +684,8 @@ def _classification(
     behavior = _behavior_change_summary(noop_trace, condition_trace)
     observation_changed = _observation_totals(noop_trace) != _observation_totals(condition_trace)
     closest = _mapping(noop_trace.get("progress_summary")).get("closest_robot_ped_distance")
-    near_field = isinstance(closest, (int, float)) and closest <= 2.0
+    finite_closest = _finite_number(closest)
+    near_field = finite_closest is not None and finite_closest <= 2.0
     if not fixture_contract_satisfied:
         return {
             "label": "diagnostic_only",
@@ -1069,9 +1091,12 @@ def _verify_issue_3328_trace_identity(label: str, trace: Mapping[str, Any]) -> l
 def _verify_issue_3328_near_field_trace(noop_trace: Mapping[str, Any]) -> list[str]:
     """Verify the #3328 probe no-op trace has near-field interaction geometry."""
     closest = _mapping(noop_trace.get("progress_summary")).get("closest_robot_ped_distance")
-    if not isinstance(closest, int | float):
-        return ["Issue #3328 behavior probe requires a no-op closest_robot_ped_distance value."]
-    if float(closest) > 2.0:
+    finite_closest = _finite_number(closest)
+    if finite_closest is None:
+        return [
+            "Issue #3328 behavior probe requires a finite no-op closest_robot_ped_distance value."
+        ]
+    if finite_closest > 2.0:
         return [
             "Issue #3328 behavior probe requires no-op closest_robot_ped_distance <= 2.0 m; "
             f"observed {closest}."

@@ -4,15 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 from pathlib import Path
 from typing import Any
 
 CLAIM_BOUNDARY = (
-    "analysis_only_diagnostic: proposal-vs-random results from the synthetic fixture only "
-    "exercise model plumbing and report shape. They are not held-out archive evidence, benchmark "
-    "evidence, planner-performance evidence, or a claim that learned proposals improve yield."
+    "plumbing_validation_only: proposal-vs-random deltas in this report exercise ranking and "
+    "report plumbing only. The current objective is archive-nearness, so it is circular with "
+    "archive-nearness ranking and is not held-out yield, benchmark evidence, planner-performance "
+    "evidence, or evidence that learned proposals improve failure discovery."
 )
 
 
@@ -75,16 +77,44 @@ def create_synthetic_archive() -> dict[str, Any]:
     }
 
 
-def load_search_space(path: Path | None) -> Any:
-    """Load SearchSpaceConfig from path, falling back to synthetic if not found/error."""
+def _payload_sha256(payload: dict[str, Any]) -> str:
+    """Return a deterministic digest for JSON-like report provenance."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def load_search_space(path: Path | None) -> tuple[str, str, Any, bool]:
+    """Load SearchSpaceConfig, returning state and synthetic fallback provenance."""
     from robot_sf.adversarial.config import SearchSpaceConfig
 
-    if path and path.exists():
+    if path is None:
+        return (
+            "diagnostic_only",
+            "No search space path provided; using synthetic search-space fixture.",
+            create_synthetic_search_space(),
+            True,
+        )
+    if path.exists():
         try:
-            return SearchSpaceConfig.from_file(path)
-        except (ValueError, TypeError, OSError):
-            pass
-    return create_synthetic_search_space()
+            return (
+                "active",
+                "Search space loaded successfully.",
+                SearchSpaceConfig.from_file(path),
+                False,
+            )
+        except (ValueError, TypeError, OSError) as exc:
+            return (
+                "blocked",
+                f"Failed to load search space: {exc}; using synthetic fixture for plumbing only.",
+                create_synthetic_search_space(),
+                True,
+            )
+    return (
+        "blocked",
+        f"Search space path {path} does not exist; using synthetic fixture for plumbing only.",
+        create_synthetic_search_space(),
+        True,
+    )
 
 
 def load_archive(path: Path | None) -> tuple[str, str, dict[str, Any], bool]:
@@ -186,8 +216,18 @@ def main() -> int:
     """Main execution function."""
     args = parse_args()
 
-    search_space = load_search_space(args.search_space)
-    state, reason, archive_data, synthetic_evidence = load_archive(args.archive)
+    search_space_state, search_space_reason, search_space, synthetic_search_space = (
+        load_search_space(args.search_space)
+    )
+    archive_state, archive_reason, archive_data, synthetic_archive = load_archive(args.archive)
+    state = archive_state
+    reason_parts = [archive_reason, search_space_reason]
+    if not synthetic_archive and synthetic_search_space:
+        state = "blocked"
+        reason_parts.append("Real-archive runs require a real search-space config.")
+    if search_space_state == "blocked" and state == "active":
+        state = "blocked"
+    reason = " ".join(reason_parts)
 
     from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 
@@ -233,22 +273,35 @@ def main() -> int:
 
     proposal_metrics["certification_statuses_advisory"] = cert_statuses_advisory
     proposal_metrics["certification_statuses_strict"] = cert_statuses_strict
+    provenance = {
+        "archive_sha256": _payload_sha256(archive_data),
+        "evaluation_outcome_sha256": None,
+        "split_policy": "none_plumbing_fixture",
+        "scenario_family_overlap": "not_checked",
+        "seed_overlap": "not_checked",
+        "archive_id_overlap": "not_checked",
+        "disjointness_checks_passed": False,
+        "required_for_held_out_claim": True,
+    }
 
     report = {
         "schema_version": "adversarial_proposal_comparison.v1",
         "state": state,
         "reason": reason,
         "claim_boundary": CLAIM_BOUNDARY,
-        "result_classification": "diagnostic_only" if synthetic_evidence else "analysis_only",
-        "held_out_evidence": not synthetic_evidence,
+        "result_classification": "plumbing_validation_only",
+        "held_out_evidence": False,
         "benchmark_evidence": False,
         "planner_performance_claim": False,
-        "synthetic_evidence": synthetic_evidence,
+        "synthetic_archive": synthetic_archive,
+        "synthetic_search_space": synthetic_search_space,
+        "search_space_state": search_space_state,
         "budget": args.budget,
         "seed": args.seed,
         "random_metrics": random_metrics,
         "proposal_metrics": proposal_metrics,
         "comparison": {
+            "interpretation": "plumbing_only_circular_archive_nearness_objective",
             "mean_objective_improvement": round(
                 proposal_metrics["mean_objective"] - random_metrics["mean_objective"], 4
             ),
@@ -258,6 +311,12 @@ def main() -> int:
             "failure_count_improvement": (
                 proposal_metrics["failure_count"] - random_metrics["failure_count"]
             ),
+        },
+        "archive_evaluation_provenance": provenance,
+        "null_tests": {
+            "shuffled_archive_outcomes": "not_run_requires_real_certified_archive",
+            "proposal_ranking_permutation": "not_run_requires_real_certified_archive",
+            "required_for_held_out_claim": True,
         },
     }
 

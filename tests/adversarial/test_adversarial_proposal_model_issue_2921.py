@@ -208,11 +208,17 @@ def test_comparison_report_runs_and_outputs_correct_shape(tmp_path: Path) -> Non
     assert "state" in report
     assert report["state"] in ("diagnostic_only", "blocked")
     assert report["schema_version"] == "adversarial_proposal_comparison.v1"
-    assert report["result_classification"] == "diagnostic_only"
+    assert report["result_classification"] == "plumbing_validation_only"
     assert report["held_out_evidence"] is False
     assert report["benchmark_evidence"] is False
     assert report["planner_performance_claim"] is False
-    assert report["synthetic_evidence"] is True
+    assert report["synthetic_archive"] is True
+    assert report["synthetic_search_space"] is True
+    assert report["archive_evaluation_provenance"]["disjointness_checks_passed"] is False
+    assert report["comparison"]["interpretation"] == (
+        "plumbing_only_circular_archive_nearness_objective"
+    )
+    assert report["null_tests"]["required_for_held_out_claim"] is True
     assert "random_metrics" in report
     assert "proposal_metrics" in report
     assert "comparison" in report
@@ -241,3 +247,32 @@ def test_comparison_script_rejects_negative_budget(monkeypatch: pytest.MonkeyPat
         parse_args()
 
     assert exc_info.value.code == 2
+
+
+def test_real_archive_without_search_space_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    """Real archive runs should not claim held-out evidence without a real search space."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    archive_path = tmp_path / "archive.json"
+    output_json = tmp_path / "report.json"
+    archive_path.write_text(json.dumps(create_synthetic_archive()), encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--archive",
+            archive_path.as_posix(),
+            "--budget",
+            "3",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    assert report["state"] == "blocked"
+    assert report["held_out_evidence"] is False
+    assert report["synthetic_archive"] is False
+    assert report["synthetic_search_space"] is True
+    assert report["archive_evaluation_provenance"]["disjointness_checks_passed"] is False

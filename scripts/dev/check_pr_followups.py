@@ -237,10 +237,15 @@ def _domain_value_not_required(text: str) -> bool:
         return False
     if value in DOMAIN_APPROVAL_NOT_REQUIRED or value in EMPTY_OR_PLACEHOLDER:
         return True
-    return any(
-        value.startswith(f"{prefix} - ") or value.startswith(f"{prefix}: ")
-        for prefix in DOMAIN_APPROVAL_NOT_REQUIRED
-    )
+    return any(_has_value_prefix(value, prefix) for prefix in DOMAIN_APPROVAL_NOT_REQUIRED)
+
+
+def _has_value_prefix(value: str, prefix: str) -> bool:
+    """Return whether *value* starts with *prefix* as a standalone token."""
+    if not value.startswith(prefix):
+        return False
+    rest = value[len(prefix) :]
+    return not rest or rest[0] in " -:,()"
 
 
 def _domain_approval_triggers(body: str) -> tuple[str, ...]:
@@ -261,7 +266,13 @@ def _domain_checklist_errors(section: str) -> tuple[str, ...]:
     errors: list[str] = []
     for label in DOMAIN_VALIDITY_LABELS:
         value = _value_after_label(section, label)
-        if _is_empty_or_option_placeholder(value):
+        cleaned = _clean_value(value)
+        if (
+            not cleaned
+            or cleaned == "-"
+            or cleaned.startswith("#<")
+            or _is_option_placeholder(value)
+        ):
             errors.append(label)
     return tuple(errors)
 
@@ -430,8 +441,9 @@ def analyze_domain_approval(body: str, *, source: str) -> DomainApprovalReport:
     status_value = _clean_value(approval_status).lower()
     note_value = _clean_value(approval_note)
 
-    if _is_empty_or_option_placeholder(required) or required_value.startswith(
-        ("no", "n/a", "na", "not applicable")
+    if _is_empty_or_option_placeholder(required) or any(
+        _has_value_prefix(required_value, prefix)
+        for prefix in ("no", "n/a", "na", "not applicable")
     ):
         return DomainApprovalReport(
             status="domain_approval_required",

@@ -75,6 +75,27 @@ def test_domain_approval_not_required_for_na_or_docs_only_research_fields() -> N
     assert report.sensitive_terms == ()
 
 
+@pytest.mark.parametrize(
+    ("evidence_tier", "result_classification"),
+    [
+        ("docs-only (support helper)", "NA"),
+        ("na, support-only workflow", "not applicable (workflow bugfix)"),
+    ],
+)
+def test_domain_approval_not_required_allows_punctuated_opt_out_reasons(
+    evidence_tier: str,
+    result_classification: str,
+) -> None:
+    """Docs/NA opt-out fields may include a short reason after punctuation."""
+    report = analyze_domain_approval(
+        _domain_body(evidence_tier=evidence_tier, result_classification=result_classification),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+    assert report.sensitive_terms == ()
+
+
 def test_domain_approval_required_for_non_na_research_fields() -> None:
     """Evidence-result PR bodies need the domain approval section."""
     report = analyze_domain_approval(_domain_body(), source="fixture")
@@ -97,6 +118,22 @@ def test_domain_approval_accepts_approved_review_source() -> None:
 
     assert report.status == "ok"
     assert "maintainer review" in report.approval_note
+
+
+def test_domain_approval_accepts_none_in_validity_checklist_field() -> None:
+    """A checklist answer can honestly say no exclusion or claim applies."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section=_approved_domain_section().replace(
+                "fallback/degraded evidence remains excluded",
+                "none",
+            )
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+    assert report.checklist_errors == ()
 
 
 def test_domain_approval_accepts_explicit_maintainer_waiver() -> None:
@@ -187,6 +224,22 @@ def test_domain_approval_rejects_not_required_for_sensitive_result() -> None:
     )
 
     assert report.status == "domain_approval_required"
+
+
+def test_domain_approval_required_value_does_not_treat_nominal_as_no() -> None:
+    """Required explanations starting with nominal/narrowed stay in the required path."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section=_approved_domain_section().replace(
+                "yes - evidence-validity-sensitive result classification",
+                "nominal benchmark change",
+            )
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+    assert report.required == "nominal benchmark change"
 
 
 def test_analyze_body_requires_issue_when_deferred_work_is_declared() -> None:

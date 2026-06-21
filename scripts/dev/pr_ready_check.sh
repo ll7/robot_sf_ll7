@@ -88,6 +88,51 @@ print_compact_worktree_status() {
   fi
 }
 
+is_optional_readiness_path() {
+  case "$1" in
+    robot_sf/benchmark/*|\
+    robot_sf/baselines/drl_vo.py|\
+    robot_sf/feature_extractor.py|\
+    robot_sf/feature_extractors/*|\
+    robot_sf/planner/*|\
+    robot_sf/training/*|\
+    robot_sf_carla_bridge/*|\
+    scripts/multi_extractor_training.py|\
+    scripts/tools/benchmark_feature_extractors.py|\
+    scripts/tools/probe_social_navigation_pyenvs_socialforce_runtime.py|\
+    scripts/tools/probe_sonic_model_inference.py|\
+    scripts/training/*|\
+    tests/benchmark/*|\
+    tests/benchmark_full/*|\
+    tests/carla_bridge/*|\
+    tests/integration/*|\
+    tests/planner/*|\
+    tests/render/*|\
+    tests/training/*|\
+    tests/visuals/*|\
+    tests/sb3_test.py|\
+    tests/tools/test_probe_sonic_model_inference.py|\
+    tests/test_baseline_ppo_smoke.py|\
+    tests/test_benchmark_visualization_integration.py|\
+    tests/test_feature_extractors.py|\
+    tests/test_grid_socnav_extractor.py|\
+    tests/test_map_runner_ppo.py|\
+    tests/test_map_runner_sac.py|\
+    tests/test_output_root_migration.py|\
+    tests/test_ppo_diagnostics.py|\
+    tests/test_predictive_model.py|\
+    tests/unit/test_cli_logging_flags.py|\
+    tests/unit/test_figure_orchestrator_requirements.py|\
+    tests/unit/test_runner_helper_coverage.py|\
+    tests/unit/test_runner_video.py)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 pr_ready_mode_lower=$(printf '%s' "$PR_READY_MODE" | tr '[:upper:]' '[:lower:]')
 case "$pr_ready_mode_lower" in
   "")
@@ -120,6 +165,32 @@ if [[ "$pr_ready_final" == "1" ]]; then
   preflight_check_test_deps
 fi
 
+changed_files=()
+core_changed_files=()
+optional_changed_files=()
+while IFS= read -r changed_file; do
+  [[ -z "$changed_file" ]] && continue
+  changed_files+=("$changed_file")
+  if is_optional_readiness_path "$changed_file"; then
+    optional_changed_files+=("$changed_file")
+  else
+    core_changed_files+=("$changed_file")
+  fi
+done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
+
+if [[ ${#changed_files[@]} -gt 0 ]]; then
+  printf 'Changed files vs %s:\n' "$BASE_REF" >&2
+  printf '%s\n' "${changed_files[@]}" >&2
+fi
+if [[ ${#core_changed_files[@]} -gt 0 ]]; then
+  printf 'Core-ready changed files:\n' >&2
+  printf '%s\n' "${core_changed_files[@]}" >&2
+fi
+if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
+  printf 'Optional-extra changed files requiring the predictive lane:\n' >&2
+  printf '%s\n' "${optional_changed_files[@]}" >&2
+fi
+
 followup_args=()
 if [[ "$pr_ready_final" == "1" ]]; then
   followup_args+=(--require-body)
@@ -127,7 +198,14 @@ fi
 uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"
 uv run python "$SCRIPT_DIR/check_fast_results_claim_map.py"
 "$SCRIPT_DIR/ruff_fix_format.sh"
-ROBOT_SF_PYTEST_COVERAGE=1 "$SCRIPT_DIR/run_tests_parallel.sh"
+printf 'Running core readiness lane.\n' >&2
+ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core
+if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
+  printf 'Running optional-extra lane for predictive/optional changed files.\n' >&2
+  ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional
+else
+  printf 'No changed files require the optional-extra lane.\n' >&2
+fi
 "$SCRIPT_DIR/check_changed_coverage.sh"
 "$SCRIPT_DIR/check_docstring_todos_diff.sh"
 "$SCRIPT_DIR/check_docstring_todos_ratchet.sh"

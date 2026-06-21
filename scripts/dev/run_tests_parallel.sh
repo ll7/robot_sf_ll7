@@ -13,11 +13,16 @@ Wrapper options:
   --failed-first   Run previously failed tests first [default]
   --new-first      Run tests from new files first
   --no-ordering    Disable ordering hints
+  --lane core|optional|all
+                   Select the pytest collection lane. Core defaults to a
+                   dependency-minimal path set; optional defaults to
+                   optional-extra paths; all preserves the existing behavior.
   -h, --help       Show this help message
 
 Environment overrides:
   ROBOT_SF_PYTEST_COVERAGE=1
     Explicit opt-in for coverage output when running this wrapper.
+  ROBOT_SF_TEST_LANE=core|optional|all
   COVERAGE_FILE=<path>
   PYTEST_FAST_FAIL=1|0
   PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup
@@ -45,6 +50,98 @@ fast_fail="${PYTEST_FAST_FAIL:-1}"
 dist_mode="${PYTEST_XDIST_DIST:-load}"
 order_mode="${PYTEST_ORDER_MODE:-failed-first}"
 worker_override="${PYTEST_NUM_WORKERS:-}"
+lane_mode="${ROBOT_SF_TEST_LANE:-all}"
+core_test_paths=(
+  tests/common
+  tests/contract
+  tests/factories
+  tests/guard
+  tests/sensor
+  tests/sim
+  tests/unit
+  tests/dev
+  tests/test_action_adapters.py
+  tests/test_config_validation.py
+  tests/test_environment_factory_signatures.py
+  tests/test_error_policy.py
+  tests/test_planner.py
+  tests/test_range_sensor.py
+  tests/test_seed_utils.py
+  tests/test_types.py
+  tests/test_ci_script_contract.py
+  tests/map_test.py
+  tests/navigation_test.py
+  tests/ped_grouping_test.py
+  tests/sim_config_test.py
+  tests/unicycle_drive_test.py
+  tests/zone_sampling_test.py
+)
+optional_test_paths=(
+  tests/benchmark
+  tests/benchmark_full
+  tests/carla_bridge
+  tests/integration
+  tests/planner
+  tests/render
+  tests/training
+  tests/visuals
+  tests/tools/test_probe_sonic_model_inference.py
+  tests/sb3_test.py
+  tests/test_baseline_ppo_smoke.py
+  tests/test_benchmark_visualization_integration.py
+  tests/test_feature_extractors.py
+  tests/test_grid_socnav_extractor.py
+  tests/test_map_runner_ppo.py
+  tests/test_map_runner_sac.py
+  tests/test_output_root_migration.py
+  tests/test_ppo_diagnostics.py
+  tests/test_predictive_model.py
+  tests/unit/test_cli_logging_flags.py
+  tests/unit/test_figure_orchestrator_requirements.py
+  tests/unit/test_runner_helper_coverage.py
+  tests/unit/test_runner_video.py
+)
+
+normalize_pytest_target_path() {
+  local path="${1#./}"
+  path="${path%%::*}"
+  printf '%s\n' "$path"
+}
+
+is_optional_test_path() {
+  local path
+  path="$(normalize_pytest_target_path "$1")"
+  case "$path" in
+    tests/benchmark|tests/benchmark/*|\
+    tests/benchmark_full|tests/benchmark_full/*|\
+    tests/carla_bridge|tests/carla_bridge/*|\
+    tests/integration|tests/integration/*|\
+    tests/planner|tests/planner/*|\
+    tests/render|tests/render/*|\
+    tests/training|tests/training/*|\
+    tests/visuals|tests/visuals/*|\
+    tests/tools/test_probe_sonic_model_inference.py|\
+    tests/sb3_test.py|\
+    tests/test_baseline_ppo_smoke.py|\
+    tests/test_benchmark_visualization_integration.py|\
+    tests/test_feature_extractors.py|\
+    tests/test_grid_socnav_extractor.py|\
+    tests/test_map_runner_ppo.py|\
+    tests/test_map_runner_sac.py|\
+    tests/test_output_root_migration.py|\
+    tests/test_ppo_diagnostics.py|\
+    tests/test_predictive_model.py|\
+    tests/unit/test_cli_logging_flags.py|\
+    tests/unit/test_figure_orchestrator_requirements.py|\
+    tests/unit/test_runner_helper_coverage.py|\
+    tests/unit/test_runner_video.py)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 pytest_args=()
 while [[ $# -gt 0 ]]; do
@@ -69,6 +166,14 @@ while [[ $# -gt 0 ]]; do
       order_mode="none"
       shift
       ;;
+    --lane)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "--lane requires a non-empty value." >&2
+        exit 2
+      fi
+      lane_mode="$2"
+      shift 2
+      ;;
     -h|--help)
       show_help
       exit 0
@@ -89,7 +194,17 @@ case "$dist_mode" in
     ;;
 esac
 
+case "$lane_mode" in
+  all|core|optional)
+    ;;
+  *)
+    echo "Invalid ROBOT_SF_TEST_LANE value '$lane_mode' (expected all|core|optional)." >&2
+    exit 2
+    ;;
+esac
+
 echo "Resolved pytest-xdist distribution mode: $dist_mode" >&2
+echo "Resolved pytest lane: $lane_mode" >&2
 
 requested_args=()
 if [[ -n "$worker_override" ]]; then
@@ -115,6 +230,48 @@ if [[ "${CI:-}" == "true" ]] || [[ "$coverage_requested" == "1" ]] || \
   [[ "$coverage_requested" == [Yy][Ee][Ss] ]] || \
   [[ "$coverage_requested" == [Oo][Nn] ]]; then
   cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")
+fi
+
+if [[ "$lane_mode" != "all" ]]; then
+  export ROBOT_SF_TEST_LANE="$lane_mode"
+fi
+
+explicit_test_targets=()
+for pytest_arg in "${pytest_args[@]}"; do
+  [[ "$pytest_arg" == -* ]] && continue
+  normalized_pytest_arg="$(normalize_pytest_target_path "$pytest_arg")"
+  if [[ -e "$normalized_pytest_arg" || "$normalized_pytest_arg" == tests* ]]; then
+    explicit_test_targets+=("$pytest_arg")
+  fi
+done
+
+if [[ "$lane_mode" == "core" ]]; then
+  for pytest_arg in "${explicit_test_targets[@]}"; do
+    if is_optional_test_path "$pytest_arg"; then
+      echo "Core pytest lane cannot run optional-extra path '$pytest_arg'." >&2
+      echo "Use scripts/dev/run_tests_parallel.sh --lane optional for torch/rvo2/CARLA/predictive tests." >&2
+      exit 2
+    fi
+  done
+  if [[ ${#explicit_test_targets[@]} -eq 0 ]]; then
+    for core_test_path in "${core_test_paths[@]}"; do
+      if [[ -e "$core_test_path" ]]; then
+        pytest_args+=("$core_test_path")
+      fi
+    done
+  else
+    for optional_test_path in "${optional_test_paths[@]}"; do
+      if [[ -e "$optional_test_path" ]]; then
+        cmd+=("--ignore=$optional_test_path")
+      fi
+    done
+  fi
+elif [[ "$lane_mode" == "optional" && ${#explicit_test_targets[@]} -eq 0 ]]; then
+  for optional_test_path in "${optional_test_paths[@]}"; do
+    if [[ -e "$optional_test_path" ]]; then
+      pytest_args+=("$optional_test_path")
+    fi
+  done
 fi
 
 if [[ "$fast_fail" == "1" ]]; then

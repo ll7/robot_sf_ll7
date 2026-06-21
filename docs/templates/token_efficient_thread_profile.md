@@ -8,18 +8,18 @@ changes.
 ```markdown
 ## Active Profile
 
-- goal: <one sentence objective>
-- task_class: <docs | workflow | runtime-code | benchmark | metric | schema | model-provenance | paper-facing | mixed>
-- validation_tier: <cheap-docs | skill-sync | focused-tests | full-readiness | benchmark-proof>
-- scope: <files, issues, PRs, or batch included>
-- out_of_scope: <nearby work deliberately deferred>
-- worktree: <absolute or repo-relative worktree path and branch>
-- context_budget: <compact snapshots first; raw logs only by artifact path>
-- delegation_artifacts: <RESULT.md, changed files, diffstat, validation, blockers, mutations>
-- output_budget: <parent-thread summary length and exact artifact paths to return>
-- stop_guard: <usage threshold, wall-clock limit, or external blocker>
-- validation_plan: <commands or checks that prove this task class>
-- handoff_target: <PR, issue comment, context note, or final handoff>
+- goal: [one sentence objective]
+- task_class: [docs | workflow | runtime-code | benchmark | metric | schema | model-provenance | paper-facing | mixed]
+- validation_tier: [cheap-docs | skill-sync | focused-tests | full-readiness | benchmark-proof]
+- scope: [files, issues, PRs, or batch included]
+- out_of_scope: [nearby work deliberately deferred]
+- worktree: [absolute or repo-relative worktree path and branch]
+- context_budget: [compact snapshots first; raw logs only by artifact path]
+- delegation_artifacts: [RESULT.md, changed files, diffstat, validation, blockers, mutations]
+- output_budget: [parent-thread summary length and exact artifact paths to return]
+- stop_guard: [usage threshold, wall-clock limit, or external blocker]
+- validation_plan: [commands or checks that prove this task class]
+- handoff_target: [PR, issue comment, context note, or final handoff]
 ```
 
 ## Field Rules
@@ -32,9 +32,9 @@ changes.
   `docs/context/issue_1512_issue_archetypes.md` for issue archetype language
   instead of redefining classes here.
 - `context_budget` defaults to compact helpers before broad reads:
-  `scripts/dev/autopilot_state_snapshot.py --include-worktrees`,
-  `scripts/dev/snapshot_issue_batch.py --json`,
-  `scripts/dev/snapshot_pr_queue.py --json`, and
+  `uv run python scripts/dev/autopilot_state_snapshot.py --include-worktrees`,
+  `uv run python scripts/dev/snapshot_issue_batch.py --json`,
+  `uv run python scripts/dev/snapshot_pr_queue.py --json`, and
   `uv run python scripts/dev/run_compact_validation.py -- <command>`.
 - `delegation_artifacts` are route evidence, not task acceptance. Codex still
   inspects the diff, verifies changed files, and runs the selected validation.

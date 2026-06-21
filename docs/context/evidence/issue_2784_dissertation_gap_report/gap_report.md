@@ -2,9 +2,9 @@
 
 **Purpose**: synthesis/planning aid; not new benchmark, paper, dissertation, or safety evidence.
 
-Generated: 2026-06-20  | Schema: dissertation_gap_report.v1
+Generated: 2026-06-21  | Schema: dissertation_gap_report.v1
 
-Sources: ledger #2760 (7 rows), register #2762 (4 entries)
+Sources: ledger #2760 (7 rows), register #2762 (5 entries)
 
 ## Supported (release-backed, current)
 
@@ -99,6 +99,14 @@ Sources: ledger #2760 (7 rows), register #2762 (4 entries)
 - **Allowed wording / boundary**: Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.
 - **Caveat**: Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.
 - **Claim gap / reason**: Five of seven ledger rows are diagnostic-tier or blocked evidence (topology, signalized behavior, prediction, pedestrian density, exported tables). One area (observation robustness) is release-backed but is a contract/provenance layer only. The exported-tables payload gap is resolved, but the Issue #3203 rerun remains invalid as benchmark-success evidence because PPO partial-failed and SNQI contract status failed. No row supports Results-chapter wording without qualification.
+
+### issue-3213-hardcase-authority-speedcap [register]
+
+- **Tier/Classification**: diagnostic_only
+- **Promotion step or reason**: Keep predictive_near_field_speed_cap as a minor safety-progress tuning knob, not a success driver. Stop further planner-authority tuning as a plateau fix; prioritize model-side bets (#3214 retraining, richer hard-case data) and proxy-vs-ADE selection (#3204).
+- **Allowed wording / boundary**: Diagnostic-only, not benchmark or paper evidence. Small attributable speed-cap effect; classification diagnostic_only, not promote.
+- **Caveat**: Diagnostic-only, not benchmark or paper evidence. Small attributable speed-cap effect; classification diagnostic_only, not promote.
+- **Claim gap / reason**: Only the near-field speed cap moved hard-success (~0.07 to ~0.10, about +0.03 absolute / +33% relative, consistent across checkpoints, ~120 episodes/cell). nf_headings_only, nf_horizonboost_only, high_angular, dense_lattice, deep_sequence, and combined_max_authority were inert (about baseline). The lift does not close the plateau (hard-success ~0.10) and checkpoint choice barely moved baseline, indicating the binding constraint is model/data-side rather than planner authority.
 
 ## Remove / Weaken
 

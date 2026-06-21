@@ -32,7 +32,12 @@
         "docs/context/evidence/issue_2716_topology_reselection_cross_slice/report.md"
       ],
       "recommended_next_action": "Design a successor targeting actual clearance or terminal-outcome movement. Stop same-family selector reruns on the canonical slice.",
-      "linked_issues": [2716, 2743, 2742, 2704],
+      "linked_issues": [
+        2716,
+        2743,
+        2742,
+        2704
+      ],
       "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Classification is revise, not promote.",
       "created_at": "2026-06-13"
     },
@@ -50,7 +55,10 @@
         "docs/context/evidence/issue_2749_observation_noise_diagnostics/RESULT.md"
       ],
       "recommended_next_action": "Retest with a closer pedestrian, higher pedestrian count, or a scenario where the planner must actively avoid pedestrians.",
-      "linked_issues": [2749, 2750],
+      "linked_issues": [
+        2749,
+        2750
+      ],
       "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Confirms perturbation infrastructure works; does not measure behavioral degradation.",
       "created_at": "2026-06-13"
     },
@@ -72,7 +80,13 @@
         "docs/context/evidence/issue_3233_near_field_observation_noise/summary.json",
         "docs/context/evidence/issue_3233_near_field_observation_noise/README.md"
       ],
-      "linked_issues": [3201, 3233, 2749, 3067, 2777],
+      "linked_issues": [
+        3201,
+        3233,
+        2749,
+        3067,
+        2777
+      ],
       "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Confirms live perturbation can change planner-input observations; does not show a planner behavior delta.",
       "created_at": "2026-06-20"
     },
@@ -90,9 +104,32 @@
         "docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json"
       ],
       "recommended_next_action": "Use the ledger as a planning aid to identify which thesis areas need new experiments before Results wording is possible. Do not cite any current row as benchmark-strength evidence.",
-      "linked_issues": [2760],
+      "linked_issues": [
+        2760
+      ],
       "claim_boundary": "Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.",
       "created_at": "2026-06-13"
+    },
+    {
+      "id": "issue-3213-hardcase-authority-speedcap",
+      "hypothesis": "Richer predictive-planner maneuver authority (turn rate, action lattice, sequence-search depth, near-field geometry) closes the hard-case crossing-conflict success plateau.",
+      "tested_artifact": "Predictive planner authority variants (baseline, high_angular, dense_lattice, deep_sequence, nearfield_turn) plus single-knob ablations (nf_headings_only, nf_speedcap_only, nf_horizonboost_only) across 5 prediction checkpoints.",
+      "scenario": "predictive_hardcase_portfolio_v1 (cross_trap low/medium/high + group_crossing_high), broad robust seeds 200-229 over both seed halves, ~120 episodes/cell.",
+      "comparator": "Baseline camera-ready predictive authority config.",
+      "result_classification": "diagnostic_only",
+      "failure_mode": "mechanism_failed",
+      "why_failed_or_inconclusive": "Only the near-field speed cap moved hard-success (~0.07 to ~0.10, about +0.03 absolute / +33% relative, consistent across checkpoints, ~120 episodes/cell). nf_headings_only, nf_horizonboost_only, high_angular, dense_lattice, deep_sequence, and combined_max_authority were inert (about baseline). The lift does not close the plateau (hard-success ~0.10) and checkpoint choice barely moved baseline, indicating the binding constraint is model/data-side rather than planner authority.",
+      "evidence_pointer": [
+        "docs/context/evidence/issue_3213_authority_sweep/robust_grid.json"
+      ],
+      "recommended_next_action": "Keep predictive_near_field_speed_cap as a minor safety-progress tuning knob, not a success driver. Stop further planner-authority tuning as a plateau fix; prioritize model-side bets (#3214 retraining, richer hard-case data) and proxy-vs-ADE selection (#3204).",
+      "linked_issues": [
+        3213,
+        3215,
+        3306
+      ],
+      "claim_boundary": "Diagnostic-only, not benchmark or paper evidence. Small attributable speed-cap effect; classification diagnostic_only, not promote.",
+      "created_at": "2026-06-20"
     }
   ],
   "claim_boundaries": [

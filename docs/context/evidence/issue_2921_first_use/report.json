@@ -1,0 +1,52 @@
+{
+  "benchmark_evidence": false,
+  "budget": 10,
+  "claim_boundary": "analysis_only_diagnostic: proposal-vs-random results from the synthetic fixture only exercise model plumbing and report shape. They are not held-out archive evidence, benchmark evidence, planner-performance evidence, or a claim that learned proposals improve yield.",
+  "comparison": {
+    "failure_count_improvement": 6,
+    "max_objective_improvement": 0.5386,
+    "mean_objective_improvement": 0.7101
+  },
+  "held_out_evidence": false,
+  "planner_performance_claim": false,
+  "proposal_metrics": {
+    "certification_statuses_advisory": [
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed"
+    ],
+    "certification_statuses_strict": [
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed"
+    ],
+    "failure_count": 10,
+    "max_objective": 9.3006,
+    "mean_objective": 8.6708
+  },
+  "random_metrics": {
+    "failure_count": 4,
+    "max_objective": 8.762,
+    "mean_objective": 7.9607
+  },
+  "reason": "No archive path provided; using synthetic archive fixture.",
+  "result_classification": "diagnostic_only",
+  "schema_version": "adversarial_proposal_comparison.v1",
+  "seed": 42,
+  "state": "diagnostic_only",
+  "synthetic_evidence": true
+}

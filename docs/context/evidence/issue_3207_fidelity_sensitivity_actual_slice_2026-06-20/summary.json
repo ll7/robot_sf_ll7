@@ -193,7 +193,7 @@
     "axes": [
       {
         "axis": "integration_timestep__dt_0_05",
-        "kendall_tau": 1.0,
+        "kendall_tau": null,
         "metric_drift": {
           "collision_rate": 0.0,
           "comfort_exposure_mean": 0.03812597358533808,
@@ -203,16 +203,18 @@
           "success_rate": 0.0,
           "time_to_goal_norm": 0.06712962962962965
         },
-        "rank_flips": 0,
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
         "ranking": [
           "baseline_social_force",
           "goal_seek"
         ],
-        "top1_changed": false
+        "top1_changed": null
       },
       {
         "axis": "integration_timestep__dt_0_20",
-        "kendall_tau": 1.0,
+        "kendall_tau": null,
         "metric_drift": {
           "collision_rate": 0.0,
           "comfort_exposure_mean": 0.024598038364609335,
@@ -222,16 +224,18 @@
           "success_rate": 0.0,
           "time_to_goal_norm": 0.0046296296296296224
         },
-        "rank_flips": 0,
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
         "ranking": [
           "baseline_social_force",
           "goal_seek"
         ],
-        "top1_changed": false
+        "top1_changed": null
       },
       {
         "axis": "social_force_speed_archetypes__mixed_balanced",
-        "kendall_tau": 1.0,
+        "kendall_tau": null,
         "metric_drift": {
           "collision_rate": 0.0,
           "comfort_exposure_mean": 0.00077663624205347,
@@ -241,16 +245,18 @@
           "success_rate": 0.0,
           "time_to_goal_norm": 0.0018518518518518823
         },
-        "rank_flips": 0,
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
         "ranking": [
           "baseline_social_force",
           "goal_seek"
         ],
-        "top1_changed": false
+        "top1_changed": null
       },
       {
         "axis": "social_force_speed_archetypes__rush_hour",
-        "kendall_tau": 1.0,
+        "kendall_tau": null,
         "metric_drift": {
           "collision_rate": 0.0,
           "comfort_exposure_mean": 0.00077663624205347,
@@ -260,16 +266,18 @@
           "success_rate": 0.0,
           "time_to_goal_norm": 0.0018518518518518823
         },
-        "rank_flips": 0,
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
         "ranking": [
           "baseline_social_force",
           "goal_seek"
         ],
-        "top1_changed": false
+        "top1_changed": null
       },
       {
         "axis": "observation_noise__pose_heading_low",
-        "kendall_tau": 1.0,
+        "kendall_tau": null,
         "metric_drift": {
           "collision_rate": 0.0,
           "comfort_exposure_mean": 0.004734397428990549,
@@ -279,16 +287,18 @@
           "success_rate": 0.0,
           "time_to_goal_norm": 0.002777777777777851
         },
-        "rank_flips": 0,
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
         "ranking": [
           "baseline_social_force",
           "goal_seek"
         ],
-        "top1_changed": false
+        "top1_changed": null
       },
       {
         "axis": "observation_noise__pedestrian_dropout_low",
-        "kendall_tau": 1.0,
+        "kendall_tau": null,
         "metric_drift": {
           "collision_rate": 0.0,
           "comfort_exposure_mean": 0.0,
@@ -298,16 +308,18 @@
           "success_rate": 0.0,
           "time_to_goal_norm": 0.0
         },
-        "rank_flips": 0,
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
         "ranking": [
           "baseline_social_force",
           "goal_seek"
         ],
-        "top1_changed": false
+        "top1_changed": null
       },
       {
         "axis": "clearance_radius__radius_0_30",
-        "kendall_tau": 1.0,
+        "kendall_tau": null,
         "metric_drift": {
           "collision_rate": 0.0,
           "comfort_exposure_mean": 0.023809523809523805,
@@ -317,16 +329,18 @@
           "success_rate": 0.0,
           "time_to_goal_norm": 0.06666666666666671
         },
-        "rank_flips": 0,
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
         "ranking": [
           "baseline_social_force",
           "goal_seek"
         ],
-        "top1_changed": false
+        "top1_changed": null
       },
       {
         "axis": "clearance_radius__radius_0_50",
-        "kendall_tau": 1.0,
+        "kendall_tau": null,
         "metric_drift": {
           "collision_rate": 0.0,
           "comfort_exposure_mean": 0.0021043771043771017,
@@ -336,12 +350,14 @@
           "success_rate": 0.0,
           "time_to_goal_norm": 0.0009259259259259134
         },
-        "rank_flips": 0,
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
         "ranking": [
           "baseline_social_force",
           "goal_seek"
         ],
-        "top1_changed": false
+        "top1_changed": null
       }
     ],
     "flipping_axes": [],
@@ -350,15 +366,28 @@
       "baseline_social_force",
       "goal_seek"
     ],
+    "non_identifiable_axes": [
+      "integration_timestep__dt_0_05",
+      "integration_timestep__dt_0_20",
+      "social_force_speed_archetypes__mixed_balanced",
+      "social_force_speed_archetypes__rush_hour",
+      "observation_noise__pose_heading_low",
+      "observation_noise__pedestrian_dropout_low",
+      "clearance_radius__radius_0_30",
+      "clearance_radius__radius_0_50"
+    ],
     "primary_metric": "success_rate",
-    "rank_stable": true,
-    "schema_version": "fidelity_rank_stability.v1"
+    "rank_identifiability_reason": "primary_metric_zero_variance",
+    "rank_identifiable": false,
+    "rank_stable": null,
+    "schema_version": "fidelity_rank_stability.v2"
   },
   "raw_output_policy": "raw JSONL remains ignored under output/",
   "raw_rows_path": "output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-20/episode_rows.jsonl",
   "result_caveats": [
     "ranking_stability_is_on_bounded_two_planner_slice_only",
     "full_fixed_scope_planners_not_run",
+    "rank_non_identifiable_primary_metric_zero_variance",
     "all_observed_success_rates_zero",
     "all_observed_collision_rates_one"
   ],

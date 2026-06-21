@@ -900,6 +900,59 @@ def test_post_process_metrics_adds_human_interaction_proxy_block() -> None:
     assert "group-membership" in block["exclusions"]["group_split_intrusion"]
 
 
+def test_post_process_metrics_adds_social_mini_game_rows() -> None:
+    """Social Mini-Game rows should distinguish valid zero values from unavailable metrics."""
+    metrics = post_process_metrics(
+        {
+            "success": 1.0,
+            "collisions": 0.0,
+            "_episode_metadata": {"mechanism_aware_suite_id": "doorway_yield"},
+            "time_to_goal_ideal_ratio": 1.25,
+            "time_to_goal_ideal_ratio_valid": 1.0,
+            "socnavbench_path_length_ratio": 1.4,
+            "failure_to_progress": 0.0,
+            "distributional_disruption": {
+                "schema_version": "distributional-disruption.v1",
+                "support_counts": {"slow_speed_tier": 2},
+                "cohort_metrics": {"slow_speed_tier": {"displacement_mean_m": 0.2}},
+            },
+            "human_proxy_available": 1.0,
+            "human_proxy_proxemic_radius_m": 1.2,
+            "human_proxy_yield_speed_mps": 0.1,
+            "human_proxy_ped_count": 2.0,
+            "human_proxy_timestep_count": 4.0,
+            "human_discomfort_exposure_m_s": 0.0,
+        },
+        snqi_weights=None,
+        snqi_baseline=None,
+    )
+
+    block = metrics["social_mini_game"]
+    assert block["schema_version"] == "social-mini-game-metrics.v1"
+    assert block["status"] == "diagnostic"
+    assert block["mechanism_family"] == "doorway_yield"
+    assert "_episode_metadata" not in metrics
+    rows = {row["metric"]: row for row in block["rows"]}
+    assert rows["makespan_ratio"]["value"] == 1.25
+    assert rows["path_deviation_ratio"]["value"] == pytest.approx(0.4)
+    assert rows["deadlock_frequency"]["status"] == "available"
+    assert rows["deadlock_frequency"]["value"] == 0.0
+    assert rows["flow_throughput"]["status"] == "unavailable"
+    assert "arrival or exit counts" in rows["flow_throughput"]["unavailable_reason"]
+    assert rows["distributional_inconvenience"]["support_count"] == 2
+    assert rows["invasiveness"]["status"] == "available"
+    assert rows["invasiveness"]["value"] == 0.0
+
+
+def test_compute_all_metrics_emits_deadlock_source_metrics() -> None:
+    """Deadlock source metrics should be available to Social Mini-Game post-processing."""
+    ep = _make_episode(T=8, K=0)
+    vals = compute_all_metrics(ep, horizon=8)
+
+    assert "failure_to_progress" in vals
+    assert "stalled_time" in vals
+
+
 def test_experimental_ped_impact_handles_empty_crowd() -> None:
     """Experimental pedestrian-impact metrics should stay stable when K=0."""
     ep = _make_episode(T=8, K=0)

@@ -833,6 +833,85 @@
                     },
                     "additionalProperties": true
                 },
+                "social_mini_game": {
+                    "type": "object",
+                    "description": "Schema-backed diagnostic Social Mini-Game metric rows with explicit availability semantics.",
+                    "required": [
+                        "schema_version",
+                        "status",
+                        "mechanism_family",
+                        "rows",
+                        "interpretation"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "social-mini-game-metrics.v1"
+                        },
+                        "status": {
+                            "const": "diagnostic"
+                        },
+                        "mechanism_family": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "rows": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "required": [
+                                    "metric",
+                                    "status",
+                                    "unit",
+                                    "denominator",
+                                    "support_count"
+                                ],
+                                "properties": {
+                                    "metric": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "available",
+                                            "unavailable",
+                                            "undefined"
+                                        ]
+                                    },
+                                    "unit": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "denominator": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "value": {
+                                        "type": [
+                                            "number",
+                                            "integer",
+                                            "boolean"
+                                        ]
+                                    },
+                                    "support_count": {
+                                        "type": "integer",
+                                        "minimum": 0
+                                    },
+                                    "unavailable_reason": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "additionalProperties": true
+                            }
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
+                },
                 "distributional_disruption": {
                     "type": "object",
                     "description": "Schema-backed distributional disruption metric block for observable cohort comparison.",

@@ -229,6 +229,62 @@ def test_episode_schema_validates_human_interaction_proxy_block() -> None:
         jsonschema.validate(instance=record, schema=schema)
 
 
+def test_episode_schema_validates_social_mini_game_block() -> None:
+    """The Social Mini-Game metric block should validate row availability contracts."""
+    schema = _load_schema()
+    record = {
+        "episode_id": "e_social_mini_game",
+        "version": "v1",
+        "scenario_id": "sc_social_mini_game",
+        "seed": 123,
+        "metrics": {
+            "collisions": 0,
+            "near_misses": 0,
+            "social_mini_game": {
+                "schema_version": "social-mini-game-metrics.v1",
+                "status": "diagnostic",
+                "mechanism_family": "doorway",
+                "rows": [
+                    {
+                        "metric": "deadlock_frequency",
+                        "status": "available",
+                        "unit": "events_per_episode",
+                        "denominator": "one episode",
+                        "value": 0.0,
+                        "support_count": 1,
+                    },
+                    {
+                        "metric": "flow_throughput",
+                        "status": "unavailable",
+                        "unit": "pedestrians_per_second",
+                        "denominator": "pedestrian arrivals or exits",
+                        "support_count": 0,
+                        "unavailable_reason": "missing arrival or exit counts",
+                    },
+                ],
+                "interpretation": "Diagnostic Social Mini-Game mechanism metrics.",
+            },
+        },
+        "termination_reason": "max_steps",
+        "outcome": {
+            "route_complete": False,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        "integrity": {"contradictions": []},
+    }
+
+    jsonschema.validate(instance=record, schema=schema)
+    record["metrics"]["social_mini_game"]["schema_version"] = "wrong"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=record, schema=schema)
+
+    record["metrics"]["social_mini_game"]["schema_version"] = "social-mini-game-metrics.v1"
+    record["metrics"]["social_mini_game"]["rows"][0]["support_count"] = -1
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=record, schema=schema)
+
+
 def test_episode_schema_rejects_collision_event_without_collision_metric() -> None:
     """New v1 records should not report collision_event=true with zero collision count."""
     schema = _load_schema()

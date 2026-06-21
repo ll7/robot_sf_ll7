@@ -1,0 +1,49 @@
+schema_version: social-mini-game-metric-contract.v1
+issue: 3280
+status: diagnostic_contract
+claim_boundary: >
+  Social Mini-Game metrics are mechanism diagnostics for local social-navigation scenarios. They
+  expose denominators, units, support counts, and unavailable rows, but they do not establish
+  real-world comfort, fairness, safety, or paper-grade benchmark evidence by themselves.
+episode_metrics_namespace: metrics.social_mini_game
+row_schema_version: social-mini-game-metrics.v1
+status_values:
+  - available
+  - unavailable
+  - undefined
+missing_data_policy: >
+  Emit a row for each contract metric. Use status=available only when a value is supported by the
+  episode data. Use status=undefined when the metric is mathematically undefined for the episode
+  outcome. Use status=unavailable when the required signal is absent. Valid zero values must remain
+  numeric values with status=available.
+metric_rows:
+  - id: makespan_ratio
+    units: ratio
+    denominator: successful episodes with finite ideal-time baseline
+    source_metric: time_to_goal_ideal_ratio
+    missing_data_behavior: undefined when the episode did not reach the goal or lacks ideal time
+  - id: path_deviation_ratio
+    units: ratio_over_straight_line
+    denominator: robot trajectory length divided by start-goal displacement
+    source_metric: socnavbench_path_length_ratio - 1
+    missing_data_behavior: undefined when start-goal displacement or trajectory length is unavailable
+  - id: deadlock_frequency
+    units: events_per_episode
+    denominator: one episode
+    source_metric: failure_to_progress
+    missing_data_behavior: undefined when failure-to-progress cannot be computed
+  - id: flow_throughput
+    units: pedestrians_per_second
+    denominator: pedestrian arrivals or exits over elapsed scenario time
+    source_metric: unavailable until episodes carry arrival or exit counts
+    missing_data_behavior: unavailable without pedestrian arrival or exit counts
+  - id: distributional_inconvenience
+    units: diagnostic_cohort_delta
+    denominator: matched robot-present and control pedestrian trajectories by cohort
+    source_metric: distributional_disruption
+    missing_data_behavior: unavailable without paired control trajectory cohort comparison
+  - id: invasiveness
+    units: m*s
+    denominator: proxemic exposure over robot-pedestrian trajectory samples
+    source_metric: human_interaction_proxy.canonical_reductions.human_discomfort_exposure_m_s
+    missing_data_behavior: unavailable when human-interaction proxy metrics are disabled or unsupported

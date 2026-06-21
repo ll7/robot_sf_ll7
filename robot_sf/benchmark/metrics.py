@@ -1683,6 +1683,8 @@ def failure_to_progress(
     Section 3.2, Table 1: "Failure to progress (FP)" metric
     """
     T = data.robot_pos.shape[0]
+    if not math.isfinite(data.dt) or data.dt <= 0.0:
+        return float("nan")
     window_steps = int(np.ceil(time_threshold / data.dt))
 
     if T < window_steps:
@@ -1729,6 +1731,8 @@ def stalled_time(data: EpisodeData, *, velocity_threshold: float = 0.05) -> floa
     ---------------
     Section 3.2, Table 1: "Stalled time (ST)" metric
     """
+    if not math.isfinite(data.dt) or data.dt < 0.0:
+        return float("nan")
     speeds = np.linalg.norm(data.robot_vel, axis=1)
     stalled_count = np.count_nonzero(speeds < velocity_threshold)
     return float(stalled_count * data.dt)
@@ -2529,6 +2533,8 @@ METRIC_NAMES: list[str] = [
     "wall_collisions",
     "clearing_distance_min",
     "clearing_distance_avg",
+    "failure_to_progress",
+    "stalled_time",
     "signal_red_phase_violations",
     "signal_stop_line_crossings_under_red",
     "signal_min_distance_to_stop_line_before_crossing_m",
@@ -2607,6 +2613,8 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     )
 
     values: dict[str, Any] = {}
+    if isinstance(data.episode_metadata, dict):
+        values["_episode_metadata"] = dict(data.episode_metadata)
     try:
         values.update(calculate_signal_metrics(data))
     except Exception:
@@ -2684,6 +2692,8 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values["wall_collisions"] = values["obstacle_collision_count"]
     values["clearing_distance_min"] = clearing_distance_min(data)
     values["clearing_distance_avg"] = clearing_distance_avg(data)
+    values["failure_to_progress"] = failure_to_progress(data)
+    values["stalled_time"] = stalled_time(data)
     if experimental_ped_impact:
         values.update(
             experimental_ped_impact_metrics(
@@ -2783,6 +2793,8 @@ def post_process_metrics(
     _attach_pedestrian_impact_block(metrics)
     _attach_social_acceptability_block(metrics)
     _attach_human_interaction_proxy_block(metrics)
+    _attach_social_mini_game_block(metrics)
+    metrics.pop("_episode_metadata", None)
     return _sanitize_metrics(metrics)
 
 
@@ -2903,6 +2915,200 @@ def _attach_human_interaction_proxy_block(metrics: dict[str, Any]) -> None:
         "interpretation": (
             "Diagnostic simulation-proxy metrics for mechanism reports only; not validated "
             "human comfort, human-subject, safety, or paper-grade social-compliance evidence."
+        ),
+    }
+
+
+def _social_mini_game_metric_row(
+    *,
+    metric: str,
+    status: str,
+    unit: str,
+    denominator: str,
+    value: float | int | bool | None = None,
+    support_count: int = 0,
+    unavailable_reason: str | None = None,
+) -> dict[str, Any]:
+    """Build one Social Mini-Game metric row with explicit availability semantics.
+
+    Returns:
+        Row dictionary ready for the ``social_mini_game`` metric block.
+    """
+    row: dict[str, Any] = {
+        "metric": metric,
+        "status": status,
+        "unit": unit,
+        "denominator": denominator,
+        "support_count": int(support_count),
+    }
+    if value is not None:
+        row["value"] = value
+    if unavailable_reason:
+        row["unavailable_reason"] = unavailable_reason
+    return row
+
+
+def _social_mini_game_mechanism_family(metrics: dict[str, Any]) -> str:
+    """Resolve a mechanism-family label from optional episode metadata.
+
+    Returns:
+        Mechanism-family label, or ``unknown`` when no supported metadata key is present.
+    """
+    metadata = metrics.get("_episode_metadata")
+    if not isinstance(metadata, dict):
+        return "unknown"
+    for key in (
+        "social_mini_game_mechanism_family",
+        "mechanism_family",
+        "mechanism_aware_suite_id",
+        "target_mechanism",
+        "mechanism_id",
+    ):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown"
+
+
+def _attach_social_mini_game_block(metrics: dict[str, Any]) -> None:
+    """Attach Social Mini-Game diagnostic metric rows when source metrics are present."""
+    rows: list[dict[str, Any]] = []
+
+    makespan_ratio = metrics.get("time_to_goal_ideal_ratio")
+    makespan_valid = bool(metrics.get("time_to_goal_ideal_ratio_valid", False))
+    rows.append(
+        _social_mini_game_metric_row(
+            metric="makespan_ratio",
+            status="available" if makespan_valid and makespan_ratio is not None else "undefined",
+            unit="ratio",
+            denominator="successful episodes with finite ideal-time baseline",
+            value=makespan_ratio if makespan_valid and makespan_ratio is not None else None,
+            support_count=1 if makespan_valid and makespan_ratio is not None else 0,
+            unavailable_reason=(
+                None
+                if makespan_valid and makespan_ratio is not None
+                else "episode did not reach the goal with a finite ideal-time baseline"
+            ),
+        )
+    )
+
+    path_ratio = metrics.get("socnavbench_path_length_ratio")
+    path_ratio_available = isinstance(path_ratio, int | float) and math.isfinite(float(path_ratio))
+    rows.append(
+        _social_mini_game_metric_row(
+            metric="path_deviation_ratio",
+            status="available" if path_ratio_available else "undefined",
+            unit="ratio_over_straight_line",
+            denominator="robot trajectory length divided by start-goal displacement",
+            value=float(path_ratio) - 1.0 if path_ratio_available else None,
+            support_count=1 if path_ratio_available else 0,
+            unavailable_reason=(
+                None
+                if path_ratio_available
+                else "start-goal displacement or trajectory length was unavailable"
+            ),
+        )
+    )
+
+    deadlock_value = metrics.get("failure_to_progress")
+    deadlock_available = isinstance(deadlock_value, int | float) and math.isfinite(
+        float(deadlock_value)
+    )
+    rows.append(
+        _social_mini_game_metric_row(
+            metric="deadlock_frequency",
+            status="available" if deadlock_available else "undefined",
+            unit="events_per_episode",
+            denominator="one episode",
+            value=float(deadlock_value) if deadlock_available else None,
+            support_count=1 if deadlock_available else 0,
+            unavailable_reason=(
+                None
+                if deadlock_available
+                else "failure-to-progress metric was unavailable for this episode"
+            ),
+        )
+    )
+
+    rows.append(
+        _social_mini_game_metric_row(
+            metric="flow_throughput",
+            status="unavailable",
+            unit="pedestrians_per_second",
+            denominator="pedestrian arrivals or exits over elapsed scenario time",
+            unavailable_reason="episode data does not carry pedestrian arrival or exit counts",
+        )
+    )
+
+    distributional_block = metrics.get("distributional_disruption")
+    distributional_available = (
+        isinstance(distributional_block, dict)
+        and distributional_block.get("schema_version") == "distributional-disruption.v1"
+        and bool(distributional_block.get("cohort_metrics"))
+    )
+    rows.append(
+        _social_mini_game_metric_row(
+            metric="distributional_inconvenience",
+            status="available" if distributional_available else "unavailable",
+            unit="diagnostic_cohort_delta",
+            denominator="matched robot-present and control pedestrian trajectories by cohort",
+            support_count=(
+                sum(
+                    int(value)
+                    for value in (distributional_block.get("support_counts") or {}).values()
+                    if isinstance(value, int | float)
+                )
+                if distributional_available
+                else 0
+            ),
+            unavailable_reason=(
+                None
+                if distributional_available
+                else "control trajectory cohort comparison was unavailable"
+            ),
+        )
+    )
+
+    human_block = metrics.get("human_interaction_proxy")
+    human_reductions = (
+        human_block.get("canonical_reductions") if isinstance(human_block, dict) else {}
+    )
+    invasiveness_value = (
+        human_reductions.get("human_discomfort_exposure_m_s")
+        if isinstance(human_reductions, dict)
+        else None
+    )
+    invasiveness_available = isinstance(invasiveness_value, int | float) and math.isfinite(
+        float(invasiveness_value)
+    )
+    rows.append(
+        _social_mini_game_metric_row(
+            metric="invasiveness",
+            status="available" if invasiveness_available else "unavailable",
+            unit="m*s",
+            denominator="proxemic exposure over robot-pedestrian trajectory samples",
+            value=float(invasiveness_value) if invasiveness_available else None,
+            support_count=(
+                int((human_block.get("sample_counts") or {}).get("timesteps") or 0)
+                if isinstance(human_block, dict)
+                else 0
+            ),
+            unavailable_reason=(
+                None
+                if invasiveness_available
+                else "human-interaction proxy metrics were not enabled or lacked support"
+            ),
+        )
+    )
+
+    metrics["social_mini_game"] = {
+        "schema_version": "social-mini-game-metrics.v1",
+        "status": "diagnostic",
+        "mechanism_family": _social_mini_game_mechanism_family(metrics),
+        "rows": rows,
+        "interpretation": (
+            "Diagnostic Social Mini-Game mechanism metrics. Rows distinguish valid zero values "
+            "from unavailable or undefined metrics and are not paper-grade evidence by themselves."
         ),
     }
 

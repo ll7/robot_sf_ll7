@@ -46,15 +46,31 @@ Notes
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from pathlib import Path
+
+
+SIMULATION_RUN_PROVENANCE_SCHEMA_VERSION = "simulation_run_provenance.v1"
+_REQUIRED_PROVENANCE_FIELDS = frozenset(
+    {
+        "schema_version",
+        "bundle_status",
+        "inputs",
+        "outputs",
+        "generated_reports",
+        "stable_identifiers",
+        "optional_fields",
+    }
+)
+_EXPLICIT_OPTIONAL_FIELDS = ("run_id", "invocation", "config_path", "scenario_path")
 
 
 @dataclass(frozen=True)
@@ -69,6 +85,130 @@ def _stat_of(path: Path) -> _Stat:
     """Return size and mtime_ns for a path."""
     st = path.stat()
     return _Stat(size=int(st.st_size), mtime_ns=int(st.st_mtime_ns))
+
+
+def _sha256_file(path: Path) -> str:
+    """Return a SHA256 checksum for a provenance artifact."""
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _sha256_jsonable(payload: object) -> str:
+    """Return a stable SHA256 digest for JSON-serializable provenance identity."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _artifact_entry(path: Path, *, required: bool = False) -> dict[str, object]:
+    """Return the minimum machine-readable artifact identity for a path."""
+    if not path.exists():
+        if required:
+            raise ValueError(f"Required provenance artifact does not exist: {path}")
+        return {
+            "path": str(path),
+            "artifact_status": "missing",
+            "sha256": None,
+            "size": None,
+            "mtime_ns": None,
+        }
+    if not path.is_file():
+        if required:
+            raise ValueError(f"Required provenance artifact is not a file: {path}")
+        return {
+            "path": str(path),
+            "artifact_status": "not_file",
+            "sha256": None,
+            "size": None,
+            "mtime_ns": None,
+        }
+    stat = _stat_of(path)
+    return {
+        "path": str(path),
+        "artifact_status": "available",
+        "sha256": _sha256_file(path),
+        "size": stat.size,
+        "mtime_ns": stat.mtime_ns,
+    }
+
+
+def _artifact_entries(paths: Iterable[Path] | None) -> list[dict[str, object]]:
+    """Return artifact entries for provided paths, preserving explicit absence as an empty list."""
+    if paths is None:
+        return []
+    return [_artifact_entry(Path(path)) for path in paths]
+
+
+def _build_simulation_run_provenance(
+    *,
+    out_path: Path,
+    episode_ids: list[str],
+    identity_hash: str | None,
+    schema_version: str,
+    input_paths: Iterable[Path] | None,
+    report_paths: Iterable[Path] | None,
+) -> dict[str, object]:
+    """Build and validate the minimum simulation-run provenance bundle.
+
+    Returns:
+        Machine-readable provenance bundle for the simulation output sidecar.
+    """
+    bundle: dict[str, object] = {
+        "schema_version": SIMULATION_RUN_PROVENANCE_SCHEMA_VERSION,
+        "bundle_status": "complete",
+        "inputs": _artifact_entries(input_paths),
+        "outputs": [_artifact_entry(out_path, required=True)],
+        "generated_reports": _artifact_entries(report_paths),
+        "stable_identifiers": {
+            "episode_ids_sha256": _sha256_jsonable(sorted(set(episode_ids))),
+            "identity_hash": identity_hash,
+            "schema_version": schema_version,
+        },
+        "optional_fields": dict.fromkeys(_EXPLICIT_OPTIONAL_FIELDS),
+    }
+    _validate_simulation_run_provenance(bundle)
+    return bundle
+
+
+def _validate_provenance_artifact_entry(collection_name: str, artifact: object) -> None:
+    """Validate one provenance artifact entry."""
+    if not isinstance(artifact, dict) or not artifact.get("path"):
+        raise ValueError(f"Simulation-run provenance {collection_name} entries require path")
+    status = artifact.get("artifact_status", "available")
+    if status == "available" and not artifact.get("sha256"):
+        raise ValueError(
+            f"Simulation-run provenance {collection_name} available entries require sha256"
+        )
+    if status not in {"available", "missing", "not_file"}:
+        raise ValueError(f"Simulation-run provenance {collection_name} artifact_status is invalid")
+
+
+def _validate_simulation_run_provenance(bundle: dict[str, object]) -> None:
+    """Fail closed when the required provenance bundle contract is incomplete."""
+    missing = sorted(_REQUIRED_PROVENANCE_FIELDS - bundle.keys())
+    if missing:
+        raise ValueError(f"Simulation-run provenance missing required fields: {missing}")
+    if bundle.get("schema_version") != SIMULATION_RUN_PROVENANCE_SCHEMA_VERSION:
+        raise ValueError("Simulation-run provenance schema_version is invalid")
+    optional_fields = bundle.get("optional_fields")
+    if not isinstance(optional_fields, dict):
+        raise ValueError("Simulation-run provenance optional_fields must be a mapping")
+    missing_optionals = [
+        field for field in _EXPLICIT_OPTIONAL_FIELDS if field not in optional_fields
+    ]
+    if missing_optionals:
+        raise ValueError(
+            "Simulation-run provenance optional_fields missing explicit fields: "
+            f"{missing_optionals}"
+        )
+    for collection_name in ("inputs", "outputs", "generated_reports"):
+        collection = bundle.get(collection_name)
+        if not isinstance(collection, list):
+            raise ValueError(f"Simulation-run provenance {collection_name} must be a list")
+        for artifact in collection:
+            _validate_provenance_artifact_entry(collection_name, artifact)
 
 
 def manifest_path_for(out_path: Path) -> Path:
@@ -152,6 +292,9 @@ def save_manifest(
     episode_ids: Iterable[str],
     identity_hash: str | None = None,
     schema_version: str = EPISODE_SCHEMA_VERSION,
+    *,
+    input_paths: Iterable[Path] | None = None,
+    report_paths: Iterable[Path] | None = None,
 ) -> None:
     """Write or update the manifest to reflect the current on-disk state.
 
@@ -160,10 +303,14 @@ def save_manifest(
         episode_ids: All episode ids currently present in the JSONL file.
         identity_hash: Optional content hash written for tamper detection.
         schema_version: Episode schema version recorded in the manifest.
+        input_paths: Optional simulation inputs to checksum into the provenance bundle.
+        report_paths: Optional generated reports to checksum into the provenance bundle.
 
     Notes:
         - If the JSONL file does not exist, the function returns without writing.
         - The sidecar captures the target file's stat for change detection.
+        - ``simulation_run_provenance`` records explicit ``None`` values for optional
+          run metadata that this entry point cannot infer.
     """
     if not out_path.exists():
         return
@@ -178,6 +325,14 @@ def save_manifest(
         "episode_ids": ids_sorted,
         "episodes_count": len(ids_sorted),
         "schema_version": schema_version,
+        "simulation_run_provenance": _build_simulation_run_provenance(
+            out_path=out_path,
+            episode_ids=ids_sorted,
+            identity_hash=identity_hash,
+            schema_version=schema_version,
+            input_paths=input_paths,
+            report_paths=report_paths,
+        ),
     }
     if identity_hash is not None:
         rec["identity_hash"] = identity_hash

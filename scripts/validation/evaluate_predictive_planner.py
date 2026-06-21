@@ -9,12 +9,14 @@ import math
 import sys
 from collections import Counter
 from pathlib import Path
+from statistics import NormalDist
 
 import numpy as np
 import yaml
 from loguru import logger
 
 from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
 from scripts.validation.predictive_eval_common import load_seed_manifest, make_subset_scenarios
 
@@ -65,6 +67,15 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional baseline JSONL to compute per-scenario deltas vs a reference run.",
     )
+    parser.add_argument(
+        "--observation-noise",
+        type=Path,
+        default=None,
+        help="Optional observation-noise YAML profile passed through to map-runner evaluation.",
+    )
+    parser.add_argument("--bootstrap-samples", type=int, default=1000)
+    parser.add_argument("--bootstrap-seed", type=int, default=123)
+    parser.add_argument("--confidence", type=float, default=0.95)
     return parser.parse_args()
 
 
@@ -100,6 +111,90 @@ def _failure_taxonomy(rows: list[dict]) -> dict:
         "status_counts": dict(by_status),
         "termination_reason_counts": dict(by_reason),
         "scenario_counts": dict(by_scenario),
+    }
+
+
+def _normal_z(confidence: float) -> float:
+    """Return the two-sided normal critical value for a confidence level."""
+    if not 0.0 < confidence < 1.0:
+        raise ValueError(f"confidence must be between 0 and 1, got {confidence}")
+    return float(NormalDist().inv_cdf(0.5 + confidence / 2.0))
+
+
+def _wilson_interval(successes: int, total: int, confidence: float) -> list[float | None]:
+    """Return Wilson score interval for a Bernoulli rate."""
+    if total <= 0:
+        return [None, None]
+    z = _normal_z(confidence)
+    p = float(successes) / float(total)
+    denom = 1.0 + z * z / total
+    center = (p + z * z / (2.0 * total)) / denom
+    half = z * math.sqrt((p * (1.0 - p) / total) + (z * z / (4.0 * total * total))) / denom
+    return [float(max(0.0, center - half)), float(min(1.0, center + half))]
+
+
+def _bootstrap_mean_interval(
+    values: list[float],
+    *,
+    samples: int,
+    confidence: float,
+    seed: int,
+) -> list[float | None]:
+    """Return deterministic bootstrap CI for a finite-value mean."""
+    finite_values = [float(value) for value in values if math.isfinite(float(value))]
+    if not finite_values or samples <= 0:
+        return [None, None]
+    arr = np.asarray(finite_values, dtype=float)
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, len(arr), size=(int(samples), len(arr)))
+    means = np.mean(arr[indices], axis=1)
+    alpha = (1.0 - float(confidence)) / 2.0
+    return [
+        float(np.quantile(means, max(0.0, alpha))),
+        float(np.quantile(means, min(1.0, 1.0 - alpha))),
+    ]
+
+
+def _collision_metric_value(row: dict) -> float | None:
+    """Return the explicit episode collision metric, or None when unavailable."""
+    metrics = row.get("metrics")
+    if not isinstance(metrics, dict):
+        return None
+    for key in ("total_collision_count", "collisions"):
+        value = metrics.get(key)
+        if value is None or value == "":
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            return number
+    return None
+
+
+def _collision_metric_status(rows: list[dict]) -> dict[str, object]:
+    """Summarize whether every episode has an explicit collision metric."""
+    available = sum(1 for row in rows if _collision_metric_value(row) is not None)
+    total = len(rows)
+    if total == 0:
+        status = "not_available"
+        reason = "no episode rows"
+    elif available == total:
+        status = "available"
+        reason = None
+    elif available == 0:
+        status = "not_available"
+        reason = "no episode rows had metrics.total_collision_count or metrics.collisions"
+    else:
+        status = "partial"
+        reason = "some episode rows lacked metrics.total_collision_count or metrics.collisions"
+    return {
+        "status": status,
+        "reason": reason,
+        "denominator": total,
+        "available": available,
+        "required_fields": ["metrics.total_collision_count", "metrics.collisions"],
     }
 
 
@@ -204,6 +299,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         workers=int(args.workers),
         resume=False,
         benchmark_profile="experimental",
+        observation_noise=(
+            load_observation_noise_spec(args.observation_noise)
+            if args.observation_noise is not None
+            else None
+        ),
     )
 
     rows = [
@@ -220,11 +320,43 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         for row in rows
         if row.get("metrics", {}).get("min_distance") is not None
     ]
+    collision_metric_values = [_collision_metric_value(row) for row in rows]
+    collision_vals = [
+        1.0 if float(value) > 0.0 else 0.0 for value in collision_metric_values if value is not None
+    ]
     avg_speed_vals = [float(row.get("metrics", {}).get("avg_speed", 0.0)) for row in rows]
 
     success_rate = _mean(success_vals)
+    collision_rate = _mean(collision_vals) if collision_vals else float("nan")
     mean_min_distance = _mean(min_dist_vals) if min_dist_vals else float("nan")
     mean_speed = _mean(avg_speed_vals)
+    collision_status = _collision_metric_status(rows)
+    success_count = int(sum(success_vals))
+    collision_count = int(sum(collision_vals))
+    uncertainty = {
+        "confidence": float(args.confidence),
+        "bootstrap_samples": int(args.bootstrap_samples),
+        "bootstrap_seed": int(args.bootstrap_seed),
+        "success_rate_ci": _wilson_interval(
+            success_count, len(success_vals), float(args.confidence)
+        ),
+        "collision_rate_ci": _wilson_interval(
+            collision_count,
+            len(collision_vals),
+            float(args.confidence),
+        ),
+        "mean_min_distance_ci": _bootstrap_mean_interval(
+            min_dist_vals,
+            samples=int(args.bootstrap_samples),
+            confidence=float(args.confidence),
+            seed=int(args.bootstrap_seed),
+        ),
+        "methods": {
+            "success_rate": "wilson_score",
+            "collision_rate": "wilson_score",
+            "mean_min_distance": "bootstrap_episode_mean",
+        },
+    }
     per_scenario: dict[str, dict] = {}
     for row in rows:
         scenario_id = str(row.get("scenario_id", "unknown"))
@@ -329,12 +461,18 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "min_success_rate": float(args.min_success_rate),
         "min_distance": float(args.min_distance),
         "min_distance_available": min_distance_available,
+        "collision_metric_status": collision_status,
+        "collision_metric_available": collision_status["status"] == "available",
         "pass_success_rate": bool(success_rate >= float(args.min_success_rate)),
         "pass_min_distance": bool(
             mean_min_distance >= float(args.min_distance) if min_distance_available else True
         ),
     }
-    gates["pass_all"] = bool(gates["pass_success_rate"] and gates["pass_min_distance"])
+    gates["pass_all"] = bool(
+        gates["pass_success_rate"]
+        and gates["pass_min_distance"]
+        and gates["collision_metric_available"]
+    )
     integrity = _integrity_summary(rows)
 
     result = {
@@ -349,9 +487,12 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "run_summary": summary,
         "metrics": {
             "success_rate": success_rate,
+            "collision_rate": collision_rate,
             "mean_min_distance": mean_min_distance,
             "mean_avg_speed": mean_speed,
         },
+        "uncertainty": uncertainty,
+        "collision_metric_status": collision_status,
         "per_scenario_delta": per_scenario_summary,
         "failure_taxonomy": _failure_taxonomy(rows),
         "integrity": integrity,

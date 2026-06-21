@@ -132,6 +132,24 @@ Each entry records:
 | `claim_boundary` | Diagnostic-only, not benchmark or paper evidence. Small attributable speed-cap effect; classification `diagnostic_only`, not promote. |
 | `created_at` | 2026-06-20 |
 
+### NR-005: Near-Field Turn Budget S20 Follow-Up
+
+| Field | Value |
+|---|---|
+| `id` | `issue-3342-nearfield-turn-budget-s20` |
+| `hypothesis` | The near-field turn-budget improvement observed in the Issue #3215 n=7 hard slice is a real small effect that survives a larger hard-seed sample. |
+| `tested_artifact` | Predictive planner authority variants `baseline`, `nearfield_turn`, and `nf_speedcap_only` using `predictive_proxy_selected_v2_full`. |
+| `scenario` | `predictive_hardcase_portfolio_v1`, S20 hard-seed manifest, clean and `robustness_smoke_v1` observation-noise slices. |
+| `comparator` | Baseline predictive planner authority config on the same S20 seed schedule. |
+| `result_classification` | `diagnostic_only` |
+| `failure_mode` | `evidence_diagnostic_only` |
+| `why_failed_or_inconclusive` | The local S20 diagnostic slice did not reproduce the near-field signal: baseline was 0.20 success / 0.80 collision in both clean and noisy slices, while `nearfield_turn` and `nf_speedcap_only` were 0.15 success / 0.85 collision. Intervals are wide and overlapping, so the result is a diagnostic negative rather than a benchmark-strength rejection. |
+| `evidence_pointer` | `docs/context/evidence/issue_3342_nearfield_turn_budget_2026-06-21/README.md`, `docs/context/evidence/issue_3342_nearfield_turn_budget_2026-06-21/summary.json` |
+| `recommended_next_action` | Do not adopt the near-field turn-budget signal from S20. Run the configured S30 slice only if the remaining uncertainty is worth the local compute; otherwise route forecast-lane effort to model/data-side blockers. |
+| `linked_issues` | [#3342](https://github.com/ll7/robot_sf_ll7/issues/3342), [#3215](https://github.com/ll7/robot_sf_ll7/issues/3215), [#2835](https://github.com/ll7/robot_sf_ll7/issues/2835) |
+| `claim_boundary` | Diagnostic-local, not benchmark-strength, paper-facing, or release evidence. S30 is configured but not run. |
+| `created_at` | 2026-06-21 |
+
 ## Research Planning Implications
 
 This register is a planning aid. When scoping new experiments:

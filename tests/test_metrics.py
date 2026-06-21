@@ -944,6 +944,27 @@ def test_post_process_metrics_adds_social_mini_game_rows() -> None:
     assert rows["invasiveness"]["value"] == 0.0
 
 
+def test_post_process_metrics_treats_invalid_distributional_support_counts_as_zero() -> None:
+    """Malformed support-count payloads should not crash or inflate diagnostic support."""
+    metrics = post_process_metrics(
+        {
+            "success": 1.0,
+            "collisions": 0.0,
+            "distributional_disruption": {
+                "schema_version": "distributional-disruption.v1",
+                "support_counts": ["slow_speed_tier"],
+                "cohort_metrics": {"slow_speed_tier": {"displacement_mean_m": 0.2}},
+            },
+        },
+        snqi_weights=None,
+        snqi_baseline=None,
+    )
+
+    rows = {row["metric"]: row for row in metrics["social_mini_game"]["rows"]}
+    assert rows["distributional_inconvenience"]["status"] == "available"
+    assert rows["distributional_inconvenience"]["support_count"] == 0
+
+
 def test_compute_all_metrics_emits_deadlock_source_metrics() -> None:
     """Deadlock source metrics should be available to Social Mini-Game post-processing."""
     ep = _make_episode(T=8, K=0)

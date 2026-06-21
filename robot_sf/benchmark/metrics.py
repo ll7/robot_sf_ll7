@@ -3046,6 +3046,13 @@ def _attach_social_mini_game_block(metrics: dict[str, Any]) -> None:
         and distributional_block.get("schema_version") == "distributional-disruption.v1"
         and bool(distributional_block.get("cohort_metrics"))
     )
+    distributional_support_counts = (
+        distributional_block.get("support_counts")
+        if isinstance(distributional_block, dict)
+        else {}
+    )
+    if not isinstance(distributional_support_counts, dict):
+        distributional_support_counts = {}
     rows.append(
         _social_mini_game_metric_row(
             metric="distributional_inconvenience",
@@ -3055,7 +3062,7 @@ def _attach_social_mini_game_block(metrics: dict[str, Any]) -> None:
             support_count=(
                 sum(
                     int(value)
-                    for value in (distributional_block.get("support_counts") or {}).values()
+                    for value in distributional_support_counts.values()
                     if isinstance(value, int | float)
                 )
                 if distributional_available

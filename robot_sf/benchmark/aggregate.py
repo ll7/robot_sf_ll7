@@ -426,7 +426,7 @@ def _flatten_human_interaction_proxy_block(
 
 def _flatten_social_mini_game_block(base: dict[str, Any], social_mini_game: Any) -> None:
     """Flatten available Social Mini-Game row values with a stable prefix."""
-    if not isinstance(social_mini_game, dict):
+    if not isinstance(social_mini_game, dict) or not social_mini_game:
         return
     base["social_mini_game_status"] = social_mini_game.get("status")
     base["social_mini_game_mechanism_family"] = social_mini_game.get("mechanism_family")

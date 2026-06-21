@@ -579,6 +579,25 @@ def test_compute_aggregates_flattens_social_mini_game_available_rows() -> None:
     assert "social_mini_game_flow_throughput" not in metrics
 
 
+def test_flatten_metrics_skips_empty_social_mini_game_block() -> None:
+    """Empty Social Mini-Game blocks should not create null diagnostic columns."""
+    record = {
+        "episode_id": "ep-1",
+        "scenario_id": "sc-1",
+        "seed": 1,
+        "metrics": {
+            "success": True,
+            "social_mini_game": {},
+        },
+    }
+
+    flat = flatten_metrics(record)
+
+    assert "social_mini_game" not in flat
+    assert "social_mini_game_status" not in flat
+    assert "social_mini_game_mechanism_family" not in flat
+
+
 def test_flatten_metrics_keeps_distributional_disruption_nested_out_of_scalar_rows() -> None:
     """Distributional disruption is a schema block, not a scalar aggregate metric."""
     record = {

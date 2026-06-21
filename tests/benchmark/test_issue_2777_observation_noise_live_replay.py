@@ -109,7 +109,10 @@ def test_issue_3323_matrix_adds_near_field_route_and_preserves_fixture_contract(
     assert len(scenarios) == 1
     scenario = scenarios[0]
     assert scenario["name"] == "issue_2756_occluded_emergence"
-    assert Path(str(scenario["route_overrides_file"])).resolve() == route_override
+    route_overrides_path = Path(str(scenario["route_overrides_file"]))
+    if not route_overrides_path.is_absolute():
+        route_overrides_path = (matrix.parent / route_overrides_path).resolve()
+    assert route_overrides_path == route_override
 
     config = build_robot_config_from_scenario(scenario, scenario_path=matrix.resolve())
     _map_name, map_def = next(iter(config.map_pool.map_defs.items()))

@@ -48,9 +48,14 @@
     "candidate": "risk_surface_dwa_v0",
     "stage": "smoke",
     "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
-    "seed": 111,
+    "scenario_name": null,
+    "scenario_index": 0,
+    "seed": null,
+    "seed_index": 0,
     "horizon": 50,
-    "output_dir": "docs/context/evidence/issue_2777_live_observation_noise_replay"
+    "output_dir": "docs/context/evidence/issue_2777_live_observation_noise_replay",
+    "allow_non_occluded_live_fixture": false,
+    "dry_run": false
   },
   "conditions": [
     {

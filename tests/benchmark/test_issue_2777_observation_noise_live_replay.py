@@ -216,3 +216,25 @@ def test_markdown_and_json_outputs_are_written(tmp_path: Path) -> None:
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["schema_version"] == mod.SCHEMA_VERSION
     assert "Issue #2777" in (output_dir / "README.md").read_text(encoding="utf-8")
+
+
+def test_relative_output_dir_is_repo_relative_from_other_cwd(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Repository-relative artifact paths should not depend on the launch cwd."""
+    mod = _load_script()
+    fake_repo = tmp_path / "repo"
+    fake_repo.mkdir()
+    matrix = fake_repo / "matrix.yaml"
+    matrix.write_text("schema_version: robot_sf.scenario_matrix.v1\n", encoding="utf-8")
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir()
+    monkeypatch.setattr(mod, "REPO_ROOT", fake_repo)
+    monkeypatch.chdir(outside_cwd)
+
+    exit_code = mod.main(["--scenario-matrix", "matrix.yaml", "--output-dir", "relative-out"])
+
+    assert exit_code == 2
+    assert (fake_repo / "relative-out" / "summary.json").exists()
+    assert not (outside_cwd / "relative-out").exists()

@@ -430,13 +430,13 @@ def _run_config(*, args: argparse.Namespace, output_dir: Path) -> dict[str, Any]
     return {
         "candidate": args.candidate,
         "stage": args.stage,
-        "scenario_matrix": args.scenario_matrix.as_posix(),
+        "scenario_matrix": _durable_ref(_repo_path(args.scenario_matrix)),
         "scenario_name": args.scenario_name,
         "scenario_index": args.scenario_index,
         "seed": args.seed,
         "seed_index": args.seed_index,
         "horizon": args.horizon,
-        "output_dir": output_dir.as_posix(),
+        "output_dir": _durable_ref(output_dir),
         "allow_non_occluded_live_fixture": bool(args.allow_non_occluded_live_fixture),
         "dry_run": bool(args.dry_run),
     }
@@ -684,6 +684,7 @@ def _final_classification(
 def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
     """Run the seven live diagnostics conditions and return the summary report."""
     output_dir = args.output_dir
+    output_dir = _repo_path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     scenario_matrix = _repo_path(args.scenario_matrix)
     fixture_contract = _fixture_contract(scenario_matrix)
@@ -774,6 +775,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = parse_args(argv)
+    args.output_dir = _repo_path(args.output_dir)
     if tuple(condition.name for condition in CONDITIONS) != REQUIRED_CONDITIONS:
         raise RuntimeError("Issue #2777 condition set drifted from the required seven families")
     report = run_live_batch(args)
@@ -784,8 +786,8 @@ def main(argv: list[str] | None = None) -> int:
                 "schema_version": SCHEMA_VERSION,
                 "status": report["status"],
                 "classification": report["classification"],
-                "summary": (args.output_dir / "summary.json").as_posix(),
-                "readme": (args.output_dir / "README.md").as_posix(),
+                "summary": _durable_ref(args.output_dir / "summary.json"),
+                "readme": _durable_ref(args.output_dir / "README.md"),
             },
             sort_keys=True,
         )

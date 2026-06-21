@@ -533,7 +533,7 @@ def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
     return out
 
 
-def compute_aggregates(
+def compute_aggregates(  # noqa: PLR0913
     records: list[dict[str, Any]],
     *,
     group_by: str = "scenario_params.algo",

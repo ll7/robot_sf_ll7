@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
+from robot_sf.planner.teb_commitment import (
+    TEBCommitmentPlannerAdapter,
+    build_teb_commitment_config,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -37,8 +41,24 @@ def _build_risk_dwa_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpe
     )
 
 
+def _build_teb_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Build the TEB commitment adapter spec without applying map-runner metadata.
+
+    Returns:
+        AdapterPolicySpec: Adapter construction payload for the map runner.
+    """
+
+    return AdapterPolicySpec(
+        algo_key="teb",
+        algo_config=algo_config,
+        adapter=TEBCommitmentPlannerAdapter(config=build_teb_commitment_config(algo_config)),
+        adapter_name="TEBCommitmentPlannerAdapter",
+    )
+
+
 _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
     "risk_dwa": _build_risk_dwa_policy_spec,
+    "teb": _build_teb_policy_spec,
 }
 
 

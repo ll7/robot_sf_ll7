@@ -623,7 +623,10 @@ def test_build_policy_teb_wires_teb_adapter(
             """Return a deterministic planner command for the wiring test."""
             return (0.4, 0.2)
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.TEBCommitmentPlannerAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.policy_builders.TEBCommitmentPlannerAdapter",
+        _DummyAdapter,
+    )
     policy, meta = _build_policy("teb", {"commit_gain": 0.8})
     linear, angular = policy(
         {"robot": {"position": [0.0, 0.0], "heading": [0.0]}, "goal": {"current": [1.0, 0.0]}}
@@ -632,6 +635,8 @@ def test_build_policy_teb_wires_teb_adapter(
     assert meta["status"] == "ok"
     assert meta["policy_semantics"] == "corridor_commitment_local_planner"
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+    assert meta["planner_kinematics"]["adapter_name"] == "TEBCommitmentPlannerAdapter"
+    assert hasattr(policy, "_planner_adapter")
 
 
 def test_build_policy_nmpc_social_wires_nmpc_adapter(

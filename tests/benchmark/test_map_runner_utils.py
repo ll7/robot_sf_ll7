@@ -56,6 +56,7 @@ from robot_sf.benchmark.map_runner_batch_plan import (
     build_worker_fixed_params,
     resolve_batch_kinematics_tag,
 )
+from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -3581,6 +3582,83 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         resume=True,
     )
     assert result["written"] == 0
+
+
+def test_run_map_batch_summary_populates_collision_metric(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Completed map batches should expose aggregate collision status instead of null."""
+    scenarios = [
+        {"name": "clear", "metadata": {"supported": True}},
+        {"name": "collision", "metadata": {"supported": True}},
+    ]
+    out_path = tmp_path / "episodes.jsonl"
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+
+    def _fake_run_map_job_worker(job):
+        """Emit one clear and one colliding episode record."""
+        scenario, seed, _params = job
+        collision_count = 1.0 if scenario["name"] == "collision" else 0.0
+        return {
+            "episode_id": f"{scenario['name']}-{seed}",
+            "scenario_id": scenario["name"],
+            "seed": seed,
+            "metrics": {"collisions": collision_count},
+            "outcome": {"collision_event": collision_count > 0.0},
+            "algorithm_metadata": {},
+        }
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        _fake_run_map_job_worker,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._write_validated_to_handle",
+        lambda *args, **kwargs: None,
+    )
+
+    result = run_map_batch(
+        scenarios,
+        out_path,
+        schema_path=tmp_path / "schema.json",
+        workers=1,
+        resume=False,
+    )
+
+    assert result["written"] == 2
+    assert result["metrics"]["collision"] == pytest.approx(1.0)
+    assert result["metrics"]["collision_count"] == pytest.approx(1.0)
+    assert result["metrics"]["collision_rate"] == pytest.approx(0.5)
+    assert result["metrics"]["collision_status"] == {
+        "status": "available",
+        "reason": None,
+        "denominator": 2,
+        "source": "episode.metrics.collisions",
+    }
+
+
+def test_summarize_collision_metrics_preserves_missing_collision_events() -> None:
+    """Missing collision-event data should stay unavailable instead of coercing to no collision."""
+    summary = summarize_collision_metrics(
+        [
+            {"outcome": {"collision_event": None}},
+            {"outcome": {"collision_event": True}},
+            {"outcome": {"collision_event": False}},
+        ]
+    )
+
+    assert summary["collision"] == pytest.approx(1.0)
+    assert summary["collision_count"] == pytest.approx(1.0)
+    assert summary["collision_rate"] == pytest.approx(0.5)
+    assert summary["collision_status"] == {
+        "status": "partial",
+        "reason": "some successful records lacked collision metrics",
+        "denominator": 3,
+        "source": "episode.outcome.collision_event",
+    }
 
 
 def test_run_map_batch_rejects_unsupported_observation_override(

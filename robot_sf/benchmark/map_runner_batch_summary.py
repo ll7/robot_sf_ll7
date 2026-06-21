@@ -10,6 +10,7 @@ from robot_sf.benchmark.algorithm_metadata import (
 )
 from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
+from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
 from robot_sf.benchmark.map_runner_provenance import map_result_provenance
 from robot_sf.benchmark.utils import attach_track_metadata
 
@@ -194,6 +195,7 @@ def build_completed_batch_summary(  # noqa: PLR0913
     batch_runtime_sec: float,
     wrote: int,
     failures: list[dict[str, Any]],
+    episode_records: list[dict[str, Any]],
     preflight_skipped_jobs: int,
     out_path: Path,
     readiness: Any,
@@ -315,6 +317,7 @@ def build_completed_batch_summary(  # noqa: PLR0913
         "observation_noise": noise_spec,
         "observation_noise_hash": noise_hash,
         "observation_level": active_observation_level,
+        "metrics": summarize_collision_metrics(episode_records),
         "synthetic_actuation_profile": actuation_profile_metadata,
         "latency_stress_profile": latency_profile_metadata,
         "latency_stress_metrics": (

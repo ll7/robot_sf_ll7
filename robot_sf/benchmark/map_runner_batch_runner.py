@@ -15,6 +15,7 @@ class BatchExecutionResult(NamedTuple):
     """Counters and metadata accumulated while executing map-runner jobs."""
 
     wrote: int
+    episode_records: list[dict[str, Any]]
     failures: list[dict[str, Any]]
     adapter_native_steps: int
     adapter_adapted_steps: int
@@ -76,13 +77,14 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
     apply_worker_metadata_bridge,
     scenario_id,
     feasibility_totals: FeasibilityTotals,
-) -> tuple[int, list[dict[str, Any]], bool, int, int, dict[str, Any] | None]:
+) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]], bool, int, int, dict[str, Any] | None]:
     """Execute map-runner jobs serially and append successful records.
 
     Returns:
         Write count, failures, adapter counters, and runtime algorithm contract.
     """
     wrote = 0
+    episode_records: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     adapter_native_steps = 0
     adapter_adapted_steps = 0
@@ -109,6 +111,7 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
                 )
                 write_validated_to_handle(handle, schema, rec)
                 wrote += 1
+                episode_records.append(rec)
             except Exception as exc:  # pragma: no cover - error path
                 logger.exception(
                     "Map batch worker failed in serial execution: scenario={} seed={}",
@@ -124,6 +127,7 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
                 )
     return (
         wrote,
+        episode_records,
         failures,
         adapter_samples_seen,
         adapter_native_steps,
@@ -146,13 +150,14 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
     workers: int,
     executor_cls,
     as_completed_fn,
-) -> tuple[int, list[dict[str, Any]], bool, int, int, dict[str, Any] | None]:
+) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]], bool, int, int, dict[str, Any] | None]:
     """Execute map-runner jobs in parallel and append records in job order.
 
     Returns:
         Write count, failures, adapter counters, and runtime algorithm contract.
     """
     wrote = 0
+    episode_records: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     adapter_native_steps = 0
     adapter_adapted_steps = 0
@@ -202,6 +207,7 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
             try:
                 write_validated_to_handle(handle, schema, results_by_idx[idx])
                 wrote += 1
+                episode_records.append(results_by_idx[idx])
             except Exception as exc:  # pragma: no cover - write/validate path
                 rec = results_by_idx[idx]
                 logger.exception(
@@ -222,6 +228,7 @@ def _parallel_execute_map_jobs(  # noqa: PLR0913
                 )
     return (
         wrote,
+        episode_records,
         failures,
         adapter_samples_seen,
         adapter_native_steps,
@@ -255,6 +262,7 @@ def execute_map_jobs(  # noqa: PLR0913
     if workers <= 1:
         (
             wrote,
+            episode_records,
             failures,
             adapter_samples_seen,
             adapter_native_steps,
@@ -274,6 +282,7 @@ def execute_map_jobs(  # noqa: PLR0913
     else:
         (
             wrote,
+            episode_records,
             failures,
             adapter_samples_seen,
             adapter_native_steps,
@@ -295,6 +304,7 @@ def execute_map_jobs(  # noqa: PLR0913
         )
     return BatchExecutionResult(
         wrote=wrote,
+        episode_records=episode_records,
         failures=failures,
         adapter_native_steps=adapter_native_steps,
         adapter_adapted_steps=adapter_adapted_steps,

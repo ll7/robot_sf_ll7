@@ -45,6 +45,98 @@ def collision_metric_value(metrics: dict[str, Any], key: str) -> float:
     return value if math.isfinite(value) else 0.0
 
 
+def _finite_float(value: Any) -> float | None:
+    """Return a finite float value, or ``None`` when the input is unavailable."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _episode_collision_value(record: dict[str, Any]) -> tuple[float | None, str | None]:
+    """Return one episode's collision value and source path when available."""
+    metrics = record.get("metrics")
+    if isinstance(metrics, dict):
+        for key in ("collisions", "total_collision_count", "collision_count"):
+            if key in metrics:
+                value = _finite_float(metrics.get(key))
+                if value is not None:
+                    return value, f"episode.metrics.{key}"
+
+    outcome = record.get("outcome")
+    if isinstance(outcome, dict) and "collision_event" in outcome:
+        event = outcome.get("collision_event")
+        if event is None:
+            return None, None
+        return 1.0 if bool(event) else 0.0, "episode.outcome.collision_event"
+    return None, None
+
+
+def summarize_collision_metrics(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a batch-level collision summary from successful episode records.
+
+    Returns:
+        Backward-compatible scalar aliases plus explicit availability metadata.
+    """
+    denominator = len(records)
+    if denominator <= 0:
+        return {
+            "collision": "not_available",
+            "collision_count": "not_available",
+            "collision_rate": "not_available",
+            "collision_status": {
+                "status": "not_available",
+                "reason": "no successful episode records were available for aggregation",
+                "denominator": 0,
+                "source": None,
+            },
+        }
+
+    collision_count = 0.0
+    collided_episodes = 0
+    available = 0
+    sources: set[str] = set()
+    for record in records:
+        value, source = _episode_collision_value(record)
+        if value is None:
+            continue
+        if source is not None:
+            sources.add(source)
+        available += 1
+        collision_count += value
+        if value > 0.0:
+            collided_episodes += 1
+
+    if available <= 0:
+        return {
+            "collision": "not_available",
+            "collision_count": "not_available",
+            "collision_rate": "not_available",
+            "collision_status": {
+                "status": "not_available",
+                "reason": "successful episode records did not emit collision metrics",
+                "denominator": denominator,
+                "source": None,
+            },
+        }
+
+    status = "available" if available == denominator else "partial"
+    reason = None if status == "available" else "some successful records lacked collision metrics"
+    source = ",".join(sorted(sources))
+    return {
+        "collision": float(collision_count),
+        "collision_count": float(collision_count),
+        "collision_rate": float(collided_episodes / available),
+        "collision_status": {
+            "status": status,
+            "reason": reason,
+            "denominator": denominator,
+            "source": source,
+        },
+    }
+
+
 def floor_collision_metrics_from_flags(
     metrics: dict[str, Any],
     *,

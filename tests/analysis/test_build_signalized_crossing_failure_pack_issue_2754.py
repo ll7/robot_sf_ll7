@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 from scripts.analysis.build_signalized_crossing_failure_pack_issue_2754 import (
     ALLOWED_CLAIM_WORDING,
+    _portable_input_path,
     main,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _make_dummy_trace(episode_id: str, scenario_id: str) -> dict[str, Any]:
@@ -128,6 +127,23 @@ def _eligible_runtime_args() -> list[str]:
         "--claim-matrix-status",
         "allowed",
     ]
+
+
+def test_portable_input_path_is_repo_relative_outside_repo_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Repo-local absolute paths stay repo-relative even when the process CWD is elsewhere."""
+    repo_root = Path(__file__).resolve().parents[2]
+    source_path = (
+        repo_root / "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py"
+    )
+
+    monkeypatch.chdir(tmp_path)
+
+    assert (
+        _portable_input_path(source_path)
+        == "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py"
+    )
 
 
 def test_real_failure_case_output(tmp_path: Path) -> None:

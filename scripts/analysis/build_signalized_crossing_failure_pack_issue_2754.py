@@ -68,6 +68,7 @@ _FIGURE_EXECUTION_MODES = {"native", "durable_replay"}
 _ALLOWED_CLAIM_STATUSES = {"allowed", "claimable"}
 _METRIC_INPUT_PATH_KEY = "_failure_pack_metric_input_path"
 _METRIC_INPUT_LINE_KEY = "_failure_pack_metric_input_line"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -117,7 +118,7 @@ def _expand_timeline(timeline: list[dict[str, Any]], dt: float) -> list[dict[str
 
 def _portable_input_path(path: Path, *, repo_root: Path | None = None) -> str:
     """Return a non-absolute path suitable for tracked provenance output."""
-    root = (repo_root or Path.cwd()).resolve()
+    root = (repo_root or _REPO_ROOT).resolve()
     resolved = path.resolve()
     try:
         return resolved.relative_to(root).as_posix()

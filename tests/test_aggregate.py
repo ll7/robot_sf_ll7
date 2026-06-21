@@ -503,6 +503,101 @@ def test_compute_aggregates_flattens_human_interaction_proxy_block() -> None:
     assert metrics["pedestrian_path_deviation_proxy_m"]["mean"] == pytest.approx(0.3)
 
 
+def test_compute_aggregates_flattens_social_mini_game_available_rows() -> None:
+    """Available Social Mini-Game row values should aggregate without nested payload leakage."""
+    records = [
+        {
+            "episode_id": "ep-1",
+            "scenario_id": "sc-1",
+            "seed": 1,
+            "algo": "planner-a",
+            "metrics": {
+                "success": True,
+                "social_mini_game": {
+                    "schema_version": "social-mini-game-metrics.v1",
+                    "status": "diagnostic",
+                    "mechanism_family": "doorway",
+                    "rows": [
+                        {
+                            "metric": "deadlock_frequency",
+                            "status": "available",
+                            "unit": "events_per_episode",
+                            "denominator": "one episode",
+                            "value": 0.0,
+                            "support_count": 1,
+                        },
+                        {
+                            "metric": "flow_throughput",
+                            "status": "unavailable",
+                            "unit": "pedestrians_per_second",
+                            "denominator": "pedestrian arrivals or exits",
+                            "support_count": 0,
+                            "unavailable_reason": "missing arrival or exit counts",
+                        },
+                    ],
+                    "interpretation": "diagnostic only",
+                },
+            },
+        },
+        {
+            "episode_id": "ep-2",
+            "scenario_id": "sc-1",
+            "seed": 2,
+            "algo": "planner-a",
+            "metrics": {
+                "success": True,
+                "social_mini_game": {
+                    "schema_version": "social-mini-game-metrics.v1",
+                    "status": "diagnostic",
+                    "mechanism_family": "doorway",
+                    "rows": [
+                        {
+                            "metric": "deadlock_frequency",
+                            "status": "available",
+                            "unit": "events_per_episode",
+                            "denominator": "one episode",
+                            "value": 2.0,
+                            "support_count": 1,
+                        }
+                    ],
+                    "interpretation": "diagnostic only",
+                },
+            },
+        },
+    ]
+
+    flat = flatten_metrics(records[0])
+    assert "social_mini_game" not in flat
+    assert flat["social_mini_game_deadlock_frequency"] == 0.0
+    assert flat["social_mini_game_flow_throughput_status"] == "unavailable"
+    assert "social_mini_game_flow_throughput" not in flat
+
+    summary = compute_aggregates(records, group_by="algo")
+
+    metrics = summary["planner-a"]
+    assert metrics["social_mini_game_deadlock_frequency"]["mean"] == 1.0
+    assert "social_mini_game_flow_throughput" not in metrics
+
+
+def test_flatten_metrics_skips_empty_social_mini_game_block() -> None:
+    """Empty Social Mini-Game blocks should not create null diagnostic columns."""
+    record = {
+        "episode_id": "ep-1",
+        "scenario_id": "sc-1",
+        "seed": 1,
+        "metrics": {
+            "success": True,
+            "social_mini_game": {},
+        },
+    }
+
+    flat = flatten_metrics(record)
+
+    assert "social_mini_game" not in flat
+    assert "social_mini_game_status" not in flat
+    assert "social_mini_game_mechanism_family" not in flat
+
+
 def test_flatten_metrics_keeps_distributional_disruption_nested_out_of_scalar_rows() -> None:
     """Distributional disruption is a schema block, not a scalar aggregate metric."""
     record = {

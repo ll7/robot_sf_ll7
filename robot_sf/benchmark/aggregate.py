@@ -424,6 +424,28 @@ def _flatten_human_interaction_proxy_block(
             base[source_key] = reductions.get(source_key)
 
 
+def _flatten_social_mini_game_block(base: dict[str, Any], social_mini_game: Any) -> None:
+    """Flatten available Social Mini-Game row values with a stable prefix."""
+    if not isinstance(social_mini_game, dict) or not social_mini_game:
+        return
+    base["social_mini_game_status"] = social_mini_game.get("status")
+    base["social_mini_game_mechanism_family"] = social_mini_game.get("mechanism_family")
+    rows = social_mini_game.get("rows") or []
+    if not isinstance(rows, list):
+        return
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        metric = row.get("metric")
+        if not isinstance(metric, str) or not metric:
+            continue
+        prefix = f"social_mini_game_{metric}"
+        base[f"{prefix}_status"] = row.get("status")
+        base[f"{prefix}_support_count"] = row.get("support_count")
+        if row.get("status") == "available" and "value" in row:
+            base[prefix] = row.get("value")
+
+
 def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     """Flatten metrics dict into a flat per-episode row.
 
@@ -441,6 +463,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     ped_impact = metrics.pop("pedestrian_impact", {}) or {}
     social_acceptability = metrics.pop("social_acceptability", {}) or {}
     human_interaction_proxy = metrics.pop("human_interaction_proxy", {}) or {}
+    social_mini_game = metrics.pop("social_mini_game", {}) or {}
     inter_robot = metrics.pop("inter_robot", {}) or {}
     # Flatten known force quantiles
     for qk in ("q50", "q90", "q95"):
@@ -451,6 +474,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     _flatten_pedestrian_impact_block(base, ped_impact)
     _flatten_social_acceptability_block(base, social_acceptability)
     _flatten_human_interaction_proxy_block(base, human_interaction_proxy)
+    _flatten_social_mini_game_block(base, social_mini_game)
     if isinstance(inter_robot, dict):
         for key, value in inter_robot.items():
             base[str(key)] = value

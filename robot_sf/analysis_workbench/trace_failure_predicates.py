@@ -354,7 +354,10 @@ def build_trace_failure_predicate_definitions(
             emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
         ),
     )
-    return [definition.to_dict() for definition in definitions]
+    definitions_by_id = {definition.predicate_id: definition for definition in definitions}
+    return [
+        definitions_by_id[predicate_id].to_dict() for predicate_id in TRACE_FAILURE_PREDICATE_IDS
+    ]
 
 
 def extract_trace_failure_predicates(  # noqa: PLR0913
@@ -1239,22 +1242,42 @@ def _collision_events(
     """Return collision predicates for radius-overlap contact-distance frames."""
     predicates: list[TraceFailurePredicate] = []
     for frame in trace.frames:
-        nearest = _nearest_pedestrian(frame)
-        if nearest is None:
-            continue
-        pedestrian_id, distance_m = nearest
-        pedestrian = _pedestrian_by_id(frame, pedestrian_id)
-        robot_radius_m = _number_or_none(frame.robot.get("radius"))
-        pedestrian_radius_m = (
-            _number_or_none(pedestrian.get("radius")) if pedestrian is not None else None
-        )
-        if robot_radius_m is None or pedestrian_radius_m is None:
-            if distance_m <= collision_missing_radius_near_distance_m:
-                missing_fields = []
-                if robot_radius_m is None:
-                    missing_fields.append("robot.radius")
-                if pedestrian_radius_m is None:
-                    missing_fields.append("pedestrians.radius")
+        for pedestrian in frame.pedestrians:
+            distance_m = _distance(frame.robot.get("position"), pedestrian.get("position"))
+            if distance_m is None:
+                continue
+            pedestrian_id = str(pedestrian.get("id", "unknown"))
+            robot_radius_m = _number_or_none(frame.robot.get("radius"))
+            pedestrian_radius_m = _number_or_none(pedestrian.get("radius"))
+            if robot_radius_m is None or pedestrian_radius_m is None:
+                if distance_m <= collision_missing_radius_near_distance_m:
+                    missing_fields = []
+                    if robot_radius_m is None:
+                        missing_fields.append("robot.radius")
+                    if pedestrian_radius_m is None:
+                        missing_fields.append("pedestrians.radius")
+                    predicates.append(
+                        _predicate(
+                            "collision",
+                            frame,
+                            frame,
+                            scenario_family=scenario_family,
+                            planner_id=trace.source.planner_id,
+                            involved_actors=["robot", pedestrian_id],
+                            evidence_fields={
+                                "distance_m": distance_m,
+                                "missing_fields": missing_fields,
+                                "missing_radius_near_distance_m": (
+                                    collision_missing_radius_near_distance_m
+                                ),
+                            },
+                            severity=VALIDITY_STATUS_UNAVAILABLE_DATA,
+                            validity_status=VALIDITY_STATUS_UNAVAILABLE_DATA,
+                        )
+                    )
+                continue
+            collision_distance_m = robot_radius_m + pedestrian_radius_m
+            if distance_m <= collision_distance_m:
                 predicates.append(
                     _predicate(
                         "collision",
@@ -1265,36 +1288,14 @@ def _collision_events(
                         involved_actors=["robot", pedestrian_id],
                         evidence_fields={
                             "distance_m": distance_m,
-                            "missing_fields": missing_fields,
-                            "missing_radius_near_distance_m": (
-                                collision_missing_radius_near_distance_m
-                            ),
+                            "robot_radius_m": robot_radius_m,
+                            "pedestrian_radius_m": pedestrian_radius_m,
+                            "collision_distance_m": collision_distance_m,
                         },
-                        severity=VALIDITY_STATUS_UNAVAILABLE_DATA,
-                        validity_status=VALIDITY_STATUS_UNAVAILABLE_DATA,
+                        severity="critical",
+                        validity_status=VALIDITY_STATUS_VALID,
                     )
                 )
-            continue
-        collision_distance_m = robot_radius_m + pedestrian_radius_m
-        if distance_m <= collision_distance_m:
-            predicates.append(
-                _predicate(
-                    "collision",
-                    frame,
-                    frame,
-                    scenario_family=scenario_family,
-                    planner_id=trace.source.planner_id,
-                    involved_actors=["robot", pedestrian_id],
-                    evidence_fields={
-                        "distance_m": distance_m,
-                        "robot_radius_m": robot_radius_m,
-                        "pedestrian_radius_m": pedestrian_radius_m,
-                        "collision_distance_m": collision_distance_m,
-                    },
-                    severity="critical",
-                    validity_status=VALIDITY_STATUS_VALID,
-                )
-            )
     return predicates
 
 
@@ -1620,14 +1621,6 @@ def _nearest_pedestrian(frame: SimulationTraceFrame) -> tuple[str, float] | None
         if nearest is None or distance_m < nearest[1]:
             nearest = (pedestrian_id, distance_m)
     return nearest
-
-
-def _pedestrian_by_id(frame: SimulationTraceFrame, pedestrian_id: str) -> Mapping[str, Any] | None:
-    """Return pedestrian metadata for an emitted actor id."""
-    for pedestrian in frame.pedestrians:
-        if str(pedestrian.get("id", "unknown")) == pedestrian_id:
-            return pedestrian
-    return None
 
 
 def _selected_action(frame: SimulationTraceFrame) -> dict[str, Any]:

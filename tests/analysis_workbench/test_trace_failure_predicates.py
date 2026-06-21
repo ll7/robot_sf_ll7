@@ -370,6 +370,51 @@ def test_collision_uses_radius_overlap_not_fixed_center_distance() -> None:
     assert collision["evidence_fields"]["collision_distance_m"] == pytest.approx(0.32)
 
 
+def test_collision_checks_all_pedestrians_not_only_nearest_center() -> None:
+    """A larger non-nearest pedestrian can overlap even when the nearest does not."""
+    trace = _build_trace(
+        trace_id="trace-non-nearest-radius-collision",
+        scenario_id="scenario-radius-collision",
+        seed=28,
+        planner_id="planner-radius",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                robot={
+                    "position": [0.0, 0.0],
+                    "heading": 0.0,
+                    "velocity": [0.0, 0.0],
+                    "radius": 0.1,
+                },
+                pedestrians=[
+                    {
+                        "id": "ped_small_nearest",
+                        "position": [0.22, 0.0],
+                        "velocity": [0.0, 0.0],
+                        "radius": 0.05,
+                    },
+                    {
+                        "id": "ped_large_farther",
+                        "position": [0.3, 0.0],
+                        "velocity": [0.0, 0.0],
+                        "radius": 0.22,
+                    },
+                ],
+            )
+        ],
+    )
+
+    collisions = [
+        row
+        for row in extract_trace_failure_predicates(trace)["predicates"]
+        if row["predicate_id"] == "collision" and row["validity_status"] == "valid"
+    ]
+
+    assert [row["involved_actors"][1] for row in collisions] == ["ped_large_farther"]
+    assert collisions[0]["evidence_fields"]["collision_distance_m"] == pytest.approx(0.32)
+
+
 def test_collision_near_contact_without_radii_is_not_available() -> None:
     """Near-contact geometry without radii should not become a collision claim."""
     trace = _build_trace(

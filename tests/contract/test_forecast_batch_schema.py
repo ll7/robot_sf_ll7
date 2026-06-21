@@ -245,6 +245,15 @@ def test_forecast_batch_schema_entity_rejects_non_datetime_timestamp() -> None:
         schema.validate_forecast_batch_data(batch)
 
 
+def test_forecast_batch_schema_entity_accepts_lowercase_utc_datetime() -> None:
+    """The structural schema validator should allow RFC3339 lowercase t/z forms."""
+    schema = ForecastBatchSchema(SCHEMA_PATH)
+    batch = _valid_batch_dict()
+    batch["provenance"]["timestamp"] = "2026-06-15t12:00:00z"
+
+    schema.validate_forecast_batch_data(batch)
+
+
 @pytest.mark.parametrize(
     "timestamp",
     [

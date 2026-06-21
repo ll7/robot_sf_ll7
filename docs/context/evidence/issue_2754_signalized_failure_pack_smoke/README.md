@@ -12,6 +12,13 @@ It is not benchmark evidence, dissertation figure evidence, or traffic-light com
 The metric row in `episodes.jsonl` is intentionally small and synthetic; it exists to exercise the
 pack builder against a durable trace fixture without copying raw traces into this directory.
 
+## Execution Metadata
+
+- Planner id recorded by the trace fixture: `hybrid_rule_v0_minimal`.
+- Execution mode: tracked fixture plus synthetic metric row; no planner execution or simulator
+  rerun was performed for this smoke pack.
+- Evidence boundary: analysis-only smoke validation of pack extraction fields.
+
 ## Inputs
 
 - Trace fixture:

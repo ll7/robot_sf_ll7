@@ -17,6 +17,7 @@ import numpy as np
 
 from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExport,
+    SimulationTraceExportValidationError,
     load_simulation_trace_export,
 )
 from robot_sf.benchmark.failure_extractor import is_failure
@@ -242,7 +243,7 @@ def load_trace_with_fallback(path: Path) -> SimulationTraceExport:
     """Load a simulation trace export, falling back to a raw JSON load if validation fails."""
     try:
         return load_simulation_trace_export(path)
-    except Exception:
+    except SimulationTraceExportValidationError:
         # Fall back to raw JSON load and bypass strict schema checks
         from robot_sf.analysis_workbench.simulation_trace_export import (
             SimulationTraceFrame,

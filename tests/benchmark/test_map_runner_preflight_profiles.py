@@ -2,10 +2,27 @@
 
 from __future__ import annotations
 
+import sys
+import types
 from typing import TYPE_CHECKING
 
 import pytest
 import yaml
+
+# This module tests map-runner preflight plumbing with all policy execution stubbed. The shared
+# lightweight validation venv does not include torch, but map_runner imports the experimental
+# CrowdNav_HEIGHT adapter at module import time. Provide only the marker SciPy probes during import;
+# tests that execute torch-dependent adapter code should still fail instead of silently passing.
+try:  # pragma: no cover - exercised only in optional-dependency environments
+    import torch as _torch  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover - local lightweight validation path
+    _torch_stub = types.ModuleType("torch")
+
+    class _TorchTensor:
+        """Marker class for SciPy optional torch-array detection."""
+
+    _torch_stub.Tensor = _TorchTensor
+    sys.modules["torch"] = _torch_stub
 
 from robot_sf.benchmark import map_runner
 
@@ -446,6 +463,11 @@ def test_adapter_impact_summary_finalizes_from_worker_records(
     monkeypatch.setattr(map_runner, "validate_scenario_list", lambda _scenarios: [])
     monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
     monkeypatch.setattr(map_runner, "_write_validated", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        map_runner,
+        "_build_policy",
+        lambda _algo, _cfg: (lambda _obs: (0.0, 0.0), {"status": "ok"}),
+    )
     monkeypatch.setattr(
         map_runner,
         "_run_map_job_worker",

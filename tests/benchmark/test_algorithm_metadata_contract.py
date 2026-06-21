@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from robot_sf.benchmark import algorithm_metadata
 from robot_sf.benchmark.algorithm_metadata import (
     canonical_algorithm_name,
     enrich_algorithm_metadata,
@@ -39,6 +40,127 @@ def test_observation_spec_declares_supported_modes_and_rejects_invalid_override(
         excinfo.value
     )
     assert "socnav_state" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("obs_mode", ["dict", "native_dict", "multi_input"])
+def test_learned_checkpoint_contract_derives_ppo_dict_family_from_registry_metadata(
+    obs_mode: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dict-family PPO checkpoints should derive the active producer from checkpoint metadata."""
+
+    def _registry_entry(_model_id: str) -> dict[str, object]:
+        return {
+            "benchmark_promotion": {
+                "observation_level": "tracked_agents_no_noise",
+                "observation_mode": "dict",
+            }
+        }
+
+    monkeypatch.setattr(algorithm_metadata, "get_registry_entry", _registry_entry, raising=False)
+
+    contract = algorithm_metadata.resolve_learned_checkpoint_observation_contract(
+        "ppo",
+        {"model_id": "ppo-grid", "obs_mode": obs_mode},
+    )
+
+    assert contract["active_observation_mode"] == "socnav_state"
+    assert contract["status"] == "metadata_resolved"
+    assert contract["metadata_source"] == "model_registry.benchmark_promotion"
+    assert contract["planner_observation_mode"] == obs_mode
+
+
+def test_learned_checkpoint_contract_explicit_observation_mode_override_wins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit observation-mode overrides should not require checkpoint metadata."""
+
+    def _unexpected_registry_lookup(_model_id: str) -> dict[str, object]:
+        raise AssertionError("explicit observation overrides must bypass metadata lookup")
+
+    monkeypatch.setattr(
+        algorithm_metadata,
+        "get_registry_entry",
+        _unexpected_registry_lookup,
+        raising=False,
+    )
+
+    contract = algorithm_metadata.resolve_learned_checkpoint_observation_contract(
+        "ppo",
+        {"model_id": "metadata-not-needed", "obs_mode": "dict"},
+        observation_mode="sensor_fusion_state",
+    )
+
+    assert contract["active_observation_mode"] == "sensor_fusion_state"
+    assert contract["status"] == "explicit_override"
+    assert contract["metadata_source"] == "explicit_observation_mode"
+
+
+def test_learned_checkpoint_contract_explicit_observation_level_override_wins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit observation-level overrides should select their compatible producer."""
+
+    def _unexpected_registry_lookup(_model_id: str) -> dict[str, object]:
+        raise AssertionError("explicit observation overrides must bypass metadata lookup")
+
+    monkeypatch.setattr(
+        algorithm_metadata,
+        "get_registry_entry",
+        _unexpected_registry_lookup,
+        raising=False,
+    )
+
+    contract = algorithm_metadata.resolve_learned_checkpoint_observation_contract(
+        "ppo",
+        {"model_id": "metadata-not-needed", "obs_mode": "dict"},
+        observation_level="lidar_2d",
+    )
+
+    assert contract["active_observation_mode"] == "sensor_fusion_state"
+    assert contract["status"] == "explicit_override"
+    assert contract["metadata_source"] == "explicit_observation_level"
+
+
+def test_learned_checkpoint_contract_rejects_missing_dict_family_metadata() -> None:
+    """Dict-family learned checkpoints should fail closed when metadata is absent."""
+    with pytest.raises(ValueError, match="requires learned checkpoint observation metadata"):
+        algorithm_metadata.resolve_learned_checkpoint_observation_contract(
+            "ppo",
+            {"obs_mode": "dict"},
+        )
+
+
+def test_learned_checkpoint_contract_rejects_malformed_metadata() -> None:
+    """Malformed checkpoint observation metadata should fail with a classified error."""
+    with pytest.raises(ValueError, match="malformed learned checkpoint observation metadata"):
+        algorithm_metadata.resolve_learned_checkpoint_observation_contract(
+            "ppo",
+            {"obs_mode": "dict", "observation_contract": "not-a-mapping"},
+        )
+
+
+def test_learned_checkpoint_contract_rejects_incompatible_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Metadata that resolves to an unsupported producer should fail before execution."""
+
+    def _registry_entry(_model_id: str) -> dict[str, object]:
+        return {
+            "benchmark_promotion": {
+                "observation_level": "tracked_agents_no_noise",
+                "active_observation_mode": "goal_state",
+                "observation_mode": "dict",
+            }
+        }
+
+    monkeypatch.setattr(algorithm_metadata, "get_registry_entry", _registry_entry, raising=False)
+
+    with pytest.raises(ValueError, match="incompatible learned checkpoint observation metadata"):
+        algorithm_metadata.resolve_learned_checkpoint_observation_contract(
+            "ppo",
+            {"model_id": "ppo-bad", "obs_mode": "dict"},
+        )
 
 
 def test_enriched_metadata_embeds_typed_planner_contract_payload() -> None:

@@ -58,10 +58,15 @@ from robot_sf.planner.obstacle_features import (
     predictive_ego_motion_channel_producer_key,
     predictive_feature_schema_metadata,
 )
-from robot_sf.planner.predictive_model import (
-    PredictiveTrajectoryModel,
-    load_predictive_checkpoint,
-)
+
+try:  # pragma: no cover - exercised in minimal environments without torch
+    from robot_sf.planner.predictive_model import (
+        PredictiveTrajectoryModel,
+        load_predictive_checkpoint,
+    )
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    PredictiveTrajectoryModel = Any  # type: ignore[misc,assignment]
+    load_predictive_checkpoint = None  # type: ignore[assignment]
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
 
 _SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
@@ -3573,6 +3578,10 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         if torch is None:  # pragma: no cover - dependency guard
             raise RuntimeError(
                 "PyTorch is required for PredictionPlannerAdapter. Install torch dependency."
+            )
+        if load_predictive_checkpoint is None:  # pragma: no cover - dependency guard
+            raise RuntimeError(
+                "Predictive model checkpoint loading is unavailable. Install torch dependency."
             )
         checkpoint_path = self._resolve_checkpoint_path()
         model, _payload = load_predictive_checkpoint(

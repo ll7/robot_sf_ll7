@@ -1,0 +1,82 @@
+{
+  "artifacts": [
+    {
+      "artifact_id": "trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_low_progress_intervention_left_close_occluded_emergence_ep0000",
+      "artifact_kind": "figure",
+      "caption_file": {
+        "path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/captions.md",
+        "sha256": "b8dc8aa31cba1188474de2ebc0e20f52f6d948368f25aedaa69e4eee57e91580"
+      },
+      "category": "low_progress",
+      "claim_boundary": "diagnostic_only",
+      "generation_command": "python scripts/analysis/run_counterfactual_pair_issue_2924.py --manifest configs/research/issue_2924_counterfactual_pair.yaml --panel-output-dir docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels",
+      "generation_commit": "d2aa9b8c8",
+      "outputs": {
+        "pdf": {
+          "path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panels/trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_low_progress_intervention_left_close_occluded_emergence_ep0000.pdf",
+          "sha256": "18cef6eb6a8d84cd801a57a8124d47f9346c6aee858c6f6b30c7df8286a259b3"
+        },
+        "png": {
+          "path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panels/trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_low_progress_intervention_left_close_occluded_emergence_ep0000.png",
+          "sha256": "5f5abeed2eac386fba3921f58fe74709645eb5098be5981125c7bd8d1b129003"
+        }
+      },
+      "panel_type": "trajectory_panel",
+      "source_files": [
+        {
+          "path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/intervention_trace_export.json",
+          "source_sha256": "7201e3cba6f8dd8d33417f4fc55e7eaddcf14567ebc5391806cdc9a99b2f6a77"
+        }
+      ],
+      "source_kind": "simulation_trace_export",
+      "trace_source": {
+        "episode_id": "intervention_left_close_occluded_emergence_ep0000",
+        "generated_by": "hand-authored compact fixture for issue #2924 analysis-only panel generation",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "scenario_id": "issue_2924_prediction_risk_occluded_emergence",
+        "seed": 111
+      }
+    },
+    {
+      "artifact_id": "trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_other_baseline_occluded_emergence_ep0000",
+      "artifact_kind": "figure",
+      "caption_file": {
+        "path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/captions.md",
+        "sha256": "b8dc8aa31cba1188474de2ebc0e20f52f6d948368f25aedaa69e4eee57e91580"
+      },
+      "category": "other",
+      "claim_boundary": "diagnostic_only",
+      "generation_command": "python scripts/analysis/run_counterfactual_pair_issue_2924.py --manifest configs/research/issue_2924_counterfactual_pair.yaml --panel-output-dir docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels",
+      "generation_commit": "d2aa9b8c8",
+      "outputs": {
+        "pdf": {
+          "path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panels/trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_other_baseline_occluded_emergence_ep0000.pdf",
+          "sha256": "6deeb2a320104de418828dce47d3b7a393fb337bc01a91f1c56accd705391b73"
+        },
+        "png": {
+          "path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/trajectory_panels/trajectory_panel_hybrid_rule_v0_minimal_issue_2924_prediction_risk_occluded_emergence_other_baseline_occluded_emergence_ep0000.png",
+          "sha256": "acae3aa1a1367edbcbd3a3d66de1da12f0be9a257737f5759b5de1673a551a31"
+        }
+      },
+      "panel_type": "trajectory_panel",
+      "source_files": [
+        {
+          "path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/baseline_trace_export.json",
+          "source_sha256": "de243daa74747c3081286130adc3f6929aa373015240d6a64782ea43f47b0e6f"
+        }
+      ],
+      "source_kind": "simulation_trace_export",
+      "trace_source": {
+        "episode_id": "baseline_occluded_emergence_ep0000",
+        "generated_by": "hand-authored compact fixture for issue #2924 analysis-only panel generation",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "scenario_id": "issue_2924_prediction_risk_occluded_emergence",
+        "seed": 111
+      }
+    }
+  ],
+  "captions_path": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels/captions.md",
+  "generation_command": "python scripts/analysis/run_counterfactual_pair_issue_2924.py --manifest configs/research/issue_2924_counterfactual_pair.yaml --panel-output-dir docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/panels",
+  "generation_commit": "d2aa9b8c8",
+  "schema_version": "trajectory_panel_manifest.v1"
+}

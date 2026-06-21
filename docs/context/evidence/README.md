@@ -98,6 +98,19 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3294_release_claim_matrix/`: reviewable v0.1 release claim matrix assembled from
+  existing release artifacts, leaderboard row-claim sidecars, release config metadata, and ODD
+  coverage rows. It classifies rows as benchmark evidence, diagnostic evidence, or non-claim
+  without running a new benchmark campaign or promoting fallback/degraded/unavailable rows.
+- `issue_2919_scenario_prior_gap_2026-06-21/`: analysis-only authored-vs-repository-trace-derived
+  scenario-prior gap report from the Issue #2917 card registry. It compares pedestrian density,
+  pedestrian speed, and timing-offset parameter families, emits scenario-family proposals, and
+  explicitly defers dataset-backed SDD/ETH/AMV comparison to #3161. Not planner-ranking,
+  benchmark-superiority, or real-world representativeness evidence.
+- `issue_2924_counterfactual_pair_2026-06-21/`: analysis-only counterfactual pair
+  runner evidence for a matched prediction-risk fixture. It records invariant enforcement,
+  mechanism-trace activation delta, `min_clearance_m` outcome delta, and diagnostic trace panels.
+  Not benchmark-strength, paper-grade, or planner-superiority evidence.
 - `issue_1470_oracle_imitation_traces_12911_2026-06-17/`: tracked closeout evidence
   for Slurm job `12911` on #1470/#2441. The bundle includes the small six-row oracle
   imitation trace JSONL and manifest. It is trace-collection evidence only, not final
@@ -153,6 +166,10 @@ Policy caveats:
   trace fixture as non-corridor forecast evidence. Corridor and occluded-emergence traces are
   evaluated; crossing and bottleneck remain zero-motion limitations, and signalized/dense/bottleneck
   motion-rich coverage remains unavailable.
+- `issue_2915_forecast_baselines_2026-06-20/`: analysis-only comparison of constant-velocity,
+  semantic CV, and interaction-aware CV baselines on identical configured trace-origin forecast
+  batches. The bundle includes one ForecastBatch.v1 JSONL per baseline, a comparison table, and a
+  report naming strongest baselines per scenario family with fail-closed unavailable rows.
 - `issue_2749_observation_noise_diagnostics/`: diagnostic-only paired no-op vs
   perception-limited observation-noise step diagnostics for `hybrid_rule_v0_minimal` on a
   pedestrian-present stress-slice scenario; perturbation plumbing activated, but the distant
@@ -162,6 +179,11 @@ Policy caveats:
   changed planner-input pedestrian observations, but commands and progress/risk summaries stayed
   identical because the live scenario remained outside the intended 2 m near-field target. Not
   benchmark or sensor-realism evidence.
+- `issue_2927_observation_quality_live_smoke/`: smoke/diagnostic observation-quality wrapper over
+  the committed near-field live step-diagnostics summary. It attaches validated
+  `observation_quality.v1` metadata, reports false-negative safety effects, and explicitly excludes
+  false-positive actor rows as not available; not planner-superiority or hardware-calibrated sensor
+  evidence.
 - `issue_3206_pedestrian_archetype_reporting_2026-06-20/`: composition-report-only packet for
   the shipped pedestrian speed-archetype MVP. Records deterministic counts, speed factors, and
   no-result boundaries for later homogeneous-vs-heterogeneous smoke runs.
@@ -172,6 +194,11 @@ Policy caveats:
   Issue #3207 over the same compact scenario surface. It materializes rank-stability and metric-drift
   calculations across clean timestep variants and the existing observation-noise smoke profile; it
   is not benchmark-strength planner-ranking, sensor-realism, or sim-to-real evidence.
+- `issue_3207_fidelity_sensitivity_actual_slice_2026-06-20/`: bounded actual two-planner local
+  campaign slice for #3207 over the compact scenario surface. It runs 54 episodes across timestep,
+  pedestrian-archetype, observation-noise, and clearance-radius variants; rank order stayed stable
+  on the success-rate tie-breaker with no rank flips. This remains bounded sensitivity evidence,
+  not full fixed-scope, simulator-realism, sim-to-real, or paper-facing planner-ranking evidence.
 - `issue_3233_near_field_observation_noise/`: diagnostic-only same-seed clean vs perturbed
   step-diagnostics replay on a deterministic near-field live fixture. The clean baseline reached
   1.45 m closest robot-pedestrian distance and selected low-speed commands under dynamic-collision

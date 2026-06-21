@@ -1,0 +1,25 @@
+{
+  "schema_version": "mechanism_trace.v1",
+  "generated_at_utc": "2026-06-21T00:00:00Z",
+  "rows": [
+    {
+      "mechanism_id": "prediction_risk_gating",
+      "activation_step": 4,
+      "input_condition": {
+        "risk_score_threshold": 0.75,
+        "observed_risk_score": 0.84,
+        "gate": "yield_or_slow"
+      },
+      "selected_command": [
+        0.2,
+        0.0
+      ],
+      "command_source": "prediction_risk_gate",
+      "risk_score": 0.84,
+      "route_progress_delta": 0.12,
+      "failure_mode": null,
+      "trace_uri": "docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/intervention_trace_export.json",
+      "classification": "revise"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": "dissertation_gap_report.v1",
-  "generated_at": "2026-06-20",
+  "generated_at": "2026-06-21",
   "purpose": "synthesis/planning aid; not new benchmark, paper, dissertation, or safety evidence",
   "source_ledger": {
     "path": "docs/context/evidence/issue_2760_dissertation_evidence_ledger/ledger.json",
@@ -10,7 +10,7 @@
   "source_register": {
     "path": "docs/context/evidence/issue_2762_negative_result_register/register.json",
     "issue": 2762,
-    "entry_count": 4
+    "entry_count": 5
   },
   "gaps": [
     {
@@ -155,6 +155,19 @@
       "allowed_wording_or_boundary": "Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.",
       "caveat": "Synthesis/planning aid only. Does not produce new benchmark evidence, paper-facing results, or safety claims.",
       "claim_gap_or_reason": "Five of seven ledger rows are diagnostic-tier or blocked evidence (topology, signalized behavior, prediction, pedestrian density, exported tables). One area (observation robustness) is release-backed but is a contract/provenance layer only. The exported-tables payload gap is resolved, but the Issue #3203 rerun remains invalid as benchmark-success evidence because PPO partial-failed and SNQI contract status failed. No row supports Results-chapter wording without qualification."
+    },
+    {
+      "area": null,
+      "entry_id": "issue-3213-hardcase-authority-speedcap",
+      "bucket": "negative_revise_only",
+      "promotion_step_or_reason": "Keep predictive_near_field_speed_cap as a minor safety-progress tuning knob, not a success driver. Stop further planner-authority tuning as a plateau fix; prioritize model-side bets (#3214 retraining, richer hard-case data) and proxy-vs-ADE selection (#3204).",
+      "source": "register",
+      "source_issue": 3213,
+      "evidence_tier": null,
+      "result_classification": "diagnostic_only",
+      "allowed_wording_or_boundary": "Diagnostic-only, not benchmark or paper evidence. Small attributable speed-cap effect; classification diagnostic_only, not promote.",
+      "caveat": "Diagnostic-only, not benchmark or paper evidence. Small attributable speed-cap effect; classification diagnostic_only, not promote.",
+      "claim_gap_or_reason": "Only the near-field speed cap moved hard-success (~0.07 to ~0.10, about +0.03 absolute / +33% relative, consistent across checkpoints, ~120 episodes/cell). nf_headings_only, nf_horizonboost_only, high_angular, dense_lattice, deep_sequence, and combined_max_authority were inert (about baseline). The lift does not close the plateau (hard-success ~0.10) and checkpoint choice barely moved baseline, indicating the binding constraint is model/data-side rather than planner authority."
     }
   ],
   "claim_boundaries": [

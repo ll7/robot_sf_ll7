@@ -1,0 +1,89 @@
+{
+  "schema_version": "signalized_crossing_failure_pack.v1",
+  "negative_control": false,
+  "status": "failures_present",
+  "cases": [
+    {
+      "episode_id": "issue_2868_signalized_crossing_episode_0000",
+      "scenario_id": "issue_2868_signalized_crossing",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json",
+      "episodes_jsonl_path": "docs/context/evidence/issue_2754_signalized_failure_pack_smoke/episodes.jsonl",
+      "metric_row_line_number": 1,
+      "metric_row_claim_boundary": "smoke fixture only; validates issue #2754 pack extraction against a tracked signalized trace fixture and synthetic metric row, not benchmark evidence or traffic-light compliance evidence.",
+      "trace_row_range": [
+        0,
+        11
+      ],
+      "signal_phase": "red",
+      "stop_line_geometry": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          -1.0
+        ]
+      ],
+      "robot_state": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrian_state": [
+        {
+          "id": 2868,
+          "position": [
+            1.0,
+            0.0
+          ],
+          "velocity": [
+            0.7,
+            0.0
+          ],
+          "signal_state": {
+            "available": true,
+            "label": "red"
+          }
+        }
+      ],
+      "metric_row": {
+        "collisions": 1.0,
+        "comfort_exposure": 0.0,
+        "near_misses": 0,
+        "signal_metrics_denominator": 1,
+        "signal_metrics_evidence": {
+          "state": "planner_observable",
+          "exclusion_reason": ""
+        }
+      },
+      "denominator_status": "eligible",
+      "stale_current_status": "current",
+      "artifact_status": "current",
+      "trace_source_kind": "fixture",
+      "metric_source_kind": "synthetic",
+      "execution_performed": false,
+      "evidence_tier": "smoke",
+      "execution_mode": "fixture",
+      "fallback_or_degraded": false,
+      "claim_matrix_status": "diagnostic_only",
+      "figure_ineligibility_reasons": [
+        "trace_source_kind=fixture",
+        "metric_source_kind=synthetic",
+        "execution_performed=false",
+        "evidence_tier=smoke",
+        "execution_mode=fixture",
+        "claim_matrix_status=diagnostic_only"
+      ],
+      "allowed_claim_wording": "Figure-ineligible diagnostic-only row; do not use for benchmark, dissertation figure, or paper-facing claims. Reasons: trace_source_kind=fixture, metric_source_kind=synthetic, execution_performed=false, evidence_tier=smoke, execution_mode=fixture, claim_matrix_status=diagnostic_only.",
+      "diagnostic_only": true,
+      "figure_eligible": false
+    }
+  ]
+}

@@ -14,7 +14,7 @@ from loguru import logger
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
-    resolve_observation_mode,
+    resolve_learned_checkpoint_observation_contract,
 )
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
@@ -211,11 +211,16 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         scenario=scenario,
         seed=int(seed),
     )
-    active_observation_mode = resolve_observation_mode(
+    learned_observation_contract = resolve_learned_checkpoint_observation_contract(
         algo,
-        observation_mode,
+        policy_cfg,
+        observation_mode=observation_mode,
         observation_level=observation_level,
     )
+    active_observation_mode = str(learned_observation_contract["active_observation_mode"])
+    resolved_observation_level = observation_level
+    if resolved_observation_level is None:
+        resolved_observation_level = learned_observation_contract.get("observation_level_key")
     _apply_active_observation_mode_to_env_config(
         config,
         active_observation_mode=active_observation_mode,
@@ -245,8 +250,9 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         metadata=algo_meta,
         robot_kinematics=robot_kinematics,
         observation_mode=active_observation_mode,
-        observation_level=observation_level,
+        observation_level=resolved_observation_level,
     )
+    algo_meta["learned_checkpoint_observation_contract"] = learned_observation_contract
     active_observation_level = str(algo_meta["observation_level"]["key"])
     attach_track_metadata(
         algo_meta,

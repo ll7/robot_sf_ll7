@@ -72,6 +72,51 @@ def test_run_compact_validation_json_summary_for_success(tmp_path: Path, capsys)
     assert Path(payload["summary_path"]).exists()
 
 
+def test_run_compact_validation_suppresses_node_ids_on_success(tmp_path: Path) -> None:
+    """Passing pytest-like logs should not look like failed test summaries."""
+    artifact_dir = tmp_path / "artifacts"
+    command = [
+        sys.executable,
+        "-c",
+        "\n".join(
+            [
+                "print('tests/planner/test_policy_stack_v1.py::test_policy_stack_runs_atomic_topology_smoke_through_map_runner')",
+                "print('tests/examples/test_examples_run.py::test_example_runs_without_error[quickstart/01_basic_robot.py]')",
+                "print('============================= slowest 10 durations =============================')",
+                "print('18.15s call     tests/planner/test_policy_stack_v1.py::test_policy_stack_runs_atomic_topology_smoke_through_map_runner')",
+                "print('=========== 7588 passed, 12 skipped, 9 warnings in 328.89s ===========')",
+            ]
+        ),
+    ]
+
+    summary = run_compact_validation(command, artifact_dir=artifact_dir)
+
+    assert summary["exit_code"] == 0
+    assert summary["failing_node_ids"] == []
+    assert "test_policy_stack_runs_atomic_topology_smoke" in "\n".join(summary["failure_excerpt"])
+
+
+def test_run_compact_validation_keeps_node_ids_on_failure(tmp_path: Path) -> None:
+    """Nonzero pytest-like output should still report failing node ids."""
+    artifact_dir = tmp_path / "artifacts"
+    command = [
+        sys.executable,
+        "-c",
+        "\n".join(
+            [
+                "import sys",
+                "print('FAILED tests/dev/test_compact.py::test_real_failure - AssertionError')",
+                "sys.exit(1)",
+            ]
+        ),
+    ]
+
+    summary = run_compact_validation(command, artifact_dir=artifact_dir)
+
+    assert summary["exit_code"] == 1
+    assert summary["failing_node_ids"] == ["tests/dev/test_compact.py::test_real_failure"]
+
+
 def test_run_compact_validation_marks_truncated_plain_output(tmp_path: Path) -> None:
     """Large output without failure keywords should still report truncation."""
     artifact_dir = tmp_path / "artifacts"

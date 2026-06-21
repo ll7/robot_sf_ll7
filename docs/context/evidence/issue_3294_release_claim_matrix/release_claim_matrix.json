@@ -1,0 +1,1067 @@
+{
+  "claim_boundary": "Issue #3294 assembles a review matrix from existing tracked metadata and release artifacts. It does not run a new benchmark campaign, create scenario certification, or establish deployment-safety, real-world AMV, fallback, degraded, or unavailable rows as successful benchmark evidence.",
+  "generated_at_utc": "2026-06-21T04:59:44.508781Z",
+  "issue": 3294,
+  "rows": [
+    {
+      "artifact_match": true,
+      "artifact_sha256": "e1472337a4596a68b8dbf490bb3c348ccb1338002f655258b61f3202d4d63af9",
+      "artifact_uri": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
+      "availability_status": "available",
+      "benchmark_success": null,
+      "claim_boundary": "Republishes existing release 0.0.2 scenario-family table evidence for downstream table drafting; it is not a new failure taxonomy or benchmark rerun.",
+      "classification": "benchmark evidence",
+      "exclusions": [
+        "Use with the release 0.0.2 scoped-planner caveat and preserve unavailable/excluded planner limitations in surrounding prose."
+      ],
+      "hazard_class": "mixed_release_table",
+      "missing_prerequisites": [],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "mixed",
+      "planner_rows": [
+        "prediction_planner",
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "socnav_sampling",
+        "sacadrl"
+      ],
+      "row_id": "release_artifact:tab_release_failure_count_slices",
+      "row_status": "release_snapshot_pass",
+      "scenario_certification": "not_available_in_manifest",
+      "scenario_contract_ref": "../../scenarios/classic_interactions_francis2023.yaml",
+      "scenario_family": "release_0_0_2_table_bundle",
+      "section": "release_artifact",
+      "seed_schedule": {
+        "mode": "seed-set",
+        "seed_set": "eval",
+        "seed_sets_path": "../../benchmarks/seed_sets_v1.yaml",
+        "seeds": []
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json",
+        "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml"
+      ],
+      "suite_or_surface": "paper_experiment_matrix_v1_v0_1_0"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "dea2f932ad01ddbc7c31f9d2af552204f11854c683e34444fc3982174a97d684",
+      "artifact_uri": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
+      "availability_status": "available",
+      "benchmark_success": null,
+      "claim_boundary": "Packaging existing release-backed table evidence only; this does not create new benchmark evidence or expand the scoped 0.0.2 claim boundary.",
+      "classification": "benchmark evidence",
+      "exclusions": [
+        "Release 0.0.2 is scoped to seven planners and excludes socnav_bench because licensed SocNavBench assets were not staged; fallback/degraded status must remain visible."
+      ],
+      "hazard_class": "mixed_release_table",
+      "missing_prerequisites": [],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "mixed",
+      "planner_rows": [
+        "prediction_planner",
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "socnav_sampling",
+        "sacadrl"
+      ],
+      "row_id": "release_artifact:tab_results_overview",
+      "row_status": "release_snapshot_pass",
+      "scenario_certification": "not_available_in_manifest",
+      "scenario_contract_ref": "../../scenarios/classic_interactions_francis2023.yaml",
+      "scenario_family": "release_0_0_2_table_bundle",
+      "section": "release_artifact",
+      "seed_schedule": {
+        "mode": "seed-set",
+        "seed_set": "eval",
+        "seed_sets_path": "../../benchmarks/seed_sets_v1.yaml",
+        "seeds": []
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json",
+        "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml"
+      ],
+      "suite_or_surface": "paper_experiment_matrix_v1_v0_1_0"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "ac9c306ae7e73e6d0691887721239028867a8ca3e1eb6a7254feb5e07cb929fa",
+      "artifact_uri": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
+      "availability_status": "available",
+      "benchmark_success": null,
+      "claim_boundary": "Republishes existing release 0.0.2 table evidence with provenance; it does not rerun the benchmark or establish new planner-ranking claims.",
+      "classification": "benchmark evidence",
+      "exclusions": [
+        "The scoped release excludes socnav_bench and records ORCA/SACADRL prerequisite policy as fallback while preserving readiness fields in the table."
+      ],
+      "hazard_class": "mixed_release_table",
+      "missing_prerequisites": [],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "mixed",
+      "planner_rows": [
+        "prediction_planner",
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "socnav_sampling",
+        "sacadrl"
+      ],
+      "row_id": "release_artifact:tab_robot_sf_release_planner_results",
+      "row_status": "release_snapshot_pass",
+      "scenario_certification": "not_available_in_manifest",
+      "scenario_contract_ref": "../../scenarios/classic_interactions_francis2023.yaml",
+      "scenario_family": "release_0_0_2_table_bundle",
+      "section": "release_artifact",
+      "seed_schedule": {
+        "mode": "seed-set",
+        "seed_set": "eval",
+        "seed_sets_path": "../../benchmarks/seed_sets_v1.yaml",
+        "seeds": []
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json",
+        "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml"
+      ],
+      "suite_or_surface": "paper_experiment_matrix_v1_v0_1_0"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "9da101e31bf28f4c77399f26f9ded99486858c676efb1702c4f6bc3cf8a160c9",
+      "artifact_uri": "docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "Synthetic AMV actuation diagnostic only; not platform-class proxy or hardware-calibrated AMV evidence.",
+      "claim_wording": "Executable synthetic diagnostic row; no paper-facing AMV promotion claim.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "amv_coverage_warn",
+        "synthetic_actuation_not_hardware_amv"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.2,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "near_miss": 1.0,
+        "runtime_sec": 13.4813,
+        "success": 0.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "goal",
+      "planner_mode": "native",
+      "planner_rows": [
+        "goal"
+      ],
+      "row_id": "leaderboard:amv_actuation.rows:000",
+      "row_status": "successful_evidence",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "amv_actuation_smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/amv_actuation.rows.json"
+      ],
+      "suite_or_surface": "amv_actuation_smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "9da101e31bf28f4c77399f26f9ded99486858c676efb1702c4f6bc3cf8a160c9",
+      "artifact_uri": "docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "Synthetic diagnostic only; adapter projection metadata remains incomplete.",
+      "claim_wording": "Executable synthetic diagnostic row; ORCA projection diagnostics remain caveated.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "amv_coverage_warn",
+        "synthetic_actuation_not_hardware_amv",
+        "orca_projection_diagnostics_caveated"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.1333,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "near_miss": 3.4667,
+        "runtime_sec": 7.9955,
+        "success": 0.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "orca",
+      "planner_mode": "adapter",
+      "planner_rows": [
+        "orca"
+      ],
+      "row_id": "leaderboard:amv_actuation.rows:001",
+      "row_status": "successful_evidence",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "amv_actuation_smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/amv_actuation.rows.json"
+      ],
+      "suite_or_surface": "amv_actuation_smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "9da101e31bf28f4c77399f26f9ded99486858c676efb1702c4f6bc3cf8a160c9",
+      "artifact_uri": "docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "Synthetic diagnostic only; SocialForce execution mode metadata remains caveated.",
+      "claim_wording": "Executable synthetic diagnostic row; command-space and projection-policy metadata remain caveated.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "amv_coverage_warn",
+        "synthetic_actuation_not_hardware_amv",
+        "command_space_and_projection_policy_metadata_unknown"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.2667,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "near_miss": 1.0,
+        "runtime_sec": 6.4261,
+        "success": 0.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "social_force",
+      "planner_mode": "adapter",
+      "planner_rows": [
+        "social_force"
+      ],
+      "row_id": "leaderboard:amv_actuation.rows:002",
+      "row_status": "successful_evidence",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "amv_actuation_smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/amv_actuation.rows.json"
+      ],
+      "suite_or_surface": "amv_actuation_smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "3e7936f2bdf8ef78d51c9185ba908d94fe13f82b743dc8410d9de7b1a085ccca",
+      "artifact_uri": "docs/context/policy_search/reports/2026-05-31_actuation_aware_hybrid_rule_v0_amv_actuation_smoke.md",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "Synthetic diagnostic only; timeout means zero task success despite clean command clipping.",
+      "claim_wording": "Executable synthetic diagnostic row; no paper-facing AMV promotion claim, and low-progress timeout remains a planner limitation.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "amv_coverage_warn",
+        "synthetic_actuation_not_hardware_amv",
+        "low_progress_timeout_remains_a_planner_limitation"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.0,
+        "low_progress": "timeout_low_progress: 1",
+        "min_distance": 2.3627,
+        "near_miss": 0.0,
+        "runtime_sec": 12.0865,
+        "success": 0.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "actuation_aware_hybrid_rule_v0",
+      "planner_mode": "native",
+      "planner_rows": [
+        "actuation_aware_hybrid_rule_v0"
+      ],
+      "row_id": "leaderboard:amv_actuation.rows:003",
+      "row_status": "successful_evidence",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "amv_actuation_smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/amv_actuation.rows.json"
+      ],
+      "suite_or_surface": "amv_actuation_smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a7489b65d8215d4f99e6be196586b3204cd7211454949b46e9958a8bdbbe49ac",
+      "artifact_uri": "docs/context/evidence/issue_2224_amv_actuation_ranking_2026-06-04/comparison.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "One-episode diagnostic-only row; both compared candidates timed out with zero success.",
+      "claim_wording": "Matched smoke row for issue #2224; command clip 0.2750, yaw saturation 0.0000; no planner-ranking claim.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "single_episode_one_scenario_diagnostic",
+        "command_clip_0_2750",
+        "yaw_saturation_0_0000",
+        "both_candidates_timed_out"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.0,
+        "low_progress": "timeout_low_progress: 1",
+        "min_distance": 2.1571,
+        "near_miss": 0.0,
+        "runtime_sec": "not_recorded",
+        "success": 0.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "hybrid_rule_v3_fast_progress",
+      "planner_mode": "native",
+      "planner_rows": [
+        "hybrid_rule_v3_fast_progress"
+      ],
+      "row_id": "leaderboard:amv_actuation.rows:004",
+      "row_status": "completed_smoke_not_benchmark_evidence",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "amv_actuation_smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/amv_actuation.rows.json"
+      ],
+      "suite_or_surface": "amv_actuation_smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a7489b65d8215d4f99e6be196586b3204cd7211454949b46e9958a8bdbbe49ac",
+      "artifact_uri": "docs/context/evidence/issue_2224_amv_actuation_ranking_2026-06-04/comparison.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "One-episode diagnostic-only row; suggests lower synthetic command clipping but does not establish material ranking change.",
+      "claim_wording": "Matched smoke row for issue #2224; command clip 0.1875, yaw saturation 0.0000; both compared candidates timed out.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_summary",
+        "single_episode_one_scenario_diagnostic",
+        "command_clip_0_1875",
+        "yaw_saturation_0_0000",
+        "both_candidates_timed_out"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.0,
+        "low_progress": "timeout_low_progress: 1",
+        "min_distance": 2.3627,
+        "near_miss": 0.0,
+        "runtime_sec": "not_recorded",
+        "success": 0.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "actuation_aware_hybrid_rule_v0",
+      "planner_mode": "native",
+      "planner_rows": [
+        "actuation_aware_hybrid_rule_v0"
+      ],
+      "row_id": "leaderboard:amv_actuation.rows:005",
+      "row_status": "completed_smoke_not_benchmark_evidence",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "amv_actuation_smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/amv_actuation.rows.json"
+      ],
+      "suite_or_surface": "amv_actuation_smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "fb82d29cfd5c7aefc8dfe5e9983fb697703be017de17a006bc018179c619e13e",
+      "artifact_uri": "docs/context/evidence/issue_1662_lidar_ppo_smoke_summary.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "Training-smoke plumbing only; no deployment adapter, benchmark row, or model promotion claim.",
+      "claim_wording": "Documents fixed LiDAR PPO MLP training/eval plumbing only; no durable checkpoint or promotion claim.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "training_smoke_only",
+        "no_durable_checkpoint_promoted",
+        "zero_success_at_eval_step"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.0,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "near_miss": "not_recorded",
+        "runtime_sec": 59.7432,
+        "success": 0.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "ppo_lidar_mlp_gate_v1",
+      "planner_mode": "native",
+      "planner_rows": [
+        "ppo_lidar_mlp_gate_v1"
+      ],
+      "row_id": "leaderboard:lidar_2d.rows:000",
+      "row_status": "completed_smoke_not_benchmark_evidence",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "lidar_2d_training_smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          123
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/lidar_2d.rows.json"
+      ],
+      "suite_or_surface": "lidar_2d_training_smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "5f8e592726fa42ce2b68ee7425ef4a0d6fec6416601a77aa2932b98ac6eb8fce",
+      "artifact_uri": "docs/context/policy_search/reports/2026-05-05_ppo_issue791_best_v1_nominal_sanity.md",
+      "availability_status": "non-claim",
+      "benchmark_success": false,
+      "claim_boundary": "Nominal-sanity triage evidence only; does not promote the planner to a paper-facing benchmark result.",
+      "claim_wording": "Learned-only nominal-sanity row from that pass, but still limited by low-progress timeouts and intrusive near misses.",
+      "classification": "non-claim",
+      "exclusions": [
+        "low_progress_timeouts_dominate",
+        "intrusive_near_misses_present",
+        "nominal_sanity_is_triage_not_promotion"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.0,
+        "low_progress": "10/18",
+        "min_distance": 3.7136,
+        "near_miss": 0.2222,
+        "runtime_sec": "not_recorded",
+        "success": 0.2778
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "ppo_issue791_best_v1",
+      "planner_mode": "native",
+      "planner_rows": [
+        "ppo_issue791_best_v1"
+      ],
+      "row_id": "leaderboard:nominal_sanity.rows:000",
+      "row_status": "revise",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "policy_search:nominal_sanity",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          111,
+          112,
+          113
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/nominal_sanity.rows.json"
+      ],
+      "suite_or_surface": "policy_search:nominal_sanity",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "301972d69aedff21edac0d2a0974b76883ffb9f31ba22be2670835799e403ec6",
+      "artifact_uri": "docs/context/evidence/issue_1428_orca_residual_lineage_2026-05-24/orca_residual_guarded_ppo_v0_smoke_summary.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "Single-episode smoke proves the candidate can run; does not establish benchmark ranking or residual-policy generalization.",
+      "claim_wording": "Runtime smoke only; not learned-residual training evidence.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_smoke_summary",
+        "single_episode_smoke_not_benchmark_evidence"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.0,
+        "low_progress": 0,
+        "min_distance": "not_recorded",
+        "near_miss": 0.0,
+        "runtime_sec": 16.2991,
+        "success": 1.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "orca_residual_guarded_ppo_v0",
+      "planner_mode": "native",
+      "planner_rows": [
+        "orca_residual_guarded_ppo_v0"
+      ],
+      "row_id": "leaderboard:smoke.rows:000",
+      "row_status": "pass",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "policy_search:smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/smoke.rows.json"
+      ],
+      "suite_or_surface": "policy_search:smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "0a2c9198eddda313aefd83037e8b7180c6ec604840d9045bdec0d79a8348436b",
+      "artifact_uri": "docs/context/policy_search/reports/2026-05-05_best_learning_policy.md",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "Does not prove benchmark readiness, generalization, or checkpoint durability.",
+      "claim_wording": "Smoke proves artifact hydration and runnable learned-policy inference only.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_smoke_summary",
+        "tracked_report_does_not_expose_all_metrics"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.0,
+        "low_progress": "not_recorded",
+        "min_distance": "not_recorded",
+        "near_miss": 0.0,
+        "runtime_sec": "not_recorded",
+        "success": 1.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "ppo_issue791_best_v1",
+      "planner_mode": "native",
+      "planner_rows": [
+        "ppo_issue791_best_v1"
+      ],
+      "row_id": "leaderboard:smoke.rows:001",
+      "row_status": "pass",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "policy_search:smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/smoke.rows.json"
+      ],
+      "suite_or_surface": "policy_search:smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "e1a754ad6cd3596675ece41d199e307edd520e67ebff8a7a95825577c8b53c3a",
+      "artifact_uri": "docs/context/policy_search/reports/2026-05-31_hybrid_orca_sampler_v1_smoke.md",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "Horizon-specific smoke only; no claim about default-horizon behavior or benchmark rank.",
+      "claim_wording": "Smoke evidence for the 120-step horizon probe only; not candidate promotion.",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "seeds_not_recorded_in_compact_smoke_summary",
+        "120_step_horizon_probe_only"
+      ],
+      "hazard_class": "not_recorded",
+      "metrics": {
+        "collision": 0.0,
+        "low_progress": 0,
+        "min_distance": "not_recorded",
+        "near_miss": 0.0,
+        "runtime_sec": "not_recorded",
+        "success": 1.0
+      },
+      "missing_prerequisites": [
+        "not benchmark-strength evidence"
+      ],
+      "odd_condition": "not_recorded",
+      "planner_id": "hybrid_orca_sampler_v1",
+      "planner_mode": "native",
+      "planner_rows": [
+        "hybrid_orca_sampler_v1"
+      ],
+      "row_id": "leaderboard:smoke.rows:002",
+      "row_status": "pass",
+      "scenario_certification": "not_recorded",
+      "scenario_contract_ref": "not_recorded",
+      "scenario_family": "policy_search:smoke",
+      "section": "leaderboard_row_claim",
+      "seed_schedule": {
+        "seeds": [
+          "not_recorded"
+        ]
+      },
+      "source_refs": [
+        "docs/leaderboards/smoke.rows.json"
+      ],
+      "suite_or_surface": "policy_search:smoke",
+      "validation": {
+        "row_count": null,
+        "sidecar_status": "ok"
+      }
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a4cee5b2716b22e29e7b045a4196ff3c1fe702e540af4ed24862a6427fbf4b8b",
+      "artifact_uri": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "This matrix records which ODD conditions and hazard classes are represented by checked-in configs only. It does not claim that any row has executed benchmark evidence, safety proof, or paper-facing validity. Uncovered or blocked rows must not be cited as covered in benchmark wording.\n",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "Scenario contract exists, but no scenario_cert.v1 or executed benchmark evidence is checked in.\n"
+      ],
+      "hazard_class": "robot_pedestrian_collision",
+      "metrics": [
+        "collision_rate"
+      ],
+      "missing_prerequisites": [
+        "Scenario contract exists, but no scenario_cert.v1 or executed benchmark evidence is checked in.\n"
+      ],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "not_recorded",
+      "planner_rows": [
+        "goal",
+        "orca",
+        "social_force"
+      ],
+      "row_id": "odd_hazard:000",
+      "row_status": "weakly_covered",
+      "scenario_certification": "not_available",
+      "scenario_contract_ref": [
+        "configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "scenario_family": "station_platform",
+      "section": "odd_hazard_coverage",
+      "seed_schedule": {
+        "seeds": "not_recorded"
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+        "configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "suite_or_surface": "odd_hazard_coverage.v1"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a4cee5b2716b22e29e7b045a4196ff3c1fe702e540af4ed24862a6427fbf4b8b",
+      "artifact_uri": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "This matrix records which ODD conditions and hazard classes are represented by checked-in configs only. It does not claim that any row has executed benchmark evidence, safety proof, or paper-facing validity. Uncovered or blocked rows must not be cited as covered in benchmark wording.\n",
+      "classification": "non-claim",
+      "exclusions": [
+        "Included in paper_experiment_matrix_v1 checked-in config; durable runtime evidence is not committed.\n"
+      ],
+      "hazard_class": "near_miss",
+      "metrics": [
+        "min_ttc",
+        "pet"
+      ],
+      "missing_prerequisites": [
+        "Included in paper_experiment_matrix_v1 checked-in config; durable runtime evidence is not committed.\n"
+      ],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "not_recorded",
+      "planner_rows": [
+        "goal",
+        "orca",
+        "social_force",
+        "teb",
+        "dwa",
+        "risk_dwa",
+        "ppo"
+      ],
+      "row_id": "odd_hazard:001",
+      "row_status": "weakly_covered",
+      "scenario_certification": "not_available",
+      "scenario_contract_ref": [
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "scenario_family": "classic_crossing",
+      "section": "odd_hazard_coverage",
+      "seed_schedule": {
+        "seeds": "not_recorded"
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "suite_or_surface": "odd_hazard_coverage.v1"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a4cee5b2716b22e29e7b045a4196ff3c1fe702e540af4ed24862a6427fbf4b8b",
+      "artifact_uri": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "This matrix records which ODD conditions and hazard classes are represented by checked-in configs only. It does not claim that any row has executed benchmark evidence, safety proof, or paper-facing validity. Uncovered or blocked rows must not be cited as covered in benchmark wording.\n",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "Smoke fixture exists; not integrated into a released benchmark campaign config with run evidence.\n"
+      ],
+      "hazard_class": "blind_corner_emergence",
+      "metrics": [
+        "min_ttc",
+        "clearance"
+      ],
+      "missing_prerequisites": [
+        "Smoke fixture exists; not integrated into a released benchmark campaign config with run evidence.\n"
+      ],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "not_recorded",
+      "planner_rows": [
+        "goal",
+        "orca",
+        "social_force"
+      ],
+      "row_id": "odd_hazard:002",
+      "row_status": "weakly_covered",
+      "scenario_certification": "not_available",
+      "scenario_contract_ref": [
+        "configs/scenarios/single/observation_visibility_blind_corner_smoke.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "scenario_family": "blind_corner",
+      "section": "odd_hazard_coverage",
+      "seed_schedule": {
+        "seeds": "not_recorded"
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+        "configs/scenarios/single/observation_visibility_blind_corner_smoke.yaml",
+        "configs/benchmarks/hazard_traceability/low_speed_public_space_v1.yaml"
+      ],
+      "suite_or_surface": "odd_hazard_coverage.v1"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a4cee5b2716b22e29e7b045a4196ff3c1fe702e540af4ed24862a6427fbf4b8b",
+      "artifact_uri": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "This matrix records which ODD conditions and hazard classes are represented by checked-in configs only. It does not claim that any row has executed benchmark evidence, safety proof, or paper-facing validity. Uncovered or blocked rows must not be cited as covered in benchmark wording.\n",
+      "classification": "non-claim",
+      "exclusions": [
+        "Classic interactions matrix includes corridor family; no durable run evidence is committed.\n"
+      ],
+      "hazard_class": "pedestrian_flow_disruption",
+      "metrics": [
+        "comfort_exposure_s",
+        "path_efficiency"
+      ],
+      "missing_prerequisites": [
+        "Classic interactions matrix includes corridor family; no durable run evidence is committed.\n"
+      ],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "not_recorded",
+      "planner_rows": [
+        "goal",
+        "orca",
+        "social_force",
+        "teb",
+        "dwa",
+        "risk_dwa",
+        "ppo"
+      ],
+      "row_id": "odd_hazard:003",
+      "row_status": "weakly_covered",
+      "scenario_certification": "not_available",
+      "scenario_contract_ref": [
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        "configs/scenarios/classic_interactions.yaml"
+      ],
+      "scenario_family": "corridor",
+      "section": "odd_hazard_coverage",
+      "seed_schedule": {
+        "seeds": "not_recorded"
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        "configs/scenarios/classic_interactions.yaml"
+      ],
+      "suite_or_surface": "odd_hazard_coverage.v1"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a4cee5b2716b22e29e7b045a4196ff3c1fe702e540af4ed24862a6427fbf4b8b",
+      "artifact_uri": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "This matrix records which ODD conditions and hazard classes are represented by checked-in configs only. It does not claim that any row has executed benchmark evidence, safety proof, or paper-facing validity. Uncovered or blocked rows must not be cited as covered in benchmark wording.\n",
+      "classification": "non-claim",
+      "exclusions": [
+        "Classic interactions matrix includes bottleneck family; no durable run evidence is committed.\n"
+      ],
+      "hazard_class": "robot_pedestrian_collision",
+      "metrics": [
+        "collision_rate"
+      ],
+      "missing_prerequisites": [
+        "Classic interactions matrix includes bottleneck family; no durable run evidence is committed.\n"
+      ],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "not_recorded",
+      "planner_rows": [
+        "goal",
+        "orca",
+        "social_force",
+        "teb",
+        "dwa",
+        "risk_dwa",
+        "ppo"
+      ],
+      "row_id": "odd_hazard:004",
+      "row_status": "weakly_covered",
+      "scenario_certification": "not_available",
+      "scenario_contract_ref": [
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml"
+      ],
+      "scenario_family": "bottleneck",
+      "section": "odd_hazard_coverage",
+      "seed_schedule": {
+        "seeds": "not_recorded"
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml"
+      ],
+      "suite_or_surface": "odd_hazard_coverage.v1"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a4cee5b2716b22e29e7b045a4196ff3c1fe702e540af4ed24862a6427fbf4b8b",
+      "artifact_uri": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "This matrix records which ODD conditions and hazard classes are represented by checked-in configs only. It does not claim that any row has executed benchmark evidence, safety proof, or paper-facing validity. Uncovered or blocked rows must not be cited as covered in benchmark wording.\n",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "Scenario contract exists for #1484 rows; executed evidence is not checked in.\n"
+      ],
+      "hazard_class": "robot_pedestrian_collision",
+      "metrics": [
+        "collision_rate",
+        "near_miss"
+      ],
+      "missing_prerequisites": [
+        "Scenario contract exists for #1484 rows; executed evidence is not checked in.\n"
+      ],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "not_recorded",
+      "planner_rows": [
+        "goal",
+        "orca",
+        "social_force"
+      ],
+      "row_id": "odd_hazard:005",
+      "row_status": "weakly_covered",
+      "scenario_certification": "not_available",
+      "scenario_contract_ref": [
+        "configs/scenarios/contracts/issue_2164_amv_cross_trap_contracts.yaml"
+      ],
+      "scenario_family": "cross_trap",
+      "section": "odd_hazard_coverage",
+      "seed_schedule": {
+        "seeds": "not_recorded"
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+        "configs/scenarios/contracts/issue_2164_amv_cross_trap_contracts.yaml"
+      ],
+      "suite_or_surface": "odd_hazard_coverage.v1"
+    },
+    {
+      "artifact_match": true,
+      "artifact_sha256": "a4cee5b2716b22e29e7b045a4196ff3c1fe702e540af4ed24862a6427fbf4b8b",
+      "artifact_uri": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+      "availability_status": "available",
+      "benchmark_success": false,
+      "claim_boundary": "This matrix records which ODD conditions and hazard classes are represented by checked-in configs only. It does not claim that any row has executed benchmark evidence, safety proof, or paper-facing validity. Uncovered or blocked rows must not be cited as covered in benchmark wording.\n",
+      "classification": "diagnostic evidence",
+      "exclusions": [
+        "Dense-pedestrian stress fixture exists but is not a calibrated crowd benchmark.\n"
+      ],
+      "hazard_class": "robot_pedestrian_collision",
+      "metrics": [
+        "collision_rate",
+        "comfort_exposure_s"
+      ],
+      "missing_prerequisites": [
+        "Dense-pedestrian stress fixture exists but is not a calibrated crowd benchmark.\n"
+      ],
+      "odd_condition": "low_speed_public_space_v1",
+      "planner_id": null,
+      "planner_mode": "not_recorded",
+      "planner_rows": [
+        "goal",
+        "orca",
+        "social_force"
+      ],
+      "row_id": "odd_hazard:006",
+      "row_status": "weakly_covered",
+      "scenario_certification": "not_available",
+      "scenario_contract_ref": [
+        "configs/scenarios/single/dense_pedestrian_stress.yaml"
+      ],
+      "scenario_family": "dense_pedestrian",
+      "section": "odd_hazard_coverage",
+      "seed_schedule": {
+        "seeds": "not_recorded"
+      },
+      "source_refs": [
+        "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+        "configs/scenarios/single/dense_pedestrian_stress.yaml"
+      ],
+      "suite_or_surface": "odd_hazard_coverage.v1"
+    }
+  ],
+  "schema_version": "release_claim_matrix_issue_3294.v1",
+  "sources": {
+    "artifact_manifest": "docs/context/evidence/issue_2686_release_0_0_2_table_bundle/artifact_manifest.json",
+    "leaderboard_sidecars": [
+      "docs/leaderboards/amv_actuation.rows.json",
+      "docs/leaderboards/lidar_2d.rows.json",
+      "docs/leaderboards/nominal_sanity.rows.json",
+      "docs/leaderboards/smoke.rows.json"
+    ],
+    "odd_coverage": "docs/context/evidence/issue_2911_odd_hazard_coverage_2026-06-17/coverage_matrix.json",
+    "release_config": "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml",
+    "release_snapshot": "docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json"
+  },
+  "summary": {
+    "classification_counts": {
+      "benchmark evidence": 3,
+      "diagnostic evidence": 14,
+      "non-claim": 4
+    },
+    "doi": "10.5281/zenodo.19563812",
+    "release_snapshot_status": "PASS",
+    "release_tag": "0.0.2",
+    "row_count": 21
+  }
+}

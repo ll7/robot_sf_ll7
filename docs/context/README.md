@@ -193,6 +193,11 @@ knowledge, not every transient iteration detail.
   [issue_3205_release_evidence_snapshot_contract.md](issue_3205_release_evidence_snapshot_contract.md)
   records the dry-runable release evidence manifest gate, fail-closed missing-input behavior,
   DOI-ready metadata fields, and current diagnostic-only artifact-catalog proof.
+* Issue #3294 Release Claim Matrix:
+  [release_claim_matrix.md](evidence/issue_3294_release_claim_matrix/release_claim_matrix.md)
+  records the v0.1 row-level synthesis over existing release artifacts, leaderboard row-claim
+  sidecars, and ODD coverage metadata. It does not add a new benchmark campaign or promote
+  fallback, degraded, unavailable, or diagnostic rows as successful benchmark evidence.
 * Issue #2536 simulator-speed candidate discovery:
   [issue_2536_speed_discovery.md](issue_2536_speed_discovery.md)
 * Issue #2531 AMV trace-boundary decision:

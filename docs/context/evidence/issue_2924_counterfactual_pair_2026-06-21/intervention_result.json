@@ -1,0 +1,18 @@
+{
+  "schema_version": "counterfactual_pair_observation.v1",
+  "config_id": "intervention_left_close_occluded_emergence",
+  "invariant_fields": {
+    "scenario": "issue_2924_prediction_risk_occluded_emergence",
+    "seed": 111,
+    "planner": "hybrid_rule_v0_minimal",
+    "artifact": "issue_2924_prediction_risk_pair_fixture.v1"
+  },
+  "execution_mode": "native",
+  "readiness_status": "native",
+  "availability_status": "available",
+  "metrics": {
+    "min_clearance_m": 0.42,
+    "collision_count": 0,
+    "route_progress_m": 0.82
+  }
+}

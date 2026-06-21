@@ -493,6 +493,7 @@ def _handle_aggregate(args) -> int:
                 fallback_group_by=args.fallback_group_by,
                 snqi_weights=snqi_weights,
                 snqi_baseline=snqi_baseline,
+                recompute_snqi=bool(getattr(args, "recompute_snqi", False)),
                 bootstrap_samples=int(args.bootstrap_samples),
                 bootstrap_confidence=float(args.bootstrap_confidence),
                 bootstrap_seed=(
@@ -507,6 +508,7 @@ def _handle_aggregate(args) -> int:
                 fallback_group_by=args.fallback_group_by,
                 snqi_weights=snqi_weights,
                 snqi_baseline=snqi_baseline,
+                recompute_snqi=bool(getattr(args, "recompute_snqi", False)),
                 observation_track_mode=str(args.observation_track_mode),
             )
         out_path = Path(args.out)
@@ -1843,13 +1845,20 @@ def _add_aggregate_subparser(
         "--snqi-weights",
         type=str,
         default=None,
-        help="Optional SNQI weights JSON to compute metrics.snqi during aggregation",
+        help="Optional SNQI weights JSON to compute metrics.snqi during aggregation "
+        "(fills missing SNQI only; pass --recompute-snqi to override stored values)",
     )
     p.add_argument(
         "--snqi-baseline",
         type=str,
         default=None,
         help="Optional baseline stats JSON used for SNQI normalization",
+    )
+    p.add_argument(
+        "--recompute-snqi",
+        action="store_true",
+        help="Recompute metrics.snqi from --snqi-weights even when episodes already "
+        "contain a stored SNQI value (default: only fill missing SNQI).",
     )
     p.set_defaults(cmd="aggregate")
 

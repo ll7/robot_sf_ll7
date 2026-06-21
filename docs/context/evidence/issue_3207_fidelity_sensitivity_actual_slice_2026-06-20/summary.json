@@ -1,0 +1,479 @@
+{
+  "aggregates": {
+    "baseline": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.011902774909950216,
+        "mean_clearance": 9.300042201821086,
+        "min_clearance": 3.9049798564385725,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9277777777777777
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.08163202859171133,
+        "mean_clearance": 11.602001209088755,
+        "min_clearance": 7.159963181738188,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.3444444444444444
+      }
+    },
+    "clearance_radius__radius_0_30": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.011902774909950216,
+        "mean_clearance": 9.400042201821085,
+        "min_clearance": 4.004979856438573,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9277777777777777
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.03401298097266372,
+        "mean_clearance": 12.46498696952163,
+        "min_clearance": 7.240994568974846,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.4777777777777778
+      }
+    },
+    "clearance_radius__radius_0_50": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.011902774909950216,
+        "mean_clearance": 9.200042201821084,
+        "min_clearance": 3.804979856438573,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9277777777777777
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.07742327438295712,
+        "mean_clearance": 11.515458059078604,
+        "min_clearance": 7.077994761412508,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.34259259259259256
+      }
+    },
+    "integration_timestep__dt_0_05": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.005638017063027449,
+        "mean_clearance": 5.060521732730041,
+        "min_clearance": 1.3459861040594765,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9249999999999999
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.011644839267957936,
+        "mean_clearance": 9.28105548391971,
+        "min_clearance": 3.841663420214586,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.4759259259259259
+      }
+    },
+    "integration_timestep__dt_0_20": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.02118205868205868,
+        "mean_clearance": 12.356707550036086,
+        "min_clearance": 7.255754363074769,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9333333333333332
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.12154882154882153,
+        "mean_clearance": 12.426446469520391,
+        "min_clearance": 6.582630637499466,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.3481481481481481
+      }
+    },
+    "observation_noise__pedestrian_dropout_low": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.011902774909950216,
+        "mean_clearance": 9.300042201821086,
+        "min_clearance": 3.9049798564385725,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9277777777777777
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.08163202859171133,
+        "mean_clearance": 11.602001209088755,
+        "min_clearance": 7.159963181738188,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.3444444444444444
+      }
+    },
+    "observation_noise__pose_heading_low": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.011845238095238094,
+        "mean_clearance": 9.289097560822883,
+        "min_clearance": 3.905775465067604,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9314814814814815
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.07222077054844235,
+        "mean_clearance": 11.617095821080056,
+        "min_clearance": 7.170802262531839,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.3462962962962963
+      }
+    },
+    "social_force_speed_archetypes__mixed_balanced": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.01251692018262326,
+        "mean_clearance": 8.469650757602409,
+        "min_clearance": 3.501684511590676,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9277777777777777
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.08257115580314522,
+        "mean_clearance": 11.337917312667372,
+        "min_clearance": 6.198165855866628,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.34814814814814815
+      }
+    },
+    "social_force_speed_archetypes__rush_hour": {
+      "baseline_social_force": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.01251692018262326,
+        "mean_clearance": 8.469650757602409,
+        "min_clearance": 3.501684511590676,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.9277777777777777
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.08257115580314522,
+        "mean_clearance": 11.337917312667372,
+        "min_clearance": 6.198165855866628,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.34814814814814815
+      }
+    }
+  },
+  "claim_boundary": "bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF episodes for a compact two-planner local fidelity-sensitivity slice. It measures internal sensitivity on this slice only; it is not simulator-realism, sim-to-real, paper-facing planner-ranking, or full #3207 acceptance evidence.",
+  "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
+  "date": "2026-06-20",
+  "git_head": "518ad79c9",
+  "git_status_short_at_generation": [],
+  "git_worktree_dirty": false,
+  "issue": 3207,
+  "prior_smoke_boundary": "diagnostic_smoke_not_benchmark_evidence: summarizes a small local same-scenario fidelity sensitivity smoke. It can show wiring, metric drift, and rank-stability calculation behavior, but it does not establish planner ranking, simulator realism, sim-to-real validity, or paper-facing benchmark evidence.",
+  "rank_stability": {
+    "axes": [
+      {
+        "axis": "integration_timestep__dt_0_05",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.03812597358533808,
+          "mean_clearance": 0.3279536818650532,
+          "min_clearance": 0.5593837756980689,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.06712962962962965
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "integration_timestep__dt_0_20",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.024598038364609335,
+          "mean_clearance": 0.19986640497032107,
+          "min_clearance": 0.46935536743023054,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.0046296296296296224
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "social_force_speed_archetypes__mixed_balanced",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.00077663624205347,
+          "mean_clearance": 0.056025461861527195,
+          "min_clearance": 0.11880355788343683,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.0018518518518518823
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "social_force_speed_archetypes__rush_hour",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.00077663624205347,
+          "mean_clearance": 0.056025461861527195,
+          "min_clearance": 0.11880355788343683,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.0018518518518518823
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "observation_noise__pose_heading_low",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.004734397428990549,
+          "mean_clearance": 0.001238936490097677,
+          "min_clearance": 0.0008587939706655089,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.002777777777777851
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "observation_noise__pedestrian_dropout_low",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.0,
+          "mean_clearance": 0.0,
+          "min_clearance": 0.0,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.0
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "clearance_radius__radius_0_30",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.023809523809523805,
+          "mean_clearance": 0.04256756561652878,
+          "min_clearance": 0.018462808885281498,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.06666666666666671
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "clearance_radius__radius_0_50",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.0021043771043771017,
+          "mean_clearance": 0.009105984444891142,
+          "min_clearance": 0.01852824449334522,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.0009259259259259134
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      }
+    ],
+    "flipping_axes": [],
+    "higher_is_better": true,
+    "nominal_ranking": [
+      "baseline_social_force",
+      "goal_seek"
+    ],
+    "non_identifiable_axes": [
+      "integration_timestep__dt_0_05",
+      "integration_timestep__dt_0_20",
+      "social_force_speed_archetypes__mixed_balanced",
+      "social_force_speed_archetypes__rush_hour",
+      "observation_noise__pose_heading_low",
+      "observation_noise__pedestrian_dropout_low",
+      "clearance_radius__radius_0_30",
+      "clearance_radius__radius_0_50"
+    ],
+    "primary_metric": "success_rate",
+    "rank_identifiability_reason": "primary_metric_zero_variance",
+    "rank_identifiable": false,
+    "rank_stable": null,
+    "schema_version": "fidelity_rank_stability.v2"
+  },
+  "raw_output_policy": "raw JSONL remains ignored under output/",
+  "raw_rows_path": "output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-20/episode_rows.jsonl",
+  "result_caveats": [
+    "ranking_stability_is_on_bounded_two_planner_slice_only",
+    "full_fixed_scope_planners_not_run",
+    "rank_non_identifiable_primary_metric_zero_variance",
+    "all_observed_success_rates_zero",
+    "all_observed_collision_rates_one"
+  ],
+  "scenario_set": "configs/scenarios/sets/paper_cross_kinematics_v1.yaml",
+  "schema_version": "issue_3207_fidelity_sensitivity_campaign_slice.v1",
+  "scope": {
+    "classification": "bounded_actual_slice",
+    "episode_count": 54,
+    "horizon": 180,
+    "not_full_fixed_scope_reason": "local torch/rvo2-independent slice uses two non-learned planners; full config fixed_scope planners remain future work",
+    "planners": [
+      "baseline_social_force",
+      "goal_seek"
+    ],
+    "scenario_count": 1,
+    "seeds": [
+      111,
+      112,
+      113
+    ]
+  },
+  "status": "actual_campaign_slice",
+  "study_id": "issue_3207_fidelity_sensitivity_v1",
+  "variants": [
+    {
+      "axis": "integration_timestep",
+      "baseline": false,
+      "runtime_binding": "sim_config.time_per_step_in_secs",
+      "source_key": "dt_0_05",
+      "variant": "integration_timestep__dt_0_05"
+    },
+    {
+      "axis": "integration_timestep",
+      "baseline": true,
+      "runtime_binding": "sim_config.time_per_step_in_secs",
+      "source_key": "dt_0_10_nominal",
+      "variant": "baseline"
+    },
+    {
+      "axis": "integration_timestep",
+      "baseline": false,
+      "runtime_binding": "sim_config.time_per_step_in_secs",
+      "source_key": "dt_0_20",
+      "variant": "integration_timestep__dt_0_20"
+    },
+    {
+      "axis": "social_force_speed_archetypes",
+      "baseline": false,
+      "runtime_binding": "sim_config.archetype_composition",
+      "source_key": "mixed_balanced",
+      "variant": "social_force_speed_archetypes__mixed_balanced"
+    },
+    {
+      "axis": "social_force_speed_archetypes",
+      "baseline": false,
+      "runtime_binding": "sim_config.archetype_composition",
+      "source_key": "rush_hour",
+      "variant": "social_force_speed_archetypes__rush_hour"
+    },
+    {
+      "axis": "observation_noise",
+      "baseline": false,
+      "runtime_binding": "planner_observation_noise",
+      "source_key": "pose_heading_low",
+      "variant": "observation_noise__pose_heading_low"
+    },
+    {
+      "axis": "observation_noise",
+      "baseline": false,
+      "runtime_binding": "planner_observation_noise",
+      "source_key": "pedestrian_dropout_low",
+      "variant": "observation_noise__pedestrian_dropout_low"
+    },
+    {
+      "axis": "clearance_radius",
+      "baseline": false,
+      "runtime_binding": "sim_config.ped_radius",
+      "source_key": "radius_0_30",
+      "variant": "clearance_radius__radius_0_30"
+    },
+    {
+      "axis": "clearance_radius",
+      "baseline": false,
+      "runtime_binding": "sim_config.ped_radius",
+      "source_key": "radius_0_50",
+      "variant": "clearance_radius__radius_0_50"
+    }
+  ]
+}

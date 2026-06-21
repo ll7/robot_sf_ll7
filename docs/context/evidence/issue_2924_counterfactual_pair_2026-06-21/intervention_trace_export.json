@@ -1,0 +1,91 @@
+{
+  "schema_version": "simulation_trace_export.v1",
+  "trace_id": "issue_2924_prediction_risk_intervention_seed111",
+  "source": {
+    "scenario_id": "issue_2924_prediction_risk_occluded_emergence",
+    "seed": 111,
+    "planner_id": "hybrid_rule_v0_minimal",
+    "episode_id": "intervention_left_close_occluded_emergence_ep0000",
+    "generated_by": "hand-authored compact fixture for issue #2924 analysis-only panel generation"
+  },
+  "evidence_boundary": "analysis_workbench_only",
+  "coordinate_frame": "world",
+  "units": {
+    "position": "m",
+    "heading": "rad",
+    "time": "s",
+    "velocity": "m/s"
+  },
+  "frames": [
+    {
+      "step": 0,
+      "time_s": 0.0,
+      "robot": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.2,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": "ped_issue_2924",
+          "position": [
+            0.9,
+            -0.4
+          ],
+          "velocity": [
+            0.0,
+            0.8
+          ]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "prediction_risk_gate"
+      }
+    },
+    {
+      "step": 1,
+      "time_s": 0.5,
+      "robot": {
+        "position": [
+          0.1,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.2,
+          0.0
+        ]
+      },
+      "pedestrians": [
+        {
+          "id": "ped_issue_2924",
+          "position": [
+            0.9,
+            0.0
+          ],
+          "velocity": [
+            0.0,
+            0.8
+          ]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.2,
+          "angular_velocity": 0.0
+        },
+        "event": "yield_after_risk_gate"
+      }
+    }
+  ]
+}

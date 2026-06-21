@@ -64,6 +64,8 @@ Use `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` for the dependency-mini
 readiness lane. If a change touches predictive or other optional-extra paths and you need the
 optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_tests_parallel.sh
 --lane optional`.
+This lane split was introduced for issue #3301 and PR #3314; the executable source of truth is
+`scripts/dev/pr_ready_check.sh` dispatching to `scripts/dev/run_tests_parallel.sh`.
 
 ### Claim-map validation
 

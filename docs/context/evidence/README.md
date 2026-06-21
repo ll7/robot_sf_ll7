@@ -183,7 +183,10 @@ Policy caveats:
   observations but not commands or progress/risk summaries. The nested
   `issue_3328_behavior_probe/` evidence adds an opt-in high-amplitude noise probe that changes
   commands/progress on the same one-seed fixture and is classified
-  `behavior_sensitive_diagnostic_only`. Diagnostic stress evidence only; not a robustness claim.
+  `behavior_sensitive_diagnostic_only`. The nested `issue_3330_seed_amplitude_grid/` evidence adds
+  a two-amplitude, three-perturbation-seed Gaussian grid; behavior sensitivity is mixed across the
+  selected cells, with command/progress/min-distance changes in three cells and policy-insensitive
+  results in four non-baseline cells. Diagnostic stress evidence only; not a robustness claim.
 - `issue_3201_observation_noise_live_smoke/`: diagnostic-only same-seed clean vs perturbed
   step-diagnostics replay on the `dense_pedestrian_stress` live matrix candidate. Perturbation
   changed planner-input pedestrian observations, but commands and progress/risk summaries stayed

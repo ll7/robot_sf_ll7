@@ -1,0 +1,1593 @@
+{
+  "schema_version": "issue_2777_observation_noise_live_replay.v1",
+  "artifact_shape": "compact_summary_without_raw_traces",
+  "issue": 2777,
+  "status": "live_replay",
+  "classification": {
+    "label": "behavior_sensitive_diagnostic_only",
+    "rationale": "All selected live replays completed. The predeclared seed/amplitude grid is diagnostic-only and does not support a robustness, sensor-realism, or planner-superiority claim."
+  },
+  "claim_boundary": "Stress-slice live planner/environment replay for one scenario, one scenario seed, and a predeclared observation-noise seed/amplitude grid. Treat persistence, disappearance, or mixed behavior sensitivity as diagnostic-only; do not infer robustness, sensor realism, or planner superiority.",
+  "inputs": {
+    "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
+    "raw_trace_json": "worktree-local generated traces summarized here; raw trace.json files are intentionally not committed",
+    "generated_funnel": "worktree-local generated_policy_search_funnel.yaml was intentionally not committed"
+  },
+  "fixture_contract": {
+    "required_source_issue": 2756,
+    "required_scenario": "issue_2756_occluded_emergence",
+    "required_family": "occluded_emergence/deterministic_occluded_emergence",
+    "required_seed": 111,
+    "first_visible_step": 5,
+    "delay_steps": 2,
+    "delay_only_expected_first_observed_step": 7,
+    "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
+    "satisfied": true,
+    "blocker": null,
+    "matched_scenario": {
+      "name": "issue_2756_occluded_emergence",
+      "source_issue": 2756,
+      "family": "occluded_emergence",
+      "label": "deterministic_occluded_emergence",
+      "seeds": [
+        111
+      ],
+      "first_visible_step": 5,
+      "delay_steps": 2,
+      "delay_only_expected_first_observed_step": 7
+    }
+  },
+  "fixture_observation_boundary": {
+    "noop_first_observed_step": 5,
+    "delay_only_first_observed_step": 7,
+    "expected_noop_first_observed_step": 5,
+    "expected_delay_only_first_observed_step": 7
+  },
+  "run_config": {
+    "candidate": "risk_surface_dwa_v0",
+    "stage": "smoke",
+    "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
+    "scenario_name": null,
+    "scenario_index": 0,
+    "seed": null,
+    "seed_index": 0,
+    "horizon": 50,
+    "output_dir": "docs/context/evidence/issue_2777_live_observation_noise_replay/issue_3330_seed_amplitude_grid",
+    "condition_set": "issue_3330_seed_amplitude_grid",
+    "condition_names": [
+      "noop",
+      "delay_only",
+      "medium_noise_seed_2755",
+      "medium_noise_seed_3328",
+      "medium_noise_seed_3330",
+      "high_noise_seed_2755",
+      "high_noise_seed_3328",
+      "high_noise_seed_3330"
+    ],
+    "allow_non_occluded_live_fixture": false,
+    "dry_run": false
+  },
+  "behavior_sensitivity_summary": {
+    "live_condition_count": 7,
+    "behavior_sensitive_condition_count": 3,
+    "policy_insensitive_condition_count": 4,
+    "behavior_sensitive_conditions": [
+      "medium_noise_seed_3328",
+      "high_noise_seed_3328",
+      "high_noise_seed_3330"
+    ],
+    "policy_insensitive_conditions": [
+      "delay_only",
+      "medium_noise_seed_2755",
+      "medium_noise_seed_3330",
+      "high_noise_seed_2755"
+    ],
+    "command_changed_conditions": [
+      "medium_noise_seed_3328",
+      "high_noise_seed_3328",
+      "high_noise_seed_3330"
+    ],
+    "progress_or_risk_changed_conditions": [
+      "medium_noise_seed_3328",
+      "high_noise_seed_3328",
+      "high_noise_seed_3330"
+    ],
+    "min_distance_changed_conditions": [
+      "medium_noise_seed_3328",
+      "high_noise_seed_3328",
+      "high_noise_seed_3330"
+    ],
+    "collision_or_near_miss_changed_conditions": [],
+    "stop_yield_proxy_changed_conditions": [],
+    "seed_amplitude_cells": [
+      {
+        "condition": "delay_only",
+        "position_noise_std_m": null,
+        "position_noise_bound_m": null,
+        "observation_perturbation_seed": null,
+        "classification": "policy_insensitive",
+        "command_sequence_changed": false,
+        "progress_or_risk_changed": false,
+        "min_distance_changed": false,
+        "collision_or_near_miss_changed": false,
+        "stop_yield_proxy_changed": false
+      },
+      {
+        "condition": "medium_noise_seed_2755",
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "observation_perturbation_seed": 2755,
+        "classification": "policy_insensitive",
+        "command_sequence_changed": false,
+        "progress_or_risk_changed": false,
+        "min_distance_changed": false,
+        "collision_or_near_miss_changed": false,
+        "stop_yield_proxy_changed": false
+      },
+      {
+        "condition": "medium_noise_seed_3328",
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "observation_perturbation_seed": 3328,
+        "classification": "behavior_sensitive_diagnostic_only",
+        "command_sequence_changed": true,
+        "progress_or_risk_changed": true,
+        "min_distance_changed": true,
+        "collision_or_near_miss_changed": false,
+        "stop_yield_proxy_changed": false
+      },
+      {
+        "condition": "medium_noise_seed_3330",
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "observation_perturbation_seed": 3330,
+        "classification": "policy_insensitive",
+        "command_sequence_changed": false,
+        "progress_or_risk_changed": false,
+        "min_distance_changed": false,
+        "collision_or_near_miss_changed": false,
+        "stop_yield_proxy_changed": false
+      },
+      {
+        "condition": "high_noise_seed_2755",
+        "position_noise_std_m": 1.0,
+        "position_noise_bound_m": 2.0,
+        "observation_perturbation_seed": 2755,
+        "classification": "policy_insensitive",
+        "command_sequence_changed": false,
+        "progress_or_risk_changed": false,
+        "min_distance_changed": false,
+        "collision_or_near_miss_changed": false,
+        "stop_yield_proxy_changed": false
+      },
+      {
+        "condition": "high_noise_seed_3328",
+        "position_noise_std_m": 1.0,
+        "position_noise_bound_m": 2.0,
+        "observation_perturbation_seed": 3328,
+        "classification": "behavior_sensitive_diagnostic_only",
+        "command_sequence_changed": true,
+        "progress_or_risk_changed": true,
+        "min_distance_changed": true,
+        "collision_or_near_miss_changed": false,
+        "stop_yield_proxy_changed": false
+      },
+      {
+        "condition": "high_noise_seed_3330",
+        "position_noise_std_m": 1.0,
+        "position_noise_bound_m": 2.0,
+        "observation_perturbation_seed": 3330,
+        "classification": "behavior_sensitive_diagnostic_only",
+        "command_sequence_changed": true,
+        "progress_or_risk_changed": true,
+        "min_distance_changed": true,
+        "collision_or_near_miss_changed": false,
+        "stop_yield_proxy_changed": false
+      }
+    ],
+    "interpretation": "behavior_sensitivity_is_seed_or_amplitude_specific_in_selected_grid",
+    "claim_boundary": "Diagnostic-only persistence summary over completed live replay cells. It is not a benchmark-strength robustness, sensor-realism, or planner-superiority claim."
+  },
+  "conditions": [
+    {
+      "name": "noop",
+      "description": "Unperturbed live planner/environment replay.",
+      "perturbation": {
+        "position_noise_std_m": null,
+        "position_noise_bound_m": null,
+        "observation_perturbation_seed": null,
+        "observation_delay_steps": null,
+        "missed_detection_probability": null,
+        "occlusion_distance_m": null
+      },
+      "status": "live_replay"
+    },
+    {
+      "name": "delay_only",
+      "description": "Two-step delayed pedestrian observation, preserving the #2755 expected lag.",
+      "perturbation": {
+        "position_noise_std_m": null,
+        "position_noise_bound_m": null,
+        "observation_perturbation_seed": null,
+        "observation_delay_steps": 2,
+        "missed_detection_probability": null,
+        "occlusion_distance_m": null
+      },
+      "status": "live_replay",
+      "scenario": {
+        "noop": "issue_2756_occluded_emergence",
+        "condition": "issue_2756_occluded_emergence",
+        "same": true
+      },
+      "seed": {
+        "noop": 111,
+        "condition": 111,
+        "same": true
+      },
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "observation_summary": {
+        "noop": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "fixture_visibility",
+            "none"
+          ]
+        },
+        "condition": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "delayed_observation"
+          ]
+        }
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "changed_steps": [],
+        "changed_step_count": 0,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "behavior_change_summary": {
+        "command_sequence_changed": false,
+        "changed_command_steps": [],
+        "changed_command_step_count": 0,
+        "progress_or_risk_changed": false,
+        "progress_delta_changed_fields": [],
+        "closest_robot_ped": {
+          "distance": {
+            "noop": 1.65520666531114,
+            "condition": 1.65520666531114,
+            "changed": false
+          },
+          "step": {
+            "noop": 14,
+            "condition": 14,
+            "changed": false
+          }
+        },
+        "min_distance_changed": false,
+        "collision_or_near_miss_changed": false,
+        "collision_summary": {
+          "status": "available",
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "near_miss_summary": {
+          "status": "available",
+          "noop": 0.0,
+          "condition": 0.0,
+          "changed": false
+        },
+        "stop_yield_timing_proxy": {
+          "status": "available",
+          "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+          "direct_event_available": false,
+          "noop_first_stop_step": null,
+          "condition_first_stop_step": null,
+          "changed": false
+        },
+        "stop_yield_timing": {
+          "direct_event_available": false,
+          "limitation": "Direct stop/yield event timing is not available in diagnostics traces; only a zero-linear-speed command proxy is reported.",
+          "command_stop_proxy": {
+            "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+            "noop_first_stop_step": null,
+            "condition_first_stop_step": null,
+            "changed": false
+          }
+        }
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 7
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "medium_noise_seed_2755",
+      "description": "Issue #3330 medium-amplitude Gaussian grid cell, std=0.30 m, bound=0.60 m, seed=2755.",
+      "perturbation": {
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "observation_perturbation_seed": 2755,
+        "observation_delay_steps": null,
+        "missed_detection_probability": null,
+        "occlusion_distance_m": null
+      },
+      "status": "live_replay",
+      "scenario": {
+        "noop": "issue_2756_occluded_emergence",
+        "condition": "issue_2756_occluded_emergence",
+        "same": true
+      },
+      "seed": {
+        "noop": 111,
+        "condition": 111,
+        "same": true
+      },
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "observation_summary": {
+        "noop": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "fixture_visibility",
+            "none"
+          ]
+        },
+        "condition": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "bounded_gaussian"
+          ]
+        }
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "changed_steps": [],
+        "changed_step_count": 0,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "behavior_change_summary": {
+        "command_sequence_changed": false,
+        "changed_command_steps": [],
+        "changed_command_step_count": 0,
+        "progress_or_risk_changed": false,
+        "progress_delta_changed_fields": [],
+        "closest_robot_ped": {
+          "distance": {
+            "noop": 1.65520666531114,
+            "condition": 1.65520666531114,
+            "changed": false
+          },
+          "step": {
+            "noop": 14,
+            "condition": 14,
+            "changed": false
+          }
+        },
+        "min_distance_changed": false,
+        "collision_or_near_miss_changed": false,
+        "collision_summary": {
+          "status": "available",
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "near_miss_summary": {
+          "status": "available",
+          "noop": 0.0,
+          "condition": 0.0,
+          "changed": false
+        },
+        "stop_yield_timing_proxy": {
+          "status": "available",
+          "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+          "direct_event_available": false,
+          "noop_first_stop_step": null,
+          "condition_first_stop_step": null,
+          "changed": false
+        },
+        "stop_yield_timing": {
+          "direct_event_available": false,
+          "limitation": "Direct stop/yield event timing is not available in diagnostics traces; only a zero-linear-speed command proxy is reported.",
+          "command_stop_proxy": {
+            "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+            "noop_first_stop_step": null,
+            "condition_first_stop_step": null,
+            "changed": false
+          }
+        }
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "medium_noise_seed_3328",
+      "description": "Issue #3330 medium-amplitude Gaussian grid cell, std=0.30 m, bound=0.60 m, seed=3328.",
+      "perturbation": {
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "observation_perturbation_seed": 3328,
+        "observation_delay_steps": null,
+        "missed_detection_probability": null,
+        "occlusion_distance_m": null
+      },
+      "status": "live_replay",
+      "scenario": {
+        "noop": "issue_2756_occluded_emergence",
+        "condition": "issue_2756_occluded_emergence",
+        "same": true
+      },
+      "seed": {
+        "noop": 111,
+        "condition": 111,
+        "same": true
+      },
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "observation_summary": {
+        "noop": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "fixture_visibility",
+            "none"
+          ]
+        },
+        "condition": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "bounded_gaussian"
+          ]
+        }
+      },
+      "command_summary": {
+        "sequence_changed": true,
+        "changed_steps": [
+          8
+        ],
+        "changed_step_count": 1,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017799448099487414,
+          "changed": true
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017799448099487414,
+          "changed": true
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.6624126661115424,
+          "changed": true
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "behavior_change_summary": {
+        "command_sequence_changed": true,
+        "changed_command_steps": [
+          8
+        ],
+        "changed_command_step_count": 1,
+        "progress_or_risk_changed": true,
+        "progress_delta_changed_fields": [
+          "net_goal_progress",
+          "best_goal_progress",
+          "closest_robot_ped_distance"
+        ],
+        "closest_robot_ped": {
+          "distance": {
+            "noop": 1.65520666531114,
+            "condition": 1.6624126661115424,
+            "changed": true
+          },
+          "step": {
+            "noop": 14,
+            "condition": 14,
+            "changed": false
+          }
+        },
+        "min_distance_changed": true,
+        "collision_or_near_miss_changed": false,
+        "collision_summary": {
+          "status": "available",
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "near_miss_summary": {
+          "status": "available",
+          "noop": 0.0,
+          "condition": 0.0,
+          "changed": false
+        },
+        "stop_yield_timing_proxy": {
+          "status": "available",
+          "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+          "direct_event_available": false,
+          "noop_first_stop_step": null,
+          "condition_first_stop_step": null,
+          "changed": false
+        },
+        "stop_yield_timing": {
+          "direct_event_available": false,
+          "limitation": "Direct stop/yield event timing is not available in diagnostics traces; only a zero-linear-speed command proxy is reported.",
+          "command_stop_proxy": {
+            "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+            "noop_first_stop_step": null,
+            "condition_first_stop_step": null,
+            "changed": false
+          }
+        }
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "classification": {
+        "label": "behavior_sensitive_diagnostic_only",
+        "rationale": "Perturbation changed selected commands or progress/risk fields. This is live behavior evidence, but the selected diagnostic slice is not enough for a benchmark-strength robustness claim."
+      }
+    },
+    {
+      "name": "medium_noise_seed_3330",
+      "description": "Issue #3330 medium-amplitude Gaussian grid cell, std=0.30 m, bound=0.60 m, seed=3330.",
+      "perturbation": {
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "observation_perturbation_seed": 3330,
+        "observation_delay_steps": null,
+        "missed_detection_probability": null,
+        "occlusion_distance_m": null
+      },
+      "status": "live_replay",
+      "scenario": {
+        "noop": "issue_2756_occluded_emergence",
+        "condition": "issue_2756_occluded_emergence",
+        "same": true
+      },
+      "seed": {
+        "noop": 111,
+        "condition": 111,
+        "same": true
+      },
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "observation_summary": {
+        "noop": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "fixture_visibility",
+            "none"
+          ]
+        },
+        "condition": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "bounded_gaussian"
+          ]
+        }
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "changed_steps": [],
+        "changed_step_count": 0,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "behavior_change_summary": {
+        "command_sequence_changed": false,
+        "changed_command_steps": [],
+        "changed_command_step_count": 0,
+        "progress_or_risk_changed": false,
+        "progress_delta_changed_fields": [],
+        "closest_robot_ped": {
+          "distance": {
+            "noop": 1.65520666531114,
+            "condition": 1.65520666531114,
+            "changed": false
+          },
+          "step": {
+            "noop": 14,
+            "condition": 14,
+            "changed": false
+          }
+        },
+        "min_distance_changed": false,
+        "collision_or_near_miss_changed": false,
+        "collision_summary": {
+          "status": "available",
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "near_miss_summary": {
+          "status": "available",
+          "noop": 0.0,
+          "condition": 0.0,
+          "changed": false
+        },
+        "stop_yield_timing_proxy": {
+          "status": "available",
+          "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+          "direct_event_available": false,
+          "noop_first_stop_step": null,
+          "condition_first_stop_step": null,
+          "changed": false
+        },
+        "stop_yield_timing": {
+          "direct_event_available": false,
+          "limitation": "Direct stop/yield event timing is not available in diagnostics traces; only a zero-linear-speed command proxy is reported.",
+          "command_stop_proxy": {
+            "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+            "noop_first_stop_step": null,
+            "condition_first_stop_step": null,
+            "changed": false
+          }
+        }
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "high_noise_seed_2755",
+      "description": "Issue #3330 high-amplitude Gaussian grid cell, std=1.0 m, bound=2.0 m, seed=2755.",
+      "perturbation": {
+        "position_noise_std_m": 1.0,
+        "position_noise_bound_m": 2.0,
+        "observation_perturbation_seed": 2755,
+        "observation_delay_steps": null,
+        "missed_detection_probability": null,
+        "occlusion_distance_m": null
+      },
+      "status": "live_replay",
+      "scenario": {
+        "noop": "issue_2756_occluded_emergence",
+        "condition": "issue_2756_occluded_emergence",
+        "same": true
+      },
+      "seed": {
+        "noop": 111,
+        "condition": 111,
+        "same": true
+      },
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "observation_summary": {
+        "noop": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "fixture_visibility",
+            "none"
+          ]
+        },
+        "condition": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "bounded_gaussian"
+          ]
+        }
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "changed_steps": [],
+        "changed_step_count": 0,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "behavior_change_summary": {
+        "command_sequence_changed": false,
+        "changed_command_steps": [],
+        "changed_command_step_count": 0,
+        "progress_or_risk_changed": false,
+        "progress_delta_changed_fields": [],
+        "closest_robot_ped": {
+          "distance": {
+            "noop": 1.65520666531114,
+            "condition": 1.65520666531114,
+            "changed": false
+          },
+          "step": {
+            "noop": 14,
+            "condition": 14,
+            "changed": false
+          }
+        },
+        "min_distance_changed": false,
+        "collision_or_near_miss_changed": false,
+        "collision_summary": {
+          "status": "available",
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "near_miss_summary": {
+          "status": "available",
+          "noop": 0.0,
+          "condition": 0.0,
+          "changed": false
+        },
+        "stop_yield_timing_proxy": {
+          "status": "available",
+          "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+          "direct_event_available": false,
+          "noop_first_stop_step": null,
+          "condition_first_stop_step": null,
+          "changed": false
+        },
+        "stop_yield_timing": {
+          "direct_event_available": false,
+          "limitation": "Direct stop/yield event timing is not available in diagnostics traces; only a zero-linear-speed command proxy is reported.",
+          "command_stop_proxy": {
+            "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+            "noop_first_stop_step": null,
+            "condition_first_stop_step": null,
+            "changed": false
+          }
+        }
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "high_noise_seed_3328",
+      "description": "Issue #3330 high-amplitude Gaussian grid cell, std=1.0 m, bound=2.0 m, seed=3328.",
+      "perturbation": {
+        "position_noise_std_m": 1.0,
+        "position_noise_bound_m": 2.0,
+        "observation_perturbation_seed": 3328,
+        "observation_delay_steps": null,
+        "missed_detection_probability": null,
+        "occlusion_distance_m": null
+      },
+      "status": "live_replay",
+      "scenario": {
+        "noop": "issue_2756_occluded_emergence",
+        "condition": "issue_2756_occluded_emergence",
+        "same": true
+      },
+      "seed": {
+        "noop": 111,
+        "condition": 111,
+        "same": true
+      },
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "observation_summary": {
+        "noop": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "fixture_visibility",
+            "none"
+          ]
+        },
+        "condition": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "bounded_gaussian"
+          ]
+        }
+      },
+      "command_summary": {
+        "sequence_changed": true,
+        "changed_steps": [
+          6,
+          9
+        ],
+        "changed_step_count": 2,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.0077209567744040974,
+          "changed": true
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.0077209567744040974,
+          "changed": true
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.6632785410644526,
+          "changed": true
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "behavior_change_summary": {
+        "command_sequence_changed": true,
+        "changed_command_steps": [
+          6,
+          9
+        ],
+        "changed_command_step_count": 2,
+        "progress_or_risk_changed": true,
+        "progress_delta_changed_fields": [
+          "net_goal_progress",
+          "best_goal_progress",
+          "closest_robot_ped_distance"
+        ],
+        "closest_robot_ped": {
+          "distance": {
+            "noop": 1.65520666531114,
+            "condition": 1.6632785410644526,
+            "changed": true
+          },
+          "step": {
+            "noop": 14,
+            "condition": 14,
+            "changed": false
+          }
+        },
+        "min_distance_changed": true,
+        "collision_or_near_miss_changed": false,
+        "collision_summary": {
+          "status": "available",
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "near_miss_summary": {
+          "status": "available",
+          "noop": 0.0,
+          "condition": 0.0,
+          "changed": false
+        },
+        "stop_yield_timing_proxy": {
+          "status": "available",
+          "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+          "direct_event_available": false,
+          "noop_first_stop_step": null,
+          "condition_first_stop_step": null,
+          "changed": false
+        },
+        "stop_yield_timing": {
+          "direct_event_available": false,
+          "limitation": "Direct stop/yield event timing is not available in diagnostics traces; only a zero-linear-speed command proxy is reported.",
+          "command_stop_proxy": {
+            "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+            "noop_first_stop_step": null,
+            "condition_first_stop_step": null,
+            "changed": false
+          }
+        }
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "classification": {
+        "label": "behavior_sensitive_diagnostic_only",
+        "rationale": "Perturbation changed selected commands or progress/risk fields. This is live behavior evidence, but the selected diagnostic slice is not enough for a benchmark-strength robustness claim."
+      }
+    },
+    {
+      "name": "high_noise_seed_3330",
+      "description": "Issue #3330 high-amplitude Gaussian grid cell, std=1.0 m, bound=2.0 m, seed=3330.",
+      "perturbation": {
+        "position_noise_std_m": 1.0,
+        "position_noise_bound_m": 2.0,
+        "observation_perturbation_seed": 3330,
+        "observation_delay_steps": null,
+        "missed_detection_probability": null,
+        "occlusion_distance_m": null
+      },
+      "status": "live_replay",
+      "scenario": {
+        "noop": "issue_2756_occluded_emergence",
+        "condition": "issue_2756_occluded_emergence",
+        "same": true
+      },
+      "seed": {
+        "noop": 111,
+        "condition": 111,
+        "same": true
+      },
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "observation_summary": {
+        "noop": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "fixture_visibility",
+            "none"
+          ]
+        },
+        "condition": {
+          "missed_actor_observations_total": 0,
+          "occluded_actor_observations_total": 0,
+          "visibility_hidden_actor_observations_total": 5,
+          "min_observed_actor_count": 0,
+          "max_observed_actor_count": 1,
+          "noise_profiles": [
+            "bounded_gaussian"
+          ]
+        }
+      },
+      "command_summary": {
+        "sequence_changed": true,
+        "changed_steps": [
+          5,
+          8
+        ],
+        "changed_step_count": 2,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.0077209567744040974,
+          "changed": true
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.0077209567744040974,
+          "changed": true
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.6634374789381774,
+          "changed": true
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "behavior_change_summary": {
+        "command_sequence_changed": true,
+        "changed_command_steps": [
+          5,
+          8
+        ],
+        "changed_command_step_count": 2,
+        "progress_or_risk_changed": true,
+        "progress_delta_changed_fields": [
+          "net_goal_progress",
+          "best_goal_progress",
+          "closest_robot_ped_distance"
+        ],
+        "closest_robot_ped": {
+          "distance": {
+            "noop": 1.65520666531114,
+            "condition": 1.6634374789381774,
+            "changed": true
+          },
+          "step": {
+            "noop": 14,
+            "condition": 14,
+            "changed": false
+          }
+        },
+        "min_distance_changed": true,
+        "collision_or_near_miss_changed": false,
+        "collision_summary": {
+          "status": "available",
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "near_miss_summary": {
+          "status": "available",
+          "noop": 0.0,
+          "condition": 0.0,
+          "changed": false
+        },
+        "stop_yield_timing_proxy": {
+          "status": "available",
+          "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+          "direct_event_available": false,
+          "noop_first_stop_step": null,
+          "condition_first_stop_step": null,
+          "changed": false
+        },
+        "stop_yield_timing": {
+          "direct_event_available": false,
+          "limitation": "Direct stop/yield event timing is not available in diagnostics traces; only a zero-linear-speed command proxy is reported.",
+          "command_stop_proxy": {
+            "definition": "First diagnostics trace step where the selected policy_command linear speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield event timing is not available in these traces.",
+            "noop_first_stop_step": null,
+            "condition_first_stop_step": null,
+            "changed": false
+          }
+        }
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "classification": {
+        "label": "behavior_sensitive_diagnostic_only",
+        "rationale": "Perturbation changed selected commands or progress/risk fields. This is live behavior evidence, but the selected diagnostic slice is not enough for a benchmark-strength robustness claim."
+      }
+    }
+  ],
+  "blockers": []
+}

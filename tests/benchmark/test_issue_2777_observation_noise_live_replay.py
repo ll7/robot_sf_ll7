@@ -69,6 +69,90 @@ def test_issue_3328_behavior_probe_condition_set_is_opt_in() -> None:
     assert tuple(condition.name for condition in mod.CONDITIONS) == mod.REQUIRED_CONDITIONS
 
 
+def test_issue_3330_seed_amplitude_grid_condition_set_is_opt_in() -> None:
+    """The #3330 grid should predeclare two amplitudes across three perturbation seeds."""
+    mod = _load_script()
+
+    grid_conditions = mod.CONDITION_SETS[mod.ISSUE_3330_CONDITION_SET]
+
+    assert (
+        tuple(condition.name for condition in grid_conditions) == mod.ISSUE_3330_REQUIRED_CONDITIONS
+    )
+    perturbations = {
+        condition.name: mod._condition_perturbation(condition)
+        for condition in grid_conditions
+        if "noise_seed" in condition.name
+    }
+    assert {payload["observation_perturbation_seed"] for payload in perturbations.values()} == {
+        2755,
+        3328,
+        3330,
+    }
+    assert {
+        (
+            payload["position_noise_std_m"],
+            payload["position_noise_bound_m"],
+        )
+        for payload in perturbations.values()
+    } == {(0.3, 0.6), (1.0, 2.0)}
+    assert tuple(condition.name for condition in mod.CONDITIONS) == mod.REQUIRED_CONDITIONS
+
+
+def test_behavior_sensitivity_summary_classifies_mixed_grid() -> None:
+    """Grid summaries should distinguish persistent sensitivity from seed-specific sensitivity."""
+    mod = _load_script()
+    conditions = [
+        {"name": "noop", "status": "live_replay"},
+        {
+            "name": "medium_noise_seed_2755",
+            "status": "live_replay",
+            "classification": {"label": "policy_insensitive"},
+            "perturbation": {
+                "position_noise_std_m": 0.3,
+                "position_noise_bound_m": 0.6,
+                "observation_perturbation_seed": 2755,
+            },
+            "behavior_change_summary": {
+                "command_sequence_changed": False,
+                "progress_or_risk_changed": False,
+                "min_distance_changed": False,
+                "collision_or_near_miss_changed": False,
+                "stop_yield_timing_proxy": {"changed": False},
+            },
+        },
+        {
+            "name": "high_noise_seed_3330",
+            "status": "live_replay",
+            "classification": {"label": "behavior_sensitive_diagnostic_only"},
+            "perturbation": {
+                "position_noise_std_m": 1.0,
+                "position_noise_bound_m": 2.0,
+                "observation_perturbation_seed": 3330,
+            },
+            "behavior_change_summary": {
+                "command_sequence_changed": True,
+                "progress_or_risk_changed": True,
+                "min_distance_changed": True,
+                "collision_or_near_miss_changed": False,
+                "stop_yield_timing_proxy": {"changed": False},
+            },
+        },
+    ]
+
+    summary = mod._behavior_sensitivity_summary(conditions)
+
+    assert (
+        summary["interpretation"]
+        == "behavior_sensitivity_is_seed_or_amplitude_specific_in_selected_grid"
+    )
+    assert summary["behavior_sensitive_conditions"] == ["high_noise_seed_3330"]
+    assert summary["policy_insensitive_conditions"] == ["medium_noise_seed_2755"]
+    assert summary["command_changed_conditions"] == ["high_noise_seed_3330"]
+    assert summary["progress_or_risk_changed_conditions"] == ["high_noise_seed_3330"]
+    assert summary["seed_amplitude_cells"][1]["position_noise_bound_m"] == 2.0
+    assert "Diagnostic-only" in summary["claim_boundary"]
+
+
 def test_default_strict_mode_fails_closed_without_occluded_fixture(tmp_path: Path) -> None:
     """A non-occluded matrix should not be promoted as #2777 live replay evidence."""
     mod = _load_script()
@@ -253,6 +337,44 @@ def test_issue_3328_behavior_probe_dry_run_plans_only_probe_conditions(tmp_path:
     assert "2.0" in commands["high_noise_3328"]
     assert "--observation-perturbation-seed" in commands["high_noise_3328"]
     assert "3328" in commands["high_noise_3328"]
+
+
+def test_issue_3330_grid_dry_run_plans_seed_amplitude_cells(tmp_path: Path) -> None:
+    """The opt-in #3330 grid should expose explicit seed/amplitude cells."""
+    mod = _load_script()
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        "schema_version: robot_sf.scenario_matrix.v1\n"
+        "select_scenarios: [issue_3233_near_field_observation_noise]\n",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "out"
+    args = mod.parse_args(
+        [
+            "--condition-set",
+            mod.ISSUE_3330_CONDITION_SET,
+            "--scenario-matrix",
+            str(matrix),
+            "--output-dir",
+            str(output_dir),
+            "--allow-non-occluded-live-fixture",
+            "--dry-run",
+        ]
+    )
+
+    report = mod.run_live_batch(args)
+
+    assert report["run_config"]["condition_set"] == mod.ISSUE_3330_CONDITION_SET
+    assert [condition["name"] for condition in report["conditions"]] == list(
+        mod.ISSUE_3330_REQUIRED_CONDITIONS
+    )
+    cells = {condition["name"]: condition["perturbation"] for condition in report["conditions"]}
+    assert cells["medium_noise_seed_3330"]["position_noise_std_m"] == 0.3
+    assert cells["medium_noise_seed_3330"]["position_noise_bound_m"] == 0.6
+    assert cells["medium_noise_seed_3330"]["observation_perturbation_seed"] == 3330
+    assert cells["high_noise_seed_3330"]["position_noise_std_m"] == 1.0
+    assert cells["high_noise_seed_3330"]["position_noise_bound_m"] == 2.0
+    assert cells["high_noise_seed_3330"]["observation_perturbation_seed"] == 3330
 
 
 def test_scalar_includes_are_ignored_for_fixture_detection(tmp_path: Path) -> None:

@@ -47,6 +47,23 @@ ISSUE_3328_REQUIRED_CONDITIONS = (
     "delay_only",
     "high_noise_3328",
 )
+ISSUE_3330_CONDITION_SET = "issue_3330_seed_amplitude_grid"
+ISSUE_3330_NOISE_SEEDS = (2755, 3328, 3330)
+ISSUE_3330_AMPLITUDE_PROFILES = (
+    ("medium", "0.30", "0.60"),
+    ("high", "1.0", "2.0"),
+)
+ISSUE_3330_REQUIRED_CONDITIONS = (
+    "noop",
+    "delay_only",
+    "medium_noise_seed_2755",
+    "medium_noise_seed_3328",
+    "medium_noise_seed_3330",
+    "high_noise_seed_2755",
+    "high_noise_seed_3328",
+    "high_noise_seed_3330",
+)
+BEHAVIOR_PROBE_CONDITION_SETS = {ISSUE_3328_CONDITION_SET, ISSUE_3330_CONDITION_SET}
 PROGRESS_FIELDS = (
     "net_goal_progress",
     "best_goal_progress",
@@ -67,6 +84,31 @@ class Condition:
     name: str
     description: str
     flags: tuple[str, ...] = ()
+
+
+def _gaussian_condition(
+    *,
+    profile: str,
+    std_m: str,
+    bound_m: str,
+    seed: int,
+) -> Condition:
+    """Return a seeded Gaussian observation-noise grid condition."""
+    return Condition(
+        f"{profile}_noise_seed_{seed}",
+        (
+            f"Issue #3330 {profile}-amplitude Gaussian grid cell, "
+            f"std={std_m} m, bound={bound_m} m, seed={seed}."
+        ),
+        (
+            "--observation-noise-std-m",
+            std_m,
+            "--observation-noise-bound-m",
+            bound_m,
+            "--observation-perturbation-seed",
+            str(seed),
+        ),
+    )
 
 
 CONDITIONS = (
@@ -146,6 +188,20 @@ CONDITION_SETS = {
         _CONDITION_BY_NAME["delay_only"],
         HIGH_NOISE_3328_CONDITION,
     ),
+    ISSUE_3330_CONDITION_SET: (
+        _CONDITION_BY_NAME["noop"],
+        _CONDITION_BY_NAME["delay_only"],
+        *(
+            _gaussian_condition(
+                profile=profile,
+                std_m=std_m,
+                bound_m=bound_m,
+                seed=seed,
+            )
+            for profile, std_m, bound_m in ISSUE_3330_AMPLITUDE_PROFILES
+            for seed in ISSUE_3330_NOISE_SEEDS
+        ),
+    ),
 }
 
 
@@ -202,6 +258,17 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _optional_float(value: Any) -> float | None:
+    """Return a finite non-boolean float when coercion is possible."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _int_list(value: Any) -> list[int]:
@@ -397,6 +464,40 @@ def _durable_ref(path: Path) -> str:
         return path.relative_to(REPO_ROOT).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+def _condition_flag_value(condition: Condition, flag: str) -> str | None:
+    """Return a condition flag value when the flag is present."""
+    try:
+        index = condition.flags.index(flag)
+    except ValueError:
+        return None
+    value_index = index + 1
+    return condition.flags[value_index] if value_index < len(condition.flags) else None
+
+
+def _condition_perturbation(condition: Condition) -> dict[str, Any]:
+    """Return machine-readable perturbation parameters for one condition."""
+    return {
+        "position_noise_std_m": _optional_float(
+            _condition_flag_value(condition, "--observation-noise-std-m")
+        ),
+        "position_noise_bound_m": _optional_float(
+            _condition_flag_value(condition, "--observation-noise-bound-m")
+        ),
+        "observation_perturbation_seed": _optional_int(
+            _condition_flag_value(condition, "--observation-perturbation-seed")
+        ),
+        "observation_delay_steps": _optional_int(
+            _condition_flag_value(condition, "--observation-delay-steps")
+        ),
+        "missed_detection_probability": _optional_float(
+            _condition_flag_value(condition, "--missed-detection-probability")
+        ),
+        "occlusion_distance_m": _optional_float(
+            _condition_flag_value(condition, "--occlusion-distance-m")
+        ),
+    }
 
 
 def _load_trace(path: Path) -> dict[str, Any]:
@@ -704,8 +805,8 @@ def _classification(
             "label": "behavior_sensitive_diagnostic_only",
             "rationale": (
                 "Perturbation changed selected commands or progress/risk fields. "
-                "This is live behavior evidence, but one seed is not enough for "
-                "a benchmark-strength robustness claim."
+                "This is live behavior evidence, but the selected diagnostic slice is not "
+                "enough for a benchmark-strength robustness claim."
             ),
         }
     if observation_changed and near_field:
@@ -810,6 +911,7 @@ def _fail_closed_report(
             {
                 "name": condition.name,
                 "description": condition.description,
+                "perturbation": _condition_perturbation(condition),
                 "status": "blocked",
                 "blocker": blocker,
             }
@@ -880,6 +982,37 @@ def _markdown(report: dict[str, Any]) -> str:
         "blocker",
     ):
         lines.append(f"- `{key}`: `{contract.get(key)}`")
+    behavior_summary = _mapping(report.get("behavior_sensitivity_summary"))
+    if behavior_summary:
+        lines.extend(
+            [
+                "",
+                "## Behavior Sensitivity Summary",
+                "",
+                f"- Interpretation: `{behavior_summary.get('interpretation')}`",
+                (
+                    f"- Behavior-sensitive conditions: "
+                    f"`{behavior_summary.get('behavior_sensitive_conditions')}`"
+                ),
+                (
+                    f"- Policy-insensitive conditions: "
+                    f"`{behavior_summary.get('policy_insensitive_conditions')}`"
+                ),
+                (
+                    f"- Command-changed conditions: "
+                    f"`{behavior_summary.get('command_changed_conditions')}`"
+                ),
+                (
+                    f"- Progress/risk-changed conditions: "
+                    f"`{behavior_summary.get('progress_or_risk_changed_conditions')}`"
+                ),
+                (
+                    f"- Stop/yield proxy-changed conditions: "
+                    f"`{behavior_summary.get('stop_yield_proxy_changed_conditions')}`"
+                ),
+                f"- Boundary: {behavior_summary.get('claim_boundary')}",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -939,6 +1072,7 @@ def _planned_report(
             {
                 "name": condition.name,
                 "description": condition.description,
+                "perturbation": _condition_perturbation(condition),
                 "status": "planned",
                 "command": _condition_command(
                     condition=condition,
@@ -988,6 +1122,7 @@ def _execute_conditions(
                 {
                     "name": condition.name,
                     "description": condition.description,
+                    "perturbation": _condition_perturbation(condition),
                     "status": "blocked",
                     "command": command,
                     "blocker": blocker,
@@ -1006,6 +1141,7 @@ def _execute_conditions(
                 {
                     "name": condition.name,
                     "description": condition.description,
+                    "perturbation": _condition_perturbation(condition),
                     "status": "blocked",
                     "command": command,
                     "blocker": blocker,
@@ -1016,6 +1152,7 @@ def _execute_conditions(
             {
                 "name": condition.name,
                 "description": condition.description,
+                "perturbation": _condition_perturbation(condition),
                 "status": "live_replay",
                 "command": command,
                 "trace": _durable_ref(trace_path),
@@ -1054,27 +1191,29 @@ def _verify_issue_3328_contract_guardrails(
     *,
     fixture_contract: Mapping[str, Any],
 ) -> list[str]:
-    """Verify the static fixture-contract side of the #3328 probe."""
+    """Verify the static fixture-contract side of behavior-sensitive probes."""
     blockers: list[str] = []
     if not fixture_contract.get("satisfied"):
-        blockers.append("Issue #3328 behavior probe requires fixture_contract.satisfied=true.")
+        blockers.append(
+            "Behavior-sensitive observation-noise probe requires fixture_contract.satisfied=true."
+        )
 
     matched = _mapping(fixture_contract.get("matched_scenario"))
     if matched.get("name") != ISSUE_2756_FIXTURE_SCENARIO:
         blockers.append(
-            "Issue #3328 behavior probe requires scenario "
+            "Behavior-sensitive observation-noise probe requires scenario "
             f"{ISSUE_2756_FIXTURE_SCENARIO!r}; got {matched.get('name')!r}."
         )
     if ISSUE_2756_FIXTURE_SEED not in _int_list(matched.get("seeds")):
         blockers.append(
-            f"Issue #3328 behavior probe requires seed {ISSUE_2756_FIXTURE_SEED} "
+            f"Behavior-sensitive observation-noise probe requires seed {ISSUE_2756_FIXTURE_SEED} "
             f"in matrix seeds; got {matched.get('seeds')!r}."
         )
     return blockers
 
 
 def _verify_issue_3328_trace_identity(label: str, trace: Mapping[str, Any]) -> list[str]:
-    """Verify one #3328 probe trace still names the intended scenario and seed."""
+    """Verify one behavior-sensitive probe trace still names the intended scenario and seed."""
     blockers: list[str] = []
     if trace.get("scenario_id") != ISSUE_2756_FIXTURE_SCENARIO:
         blockers.append(
@@ -1089,16 +1228,18 @@ def _verify_issue_3328_trace_identity(label: str, trace: Mapping[str, Any]) -> l
 
 
 def _verify_issue_3328_near_field_trace(noop_trace: Mapping[str, Any]) -> list[str]:
-    """Verify the #3328 probe no-op trace has near-field interaction geometry."""
+    """Verify the behavior-sensitive probe no-op trace has near-field interaction geometry."""
     closest = _mapping(noop_trace.get("progress_summary")).get("closest_robot_ped_distance")
     finite_closest = _finite_number(closest)
     if finite_closest is None:
         return [
-            "Issue #3328 behavior probe requires a finite no-op closest_robot_ped_distance value."
+            "Behavior-sensitive observation-noise probe requires a finite no-op "
+            "closest_robot_ped_distance value."
         ]
     if finite_closest > 2.0:
         return [
-            "Issue #3328 behavior probe requires no-op closest_robot_ped_distance <= 2.0 m; "
+            "Behavior-sensitive observation-noise probe requires no-op "
+            "closest_robot_ped_distance <= 2.0 m; "
             f"observed {closest}."
         ]
     return []
@@ -1109,7 +1250,7 @@ def _verify_issue_3328_behavior_probe_guardrails(
     output_dir: Path,
     fixture_contract: Mapping[str, Any],
 ) -> list[str]:
-    """Fail closed unless the opt-in #3328 probe remains a near-field #2756 replay."""
+    """Fail closed unless opt-in behavior probes remain near-field #2756 replays."""
     blockers = _verify_issue_3328_contract_guardrails(fixture_contract=fixture_contract)
     try:
         noop_trace = _load_trace(output_dir / "traces" / "noop" / "trace.json")
@@ -1124,12 +1265,12 @@ def _verify_issue_3328_behavior_probe_guardrails(
     delay_first_observed = _first_observed_step(delay_trace)
     if noop_first_observed != 5:
         blockers.append(
-            "Issue #3328 behavior probe requires no-op first observed step 5; "
+            "Behavior-sensitive observation-noise probe requires no-op first observed step 5; "
             f"observed {noop_first_observed}."
         )
     if delay_first_observed != 7:
         blockers.append(
-            "Issue #3328 behavior probe requires delay-only first observed step 7; "
+            "Behavior-sensitive observation-noise probe requires delay-only first observed step 7; "
             f"observed {delay_first_observed}."
         )
     blockers.extend(_verify_issue_3328_near_field_trace(noop_trace))
@@ -1197,11 +1338,162 @@ def _compact_live_conditions(conditions: list[dict[str, Any]]) -> list[dict[str,
     return compact_conditions
 
 
+def _live_condition_rows(conditions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return completed non-baseline condition rows."""
+    return [
+        item
+        for item in conditions
+        if item.get("name") != "noop" and item.get("status") == "live_replay"
+    ]
+
+
+def _behavior_bool(item: Mapping[str, Any], key: str) -> bool:
+    """Return a boolean behavior-change field from a condition row."""
+    behavior = _mapping(item.get("behavior_change_summary"))
+    return bool(behavior.get(key))
+
+
+def _conditions_where(conditions: list[dict[str, Any]], key: str) -> list[str]:
+    """Return live condition names where a behavior-change flag is true."""
+    return [
+        str(item["name"]) for item in _live_condition_rows(conditions) if _behavior_bool(item, key)
+    ]
+
+
+def _condition_grid_cell(item: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a compact seed/amplitude row for the behavior-sensitivity summary."""
+    behavior = _mapping(item.get("behavior_change_summary"))
+    perturbation = _mapping(item.get("perturbation"))
+    classification = _mapping(item.get("classification"))
+    return {
+        "condition": item.get("name"),
+        "position_noise_std_m": perturbation.get("position_noise_std_m"),
+        "position_noise_bound_m": perturbation.get("position_noise_bound_m"),
+        "observation_perturbation_seed": perturbation.get("observation_perturbation_seed"),
+        "classification": classification.get("label"),
+        "command_sequence_changed": bool(behavior.get("command_sequence_changed")),
+        "progress_or_risk_changed": bool(behavior.get("progress_or_risk_changed")),
+        "min_distance_changed": bool(behavior.get("min_distance_changed")),
+        "collision_or_near_miss_changed": bool(behavior.get("collision_or_near_miss_changed")),
+        "stop_yield_proxy_changed": bool(
+            _mapping(behavior.get("stop_yield_timing_proxy")).get("changed")
+        ),
+    }
+
+
+def _behavior_sensitivity_interpretation(
+    *,
+    live_condition_count: int,
+    behavior_sensitive_count: int,
+) -> str:
+    """Classify persistence across the selected condition grid."""
+    if live_condition_count == 0:
+        return "no_live_conditions"
+    if behavior_sensitive_count == 0:
+        return "behavior_sensitivity_disappeared_in_selected_grid"
+    if behavior_sensitive_count == live_condition_count:
+        return "behavior_sensitivity_persisted_across_selected_grid"
+    return "behavior_sensitivity_is_seed_or_amplitude_specific_in_selected_grid"
+
+
+def _behavior_sensitivity_summary(conditions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize behavior sensitivity across completed non-baseline conditions."""
+    live_conditions = _live_condition_rows(conditions)
+    behavior_sensitive_conditions = [
+        str(item["name"])
+        for item in live_conditions
+        if _mapping(item.get("classification")).get("label") == "behavior_sensitive_diagnostic_only"
+    ]
+    policy_insensitive_conditions = [
+        str(item["name"])
+        for item in live_conditions
+        if _mapping(item.get("classification")).get("label") == "policy_insensitive"
+    ]
+    return {
+        "live_condition_count": len(live_conditions),
+        "behavior_sensitive_condition_count": len(behavior_sensitive_conditions),
+        "policy_insensitive_condition_count": len(policy_insensitive_conditions),
+        "behavior_sensitive_conditions": behavior_sensitive_conditions,
+        "policy_insensitive_conditions": policy_insensitive_conditions,
+        "command_changed_conditions": _conditions_where(conditions, "command_sequence_changed"),
+        "progress_or_risk_changed_conditions": _conditions_where(
+            conditions, "progress_or_risk_changed"
+        ),
+        "min_distance_changed_conditions": _conditions_where(conditions, "min_distance_changed"),
+        "collision_or_near_miss_changed_conditions": _conditions_where(
+            conditions,
+            "collision_or_near_miss_changed",
+        ),
+        "stop_yield_proxy_changed_conditions": [
+            str(item["name"])
+            for item in live_conditions
+            if bool(
+                _mapping(
+                    _mapping(item.get("behavior_change_summary")).get("stop_yield_timing_proxy")
+                ).get("changed")
+            )
+        ],
+        "seed_amplitude_cells": [_condition_grid_cell(item) for item in live_conditions],
+        "interpretation": _behavior_sensitivity_interpretation(
+            live_condition_count=len(live_conditions),
+            behavior_sensitive_count=len(behavior_sensitive_conditions),
+        ),
+        "claim_boundary": (
+            "Diagnostic-only persistence summary over completed live replay cells. "
+            "It is not a benchmark-strength robustness, sensor-realism, or "
+            "planner-superiority claim."
+        ),
+    }
+
+
+def _classification_rationale(condition_set: str) -> str:
+    """Return top-level classification rationale text for a condition set."""
+    if condition_set == ISSUE_3330_CONDITION_SET:
+        return (
+            "All selected live replays completed. The predeclared seed/amplitude grid is "
+            "diagnostic-only and does not support a robustness, sensor-realism, or "
+            "planner-superiority claim."
+        )
+    if condition_set == ISSUE_3328_CONDITION_SET:
+        return (
+            "All selected live replays completed. One behavior-probe seed is diagnostic only and "
+            "does not support a robustness, sensor-realism, or planner-superiority claim."
+        )
+    return (
+        "All selected live replays completed. The selected stress slice is diagnostic only and "
+        "does not support a robustness, sensor-realism, or planner-superiority claim."
+    )
+
+
+def _claim_boundary(args: argparse.Namespace) -> str:
+    """Return conservative claim-boundary text for the selected condition set."""
+    if args.condition_set == ISSUE_3330_CONDITION_SET:
+        return (
+            "Stress-slice live planner/environment replay for one scenario, one scenario seed, "
+            "and a predeclared observation-noise seed/amplitude grid. Treat persistence, "
+            "disappearance, or mixed behavior sensitivity as diagnostic-only; do not infer "
+            "robustness, sensor realism, or planner superiority."
+        )
+    if args.condition_set == ISSUE_3328_CONDITION_SET:
+        return (
+            "Stress-slice live planner/environment replay for one scenario, one seed, and the "
+            "selected perturbation condition set. Treat behavior-sensitive differences as "
+            "diagnostic-only from one perturbation seed; do not infer robustness, sensor realism, "
+            "or planner superiority."
+        )
+    return (
+        "Stress-slice live planner/environment replay for one scenario, one seed, and the selected "
+        "perturbation condition set. Treat as benchmark-facing only when fixture_contract.satisfied "
+        "is true; otherwise diagnostic-only."
+    )
+
+
 def _final_classification(
     *,
     blockers: list[str],
     fixture_contract_satisfied: bool,
     conditions: list[dict[str, Any]],
+    condition_set: str,
 ) -> tuple[str, dict[str, str]]:
     """Resolve the top-level status/classification for the issue report."""
     if blockers:
@@ -1236,16 +1528,13 @@ def _final_classification(
         "live_replay",
         {
             "label": label,
-            "rationale": (
-                "All selected live replays completed. One seed is diagnostic only and "
-                "does not support a robustness, sensor-realism, or planner-superiority claim."
-            ),
+            "rationale": _classification_rationale(condition_set),
         },
     )
 
 
 def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
-    """Run the seven live diagnostics conditions and return the summary report."""
+    """Run the selected live diagnostics conditions and return the summary report."""
     output_dir = args.output_dir
     output_dir = _repo_path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1291,7 +1580,7 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
             fixture_contract=fixture_contract,
         )
     )
-    if args.condition_set == ISSUE_3328_CONDITION_SET:
+    if args.condition_set in BEHAVIOR_PROBE_CONDITION_SETS:
         blockers.extend(
             _verify_issue_3328_behavior_probe_guardrails(
                 output_dir=output_dir,
@@ -1302,7 +1591,9 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
         blockers=blockers,
         fixture_contract_satisfied=bool(fixture_contract["satisfied"]),
         conditions=conditions,
+        condition_set=args.condition_set,
     )
+    compact_conditions = _compact_live_conditions(conditions)
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -1310,12 +1601,7 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
         "issue": 2777,
         "status": status,
         "classification": classification,
-        "claim_boundary": (
-            "Stress-slice live planner/environment replay for one scenario, one seed, "
-            "and the selected perturbation condition set. Treat behavior-sensitive "
-            "differences as diagnostic-only from one seed; do not infer robustness, "
-            "sensor realism, or planner superiority."
-        ),
+        "claim_boundary": _claim_boundary(args),
         "inputs": {
             "scenario_matrix": _durable_ref(scenario_matrix),
             "raw_trace_json": (
@@ -1329,7 +1615,8 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
         "fixture_contract": fixture_contract,
         "fixture_observation_boundary": _fixture_observation_boundary_summary(output_dir),
         "run_config": _run_config(args=args, output_dir=output_dir),
-        "conditions": _compact_live_conditions(conditions),
+        "behavior_sensitivity_summary": _behavior_sensitivity_summary(compact_conditions),
+        "conditions": compact_conditions,
         "blockers": blockers,
     }
 
@@ -1357,7 +1644,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_CONDITION_SET,
         help=(
             "Perturbation condition set to run. The default preserves the seven #2755 "
-            "families; issue_3328_behavior_probe is an opt-in four-condition probe."
+            "families; issue_3328_behavior_probe is an opt-in four-condition probe; "
+            "issue_3330_seed_amplitude_grid is an opt-in diagnostic seed/amplitude grid."
         ),
     )
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
@@ -1381,6 +1669,11 @@ def main(argv: list[str] | None = None) -> int:
         != ISSUE_3328_REQUIRED_CONDITIONS
     ):
         raise RuntimeError("Issue #3328 behavior probe condition set drifted")
+    if (
+        tuple(condition.name for condition in CONDITION_SETS[ISSUE_3330_CONDITION_SET])
+        != ISSUE_3330_REQUIRED_CONDITIONS
+    ):
+        raise RuntimeError("Issue #3330 seed/amplitude grid condition set drifted")
     report = run_live_batch(args)
     _write_outputs(report, args.output_dir)
     print(

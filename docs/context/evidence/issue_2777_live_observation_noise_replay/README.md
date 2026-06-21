@@ -49,3 +49,14 @@ high-amplitude noise condition (`std=1.0`, `bound=2.0`, seed 3328). The probe is
 progress/min-distance summaries on one seed, while medium noise and delay-only remain
 policy-insensitive. It is diagnostic stress evidence only, not a robustness, sensor-realism, or
 planner-superiority claim.
+
+## Issue #3330 Seed/Amplitude Grid
+
+`issue_3330_seed_amplitude_grid/` preserves the same #2756/#3323 near-field fixture boundary and
+adds an opt-in two-amplitude, three-perturbation-seed Gaussian grid. The grid is classified
+`behavior_sensitive_diagnostic_only`: behavior sensitivity is mixed across the selected cells.
+`medium_noise_seed_3328`, `high_noise_seed_3328`, and `high_noise_seed_3330` changed selected
+commands plus progress/min-distance summaries, while `medium_noise_seed_2755`,
+`medium_noise_seed_3330`, `high_noise_seed_2755`, and `delay_only` remained policy-insensitive.
+This is diagnostic stress evidence only, not a robustness, sensor-realism, or planner-superiority
+claim.

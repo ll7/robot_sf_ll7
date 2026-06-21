@@ -20,10 +20,11 @@ FORMAT_CHECKER = jsonschema.FormatChecker()
 @FORMAT_CHECKER.checks("date-time")
 def _is_datetime(instance: object) -> bool:
     """Return True when a string is a timezone-qualified ISO 8601 datetime."""
-    if not isinstance(instance, str) or "T" not in instance:
+    if not isinstance(instance, str) or "t" not in instance.lower():
         return False
+    normalized = f"{instance[:-1]}+00:00" if instance.lower().endswith("z") else instance
     try:
-        parsed = datetime.fromisoformat(instance.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return False
     return parsed.tzinfo is not None and parsed.utcoffset() is not None

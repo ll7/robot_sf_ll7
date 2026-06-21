@@ -68,6 +68,16 @@ VARIANTS: dict[str, dict] = {
         "predictive_horizon_boost_steps": 9,
         "predictive_near_field_speed_cap": 0.8,
     },
+    # Single-knob ablations of nearfield_turn, to attribute which knob drives the hard-case lift.
+    "nf_headings_only": {
+        "predictive_near_field_heading_deltas": _WIDE_NEARFIELD,
+    },
+    "nf_speedcap_only": {
+        "predictive_near_field_speed_cap": 0.8,
+    },
+    "nf_horizonboost_only": {
+        "predictive_horizon_boost_steps": 9,
+    },
     "combined_max_authority": {
         "max_angular_speed": 1.8,
         "predictive_candidate_speeds": _DENSE_SPEEDS,

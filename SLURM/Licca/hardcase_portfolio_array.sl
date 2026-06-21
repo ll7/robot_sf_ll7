@@ -13,8 +13,8 @@ PYTHON="${HC_PYTHON:-$REPO/.venv/bin/python}"
 SCOPE_TAG="${HC_SCOPE_TAG:-hard}"
 SEED_MANIFEST="${HC_SEED_MANIFEST:-configs/benchmarks/predictive_hard_seeds_v1.yaml}"
 
-CKPTS=(predictive_proxy_selected_v2_full predictive_proxy_selected_v1)
-VARIANTS=(baseline high_angular dense_lattice deep_sequence nearfield_turn combined_max_authority)
+read -ra CKPTS <<< "${HC_CKPTS:-predictive_proxy_selected_v2_full predictive_proxy_selected_v1}"
+read -ra VARIANTS <<< "${HC_VARIANTS:-baseline high_angular dense_lattice deep_sequence nearfield_turn combined_max_authority}"
 
 i="${SLURM_ARRAY_TASK_ID:-0}"
 ckpt="${CKPTS[$((i / ${#VARIANTS[@]}))]}"

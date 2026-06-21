@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,57 @@ ALLOWED_CLAIM_WORDING = (
     "planner-observable denominator evidence from unavailable/proxy exclusions; this proves "
     "denominator plumbing, not traffic-light realism or crossing-legality compliance."
 )
+
+SOURCE_KIND_CHOICES = ("live_execution", "durable_replay", "fixture", "synthetic", "unknown")
+EVIDENCE_TIER_CHOICES = (
+    "benchmark",
+    "nominal_benchmark",
+    "paper_grade",
+    "smoke",
+    "diagnostic",
+    "analysis_only",
+    "proposal",
+    "unknown",
+)
+EXECUTION_MODE_CHOICES = (
+    "native",
+    "durable_replay",
+    "fixture",
+    "synthetic",
+    "fallback",
+    "degraded",
+    "proxy",
+    "unavailable",
+    "not_available",
+    "unknown",
+)
+CLAIM_MATRIX_STATUS_CHOICES = (
+    "allowed",
+    "claimable",
+    "diagnostic_only",
+    "not_claimable",
+    "blocked",
+    "unknown",
+)
+
+_DURABLE_SOURCE_KINDS = {"live_execution", "durable_replay"}
+_FIGURE_EVIDENCE_TIERS = {"benchmark", "nominal_benchmark", "paper_grade"}
+_FIGURE_EXECUTION_MODES = {"native", "durable_replay"}
+_ALLOWED_CLAIM_STATUSES = {"allowed", "claimable"}
+
+
+@dataclass(frozen=True)
+class FailurePackProvenance:
+    """Provenance fields that control claim and figure eligibility."""
+
+    trace_source_kind: str
+    metric_source_kind: str
+    execution_performed: bool
+    evidence_tier: str
+    artifact_status: str
+    execution_mode: str
+    fallback_or_degraded: bool
+    claim_matrix_status: str
 
 
 def _sanitize(val: Any) -> Any:
@@ -118,14 +170,65 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def _figure_ineligibility_reasons(
+    *,
+    denominator: int,
+    evidence_state: str,
+    evidence_exclusion: str,
+    provenance: FailurePackProvenance,
+) -> list[str]:
+    """Return fail-closed reasons that make a failure-pack row diagnostic-only."""
+    checks = [
+        (denominator <= 0, "signal_metrics_denominator<=0"),
+        (evidence_state != "planner_observable", f"signal_metrics_evidence.state={evidence_state}"),
+        (
+            bool(evidence_exclusion),
+            f"signal_metrics_evidence.exclusion_reason={evidence_exclusion}",
+        ),
+        (
+            provenance.trace_source_kind not in _DURABLE_SOURCE_KINDS,
+            f"trace_source_kind={provenance.trace_source_kind}",
+        ),
+        (
+            provenance.metric_source_kind not in _DURABLE_SOURCE_KINDS,
+            f"metric_source_kind={provenance.metric_source_kind}",
+        ),
+        (not provenance.execution_performed, "execution_performed=false"),
+        (
+            provenance.evidence_tier not in _FIGURE_EVIDENCE_TIERS,
+            f"evidence_tier={provenance.evidence_tier}",
+        ),
+        (provenance.artifact_status != "current", f"artifact_status={provenance.artifact_status}"),
+        (
+            provenance.execution_mode not in _FIGURE_EXECUTION_MODES,
+            f"execution_mode={provenance.execution_mode}",
+        ),
+        (provenance.fallback_or_degraded, "fallback_or_degraded=true"),
+        (
+            provenance.claim_matrix_status not in _ALLOWED_CLAIM_STATUSES,
+            f"claim_matrix_status={provenance.claim_matrix_status}",
+        ),
+    ]
+    return [reason for failed, reason in checks if failed]
+
+
+def _diagnostic_claim_wording(reasons: list[str]) -> str:
+    """Build conservative claim wording for rows that fail figure eligibility."""
+    reason_text = ", ".join(reasons) if reasons else "figure eligibility was not proven"
+    return (
+        "Figure-ineligible diagnostic-only row; do not use for benchmark, dissertation figure, "
+        f"or paper-facing claims. Reasons: {reason_text}."
+    )
+
+
 def build_failure_pack(
     traces: list[SimulationTraceExport],
     records: list[dict[str, Any]],
-    artifact_status: str,
     allowed_claim_wording: str,
     collision_threshold: float,
     comfort_threshold: float,
     near_miss_threshold: float,
+    provenance: FailurePackProvenance,
 ) -> dict[str, Any]:
     """Assemble failure cases from paired trace exports and metrics records."""
     cases = []
@@ -186,19 +289,21 @@ def build_failure_pack(
         exclusion = evidence.get("exclusion_reason", "")
 
         planner_observable = state == "planner_observable" and not exclusion
-        benchmark_evidence = planner_observable and denominator > 0
-        eligible = planner_observable and benchmark_evidence
+        denominator_eligible = planner_observable and denominator > 0
+        ineligibility_reasons = _figure_ineligibility_reasons(
+            denominator=denominator,
+            evidence_state=str(state),
+            evidence_exclusion=str(exclusion),
+            provenance=provenance,
+        )
+        figure_eligible = not ineligibility_reasons
 
-        denominator_status = "eligible" if eligible else "excluded"
-        diagnostic_only = not eligible
-        figure_eligible = eligible
+        denominator_status = "eligible" if denominator_eligible else "excluded"
+        diagnostic_only = not figure_eligible
 
-        # Proxy/unavailable signal rows remain diagnostic-only and figure-ineligible
+        # Provenance, fallback, stale, proxy, and unavailable rows fail closed.
         if diagnostic_only:
-            claim_wording = (
-                "Unavailable or proxy signal rows are diagnostic-only and ineligible "
-                "for compliance claims."
-            )
+            claim_wording = _diagnostic_claim_wording(ineligibility_reasons)
         else:
             claim_wording = allowed_claim_wording
 
@@ -215,7 +320,16 @@ def build_failure_pack(
                 "pedestrian_state": ped_state,
                 "metric_row": metrics,
                 "denominator_status": denominator_status,
-                "stale_current_status": artifact_status,
+                "stale_current_status": provenance.artifact_status,
+                "artifact_status": provenance.artifact_status,
+                "trace_source_kind": provenance.trace_source_kind,
+                "metric_source_kind": provenance.metric_source_kind,
+                "execution_performed": provenance.execution_performed,
+                "evidence_tier": provenance.evidence_tier,
+                "execution_mode": provenance.execution_mode,
+                "fallback_or_degraded": provenance.fallback_or_degraded,
+                "claim_matrix_status": provenance.claim_matrix_status,
+                "figure_ineligibility_reasons": ineligibility_reasons,
                 "allowed_claim_wording": claim_wording,
                 "diagnostic_only": diagnostic_only,
                 "figure_eligible": figure_eligible,
@@ -314,6 +428,46 @@ def main(argv: list[str] | None = None) -> int:
         help="Allowed claim wording for eligible rows.",
     )
     parser.add_argument(
+        "--trace-source-kind",
+        choices=SOURCE_KIND_CHOICES,
+        default="unknown",
+        help="Provenance of the trace input.",
+    )
+    parser.add_argument(
+        "--metric-source-kind",
+        choices=SOURCE_KIND_CHOICES,
+        default="unknown",
+        help="Provenance of the metric row input.",
+    )
+    parser.add_argument(
+        "--execution-performed",
+        action="store_true",
+        help="Set when this pack is backed by an actual planner/simulator execution.",
+    )
+    parser.add_argument(
+        "--evidence-tier",
+        choices=EVIDENCE_TIER_CHOICES,
+        default="unknown",
+        help="Evidence tier for this pack.",
+    )
+    parser.add_argument(
+        "--execution-mode",
+        choices=EXECUTION_MODE_CHOICES,
+        default="unknown",
+        help="Execution mode backing the pack.",
+    )
+    parser.add_argument(
+        "--fallback-or-degraded",
+        action="store_true",
+        help="Mark the row as fallback or degraded; figure eligibility then fails closed.",
+    )
+    parser.add_argument(
+        "--claim-matrix-status",
+        choices=CLAIM_MATRIX_STATUS_CHOICES,
+        default="unknown",
+        help="Claim-matrix status for the requested claim boundary.",
+    )
+    parser.add_argument(
         "--collision-threshold",
         type=float,
         default=1.0,
@@ -349,11 +503,20 @@ def main(argv: list[str] | None = None) -> int:
     pack = build_failure_pack(
         traces=loaded_traces,
         records=loaded_records,
-        artifact_status=args.artifact_status,
         allowed_claim_wording=args.allowed_claim_wording,
         collision_threshold=args.collision_threshold,
         comfort_threshold=args.comfort_threshold,
         near_miss_threshold=args.near_miss_threshold,
+        provenance=FailurePackProvenance(
+            trace_source_kind=args.trace_source_kind,
+            metric_source_kind=args.metric_source_kind,
+            execution_performed=args.execution_performed,
+            evidence_tier=args.evidence_tier,
+            artifact_status=args.artifact_status,
+            execution_mode=args.execution_mode,
+            fallback_or_degraded=args.fallback_or_degraded,
+            claim_matrix_status=args.claim_matrix_status,
+        ),
     )
 
     sanitized_pack = _sanitize(pack)

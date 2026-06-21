@@ -14,6 +14,11 @@ implemented in the repository. Benchmark, metric, schema, artifact-provenance, a
 claims require enough evidence for another contributor to understand what ran, what did not run,
 and what remains uncertain.
 
+Changes to benchmark scenarios, metric semantics, model profiles, or release-bound evidence must
+follow the standing [benchmark scenario and model governance](./benchmark_governance.md) contract so
+versioning, comparability, deprecation, and reproduction requirements are reviewable before claims
+are interpreted.
+
 When evidence is mixed, limited, or partly degraded, every report must open with:
 1. claim boundary,
 2. evidence status (`diagnostic-only`, `smoke evidence`, `nominal benchmark evidence`,

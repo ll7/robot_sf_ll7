@@ -38,7 +38,7 @@ class SICNavPlannerConfig:
     """Configuration for the SICNav baseline wrapper."""
 
     checkpoint_path: str | None = None
-    repo_root: str = "third_party/external_mpc_repos/sicnav"
+    repo_root: str = "third_party/external_repos/sicnav"
     upstream_repo_url: str = "https://github.com/sepsamavi/safe-interactive-crowdnav"
     solver: str = "ipopt"
     device: str = "cpu"

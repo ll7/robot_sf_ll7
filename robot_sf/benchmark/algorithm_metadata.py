@@ -501,8 +501,8 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
     },
     "sicnav": {
         "repo_url": "https://github.com/sepsamavi/safe-interactive-crowdnav",
-        "commit": "local_vendor_reference",
-        "checkout_path": "third_party/external_mpc_repos/sicnav",
+        "commit": "c702fb8ac9ba6439ca61da7dde68b8524bbc6a1f",
+        "checkout_path": "third_party/external_repos/sicnav",
         "upstream_policy": "sicnav_diffusion.policy.sicnav_acados.SICNavAcados",
         "default_checkpoint": (
             "sicnav_diffusion/JMID/MID/checkpoints/jrdb_bev_0_25_multi_class_epoch16.pt"

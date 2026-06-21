@@ -397,6 +397,21 @@ def test_drl_vo_metadata_exposes_reference_contract() -> None:
     assert upstream["commit"] == "6d734b6e0df77fd4c4faa4649ca0fcb3e69cf835"
 
 
+def test_sicnav_metadata_exposes_pinned_external_repo_contract() -> None:
+    """SICNav metadata should point at the pinned external-repo staging contract."""
+    meta = enrich_algorithm_metadata(
+        algo="sicnav",
+        metadata={"status": "ok"},
+        execution_mode="adapter",
+        robot_kinematics="differential_drive",
+    )
+
+    upstream = meta["upstream_reference"]
+    assert upstream["repo_url"] == "https://github.com/sepsamavi/safe-interactive-crowdnav"
+    assert upstream["commit"] == "c702fb8ac9ba6439ca61da7dde68b8524bbc6a1f"
+    assert upstream["checkout_path"] == "third_party/external_repos/sicnav"
+
+
 def test_social_navigation_pyenvs_orca_metadata_exposes_upstream_wrapper_contract() -> None:
     """Prototype external ORCA metadata should expose upstream repo and projection boundary."""
     meta = enrich_algorithm_metadata(

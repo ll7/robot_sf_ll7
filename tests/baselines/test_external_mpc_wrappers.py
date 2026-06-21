@@ -3,6 +3,7 @@
 import os
 import sys
 import types
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,9 @@ from robot_sf.baselines.dr_mpc import Observation as DRMPCObservation
 from robot_sf.baselines.interface import Observation as InterfaceObservation
 from robot_sf.baselines.sicnav import Observation as SICNavObservation
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SICNAV_STAGE_PATH = REPO_ROOT / "third_party" / "external_repos" / "sicnav"
 
 
 def _make_robot_observation() -> dict[str, object]:
@@ -57,6 +61,28 @@ def test_sicnav_step_raises_when_dependency_missing(
     )
     with pytest.raises(RuntimeError, match="SICNav dependency"):
         planner.step(_make_robot_observation())
+
+
+def test_sicnav_config_builder_uses_external_repos_default() -> None:
+    """SICNav config defaults should point at the license-staged external repo path."""
+    cfg = build_sicnav_config({})
+    assert cfg.repo_root == "third_party/external_repos/sicnav"
+
+
+def test_sicnav_skip_without_external_repo() -> None:
+    """Smoke-check the staged SICNav checkout when it is present locally."""
+    if not SICNAV_STAGE_PATH.exists():
+        pytest.skip(f"SICNav external repo is not staged at {SICNAV_STAGE_PATH}")
+
+    cfg = build_sicnav_config({})
+    planner = SICNavPlanner(cfg, seed=1)
+    assert planner._resolve_repo_root(cfg.repo_root) == SICNAV_STAGE_PATH.resolve()
+
+    with planner._upstream_import_context():
+        package_names = {"sicnav_diffusion", "sicnav"}
+        package_paths = [SICNAV_STAGE_PATH / name for name in package_names]
+        assert any(path.exists() for path in package_paths)
+        assert any(find_spec(name) is not None for name in package_names)
 
 
 def test_dr_mpc_step_raises_when_dependency_missing() -> None:

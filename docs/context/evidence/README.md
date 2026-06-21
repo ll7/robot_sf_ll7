@@ -181,8 +181,8 @@ Policy caveats:
   pedestrian-present stress-slice scenario; perturbation plumbing activated, but the distant
   pedestrian produced no measurable planner degradation.
 - `issue_2777_live_observation_noise_replay/`: diagnostic stress-slice live replay for all seven
-  #2755 perturbation families on the #2756 occluded-emergence boundary added by #3320 and moved
-  into near-field geometry by #3323. The wrapper ran `risk_surface_dwa_v0` on
+  Issue #2755 perturbation families on the Issue #2756 occluded-emergence boundary added by
+  Issue #3320 and moved into near-field geometry by Issue #3323. The wrapper ran `risk_surface_dwa_v0` on
   `issue_2756_occluded_emergence` seed 111, preserved no-op first visibility at step 5 and
   delay-only first observation at step 7, reached a 1.6552 m closest robot-pedestrian distance,
   and classified the seven-family run as `policy_insensitive` because perturbations changed
@@ -220,6 +220,12 @@ Policy caveats:
   1.45 m closest robot-pedestrian distance and selected low-speed commands under dynamic-collision
   pressure; the perturbed run changed command sequence/progress and ended with a pedestrian
   collision. Not benchmark or sensor-realism evidence.
+- `issue_3335_observation_noise_cross_fixture_2026-06-21/`: diagnostic-only cross-fixture
+  synthesis of tracked native live observation-noise grid summaries. It records the committed #3330
+  near-field seed/amplitude grid as behavior-sensitive, then preserves a #3335 second-matrix attempt
+  that failed closed because `issue_3320_occluded_emergence_live_replay` was not near-field
+  (`closest_robot_ped_distance=21.80 m`). This is useful negative external-validity evidence, not
+  benchmark, robustness, planner-superiority, or hardware-calibrated sensor-realism evidence.
 - `issue_3202_ammv_anticipatory_conflict/`: diagnostic-only default-vs-AMMV Social Force
   comparison on a waiting-then-crossing fixture plus a direct AMMV mechanism probe. Adapter rows
   stayed identical and lacked AMMV metadata; the direct probe activated AMMV force and produced

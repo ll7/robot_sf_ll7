@@ -288,6 +288,31 @@ def test_metric_row_input_provenance_records_matched_jsonl_line(tmp_path: Path) 
     assert not case["episodes_jsonl_path"].startswith("/")
 
 
+def test_invalid_jsonl_error_reports_input_path_and_line(tmp_path: Path) -> None:
+    """Malformed metric rows fail with the JSONL source path and physical line number."""
+    trace_path = tmp_path / "trace.json"
+    trace_path.write_text(json.dumps(_make_dummy_trace("fail_ep_0", "fail_scen_0")))
+    record_path = tmp_path / "episodes.jsonl"
+    record_path.write_text(json.dumps({"episode_id": "other_ep_0"}) + "\n" + "{oops\n")
+    output_path = tmp_path / "result.json"
+
+    with pytest.raises(ValueError) as exc_info:
+        main(
+            [
+                "--traces",
+                str(trace_path),
+                "--episodes-jsonl",
+                str(record_path),
+                "--output-json",
+                str(output_path),
+            ]
+        )
+
+    message = str(exc_info.value)
+    assert "Invalid JSONL in episodes.jsonl at line 2" in message
+    assert "Expecting property name enclosed in double quotes" in message
+
+
 def test_missing_provenance_defaults_to_diagnostic_only(tmp_path: Path) -> None:
     """Missing provenance fails closed even when denominator evidence is planner-observable."""
     trace_path, record_path = _write_failure_inputs(tmp_path)

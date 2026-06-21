@@ -66,9 +66,10 @@ def _episode_collision_value(record: dict[str, Any]) -> tuple[float | None, str 
 
     outcome = record.get("outcome")
     if isinstance(outcome, dict) and "collision_event" in outcome:
-        return 1.0 if bool(outcome.get("collision_event")) else 0.0, (
-            "episode.outcome.collision_event"
-        )
+        event = outcome.get("collision_event")
+        if event is None:
+            return None, None
+        return 1.0 if bool(event) else 0.0, "episode.outcome.collision_event"
     return None, None
 
 
@@ -126,7 +127,7 @@ def summarize_collision_metrics(records: list[dict[str, Any]]) -> dict[str, Any]
     return {
         "collision": float(collision_count),
         "collision_count": float(collision_count),
-        "collision_rate": float(collided_episodes / denominator),
+        "collision_rate": float(collided_episodes / available),
         "collision_status": {
             "status": status,
             "reason": reason,

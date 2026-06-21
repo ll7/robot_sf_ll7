@@ -56,6 +56,7 @@ from robot_sf.benchmark.map_runner_batch_plan import (
     build_worker_fixed_params,
     resolve_batch_kinematics_tag,
 )
+from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -3636,6 +3637,27 @@ def test_run_map_batch_summary_populates_collision_metric(
         "reason": None,
         "denominator": 2,
         "source": "episode.metrics.collisions",
+    }
+
+
+def test_summarize_collision_metrics_preserves_missing_collision_events() -> None:
+    """Missing collision-event data should stay unavailable instead of coercing to no collision."""
+    summary = summarize_collision_metrics(
+        [
+            {"outcome": {"collision_event": None}},
+            {"outcome": {"collision_event": True}},
+            {"outcome": {"collision_event": False}},
+        ]
+    )
+
+    assert summary["collision"] == pytest.approx(1.0)
+    assert summary["collision_count"] == pytest.approx(1.0)
+    assert summary["collision_rate"] == pytest.approx(0.5)
+    assert summary["collision_status"] == {
+        "status": "partial",
+        "reason": "some successful records lacked collision metrics",
+        "denominator": 3,
+        "source": "episode.outcome.collision_event",
     }
 
 

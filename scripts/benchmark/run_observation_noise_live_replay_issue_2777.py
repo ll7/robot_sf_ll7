@@ -116,24 +116,22 @@ def _repo_path(path: Path) -> Path:
     return path if path.is_absolute() else REPO_ROOT / path
 
 
-def _read_yaml(path: Path) -> dict[str, Any]:
-    """Load a YAML mapping, treating missing or empty files as invalid."""
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path} must contain a YAML mapping")
-    return payload
-
-
 def _scenario_matrix_text(matrix_path: Path) -> str:
     """Return scenario matrix text with includes expanded one level when possible."""
-    text = matrix_path.read_text(encoding="utf-8")
+    raw_text = matrix_path.read_text(encoding="utf-8")
     try:
-        payload = yaml.safe_load(text) or {}
+        payload = yaml.safe_load(raw_text) or {}
     except yaml.YAMLError:
-        return text
+        return raw_text
     if not isinstance(payload, dict):
+        return raw_text
+    base_payload = dict(payload)
+    base_payload.pop("includes", None)
+    text = yaml.safe_dump(base_payload, sort_keys=False)
+    includes = payload.get("includes", []) or []
+    if not isinstance(includes, list):
         return text
-    for include in payload.get("includes", []) or []:
+    for include in includes:
         include_path = (matrix_path.parent / str(include)).resolve()
         if include_path.exists():
             text += "\n" + include_path.read_text(encoding="utf-8")
@@ -173,6 +171,7 @@ def _write_generated_funnel(
     horizon: int,
 ) -> Path:
     """Write a tiny funnel config that points diagnostics at the selected matrix."""
+    output_dir.mkdir(parents=True, exist_ok=True)
     funnel = {
         "stage_order": [stage],
         "stages": {
@@ -559,14 +558,31 @@ def _execute_conditions(
             funnel_config=funnel_config,
             args=args,
         )
-        completed = subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=args.timeout_seconds,
-        )
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=REPO_ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=args.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            blocker = (
+                f"{condition.name} live replay timed out after "
+                f"{args.timeout_seconds:.1f}s; stderr: {str(exc.stderr or '')[:500]}"
+            )
+            blockers.append(blocker)
+            conditions.append(
+                {
+                    "name": condition.name,
+                    "description": condition.description,
+                    "status": "blocked",
+                    "command": command,
+                    "blocker": blocker,
+                }
+            )
+            continue
         trace_path = output_dir / "traces" / condition.name / "trace.json"
         report_path = output_dir / "traces" / condition.name / "report.md"
         if completed.returncode != 0 or not trace_path.exists():

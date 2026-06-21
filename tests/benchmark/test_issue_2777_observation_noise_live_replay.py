@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -90,6 +91,61 @@ def test_dry_run_plans_all_live_diagnostics_commands(tmp_path: Path) -> None:
     assert "--occlusion-distance-m" in commands["occlusion_only"]
     assert "--missed-detection-probability" in commands["missed_detection_only"]
     assert (output_dir / "generated_policy_search_funnel.yaml").exists()
+
+
+def test_scalar_includes_are_ignored_for_fixture_detection(tmp_path: Path) -> None:
+    """Malformed scalar includes should not be iterated character-by-character."""
+    mod = _load_script()
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        "schema_version: robot_sf.scenario_matrix.v1\n"
+        "includes: ../single/issue_2756_occluded_emergence.yaml\n",
+        encoding="utf-8",
+    )
+
+    contract = mod._fixture_contract(matrix)
+
+    assert contract["satisfied"] is False
+    assert "blocker" in contract
+
+
+def test_live_condition_timeout_becomes_fail_closed_blocker(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Subprocess timeouts should produce a compact blocker instead of crashing."""
+    mod = _load_script()
+
+    def _raise_timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=["diagnostics"], timeout=0.01, stderr="hung")
+
+    monkeypatch.setattr(mod.subprocess, "run", _raise_timeout)
+    args = mod.parse_args(
+        [
+            "--scenario-matrix",
+            str(tmp_path / "matrix.yaml"),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--allow-non-occluded-live-fixture",
+        ]
+    )
+    funnel = mod._write_generated_funnel(
+        output_dir=args.output_dir,
+        scenario_matrix=args.scenario_matrix,
+        stage=args.stage,
+        horizon=args.horizon,
+    )
+
+    conditions, blockers = mod._execute_conditions(
+        args=args,
+        output_dir=args.output_dir,
+        funnel_config=funnel,
+    )
+
+    assert len(conditions) == 7
+    assert len(blockers) == 7
+    assert all(condition["status"] == "blocked" for condition in conditions)
+    assert "timed out" in blockers[0]
 
 
 def _write_trace(path: Path, *, command: list[float], observed_count: int, closest: float) -> None:

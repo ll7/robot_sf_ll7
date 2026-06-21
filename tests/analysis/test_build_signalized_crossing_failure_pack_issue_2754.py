@@ -313,6 +313,29 @@ def test_invalid_jsonl_error_reports_input_path_and_line(tmp_path: Path) -> None
     assert "Expecting property name enclosed in double quotes" in message
 
 
+def test_non_object_jsonl_error_reports_input_path_and_line(tmp_path: Path) -> None:
+    """Metric JSONL rows must be objects before provenance fields are attached."""
+    trace_path = tmp_path / "trace.json"
+    trace_path.write_text(json.dumps(_make_dummy_trace("fail_ep_0", "fail_scen_0")))
+    record_path = tmp_path / "episodes.jsonl"
+    record_path.write_text(json.dumps({"episode_id": "other_ep_0"}) + "\n" + "[]\n")
+    output_path = tmp_path / "result.json"
+
+    with pytest.raises(ValueError) as exc_info:
+        main(
+            [
+                "--traces",
+                str(trace_path),
+                "--episodes-jsonl",
+                str(record_path),
+                "--output-json",
+                str(output_path),
+            ]
+        )
+
+    assert "Invalid JSONL in episodes.jsonl at line 2: expected object" in str(exc_info.value)
+
+
 def test_missing_provenance_defaults_to_diagnostic_only(tmp_path: Path) -> None:
     """Missing provenance fails closed even when denominator evidence is planner-observable."""
     trace_path, record_path = _write_failure_inputs(tmp_path)

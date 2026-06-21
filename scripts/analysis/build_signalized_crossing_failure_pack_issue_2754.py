@@ -186,9 +186,11 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
                 except json.JSONDecodeError as exc:
                     msg = f"Invalid JSONL in {input_path} at line {line_number}: {exc.msg}"
                     raise ValueError(msg) from exc
-                if isinstance(record, dict):
-                    record[_METRIC_INPUT_PATH_KEY] = input_path
-                    record[_METRIC_INPUT_LINE_KEY] = line_number
+                if not isinstance(record, dict):
+                    msg = f"Invalid JSONL in {input_path} at line {line_number}: expected object"
+                    raise ValueError(msg)
+                record[_METRIC_INPUT_PATH_KEY] = input_path
+                record[_METRIC_INPUT_LINE_KEY] = line_number
                 records.append(record)
     return records
 

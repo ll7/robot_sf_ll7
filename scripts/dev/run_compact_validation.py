@@ -153,6 +153,7 @@ def run_compact_validation(
     elapsed = time.monotonic() - started
     combined = log_path.read_text(encoding="utf-8", errors="replace")
     excerpt, truncated = _failure_lines(combined, limit=excerpt_lines, width=excerpt_width)
+    failing_node_ids = _pytest_node_ids(combined) if returncode != 0 else []
     summary: dict[str, Any] = {
         "schema": SCHEMA_VERSION,
         "command": command,
@@ -168,7 +169,7 @@ def run_compact_validation(
         "summary_path": str(summary_path),
         "excerpt_line_count": len(excerpt),
         "excerpt_truncated": truncated,
-        "failing_node_ids": _pytest_node_ids(combined),
+        "failing_node_ids": failing_node_ids,
         "failure_excerpt": excerpt,
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")

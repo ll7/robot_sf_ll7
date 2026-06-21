@@ -23,6 +23,7 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
         "## What Changed",
         "## Why It Matters",
         "## Validation / Proof",
+        "## Domain-Aware Approval",
         "## Risks / Rollout",
         "## Docs / Provenance",
         "## Downstream Propagation",
@@ -33,6 +34,10 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
 
     assert "Commands run:" in text
     assert "Evidence that the change works here:" in text
+    assert "Required for this PR:" in text
+    assert "Domains reviewed:" in text
+    assert "Approver/review source or waiver:" in text
+    assert "Implementation integrity vs experimental validity:" in text
     assert "Deferred work:" in text
     assert "Issues opened for follow-up:" in text
     assert "Parent issue updated (yes/no/NA):" in text

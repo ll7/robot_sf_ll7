@@ -11,6 +11,8 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _apply_observed_pedestrians_to_policy_obs,
     _diagnostics_stdout_payload,
     _false_positive_actor_state_from_args,
+    _fixture_first_visible_step,
+    _fixture_visibility_mask,
     _format_planner_summary_lines,
     _observation_perturbation_spec,
     _occlusion_mask_by_distance,
@@ -272,6 +274,27 @@ def test_observation_perturbation_spec_includes_false_positive_actors() -> None:
     assert spec.false_positive_actor_count == 1
     np.testing.assert_array_equal(spec.false_positive_positions, [[1.0, 0.0]])
     assert spec.false_positive_ids == ["false_positive_0"]
+
+
+def test_fixture_visibility_mask_hides_until_first_visible_step() -> None:
+    """Fixture metadata should become an all-hidden mask before first visibility."""
+    scenario = {"metadata": {"fixture_contract": {"first_visible_step": 5}}}
+
+    first_visible_step = _fixture_first_visible_step(scenario)
+    hidden = _fixture_visibility_mask(
+        actor_count=2,
+        step=4,
+        first_visible_step=first_visible_step,
+    )
+    visible = _fixture_visibility_mask(
+        actor_count=2,
+        step=5,
+        first_visible_step=first_visible_step,
+    )
+
+    assert first_visible_step == 5
+    assert hidden.tolist() == [False, False]
+    assert visible is None
 
 
 def test_policy_obs_uses_observed_pedestrian_payload() -> None:

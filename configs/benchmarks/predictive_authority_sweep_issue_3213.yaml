@@ -1,0 +1,57 @@
+# Maneuver-authority sweep for the predictive planner hard-case bet (#3213).
+#
+# Isolates the *authority* lever of the hard-case breakthrough portfolio (#3215): every
+# variant holds the predictive scoring weights fixed (inherited from the base algo config)
+# and varies only the action lattice + turn authority. The comparator is `authority_baseline`
+# (the current `risk_aware_adaptive` lattice / turn authority from
+# configs/benchmarks/predictive_sweep_planner_grid_v1.yaml).
+#
+# evidence_tier: idea — this only *defines* a bounded sweep. It makes no success claim until a
+# GPU run records hard-seed results with uncertainty and clears the #3213 stop rule (adopt only
+# if hard success improves with non-regressing overall success + safety; otherwise record a
+# safety/quality tradeoff or a negative result).
+#
+# Keys under `params` are merged into the algorithm config passed to map_runner, identical in
+# shape to predictive_sweep_planner_grid_v1.yaml. Angles are radians
+# (0.785398 = 45 deg, 1.047198 = 60 deg, 1.570796 = 90 deg).
+#
+# Evaluate on a GPU node (sbatch / torch required; cannot run on a CPU-only host):
+#   uv run python scripts/validation/run_predictive_success_campaign.py \
+#     --checkpoints <predictive_baseline_ckpt> \
+#     --hard-seed-manifest configs/benchmarks/predictive_hard_seeds_v1.yaml \
+#     --planner-grid configs/benchmarks/predictive_authority_sweep_issue_3213.yaml \
+#     --closed-loop-gate-baseline-variant authority_baseline \
+#     --closed-loop-gate-min-hard-success-delta 0.0 \
+#     --closed-loop-gate-max-min-distance-regression 0.10
+variants:
+  # Comparator: current risk_aware_adaptive lattice / turn authority.
+  - name: authority_baseline
+    params:
+      predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.75, 1.0]
+      predictive_candidate_heading_deltas: [-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398]
+      predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5]
+      predictive_near_field_heading_deltas: [-1.570796, -1.047198, -0.785398, -0.523599, 0.0, 0.523599, 0.785398, 1.047198, 1.570796]
+
+  # Wider turn authority: extend the cruise-phase max heading delta 45 -> 60 deg (same count).
+  - name: authority_wide_turn
+    params:
+      predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.75, 1.0]
+      predictive_candidate_heading_deltas: [-1.047198, -0.698132, -0.349066, 0.0, 0.349066, 0.698132, 1.047198]
+      predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5]
+      predictive_near_field_heading_deltas: [-1.570796, -1.047198, -0.785398, -0.523599, 0.0, 0.523599, 0.785398, 1.047198, 1.570796]
+
+  # Denser action lattice within the baseline range: finer heading + speed resolution.
+  - name: authority_dense_lattice
+    params:
+      predictive_candidate_speeds: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+      predictive_candidate_heading_deltas: [-0.785398, -0.589049, -0.392699, -0.196350, 0.0, 0.196350, 0.392699, 0.589049, 0.785398]
+      predictive_near_field_speed_samples: [0.1, 0.2, 0.3, 0.4, 0.5]
+      predictive_near_field_heading_deltas: [-1.570796, -1.178097, -0.785398, -0.392699, 0.0, 0.392699, 0.785398, 1.178097, 1.570796]
+
+  # Maximum maneuver authority: wider AND denser cruise lattice + richer near-field turning.
+  - name: authority_wide_dense
+    params:
+      predictive_candidate_speeds: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+      predictive_candidate_heading_deltas: [-1.047198, -0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398, 1.047198]
+      predictive_near_field_speed_samples: [0.1, 0.2, 0.3, 0.4, 0.5]
+      predictive_near_field_heading_deltas: [-1.570796, -1.178097, -0.785398, -0.392699, 0.0, 0.392699, 0.785398, 1.178097, 1.570796]

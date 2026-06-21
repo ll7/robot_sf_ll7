@@ -1,0 +1,730 @@
+{
+  "schema_version": "issue_2777_observation_noise_live_replay.v1",
+  "artifact_shape": "compact_summary_without_raw_traces",
+  "issue": 2777,
+  "matrix_issue": 3323,
+  "status": "live_replay",
+  "classification": {
+    "label": "policy_insensitive",
+    "rationale": "All seven perturbation-family live replays completed."
+  },
+  "claim_boundary": "Stress-slice live planner/environment replay for one scenario, one seed, and seven #2755 perturbation families. Treat as benchmark-facing only when fixture_contract.satisfied is true; otherwise diagnostic-only.",
+  "inputs": {
+    "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
+    "raw_trace_json": "worktree-local generated artifacts summarized here; raw docs/context/evidence/issue_2777_live_observation_noise_replay/traces/*/trace.json files were intentionally not committed",
+    "generated_funnel": "worktree-local generated artifact summarized here; generated_policy_search_funnel.yaml was intentionally not committed"
+  },
+  "fixture_contract": {
+    "required_source_issue": 2756,
+    "required_scenario": "issue_2756_occluded_emergence",
+    "required_family": "occluded_emergence/deterministic_occluded_emergence",
+    "required_seed": 111,
+    "first_visible_step": 5,
+    "delay_steps": 2,
+    "delay_only_expected_first_observed_step": 7,
+    "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
+    "satisfied": true,
+    "blocker": null,
+    "matched_scenario": {
+      "name": "issue_2756_occluded_emergence",
+      "source_issue": 2756,
+      "family": "occluded_emergence",
+      "label": "deterministic_occluded_emergence",
+      "seeds": [
+        111
+      ],
+      "first_visible_step": 5,
+      "delay_steps": 2,
+      "delay_only_expected_first_observed_step": 7
+    }
+  },
+  "fixture_observation_boundary": {
+    "noop_first_observed_step": 5,
+    "delay_only_first_observed_step": 7,
+    "expected_noop_first_observed_step": 5,
+    "expected_delay_only_first_observed_step": 7
+  },
+  "run_config": {
+    "candidate": "risk_surface_dwa_v0",
+    "stage": "smoke",
+    "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
+    "scenario_name": null,
+    "scenario_index": 0,
+    "seed": null,
+    "seed_index": 0,
+    "horizon": 50,
+    "output_dir": "docs/context/evidence/issue_2777_live_observation_noise_replay",
+    "allow_non_occluded_live_fixture": false,
+    "dry_run": false
+  },
+  "conditions": [
+    {
+      "name": "noop",
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "fixture_visibility",
+          "none"
+        ]
+      },
+      "command_summary": {
+        "first": [
+          2.0,
+          0.0
+        ],
+        "last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_summary": {
+        "net_goal_progress": 0.017716584144122027,
+        "best_goal_progress": 0.017716584144122027,
+        "closest_robot_ped_distance": 1.65520666531114,
+        "closest_robot_ped_step": 14,
+        "collision_flag_counts": {
+          "pedestrian": 0,
+          "obstacle": 0,
+          "robot": 0
+        },
+        "progress_step_count": 14,
+        "regression_step_count": 1,
+        "stagnant_step_count": 0,
+        "longest_stagnant_run": 0
+      }
+    },
+    {
+      "name": "low_noise",
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "bounded_gaussian"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "medium_noise",
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "bounded_gaussian"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "missed_detection_only",
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": null
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 15,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 0,
+        "noise_profiles": [
+          "missed_detection"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "occlusion_only",
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 10,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "occlusion_mask"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "delay_only",
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 7
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "delayed_observation"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    },
+    {
+      "name": "combined",
+      "status": "live_replay",
+      "scenario": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_mode": {
+        "candidate": "risk_surface_dwa_v0",
+        "algo": "risk_surface_dwa",
+        "stage": "smoke"
+      },
+      "fixture_visibility": {
+        "noop_first_observed_step": 5,
+        "condition_first_observed_step": 5
+      },
+      "observation_summary": {
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 10,
+        "visibility_hidden_actor_observations_total": 5,
+        "min_observed_actor_count": 0,
+        "max_observed_actor_count": 1,
+        "noise_profiles": [
+          "bounded_gaussian"
+        ]
+      },
+      "command_summary": {
+        "sequence_changed": false,
+        "noop_first": [
+          2.0,
+          0.0
+        ],
+        "condition_first": [
+          2.0,
+          0.0
+        ],
+        "noop_last": [
+          1.2,
+          0.0
+        ],
+        "condition_last": [
+          1.2,
+          0.0
+        ]
+      },
+      "progress_delta": {
+        "net_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "best_goal_progress": {
+          "noop": 0.017716584144122027,
+          "condition": 0.017716584144122027,
+          "changed": false
+        },
+        "closest_robot_ped_distance": {
+          "noop": 1.65520666531114,
+          "condition": 1.65520666531114,
+          "changed": false
+        },
+        "closest_robot_ped_step": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "collision_flag_counts": {
+          "noop": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "condition": {
+            "pedestrian": 0,
+            "obstacle": 0,
+            "robot": 0
+          },
+          "changed": false
+        },
+        "progress_step_count": {
+          "noop": 14,
+          "condition": 14,
+          "changed": false
+        },
+        "regression_step_count": {
+          "noop": 1,
+          "condition": 1,
+          "changed": false
+        },
+        "stagnant_step_count": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        },
+        "longest_stagnant_run": {
+          "noop": 0,
+          "condition": 0,
+          "changed": false
+        }
+      },
+      "classification": {
+        "label": "policy_insensitive",
+        "rationale": "Perturbation changed planner-input observations in a near-field trace, but selected commands and progress/risk summaries were identical."
+      }
+    }
+  ]
+}

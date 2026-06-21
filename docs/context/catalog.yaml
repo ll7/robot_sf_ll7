@@ -81,6 +81,10 @@ entries:
     status: current
     freshness: policy
     area: benchmark_evidence
+  - path: docs/context/issue_3290_simulation_model_credibility_checklist.md
+    status: current
+    freshness: policy
+    area: benchmark_evidence
   - path: docs/context/issue_1584_socnav_unavailable_row_policy.md
     status: current
     freshness: policy
@@ -1539,6 +1543,14 @@ entries:
     freshness: evidence
     area: benchmark_evidence
   - path: docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2777_live_observation_noise_replay/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2777_live_observation_noise_replay/summary.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

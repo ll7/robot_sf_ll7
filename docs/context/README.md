@@ -139,6 +139,8 @@ knowledge, not every transient iteration detail.
   [issue_3028_external_simulator_bridge_preflight.md](issue_3028_external_simulator_bridge_preflight.md)
 * Issue #1894 SLURM job finalizer:
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
+* Issue #3075 durable artifact backend decision (W&B):
+  [issue_3075_durable_artifact_backend.md](issue_3075_durable_artifact_backend.md)
 * Issue #2232 planner mechanism transfer benchmark protocol:
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Issue #3064 behavior-variant inventory:
@@ -352,6 +354,8 @@ knowledge, not every transient iteration detail.
   [issue_2928_socnavbench_hunavsim_metric_correspondence.md](issue_2928_socnavbench_hunavsim_metric_correspondence.md)
 * Issue #2930 External Benchmark Positioning:
   [issue_2930_external_benchmark_positioning.md](issue_2930_external_benchmark_positioning.md)
+* Issue #3290 Simulation Model Credibility Checklist:
+  [issue_3290_simulation_model_credibility_checklist.md](issue_3290_simulation_model_credibility_checklist.md)
 * Issue #2442 Navground planner-zoo assessment:
   [issue_2442_navground_assessment.md](issue_2442_navground_assessment.md)
 * Issue #2550 (2026-06-11): Navground Adapter Spike Report:

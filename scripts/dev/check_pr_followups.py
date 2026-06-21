@@ -44,6 +44,20 @@ EMPTY_OR_PLACEHOLDER = {
     "#<id>",
     "<id>",
 }
+DOMAIN_APPROVAL_NOT_REQUIRED = {
+    "docs-only",
+    "docs only",
+    "n/a",
+    "na",
+    "not applicable",
+}
+DOMAIN_VALIDITY_LABELS = (
+    "Target claim/hypothesis",
+    "Comparator or split/evidence validity",
+    "Fallback/degraded exclusions",
+    "Claim boundary",
+    "Implementation integrity vs experimental validity",
+)
 
 
 @dataclass(frozen=True)
@@ -56,6 +70,20 @@ class FollowupReport:
     linked_issues: tuple[str, ...]
     explicit_no_issue_reason: str
     issue_state_errors: tuple[str, ...]
+    message: str
+
+
+@dataclass(frozen=True)
+class DomainApprovalReport:
+    """Compact domain-aware approval report for evidence-validity-sensitive PRs."""
+
+    status: str
+    source: str
+    sensitive_terms: tuple[str, ...]
+    required: str
+    approval_status: str
+    approval_note: str
+    checklist_errors: tuple[str, ...]
     message: str
 
 
@@ -74,6 +102,15 @@ def _clean_value(text: str) -> str:
 def _is_empty_or_placeholder(text: str) -> bool:
     value = _clean_value(text).lower()
     return value in EMPTY_OR_PLACEHOLDER or value.startswith("#<")
+
+
+def _is_option_placeholder(text: str) -> bool:
+    """Return whether a PR template option list was left unselected."""
+    return " / " in _clean_value(text).lower()
+
+
+def _is_empty_or_option_placeholder(text: str) -> bool:
+    return _is_empty_or_placeholder(text) or _is_option_placeholder(text)
 
 
 def _is_no_issue_reason(text: str) -> bool:
@@ -153,6 +190,13 @@ def _value_after_label(section: str, label: str) -> str:
         "issues opened for follow up",
         "issues opened for followup",
         "follow up issues",
+        "required for this pr",
+        "domains reviewed",
+        "status",
+        "approver review source or waiver",
+        "approval or blocker note",
+        "validity checklist",
+        *(_normalize_label(label) for label in DOMAIN_VALIDITY_LABELS),
     }
     for index, line in enumerate(lines):
         item = _strip_bullet_prefix(line)
@@ -184,6 +228,53 @@ def _value_after_label(section: str, label: str) -> str:
 
 def _linked_issues(text: str) -> tuple[str, ...]:
     return tuple(f"#{match}" for match in sorted(set(ISSUE_RE.findall(text)), key=int))
+
+
+def _domain_value_not_required(text: str) -> bool:
+    """Return whether a domain-approval trigger field explicitly opts out."""
+    value = _clean_value(text).lower()
+    if _is_option_placeholder(text):
+        return False
+    if value in DOMAIN_APPROVAL_NOT_REQUIRED or value in EMPTY_OR_PLACEHOLDER:
+        return True
+    return any(_has_value_prefix(value, prefix) for prefix in DOMAIN_APPROVAL_NOT_REQUIRED)
+
+
+def _has_value_prefix(value: str, prefix: str) -> bool:
+    """Return whether *value* starts with *prefix* as a standalone token."""
+    if not value.startswith(prefix):
+        return False
+    rest = value[len(prefix) :]
+    return not rest or rest[0] in " -:,()"
+
+
+def _domain_approval_triggers(body: str) -> tuple[str, ...]:
+    """Return template-field triggers that require domain-aware approval."""
+    section = _extract_section(body, "Research Result Guidance")
+    if not section:
+        return ()
+    triggers: list[str] = []
+    for label in ("Evidence tier", "Result classification"):
+        value = _value_after_label(section, label)
+        if value and not _domain_value_not_required(value):
+            triggers.append(f"{label}: {value}")
+    return tuple(triggers)
+
+
+def _domain_checklist_errors(section: str) -> tuple[str, ...]:
+    """Return missing or placeholder validity-checklist fields."""
+    errors: list[str] = []
+    for label in DOMAIN_VALIDITY_LABELS:
+        value = _value_after_label(section, label)
+        cleaned = _clean_value(value)
+        if (
+            not cleaned
+            or cleaned == "-"
+            or cleaned.startswith("#<")
+            or _is_option_placeholder(value)
+        ):
+            errors.append(label)
+    return tuple(errors)
 
 
 def _verify_open_issues(issues: tuple[str, ...]) -> tuple[str, ...]:
@@ -308,6 +399,140 @@ def analyze_body(body: str, *, source: str, require_open_issues: bool = False) -
     )
 
 
+def analyze_domain_approval(body: str, *, source: str) -> DomainApprovalReport:
+    """Return whether domain-sensitive PR bodies carry explicit approval or blocker status."""
+    sensitive_terms = _domain_approval_triggers(body)
+    if not sensitive_terms:
+        return DomainApprovalReport(
+            status="ok",
+            source=source,
+            sensitive_terms=(),
+            required="",
+            approval_status="",
+            approval_note="",
+            checklist_errors=(),
+            message="No domain-sensitive evidence-validity trigger found.",
+        )
+
+    section = _extract_section(body, "Domain-Aware Approval")
+    if not section:
+        return DomainApprovalReport(
+            status="missing_domain_approval",
+            source=source,
+            sensitive_terms=sensitive_terms,
+            required="",
+            approval_status="",
+            approval_note="",
+            checklist_errors=(),
+            message=(
+                "Domain-sensitive evidence-validity terms are present; add a "
+                "Domain-Aware Approval section with approval, waiver, or blocker details."
+            ),
+        )
+
+    required = _value_after_label(section, "Required for this PR")
+    domains = _value_after_label(section, "Domains reviewed")
+    approval_status = _value_after_label(section, "Status")
+    approval_note = _value_after_label(section, "Approver/review source or waiver")
+    if not approval_note:
+        approval_note = _value_after_label(section, "Approval or blocker note")
+    checklist_errors = _domain_checklist_errors(section)
+    required_value = _clean_value(required).lower()
+    status_value = _clean_value(approval_status).lower()
+    note_value = _clean_value(approval_note)
+
+    if _is_empty_or_option_placeholder(required) or any(
+        _has_value_prefix(required_value, prefix)
+        for prefix in ("no", "n/a", "na", "not applicable")
+    ):
+        return DomainApprovalReport(
+            status="domain_approval_required",
+            source=source,
+            sensitive_terms=sensitive_terms,
+            required=required,
+            approval_status=approval_status,
+            approval_note=approval_note,
+            checklist_errors=checklist_errors,
+            message=(
+                "Domain-sensitive evidence-validity terms are present; this PR must state "
+                "that domain-aware approval is required or name the blocker."
+            ),
+        )
+    if (
+        _is_empty_or_option_placeholder(domains)
+        or _is_empty_or_option_placeholder(approval_status)
+        or _is_empty_or_option_placeholder(approval_note)
+    ):
+        return DomainApprovalReport(
+            status="missing_domain_approval_note",
+            source=source,
+            sensitive_terms=sensitive_terms,
+            required=required,
+            approval_status=approval_status,
+            approval_note=approval_note,
+            checklist_errors=checklist_errors,
+            message=(
+                "Domain-aware approval requires reviewed domains, a non-empty status, "
+                "and an approver/review source or waiver reason."
+            ),
+        )
+    if checklist_errors:
+        return DomainApprovalReport(
+            status="incomplete_domain_approval",
+            source=source,
+            sensitive_terms=sensitive_terms,
+            required=required,
+            approval_status=approval_status,
+            approval_note=approval_note,
+            checklist_errors=checklist_errors,
+            message=(
+                "Domain-aware approval requires completed validity-checklist fields: "
+                f"{', '.join(checklist_errors)}."
+            ),
+        )
+    if re.search(r"\b(blocked?|blocker|no|not|pending|awaiting)\b", status_value):
+        return DomainApprovalReport(
+            status=(
+                "pending_domain_approval"
+                if re.search(r"\b(blocked?|blocker|pending|awaiting)\b", status_value)
+                else "invalid_domain_approval_status"
+            ),
+            source=source,
+            sensitive_terms=sensitive_terms,
+            required=required,
+            approval_status=approval_status,
+            approval_note=approval_note,
+            checklist_errors=checklist_errors,
+            message=(
+                "Domain-aware approval status must say approved or waived before final readiness."
+            ),
+        )
+    if not re.search(r"\b(approved?|waived|waiver)\b", status_value):
+        return DomainApprovalReport(
+            status="invalid_domain_approval_status",
+            source=source,
+            sensitive_terms=sensitive_terms,
+            required=required,
+            approval_status=approval_status,
+            approval_note=approval_note,
+            checklist_errors=checklist_errors,
+            message=(
+                "Domain-aware approval status must say approved or waived before final readiness."
+            ),
+        )
+
+    return DomainApprovalReport(
+        status="ok",
+        source=source,
+        sensitive_terms=sensitive_terms,
+        required=required,
+        approval_status=approval_status,
+        approval_note=note_value,
+        checklist_errors=(),
+        message="Domain-aware approval or waiver is explicit.",
+    )
+
+
 def _read_event_body(path: Path) -> str | None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     pull_request = payload.get("pull_request")
@@ -346,6 +571,21 @@ def _format_report(report: FollowupReport) -> str:
         f"status={report.status}; source={report.source}; deferred={deferred!r}; "
         f"linked_issues={issue_text}; no_issue_reason={no_issue!r}; "
         f"issue_state_errors={state_errors!r}; {report.message}"
+    )
+
+
+def _format_domain_report(report: DomainApprovalReport) -> str:
+    terms = ", ".join(report.sensitive_terms) if report.sensitive_terms else "none"
+    required = report.required if report.required else "none"
+    approval_status = report.approval_status if report.approval_status else "none"
+    approval_note = report.approval_note if report.approval_note else "none"
+    checklist_errors = ", ".join(report.checklist_errors) if report.checklist_errors else "none"
+    return (
+        "PR domain-approval check: "
+        f"status={report.status}; source={report.source}; sensitive_terms={terms}; "
+        f"required={required!r}; approval_status={approval_status!r}; "
+        f"approval_note={approval_note!r}; checklist_errors={checklist_errors!r}; "
+        f"{report.message}"
     )
 
 
@@ -398,26 +638,41 @@ def main(argv: list[str] | None = None) -> int:
         "PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES", ""
     ).lower() in {"1", "true", "yes", "on"}
     report = analyze_body(body, source=source, require_open_issues=require_open)
+    domain_report = analyze_domain_approval(body, source=source)
+    failing_statuses = {
+        "missing_followup",
+        "missing_section",
+        "issue_state_error",
+        "residual_scope_without_followup",
+    }
+    domain_failing_statuses = {
+        "missing_domain_approval",
+        "domain_approval_required",
+        "missing_domain_approval_note",
+        "incomplete_domain_approval",
+        "pending_domain_approval",
+        "invalid_domain_approval_status",
+    }
     if args.json:
-        print(json.dumps(report.__dict__, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "followups": report.__dict__,
+                    "domain_approval": domain_report.__dict__,
+                },
+                sort_keys=True,
+            )
+        )
     else:
-        failing_statuses = {
-            "missing_followup",
-            "missing_section",
-            "issue_state_error",
-            "residual_scope_without_followup",
-        }
         stream = sys.stderr if report.status in failing_statuses else sys.stdout
         print(_format_report(report), file=stream)
+        domain_stream = (
+            sys.stderr if domain_report.status in domain_failing_statuses else sys.stdout
+        )
+        print(_format_domain_report(domain_report), file=domain_stream)
     return (
         2
-        if report.status
-        in {
-            "missing_followup",
-            "missing_section",
-            "issue_state_error",
-            "residual_scope_without_followup",
-        }
+        if report.status in failing_statuses or domain_report.status in domain_failing_statuses
         else 0
     )
 

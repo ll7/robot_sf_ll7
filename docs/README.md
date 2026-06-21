@@ -202,6 +202,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Hazard Traceability](./hazard_traceability.md)** - `hazard_traceability.v1` schema, typed loader, fixture, and coverage summary for scenario-to-hazard evidence caveats
 * **[ODD Contracts](./odd_contracts.md)** - `odd_contract.v1` schema, typed loader, fixture, and boundary for benchmark and falsification evidence assumptions
 * **[Simulation-Evidence Safety Case Template](./simulation_evidence_safety_case.md)** - Public-safe scaffold for mapping Robot SF simulation evidence, provenance, credibility gaps, and outside-simulation evidence requirements without implying certification
+* **[Simulation Model Credibility Checklist](./context/issue_3290_simulation_model_credibility_checklist.md)** - Compact verification-vs-validation checklist and template for deciding whether simulation campaign evidence can support a stated benchmark or release claim
 * **[Scenario Contracts](./scenario_contracts.md)** - `scenario_contract.v1` schema, typed loader, fixture, and boundary between authored intent, certification, and benchmark evidence
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
 * **[Scenario Perturbation Manifest](./scenario_perturbation_manifest.md)** - `scenario_perturbation_manifest.v1` schema, no-op and bounded route-offset preflight, and evidence boundary for perturbation pilots

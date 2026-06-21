@@ -69,6 +69,9 @@ Use validation proportional to risk.
   and verify changed links or referenced paths where practical.
 - Runtime, benchmark, metric, schema, model-provenance, and paper-facing changes need executable
   proof appropriate to the claim.
+- PRs that alter evidence classification, experimental comparison methodology, figure eligibility,
+  benchmark interpretation, or paper-facing claim surfaces need explicit domain-aware approval or a
+  stated blocker before they are treated as merge-ready.
 - Low-value tests may be removed without maintainer approval when the reason is unambiguous and
   documented, provided repository coverage expectations still hold or the remaining gap is tracked.
   Do not assume flaky tests are common; classify each failure before broad policy changes.

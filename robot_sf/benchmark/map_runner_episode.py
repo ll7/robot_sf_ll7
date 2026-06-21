@@ -12,6 +12,7 @@ import numpy as np
 from loguru import logger
 
 from robot_sf.benchmark.algorithm_metadata import (
+    canonical_algorithm_name,
     enrich_algorithm_metadata,
     infer_execution_mode_from_counts,
     resolve_observation_mode,
@@ -211,9 +212,23 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         scenario=scenario,
         seed=int(seed),
     )
+    requested_observation_mode = observation_mode
+    if (
+        requested_observation_mode is None
+        and observation_level is None
+        and canonical_algorithm_name(algo) == "ppo"
+        and str(policy_cfg.get("obs_mode", "")).strip().lower()
+        in {"dict", "native_dict", "multi_input"}
+    ):
+        # Grid/dict PPO checkpoints require the SocNav structured
+        # (occupancy-grid) observation they were trained with. The PPO spec
+        # default (sensor_fusion_state) disables the occupancy grid, so a
+        # dict-obs checkpoint would otherwise fail with "Missing required dict
+        # observation keys". Select the structured stack when none was requested.
+        requested_observation_mode = "socnav_state"
     active_observation_mode = resolve_observation_mode(
         algo,
-        observation_mode,
+        requested_observation_mode,
         observation_level=observation_level,
     )
     _apply_active_observation_mode_to_env_config(

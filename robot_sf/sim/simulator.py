@@ -531,6 +531,16 @@ class PedSimulator(Simulator):
         """
         return self.robots[0].pos
 
+    @property
+    def ego_ped_next_goal_pos(self) -> Vec2D | None:
+        """Return the route target after the ego pedestrian's current target.
+
+        The ego pedestrian's current target is the robot position. The following point is therefore
+        the robot's current route goal, which lets the target sensor expose the robot's route
+        direction without changing the existing robot-chasing goal contract.
+        """
+        return self.goal_pos[0] if self.goal_pos else None
+
     def _sync_ego_ped_social_force_state(self) -> None:
         """Synchronize the appended ego-pedestrian row in the PySF state array."""
         pysf_states = self.pysf_state.pysf_states()

@@ -578,11 +578,12 @@ def init_ped_collision_and_sensors(
         Returns:
             np.ndarray: Target sensor observation (goal direction and distances).
         """
+        next_goal_pos = sim.ego_ped_next_goal_pos if sim_config.use_next_goal else None
         return target_sensor_obs(
             sim.ego_ped.pose,
             sim.ego_ped_goal_pos,
-            None,
-        )  # TODO: What next goal to choose?
+            next_goal_pos,
+        )
 
     def speed_sensor_ego_ped():
         """Capture current speed for the ego pedestrian.
@@ -598,9 +599,9 @@ def init_ped_collision_and_sensors(
             speed_sensor_ego_ped,
             target_sensor_ego_ped,
             orig_obs_space[1],
-            False,
+            sim_config.use_next_goal,
         ),
-    )  # Ego pedestrian does not have a next goal
+    )
 
     # Format: [robot, ego_pedestrian]
     return occupancies, sensor_fusions

@@ -139,6 +139,8 @@ knowledge, not every transient iteration detail.
   [issue_3028_external_simulator_bridge_preflight.md](issue_3028_external_simulator_bridge_preflight.md)
 * Issue #1894 SLURM job finalizer:
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
+* Issue #3075 durable artifact backend decision (W&B):
+  [issue_3075_durable_artifact_backend.md](issue_3075_durable_artifact_backend.md)
 * Issue #2232 planner mechanism transfer benchmark protocol:
   [issue_2232_planner_mechanism_transfer_benchmark.md](issue_2232_planner_mechanism_transfer_benchmark.md)
 * Issue #3064 behavior-variant inventory:

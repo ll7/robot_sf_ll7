@@ -24,6 +24,7 @@ NOISE_PROFILE_GAUSSIAN = "bounded_gaussian"
 NOISE_PROFILE_MISSED_DETECTION = "missed_detection"
 NOISE_PROFILE_OCCLUSION_MASK = "occlusion_mask"
 NOISE_PROFILE_DELAYED_OBSERVATION = "delayed_observation"
+NOISE_PROFILE_FALSE_POSITIVE = "false_positive_actor_injection"
 NOISE_PROFILE_FIXTURE_VISIBILITY = "fixture_visibility"
 EVIDENCE_IDEAL = "ideal_state"
 EVIDENCE_PERCEPTION_LIMITED = "perception_limited"
@@ -37,6 +38,9 @@ class ObservationPerturbationSpec:
     position_noise_bound_m: float = 0.0
     missed_detection_probability: float = 0.0
     occlusion_mask: np.ndarray | None = None
+    false_positive_positions: np.ndarray | list[list[float]] | None = None
+    false_positive_velocities: np.ndarray | list[list[float]] | None = None
+    false_positive_ids: tuple[str, ...] | list[str] | None = None
     delay_steps: int = 0
     visibility_mask: np.ndarray | None = None
     seed: int | None = None
@@ -51,6 +55,31 @@ class ObservationPerturbationSpec:
             raise ValueError("missed_detection_probability must be between 0 and 1")
         if self.delay_steps < 0:
             raise ValueError("delay_steps must be >= 0")
+        false_positive_count = self.false_positive_actor_count
+        if self.false_positive_velocities is not None:
+            velocities = np.asarray(self.false_positive_velocities, dtype=np.float64)
+            if velocities.shape != (false_positive_count, 2):
+                raise ValueError(
+                    f"false_positive_velocities must have shape ({false_positive_count}, 2)"
+                )
+        if self.false_positive_ids is not None and len(self.false_positive_ids) != (
+            false_positive_count
+        ):
+            raise ValueError(
+                "false_positive_ids length must match false_positive_positions actor count"
+            )
+
+    @property
+    def false_positive_actor_count(self) -> int:
+        """Return the number of observed-only actors requested by the spec."""
+        if self.false_positive_positions is None:
+            return 0
+        positions = np.asarray(self.false_positive_positions, dtype=np.float64)
+        if positions.size == 0:
+            return 0
+        if positions.ndim != 2 or positions.shape[1] != 2:
+            raise ValueError("false_positive_positions must have shape (N, 2)")
+        return int(positions.shape[0])
 
     @property
     def is_noop(self) -> bool:
@@ -59,6 +88,7 @@ class ObservationPerturbationSpec:
             self.position_noise_std_m <= 0.0
             and self.missed_detection_probability <= 0.0
             and self.occlusion_mask is None
+            and self.false_positive_actor_count == 0
             and self.delay_steps <= 0
             and self.visibility_mask is None
         )
@@ -76,6 +106,8 @@ class ObservationPerturbationSpec:
             return NOISE_PROFILE_OCCLUSION_MASK
         if self.delay_steps > 0:
             return NOISE_PROFILE_DELAYED_OBSERVATION
+        if self.false_positive_actor_count > 0:
+            return NOISE_PROFILE_FALSE_POSITIVE
         if self.visibility_mask is not None:
             return NOISE_PROFILE_FIXTURE_VISIBILITY
         return NOISE_PROFILE_NONE
@@ -177,8 +209,13 @@ def _build_delayed_result(ctx: _DelayedResultContext) -> dict[str, Any]:
             "velocities": ctx.gt_vel.copy(),
             "ids": list(ctx.actor_ids),
         }
-    observed_out = delayed_snapshot
+    observed_out = {
+        "positions": delayed_snapshot["positions"],
+        "velocities": delayed_snapshot["velocities"],
+        "ids": list(delayed_snapshot["ids"]),
+    }
     observed_actor_count = observed_out["positions"].shape[0]
+    false_positive_actor_count = int(delayed_snapshot.get("false_positive_actor_count", 0) or 0)
     missing_ids = [aid for aid in ctx.actor_ids if aid not in observed_out["ids"]]
     return {
         "ground_truth": {
@@ -197,12 +234,56 @@ def _build_delayed_result(ctx: _DelayedResultContext) -> dict[str, Any]:
             "missed_actor_count": int(ctx.missed_mask.sum()),
             "occluded_actor_count": int(ctx.occluded_mask.sum()),
             "visibility_hidden_actor_count": int(ctx.visibility_hidden_mask.sum()),
+            "false_positive_actor_count": false_positive_actor_count,
             "delay_steps": ctx.delay,
             "step": ctx.step,
             "actor_count": ctx.n_actors,
             "observed_actor_count": observed_actor_count,
         },
     }
+
+
+def _false_positive_state(
+    spec: ObservationPerturbationSpec,
+) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """Return normalized observed-only false-positive actor state."""
+    count = spec.false_positive_actor_count
+    if count == 0:
+        return (
+            np.zeros((0, 2), dtype=np.float64),
+            np.zeros((0, 2), dtype=np.float64),
+            [],
+        )
+    positions = np.asarray(spec.false_positive_positions, dtype=np.float64).reshape(count, 2)
+    if spec.false_positive_velocities is None:
+        velocities = np.zeros_like(positions)
+    else:
+        velocities = np.asarray(spec.false_positive_velocities, dtype=np.float64).reshape(count, 2)
+    if spec.false_positive_ids is None:
+        ids = [f"false_positive_{idx}" for idx in range(count)]
+    else:
+        ids = [str(actor_id) for actor_id in spec.false_positive_ids]
+    return positions.copy(), velocities.copy(), ids
+
+
+def _append_false_positive_state(
+    obs_pos: np.ndarray,
+    obs_vel_out: np.ndarray,
+    ids_out: list[str],
+    spec: ObservationPerturbationSpec,
+) -> tuple[np.ndarray, np.ndarray, list[str], int]:
+    """Append observed-only false-positive actors to the observed state.
+
+    Returns:
+        Observed positions, velocities, IDs, and false-positive actor count.
+    """
+    false_pos, false_vel, false_ids = _false_positive_state(spec)
+    false_positive_count = false_pos.shape[0]
+    if false_positive_count == 0:
+        return obs_pos, obs_vel_out, ids_out, 0
+    obs_pos = np.vstack([obs_pos, false_pos]) if obs_pos.size else false_pos
+    obs_vel_out = np.vstack([obs_vel_out, false_vel]) if obs_vel_out.size else false_vel
+    return obs_pos, obs_vel_out, [*ids_out, *false_ids], false_positive_count
 
 
 def _compute_observed_state(
@@ -213,11 +294,12 @@ def _compute_observed_state(
     n_actors: int,
     spec: ObservationPerturbationSpec,
     rng: np.random.Generator,
-) -> tuple[np.ndarray, np.ndarray, list[str], np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, list[str], np.ndarray, np.ndarray, np.ndarray, int]:
     """Compute the observed state after missed detections, noise, and occlusion.
 
     Returns:
-        Tuple of observed state plus missed, occluded, and fixture-hidden masks.
+        Tuple of observed state plus missed, occluded, fixture-hidden masks, and
+        observed-only false-positive actor count.
     """
     missed_mask = np.zeros(n_actors, dtype=bool)
     occluded_mask = np.zeros(n_actors, dtype=bool)
@@ -272,7 +354,22 @@ def _compute_observed_state(
             obs_pos[i] = 0.0
             obs_vel_out[i] = 0.0
 
-    return obs_pos, obs_vel_out, ids_out, missed_mask, occluded_mask, visibility_hidden_mask
+    obs_pos, obs_vel_out, ids_out, false_positive_count = _append_false_positive_state(
+        obs_pos,
+        obs_vel_out,
+        ids_out,
+        spec,
+    )
+
+    return (
+        obs_pos,
+        obs_vel_out,
+        ids_out,
+        missed_mask,
+        occluded_mask,
+        visibility_hidden_mask,
+        false_positive_count,
+    )
 
 
 def perturb_ground_truth(
@@ -339,6 +436,7 @@ def perturb_ground_truth(
                 "missed_actor_count": 0,
                 "occluded_actor_count": 0,
                 "visibility_hidden_actor_count": 0,
+                "false_positive_actor_count": 0,
                 "delay_steps": 0,
                 "step": step,
                 "actor_count": n_actors,
@@ -355,6 +453,7 @@ def perturb_ground_truth(
         missed_mask,
         occluded_mask,
         visibility_hidden_mask,
+        false_positive_actor_count,
     ) = _compute_observed_state(
         gt_pos=gt_pos,
         gt_vel=gt_vel,
@@ -368,6 +467,7 @@ def perturb_ground_truth(
         "positions": obs_pos.copy(),
         "velocities": obs_vel_out.copy(),
         "ids": list(ids_out),
+        "false_positive_actor_count": int(false_positive_actor_count),
     }
 
     delay = spec.delay_steps
@@ -405,6 +505,7 @@ def perturb_ground_truth(
             "missed_actor_count": int(missed_mask.sum()),
             "occluded_actor_count": int(occluded_mask.sum()),
             "visibility_hidden_actor_count": int(visibility_hidden_mask.sum()),
+            "false_positive_actor_count": int(false_positive_actor_count),
             "delay_steps": 0,
             "step": step,
             "actor_count": n_actors,

@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import argparse
+
+import numpy as np
 import pytest
 
 from scripts.validation.run_policy_search_step_diagnostics import (
     _apply_observed_pedestrians_to_policy_obs,
     _diagnostics_stdout_payload,
+    _false_positive_actor_state_from_args,
     _fixture_first_visible_step,
     _fixture_visibility_mask,
     _format_planner_summary_lines,
+    _observation_perturbation_spec,
     _occlusion_mask_by_distance,
     _pedestrian_state_from_sim,
     _trace_observation_payload,
+    _trace_planner_execution_mode,
     _trace_progress_summary,
 )
 
@@ -161,6 +167,41 @@ def test_trace_progress_summary_missing_steps_break_stagnant_runs() -> None:
     assert summary["longest_stagnant_run"] == 1
 
 
+def test_trace_planner_execution_mode_uses_observed_step_modes() -> None:
+    """Run-level mode should reflect per-step execution instead of the default alone."""
+    single_mode = _trace_planner_execution_mode(
+        [
+            {"planner_execution_mode": "command_adapter"},
+            {"planner_execution_mode": "command_adapter"},
+        ],
+        default_execution_mode="native_env_action",
+    )
+    mixed_mode = _trace_planner_execution_mode(
+        [
+            {"planner_execution_mode": "native_env_action"},
+            {"planner_execution_mode": "command_adapter"},
+        ],
+        default_execution_mode="native_env_action",
+    )
+    empty_mode = _trace_planner_execution_mode(
+        [],
+        default_execution_mode="command_adapter",
+    )
+
+    assert single_mode == {
+        "planner_execution_mode": "command_adapter",
+        "planner_execution_modes_observed": ["command_adapter"],
+    }
+    assert mixed_mode == {
+        "planner_execution_mode": "mixed",
+        "planner_execution_modes_observed": ["command_adapter", "native_env_action"],
+    }
+    assert empty_mode == {
+        "planner_execution_mode": "command_adapter",
+        "planner_execution_modes_observed": [],
+    }
+
+
 def test_planner_summary_lines_render_nested_diagnostics() -> None:
     """Markdown reports should expose planner summaries without opening trace JSON."""
     lines = _format_planner_summary_lines(
@@ -228,6 +269,47 @@ def test_occlusion_mask_by_distance_marks_out_of_range_pedestrians() -> None:
     mask = _occlusion_mask_by_distance(env, positions, occlusion_distance_m=2.0)
 
     assert mask.tolist() == [False, True]
+
+
+def test_false_positive_actor_state_from_args_offsets_from_robot() -> None:
+    """False-positive diagnostic actors should be deterministic robot-relative observations."""
+    env = _DummyEnv()
+    args = argparse.Namespace(
+        false_positive_actor_count=2,
+        false_positive_offset_x_m=1.25,
+        false_positive_offset_y_m=-0.5,
+        false_positive_spacing_y_m=0.25,
+    )
+
+    positions, velocities, actor_ids = _false_positive_actor_state_from_args(args, env)
+
+    np.testing.assert_array_equal(positions, [[1.25, -0.5], [1.25, -0.25]])
+    np.testing.assert_array_equal(velocities, np.zeros((2, 2)))
+    assert actor_ids == ["false_positive_0", "false_positive_1"]
+
+
+def test_observation_perturbation_spec_includes_false_positive_actors() -> None:
+    """CLI perturbation spec should surface false positives separately from misses."""
+    env = _DummyEnv()
+    args = argparse.Namespace(
+        observation_noise_std_m=0.0,
+        observation_noise_bound_m=0.0,
+        missed_detection_probability=0.5,
+        occlusion_distance_m=None,
+        false_positive_actor_count=1,
+        false_positive_offset_x_m=1.0,
+        false_positive_offset_y_m=0.0,
+        false_positive_spacing_y_m=0.5,
+        observation_delay_steps=0,
+        observation_perturbation_seed=42,
+    )
+
+    spec = _observation_perturbation_spec(args, env)
+
+    assert spec.missed_detection_probability == pytest.approx(0.5)
+    assert spec.false_positive_actor_count == 1
+    np.testing.assert_array_equal(spec.false_positive_positions, [[1.0, 0.0]])
+    assert spec.false_positive_ids == ["false_positive_0"]
 
 
 def test_fixture_visibility_mask_hides_until_first_visible_step() -> None:

@@ -254,6 +254,31 @@ def _trace_progress_summary(
     }
 
 
+def _trace_planner_execution_mode(
+    trace_rows: list[dict[str, Any]],
+    *,
+    default_execution_mode: str,
+) -> dict[str, Any]:
+    """Summarize the actual planner execution modes observed across trace rows."""
+    observed_modes = sorted(
+        {
+            str(row.get("planner_execution_mode"))
+            for row in trace_rows
+            if row.get("planner_execution_mode")
+        }
+    )
+    if not observed_modes:
+        run_mode = default_execution_mode
+    elif len(observed_modes) == 1:
+        run_mode = observed_modes[0]
+    else:
+        run_mode = "mixed"
+    return {
+        "planner_execution_mode": run_mode,
+        "planner_execution_modes_observed": observed_modes,
+    }
+
+
 def _format_planner_summary_lines(planner_summary: Any) -> list[str]:
     """Return Markdown lines for the aggregate planner diagnostics summary."""
     summary = _json_ready(planner_summary)
@@ -289,6 +314,23 @@ def _diagnostics_stdout_payload(
     }
 
 
+def _planner_fallback_degraded_status(planner_summary: Any) -> dict[str, Any]:
+    """Return a compact fallback/degraded status from planner diagnostics."""
+    summary = _json_ready(planner_summary)
+    if summary is None:
+        return {
+            "source": "planner_adapter_diagnostics",
+            "available": False,
+            "reported_fallback_or_degraded": None,
+        }
+    rendered = json.dumps(summary, sort_keys=True).lower()
+    return {
+        "source": "planner_adapter_diagnostics",
+        "available": True,
+        "reported_fallback_or_degraded": "fallback" in rendered or "degraded" in rendered,
+    }
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -316,6 +358,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--observation-noise-bound-m", type=float, default=0.0)
     parser.add_argument("--missed-detection-probability", type=float, default=0.0)
     parser.add_argument("--occlusion-distance-m", type=float, default=None)
+    parser.add_argument("--false-positive-actor-count", type=int, default=0)
+    parser.add_argument("--false-positive-offset-x-m", type=float, default=1.0)
+    parser.add_argument("--false-positive-offset-y-m", type=float, default=0.0)
+    parser.add_argument("--false-positive-spacing-y-m", type=float, default=0.5)
     parser.add_argument("--observation-delay-steps", type=int, default=0)
     parser.add_argument("--observation-perturbation-seed", type=int, default=None)
     return parser.parse_args()
@@ -453,6 +499,28 @@ def _occlusion_mask_by_distance(
     return distances > float(occlusion_distance_m)
 
 
+def _false_positive_actor_state_from_args(
+    args: argparse.Namespace,
+    env: Any,
+) -> tuple[np.ndarray | None, np.ndarray | None, list[str] | None]:
+    """Return deterministic observed-only actors requested by CLI flags."""
+    count = int(args.false_positive_actor_count)
+    if count < 0:
+        raise ValueError("false_positive_actor_count must be >= 0")
+    if count == 0:
+        return None, None, None
+    robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float).reshape(-1)[:2]
+    offsets = np.zeros((count, 2), dtype=float)
+    offsets[:, 0] = float(args.false_positive_offset_x_m)
+    offsets[:, 1] = float(args.false_positive_offset_y_m) + (
+        np.arange(count, dtype=float) * float(args.false_positive_spacing_y_m)
+    )
+    positions = robot_pos.reshape(1, 2) + offsets
+    velocities = np.zeros_like(positions)
+    ids = [f"false_positive_{idx}" for idx in range(count)]
+    return positions, velocities, ids
+
+
 def _observation_perturbation_spec(
     args: argparse.Namespace,
     env: Any,
@@ -461,6 +529,7 @@ def _observation_perturbation_spec(
 ) -> ObservationPerturbationSpec:
     """Build a per-step observation perturbation spec from CLI flags."""
     ped_pos, _ped_vel, _actor_ids = _pedestrian_state_from_sim(env)
+    false_pos, false_vel, false_ids = _false_positive_actor_state_from_args(args, env)
     return ObservationPerturbationSpec(
         position_noise_std_m=float(args.observation_noise_std_m),
         position_noise_bound_m=float(args.observation_noise_bound_m),
@@ -470,6 +539,9 @@ def _observation_perturbation_spec(
             ped_pos,
             occlusion_distance_m=args.occlusion_distance_m,
         ),
+        false_positive_positions=false_pos,
+        false_positive_velocities=false_vel,
+        false_positive_ids=false_ids,
         delay_steps=int(args.observation_delay_steps),
         visibility_mask=visibility_mask,
         seed=args.observation_perturbation_seed,
@@ -592,6 +664,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
     planner_reset = getattr(policy_fn, "_planner_reset", None)
     planner_bind_env = getattr(policy_fn, "_planner_bind_env", None)
     planner_native_action = getattr(policy_fn, "_planner_native_env_action", False)
+    default_execution_mode = "native_env_action" if planner_native_action else "command_adapter"
 
     env = make_robot_env(config=env_config, seed=seed, debug=False)
     trace_rows: list[dict[str, Any]] = []
@@ -678,6 +751,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "post_step_min_robot_ped_distance": post_step_min_robot_ped_dist,
                     "meta": _json_ready(meta),
                     "planner_decision": _json_ready(planner_decision),
+                    "planner_execution_mode": (
+                        "native_env_action" if step_is_native else "command_adapter"
+                    ),
                     "terminated": bool(terminated),
                     "truncated": bool(truncated),
                     "is_success": bool(is_success),
@@ -706,6 +782,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         env.close()
 
     progress_summary = _trace_progress_summary(trace_rows)
+    execution_mode_summary = _trace_planner_execution_mode(
+        trace_rows,
+        default_execution_mode=default_execution_mode,
+    )
+    fallback_degraded_status = _planner_fallback_degraded_status(planner_summary)
     trace_payload = {
         "candidate": args.candidate,
         "stage": args.stage,
@@ -716,11 +797,17 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "algo": algo,
         "algo_config": _json_ready(effective_cfg),
         "algorithm_metadata": _json_ready(algo_meta),
+        **execution_mode_summary,
+        "fallback_degraded_status": fallback_degraded_status,
         "observation_perturbation_config": {
             "position_noise_std_m": float(args.observation_noise_std_m),
             "position_noise_bound_m": float(args.observation_noise_bound_m),
             "missed_detection_probability": float(args.missed_detection_probability),
             "occlusion_distance_m": args.occlusion_distance_m,
+            "false_positive_actor_count": int(args.false_positive_actor_count),
+            "false_positive_offset_x_m": float(args.false_positive_offset_x_m),
+            "false_positive_offset_y_m": float(args.false_positive_offset_y_m),
+            "false_positive_spacing_y_m": float(args.false_positive_spacing_y_m),
             "delay_steps": int(args.observation_delay_steps),
             "seed": args.observation_perturbation_seed,
             "fixture_first_visible_step": first_visible_step,
@@ -750,6 +837,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         f"- Family: `{family}`",
         f"- Seed: `{seed}`",
         f"- Horizon: `{horizon}`",
+        f"- Algorithm: `{algo}`",
+        f"- Planner execution mode: `{execution_mode_summary['planner_execution_mode']}`",
+        f"- Planner execution modes observed: "
+        f"`{execution_mode_summary['planner_execution_modes_observed']}`",
+        f"- Fallback/degraded status: `{fallback_degraded_status}`",
         f"- Trace JSON: `{trace_path}`",
         f"- Decision counts: `{dict(decision_counter)}`",
         f"- Selected heads: `{dict(selected_head_counter)}`",
@@ -809,6 +901,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "seed": seed,
             "decision_counts": dict(decision_counter),
             "selected_head_counts": dict(selected_head_counter),
+            **execution_mode_summary,
         },
         progress_summary=progress_summary,
         planner_summary=planner_summary,

@@ -1,0 +1,23 @@
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../single/issue_3323_occluded_emergence_near_field_live.yaml
+select_scenarios:
+  - issue_2756_occluded_emergence
+scenario_overrides_by_name:
+  issue_2756_occluded_emergence:
+    seeds:
+      - 111
+    metadata:
+      source_issue: 2756
+      replay_issue: 2777
+      matrix_issue: 3323
+      fixture_contract:
+        first_visible_step: 5
+        delay_steps: 2
+        delay_only_expected_first_observed_step: 7
+      claim_boundary: >
+        Live matrix for issue #2777 observation perturbation replay that
+        preserves the issue #2756 occluded-emergence first-visible/delay
+        boundary while using the issue #3323 near-field right-corridor robot
+        route override. Treat outputs as diagnostic stress evidence unless
+        separately promoted with sufficient seeds and comparators.

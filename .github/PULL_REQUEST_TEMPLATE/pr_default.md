@@ -38,6 +38,24 @@ to `NA` and state why.
   instrumentation, seed-sufficiency analysis, and why-report generation. For support helpers that
   do not interpret research evidence, state `NA - support helper` with the reason:
 
+## Domain-Aware Approval
+Required when `Evidence tier` is not `NA`/`docs-only`, or `Result classification` is not `NA`.
+Use this for PRs that change evidence classification, experimental comparison methodology, figure
+eligibility, benchmark interpretation, or paper-facing claim surfaces. This approval concerns
+experimental validity and claim boundaries; normal implementation integrity still comes from code
+review, tests, and CI.
+
+- Required for this PR: yes / no - reason
+- Domains reviewed: evidence classification / experimental comparison / figure eligibility / benchmark interpretation / paper-facing claims / NA
+- Status: approved / waived / pending / blocked / not required
+- Approver/review source or waiver:
+- Validity checklist:
+  - Target claim/hypothesis:
+  - Comparator or split/evidence validity:
+  - Fallback/degraded exclusions:
+  - Claim boundary:
+  - Implementation integrity vs experimental validity:
+
 ## Falsification / Non-Transfer Check
 Required for research-result PRs when the expected mechanism did not improve the measured outcome,
 only helped a local slice, or produced diagnostic-only evidence. For support/tooling/docs-only PRs

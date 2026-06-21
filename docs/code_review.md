@@ -47,6 +47,32 @@ follow-up issue names:
 Do not use generic backlog notes as substitutes for blockers or for follow-up issues with a clear
 acceptance condition.
 
+## Domain-Aware Approval Gate
+
+Passing CI, automated review, and implementation-integrity checks is not sufficient for PRs that
+change evidence classification, experimental comparison methodology, figure eligibility, benchmark
+interpretation, or paper-facing claim surfaces. Those PRs need an explicit `Domain-Aware Approval`
+section in the PR body before they can be treated as merge-ready.
+
+The gate is intentionally narrow. Ordinary implementation, docs, and test-only PRs can mark the
+domain approval requirement as not applicable when they do not alter evidence validity, comparison
+methodology, figure eligibility, or claim boundaries.
+
+For PRs where the gate applies, reviewers should verify that the PR body names:
+
+- target claim or hypothesis;
+- comparator and split/evidence-validity policy;
+- fallback/degraded exclusions;
+- claim boundary and evidence tier;
+- whether the change proves implementation integrity only, or also supports experimental validity.
+
+PR #3276 is the motivating comparison-methodology example: automated review accepted the linked
+issue framing even though the comparison remained circular and lacked the held-out scenario-family
+design required by the issue. PR #3273 is the motivating evidence-classification example:
+machine-readable classifications and conservative prose diverged. Future PRs in those categories
+should be held until a domain-aware approval note is present, or should state a blocker instead of
+being presented as merge-ready.
+
 ## Benchmark-Credibility Review
 
 For benchmark-facing changes, explicitly verify:

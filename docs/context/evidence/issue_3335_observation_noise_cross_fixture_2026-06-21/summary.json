@@ -1,0 +1,130 @@
+{
+  "schema_version": "issue_3335_observation_noise_live_grid.v1",
+  "issue": 3335,
+  "claim_boundary": "Diagnostic-only cross-fixture synthesis of tracked native live step-diagnostics summaries. This checks whether observation-noise behavior sensitivity appears across more than one fixture surface, but it is not benchmark-strength, paper-grade, planner-superiority, robustness, or hardware-calibrated sensor-realism evidence.",
+  "reproducibility": {
+    "command": "uv run python scripts/benchmark/summarize_observation_noise_live_grid.py --source-summary docs/context/evidence/issue_2777_live_observation_noise_replay/issue_3330_seed_amplitude_grid/summary.json --source-summary docs/context/evidence/issue_3335_observation_noise_cross_fixture_2026-06-21/issue_3320_seed_amplitude_grid/summary.json --output-json docs/context/evidence/issue_3335_observation_noise_cross_fixture_2026-06-21/summary.json --output-md docs/context/evidence/issue_3335_observation_noise_cross_fixture_2026-06-21/README.md",
+    "source_summaries": [
+      "docs/context/evidence/issue_2777_live_observation_noise_replay/issue_3330_seed_amplitude_grid/summary.json",
+      "docs/context/evidence/issue_3335_observation_noise_cross_fixture_2026-06-21/issue_3320_seed_amplitude_grid/summary.json"
+    ]
+  },
+  "source_count": 2,
+  "usable_native_live_source_count": 1,
+  "failed_closed_source_count": 1,
+  "sources": [
+    {
+      "path": "docs/context/evidence/issue_2777_live_observation_noise_replay/issue_3330_seed_amplitude_grid/summary.json",
+      "schema_version": "issue_2777_observation_noise_live_replay.v1",
+      "source_issue": 2777,
+      "scenario": "issue_2756_occluded_emergence",
+      "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
+      "condition_set": "issue_3330_seed_amplitude_grid",
+      "same_scenario": true,
+      "seed": 111,
+      "same_seed": true,
+      "status": "behavior_sensitive_grid",
+      "usable": true,
+      "status_rationale": "Diagnostic-only grid classification: medium-amplitude-sensitive because at least one std=0.30 m, bound=0.60 m condition changed live behavior.",
+      "classification": {
+        "label": "behavior_sensitive_diagnostic_only",
+        "rationale": "All selected live replays completed. One scenario fixture seed is diagnostic only and does not support a robustness, sensor-realism, or planner-superiority claim."
+      },
+      "grid_interpretation": {
+        "label": "medium_amplitude_sensitive",
+        "evidence_status": "diagnostic-only",
+        "summary": "Diagnostic-only grid classification: medium-amplitude-sensitive because at least one std=0.30 m, bound=0.60 m condition changed live behavior.",
+        "sensitive_conditions": [
+          "medium_noise_3328",
+          "high_noise_3328",
+          "high_noise_3330"
+        ],
+        "medium_sensitive_conditions": [
+          "medium_noise_3328"
+        ],
+        "high_sensitive_conditions": [
+          "high_noise_3328",
+          "high_noise_3330"
+        ],
+        "unavailable_conditions": [],
+        "limitation": "One scenario and one fixture seed only; this is diagnostic behavior-probe evidence, not a robustness, sensor-realism, or planner-superiority claim.",
+        "reasons": []
+      },
+      "near_field": {
+        "threshold_m": 2.0,
+        "clean_closest_robot_ped_distance_m": 1.65520666531114,
+        "satisfied": true
+      },
+      "command_sequence_changed": true,
+      "closest_distance_delta_m": 0.008230813627037481,
+      "collision_counts": {
+        "clean": {
+          "pedestrian": 0,
+          "obstacle": 0,
+          "robot": 0
+        },
+        "perturbed": {
+          "pedestrian": 0,
+          "obstacle": 0,
+          "robot": 0
+        }
+      },
+      "observation_summary_changed": null
+    },
+    {
+      "path": "docs/context/evidence/issue_3335_observation_noise_cross_fixture_2026-06-21/issue_3320_seed_amplitude_grid/summary.json",
+      "schema_version": "issue_2777_observation_noise_live_replay.v1",
+      "source_issue": 2777,
+      "scenario": "issue_2756_occluded_emergence",
+      "scenario_matrix": "configs/scenarios/sets/issue_3320_occluded_emergence_live_replay.yaml",
+      "condition_set": "issue_3330_seed_amplitude_grid",
+      "same_scenario": true,
+      "seed": 111,
+      "same_seed": true,
+      "status": "failed_closed",
+      "usable": false,
+      "status_rationale": "Issue #3330 seed/amplitude grid requires no-op closest_robot_ped_distance <= 2.0 m; observed 21.803818559278636.",
+      "classification": {
+        "label": "blocked",
+        "rationale": "Issue #3330 seed/amplitude grid requires no-op closest_robot_ped_distance <= 2.0 m; observed 21.803818559278636."
+      },
+      "grid_interpretation": {
+        "label": "unavailable_fail_closed",
+        "evidence_status": "diagnostic-only",
+        "summary": "Grid interpretation is unavailable/fail-closed because at least one required live replay condition did not complete under the fixture guardrails.",
+        "sensitive_conditions": [],
+        "medium_sensitive_conditions": [],
+        "high_sensitive_conditions": [],
+        "unavailable_conditions": [],
+        "limitation": "Diagnostic-only; no robustness claim is available.",
+        "reasons": [
+          "Issue #3330 seed/amplitude grid requires no-op closest_robot_ped_distance <= 2.0 m; observed 21.803818559278636."
+        ]
+      },
+      "near_field": {
+        "threshold_m": 2.0,
+        "clean_closest_robot_ped_distance_m": 21.803818559278636,
+        "satisfied": false
+      },
+      "command_sequence_changed": false,
+      "closest_distance_delta_m": 0.0,
+      "collision_counts": {
+        "clean": {
+          "pedestrian": 0,
+          "obstacle": 0,
+          "robot": 0
+        },
+        "perturbed": {
+          "pedestrian": 0,
+          "obstacle": 0,
+          "robot": 0
+        }
+      },
+      "observation_summary_changed": null
+    }
+  ],
+  "classification": {
+    "label": "fixture_candidate_failed_closed_after_sensitive_grid",
+    "rationale": "The committed #3330 near-field grid is behavior-sensitive, but the attempted second matrix failed closed under the near-field guardrail. Treat this as a useful negative external-validity check, not robustness evidence."
+  }
+}

@@ -109,6 +109,22 @@ def test_scalar_includes_are_ignored_for_fixture_detection(tmp_path: Path) -> No
     assert "blocker" in contract
 
 
+def test_invalid_yaml_matrix_fails_closed_even_with_fixture_token(tmp_path: Path) -> None:
+    """Invalid matrix syntax should not satisfy fixture detection by raw text."""
+    mod = _load_script()
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        "schema_version: robot_sf.scenario_matrix.v1\n"
+        "select_scenarios: [issue_2756_occluded_emergence\n",
+        encoding="utf-8",
+    )
+
+    contract = mod._fixture_contract(matrix)
+
+    assert contract["satisfied"] is False
+    assert "not valid YAML" in contract["blocker"]
+
+
 def test_live_condition_timeout_becomes_fail_closed_blocker(
     tmp_path: Path,
     monkeypatch,
@@ -201,6 +217,19 @@ def test_trace_comparison_names_scenario_seed_planner_and_policy_insensitive(
     assert comparison["seed"]["same"] is True
     assert comparison["planner_mode"]["candidate"] == "risk_surface_dwa_v0"
     assert comparison["classification"]["label"] == "policy_insensitive"
+
+
+def test_observation_totals_ignore_missing_noise_profile(tmp_path: Path) -> None:
+    """A null noise profile should not become a literal profile label."""
+    mod = _load_script()
+    trace = tmp_path / "trace.json"
+    _write_trace(trace, command=[1.0, 0.0], observed_count=1, closest=1.5)
+    payload = json.loads(trace.read_text(encoding="utf-8"))
+    payload["steps"][0]["observation_perturbation"]["noise_profile"] = None
+
+    totals = mod._observation_totals(payload)
+
+    assert totals["noise_profiles"] == []
 
 
 def test_markdown_and_json_outputs_are_written(tmp_path: Path) -> None:

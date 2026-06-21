@@ -121,8 +121,8 @@ def _scenario_matrix_text(matrix_path: Path) -> str:
     raw_text = matrix_path.read_text(encoding="utf-8")
     try:
         payload = yaml.safe_load(raw_text) or {}
-    except yaml.YAMLError:
-        return raw_text
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{_durable_ref(matrix_path)} is not valid YAML: {exc}") from exc
     if not isinstance(payload, dict):
         return raw_text
     base_payload = dict(payload)
@@ -140,11 +140,25 @@ def _scenario_matrix_text(matrix_path: Path) -> str:
 
 def _fixture_contract(matrix_path: Path) -> dict[str, Any]:
     """Check whether a live matrix appears to preserve the #2755 fixture boundary."""
-    matrix_text = _scenario_matrix_text(matrix_path)
+    matrix_error = None
+    try:
+        matrix_text = _scenario_matrix_text(matrix_path)
+    except ValueError as exc:
+        matrix_text = ""
+        matrix_error = str(exc)
     has_occluded_fixture = (
         "issue_2756_occluded_emergence" in matrix_text
         or "deterministic_occluded_emergence" in matrix_text
     )
+    if matrix_error:
+        blocker = matrix_error
+    elif has_occluded_fixture:
+        blocker = None
+    else:
+        blocker = (
+            "No checked-in live scenario matrix preserving the #2755/#2756 "
+            "occluded-emergence fixture boundary was found in the selected matrix."
+        )
     return {
         "required_source_issue": 2756,
         "required_scenario": "issue_2756_occluded_emergence",
@@ -154,12 +168,7 @@ def _fixture_contract(matrix_path: Path) -> dict[str, Any]:
         "delay_only_expected_first_observed_step": 7,
         "scenario_matrix": _durable_ref(matrix_path),
         "satisfied": has_occluded_fixture,
-        "blocker": None
-        if has_occluded_fixture
-        else (
-            "No checked-in live scenario matrix preserving the #2755/#2756 "
-            "occluded-emergence fixture boundary was found in the selected matrix."
-        ),
+        "blocker": blocker,
     }
 
 
@@ -269,9 +278,9 @@ def _observation_totals(trace: dict[str, Any]) -> dict[str, Any]:
         totals["missed_actor_observations_total"] += int(meta.get("missed_actor_count", 0) or 0)
         totals["occluded_actor_observations_total"] += int(meta.get("occluded_actor_count", 0) or 0)
         observed_counts.append(int(meta.get("observed_actor_count", 0) or 0))
-        profile = str(meta.get("noise_profile", ""))
+        profile = meta.get("noise_profile")
         if profile:
-            totals["noise_profiles"].add(profile)
+            totals["noise_profiles"].add(str(profile))
     totals["min_observed_actor_count"] = min(observed_counts) if observed_counts else None
     totals["max_observed_actor_count"] = max(observed_counts) if observed_counts else None
     totals["noise_profiles"] = sorted(totals["noise_profiles"])

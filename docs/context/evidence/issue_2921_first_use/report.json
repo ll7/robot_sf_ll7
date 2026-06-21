@@ -1,0 +1,70 @@
+{
+  "archive_evaluation_provenance": {
+    "archive_id_overlap": "not_checked",
+    "archive_sha256": "8c7344b6dc8d8d336a7ab5ca89ec81571e3934839e3ebe831b28ddf583429702",
+    "disjointness_checks_passed": false,
+    "evaluation_outcome_sha256": null,
+    "required_for_held_out_claim": true,
+    "scenario_family_overlap": "not_checked",
+    "seed_overlap": "not_checked",
+    "split_policy": "none_plumbing_fixture"
+  },
+  "benchmark_evidence": false,
+  "budget": 10,
+  "claim_boundary": "plumbing_validation_only: proposal-vs-random deltas in this report exercise ranking and report plumbing only. The current objective is archive-nearness, so it is circular with archive-nearness ranking and is not held-out yield, benchmark evidence, planner-performance evidence, or evidence that learned proposals improve failure discovery.",
+  "comparison": {
+    "failure_count_improvement": 6,
+    "interpretation": "plumbing_only_circular_archive_nearness_objective",
+    "max_objective_improvement": 0.5386,
+    "mean_objective_improvement": 0.7101
+  },
+  "held_out_evidence": false,
+  "null_tests": {
+    "proposal_ranking_permutation": "not_run_requires_real_certified_archive",
+    "required_for_held_out_claim": true,
+    "shuffled_archive_outcomes": "not_run_requires_real_certified_archive"
+  },
+  "planner_performance_claim": false,
+  "proposal_metrics": {
+    "certification_statuses_advisory": [
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed"
+    ],
+    "certification_statuses_strict": [
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed",
+      "failed"
+    ],
+    "failure_count": 10,
+    "max_objective": 9.3006,
+    "mean_objective": 8.6708
+  },
+  "random_metrics": {
+    "failure_count": 4,
+    "max_objective": 8.762,
+    "mean_objective": 7.9607
+  },
+  "reason": "No archive path provided; using synthetic archive fixture. No search space path provided; using synthetic search-space fixture.",
+  "result_classification": "plumbing_validation_only",
+  "schema_version": "adversarial_proposal_comparison.v1",
+  "search_space_state": "diagnostic_only",
+  "seed": 42,
+  "state": "diagnostic_only",
+  "synthetic_archive": true,
+  "synthetic_search_space": true
+}

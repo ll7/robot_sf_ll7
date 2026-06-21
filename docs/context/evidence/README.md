@@ -98,6 +98,10 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3294_release_claim_matrix/`: reviewable v0.1 release claim matrix assembled from
+  existing release artifacts, leaderboard row-claim sidecars, release config metadata, and ODD
+  coverage rows. It classifies rows as benchmark evidence, diagnostic evidence, or non-claim
+  without running a new benchmark campaign or promoting fallback/degraded/unavailable rows.
 - `issue_2919_scenario_prior_gap_2026-06-21/`: analysis-only authored-vs-repository-trace-derived
   scenario-prior gap report from the Issue #2917 card registry. It compares pedestrian density,
   pedestrian speed, and timing-offset parameter families, emits scenario-family proposals, and

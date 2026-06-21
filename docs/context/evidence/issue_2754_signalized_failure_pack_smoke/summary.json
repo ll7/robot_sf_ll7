@@ -1,0 +1,69 @@
+{
+  "schema_version": "signalized_crossing_failure_pack.v1",
+  "negative_control": false,
+  "status": "failures_present",
+  "cases": [
+    {
+      "episode_id": "issue_2868_signalized_crossing_episode_0000",
+      "scenario_id": "issue_2868_signalized_crossing",
+      "trace_row_range": [
+        0,
+        11
+      ],
+      "signal_phase": "red",
+      "stop_line_geometry": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          -1.0
+        ]
+      ],
+      "robot_state": {
+        "position": [
+          0.0,
+          0.0
+        ],
+        "heading": 0.0,
+        "velocity": [
+          0.0,
+          0.0
+        ]
+      },
+      "pedestrian_state": [
+        {
+          "id": 2868,
+          "position": [
+            1.0,
+            0.0
+          ],
+          "velocity": [
+            0.7,
+            0.0
+          ],
+          "signal_state": {
+            "available": true,
+            "label": "red"
+          }
+        }
+      ],
+      "metric_row": {
+        "collisions": 1.0,
+        "comfort_exposure": 0.0,
+        "near_misses": 0,
+        "signal_metrics_denominator": 1,
+        "signal_metrics_evidence": {
+          "state": "planner_observable",
+          "exclusion_reason": ""
+        }
+      },
+      "denominator_status": "eligible",
+      "stale_current_status": "current",
+      "allowed_claim_wording": "Smoke fixture evidence only: this pack validates signalized failure-pack extraction fields against a tracked trace fixture and synthetic metric row; it is not benchmark evidence, dissertation figure evidence, or traffic-light compliance evidence.",
+      "diagnostic_only": false,
+      "figure_eligible": true
+    }
+  ]
+}

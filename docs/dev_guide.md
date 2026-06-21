@@ -60,6 +60,11 @@ Escalate to `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` when the change
 schemas, generated indexes, routing behavior, automation, runtime behavior, benchmark/metric/schema
 semantics, model provenance, or paper-facing claims.
 
+For benchmark scenario, metric, model-profile, and release-evidence changes, first apply the
+[Benchmark Scenario And Model Governance](benchmark_governance.md) review contract. It defines the
+versioning, comparability, reproduction, and deprecation details that PRs must make explicit before
+benchmark or paper-facing claims are treated as established.
+
 Use `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` for the dependency-minimal core
 readiness lane. If a change touches predictive or other optional-extra paths and you need the
 optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_tests_parallel.sh

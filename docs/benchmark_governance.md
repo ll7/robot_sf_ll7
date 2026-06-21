@@ -109,7 +109,7 @@ artifact manifest.
 | Scenario schema | `scenario_schema_version` or the typed schema id, such as `scenario_contract.v1` | Documentation, typo, or metadata repair with no behavior change | Add optional fields, stricter provenance, or new diagnostics that preserve old rows | Change required fields, scenario semantics, seed policy, eligibility rules, or comparability |
 | Metric schema | `metric_schema_version`, metric id suffix, or report schema id | Metadata repair or implementation bugfix that preserves intended values | Add optional metric fields, diagnostics, or stricter validation while preserving old metric meaning | Change formula, denominator, threshold, weighting, normalization basis, or aggregation semantics |
 | Model profile | `model_profile_version`, `track_schema_version`, registry schema, or profile id suffix | Provenance repair, checksum repair, or docs repair | Add optional provenance, eligibility metadata, or verification fields | Change observation/action contract, adapter semantics, artifact identity, readiness status meaning, or benchmark eligibility |
-| Release evidence | benchmark protocol version, release id, BenchmarkClaim schema, or manifest version | Provenance or packaging repair with identical benchmark contract | Comparable contract extension or stricter reproducibility metadata | Non-comparable scenario suite, planner set, seed policy, metric contract, model profile, or SNQI normalization change |
+| Release evidence | `benchmark_protocol_version`, `release_id`, `BenchmarkClaim` schema, or manifest version | Provenance or packaging repair with identical benchmark contract | Comparable contract extension or stricter reproducibility metadata | Non-comparable scenario suite, planner set, seed policy, metric contract, model profile, or SNQI normalization change |
 
 Do not reuse a version id for a semantic change. If a report or artifact combines multiple schema
 versions, it must make the combination visible and classify cross-version comparisons as diagnostic
@@ -163,7 +163,7 @@ Before treating a governed PR as ready, verify:
 - release-bound evidence names durable artifacts and reproduction requirements;
 - deprecated or superseded scenarios have documented replacement and historical-row handling;
 - fallback/degraded rows are excluded from benchmark-success language;
-- validation matches the risk tier in `docs/maintainer_values.md`.
+- validation matches the risk tier in `maintainer_values.md`.
 
 Docs-only governance edits normally use the cheap validation path: inspect the diff and verify
 changed links or referenced paths. Runtime, schema, metric, benchmark, model-provenance, or

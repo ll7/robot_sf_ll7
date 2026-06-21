@@ -179,8 +179,11 @@ Policy caveats:
   into near-field geometry by #3323. The wrapper ran `risk_surface_dwa_v0` on
   `issue_2756_occluded_emergence` seed 111, preserved no-op first visibility at step 5 and
   delay-only first observation at step 7, reached a 1.6552 m closest robot-pedestrian distance,
-  and classified the run as `policy_insensitive` because perturbations changed observations but
-  not commands or progress/risk summaries. Diagnostic stress evidence only; not a robustness claim.
+  and classified the seven-family run as `policy_insensitive` because perturbations changed
+  observations but not commands or progress/risk summaries. The nested
+  `issue_3328_behavior_probe/` evidence adds an opt-in high-amplitude noise probe that changes
+  commands/progress on the same one-seed fixture and is classified
+  `behavior_sensitive_diagnostic_only`. Diagnostic stress evidence only; not a robustness claim.
 - `issue_3201_observation_noise_live_smoke/`: diagnostic-only same-seed clean vs perturbed
   step-diagnostics replay on the `dense_pedestrian_stress` live matrix candidate. Perturbation
   changed planner-input pedestrian observations, but commands and progress/risk summaries stayed

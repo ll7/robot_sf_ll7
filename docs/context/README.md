@@ -352,6 +352,8 @@ knowledge, not every transient iteration detail.
   [issue_2928_socnavbench_hunavsim_metric_correspondence.md](issue_2928_socnavbench_hunavsim_metric_correspondence.md)
 * Issue #2930 External Benchmark Positioning:
   [issue_2930_external_benchmark_positioning.md](issue_2930_external_benchmark_positioning.md)
+* Issue #3290 Simulation Model Credibility Checklist:
+  [issue_3290_simulation_model_credibility_checklist.md](issue_3290_simulation_model_credibility_checklist.md)
 * Issue #2442 Navground planner-zoo assessment:
   [issue_2442_navground_assessment.md](issue_2442_navground_assessment.md)
 * Issue #2550 (2026-06-11): Navground Adapter Spike Report:

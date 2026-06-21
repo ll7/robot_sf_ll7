@@ -57,6 +57,7 @@ from robot_sf.benchmark.map_runner_batch_plan import (
     resolve_batch_kinematics_tag,
 )
 from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
+from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -657,6 +658,39 @@ def test_build_policy_nmpc_social_wires_nmpc_adapter(
     assert meta["status"] == "ok"
     assert meta["policy_semantics"] == "nonlinear_model_predictive_local_planner"
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+
+
+def test_build_policy_risk_dwa_routes_through_registered_adapter_builder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first policy-builder registry slice should preserve Risk-DWA metadata."""
+
+    class _DummyAdapter:
+        """Planner adapter test double for policy-builder registry wiring."""
+
+        def __init__(self, config) -> None:
+            self.config = config
+
+        def plan(self, _obs):
+            """Return a deterministic planner command for the wiring test."""
+            return (0.2, -0.05)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.policy_builders.RiskDWAPlannerAdapter",
+        _DummyAdapter,
+    )
+
+    policy, meta = _build_policy("risk_dwa", {"max_linear_speed": 0.7})
+    linear, angular = policy(
+        {"robot": {"position": [0.0, 0.0], "heading": [0.0]}, "goal": {"current": [1.0, 0.0]}}
+    )
+
+    assert (linear, angular) == (0.2, -0.05)
+    assert build_registered_adapter_policy_spec("goal", {}) is None
+    assert meta["status"] == "ok"
+    assert meta["planner_kinematics"]["execution_mode"] == "adapter"
+    assert meta["planner_kinematics"]["adapter_name"] == "RiskDWAPlannerAdapter"
+    assert hasattr(policy, "_planner_adapter")
 
 
 def test_build_policy_risk_surface_dwa_wires_surface_adapter(

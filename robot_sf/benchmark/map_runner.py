@@ -160,6 +160,7 @@ from robot_sf.benchmark.observation_noise import (
 )
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.utils import (
@@ -1024,16 +1025,17 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
 
         return _policy, meta
 
-    if algo_key == "risk_dwa":
-        adapter = RiskDWAPlannerAdapter(config=build_risk_dwa_config(algo_config))
+    registered_adapter_spec = build_registered_adapter_policy_spec(algo_key, algo_config)
+    if registered_adapter_spec is not None:
         return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=algo_config,
+            algo_key=registered_adapter_spec.algo_key,
+            algo_config=registered_adapter_spec.algo_config,
             meta=meta,
-            adapter=adapter,
-            adapter_name="RiskDWAPlannerAdapter",
+            adapter=registered_adapter_spec.adapter,
+            adapter_name=registered_adapter_spec.adapter_name,
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations=registered_adapter_spec.limitations,
         )
 
     if algo_key in {"risk_surface_dwa", "risk_surface_dwa_v0"}:

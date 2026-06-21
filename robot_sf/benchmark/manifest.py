@@ -102,11 +102,32 @@ def _sha256_jsonable(payload: object) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _artifact_entry(path: Path) -> dict[str, object]:
+def _artifact_entry(path: Path, *, required: bool = False) -> dict[str, object]:
     """Return the minimum machine-readable artifact identity for a path."""
+    if not path.exists():
+        if required:
+            raise ValueError(f"Required provenance artifact does not exist: {path}")
+        return {
+            "path": str(path),
+            "artifact_status": "missing",
+            "sha256": None,
+            "size": None,
+            "mtime_ns": None,
+        }
+    if not path.is_file():
+        if required:
+            raise ValueError(f"Required provenance artifact is not a file: {path}")
+        return {
+            "path": str(path),
+            "artifact_status": "not_file",
+            "sha256": None,
+            "size": None,
+            "mtime_ns": None,
+        }
     stat = _stat_of(path)
     return {
         "path": str(path),
+        "artifact_status": "available",
         "sha256": _sha256_file(path),
         "size": stat.size,
         "mtime_ns": stat.mtime_ns,
@@ -138,7 +159,7 @@ def _build_simulation_run_provenance(
         "schema_version": SIMULATION_RUN_PROVENANCE_SCHEMA_VERSION,
         "bundle_status": "complete",
         "inputs": _artifact_entries(input_paths),
-        "outputs": [_artifact_entry(out_path)],
+        "outputs": [_artifact_entry(out_path, required=True)],
         "generated_reports": _artifact_entries(report_paths),
         "stable_identifiers": {
             "episode_ids_sha256": _sha256_jsonable(sorted(set(episode_ids))),
@@ -149,6 +170,21 @@ def _build_simulation_run_provenance(
     }
     _validate_simulation_run_provenance(bundle)
     return bundle
+
+
+def _validate_provenance_artifact_entry(collection_name: str, artifact: object) -> None:
+    """Validate one provenance artifact entry."""
+    if not isinstance(artifact, dict) or not artifact.get("path"):
+        raise ValueError(f"Simulation-run provenance {collection_name} entries require path")
+    status = artifact.get("artifact_status", "available")
+    if status == "available" and not artifact.get("sha256"):
+        raise ValueError(
+            f"Simulation-run provenance {collection_name} available entries require sha256"
+        )
+    if status not in {"available", "missing", "not_file"}:
+        raise ValueError(
+            f"Simulation-run provenance {collection_name} artifact_status is invalid"
+        )
 
 
 def _validate_simulation_run_provenance(bundle: dict[str, object]) -> None:
@@ -174,14 +210,7 @@ def _validate_simulation_run_provenance(bundle: dict[str, object]) -> None:
         if not isinstance(collection, list):
             raise ValueError(f"Simulation-run provenance {collection_name} must be a list")
         for artifact in collection:
-            if (
-                not isinstance(artifact, dict)
-                or not artifact.get("path")
-                or not artifact.get("sha256")
-            ):
-                raise ValueError(
-                    f"Simulation-run provenance {collection_name} entries require path and sha256"
-                )
+            _validate_provenance_artifact_entry(collection_name, artifact)
 
 
 def manifest_path_for(out_path: Path) -> Path:

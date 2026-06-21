@@ -134,6 +134,43 @@ def test_save_manifest_emits_simulation_run_provenance_bundle(tmp_path: Path) ->
     assert stable_identifiers["schema_version"] == "v1"
 
 
+def test_save_manifest_records_unavailable_optional_artifacts(tmp_path: Path) -> None:
+    """Optional provenance inputs should be explicit when missing or not file artifacts."""
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text('{"episode_id":"scenario-a--7"}\n', encoding="utf-8")
+    missing_path = tmp_path / "missing.yaml"
+    directory_path = tmp_path / "report_dir"
+    directory_path.mkdir()
+
+    save_manifest(
+        out_path,
+        ["scenario-a--7"],
+        identity_hash="identity-v1",
+        input_paths=[missing_path],
+        report_paths=[directory_path],
+    )
+
+    payload = json.loads(manifest_path_for(out_path).read_text(encoding="utf-8"))
+    provenance = payload["simulation_run_provenance"]
+
+    assert provenance["inputs"][0] == {
+        "path": str(missing_path),
+        "artifact_status": "missing",
+        "sha256": None,
+        "size": None,
+        "mtime_ns": None,
+    }
+    assert provenance["generated_reports"][0] == {
+        "path": str(directory_path),
+        "artifact_status": "not_file",
+        "sha256": None,
+        "size": None,
+        "mtime_ns": None,
+    }
+    assert provenance["outputs"][0]["artifact_status"] == "available"
+    assert provenance["outputs"][0]["sha256"]
+
+
 def test_finalize_batch_threads_inputs_into_resume_manifest_provenance(tmp_path: Path) -> None:
     """Batch finalization should preserve schema/scenario inputs in resume sidecar provenance."""
     out_path = tmp_path / "episodes.jsonl"

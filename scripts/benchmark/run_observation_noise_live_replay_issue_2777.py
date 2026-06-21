@@ -38,6 +38,14 @@ REQUIRED_CONDITIONS = (
     "delay_only",
     "combined",
 )
+DEFAULT_CONDITION_SET = "issue_2755_default"
+ISSUE_3328_CONDITION_SET = "issue_3328_behavior_probe"
+ISSUE_3328_REQUIRED_CONDITIONS = (
+    "noop",
+    "medium_noise",
+    "delay_only",
+    "high_noise_3328",
+)
 PROGRESS_FIELDS = (
     "net_goal_progress",
     "best_goal_progress",
@@ -116,6 +124,28 @@ CONDITIONS = (
         ),
     ),
 )
+_CONDITION_BY_NAME = {condition.name: condition for condition in CONDITIONS}
+HIGH_NOISE_3328_CONDITION = Condition(
+    "high_noise_3328",
+    "Issue #3328 high-noise behavior probe, std=1.0 m, bound=2.0 m, seed=3328.",
+    (
+        "--observation-noise-std-m",
+        "1.0",
+        "--observation-noise-bound-m",
+        "2.0",
+        "--observation-perturbation-seed",
+        "3328",
+    ),
+)
+CONDITION_SETS = {
+    DEFAULT_CONDITION_SET: CONDITIONS,
+    ISSUE_3328_CONDITION_SET: (
+        _CONDITION_BY_NAME["noop"],
+        _CONDITION_BY_NAME["medium_noise"],
+        _CONDITION_BY_NAME["delay_only"],
+        HIGH_NOISE_3328_CONDITION,
+    ),
+}
 
 
 def _repo_path(path: Path) -> Path:
@@ -355,6 +385,11 @@ def _condition_command(
     return command
 
 
+def _selected_conditions(args: argparse.Namespace) -> tuple[Condition, ...]:
+    """Return the conditions selected by the requested condition set."""
+    return CONDITION_SETS[str(args.condition_set)]
+
+
 def _durable_ref(path: Path) -> str:
     """Return a report-safe path reference."""
     try:
@@ -423,6 +458,192 @@ def _progress_delta(noop: dict[str, Any], condition: dict[str, Any]) -> dict[str
     }
 
 
+def _near_miss_total(trace: dict[str, Any]) -> tuple[float | None, bool]:
+    """Return the summed near-miss metadata and whether the field was reported."""
+    total = 0.0
+    available = False
+    for row in trace.get("steps", []):
+        meta = _mapping(_mapping(row).get("meta"))
+        if "near_misses" not in meta:
+            continue
+        available = True
+        try:
+            total += float(meta.get("near_misses", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    return (total if available else None), available
+
+
+def _near_miss_summary(
+    noop_trace: dict[str, Any], condition_trace: dict[str, Any]
+) -> dict[str, Any]:
+    """Compare near-miss counts when diagnostics traces expose that field."""
+    noop_total, noop_available = _near_miss_total(noop_trace)
+    condition_total, condition_available = _near_miss_total(condition_trace)
+    if not noop_available and not condition_available:
+        return {
+            "status": "unavailable",
+            "noop": None,
+            "condition": None,
+            "changed": False,
+            "limitation": "Diagnostics trace rows did not expose meta.near_misses.",
+        }
+    status = "available" if noop_available and condition_available else "partial"
+    return {
+        "status": status,
+        "noop": noop_total,
+        "condition": condition_total,
+        "changed": (
+            noop_total != condition_total if noop_available and condition_available else False
+        ),
+    }
+
+
+def _collision_summary(
+    noop_trace: dict[str, Any], condition_trace: dict[str, Any]
+) -> dict[str, Any]:
+    """Compare progress-summary collision counts."""
+    noop_counts = _mapping(noop_trace.get("progress_summary")).get("collision_flag_counts")
+    condition_counts = _mapping(condition_trace.get("progress_summary")).get(
+        "collision_flag_counts"
+    )
+    if noop_counts is None and condition_counts is None:
+        return {
+            "status": "unavailable",
+            "noop": None,
+            "condition": None,
+            "changed": False,
+            "limitation": "Diagnostics progress summaries did not expose collision_flag_counts.",
+        }
+    status = "available" if noop_counts is not None and condition_counts is not None else "partial"
+    return {
+        "status": status,
+        "noop": noop_counts,
+        "condition": condition_counts,
+        "changed": noop_counts != condition_counts if status == "available" else False,
+    }
+
+
+def _command_speed(command: Any) -> float | None:
+    """Return the linear-speed component from a policy command when present."""
+    if not isinstance(command, list | tuple) or not command:
+        return None
+    value = command[0]
+    if isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_command_stop_step(trace: dict[str, Any]) -> int | None:
+    """Return the first step whose selected command has zero linear speed."""
+    for fallback_step, row in enumerate(trace.get("steps", [])):
+        row = _mapping(row)
+        speed = _command_speed(row.get("policy_command"))
+        if speed is not None and abs(speed) <= 1e-9:
+            return _optional_int(row.get("step")) or fallback_step
+    return None
+
+
+def _has_command_speed(trace: dict[str, Any]) -> bool:
+    """Return whether any trace row has a parseable selected linear-speed command."""
+    return any(
+        _command_speed(_mapping(row).get("policy_command")) is not None
+        for row in trace.get("steps", [])
+    )
+
+
+def _changed_command_steps(
+    noop_trace: dict[str, Any], condition_trace: dict[str, Any]
+) -> list[int]:
+    """Return trace steps where the selected policy command differs from no-op."""
+    noop_steps = [_mapping(row) for row in noop_trace.get("steps", [])]
+    condition_steps = [_mapping(row) for row in condition_trace.get("steps", [])]
+    changed: list[int] = []
+    for index in range(max(len(noop_steps), len(condition_steps))):
+        noop_row = noop_steps[index] if index < len(noop_steps) else {}
+        condition_row = condition_steps[index] if index < len(condition_steps) else {}
+        if noop_row.get("policy_command") == condition_row.get("policy_command"):
+            continue
+        step = _optional_int(condition_row.get("step"))
+        if step is None:
+            step = _optional_int(noop_row.get("step"))
+        changed.append(index if step is None else step)
+    return changed
+
+
+def _stop_yield_timing_proxy(
+    noop_trace: dict[str, Any],
+    condition_trace: dict[str, Any],
+) -> dict[str, Any]:
+    """Report the available stop/yield proxy without inventing direct event timing."""
+    noop_available = _has_command_speed(noop_trace)
+    condition_available = _has_command_speed(condition_trace)
+    noop_stop = _first_command_stop_step(noop_trace)
+    condition_stop = _first_command_stop_step(condition_trace)
+    status = "available" if noop_available and condition_available else "unavailable"
+    return {
+        "status": status,
+        "definition": (
+            "First diagnostics trace step where the selected policy_command linear "
+            "speed component is present and abs(speed_mps) <= 1e-9. Direct stop/yield "
+            "event timing is not available in these traces."
+        ),
+        "direct_event_available": False,
+        "noop_first_stop_step": noop_stop if noop_available else None,
+        "condition_first_stop_step": condition_stop if condition_available else None,
+        "changed": noop_stop != condition_stop if status == "available" else False,
+    }
+
+
+def _behavior_change_summary(
+    noop_trace: dict[str, Any],
+    condition_trace: dict[str, Any],
+) -> dict[str, Any]:
+    """Name behavior-change dimensions used for #2777/#3328 interpretation."""
+    progress_delta = _progress_delta(noop_trace, condition_trace)
+    changed_steps = _changed_command_steps(noop_trace, condition_trace)
+    near_miss = _near_miss_summary(noop_trace, condition_trace)
+    collision = _collision_summary(noop_trace, condition_trace)
+    stop_proxy = _stop_yield_timing_proxy(noop_trace, condition_trace)
+    changed_progress_fields = [
+        field for field, payload in progress_delta.items() if payload["changed"]
+    ]
+    return {
+        "command_sequence_changed": bool(changed_steps),
+        "changed_command_steps": changed_steps,
+        "changed_command_step_count": len(changed_steps),
+        "progress_or_risk_changed": bool(changed_progress_fields),
+        "progress_delta_changed_fields": changed_progress_fields,
+        "closest_robot_ped": {
+            "distance": progress_delta["closest_robot_ped_distance"],
+            "step": progress_delta["closest_robot_ped_step"],
+        },
+        "min_distance_changed": progress_delta["closest_robot_ped_distance"]["changed"],
+        "collision_or_near_miss_changed": (
+            bool(collision["changed"]) or bool(near_miss["changed"])
+        ),
+        "collision_summary": collision,
+        "near_miss_summary": near_miss,
+        "stop_yield_timing_proxy": stop_proxy,
+        "stop_yield_timing": {
+            "direct_event_available": False,
+            "limitation": (
+                "Direct stop/yield event timing is not available in diagnostics traces; "
+                "only a zero-linear-speed command proxy is reported."
+            ),
+            "command_stop_proxy": {
+                "definition": stop_proxy["definition"],
+                "noop_first_stop_step": stop_proxy["noop_first_stop_step"],
+                "condition_first_stop_step": stop_proxy["condition_first_stop_step"],
+                "changed": stop_proxy["changed"],
+            },
+        },
+    }
+
+
 def _first_observed_step(trace: dict[str, Any]) -> int | None:
     """Return the first trace step with at least one planner-visible actor."""
     for row in trace.get("steps", []):
@@ -439,9 +660,7 @@ def _classification(
     fixture_contract_satisfied: bool,
 ) -> dict[str, str]:
     """Classify one live condition against the no-op trace."""
-    progress_delta = _progress_delta(noop_trace, condition_trace)
-    command_changed = _commands(noop_trace) != _commands(condition_trace)
-    progress_changed = any(item["changed"] for item in progress_delta.values())
+    behavior = _behavior_change_summary(noop_trace, condition_trace)
     observation_changed = _observation_totals(noop_trace) != _observation_totals(condition_trace)
     closest = _mapping(noop_trace.get("progress_summary")).get("closest_robot_ped_distance")
     near_field = isinstance(closest, (int, float)) and closest <= 2.0
@@ -453,9 +672,14 @@ def _classification(
                 "occluded-emergence fixture boundary."
             ),
         }
-    if command_changed or progress_changed:
+    if (
+        behavior["command_sequence_changed"]
+        or behavior["progress_or_risk_changed"]
+        or behavior["collision_or_near_miss_changed"]
+        or behavior["stop_yield_timing_proxy"]["changed"]
+    ):
         return {
-            "label": "diagnostic_only",
+            "label": "behavior_sensitive_diagnostic_only",
             "rationale": (
                 "Perturbation changed selected commands or progress/risk fields. "
                 "This is live behavior evidence, but one seed is not enough for "
@@ -488,6 +712,7 @@ def _compare_condition(
     """Compare one condition trace against the no-op trace."""
     noop_trace = _load_trace(noop_trace_path)
     condition_trace = _load_trace(condition_trace_path)
+    behavior = _behavior_change_summary(noop_trace, condition_trace)
     return {
         "trace": _durable_ref(condition_trace_path),
         "scenario": {
@@ -510,7 +735,9 @@ def _compare_condition(
             "condition": _observation_totals(condition_trace),
         },
         "command_summary": {
-            "sequence_changed": _commands(noop_trace) != _commands(condition_trace),
+            "sequence_changed": behavior["command_sequence_changed"],
+            "changed_steps": behavior["changed_command_steps"],
+            "changed_step_count": behavior["changed_command_step_count"],
             "noop_first": _commands(noop_trace)[0] if _commands(noop_trace) else None,
             "condition_first": _commands(condition_trace)[0]
             if _commands(condition_trace)
@@ -521,6 +748,7 @@ def _compare_condition(
             else None,
         },
         "progress_delta": _progress_delta(noop_trace, condition_trace),
+        "behavior_change_summary": behavior,
         "fixture_visibility": {
             "noop_first_observed_step": _first_observed_step(noop_trace),
             "condition_first_observed_step": _first_observed_step(condition_trace),
@@ -563,7 +791,7 @@ def _fail_closed_report(
                 "status": "blocked",
                 "blocker": blocker,
             }
-            for condition in CONDITIONS
+            for condition in _selected_conditions(args)
         ],
         "blockers": [blocker],
     }
@@ -581,6 +809,8 @@ def _run_config(*, args: argparse.Namespace, output_dir: Path) -> dict[str, Any]
         "seed_index": args.seed_index,
         "horizon": args.horizon,
         "output_dir": _durable_ref(output_dir),
+        "condition_set": args.condition_set,
+        "condition_names": [condition.name for condition in _selected_conditions(args)],
         "allow_non_occluded_live_fixture": bool(args.allow_non_occluded_live_fixture),
         "dry_run": bool(args.dry_run),
     }
@@ -591,6 +821,11 @@ def _write_outputs(report: dict[str, Any], output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "summary.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (output_dir / "README.md").write_text(_markdown(report), encoding="utf-8")
+
+
+def _markdown_value(value: Any) -> str:
+    """Return a compact table value for optional report fields."""
+    return "n/a" if value is None else str(value)
 
 
 def _markdown(report: dict[str, Any]) -> str:
@@ -628,16 +863,26 @@ def _markdown(report: dict[str, Any]) -> str:
             "",
             "## Conditions",
             "",
-            "| Condition | Status | Classification | Caveat |",
-            "|---|---|---|---|",
+            "| Condition | Status | Classification | Command changed | Progress/risk changed | "
+            "Min distance changed | Collision/near-miss changed | Stop/yield proxy changed | Caveat |",
+            "|---|---|---|---:|---:|---:|---:|---:|---|",
         ]
     )
     for condition in report["conditions"]:
         classification = _mapping(condition.get("classification"))
-        label = classification.get("label") or condition.get("status", "")
+        label = classification.get("label") or (
+            "baseline" if condition["name"] == "noop" else condition.get("status", "")
+        )
+        behavior = _mapping(condition.get("behavior_change_summary"))
+        stop_proxy = _mapping(behavior.get("stop_yield_timing_proxy"))
         lines.append(
             f"| `{condition['name']}` | `{condition['status']}` | "
             f"`{label}` | "
+            f"`{_markdown_value(behavior.get('command_sequence_changed'))}` | "
+            f"`{_markdown_value(behavior.get('progress_or_risk_changed'))}` | "
+            f"`{_markdown_value(behavior.get('min_distance_changed'))}` | "
+            f"`{_markdown_value(behavior.get('collision_or_near_miss_changed'))}` | "
+            f"`{_markdown_value(stop_proxy.get('changed'))}` | "
             f"{condition.get('blocker') or classification.get('rationale', '')} |"
         )
     if report.get("blockers"):
@@ -680,7 +925,7 @@ def _planned_report(
                     args=args,
                 ),
             }
-            for condition in CONDITIONS
+            for condition in _selected_conditions(args)
         ],
         "blockers": [] if fixture_contract["satisfied"] else [fixture_contract["blocker"]],
     }
@@ -695,7 +940,7 @@ def _execute_conditions(
     """Run all condition subprocesses and collect raw condition statuses."""
     conditions: list[dict[str, Any]] = []
     blockers: list[str] = []
-    for condition in CONDITIONS:
+    for condition in _selected_conditions(args):
         command = _condition_command(
             condition=condition,
             output_dir=output_dir,
@@ -783,6 +1028,89 @@ def _attach_condition_comparisons(
     return blockers
 
 
+def _verify_issue_3328_contract_guardrails(
+    *,
+    fixture_contract: Mapping[str, Any],
+) -> list[str]:
+    """Verify the static fixture-contract side of the #3328 probe."""
+    blockers: list[str] = []
+    if not fixture_contract.get("satisfied"):
+        blockers.append("Issue #3328 behavior probe requires fixture_contract.satisfied=true.")
+
+    matched = _mapping(fixture_contract.get("matched_scenario"))
+    if matched.get("name") != ISSUE_2756_FIXTURE_SCENARIO:
+        blockers.append(
+            "Issue #3328 behavior probe requires scenario "
+            f"{ISSUE_2756_FIXTURE_SCENARIO!r}; got {matched.get('name')!r}."
+        )
+    if ISSUE_2756_FIXTURE_SEED not in _int_list(matched.get("seeds")):
+        blockers.append(
+            f"Issue #3328 behavior probe requires seed {ISSUE_2756_FIXTURE_SEED} "
+            f"in matrix seeds; got {matched.get('seeds')!r}."
+        )
+    return blockers
+
+
+def _verify_issue_3328_trace_identity(label: str, trace: Mapping[str, Any]) -> list[str]:
+    """Verify one #3328 probe trace still names the intended scenario and seed."""
+    blockers: list[str] = []
+    if trace.get("scenario_id") != ISSUE_2756_FIXTURE_SCENARIO:
+        blockers.append(
+            f"{label} trace scenario is {trace.get('scenario_id')!r}, "
+            f"expected {ISSUE_2756_FIXTURE_SCENARIO!r}."
+        )
+    if _optional_int(trace.get("seed")) != ISSUE_2756_FIXTURE_SEED:
+        blockers.append(
+            f"{label} trace seed is {trace.get('seed')!r}, expected {ISSUE_2756_FIXTURE_SEED!r}."
+        )
+    return blockers
+
+
+def _verify_issue_3328_near_field_trace(noop_trace: Mapping[str, Any]) -> list[str]:
+    """Verify the #3328 probe no-op trace has near-field interaction geometry."""
+    closest = _mapping(noop_trace.get("progress_summary")).get("closest_robot_ped_distance")
+    if not isinstance(closest, int | float):
+        return ["Issue #3328 behavior probe requires a no-op closest_robot_ped_distance value."]
+    if float(closest) > 2.0:
+        return [
+            "Issue #3328 behavior probe requires no-op closest_robot_ped_distance <= 2.0 m; "
+            f"observed {closest}."
+        ]
+    return []
+
+
+def _verify_issue_3328_behavior_probe_guardrails(
+    *,
+    output_dir: Path,
+    fixture_contract: Mapping[str, Any],
+) -> list[str]:
+    """Fail closed unless the opt-in #3328 probe remains a near-field #2756 replay."""
+    blockers = _verify_issue_3328_contract_guardrails(fixture_contract=fixture_contract)
+    try:
+        noop_trace = _load_trace(output_dir / "traces" / "noop" / "trace.json")
+        delay_trace = _load_trace(output_dir / "traces" / "delay_only" / "trace.json")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return blockers + [f"Could not verify issue #3328 behavior probe guardrails: {exc}"]
+
+    for label, trace in (("noop", noop_trace), ("delay_only", delay_trace)):
+        blockers.extend(_verify_issue_3328_trace_identity(label, trace))
+
+    noop_first_observed = _first_observed_step(noop_trace)
+    delay_first_observed = _first_observed_step(delay_trace)
+    if noop_first_observed != 5:
+        blockers.append(
+            "Issue #3328 behavior probe requires no-op first observed step 5; "
+            f"observed {noop_first_observed}."
+        )
+    if delay_first_observed != 7:
+        blockers.append(
+            "Issue #3328 behavior probe requires delay-only first observed step 7; "
+            f"observed {delay_first_observed}."
+        )
+    blockers.extend(_verify_issue_3328_near_field_trace(noop_trace))
+    return blockers
+
+
 def _verify_fixture_observation_boundary(
     *,
     output_dir: Path,
@@ -815,6 +1143,35 @@ def _verify_fixture_observation_boundary(
     return blockers
 
 
+def _fixture_observation_boundary_summary(output_dir: Path) -> dict[str, int | None]:
+    """Return the observed no-op and delay-only fixture timing summary."""
+    summary = {
+        "noop_first_observed_step": None,
+        "delay_only_first_observed_step": None,
+        "expected_noop_first_observed_step": 5,
+        "expected_delay_only_first_observed_step": 7,
+    }
+    try:
+        noop_trace = _load_trace(output_dir / "traces" / "noop" / "trace.json")
+        delay_trace = _load_trace(output_dir / "traces" / "delay_only" / "trace.json")
+    except (OSError, ValueError, json.JSONDecodeError):
+        return summary
+    summary["noop_first_observed_step"] = _first_observed_step(noop_trace)
+    summary["delay_only_first_observed_step"] = _first_observed_step(delay_trace)
+    return summary
+
+
+def _compact_live_conditions(conditions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop worktree-local command and raw trace paths from durable report rows."""
+    compact_conditions: list[dict[str, Any]] = []
+    for condition in conditions:
+        compact = dict(condition)
+        for key in ("command", "trace", "report"):
+            compact.pop(key, None)
+        compact_conditions.append(compact)
+    return compact_conditions
+
+
 def _final_classification(
     *,
     blockers: list[str],
@@ -840,19 +1197,24 @@ def _final_classification(
         for item in conditions
         if item["name"] != "noop"
     }
-    if "diagnostic_only" in labels:
+    if "behavior_sensitive_diagnostic_only" in labels:
+        label = "behavior_sensitive_diagnostic_only"
+    elif "diagnostic_only" in labels:
         label = "diagnostic_only"
     elif "policy_insensitive" in labels:
         label = "policy_insensitive"
     elif "scenario_too_weak" in labels:
         label = "scenario_too_weak"
     else:
-        label = "robustness_evidence"
+        label = "diagnostic_only"
     return (
         "live_replay",
         {
             "label": label,
-            "rationale": "All seven perturbation-family live replays completed.",
+            "rationale": (
+                "All selected live replays completed. One seed is diagnostic only and "
+                "does not support a robustness, sensor-realism, or planner-superiority claim."
+            ),
         },
     )
 
@@ -904,6 +1266,13 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
             fixture_contract=fixture_contract,
         )
     )
+    if args.condition_set == ISSUE_3328_CONDITION_SET:
+        blockers.extend(
+            _verify_issue_3328_behavior_probe_guardrails(
+                output_dir=output_dir,
+                fixture_contract=fixture_contract,
+            )
+        )
     status, classification = _final_classification(
         blockers=blockers,
         fixture_contract_satisfied=bool(fixture_contract["satisfied"]),
@@ -912,17 +1281,30 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
 
     return {
         "schema_version": SCHEMA_VERSION,
+        "artifact_shape": "compact_summary_without_raw_traces",
         "issue": 2777,
         "status": status,
         "classification": classification,
         "claim_boundary": (
             "Stress-slice live planner/environment replay for one scenario, one seed, "
-            "and seven #2755 perturbation families. Treat as benchmark-facing only "
-            "when fixture_contract.satisfied is true; otherwise diagnostic-only."
+            "and the selected perturbation condition set. Treat behavior-sensitive "
+            "differences as diagnostic-only from one seed; do not infer robustness, "
+            "sensor realism, or planner superiority."
         ),
+        "inputs": {
+            "scenario_matrix": _durable_ref(scenario_matrix),
+            "raw_trace_json": (
+                "worktree-local generated traces summarized here; raw trace.json files "
+                "are intentionally not committed"
+            ),
+            "generated_funnel": (
+                "worktree-local generated_policy_search_funnel.yaml was intentionally not committed"
+            ),
+        },
         "fixture_contract": fixture_contract,
+        "fixture_observation_boundary": _fixture_observation_boundary_summary(output_dir),
         "run_config": _run_config(args=args, output_dir=output_dir),
-        "conditions": conditions,
+        "conditions": _compact_live_conditions(conditions),
         "blockers": blockers,
     }
 
@@ -944,6 +1326,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--seed-index", type=int, default=0)
     parser.add_argument("--horizon", type=int, default=50)
+    parser.add_argument(
+        "--condition-set",
+        choices=sorted(CONDITION_SETS),
+        default=DEFAULT_CONDITION_SET,
+        help=(
+            "Perturbation condition set to run. The default preserves the seven #2755 "
+            "families; issue_3328_behavior_probe is an opt-in four-condition probe."
+        ),
+    )
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
     parser.add_argument(
         "--allow-non-occluded-live-fixture",
@@ -960,6 +1351,11 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir = _repo_path(args.output_dir)
     if tuple(condition.name for condition in CONDITIONS) != REQUIRED_CONDITIONS:
         raise RuntimeError("Issue #2777 condition set drifted from the required seven families")
+    if (
+        tuple(condition.name for condition in CONDITION_SETS[ISSUE_3328_CONDITION_SET])
+        != ISSUE_3328_REQUIRED_CONDITIONS
+    ):
+        raise RuntimeError("Issue #3328 behavior probe condition set drifted")
     report = run_live_batch(args)
     _write_outputs(report, args.output_dir)
     print(

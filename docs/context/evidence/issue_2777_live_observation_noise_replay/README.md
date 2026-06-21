@@ -40,3 +40,12 @@ Raw trace JSON and per-condition reports were generated locally to build this su
 - The no-op trace first observes the pedestrian at step 5, and the delay-only condition first observes it at step 7.
 - The no-op trace reaches a closest robot-pedestrian distance of 1.6552 m, inside the <=2 m near-field target.
 - Perturbations changed planner-input observations, but selected commands and progress/risk summaries stayed unchanged; this is policy-insensitive diagnostic stress evidence, not a robustness claim.
+
+## Issue #3328 Behavior Probe
+
+`issue_3328_behavior_probe/` preserves this same near-field fixture boundary and adds an opt-in
+high-amplitude noise condition (`std=1.0`, `bound=2.0`, seed 3328). The probe is classified
+`behavior_sensitive_diagnostic_only`: it changes selected commands at steps 6 and 9 plus
+progress/min-distance summaries on one seed, while medium noise and delay-only remain
+policy-insensitive. It is diagnostic stress evidence only, not a robustness, sensor-realism, or
+planner-superiority claim.

@@ -37,9 +37,36 @@ def test_condition_set_matches_issue_2755_contract() -> None:
     mod = _load_script()
 
     assert tuple(condition.name for condition in mod.CONDITIONS) == mod.REQUIRED_CONDITIONS
+    assert mod.CONDITION_SETS[mod.DEFAULT_CONDITION_SET] == mod.CONDITIONS
     delay = next(condition for condition in mod.CONDITIONS if condition.name == "delay_only")
     assert "--observation-delay-steps" in delay.flags
     assert "2" in delay.flags
+
+
+def test_issue_3328_behavior_probe_condition_set_is_opt_in() -> None:
+    """The #3328 probe should not mutate the default seven-condition run."""
+    mod = _load_script()
+
+    probe_conditions = mod.CONDITION_SETS[mod.ISSUE_3328_CONDITION_SET]
+
+    assert tuple(condition.name for condition in probe_conditions) == (
+        "noop",
+        "medium_noise",
+        "delay_only",
+        "high_noise_3328",
+    )
+    high_noise = next(
+        condition for condition in probe_conditions if condition.name == "high_noise_3328"
+    )
+    assert high_noise.flags == (
+        "--observation-noise-std-m",
+        "1.0",
+        "--observation-noise-bound-m",
+        "2.0",
+        "--observation-perturbation-seed",
+        "3328",
+    )
+    assert tuple(condition.name for condition in mod.CONDITIONS) == mod.REQUIRED_CONDITIONS
 
 
 def test_default_strict_mode_fails_closed_without_occluded_fixture(tmp_path: Path) -> None:
@@ -190,6 +217,44 @@ def test_dry_run_plans_all_live_diagnostics_commands(tmp_path: Path) -> None:
     assert (output_dir / "generated_policy_search_funnel.yaml").exists()
 
 
+def test_issue_3328_behavior_probe_dry_run_plans_only_probe_conditions(tmp_path: Path) -> None:
+    """The opt-in #3328 condition set should plan only the probe conditions."""
+    mod = _load_script()
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        "schema_version: robot_sf.scenario_matrix.v1\n"
+        "select_scenarios: [issue_3233_near_field_observation_noise]\n",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "out"
+    args = mod.parse_args(
+        [
+            "--condition-set",
+            mod.ISSUE_3328_CONDITION_SET,
+            "--scenario-matrix",
+            str(matrix),
+            "--output-dir",
+            str(output_dir),
+            "--allow-non-occluded-live-fixture",
+            "--dry-run",
+        ]
+    )
+
+    report = mod.run_live_batch(args)
+
+    assert report["run_config"]["condition_set"] == mod.ISSUE_3328_CONDITION_SET
+    assert [condition["name"] for condition in report["conditions"]] == list(
+        mod.ISSUE_3328_REQUIRED_CONDITIONS
+    )
+    commands = {condition["name"]: condition["command"] for condition in report["conditions"]}
+    assert "--observation-noise-std-m" in commands["high_noise_3328"]
+    assert "1.0" in commands["high_noise_3328"]
+    assert "--observation-noise-bound-m" in commands["high_noise_3328"]
+    assert "2.0" in commands["high_noise_3328"]
+    assert "--observation-perturbation-seed" in commands["high_noise_3328"]
+    assert "3328" in commands["high_noise_3328"]
+
+
 def test_scalar_includes_are_ignored_for_fixture_detection(tmp_path: Path) -> None:
     """Malformed scalar includes should not be iterated character-by-character."""
     mod = _load_script()
@@ -261,12 +326,19 @@ def test_live_condition_timeout_becomes_fail_closed_blocker(
     assert "timed out" in blockers[0]
 
 
-def _write_trace(path: Path, *, command: list[float], observed_count: int, closest: float) -> None:
+def _write_trace(
+    path: Path,
+    *,
+    command: list[float],
+    observed_count: int,
+    closest: float,
+    seed: int = 111,
+) -> None:
     payload = {
         "candidate": "risk_surface_dwa_v0",
         "stage": "issue_2777_live_replay",
         "scenario_id": "issue_2756_occluded_emergence",
-        "seed": 2756,
+        "seed": seed,
         "algo": "risk_surface_dwa",
         "progress_summary": {
             "net_goal_progress": 1.0,
@@ -294,12 +366,15 @@ def _write_trace(path: Path, *, command: list[float], observed_count: int, close
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _write_observed_count_trace(path: Path, counts: list[int]) -> None:
+def _write_observed_count_trace(path: Path, counts: list[int], closest: float = 1.5) -> None:
     """Write a tiny diagnostics trace with configurable observed actor counts."""
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "scenario_id": "issue_2756_occluded_emergence",
         "seed": 111,
+        "progress_summary": {
+            "closest_robot_ped_distance": closest,
+        },
         "steps": [
             {
                 "step": step,
@@ -351,6 +426,52 @@ def test_fixture_boundary_verifier_requires_noop_and_delay_first_observed_steps(
     assert "Delay-only" in blockers[0]
 
 
+def test_issue_3328_behavior_probe_guardrails_require_near_field_fixture(
+    tmp_path: Path,
+) -> None:
+    """The opt-in probe should fail closed if the no-op trace is not near-field."""
+    mod = _load_script()
+    output_dir = tmp_path / "out"
+    contract = {
+        "satisfied": True,
+        "matched_scenario": {
+            "name": "issue_2756_occluded_emergence",
+            "seeds": [111],
+        },
+    }
+    _write_observed_count_trace(
+        output_dir / "traces/noop/trace.json",
+        [0, 0, 0, 0, 0, 1],
+        closest=1.9,
+    )
+    _write_observed_count_trace(
+        output_dir / "traces/delay_only/trace.json",
+        [0, 0, 0, 0, 0, 0, 0, 1],
+        closest=1.9,
+    )
+
+    assert (
+        mod._verify_issue_3328_behavior_probe_guardrails(
+            output_dir=output_dir,
+            fixture_contract=contract,
+        )
+        == []
+    )
+
+    _write_observed_count_trace(
+        output_dir / "traces/noop/trace.json",
+        [0, 0, 0, 0, 0, 1],
+        closest=2.1,
+    )
+    blockers = mod._verify_issue_3328_behavior_probe_guardrails(
+        output_dir=output_dir,
+        fixture_contract=contract,
+    )
+
+    assert blockers
+    assert "closest_robot_ped_distance <= 2.0" in blockers[-1]
+
+
 def test_trace_comparison_names_scenario_seed_planner_and_policy_insensitive(
     tmp_path: Path,
 ) -> None:
@@ -371,6 +492,56 @@ def test_trace_comparison_names_scenario_seed_planner_and_policy_insensitive(
     assert comparison["seed"]["same"] is True
     assert comparison["planner_mode"]["candidate"] == "risk_surface_dwa_v0"
     assert comparison["classification"]["label"] == "policy_insensitive"
+
+
+def test_trace_comparison_reports_behavior_change_dimensions(tmp_path: Path) -> None:
+    """Comparison payload should name command, risk, min-distance, collision, and stop proxies."""
+    mod = _load_script()
+    noop = tmp_path / "noop.json"
+    condition = tmp_path / "condition.json"
+    _write_trace(noop, command=[0.0, 0.0], observed_count=1, closest=1.5)
+    _write_trace(condition, command=[1.0, 0.0], observed_count=0, closest=0.8)
+    noop_payload = json.loads(noop.read_text(encoding="utf-8"))
+    condition_payload = json.loads(condition.read_text(encoding="utf-8"))
+    noop_payload["progress_summary"]["collision_flag_counts"]["pedestrian"] = 0
+    condition_payload["progress_summary"]["collision_flag_counts"]["pedestrian"] = 1
+    noop_payload["steps"][0]["step"] = 3
+    condition_payload["steps"][0]["step"] = 3
+    noop_payload["steps"][0]["meta"] = {"near_misses": 0}
+    condition_payload["steps"][0]["meta"] = {"near_misses": 1}
+    noop.write_text(json.dumps(noop_payload), encoding="utf-8")
+    condition.write_text(json.dumps(condition_payload), encoding="utf-8")
+
+    comparison = mod._compare_condition(
+        noop_trace_path=noop,
+        condition_trace_path=condition,
+        fixture_contract_satisfied=True,
+    )
+
+    behavior = comparison["behavior_change_summary"]
+    assert behavior["command_sequence_changed"] is True
+    assert behavior["changed_command_steps"] == [3]
+    assert comparison["command_summary"]["changed_steps"] == [3]
+    assert behavior["progress_or_risk_changed"] is True
+    assert "collision_flag_counts" in behavior["progress_delta_changed_fields"]
+    assert behavior["min_distance_changed"] is True
+    assert behavior["closest_robot_ped"]["distance"]["condition"] == 0.8
+    assert behavior["collision_or_near_miss_changed"] is True
+    assert behavior["collision_summary"]["changed"] is True
+    assert behavior["near_miss_summary"]["status"] == "available"
+    assert behavior["near_miss_summary"]["changed"] is True
+    assert behavior["stop_yield_timing_proxy"]["status"] == "available"
+    assert behavior["stop_yield_timing_proxy"]["direct_event_available"] is False
+    assert "policy_command linear speed" in behavior["stop_yield_timing_proxy"]["definition"]
+    assert behavior["stop_yield_timing_proxy"]["changed"] is True
+    assert behavior["stop_yield_timing_proxy"]["noop_first_stop_step"] == 3
+    assert behavior["stop_yield_timing_proxy"]["condition_first_stop_step"] is None
+    assert behavior["stop_yield_timing"]["direct_event_available"] is False
+    assert "not available" in behavior["stop_yield_timing"]["limitation"]
+    assert behavior["stop_yield_timing"]["command_stop_proxy"]["changed"] is True
+    assert behavior["stop_yield_timing"]["command_stop_proxy"]["noop_first_stop_step"] == 3
+    assert behavior["stop_yield_timing"]["command_stop_proxy"]["condition_first_stop_step"] is None
+    assert comparison["classification"]["label"] == "behavior_sensitive_diagnostic_only"
 
 
 def test_observation_totals_ignore_missing_noise_profile(tmp_path: Path) -> None:

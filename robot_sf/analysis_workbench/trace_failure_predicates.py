@@ -439,6 +439,7 @@ def aggregate_trace_failure_predicate_tables(
     scenario_family: str | None = None,
     matrix: Mapping[str, Any] | None = None,
     failed_trace_ids: Iterable[str] | None = None,
+    failed_trace_slices: Iterable[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build denominator-aware aggregate rows across one or more trace predicates.
 
@@ -448,6 +449,7 @@ def aggregate_trace_failure_predicate_tables(
         matrix: Optional predeclared trace-predicate benchmark matrix. When absent, outputs are
             diagnostic-only and claim-ineligible.
         failed_trace_ids: Trace IDs that failed to load.
+        failed_trace_slices: Optional structured metadata for traces that failed before parsing.
 
     Returns:
         Aggregate rows grouped by scenario family, planner, seed, predicate ID,
@@ -460,8 +462,13 @@ def aggregate_trace_failure_predicate_tables(
     included_trace_count = 0
     predicate_status_counts: dict[str, Counter[str]] = defaultdict(Counter)
     failed_trace_id_list = list(failed_trace_ids or [])
-    if failed_trace_id_list:
-        for _failed_id in failed_trace_id_list:
+    failed_trace_slice_rows = _json_safe_failed_trace_slices(failed_trace_slices)
+    failed_trace_count = _failed_trace_count(
+        failed_trace_ids=failed_trace_id_list,
+        failed_trace_slices=failed_trace_slice_rows,
+    )
+    if failed_trace_count:
+        for _failure_index in range(failed_trace_count):
             for pred_id in TRACE_FAILURE_PREDICATE_IDS:
                 predicate_status_counts[pred_id][VALIDITY_STATUS_PIPELINE_FAILURE] += 1
 
@@ -513,6 +520,7 @@ def aggregate_trace_failure_predicate_tables(
         expected_slices=expected_slices,
         observed_slices=set(trace_denominators),
         failed_trace_ids=failed_trace_id_list,
+        failed_trace_slices=failed_trace_slice_rows,
     )
     absent_expected_slice_count = len(absent_expected_slices)
     _record_absent_expected_slice_statuses(
@@ -604,8 +612,8 @@ def aggregate_trace_failure_predicate_tables(
         "schema_version": TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
         "table_kind": "aggregate_by_predicate_group",
         "summary": {
-            "input_trace_count": included_trace_count + len(failed_trace_id_list),
-            "failed_trace_count": len(failed_trace_id_list),
+            "input_trace_count": included_trace_count + failed_trace_count,
+            "failed_trace_count": failed_trace_count,
             "expected_matrix_slice_count": len(expected_slices),
             "absent_expected_slice_count": absent_expected_slice_count,
             "scenario_family_filter": scenario_family,
@@ -615,10 +623,11 @@ def aggregate_trace_failure_predicate_tables(
         "predicate_definitions": build_trace_failure_predicate_definitions(),
         "denominator_status": _aggregate_denominator_status(
             included_trace_count=included_trace_count,
-            failed_trace_count=len(failed_trace_id_list),
+            failed_trace_count=failed_trace_count,
             absent_expected_slice_count=absent_expected_slice_count,
         ),
         "rows": rows,
+        "failed_trace_slices": failed_trace_slice_rows,
         "absent_expected_slices": absent_expected_slices,
         "zero_predicate_groups": zero_predicate_groups,
         "predicate_denominator_health": {
@@ -677,11 +686,13 @@ def _absent_expected_slice_rows(
     expected_slices: set[tuple[str, str, int]],
     observed_slices: set[tuple[str, str, int]],
     failed_trace_ids: list[str],
+    failed_trace_slices: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Return matrix slices absent from loaded traces and failed trace IDs."""
     failed_expected_slices = _failed_expected_slices(
         expected_slices=expected_slices,
         failed_trace_ids=failed_trace_ids,
+        failed_trace_slices=failed_trace_slices,
     )
     return [
         {
@@ -700,15 +711,101 @@ def _failed_expected_slices(
     *,
     expected_slices: set[tuple[str, str, int]],
     failed_trace_ids: list[str],
+    failed_trace_slices: list[dict[str, Any]],
 ) -> set[tuple[str, str, int]]:
-    """Return expected slices named by failed trace IDs."""
-    return {
+    """Return expected slices named by failed structured metadata or trace IDs."""
+    failed_slices: set[tuple[str, str, int]] = set()
+    covered_failed_ids: set[str] = set()
+    for row in failed_trace_slices:
+        source_path = row.get("source_path")
+        if source_path is not None:
+            covered_failed_ids.add(_failed_trace_source_key(str(source_path)))
+        failed_slice = _complete_failed_trace_slice_metadata(row)
+        if failed_slice in expected_slices:
+            failed_slices.add(failed_slice)
+    uncovered_failed_trace_ids = [
+        failed_id
+        for failed_id in failed_trace_ids
+        if _failed_trace_source_key(failed_id) not in covered_failed_ids
+    ]
+    failed_slices.update(
         expected
         for expected in expected_slices
         if any(
-            _failed_trace_id_matches_slice(failed_id, expected) for failed_id in failed_trace_ids
+            _failed_trace_id_matches_slice(failed_id, expected)
+            for failed_id in uncovered_failed_trace_ids
         )
-    }
+    )
+    return failed_slices
+
+
+def _failed_trace_count(
+    *,
+    failed_trace_ids: list[str],
+    failed_trace_slices: list[dict[str, Any]],
+) -> int:
+    """Return a de-duplicated failed trace count across IDs and structured rows."""
+    failed_sources = {_failed_trace_source_key(failed_id) for failed_id in failed_trace_ids}
+    unkeyed_slice_count = 0
+    for row in failed_trace_slices:
+        source_path = row.get("source_path")
+        if source_path is None:
+            unkeyed_slice_count += 1
+        else:
+            failed_sources.add(_failed_trace_source_key(str(source_path)))
+    return len(failed_sources) + unkeyed_slice_count
+
+
+def _failed_trace_source_key(source: str) -> str:
+    """Return the stable comparable key for a failed trace ID or source path."""
+    return Path(source).name
+
+
+def _json_safe_failed_trace_slices(
+    failed_trace_slices: Iterable[Mapping[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Return a bounded JSON-safe failed trace slice payload."""
+    if failed_trace_slices is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    for raw_slice in failed_trace_slices:
+        if not isinstance(raw_slice, Mapping):
+            continue
+        row: dict[str, Any] = {}
+        for key in ("scenario_family", "scenario_id", "planner_id", "seed", "source_path"):
+            value = raw_slice.get(key)
+            if value is None:
+                continue
+            if key == "seed":
+                try:
+                    row[key] = int(value)
+                except (TypeError, ValueError):
+                    row[key] = str(value)
+            else:
+                row[key] = str(value)
+        if row:
+            rows.append(row)
+    return rows
+
+
+def _complete_failed_trace_slice_metadata(
+    failed_trace_slice: Mapping[str, Any],
+) -> tuple[str, str, int] | None:
+    """Return a matrix slice tuple when structured failed metadata is complete."""
+    raw_family = failed_trace_slice.get("scenario_family")
+    raw_planner = failed_trace_slice.get("planner_id")
+    raw_seed = failed_trace_slice.get("seed")
+    if raw_family is None or raw_planner is None or raw_seed is None:
+        return None
+    scenario_family = str(raw_family)
+    planner_id = str(raw_planner)
+    try:
+        seed = int(raw_seed)
+    except (TypeError, ValueError):
+        return None
+    if not scenario_family or not planner_id:
+        return None
+    return (scenario_family, planner_id, seed)
 
 
 def _matrix_expected_slices(

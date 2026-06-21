@@ -19,7 +19,10 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
     extract_trace_failure_predicates,
     render_trace_failure_predicate_markdown,
 )
-from scripts.tools.build_trace_failure_predicate_tables import write_trace_failure_predicate_tables
+from scripts.tools.build_trace_failure_predicate_tables import (
+    build_trace_failure_predicate_tables,
+    write_trace_failure_predicate_tables,
+)
 
 TRACE_FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -719,6 +722,65 @@ def test_pipeline_failure_handling(tmp_path: Path) -> None:
     assert "Traces with Pipeline Failures: 1" in markdown
     assert f"`{VALIDITY_STATUS_PIPELINE_FAILURE}`" in markdown
     assert "claim-ineligible" in markdown
+
+
+def test_table_builder_carries_structured_failed_trace_slices(tmp_path: Path) -> None:
+    """Structured failed-trace metadata should flow through the table builder."""
+    valid_trace = _build_trace(
+        trace_id="open-field-dwa-999",
+        scenario_id="open_field",
+        seed=999,
+        planner_id="dwa",
+        frames=[_frame(0, 0.0)],
+    )
+    valid_trace_path = tmp_path / "valid_trace.json"
+    valid_trace_path.write_text(json.dumps(valid_trace.to_dict()), encoding="utf-8")
+    malformed_trace_path = _build_malformed_trace_file(
+        tmp_path, "misleading-open-field-dwa-1000.json"
+    )
+    matrix = {
+        "schema_version": "trace_predicate_matrix.v1",
+        "name": "structured_failed_trace_matrix",
+        "status": "rate_interpretable",
+        "matrix": {
+            "scenario_families": ["open_field"],
+            "planners": ["dwa"],
+            "seeds": [999, 1000, 1001],
+        },
+    }
+
+    payload, failed_trace_ids = build_trace_failure_predicate_tables(
+        traces=[valid_trace_path, malformed_trace_path],
+        matrix=matrix,
+        failed_trace_slices=[
+            {
+                "scenario_family": "open_field",
+                "scenario_id": "open_field",
+                "planner_id": "dwa",
+                "seed": 1001,
+                "source_path": str(malformed_trace_path),
+            }
+        ],
+    )
+
+    assert failed_trace_ids == ["misleading-open-field-dwa-1000.json"]
+    assert payload["failed_trace_slices"] == [
+        {
+            "scenario_family": "open_field",
+            "scenario_id": "open_field",
+            "planner_id": "dwa",
+            "seed": 1001,
+            "source_path": str(malformed_trace_path),
+        }
+    ]
+    assert payload["absent_expected_slices"] == [
+        {
+            "scenario_family": "open_field",
+            "planner_id": "dwa",
+            "seed": 1000,
+            "status": "absent_expected_slice",
+        }
+    ]
 
 
 def test_predicate_denominator_health_in_payload() -> None:

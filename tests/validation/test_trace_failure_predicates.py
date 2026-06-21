@@ -527,6 +527,157 @@ def test_failed_expected_matrix_slice_not_reported_absent() -> None:
         assert report["claim_eligibility"] == MATRIX_CLAIM_INELIGIBLE
 
 
+def test_structured_failed_slice_metadata_preferred_over_filename() -> None:
+    """Structured failed slices should satisfy their slice without loose filename matching."""
+    trace = _clean_trace(
+        planner={"event": "step"},
+        scenario_id="open_field",
+        planner_id="dwa",
+        seed=999,
+    )
+    matrix = _matrix_for_slices(
+        scenario_families=["open_field"],
+        planners=["dwa"],
+        seeds=[999, 1000, 1001],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables(
+        [trace],
+        matrix=matrix,
+        failed_trace_ids=["open_field-dwa-1000.json"],
+        failed_trace_slices=[
+            {
+                "scenario_family": "open_field",
+                "scenario_id": "open_field",
+                "planner_id": "dwa",
+                "seed": 1001,
+                "source_path": "open_field-dwa-1000.json",
+            }
+        ],
+    )
+
+    assert payload["summary"]["absent_expected_slice_count"] == 1
+    assert payload["absent_expected_slices"] == [
+        {
+            "scenario_family": "open_field",
+            "planner_id": "dwa",
+            "seed": 1000,
+            "status": "absent_expected_slice",
+        }
+    ]
+    assert payload["failed_trace_slices"] == [
+        {
+            "scenario_family": "open_field",
+            "scenario_id": "open_field",
+            "planner_id": "dwa",
+            "seed": 1001,
+            "source_path": "open_field-dwa-1000.json",
+        }
+    ]
+
+
+def test_structured_failed_slice_metadata_combines_uncovered_failed_ids() -> None:
+    """Structured metadata should not hide unrelated failed trace IDs."""
+    trace = _clean_trace(
+        planner={"event": "step"},
+        scenario_id="open_field",
+        planner_id="dwa",
+        seed=999,
+    )
+    matrix = _matrix_for_slices(
+        scenario_families=["open_field"],
+        planners=["dwa"],
+        seeds=[999, 1000, 1001],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables(
+        [trace],
+        matrix=matrix,
+        failed_trace_ids=["open_field-dwa-1000.json"],
+        failed_trace_slices=[
+            {
+                "scenario_family": "open_field",
+                "scenario_id": "open_field",
+                "planner_id": "dwa",
+                "seed": 1001,
+                "source_path": "open_field-dwa-1001.json",
+            }
+        ],
+    )
+
+    assert payload["summary"]["failed_trace_count"] == 2
+    assert payload["summary"]["absent_expected_slice_count"] == 0
+    assert payload["absent_expected_slices"] == []
+
+
+def test_structured_failed_slice_metadata_deduplicates_source_path_count() -> None:
+    """The same failed source reported by ID and structured metadata counts once."""
+    matrix = _matrix_for_slices(
+        scenario_families=["open_field"],
+        planners=["dwa"],
+        seeds=[1000],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables(
+        [],
+        matrix=matrix,
+        failed_trace_ids=["open_field-dwa-1000.json"],
+        failed_trace_slices=[
+            {
+                "scenario_family": "open_field",
+                "scenario_id": "open_field",
+                "planner_id": "dwa",
+                "seed": 1000,
+                "source_path": "/tmp/open_field-dwa-1000.json",
+            }
+        ],
+    )
+
+    assert payload["summary"]["failed_trace_count"] == 1
+    assert payload["summary"]["absent_expected_slice_count"] == 0
+
+
+def test_incomplete_structured_failed_slice_metadata_fails_closed() -> None:
+    """Incomplete structured failed slices should not satisfy expected matrix slices."""
+    matrix = _matrix_for_slices(
+        scenario_families=["open_field"],
+        planners=["dwa"],
+        seeds=[1000],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables(
+        [],
+        matrix=matrix,
+        failed_trace_ids=["open_field-dwa-1000.json"],
+        failed_trace_slices=[
+            {
+                "scenario_family": "open_field",
+                "planner_id": "dwa",
+                "source_path": "open_field-dwa-1000.json",
+            }
+        ],
+    )
+
+    assert payload["denominator_status"] == "pipeline_failure"
+    assert payload["summary"]["failed_trace_count"] == 1
+    assert payload["summary"]["absent_expected_slice_count"] == 1
+    assert payload["absent_expected_slices"] == [
+        {
+            "scenario_family": "open_field",
+            "planner_id": "dwa",
+            "seed": 1000,
+            "status": "absent_expected_slice",
+        }
+    ]
+    assert payload["failed_trace_slices"] == [
+        {
+            "scenario_family": "open_field",
+            "planner_id": "dwa",
+            "source_path": "open_field-dwa-1000.json",
+        }
+    ]
+
+
 def test_failed_trace_id_requires_ordered_expected_slice_identifier() -> None:
     """Failed trace IDs should not satisfy expected slices through loose token collisions."""
     trace = _clean_trace(

@@ -14,6 +14,7 @@ SCRIPTS_DEV = REPO_ROOT / "scripts" / "dev"
 
 _POST_PREFLIGHT_SCRIPTS = [
     "check_pr_followups.py",
+    "check_fast_results_claim_map.py",
     "ruff_fix_format.sh",
     "run_tests_parallel.sh",
     "check_changed_coverage.sh",
@@ -95,6 +96,19 @@ def _make_fake_scripts(repo: Path) -> None:
             stub.chmod(0o755)
 
 
+def _write_lane_logging_stub(repo: Path) -> Path:
+    """Replace the test wrapper with a logger that records each lane invocation."""
+    stub = repo / "scripts" / "dev" / "run_tests_parallel.sh"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'printf "%s %s\\n" "${ROBOT_SF_TEST_LANE:-unset}" "$*" >> "$PWD/lane.log"\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    return repo / "lane.log"
+
+
 @pytest.fixture()
 def preflight_repo(tmp_path: Path) -> Path:
     """Return a committed git repo with the preflight and stub scripts."""
@@ -172,6 +186,95 @@ def test_interim_mode_keeps_existing_non_preflight_path(preflight_repo: Path) ->
     result = _run_pr_ready(preflight_repo, help_flag=False)
     assert result.returncode == 0, f"Script failed: {result.stderr}"
     assert "Final PR readiness requires analytics dependencies" not in result.stderr
+
+
+def test_pr_ready_check_escalates_optional_changed_files_to_the_optional_lane(
+    preflight_repo: Path,
+) -> None:
+    """Predictive or optional-path changes should trigger the optional lane."""
+    lane_log = _write_lane_logging_stub(preflight_repo)
+
+    changed_file = preflight_repo / "tests" / "planner" / "test_sonic_crowdnav.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("print('optional lane')\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "optional lane change")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD~1",
+            "PR_READY_MODE": "interim",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
+    assert lane_lines == [
+        "core --lane core",
+        "optional --lane optional",
+    ]
+    assert "Optional-extra changed files requiring the predictive lane" in result.stderr
+
+
+def test_pr_ready_check_keeps_core_only_changes_on_the_core_lane(preflight_repo: Path) -> None:
+    """Core-only changes should not schedule the optional lane."""
+    lane_log = _write_lane_logging_stub(preflight_repo)
+
+    changed_file = preflight_repo / "tests" / "unit" / "test_core_lane.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("print('core lane')\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "core lane change")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD~1",
+            "PR_READY_MODE": "interim",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
+    assert lane_lines == ["core --lane core"]
+    assert "No changed files require the optional-extra lane." in result.stderr
+
+
+def test_core_lane_collection_hook_skips_optional_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The pytest collection hook should keep optional files out of the core lane."""
+    import tests.conftest as test_conftest
+
+    monkeypatch.setenv("ROBOT_SF_TEST_LANE", "core")
+    assert (
+        test_conftest.pytest_ignore_collect(Path("tests/planner/test_sonic_crowdnav.py"), None)
+        is True
+    )
+    assert (
+        test_conftest.pytest_ignore_collect(Path("tests/unit/test_config_validation.py"), None)
+        is False
+    )
+    assert (
+        test_conftest.pytest_ignore_collect(Path("tests/dev/test_pr_ready_preflight.py"), None)
+        is False
+    )
+
+
+def test_optional_lane_collection_hook_skips_core_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The optional lane should collect only optional-extra test paths."""
+    import tests.conftest as test_conftest
+
+    monkeypatch.setenv("ROBOT_SF_TEST_LANE", "optional")
+    assert (
+        test_conftest.pytest_ignore_collect(Path("tests/planner/test_sonic_crowdnav.py"), None)
+        is False
+    )
+    assert (
+        test_conftest.pytest_ignore_collect(Path("tests/dev/test_pr_ready_preflight.py"), None)
+        is True
+    )
 
 
 def test_preflight_passes_when_modules_available(preflight_repo: Path) -> None:

@@ -60,6 +60,11 @@ Escalate to `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` when the change
 schemas, generated indexes, routing behavior, automation, runtime behavior, benchmark/metric/schema
 semantics, model provenance, or paper-facing claims.
 
+Use `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` for the dependency-minimal core
+readiness lane. If a change touches predictive or other optional-extra paths and you need the
+optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_tests_parallel.sh
+--lane optional`.
+
 ### Claim-map validation
 
 The fast-results claim map is an executable issue queue, not only a context note. Before changing

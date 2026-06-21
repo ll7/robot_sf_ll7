@@ -270,6 +270,37 @@ _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",
     "test_runner_video.py",
 }
+_TEST_LANE_ENV = "ROBOT_SF_TEST_LANE"
+_TEST_LANE_ALL = "all"
+_TEST_LANE_CORE = "core"
+_TEST_LANE_OPTIONAL = "optional"
+_OPTIONAL_TEST_PATH_FRAGMENTS = (
+    "tests/benchmark/",
+    "tests/benchmark_full/",
+    "tests/carla_bridge/",
+    "tests/integration/",
+    "tests/planner/",
+    "tests/render/",
+    "tests/training/",
+    "tests/visuals/",
+)
+_OPTIONAL_TEST_FILES = {
+    "tests/sb3_test.py",
+    "tests/tools/test_probe_sonic_model_inference.py",
+    "tests/test_baseline_ppo_smoke.py",
+    "tests/test_benchmark_visualization_integration.py",
+    "tests/test_feature_extractors.py",
+    "tests/test_grid_socnav_extractor.py",
+    "tests/test_map_runner_ppo.py",
+    "tests/test_map_runner_sac.py",
+    "tests/test_output_root_migration.py",
+    "tests/test_ppo_diagnostics.py",
+    "tests/test_predictive_model.py",
+    "tests/unit/test_cli_logging_flags.py",
+    "tests/unit/test_figure_orchestrator_requirements.py",
+    "tests/unit/test_runner_helper_coverage.py",
+    "tests/unit/test_runner_video.py",
+}
 
 
 @pytest.fixture
@@ -342,6 +373,49 @@ def _should_auto_mark_slow(path_str: str) -> bool:
     if any(filename.startswith(prefix) for prefix in _FAST_FILE_PREFIXES):
         return False
     return True
+
+
+def _configured_test_lane() -> str:
+    """Return the active pytest collection lane."""
+    lane = os.environ.get(_TEST_LANE_ENV, _TEST_LANE_ALL).strip().lower()
+    if lane in {_TEST_LANE_ALL, _TEST_LANE_CORE, _TEST_LANE_OPTIONAL}:
+        return lane
+    return _TEST_LANE_ALL
+
+
+def _is_optional_readiness_test_path(path_str: str) -> bool:
+    """Return whether a test path needs optional-extra readiness dependencies."""
+    normalized = path_str.replace("\\", "/")
+    repo_relative = normalized.split("/tests/", maxsplit=1)
+    if len(repo_relative) == 2:
+        normalized = f"tests/{repo_relative[1]}"
+    return normalized in _OPTIONAL_TEST_FILES or any(
+        fragment in normalized for fragment in _OPTIONAL_TEST_PATH_FRAGMENTS
+    )
+
+
+def _should_collect_in_lane(path_str: str, lane: str) -> bool:
+    """Return whether a path belongs in the requested pytest lane."""
+    is_optional = _is_optional_readiness_test_path(path_str)
+    if lane == _TEST_LANE_CORE:
+        return not is_optional
+    if lane == _TEST_LANE_OPTIONAL:
+        return is_optional
+    return True
+
+
+def pytest_ignore_collect(collection_path, path=None, config=None):  # type: ignore[missing-type-doc]
+    """Skip fast or slow files before import when a lane is explicitly selected."""
+    del path
+    del config
+    lane = _configured_test_lane()
+    if lane == _TEST_LANE_ALL:
+        return False
+
+    path_obj = Path(str(collection_path))
+    if path_obj.is_dir():
+        return False
+    return not _should_collect_in_lane(path_obj.as_posix(), lane)
 
 
 def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-doc]

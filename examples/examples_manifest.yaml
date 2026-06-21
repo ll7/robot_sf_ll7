@@ -484,3 +484,43 @@ examples:
     ci_reason: "Requires file output inspection; not suitable for smoke tests."
     doc_reference: specs/343-telemetry-viz/quickstart.md
     tags: [telemetry, visualization, headless, ci]
+  - path: plotting/paper_figures/build_planner_tradeoff_figure.py
+    name: "Paper Figure: Planner Trade-off"
+    summary: "Build the mandatory planner safety–efficiency tradeoff figure for the AMV paper."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Requires a benchmark publication-bundle path (--bundle-path); no default CI input."
+    tags: [paper, figures, plotting, benchmark]
+  - path: plotting/paper_figures/build_scenario_coverage_matrix.py
+    name: "Paper Table: Scenario Coverage Matrix"
+    summary: "Build a manuscript-facing AMV scenario coverage matrix."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Requires a benchmark publication-bundle/scenario-inventory path; no default CI input."
+    tags: [paper, figures, plotting, benchmark]
+  - path: plotting/paper_figures/build_svg_scenario_overview.py
+    name: "Paper Figure: Scenario SVG Overview"
+    summary: "Build a scenario-map overview figure from source SVG files."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Requires scenario SVG source assets; no default CI input."
+    tags: [paper, figures, plotting, benchmark]
+  - path: plotting/paper_figures/build_runtime_scene_panels.py
+    name: "Paper Figure: Runtime Scene Panels"
+    summary: "Build publication-ready runtime scene panel figures from benchmark videos/frames."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Requires rendered runtime frames/videos source root; no default CI input."
+    tags: [paper, figures, plotting, benchmark]
+  - path: plotting/paper_figures/build_observation_grid_figure.py
+    name: "Paper Figure: PPO Observation Grid"
+    summary: "Build a PPO occupancy-grid observation figure from rendered scenario videos."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Requires a benchmark publication-bundle path; no default CI input."
+    tags: [paper, figures, plotting, benchmark]

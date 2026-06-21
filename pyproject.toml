@@ -326,6 +326,17 @@ max-statements = 60
 "scripts/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
 # Examples, docs, and specs: similar leniencies for tutorial-style code
 "examples/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
+# Mirrored AMV-paper figure scripts: verbatim copies kept for provenance; exempt
+# from docstring/complexity style so the mirror is not diverged from its source.
+"examples/plotting/paper_figures/*.py" = [
+    "D101",
+    "D103",
+    "C901",
+    "PLR0912",
+    "PLR0915",
+    "C408",
+    "RUF046",
+]
 "docs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
 "specs/**/*.py" = ["T201", "BLE001", "PLC0415", "TC001", "TC002", "D417", "DOC201"]
 # Misc tooling directories: ignore docstring return/arg rules

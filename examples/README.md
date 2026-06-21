@@ -89,7 +89,8 @@ Feature-focused demos for developers exploring capabilities.
 | [26 Telemetry Pane](./advanced/26_telemetry_pane.py) | Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance. | _None_ | telemetry, visualization, pygame, interactive | ⚠️ Interactive pygame session not reliable for CI; use headless variant instead. |
 | [27 Telemetry Headless Smoke](./advanced/27_telemetry_headless_smoke.py) | Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering. | _None_ | telemetry, visualization, headless, ci | ⚠️ Requires file output inspection; not suitable for smoke tests. |
 | [32 Demo Adversarial Pedestrian](./advanced/32_demo_adversarial_pedestrian.py) | Run a modernized debug rollout for pedestrian PPO policies with factory-based setup. | maps/svg_maps/masterthesis/intersection.svg<br>model/run_043<br>model/pedestrian/ppo_intersection.zip | pedestrian, policy, debug, ppo | ⚠️ Interactive pygame debug demo with offline checkpoints. |
-| [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | recordings/<file>.jsonl | visualization, recording, threejs | ✅ |
+| [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | _None_ | visualization, recording, threejs | ✅ |
+| [34 Trace Three.js Viewer](./advanced/34_trace_threejs_viewer.py) | Export a simulation_trace_export.v1 trace to a static browser viewer. | _None_ | visualization, trace, annotation, threejs | ✅ |
 | [Occupancy Reward Shaping](./occupancy_reward_shaping.py) | Derive a clearance penalty from occupancy grid observations in a short rollout. | _None_ | occupancy, reward, grid | ✅ |
 
 ## Benchmarks
@@ -111,6 +112,11 @@ Visualization and analysis scripts built atop benchmark outputs.
 | --- | --- | --- | --- | --- |
 | [Coverage Example](./plotting/coverage_example.py) | Coverage tools programmatic usage example. | _None_ | coverage, tooling | ✅ |
 | [Data Analysis Example](./plotting/data_analysis_example.py) | Perform a showcase on how to use the data analysis module. | _None_ | analysis | ✅ |
+| [Paper Figure: PPO Observation Grid](./plotting/paper_figures/build_observation_grid_figure.py) | Build a PPO occupancy-grid observation figure from rendered scenario videos. | _None_ | paper, figures, plotting, benchmark | ⚠️ Requires a benchmark publication-bundle path; no default CI input. |
+| [Paper Figure: Planner Trade-off](./plotting/paper_figures/build_planner_tradeoff_figure.py) | Build the mandatory planner safety–efficiency tradeoff figure for the AMV paper. | _None_ | paper, figures, plotting, benchmark | ⚠️ Requires a benchmark publication-bundle path (--bundle-path); no default CI input. |
+| [Paper Figure: Runtime Scene Panels](./plotting/paper_figures/build_runtime_scene_panels.py) | Build publication-ready runtime scene panel figures from benchmark videos/frames. | _None_ | paper, figures, plotting, benchmark | ⚠️ Requires rendered runtime frames/videos source root; no default CI input. |
+| [Paper Table: Scenario Coverage Matrix](./plotting/paper_figures/build_scenario_coverage_matrix.py) | Build a manuscript-facing AMV scenario coverage matrix. | _None_ | paper, figures, plotting, benchmark | ⚠️ Requires a benchmark publication-bundle/scenario-inventory path; no default CI input. |
+| [Paper Figure: Scenario SVG Overview](./plotting/paper_figures/build_svg_scenario_overview.py) | Build a scenario-map overview figure from source SVG files. | _None_ | paper, figures, plotting, benchmark | ⚠️ Requires scenario SVG source assets; no default CI input. |
 | [Plot Force Field](./plotting/plot_force_field.py) | Plot a sampled social-force field using matplotlib. | _None_ | visualization, force-field | ✅ |
 | [Plot Force Field Normalized](./plotting/plot_force_field_normalized.py) | Plot normalized force vectors with a magnitude colormap and save PNG+PDF. | _None_ | visualization, force-field | ✅ |
 | [Plot Force Field Save](./plotting/plot_force_field_save.py) | Generate and save static images of the force field for documentation. | _None_ | visualization, force-field | ✅ |

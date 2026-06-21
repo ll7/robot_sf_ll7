@@ -66,6 +66,9 @@ _DURABLE_SOURCE_KINDS = {"live_execution", "durable_replay"}
 _FIGURE_EVIDENCE_TIERS = {"benchmark", "nominal_benchmark", "paper_grade"}
 _FIGURE_EXECUTION_MODES = {"native", "durable_replay"}
 _ALLOWED_CLAIM_STATUSES = {"allowed", "claimable"}
+_METRIC_INPUT_PATH_KEY = "_failure_pack_metric_input_path"
+_METRIC_INPUT_LINE_KEY = "_failure_pack_metric_input_line"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,18 @@ def _expand_timeline(timeline: list[dict[str, Any]], dt: float) -> list[dict[str
         steps = max(1, int(np.ceil(duration / dt))) if duration > 0.0 else 0
         expanded.extend([phase_info] * steps)
     return expanded
+
+
+def _portable_input_path(path: Path, *, repo_root: Path | None = None) -> str:
+    """Return a non-absolute path suitable for tracked provenance output."""
+    root = (repo_root or _REPO_ROOT).resolve()
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(root).as_posix()
+    except ValueError:
+        if path.is_absolute():
+            return path.name
+        return path.as_posix()
 
 
 def find_failure_step(trace: SimulationTraceExport) -> int:
@@ -162,11 +177,22 @@ def get_signal_phase_at_step(
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     """Read lines of JSONL into a list of dictionaries."""
     records: list[dict[str, Any]] = []
+    input_path = _portable_input_path(path)
     with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
+        for line_number, line in enumerate(fh, start=1):
             line = line.strip()
             if line:
-                records.append(json.loads(line))
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    msg = f"Invalid JSONL in {input_path} at line {line_number}: {exc.msg}"
+                    raise ValueError(msg) from exc
+                if not isinstance(record, dict):
+                    msg = f"Invalid JSONL in {input_path} at line {line_number}: expected object"
+                    raise ValueError(msg)
+                record[_METRIC_INPUT_PATH_KEY] = input_path
+                record[_METRIC_INPUT_LINE_KEY] = line_number
+                records.append(record)
     return records
 
 
@@ -229,9 +255,11 @@ def build_failure_pack(
     comfort_threshold: float,
     near_miss_threshold: float,
     provenance: FailurePackProvenance,
+    trace_input_paths: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Assemble failure cases from paired trace exports and metrics records."""
     cases = []
+    trace_input_paths = trace_input_paths or {}
 
     for trace in traces:
         # Match trace with episodes records by episode_id
@@ -311,6 +339,10 @@ def build_failure_pack(
             {
                 "episode_id": trace.source.episode_id,
                 "scenario_id": trace.source.scenario_id,
+                "trace_path": trace_input_paths.get(trace.source.episode_id),
+                "episodes_jsonl_path": matched_rec.get(_METRIC_INPUT_PATH_KEY),
+                "metric_row_line_number": matched_rec.get(_METRIC_INPUT_LINE_KEY),
+                "metric_row_claim_boundary": matched_rec.get("claim_boundary"),
                 "trace_row_range": (
                     [trace.frames[0].step, trace.frames[-1].step] if trace.frames else None
                 ),
@@ -489,10 +521,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     loaded_traces = []
+    trace_input_paths = {}
     if args.traces:
         for p in args.traces:
             if p.is_file():
-                loaded_traces.append(load_trace_with_fallback(p))
+                trace = load_trace_with_fallback(p)
+                loaded_traces.append(trace)
+                trace_input_paths[trace.source.episode_id] = _portable_input_path(p)
 
     loaded_records = []
     if args.episodes_jsonl:
@@ -517,6 +552,7 @@ def main(argv: list[str] | None = None) -> int:
             fallback_or_degraded=args.fallback_or_degraded,
             claim_matrix_status=args.claim_matrix_status,
         ),
+        trace_input_paths=trace_input_paths,
     )
 
     sanitized_pack = _sanitize(pack)

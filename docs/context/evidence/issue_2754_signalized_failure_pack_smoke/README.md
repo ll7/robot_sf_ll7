@@ -47,4 +47,6 @@ uv run python scripts/analysis/build_signalized_crossing_failure_pack_issue_2754
 
 - `summary.json`: compact `signalized_crossing_failure_pack.v1` smoke output with one
   fixture-backed case. The denominator plumbing remains eligible, but fixture/synthetic/smoke
-  provenance keeps the row diagnostic-only and figure-ineligible.
+  provenance keeps the row diagnostic-only and figure-ineligible. Each emitted case records the
+  repo-relative trace path, repo-relative metric JSONL path, matched metric-row line number, and
+  metric-row claim boundary.

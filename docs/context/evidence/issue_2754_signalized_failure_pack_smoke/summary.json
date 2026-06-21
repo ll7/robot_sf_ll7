@@ -6,6 +6,10 @@
     {
       "episode_id": "issue_2868_signalized_crossing_episode_0000",
       "scenario_id": "issue_2868_signalized_crossing",
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2868_signalized_crossing_fixture_0000.json",
+      "episodes_jsonl_path": "docs/context/evidence/issue_2754_signalized_failure_pack_smoke/episodes.jsonl",
+      "metric_row_line_number": 1,
+      "metric_row_claim_boundary": "smoke fixture only; validates issue #2754 pack extraction against a tracked signalized trace fixture and synthetic metric row, not benchmark evidence or traffic-light compliance evidence.",
       "trace_row_range": [
         0,
         11

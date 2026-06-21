@@ -77,7 +77,7 @@ probability is..." or imply operational risk.
 | Cross-entropy method | Medium for discovery, low for calibrated estimates today. Search/Optuna-style adaptation is plausible, but current artifacts are budget/quality diagnostics. | Efficiently finds failure regions and can train a good importance-sampling proposal. | Adaptive samples are not target-distribution draws; raw failure fraction is an optimizer yield, not a probability. | Use only as a proposal-training or failure-discovery stage until followed by weighted or held-out estimation. |
 | Adaptive stress testing | Low for calibrated estimates now. The AST framing is useful for sequential decision falsification, but Robot SF does not yet have a verified AST MDP, adversary action model, or trajectory likelihood accounting. | Strong for finding high-likelihood failure trajectories when the disturbance model is explicit. | Without a disturbance model and trajectory probability, AST returns counterexamples rather than failure probabilities. | Defer to a separate design after compact Monte Carlo and likelihood-accounting gaps are closed. |
 
-## Required Denominators And Fields
+## Required Denominators and Fields
 
 A probability-estimation run must emit at least these fields before any estimate is interpreted:
 
@@ -138,7 +138,7 @@ real-world probability of collision and not the probability over the canonical b
 That narrowness is useful: it makes the denominator auditable and lets later work decide whether
 importance sampling is worth implementing.
 
-## Reporting Template For A Future Run
+## Reporting Template for a Future Run
 
 A future run report should open in this order:
 

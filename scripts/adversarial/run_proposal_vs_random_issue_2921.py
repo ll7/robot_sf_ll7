@@ -176,7 +176,10 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Path to write the comparison JSON report.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.budget < 0:
+        parser.error("--budget must be >= 0")
+    return args
 
 
 def main() -> int:

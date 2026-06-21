@@ -55,9 +55,20 @@ class FailureArchiveProposalModel:
                 self.state = "blocked"
                 return
 
-            self.entries = data.get("entries", [])
-            if not self.entries:
+            raw_entries = data.get("entries", [])
+            if not isinstance(raw_entries, list):
                 self.state = "blocked"
+                return
+            if not raw_entries:
+                self.state = "blocked"
+                return
+            if any(
+                not isinstance(entry, dict) or not isinstance(entry.get("candidate", {}), dict)
+                for entry in raw_entries
+            ):
+                self.state = "blocked"
+                return
+            self.entries = raw_entries
         except (ValueError, TypeError, json.JSONDecodeError, OSError):
             self.state = "blocked"
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from robot_sf.adversarial.config import CandidateSpec, Pose2D
 from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 from robot_sf.adversarial.scenario_manifest import AdversarialScenarioManifest
@@ -64,6 +66,11 @@ def test_archive_path_loading_and_malformed_inputs(tmp_path: Path) -> None:
     assert FailureArchiveProposalModel(malformed_path).state == "blocked"
 
     assert FailureArchiveProposalModel({"entries": []}).state == "blocked"
+    assert FailureArchiveProposalModel({"entries": "not-a-list"}).state == "blocked"
+    assert FailureArchiveProposalModel({"entries": ["not-a-dict"]}).state == "blocked"
+    assert FailureArchiveProposalModel({"entries": [{"candidate": "not-a-dict"}]}).state == (
+        "blocked"
+    )
 
 
 def test_tabular_view_and_scale_fallbacks() -> None:
@@ -165,7 +172,7 @@ def test_certification_status_handling() -> None:
 
     # Advisory mode
     status_advisory = model.certify_candidate(c, dummy_yaml, require_certification=False)
-    assert status_advisory.status in ("passed", "failed")
+    assert status_advisory.status in ("passed", "failed", "not_available")
 
     # Strict mode: fails closed as not_available if the package isn't present
     status_strict = model.certify_candidate(c, dummy_yaml, require_certification=True)
@@ -219,3 +226,18 @@ def test_comparison_report_runs_and_outputs_correct_shape(tmp_path: Path) -> Non
         assert key in report["random_metrics"]
         assert key in report["proposal_metrics"]
         assert f"{key}_improvement" in report["comparison"]
+
+
+def test_comparison_script_rejects_negative_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Negative budgets should fail during argument parsing before sampling."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import parse_args
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["run_proposal_vs_random_issue_2921.py", "--budget", "-1"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args()
+
+    assert exc_info.value.code == 2

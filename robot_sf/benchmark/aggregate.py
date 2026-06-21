@@ -463,11 +463,13 @@ def _ensure_snqi(
     rec: dict[str, Any],
     weights: dict[str, float] | None,
     baseline: dict[str, dict[str, float]] | None,
+    *,
+    recompute: bool = False,
 ) -> None:
-    """Compute and attach SNQI when missing and inputs are provided."""
+    """Compute and attach SNQI when missing, or recompute when ``recompute`` is set."""
     if rec.get("metrics") is None:
         return
-    if "snqi" in rec["metrics"]:
+    if "snqi" in rec["metrics"] and not recompute:
         return
     if weights is None:
         return
@@ -538,6 +540,7 @@ def compute_aggregates(
     fallback_group_by: str = "scenario_id",
     snqi_weights: dict[str, float] | None = None,
     snqi_baseline: dict[str, dict[str, float]] | None = None,
+    recompute_snqi: bool = False,
     expected_algorithms: set[str] | None = None,
     observation_track_mode: str = "strict",
     logger_ctx=None,
@@ -548,7 +551,7 @@ def compute_aggregates(
         Nested dict of group -> metric -> summary statistics.
     """
     for rec in records:
-        _ensure_snqi(rec, snqi_weights, snqi_baseline)
+        _ensure_snqi(rec, snqi_weights, snqi_baseline, recompute=recompute_snqi)
     observation_track_meta = ensure_observation_track_policy(
         records,
         observation_track_mode=observation_track_mode,
@@ -904,6 +907,7 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
     fallback_group_by: str = "scenario_id",
     snqi_weights: dict[str, float] | None = None,
     snqi_baseline: dict[str, dict[str, float]] | None = None,
+    recompute_snqi: bool = False,
     return_ci: bool = True,
     bootstrap_samples: int = 1000,
     bootstrap_confidence: float = 0.95,
@@ -928,6 +932,7 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
         fallback_group_by=fallback_group_by,
         snqi_weights=snqi_weights,
         snqi_baseline=snqi_baseline,
+        recompute_snqi=recompute_snqi,
         expected_algorithms=expected_algorithms,
         observation_track_mode=observation_track_mode,
         logger_ctx=logger_ctx,
@@ -938,7 +943,7 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
 
     # Rebuild groups with flattened numeric values to avoid rework
     for rec in records:
-        _ensure_snqi(rec, snqi_weights, snqi_baseline)
+        _ensure_snqi(rec, snqi_weights, snqi_baseline, recompute=recompute_snqi)
     groups = _group_flattened(
         records,
         group_by=group_by,

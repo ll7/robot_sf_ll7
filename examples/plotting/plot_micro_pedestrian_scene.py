@@ -142,8 +142,10 @@ def main() -> None:
     velocities = np.asarray(sim.peds.vel())
 
     # --- Schematic ego robot + goal (overlaid; not part of pysocialforce) -----
+    # Goal placed in free space (clear of every pedestrian disc at this frame)
+    # so the green goal ring does not overlap a red pedestrian.
     robot_pos = np.array([5.4, 2.3])
-    robot_goal = np.array([8.8, 7.2])
+    robot_goal = np.array([8.0, 7.8])
     robot_heading = robot_goal - robot_pos
     robot_heading_norm = np.linalg.norm(robot_heading)
     if robot_heading_norm > 0:

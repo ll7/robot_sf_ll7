@@ -27,6 +27,7 @@ def build_trace_failure_predicate_tables(
     traces: list[Path],
     scenario_family: str | None = None,
     matrix: Mapping[str, Any] | None = None,
+    failed_trace_slices: list[Mapping[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Build aggregate predicate tables from one or more trace paths."""
     loaded_traces: list[SimulationTraceExport] = []
@@ -41,6 +42,7 @@ def build_trace_failure_predicate_tables(
         scenario_family=scenario_family,
         matrix=matrix,
         failed_trace_ids=failed_trace_ids,
+        failed_trace_slices=failed_trace_slices,
     )
     return payload, failed_trace_ids
 
@@ -50,6 +52,7 @@ def write_trace_failure_predicate_tables(
     traces: list[Path],
     scenario_family: str | None = None,
     matrix: Mapping[str, Any] | None = None,
+    failed_trace_slices: list[Mapping[str, Any]] | None = None,
     output_json: Path,
     output_markdown: Path,
     output_denominator_health_json: Path | None = None,
@@ -59,6 +62,7 @@ def write_trace_failure_predicate_tables(
         traces=traces,
         scenario_family=scenario_family,
         matrix=matrix,
+        failed_trace_slices=failed_trace_slices,
     )
     denominator_health_report = tfp.build_trace_predicate_denominator_health_report(payload)
 

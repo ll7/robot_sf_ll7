@@ -558,6 +558,53 @@ def test_failed_trace_id_requires_ordered_expected_slice_identifier() -> None:
     ]
 
 
+def test_failed_trace_id_does_not_match_seed_prefix() -> None:
+    """Failed trace IDs with longer seed tokens should not satisfy shorter expected seeds."""
+    matrix = _matrix_for_slices(
+        scenario_families=["open_field"],
+        planners=["dwa"],
+        seeds=[1000],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables(
+        [],
+        matrix=matrix,
+        failed_trace_ids=["open_field-dwa-10000.json"],
+    )
+
+    assert payload["summary"]["absent_expected_slice_count"] == 1
+    assert payload["absent_expected_slices"] == [
+        {
+            "scenario_family": "open_field",
+            "planner_id": "dwa",
+            "seed": 1000,
+            "status": "absent_expected_slice",
+        }
+    ]
+
+
+def test_matrix_expected_slices_ignore_none_fields() -> None:
+    """Matrix None entries should be missing, not coerced into literal slice identifiers."""
+    trace = _clean_trace(
+        planner={"event": "step"},
+        scenario_id="open_field",
+        planner_id="dwa",
+        seed=999,
+    )
+    matrix = _matrix_for_slices(
+        scenario_families=["open_field"],
+        planners=["dwa"],
+        seeds=[999],
+    )
+    matrix["matrix"]["scenario_families"].append(None)
+    matrix["matrix"]["planners"].append(None)
+
+    payload = aggregate_trace_failure_predicate_tables([trace], matrix=matrix)
+
+    assert payload["summary"]["expected_matrix_slice_count"] == 1
+    assert payload["absent_expected_slices"] == []
+
+
 def test_proposed_matrix_keeps_satisfied_rows_claim_ineligible() -> None:
     """A proposed matrix is a prerequisite, not evidence that rates may be interpreted."""
     trace = _clean_trace(planner={"event": "timeout"})

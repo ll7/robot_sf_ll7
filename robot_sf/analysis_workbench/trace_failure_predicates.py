@@ -741,7 +741,7 @@ def _string_list(raw_values: Any) -> list[str]:
     """Return non-empty string values from a matrix field."""
     if not isinstance(raw_values, list | tuple):
         return []
-    return [str(value) for value in raw_values if str(value)]
+    return [str(value) for value in raw_values if value is not None and str(value)]
 
 
 def _int_list(raw_values: Any) -> list[int]:
@@ -767,7 +767,18 @@ def _failed_trace_id_matches_slice(
     expected_identifier = (
         f"{_normalized_identifier(scenario_family)}{_normalized_identifier(planner_id)}{seed}"
     )
-    return expected_identifier in normalized_failed_id
+    start = 0
+    while True:
+        match_index = normalized_failed_id.find(expected_identifier, start)
+        if match_index == -1:
+            return False
+        next_char_index = match_index + len(expected_identifier)
+        if (
+            next_char_index >= len(normalized_failed_id)
+            or not normalized_failed_id[next_char_index].isdigit()
+        ):
+            return True
+        start = match_index + 1
 
 
 def _normalized_identifier(value: Any) -> str:

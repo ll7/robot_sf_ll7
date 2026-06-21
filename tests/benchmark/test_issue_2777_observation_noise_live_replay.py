@@ -8,6 +8,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts/benchmark/run_observation_noise_live_replay_issue_2777.py"
 _LOADED_MOD = None
@@ -73,6 +77,48 @@ def test_issue_3320_matrix_satisfies_occluded_emergence_contract() -> None:
     assert contract["matched_scenario"]["first_visible_step"] == 5
     assert contract["matched_scenario"]["delay_steps"] == 2
     assert contract["matched_scenario"]["delay_only_expected_first_observed_step"] == 7
+
+
+def test_issue_3323_matrix_adds_near_field_route_and_preserves_fixture_contract() -> None:
+    """The issue #3323 matrix should keep the #2756 boundary with a near-field robot route."""
+    mod = _load_script()
+    matrix = (
+        mod.REPO_ROOT
+        / "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml"
+    )
+    route_override = (
+        mod.REPO_ROOT / "configs/scenarios/route_overrides/issue_3323/"
+        "occluded_emergence_near_field_h1.yaml"
+    )
+
+    contract = mod._fixture_contract(matrix)
+
+    assert contract["satisfied"] is True
+    assert contract["matched_scenario"]["name"] == "issue_2756_occluded_emergence"
+    assert contract["matched_scenario"]["seeds"] == [111]
+    assert contract["matched_scenario"]["first_visible_step"] == 5
+    assert contract["matched_scenario"]["delay_only_expected_first_observed_step"] == 7
+    assert route_override.exists()
+
+    route_payload = yaml.safe_load(route_override.read_text(encoding="utf-8"))["route_payload"]
+    assert route_payload["robot_routes"] == [
+        {"spawn_id": 1, "goal_id": 1, "waypoints": [[27.0, 9.0], [27.0, 4.5]]}
+    ]
+
+    scenarios = load_scenarios(matrix)
+    assert len(scenarios) == 1
+    scenario = scenarios[0]
+    assert scenario["name"] == "issue_2756_occluded_emergence"
+    route_overrides_path = Path(str(scenario["route_overrides_file"]))
+    if not route_overrides_path.is_absolute():
+        route_overrides_path = (matrix.parent / route_overrides_path).resolve()
+    assert route_overrides_path == route_override
+
+    config = build_robot_config_from_scenario(scenario, scenario_path=matrix.resolve())
+    _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    assert map_def.robot_routes[0].waypoints == [(27.0, 9.0), (27.0, 4.5)]
+    assert map_def.robot_routes[0].spawn_zone[0] == (27.0, 9.0)
+    assert map_def.robot_routes[0].goal_zone[0] == (27.0, 4.5)
 
 
 def test_mismatched_occluded_emergence_contract_fails_closed(tmp_path: Path) -> None:

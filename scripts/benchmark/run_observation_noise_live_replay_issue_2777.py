@@ -163,18 +163,25 @@ def _source_issue_matches(value: Any) -> bool:
     return False
 
 
+def _optional_int(value: Any) -> int | None:
+    """Return a non-boolean integer when coercion is exact enough for metadata checks."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _int_list(value: Any) -> list[int]:
     """Parse a list of integer-like values while ignoring invalid entries."""
     if not isinstance(value, list):
         return []
     parsed: list[int] = []
     for item in value:
-        if isinstance(item, bool):
-            continue
-        try:
-            parsed.append(int(item))
-        except (TypeError, ValueError):
-            continue
+        parsed_item = _optional_int(item)
+        if parsed_item is not None:
+            parsed.append(parsed_item)
     return parsed
 
 
@@ -188,12 +195,16 @@ def _fixture_candidate(scenario: Mapping[str, Any]) -> dict[str, Any]:
         "family": str(metadata.get("family") or scenario.get("scenario_family") or ""),
         "label": str(metadata.get("label") or fixture.get("label") or ""),
         "seeds": _int_list(scenario.get("seeds")),
-        "first_visible_step": _metadata_field(metadata, fixture, "first_visible_step"),
-        "delay_steps": _metadata_field(metadata, fixture, "delay_steps"),
-        "delay_only_expected_first_observed_step": _metadata_field(
-            metadata,
-            fixture,
-            "delay_only_expected_first_observed_step",
+        "first_visible_step": _optional_int(
+            _metadata_field(metadata, fixture, "first_visible_step")
+        ),
+        "delay_steps": _optional_int(_metadata_field(metadata, fixture, "delay_steps")),
+        "delay_only_expected_first_observed_step": _optional_int(
+            _metadata_field(
+                metadata,
+                fixture,
+                "delay_only_expected_first_observed_step",
+            )
         ),
     }
 
@@ -417,8 +428,7 @@ def _first_observed_step(trace: dict[str, Any]) -> int | None:
     for row in trace.get("steps", []):
         meta = _mapping(_mapping(row).get("observation_perturbation"))
         if int(meta.get("observed_actor_count", 0) or 0) > 0:
-            step = row.get("step")
-            return int(step) if isinstance(step, int) and not isinstance(step, bool) else None
+            return _optional_int(row.get("step"))
     return None
 
 

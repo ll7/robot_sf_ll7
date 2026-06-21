@@ -492,3 +492,24 @@ class TestStateReset:
         r = perturb_ground_truth(pos, vel, ids, spec=spec, step=0, state=state)
         # Buffer has initial_obs, delay=1: should return the seeded observation
         np.testing.assert_array_equal(r["observed"]["positions"], pos + 99)
+
+    def test_reset_with_initial_obs_copies_seeded_snapshots(self) -> None:
+        """Seeded delay-buffer warmup should not share mutable snapshot references."""
+        state = ObservationPerturbationState(delay_steps=2)
+        pos, vel, ids = _simple_actors()
+        initial_obs = {
+            "positions": pos.copy(),
+            "velocities": vel.copy(),
+            "ids": list(ids),
+        }
+
+        state.reset(initial_obs=initial_obs)
+        initial_obs["ids"].append("mutated")
+        initial_obs["positions"][0, 0] = 99.0
+
+        first, second = list(state._delay_buffer)
+        assert first is not second
+        assert first["ids"] == ids
+        assert second["ids"] == ids
+        np.testing.assert_array_equal(first["positions"], pos)
+        np.testing.assert_array_equal(second["positions"], pos)

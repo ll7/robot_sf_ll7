@@ -13,6 +13,7 @@ carry no sensor-certification semantics.
 from __future__ import annotations
 
 from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -107,7 +108,7 @@ class ObservationPerturbationState:
         self._delay_buffer = deque(maxlen=capacity)
         if initial_obs is not None:
             for _ in range(max(1, self.delay_steps)):
-                self._delay_buffer.append(initial_obs)
+                self._delay_buffer.append(deepcopy(initial_obs))
 
 
 def _make_rng(spec: ObservationPerturbationSpec, step: int) -> np.random.Generator | None:

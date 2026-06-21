@@ -1,0 +1,81 @@
+{
+  "schema_version": "issue_2777_observation_noise_live_replay.v1",
+  "issue": 2777,
+  "status": "fail_closed",
+  "classification": {
+    "label": "blocked",
+    "rationale": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+  },
+  "claim_boundary": "No benchmark-facing robustness claim. The command failed closed before live replay because the #2755/#2756 occluded-emergence fixture boundary could not be preserved.",
+  "fixture_contract": {
+    "required_source_issue": 2756,
+    "required_scenario": "issue_2756_occluded_emergence",
+    "required_family": "occluded_emergence/deterministic_occluded_emergence",
+    "first_visible_step": 5,
+    "delay_steps": 2,
+    "delay_only_expected_first_observed_step": 7,
+    "scenario_matrix": "configs/scenarios/sets/issue_3201_pedestrian_dominated_observation_noise.yaml",
+    "satisfied": false,
+    "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+  },
+  "run_config": {
+    "candidate": "risk_surface_dwa_v0",
+    "stage": "smoke",
+    "scenario_matrix": "configs/scenarios/sets/issue_3201_pedestrian_dominated_observation_noise.yaml",
+    "scenario_name": null,
+    "scenario_index": 0,
+    "seed": null,
+    "seed_index": 0,
+    "horizon": 50,
+    "output_dir": "docs/context/evidence/issue_2777_live_observation_noise_replay",
+    "allow_non_occluded_live_fixture": false,
+    "dry_run": false
+  },
+  "conditions": [
+    {
+      "name": "noop",
+      "description": "Unperturbed live planner/environment replay.",
+      "status": "blocked",
+      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    },
+    {
+      "name": "low_noise",
+      "description": "Bounded Gaussian pedestrian-position perturbation, std=0.10 m, bound=0.20 m.",
+      "status": "blocked",
+      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    },
+    {
+      "name": "medium_noise",
+      "description": "Bounded Gaussian pedestrian-position perturbation, std=0.30 m, bound=0.60 m.",
+      "status": "blocked",
+      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    },
+    {
+      "name": "missed_detection_only",
+      "description": "All live pedestrians removed from planner input by missed-detection probability 1.0.",
+      "status": "blocked",
+      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    },
+    {
+      "name": "occlusion_only",
+      "description": "All live pedestrians occluded from planner input with a zero-distance occlusion gate.",
+      "status": "blocked",
+      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    },
+    {
+      "name": "delay_only",
+      "description": "Two-step delayed pedestrian observation, preserving the #2755 expected lag.",
+      "status": "blocked",
+      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    },
+    {
+      "name": "combined",
+      "description": "Medium Gaussian perturbation plus full live-pedestrian occlusion.",
+      "status": "blocked",
+      "blocker": "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+    }
+  ],
+  "blockers": [
+    "No checked-in live scenario matrix preserving the #2755/#2756 occluded-emergence fixture boundary was found in the selected matrix."
+  ]
+}

@@ -188,6 +188,10 @@ def test_real_failure_case_output(tmp_path: Path) -> None:
     case = result["cases"][0]
     assert case["episode_id"] == "fail_ep_0"
     assert case["scenario_id"] == "fail_scen_0"
+    assert case["trace_path"] == "trace.json"
+    assert case["episodes_jsonl_path"] == "episodes.jsonl"
+    assert case["metric_row_line_number"] == 1
+    assert case["metric_row_claim_boundary"] is None
     assert case["trace_row_range"] == [0, 1]
     assert case["signal_phase"] == "red"
     assert case["stop_line_geometry"] == [[1.0, 1.0], [1.0, -1.0]]
@@ -206,6 +210,82 @@ def test_real_failure_case_output(tmp_path: Path) -> None:
     assert case["allowed_claim_wording"] == ALLOWED_CLAIM_WORDING
     assert case["diagnostic_only"] is False
     assert case["figure_eligible"] is True
+
+
+def test_metric_row_input_provenance_records_matched_jsonl_line(tmp_path: Path) -> None:
+    """The emitted case points to the matched metric row, not just the JSONL file."""
+    trace_data = _make_dummy_trace("fail_ep_0", "fail_scen_0")
+    trace_path = tmp_path / "trace.json"
+    trace_path.write_text(json.dumps(trace_data))
+
+    unmatched_record = {
+        "episode_id": "other_ep_0",
+        "scenario_id": "other_scen_0",
+        "seed": 456,
+        "metrics": {
+            "collisions": 1.0,
+            "comfort_exposure": 0.0,
+            "near_misses": 0,
+            "signal_metrics_denominator": 1,
+            "signal_metrics_evidence": {
+                "state": "planner_observable",
+                "exclusion_reason": "",
+            },
+        },
+    }
+    matched_record = {
+        "episode_id": "fail_ep_0",
+        "scenario_id": "fail_scen_0",
+        "seed": 123,
+        "metrics": {
+            "collisions": 1.0,
+            "comfort_exposure": 0.0,
+            "near_misses": 0,
+            "signal_metrics_denominator": 1,
+            "signal_metrics_evidence": {
+                "state": "planner_observable",
+                "exclusion_reason": "",
+            },
+        },
+        "scenario_params": {
+            "metadata": {
+                "signal_state": {
+                    "timeline": [{"state": "red", "duration": 5.0}],
+                    "stop_line": [[1.0, 1.0], [1.0, -1.0]],
+                }
+            }
+        },
+        "claim_boundary": "unit-test metric row boundary",
+    }
+    record_path = tmp_path / "episodes.jsonl"
+    record_path.write_text(
+        json.dumps(unmatched_record) + "\n" + json.dumps(matched_record) + "\n",
+        encoding="utf-8",
+    )
+
+    output_path = tmp_path / "result.json"
+
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            *_eligible_runtime_args(),
+        ]
+    )
+    assert exit_code == 0
+
+    result = json.loads(output_path.read_text(encoding="utf-8"))
+    case = result["cases"][0]
+    assert case["trace_path"] == "trace.json"
+    assert case["episodes_jsonl_path"] == "episodes.jsonl"
+    assert case["metric_row_line_number"] == 2
+    assert case["metric_row_claim_boundary"] == "unit-test metric row boundary"
+    assert not case["trace_path"].startswith("/")
+    assert not case["episodes_jsonl_path"].startswith("/")
 
 
 def test_missing_provenance_defaults_to_diagnostic_only(tmp_path: Path) -> None:

@@ -271,10 +271,6 @@ from robot_sf.planner.sonic_crowdnav import (
     build_sonic_crowdnav_config,
 )
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
-from robot_sf.planner.teb_commitment import (
-    TEBCommitmentPlannerAdapter,
-    build_teb_commitment_config,
-)
 from robot_sf.planner.topology_guided_local_policy import (
     TopologyGuidedHybridRulePlannerAdapter,
     build_topology_guided_local_policy_config,
@@ -2037,8 +2033,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     elif algo_key in {"socnav_bench"}:
         allow_fallback = bool(algo_config.get("allow_fallback", False))
         adapter = SocNavBenchSamplingAdapter(config=socnav_cfg, allow_fallback=allow_fallback)
-    elif algo_key == "teb":
-        adapter = TEBCommitmentPlannerAdapter(config=build_teb_commitment_config(algo_config))
     elif algo_key in {"nmpc_social", "nmpc"}:
         adapter = NMPCSocialPlannerAdapter(config=build_nmpc_social_config(algo_config))
     elif algo_key in {"rvo", "dwa"}:

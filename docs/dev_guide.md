@@ -47,6 +47,11 @@ Use a detached checkout at latest `origin/main` only for read-only discovery, du
 issue creation or update work. Create or switch to a branch/worktree before editing docs or code,
 running validation for a PR, pushing, or publishing.
 
+For long autonomous goals, delegated batches, and token-saving threads, seed the active prompt or
+resume summary with `docs/templates/token_efficient_thread_profile.md`. The profile keeps
+`task_class`, `validation_tier`, context budget, delegation artifact requirements, and output budget
+explicit without duplicating the maintainer hierarchy or readiness matrix.
+
 Docs-only and instruction-only changes normally use the cheap validation path: inspect the diff,
 verify changed links or paths where practical, and run available lightweight checks. Skill or AI
 workflow edits should also run the relevant skill and sync checks, for example:

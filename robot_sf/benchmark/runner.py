@@ -1740,6 +1740,7 @@ def _finalize_batch(
     out_path: Path,
     wrote: int,
     resume: bool,
+    provenance_input_paths: list[Path] | None = None,
 ) -> dict[str, Any]:
     """Finalize batch processing: save manifest and optional performance snapshot.
 
@@ -1754,6 +1755,7 @@ def _finalize_batch(
             index_existing(out_path),
             identity_hash=_episode_identity_hash(),
             schema_version=EPISODE_SCHEMA_VERSION,
+            input_paths=provenance_input_paths,
         )
 
     # Optional: write a small performance snapshot for video encoding if requested
@@ -1957,7 +1959,15 @@ def run_batch(  # noqa: PLR0913
     )
 
     # Finalize and return summary
-    summary = _finalize_batch(out_path, wrote, resume)
+    provenance_input_paths = [Path(schema_path)]
+    if isinstance(scenarios_or_path, str | Path):
+        provenance_input_paths.append(Path(scenarios_or_path))
+    summary = _finalize_batch(
+        out_path,
+        wrote,
+        resume,
+        provenance_input_paths=provenance_input_paths,
+    )
     summary["total_jobs"] = len(jobs)
     summary["failures"] = failures
     if benchmark_track is not None:

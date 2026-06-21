@@ -67,7 +67,8 @@
             "properties": {
               "position": {"$ref": "#/$defs/vector2"},
               "heading": {"type": "number"},
-              "velocity": {"$ref": "#/$defs/vector2"}
+              "velocity": {"$ref": "#/$defs/vector2"},
+              "radius": {"type": "number", "minimum": 0}
             }
           },
           "pedestrians": {
@@ -79,7 +80,8 @@
               "properties": {
                 "id": {"type": "string", "minLength": 1},
                 "position": {"$ref": "#/$defs/vector2"},
-                "velocity": {"$ref": "#/$defs/vector2"}
+                "velocity": {"$ref": "#/$defs/vector2"},
+                "radius": {"type": "number", "minimum": 0}
               }
             }
           },

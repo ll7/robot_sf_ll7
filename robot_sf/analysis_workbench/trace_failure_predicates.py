@@ -22,6 +22,15 @@ TRACE_FAILURE_PREDICATE_SOURCE = "trace_failure_predicates.rule_based.v1"
 TRACE_PREDICATE_DENOMINATOR_HEALTH_SCHEMA_VERSION = "trace_predicate_denominator_health.v1"
 TRACE_PREDICATE_MATRIX_SCHEMA_VERSION = "trace_predicate_matrix.v1"
 
+DEFAULT_CLEARANCE_THRESHOLD_M = 0.4
+DEFAULT_COLLISION_MISSING_RADIUS_NEAR_DISTANCE_M = 0.2
+DEFAULT_NEAR_MISS_THRESHOLD_M = 0.5
+DEFAULT_STATIONARY_DISPLACEMENT_THRESHOLD_M = 0.05
+DEFAULT_LOW_PROGRESS_DISPLACEMENT_THRESHOLD_M = 0.25
+DEFAULT_OSCILLATION_MIN_SIGN_CHANGES = 3
+DEFAULT_EVASIVE_ANGULAR_VELOCITY_THRESHOLD = 1.0
+DEFAULT_EVASIVE_LINEAR_DROP_THRESHOLD_MPS = 0.3
+
 VALIDITY_STATUS_VALID = "valid"
 VALIDITY_STATUS_UNAVAILABLE_DATA = "not_available"
 VALIDITY_STATUS_NO_PREDICATE_OBSERVED = "no_predicate_observed"
@@ -34,11 +43,13 @@ DENOMINATOR_HEALTH_STATUSES = (
 )
 
 TRACE_FAILURE_PREDICATE_IDS = (
+    "collision",
     "late_evasive_reaction",
     "oscillatory_local_control",
     "occlusion_triggered_near_miss",
     "bottleneck_deadlock",
     "zero_motion_timeout_behavior",
+    "low_progress",
     "clearance_critical_interaction",
 )
 
@@ -88,7 +99,7 @@ def matrix_required_fields_for_predicate(matrix: Mapping[str, Any], predicate_id
     return list(fields) if isinstance(fields, list | tuple) else []
 
 
-def _trace_has_field(trace: SimulationTraceExport, field_path: str) -> bool:
+def _trace_has_field(trace: SimulationTraceExport, field_path: str) -> bool:  # noqa: C901
     """Check whether at least one frame provides a dotted trace field.
 
     Supports paths such as ``robot.position``, ``pedestrians.position``,
@@ -98,6 +109,8 @@ def _trace_has_field(trace: SimulationTraceExport, field_path: str) -> bool:
     Returns:
         True when at least one frame contains the field, False otherwise.
     """
+    if field_path == "planner.occlusion_or_visibility":
+        return any(_occlusion_value(frame.planner) is not None for frame in trace.frames)
     parts = field_path.split(".")
     if not parts:
         return False
@@ -168,17 +181,197 @@ class TraceFailurePredicate:
         return asdict(self)
 
 
+@dataclass(frozen=True, slots=True)
+class TraceFailurePredicateDefinition:
+    """Stable documentation for one reusable trace failure predicate."""
+
+    predicate_id: str
+    description: str
+    inputs: list[str]
+    units: dict[str, str]
+    thresholds: dict[str, Any]
+    denominator_semantics: str
+    emitted_statuses: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert the predicate definition to JSON-safe primitives.
+
+        Returns:
+            Dictionary representation of the definition record.
+        """
+        return asdict(self)
+
+
+def build_trace_failure_predicate_definitions(
+    *,
+    clearance_threshold_m: float = DEFAULT_CLEARANCE_THRESHOLD_M,
+    collision_missing_radius_near_distance_m: float = (
+        DEFAULT_COLLISION_MISSING_RADIUS_NEAR_DISTANCE_M
+    ),
+    near_miss_threshold_m: float = DEFAULT_NEAR_MISS_THRESHOLD_M,
+    stationary_displacement_threshold_m: float = DEFAULT_STATIONARY_DISPLACEMENT_THRESHOLD_M,
+    low_progress_displacement_threshold_m: float = DEFAULT_LOW_PROGRESS_DISPLACEMENT_THRESHOLD_M,
+    oscillation_min_sign_changes: int = DEFAULT_OSCILLATION_MIN_SIGN_CHANGES,
+    evasive_angular_velocity_threshold: float = DEFAULT_EVASIVE_ANGULAR_VELOCITY_THRESHOLD,
+    evasive_linear_drop_threshold_mps: float = DEFAULT_EVASIVE_LINEAR_DROP_THRESHOLD_MPS,
+) -> list[dict[str, Any]]:
+    """Return machine-readable predicate definitions and denominator semantics.
+
+    Returns:
+        JSON-safe definition rows ordered by ``TRACE_FAILURE_PREDICATE_IDS``.
+    """
+    definitions = (
+        TraceFailurePredicateDefinition(
+            predicate_id="collision",
+            description=(
+                "Robot-pedestrian center distance is at or below the sum of robot and pedestrian "
+                "radii."
+            ),
+            inputs=[
+                "robot.position",
+                "robot.radius",
+                "pedestrians.id",
+                "pedestrians.position",
+                "pedestrians.radius",
+            ],
+            units={"distance": "m", "radius": "m"},
+            thresholds={"missing_radius_near_distance_m": collision_missing_radius_near_distance_m},
+            denominator_semantics=(
+                "The denominator requires robot and pedestrian radii. Near-contact geometry "
+                "without radii emits not_available instead of a benchmark-collision claim."
+            ),
+            emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
+        ),
+        TraceFailurePredicateDefinition(
+            predicate_id="late_evasive_reaction",
+            description=(
+                "Robot first enters near-miss pressure and only later issues a strong angular "
+                "command or linear-speed drop."
+            ),
+            inputs=[
+                "robot.position",
+                "pedestrians.id",
+                "pedestrians.position",
+                "planner.selected_action.linear_velocity",
+                "planner.selected_action.angular_velocity",
+            ],
+            units={"distance": "m", "linear_velocity": "m/s", "angular_velocity": "rad/s"},
+            thresholds={
+                "near_miss_threshold_m": near_miss_threshold_m,
+                "evasive_angular_velocity_threshold": evasive_angular_velocity_threshold,
+                "evasive_linear_drop_threshold_mps": evasive_linear_drop_threshold_mps,
+            },
+            denominator_semantics=(
+                "No emitted row means no late evasive pattern was observed for that trace, unless "
+                "matrix-required fields mark the predicate not_available."
+            ),
+            emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
+        ),
+        TraceFailurePredicateDefinition(
+            predicate_id="oscillatory_local_control",
+            description="Selected angular velocity changes sign at least the configured count.",
+            inputs=["planner.selected_action.angular_velocity"],
+            units={"angular_velocity": "rad/s"},
+            thresholds={"oscillation_min_sign_changes": oscillation_min_sign_changes},
+            denominator_semantics=(
+                "No emitted row means the angular-command sign-change threshold was not met, unless "
+                "matrix-required fields mark the predicate not_available."
+            ),
+            emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
+        ),
+        TraceFailurePredicateDefinition(
+            predicate_id="occlusion_triggered_near_miss",
+            description="A near miss occurs on a frame with explicit occlusion or blocked visibility.",
+            inputs=[
+                "robot.position",
+                "pedestrians.id",
+                "pedestrians.position",
+                "planner.occlusion_or_visibility",
+            ],
+            units={"distance": "m"},
+            thresholds={"near_miss_threshold_m": near_miss_threshold_m},
+            denominator_semantics=(
+                "Near-miss geometry without occlusion/visibility evidence emits not_available "
+                "instead of being treated as false."
+            ),
+            emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
+        ),
+        TraceFailurePredicateDefinition(
+            predicate_id="bottleneck_deadlock",
+            description="Planner metadata reports an explicit bottleneck_deadlock event.",
+            inputs=["planner.event"],
+            units={},
+            thresholds={"event": "bottleneck_deadlock"},
+            denominator_semantics=(
+                "No emitted row means no bottleneck_deadlock event was observed, unless "
+                "matrix-required fields mark the predicate not_available."
+            ),
+            emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
+        ),
+        TraceFailurePredicateDefinition(
+            predicate_id="zero_motion_timeout_behavior",
+            description="Timeout or truncation occurs while total robot displacement stays near zero.",
+            inputs=["robot.position", "planner.event"],
+            units={"displacement": "m"},
+            thresholds={
+                "stationary_displacement_threshold_m": stationary_displacement_threshold_m,
+                "timeout_events": ["timeout", "time_limit", "max_steps", "truncated"],
+            },
+            denominator_semantics=(
+                "No emitted row means either no timeout/truncation event was observed or the robot "
+                "moved beyond the stationary threshold."
+            ),
+            emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
+        ),
+        TraceFailurePredicateDefinition(
+            predicate_id="low_progress",
+            description=(
+                "Timeout or truncation occurs while total robot displacement remains below the "
+                "low-progress threshold."
+            ),
+            inputs=["robot.position", "planner.event"],
+            units={"displacement": "m"},
+            thresholds={
+                "low_progress_displacement_threshold_m": low_progress_displacement_threshold_m,
+                "timeout_events": ["timeout", "time_limit", "max_steps", "truncated"],
+            },
+            denominator_semantics=(
+                "No emitted row means either no timeout/truncation event was observed or the robot "
+                "moved beyond the low-progress threshold."
+            ),
+            emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
+        ),
+        TraceFailurePredicateDefinition(
+            predicate_id="clearance_critical_interaction",
+            description="Robot-pedestrian center distance is at or below the clearance threshold.",
+            inputs=["robot.position", "pedestrians.id", "pedestrians.position"],
+            units={"distance": "m"},
+            thresholds={"clearance_threshold_m": clearance_threshold_m},
+            denominator_semantics=(
+                "Every loaded trace contributes one denominator count. Missing positions prevent "
+                "emission and are tracked through denominator health when declared in a matrix."
+            ),
+            emitted_statuses=[VALIDITY_STATUS_VALID, VALIDITY_STATUS_UNAVAILABLE_DATA],
+        ),
+    )
+    return [definition.to_dict() for definition in definitions]
+
+
 def extract_trace_failure_predicates(  # noqa: PLR0913
     trace: SimulationTraceExport,
     *,
     scenario_family: str | None = None,
     matrix: Mapping[str, Any] | None = None,
-    clearance_threshold_m: float = 0.4,
-    near_miss_threshold_m: float = 0.5,
-    stationary_displacement_threshold_m: float = 0.05,
-    oscillation_min_sign_changes: int = 3,
-    evasive_angular_velocity_threshold: float = 1.0,
-    evasive_linear_drop_threshold_mps: float = 0.3,
+    clearance_threshold_m: float = DEFAULT_CLEARANCE_THRESHOLD_M,
+    collision_missing_radius_near_distance_m: float = (
+        DEFAULT_COLLISION_MISSING_RADIUS_NEAR_DISTANCE_M
+    ),
+    near_miss_threshold_m: float = DEFAULT_NEAR_MISS_THRESHOLD_M,
+    stationary_displacement_threshold_m: float = DEFAULT_STATIONARY_DISPLACEMENT_THRESHOLD_M,
+    low_progress_displacement_threshold_m: float = DEFAULT_LOW_PROGRESS_DISPLACEMENT_THRESHOLD_M,
+    oscillation_min_sign_changes: int = DEFAULT_OSCILLATION_MIN_SIGN_CHANGES,
+    evasive_angular_velocity_threshold: float = DEFAULT_EVASIVE_ANGULAR_VELOCITY_THRESHOLD,
+    evasive_linear_drop_threshold_mps: float = DEFAULT_EVASIVE_LINEAR_DROP_THRESHOLD_MPS,
 ) -> dict[str, Any]:
     """Extract dissertation-relevant trace failure predicates.
 
@@ -192,8 +385,12 @@ def extract_trace_failure_predicates(  # noqa: PLR0913
         matrix: Optional predeclared trace-predicate benchmark matrix. When provided, missing
             matrix-required trace fields cause ``not_available`` predicate rows.
         clearance_threshold_m: Distance threshold for clearance-critical interactions.
+        collision_missing_radius_near_distance_m: Near-contact distance that emits
+            ``not_available`` when collision radii are missing.
         near_miss_threshold_m: Distance threshold for near-miss and evasive predicates.
         stationary_displacement_threshold_m: Displacement threshold for zero-motion detection.
+        low_progress_displacement_threshold_m: Displacement threshold for timeout low-progress
+            detection.
         oscillation_min_sign_changes: Minimum angular sign changes for oscillation.
         evasive_angular_velocity_threshold: Angular velocity threshold for evasive reactions.
         evasive_linear_drop_threshold_mps: Linear velocity drop threshold for evasive reactions.
@@ -206,13 +403,29 @@ def extract_trace_failure_predicates(  # noqa: PLR0913
         scenario_family=scenario_family,
         matrix=matrix,
         clearance_threshold_m=clearance_threshold_m,
+        collision_missing_radius_near_distance_m=collision_missing_radius_near_distance_m,
         near_miss_threshold_m=near_miss_threshold_m,
         stationary_displacement_threshold_m=stationary_displacement_threshold_m,
+        low_progress_displacement_threshold_m=low_progress_displacement_threshold_m,
         oscillation_min_sign_changes=oscillation_min_sign_changes,
         evasive_angular_velocity_threshold=evasive_angular_velocity_threshold,
         evasive_linear_drop_threshold_mps=evasive_linear_drop_threshold_mps,
     )
-    return _predicates_payload(trace=trace, predicates=predicates, matrix=matrix)
+    return _predicates_payload(
+        trace=trace,
+        predicates=predicates,
+        matrix=matrix,
+        predicate_definitions=build_trace_failure_predicate_definitions(
+            clearance_threshold_m=clearance_threshold_m,
+            collision_missing_radius_near_distance_m=collision_missing_radius_near_distance_m,
+            near_miss_threshold_m=near_miss_threshold_m,
+            stationary_displacement_threshold_m=stationary_displacement_threshold_m,
+            low_progress_displacement_threshold_m=low_progress_displacement_threshold_m,
+            oscillation_min_sign_changes=oscillation_min_sign_changes,
+            evasive_angular_velocity_threshold=evasive_angular_velocity_threshold,
+            evasive_linear_drop_threshold_mps=evasive_linear_drop_threshold_mps,
+        ),
+    )
 
 
 def aggregate_trace_failure_predicate_tables(
@@ -260,12 +473,16 @@ def aggregate_trace_failure_predicate_tables(
             trace,
             scenario_family=group_family,
             matrix=matrix,
-            clearance_threshold_m=0.4,
-            near_miss_threshold_m=0.5,
-            stationary_displacement_threshold_m=0.05,
-            oscillation_min_sign_changes=3,
-            evasive_angular_velocity_threshold=1.0,
-            evasive_linear_drop_threshold_mps=0.3,
+            clearance_threshold_m=DEFAULT_CLEARANCE_THRESHOLD_M,
+            collision_missing_radius_near_distance_m=(
+                DEFAULT_COLLISION_MISSING_RADIUS_NEAR_DISTANCE_M
+            ),
+            near_miss_threshold_m=DEFAULT_NEAR_MISS_THRESHOLD_M,
+            stationary_displacement_threshold_m=DEFAULT_STATIONARY_DISPLACEMENT_THRESHOLD_M,
+            low_progress_displacement_threshold_m=DEFAULT_LOW_PROGRESS_DISPLACEMENT_THRESHOLD_M,
+            oscillation_min_sign_changes=DEFAULT_OSCILLATION_MIN_SIGN_CHANGES,
+            evasive_angular_velocity_threshold=DEFAULT_EVASIVE_ANGULAR_VELOCITY_THRESHOLD,
+            evasive_linear_drop_threshold_mps=DEFAULT_EVASIVE_LINEAR_DROP_THRESHOLD_MPS,
         )
         predicate_statuses_in_trace: dict[str, set[str]] = defaultdict(set)
         for predicate in extracted_predicates:
@@ -377,6 +594,11 @@ def aggregate_trace_failure_predicate_tables(
             "row_count": len(rows),
         },
         "matrix_metadata": matrix_metadata,
+        "predicate_definitions": build_trace_failure_predicate_definitions(),
+        "denominator_status": _aggregate_denominator_status(
+            included_trace_count=included_trace_count,
+            failed_trace_count=len(failed_trace_id_list),
+        ),
         "rows": rows,
         "zero_predicate_groups": zero_predicate_groups,
         "predicate_denominator_health": {
@@ -413,6 +635,19 @@ def _record_predicate_denominator_statuses(
                 predicate_status_counts[pred_id][status] += 1
         else:
             predicate_status_counts[pred_id][VALIDITY_STATUS_NO_PREDICATE_OBSERVED] += 1
+
+
+def _aggregate_denominator_status(*, included_trace_count: int, failed_trace_count: int) -> str:
+    """Classify aggregate denominator availability for machine-readable consumers.
+
+    Returns:
+        Denominator status string.
+    """
+    if failed_trace_count > 0:
+        return VALIDITY_STATUS_PIPELINE_FAILURE
+    if included_trace_count > 0:
+        return VALIDITY_STATUS_VALID
+    return VALIDITY_STATUS_UNAVAILABLE_DATA
 
 
 def render_trace_failure_predicate_markdown(
@@ -617,6 +852,10 @@ def build_trace_predicate_denominator_health_report(
             "total_traces_processed": input_trace_count,
             "failed_trace_count": failed_trace_count,
             "predicate_family_count": len(TRACE_FAILURE_PREDICATE_IDS),
+            "denominator_status": _aggregate_denominator_status(
+                included_trace_count=max(input_trace_count - failed_trace_count, 0),
+                failed_trace_count=failed_trace_count,
+            ),
         },
         "predicates": predicate_reports,
         "caveats": caveats,
@@ -734,6 +973,7 @@ def _predicates_payload(
     trace: SimulationTraceExport,
     predicates: list[TraceFailurePredicate],
     matrix: Mapping[str, Any] | None,
+    predicate_definitions: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Build the trace predicate payload schema.
 
@@ -761,6 +1001,8 @@ def _predicates_payload(
             "episode_id": trace.source.episode_id,
         },
         "matrix_metadata": matrix_metadata,
+        "predicate_definitions": predicate_definitions,
+        "denominator_status": VALIDITY_STATUS_VALID,
         "predicates": [predicate.to_dict() for predicate in predicates],
         "summary": _summary(predicates),
         "caveats": caveats,
@@ -865,8 +1107,10 @@ def _extract_trace_failure_predicate_records(  # noqa: C901, PLR0913
     scenario_family: str | None,
     matrix: Mapping[str, Any] | None,
     clearance_threshold_m: float,
+    collision_missing_radius_near_distance_m: float,
     near_miss_threshold_m: float,
     stationary_displacement_threshold_m: float,
+    low_progress_displacement_threshold_m: float,
     oscillation_min_sign_changes: int,
     evasive_angular_velocity_threshold: float,
     evasive_linear_drop_threshold_mps: float,
@@ -890,6 +1134,14 @@ def _extract_trace_failure_predicate_records(  # noqa: C901, PLR0913
     # skip per-frame extraction to avoid duplicate not_available rows.
     occlusion_guarded = "occlusion_triggered_near_miss" in unavailable
 
+    if "collision" not in unavailable:
+        predicates.extend(
+            _collision_events(
+                trace,
+                scenario_family=family,
+                collision_missing_radius_near_distance_m=(collision_missing_radius_near_distance_m),
+            )
+        )
     if "clearance_critical_interaction" not in unavailable:
         predicates.extend(
             _clearance_critical_interactions(
@@ -924,6 +1176,14 @@ def _extract_trace_failure_predicate_records(  # noqa: C901, PLR0913
         )
         if zero_motion is not None:
             predicates.append(zero_motion)
+    if "low_progress" not in unavailable:
+        low_progress = _low_progress(
+            trace,
+            scenario_family=family,
+            low_progress_displacement_threshold_m=low_progress_displacement_threshold_m,
+        )
+        if low_progress is not None:
+            predicates.append(low_progress)
     if "bottleneck_deadlock" not in unavailable:
         predicates.extend(_bottleneck_deadlocks(trace, scenario_family=family))
     if not occlusion_guarded:
@@ -964,6 +1224,74 @@ def _clearance_critical_interactions(
                         "clearance_threshold_m": clearance_threshold_m,
                     },
                     severity="high" if distance_m <= clearance_threshold_m * 0.75 else "medium",
+                    validity_status=VALIDITY_STATUS_VALID,
+                )
+            )
+    return predicates
+
+
+def _collision_events(
+    trace: SimulationTraceExport,
+    *,
+    scenario_family: str,
+    collision_missing_radius_near_distance_m: float,
+) -> list[TraceFailurePredicate]:
+    """Return collision predicates for radius-overlap contact-distance frames."""
+    predicates: list[TraceFailurePredicate] = []
+    for frame in trace.frames:
+        nearest = _nearest_pedestrian(frame)
+        if nearest is None:
+            continue
+        pedestrian_id, distance_m = nearest
+        pedestrian = _pedestrian_by_id(frame, pedestrian_id)
+        robot_radius_m = _number_or_none(frame.robot.get("radius"))
+        pedestrian_radius_m = (
+            _number_or_none(pedestrian.get("radius")) if pedestrian is not None else None
+        )
+        if robot_radius_m is None or pedestrian_radius_m is None:
+            if distance_m <= collision_missing_radius_near_distance_m:
+                missing_fields = []
+                if robot_radius_m is None:
+                    missing_fields.append("robot.radius")
+                if pedestrian_radius_m is None:
+                    missing_fields.append("pedestrians.radius")
+                predicates.append(
+                    _predicate(
+                        "collision",
+                        frame,
+                        frame,
+                        scenario_family=scenario_family,
+                        planner_id=trace.source.planner_id,
+                        involved_actors=["robot", pedestrian_id],
+                        evidence_fields={
+                            "distance_m": distance_m,
+                            "missing_fields": missing_fields,
+                            "missing_radius_near_distance_m": (
+                                collision_missing_radius_near_distance_m
+                            ),
+                        },
+                        severity=VALIDITY_STATUS_UNAVAILABLE_DATA,
+                        validity_status=VALIDITY_STATUS_UNAVAILABLE_DATA,
+                    )
+                )
+            continue
+        collision_distance_m = robot_radius_m + pedestrian_radius_m
+        if distance_m <= collision_distance_m:
+            predicates.append(
+                _predicate(
+                    "collision",
+                    frame,
+                    frame,
+                    scenario_family=scenario_family,
+                    planner_id=trace.source.planner_id,
+                    involved_actors=["robot", pedestrian_id],
+                    evidence_fields={
+                        "distance_m": distance_m,
+                        "robot_radius_m": robot_radius_m,
+                        "pedestrian_radius_m": pedestrian_radius_m,
+                        "collision_distance_m": collision_distance_m,
+                    },
+                    severity="critical",
                     validity_status=VALIDITY_STATUS_VALID,
                 )
             )
@@ -1077,12 +1405,7 @@ def _zero_motion_timeout_behavior(
     start = trace.frames[0]
     end = trace.frames[-1]
     displacement_m = _distance(start.robot.get("position"), end.robot.get("position"))
-    timeout_frames = [
-        frame
-        for frame in trace.frames
-        if str(frame.planner.get("event", "")).strip().lower()
-        in {"timeout", "time_limit", "max_steps", "truncated"}
-    ]
+    timeout_frames = _timeout_frames(trace)
     if not timeout_frames or displacement_m is None:
         return None
     if displacement_m > stationary_displacement_threshold_m:
@@ -1100,6 +1423,50 @@ def _zero_motion_timeout_behavior(
             "timeout_events": [frame.planner.get("event") for frame in timeout_frames],
         },
         severity="high",
+        validity_status=VALIDITY_STATUS_VALID,
+    )
+
+
+def _timeout_frames(trace: SimulationTraceExport) -> list[SimulationTraceFrame]:
+    """Return frames with timeout or truncation planner events."""
+    timeout_events = {"timeout", "time_limit", "max_steps", "truncated"}
+    return [
+        frame
+        for frame in trace.frames
+        if str(frame.planner.get("event", "")).strip().lower() in timeout_events
+    ]
+
+
+def _low_progress(
+    trace: SimulationTraceExport,
+    *,
+    scenario_family: str,
+    low_progress_displacement_threshold_m: float,
+) -> TraceFailurePredicate | None:
+    """Return a low-progress predicate when timeout evidence accompanies small movement."""
+    if not trace.frames:
+        return None
+    start = trace.frames[0]
+    end = trace.frames[-1]
+    displacement_m = _distance(start.robot.get("position"), end.robot.get("position"))
+    timeout_frames = _timeout_frames(trace)
+    if not timeout_frames or displacement_m is None:
+        return None
+    if displacement_m > low_progress_displacement_threshold_m:
+        return None
+    return _predicate(
+        "low_progress",
+        start,
+        end,
+        scenario_family=scenario_family,
+        planner_id=trace.source.planner_id,
+        involved_actors=["robot"],
+        evidence_fields={
+            "episode_displacement_m": displacement_m,
+            "low_progress_displacement_threshold_m": low_progress_displacement_threshold_m,
+            "timeout_events": [frame.planner.get("event") for frame in timeout_frames],
+        },
+        severity="medium",
         validity_status=VALIDITY_STATUS_VALID,
     )
 
@@ -1255,6 +1622,14 @@ def _nearest_pedestrian(frame: SimulationTraceFrame) -> tuple[str, float] | None
     return nearest
 
 
+def _pedestrian_by_id(frame: SimulationTraceFrame, pedestrian_id: str) -> Mapping[str, Any] | None:
+    """Return pedestrian metadata for an emitted actor id."""
+    for pedestrian in frame.pedestrians:
+        if str(pedestrian.get("id", "unknown")) == pedestrian_id:
+            return pedestrian
+    return None
+
+
 def _selected_action(frame: SimulationTraceFrame) -> dict[str, Any]:
     """Return planner selected-action metadata.
 
@@ -1378,7 +1753,9 @@ __all__ = [
     "VALIDITY_STATUS_UNAVAILABLE_DATA",
     "VALIDITY_STATUS_VALID",
     "TraceFailurePredicate",
+    "TraceFailurePredicateDefinition",
     "aggregate_trace_failure_predicate_tables",
+    "build_trace_failure_predicate_definitions",
     "build_trace_predicate_denominator_health_report",
     "extract_trace_failure_predicates",
     "load_trace_predicate_matrix",

@@ -5,12 +5,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+from jsonschema import Draft202012Validator
+
 from robot_sf.analysis_workbench.simulation_trace_export import (
     load_simulation_trace_export,
     simulation_trace_export_from_dict,
 )
 from robot_sf.analysis_workbench.trace_failure_predicates import (
     aggregate_trace_failure_predicate_tables,
+    build_trace_failure_predicate_definitions,
     build_trace_predicate_denominator_health_report,
     extract_trace_failure_predicates,
     render_trace_failure_predicate_markdown,
@@ -23,6 +27,13 @@ TRACE_FIXTURE_PATH = (
     / "analysis_workbench"
     / "simulation_trace_export_v1"
     / "minimal_trace.json"
+)
+TRACE_PREDICATE_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "robot_sf"
+    / "analysis_workbench"
+    / "schemas"
+    / "trace_failure_predicates.v1.json"
 )
 
 
@@ -87,6 +98,16 @@ def _find_row(
     predicate_id: str,
 ) -> dict[str, object] | None:
     return next((row for row in rows if row.get("predicate_id") == predicate_id), None)
+
+
+def _assert_predicate_schema_valid(payload: dict[str, object]) -> None:
+    """Assert that a trace-predicate payload validates against its public schema."""
+    schema = json.loads(TRACE_PREDICATE_SCHEMA_PATH.read_text(encoding="utf-8"))
+    errors = sorted(
+        Draft202012Validator(schema).iter_errors(payload),
+        key=lambda error: list(error.absolute_path),
+    )
+    assert not errors, [error.message for error in errors]
 
 
 def test_aggregate_preserves_occlusion_not_available_row() -> None:
@@ -226,6 +247,242 @@ def test_aggregate_includes_clearance_critical_interaction_predicate() -> None:
     assert row is not None
     assert row["validity_status"] == "valid"
     assert row["severity"] == "high"
+
+
+def test_aggregate_includes_collision_and_low_progress_predicates() -> None:
+    """Collision and low-progress rows should be reusable predicate-table records."""
+    collision_trace = _build_trace(
+        trace_id="trace-collision",
+        scenario_id="scenario-collision",
+        seed=21,
+        planner_id="planner-k",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                robot={
+                    "position": [0.0, 0.0],
+                    "heading": 0.0,
+                    "velocity": [0.0, 0.0],
+                    "radius": 0.18,
+                },
+                pedestrians=[
+                    {
+                        "id": "ped_1",
+                        "position": [0.3, 0.0],
+                        "velocity": [0.0, 0.0],
+                        "radius": 0.14,
+                    }
+                ],
+            )
+        ],
+    )
+    low_progress_trace = _build_trace(
+        trace_id="trace-low-progress",
+        scenario_id="scenario-low-progress",
+        seed=22,
+        planner_id="planner-l",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                robot={"position": [0.0, 0.0], "heading": 0.0, "velocity": [0.0, 0.0]},
+                action=(0.1, 0.0),
+            ),
+            _frame(
+                1,
+                1.0,
+                robot={"position": [0.12, 0.0], "heading": 0.0, "velocity": [0.0, 0.0]},
+                action=(0.0, 0.0),
+                planner_extra={"event": "timeout"},
+            ),
+        ],
+    )
+
+    collision_row = _find_row(
+        _aggregate_rows(aggregate_trace_failure_predicate_tables([collision_trace])),
+        predicate_id="collision",
+    )
+    low_progress_row = _find_row(
+        _aggregate_rows(aggregate_trace_failure_predicate_tables([low_progress_trace])),
+        predicate_id="low_progress",
+    )
+
+    assert collision_row is not None
+    assert collision_row["validity_status"] == "valid"
+    assert collision_row["severity"] == "critical"
+    assert low_progress_row is not None
+    assert low_progress_row["validity_status"] == "valid"
+    assert low_progress_row["severity"] == "medium"
+
+
+def test_predicate_definitions_document_inputs_thresholds_and_denominators() -> None:
+    """Reusable predicate definitions should be machine-readable and complete."""
+    definitions = {
+        definition["predicate_id"]: definition
+        for definition in build_trace_failure_predicate_definitions()
+    }
+
+    assert "collision" in definitions
+    assert definitions["collision"]["units"]["distance"] == "m"
+    assert definitions["collision"]["thresholds"]["missing_radius_near_distance_m"] == 0.2
+    assert "denominator" in definitions["collision"]["denominator_semantics"]
+    assert "low_progress" in definitions
+    assert (
+        definitions["low_progress"]["thresholds"]["low_progress_displacement_threshold_m"] == 0.25
+    )
+
+
+def test_collision_uses_radius_overlap_not_fixed_center_distance() -> None:
+    """Collision should follow benchmark footprint-overlap semantics."""
+    trace = _build_trace(
+        trace_id="trace-radius-collision",
+        scenario_id="scenario-radius-collision",
+        seed=25,
+        planner_id="planner-radius",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                robot={
+                    "position": [0.0, 0.0],
+                    "heading": 0.0,
+                    "velocity": [0.0, 0.0],
+                    "radius": 0.18,
+                },
+                pedestrians=[
+                    {
+                        "id": "ped_1",
+                        "position": [0.3, 0.0],
+                        "velocity": [0.0, 0.0],
+                        "radius": 0.14,
+                    }
+                ],
+            )
+        ],
+    )
+
+    predicates = extract_trace_failure_predicates(trace)["predicates"]
+    collision = next(row for row in predicates if row["predicate_id"] == "collision")
+
+    assert collision["validity_status"] == "valid"
+    assert collision["evidence_fields"]["distance_m"] == 0.3
+    assert collision["evidence_fields"]["collision_distance_m"] == pytest.approx(0.32)
+
+
+def test_collision_near_contact_without_radii_is_not_available() -> None:
+    """Near-contact geometry without radii should not become a collision claim."""
+    trace = _build_trace(
+        trace_id="trace-missing-radius-collision",
+        scenario_id="scenario-missing-radius-collision",
+        seed=26,
+        planner_id="planner-radius",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [0.1, 0.0], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+
+    predicates = extract_trace_failure_predicates(trace)["predicates"]
+    collision = next(row for row in predicates if row["predicate_id"] == "collision")
+
+    assert collision["validity_status"] == "not_available"
+    assert collision["severity"] == "not_available"
+    assert collision["evidence_fields"]["missing_fields"] == [
+        "robot.radius",
+        "pedestrians.radius",
+    ]
+
+
+def test_mixed_valid_and_failed_traces_report_pipeline_failure_denominator() -> None:
+    """Mixed valid and failed trace bundles should fail closed at the aggregate denominator."""
+    valid_trace = _build_trace(
+        trace_id="trace-valid-with-failed-peer",
+        scenario_id="scenario-mixed-denominator",
+        seed=27,
+        planner_id="planner-mixed",
+        frames=[_frame(0, 0.0)],
+    )
+
+    payload = aggregate_trace_failure_predicate_tables(
+        [valid_trace], failed_trace_ids=["bad-trace.json"]
+    )
+    health = build_trace_predicate_denominator_health_report(payload)
+
+    assert payload["denominator_status"] == "pipeline_failure"
+    assert health["summary"]["denominator_status"] == "pipeline_failure"
+
+
+def test_zero_trace_bundle_reports_unavailable_denominator() -> None:
+    """Zero valid input traces should be explicit, not a silent zero denominator."""
+    payload = aggregate_trace_failure_predicate_tables([])
+    health = build_trace_predicate_denominator_health_report(payload)
+
+    assert payload["denominator_status"] == "not_available"
+    assert payload["summary"]["input_trace_count"] == 0
+    assert payload["rows"] == []
+    assert health["summary"]["denominator_status"] == "not_available"
+    assert all(report["total_denominator_count"] == 0 for report in health["predicates"].values())
+
+
+def test_matrix_occlusion_logical_field_accepts_visibility_alias() -> None:
+    """Matrix-required logical occlusion evidence should accept supported trace aliases."""
+    trace = _build_trace(
+        trace_id="trace-occlusion-alias",
+        scenario_id="scenario-occlusion-alias",
+        seed=24,
+        planner_id="planner-n",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [0.2, 0.0], "velocity": [0.0, 0.0]}],
+                planner_extra={"visibility": {"line_of_sight": False}},
+            )
+        ],
+    )
+    matrix = {
+        "schema_version": "trace_predicate_matrix.v1",
+        "name": "occlusion_alias_matrix",
+        "status": "proposed",
+        "matrix": {
+            "required_trace_fields_by_predicate": {
+                "occlusion_triggered_near_miss": ["planner.occlusion_or_visibility"]
+            }
+        },
+    }
+
+    payload = aggregate_trace_failure_predicate_tables([trace], matrix=matrix)
+    occlusion_row = _find_row(
+        _aggregate_rows(payload),
+        predicate_id="occlusion_triggered_near_miss",
+    )
+
+    assert occlusion_row is not None
+    assert occlusion_row["validity_status"] == "valid"
+
+
+def test_trace_failure_predicate_payloads_validate_public_schema() -> None:
+    """Single-trace and aggregate predicate outputs should validate against the public schema."""
+    trace = _build_trace(
+        trace_id="trace-schema",
+        scenario_id="scenario-schema",
+        seed=23,
+        planner_id="planner-m",
+        frames=[
+            _frame(
+                0,
+                0.0,
+                pedestrians=[{"id": "ped_1", "position": [0.1, 0.0], "velocity": [0.0, 0.0]}],
+            )
+        ],
+    )
+
+    _assert_predicate_schema_valid(extract_trace_failure_predicates(trace))
+    _assert_predicate_schema_valid(aggregate_trace_failure_predicate_tables([trace]))
 
 
 def test_denominator_and_markdown_render_include_rate_fields() -> None:
@@ -631,7 +888,7 @@ def test_writer_persists_denominator_health_json_when_requested(tmp_path: Path) 
     assert paths == (json_output, markdown_output, health_output)
     health = json.loads(health_output.read_text(encoding="utf-8"))
     assert health["schema_version"] == "trace_predicate_denominator_health.v1"
-    assert health["summary"]["predicate_family_count"] == 6
+    assert health["summary"]["predicate_family_count"] == 8
 
 
 def test_markdown_report_with_denominator_health(tmp_path: Path) -> None:

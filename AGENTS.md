@@ -78,6 +78,20 @@ Treat the following files as the repository-native context stack for Agent-style
 
 Read only the surfaces relevant to the task. Prefer these repo-local files over ad-hoc summaries in issue comments, and avoid loading broad context-note indexes unless the task actually needs them.
 
+## Token-Efficient Active Thread Profile
+
+For long autonomous goals, delegated batches, or explicitly token-saving work, start or resume with
+the copyable profile in `docs/templates/token_efficient_thread_profile.md`. The header records the
+goal, `task_class`, `validation_tier`, scope, out-of-scope work, worktree, context budget,
+delegation artifacts, output budget, stop guard, validation plan, and handoff target.
+
+Use `task_class` to name the dominant risk surface and `validation_tier` to point back to the
+proportional readiness matrix above; do not redefine evidence rules inside the active thread. Use
+compact snapshots and validation wrappers before broad reads, and keep raw logs in common Git-dir
+agent-run artifacts with only artifact paths and short excerpts in the parent thread. Delegated
+worker outputs are route evidence only: parent Codex still reviews the diff, checks the artifact
+bundle, and runs the selected validation before accepting, rerouting, or rejecting the work.
+
 ## Shared Knowledge Graph
 
 This repository tracks an Understand-Anything graph under `.understand-anything/` as a shared

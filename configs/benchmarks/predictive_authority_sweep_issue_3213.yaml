@@ -18,7 +18,7 @@
 # Evaluate on a GPU node (sbatch / torch required; cannot run on a CPU-only host):
 #   uv run python scripts/validation/run_predictive_success_campaign.py \
 #     --checkpoints <predictive_baseline_ckpt> \
-#     --seeds-config configs/benchmarks/predictive_hard_seeds_v1.yaml \
+#     --hard-seed-manifest configs/benchmarks/predictive_hard_seeds_v1.yaml \
 #     --planner-grid configs/benchmarks/predictive_authority_sweep_issue_3213.yaml \
 #     --closed-loop-gate-baseline-variant authority_baseline \
 #     --closed-loop-gate-min-hard-success-delta 0.0 \

@@ -102,6 +102,7 @@ from robot_sf.benchmark.map_runner_metrics import (
 from robot_sf.benchmark.map_runner_metrics import (
     normalize_pedestrian_impact_controls as _normalize_pedestrian_impact_controls,
 )
+from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
 from robot_sf.benchmark.map_runner_observations import (
     extract_ppo_dt as _extract_ppo_dt,  # noqa: F401 - compatibility re-export for tests.
 )
@@ -2610,6 +2611,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "preflight": preflight,
             "observation_noise": noise_spec,
             "observation_noise_hash": noise_hash,
+            "metrics": summarize_collision_metrics([]),
             "latency_stress_profile": (
                 latency_profile.to_metadata(dt=latency_metadata_dt)
                 if latency_profile is not None
@@ -2750,6 +2752,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         as_completed_fn=as_completed,
     )
     wrote = batch_execution.wrote
+    episode_records = batch_execution.episode_records
     failures = batch_execution.failures
     adapter_native_steps = batch_execution.adapter_native_steps
     adapter_adapted_steps = batch_execution.adapter_adapted_steps
@@ -2775,6 +2778,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         batch_runtime_sec=batch_execution.batch_runtime_sec,
         wrote=wrote,
         failures=failures,
+        episode_records=episode_records,
         preflight_skipped_jobs=preflight_skipped_jobs,
         out_path=out_path,
         readiness=readiness,

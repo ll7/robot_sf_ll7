@@ -85,7 +85,7 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "ROBOT_SF_TEST_LANE=core|optional|all" in script_text
     assert "Resolved pytest lane:" in script_text
     assert "normalize_pytest_target_path()" in script_text
-    assert '${path%%::*}' in script_text
+    assert "${path%%::*}" in script_text
     assert "core_test_paths=(" in script_text
     assert "explicit_test_targets=(" in script_text
     assert 'cmd+=("--ignore=$optional_test_path")' in script_text
@@ -107,7 +107,10 @@ def test_pytest_coverage_is_explicit_opt_in() -> None:
     assert "ROBOT_SF_PYTEST_COVERAGE" in script_text
     assert "${coverage_requested,,}" not in script_text
     assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in script_text
-    assert 'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core' in pr_ready_text
+    assert (
+        'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core'
+        in pr_ready_text
+    )
 
 
 def test_run_tests_parallel_validates_dist_mode_before_resolving_workers() -> None:
@@ -262,8 +265,14 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     ]
     for gate in expected_gates:
         assert gate in script_text
-    assert 'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core' in script_text
-    assert 'ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional' in script_text
+    assert (
+        'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core'
+        in script_text
+    )
+    assert (
+        'ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional'
+        in script_text
+    )
     assert "Optional-extra changed files requiring the predictive lane" in script_text
     assert "No changed files require the optional-extra lane." in script_text
 

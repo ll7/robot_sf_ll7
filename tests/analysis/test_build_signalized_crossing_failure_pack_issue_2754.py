@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 from scripts.analysis.build_signalized_crossing_failure_pack_issue_2754 import (
     ALLOWED_CLAIM_WORDING,
     main,
@@ -71,6 +73,63 @@ def _make_dummy_trace(episode_id: str, scenario_id: str) -> dict[str, Any]:
     }
 
 
+def _write_failure_inputs(
+    tmp_path: Path,
+    *,
+    episode_id: str = "fail_ep_0",
+    scenario_id: str = "fail_scen_0",
+    denominator: int = 1,
+    evidence_state: str = "planner_observable",
+    exclusion_reason: str = "",
+) -> tuple[Path, Path]:
+    """Write a paired failing trace and metric row for CLI tests."""
+    trace_path = tmp_path / f"{episode_id}_trace.json"
+    trace_path.write_text(json.dumps(_make_dummy_trace(episode_id, scenario_id)))
+    record = {
+        "episode_id": episode_id,
+        "scenario_id": scenario_id,
+        "seed": 123,
+        "metrics": {
+            "collisions": 1.0,
+            "comfort_exposure": 0.0,
+            "near_misses": 0,
+            "signal_metrics_denominator": denominator,
+            "signal_metrics_evidence": {
+                "state": evidence_state,
+                "exclusion_reason": exclusion_reason,
+            },
+        },
+        "scenario_params": {
+            "metadata": {
+                "signal_state": {
+                    "timeline": [{"state": "red", "duration": 5.0}],
+                    "stop_line": [[1.0, 1.0], [1.0, -1.0]],
+                }
+            }
+        },
+    }
+    record_path = tmp_path / f"{episode_id}_episodes.jsonl"
+    record_path.write_text(json.dumps(record) + "\n")
+    return trace_path, record_path
+
+
+def _eligible_runtime_args() -> list[str]:
+    """Return provenance flags for a current, claimable runtime-backed row."""
+    return [
+        "--trace-source-kind",
+        "live_execution",
+        "--metric-source-kind",
+        "live_execution",
+        "--execution-performed",
+        "--evidence-tier",
+        "benchmark",
+        "--execution-mode",
+        "native",
+        "--claim-matrix-status",
+        "allowed",
+    ]
+
+
 def test_real_failure_case_output(tmp_path: Path) -> None:
     """Proves that a real failure case triggers non-negative-control output and contains all expected fields."""
     trace_data = _make_dummy_trace("fail_ep_0", "fail_scen_0")
@@ -114,6 +173,7 @@ def test_real_failure_case_output(tmp_path: Path) -> None:
             str(record_path),
             "--output-json",
             str(output_path),
+            *_eligible_runtime_args(),
         ]
     )
     assert exit_code == 0
@@ -134,9 +194,127 @@ def test_real_failure_case_output(tmp_path: Path) -> None:
     assert case["robot_state"]["position"] == [0.5, 0.0]  # Closest approach/failure step is frame 1
     assert case["denominator_status"] == "eligible"
     assert case["stale_current_status"] == "current"
+    assert case["artifact_status"] == "current"
+    assert case["trace_source_kind"] == "live_execution"
+    assert case["metric_source_kind"] == "live_execution"
+    assert case["execution_performed"] is True
+    assert case["evidence_tier"] == "benchmark"
+    assert case["execution_mode"] == "native"
+    assert case["fallback_or_degraded"] is False
+    assert case["claim_matrix_status"] == "allowed"
+    assert case["figure_ineligibility_reasons"] == []
     assert case["allowed_claim_wording"] == ALLOWED_CLAIM_WORDING
     assert case["diagnostic_only"] is False
     assert case["figure_eligible"] is True
+
+
+def test_missing_provenance_defaults_to_diagnostic_only(tmp_path: Path) -> None:
+    """Missing provenance fails closed even when denominator evidence is planner-observable."""
+    trace_path, record_path = _write_failure_inputs(tmp_path)
+    output_path = tmp_path / "result.json"
+
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+        ]
+    )
+    assert exit_code == 0
+
+    result = json.loads(output_path.read_text())
+    case = result["cases"][0]
+    assert case["denominator_status"] == "eligible"
+    assert case["diagnostic_only"] is True
+    assert case["figure_eligible"] is False
+    assert "trace_source_kind=unknown" in case["figure_ineligibility_reasons"]
+    assert "metric_source_kind=unknown" in case["figure_ineligibility_reasons"]
+    assert "execution_performed=false" in case["figure_ineligibility_reasons"]
+    assert "diagnostic-only" in case["allowed_claim_wording"]
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "expected_reason", "evidence_state", "exclusion_reason"),
+    [
+        (["--trace-source-kind", "fixture"], "trace_source_kind=fixture", "planner_observable", ""),
+        (
+            ["--metric-source-kind", "synthetic"],
+            "metric_source_kind=synthetic",
+            "planner_observable",
+            "",
+        ),
+        (["--evidence-tier", "smoke"], "evidence_tier=smoke", "planner_observable", ""),
+        (["--artifact-status", "stale"], "artifact_status=stale", "planner_observable", ""),
+        (["--artifact-status", "unknown"], "artifact_status=unknown", "planner_observable", ""),
+        (["--execution-mode", "fallback"], "execution_mode=fallback", "planner_observable", ""),
+        (
+            ["--execution-mode", "degraded", "--fallback-or-degraded"],
+            "execution_mode=degraded",
+            "planner_observable",
+            "",
+        ),
+        (
+            [],
+            "signal_metrics_evidence.state=proxy_diagnostic",
+            "proxy_diagnostic",
+            "signal_state_not_benchmark_evidence",
+        ),
+        (
+            [],
+            "signal_metrics_evidence.state=unavailable",
+            "unavailable",
+            "signal_state_missing",
+        ),
+    ],
+)
+def test_provenance_or_signal_caveats_fail_closed(
+    tmp_path: Path,
+    extra_args: list[str],
+    expected_reason: str,
+    evidence_state: str,
+    exclusion_reason: str,
+) -> None:
+    """Fixture, smoke, stale, degraded, proxy, and unavailable inputs are never figure-eligible."""
+    trace_path, record_path = _write_failure_inputs(
+        tmp_path,
+        evidence_state=evidence_state,
+        exclusion_reason=exclusion_reason,
+    )
+    output_path = tmp_path / "result.json"
+    args = _eligible_runtime_args()
+    for flag in (
+        "--trace-source-kind",
+        "--metric-source-kind",
+        "--evidence-tier",
+        "--execution-mode",
+    ):
+        if flag in extra_args:
+            flag_index = args.index(flag)
+            del args[flag_index : flag_index + 2]
+
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            *args,
+            *extra_args,
+        ]
+    )
+    assert exit_code == 0
+
+    result = json.loads(output_path.read_text())
+    case = result["cases"][0]
+    assert case["diagnostic_only"] is True
+    assert case["figure_eligible"] is False
+    assert expected_reason in case["figure_ineligibility_reasons"]
+    assert "diagnostic-only" in case["allowed_claim_wording"]
 
 
 def test_negative_control_output(tmp_path: Path) -> None:

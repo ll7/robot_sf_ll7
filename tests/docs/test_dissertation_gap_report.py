@@ -39,7 +39,7 @@ REQUIRED_GAP_FIELDS = {
 }
 VALID_BUCKETS = {"supported", "blocked", "negative_revise_only", "remove_weaken"}
 LEDGER_ROW_COUNT = 7
-REGISTER_ENTRY_COUNT = 4
+REGISTER_ENTRY_COUNT = 5
 
 
 def _load_json(path: Path) -> dict:
@@ -167,9 +167,9 @@ class TestSourceAccounting:
         assert buckets.get("blocked", 0) == 5, (
             f"Expected 5 blocked gaps, got {buckets.get('blocked', 0)}"
         )
-        # negative_revise_only: 5 (pedestrian_density_stress + 4 register diagnostics)
-        assert buckets.get("negative_revise_only", 0) == 5, (
-            f"Expected 5 negative_revise_only gaps, got {buckets.get('negative_revise_only', 0)}"
+        # negative_revise_only: 6 (pedestrian_density_stress + 5 register diagnostics)
+        assert buckets.get("negative_revise_only", 0) == 6, (
+            f"Expected 6 negative_revise_only gaps, got {buckets.get('negative_revise_only', 0)}"
         )
         # remove_weaken: 0 (exported_tables now has payloads but remains blocked/diagnostic)
         assert buckets.get("remove_weaken", 0) == 0, (

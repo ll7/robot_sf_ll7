@@ -61,9 +61,25 @@
       },
       "denominator_status": "eligible",
       "stale_current_status": "current",
-      "allowed_claim_wording": "Smoke fixture evidence only: this pack validates signalized failure-pack extraction fields against a tracked trace fixture and synthetic metric row; it is not benchmark evidence, dissertation figure evidence, or traffic-light compliance evidence.",
-      "diagnostic_only": false,
-      "figure_eligible": true
+      "artifact_status": "current",
+      "trace_source_kind": "fixture",
+      "metric_source_kind": "synthetic",
+      "execution_performed": false,
+      "evidence_tier": "smoke",
+      "execution_mode": "fixture",
+      "fallback_or_degraded": false,
+      "claim_matrix_status": "diagnostic_only",
+      "figure_ineligibility_reasons": [
+        "trace_source_kind=fixture",
+        "metric_source_kind=synthetic",
+        "execution_performed=false",
+        "evidence_tier=smoke",
+        "execution_mode=fixture",
+        "claim_matrix_status=diagnostic_only"
+      ],
+      "allowed_claim_wording": "Figure-ineligible diagnostic-only row; do not use for benchmark, dissertation figure, or paper-facing claims. Reasons: trace_source_kind=fixture, metric_source_kind=synthetic, execution_performed=false, evidence_tier=smoke, execution_mode=fixture, claim_matrix_status=diagnostic_only.",
+      "diagnostic_only": true,
+      "figure_eligible": false
     }
   ]
 }

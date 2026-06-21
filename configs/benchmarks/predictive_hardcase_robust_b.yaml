@@ -1,0 +1,66 @@
+# Robust hard-case seed manifest (b) for portfolio robustness/ablation (#3213/#3215).
+# Broad seed range over the 4 crossing-conflict families (less overfit than the 7 cherry-picked seeds).
+classic_cross_trap_low:
+- 215
+- 216
+- 217
+- 218
+- 219
+- 220
+- 221
+- 222
+- 223
+- 224
+- 225
+- 226
+- 227
+- 228
+- 229
+classic_cross_trap_medium:
+- 215
+- 216
+- 217
+- 218
+- 219
+- 220
+- 221
+- 222
+- 223
+- 224
+- 225
+- 226
+- 227
+- 228
+- 229
+classic_cross_trap_high:
+- 215
+- 216
+- 217
+- 218
+- 219
+- 220
+- 221
+- 222
+- 223
+- 224
+- 225
+- 226
+- 227
+- 228
+- 229
+classic_group_crossing_high:
+- 215
+- 216
+- 217
+- 218
+- 219
+- 220
+- 221
+- 222
+- 223
+- 224
+- 225
+- 226
+- 227
+- 228
+- 229

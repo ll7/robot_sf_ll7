@@ -114,6 +114,24 @@ Each entry records:
 | `claim_boundary` | Synthesis/planning aid only. The ledger does not produce new benchmark evidence, paper-facing results, or safety claims. |
 | `created_at` | 2026-06-13 |
 
+### NR-004: Predictive Hard-Case Maneuver Authority (Speed-Cap Only)
+
+| Field | Value |
+|---|---|
+| `id` | `issue-3213-hardcase-authority-speedcap` |
+| `hypothesis` | Richer predictive-planner maneuver authority (turn rate, action lattice, sequence-search depth, near-field geometry) closes the hard-case crossing-conflict success plateau. |
+| `tested_artifact` | Predictive planner authority variants (`baseline`, `high_angular`, `dense_lattice`, `deep_sequence`, `nearfield_turn`) plus single-knob ablations (`nf_headings_only`, `nf_speedcap_only`, `nf_horizonboost_only`) across 5 prediction checkpoints. |
+| `scenario` | `predictive_hardcase_portfolio_v1` (cross_trap low/medium/high + group_crossing_high), broad robust seeds 200-229 over both halves, ~120 episodes/cell. |
+| `comparator` | Baseline camera-ready predictive authority config. |
+| `result_classification` | `diagnostic_only` |
+| `failure_mode` | `mechanism_failed` |
+| `why_failed_or_inconclusive` | Only the near-field speed cap moved hard-success (~0.07 to ~0.10, about +0.03 absolute / +33% relative, consistent across checkpoints, ~120 episodes/cell). `nf_headings_only`, `nf_horizonboost_only`, `high_angular`, `dense_lattice`, `deep_sequence`, and `combined_max_authority` were inert (about baseline). The lift does not close the plateau (hard-success ~0.10) and checkpoint choice barely moved baseline, indicating the binding constraint is model/data-side rather than planner authority. |
+| `evidence_pointer` | `docs/context/evidence/issue_3213_authority_sweep/robust_grid.json` |
+| `recommended_next_action` | Keep `predictive_near_field_speed_cap` as a minor safety-progress tuning knob, not a success driver. Stop further planner-authority tuning as a plateau fix; prioritize model-side bets ([#3214](https://github.com/ll7/robot_sf_ll7/issues/3214) retraining, richer hard-case data) and proxy-vs-ADE selection ([#3204](https://github.com/ll7/robot_sf_ll7/issues/3204)). |
+| `linked_issues` | [#3213](https://github.com/ll7/robot_sf_ll7/issues/3213), [#3215](https://github.com/ll7/robot_sf_ll7/issues/3215), [#3306](https://github.com/ll7/robot_sf_ll7/pull/3306) |
+| `claim_boundary` | Diagnostic-only, not benchmark or paper evidence. Small attributable speed-cap effect; classification `diagnostic_only`, not promote. |
+| `created_at` | 2026-06-20 |
+
 ## Research Planning Implications
 
 This register is a planning aid. When scoping new experiments:

@@ -1,0 +1,13 @@
+# Scenario set for the predictive hard-case breakthrough portfolio (issue #3215 / #3213 / #3204).
+# Contains exactly the scenario ids referenced by configs/benchmarks/predictive_hard_seeds_v1.yaml
+# so evaluate_predictive_planner.py --seed-manifest can subset against it.
+includes:
+  - ../archetypes/classic_cross_trap.yaml
+  - ../archetypes/classic_group_crossing.yaml
+select_scenarios:
+  - classic_cross_trap_low
+  - classic_cross_trap_medium
+  - classic_cross_trap_high
+  - classic_group_crossing_high
+map_search_paths:
+  - ../../../maps/svg_maps

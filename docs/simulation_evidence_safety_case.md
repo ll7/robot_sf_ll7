@@ -44,7 +44,7 @@ record `missing` plus the unblock condition instead of leaving the field blank.
 | Scenario intent | [Scenario contract](./scenario_contracts.md) or explicit gap. |
 | Scenario feasibility | [Scenario certification](./scenario_certification.md) or exclusion reason. |
 | Artifact provenance | Campaign root or manifest, command, commit, checksum, and artifact category from the [Artifact Evidence Vocabulary](./context/artifact_evidence_vocabulary.md). |
-| Credibility assessment | Filled credibility checklist, planned assessment, or blocker. |
+| Credibility assessment | Filled [simulation model credibility checklist](./context/issue_3290_simulation_model_credibility_checklist.md), planned assessment, or blocker. |
 | External evidence | Required real-world, operational, hardware, human-factors, or regulatory evidence outside Robot SF. |
 
 ## Template
@@ -146,7 +146,7 @@ deployment readiness.
 | Scenario contract | [`configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml`](../configs/scenarios/contracts/station_platform_candidate_pack_issue736_contracts.yaml). |
 | Source campaign root | [`docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28`](./context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/README.md). |
 | Evidence artifact | [`docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03`](./context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/README.md). |
-| Credibility assessment | `missing`: this toy example records the gap; issue #3290 tracks a reusable credibility checklist. |
+| Credibility assessment | `missing`: this toy example records the gap; use the [Issue #3290 credibility checklist](./context/issue_3290_simulation_model_credibility_checklist.md) before promotion. |
 
 ### Example Hazard And Requirement Rows
 

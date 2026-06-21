@@ -9,6 +9,7 @@ import math
 import sys
 from collections import Counter
 from pathlib import Path
+from statistics import NormalDist
 
 import numpy as np
 import yaml
@@ -114,12 +115,10 @@ def _failure_taxonomy(rows: list[dict]) -> dict:
 
 
 def _normal_z(confidence: float) -> float:
-    """Return a normal critical value for common confidence levels."""
-    if math.isclose(confidence, 0.90):
-        return 1.6448536269514722
-    if math.isclose(confidence, 0.99):
-        return 2.5758293035489004
-    return 1.959963984540054
+    """Return the two-sided normal critical value for a confidence level."""
+    if not 0.0 < confidence < 1.0:
+        raise ValueError(f"confidence must be between 0 and 1, got {confidence}")
+    return float(NormalDist().inv_cdf(0.5 + confidence / 2.0))
 
 
 def _wilson_interval(successes: int, total: int, confidence: float) -> list[float | None]:
@@ -142,9 +141,10 @@ def _bootstrap_mean_interval(
     seed: int,
 ) -> list[float | None]:
     """Return deterministic bootstrap CI for a finite-value mean."""
-    if not values or samples <= 0:
+    finite_values = [float(value) for value in values if math.isfinite(float(value))]
+    if not finite_values or samples <= 0:
         return [None, None]
-    arr = np.asarray(values, dtype=float)
+    arr = np.asarray(finite_values, dtype=float)
     rng = np.random.default_rng(seed)
     indices = rng.integers(0, len(arr), size=(int(samples), len(arr)))
     means = np.mean(arr[indices], axis=1)

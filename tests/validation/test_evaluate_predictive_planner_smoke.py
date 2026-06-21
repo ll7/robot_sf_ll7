@@ -134,6 +134,28 @@ def test_evaluate_predictive_planner_fails_closed_without_collision_metric(
     assert payload["quality_gates"]["pass_all"] is False
 
 
+def test_uncertainty_helpers_validate_confidence_and_filter_non_finite() -> None:
+    """Uncertainty helpers should avoid silent confidence fallback and non-finite samples."""
+    assert 1.28 < mod._normal_z(0.80) < 1.29
+
+    try:
+        mod._normal_z(1.0)
+    except ValueError as exc:
+        assert "confidence" in str(exc)
+    else:  # pragma: no cover - explicit failure branch
+        raise AssertionError("expected invalid confidence to fail")
+
+    interval = mod._bootstrap_mean_interval(
+        [1.0, float("nan"), 3.0, float("inf")],
+        samples=20,
+        confidence=0.95,
+        seed=123,
+    )
+    assert interval[0] is not None
+    assert interval[1] is not None
+    assert 1.0 <= interval[0] <= interval[1] <= 3.0
+
+
 def test_integrity_summary_groups_multiple_reasons_per_episode() -> None:
     """Integrity summary should emit one contradiction entry per episode id."""
     rows = [

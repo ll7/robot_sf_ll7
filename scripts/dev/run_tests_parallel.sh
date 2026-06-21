@@ -102,8 +102,15 @@ optional_test_paths=(
   tests/unit/test_runner_video.py
 )
 
-is_optional_test_path() {
+normalize_pytest_target_path() {
   local path="${1#./}"
+  path="${path%%::*}"
+  printf '%s\n' "$path"
+}
+
+is_optional_test_path() {
+  local path
+  path="$(normalize_pytest_target_path "$1")"
   case "$path" in
     tests/benchmark|tests/benchmark/*|\
     tests/benchmark_full|tests/benchmark_full/*|\
@@ -232,7 +239,8 @@ fi
 explicit_test_targets=()
 for pytest_arg in "${pytest_args[@]}"; do
   [[ "$pytest_arg" == -* ]] && continue
-  if [[ -e "$pytest_arg" || "$pytest_arg" == tests* ]]; then
+  normalized_pytest_arg="$(normalize_pytest_target_path "$pytest_arg")"
+  if [[ -e "$normalized_pytest_arg" || "$normalized_pytest_arg" == tests* ]]; then
     explicit_test_targets+=("$pytest_arg")
   fi
 done

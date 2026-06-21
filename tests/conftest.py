@@ -385,8 +385,8 @@ def _configured_test_lane() -> str:
 
 def _is_optional_readiness_test_path(path_str: str) -> bool:
     """Return whether a test path needs optional-extra readiness dependencies."""
-    normalized = path_str.replace("\\", "/")
-    repo_relative = normalized.split("/tests/", maxsplit=1)
+    normalized = path_str.replace("\\", "/").split("::", maxsplit=1)[0]
+    repo_relative = normalized.rsplit("/tests/", maxsplit=1)
     if len(repo_relative) == 2:
         normalized = f"tests/{repo_relative[1]}"
     return normalized in _OPTIONAL_TEST_FILES or any(

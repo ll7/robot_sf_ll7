@@ -84,6 +84,8 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "--lane core|optional|all" in script_text
     assert "ROBOT_SF_TEST_LANE=core|optional|all" in script_text
     assert "Resolved pytest lane:" in script_text
+    assert "normalize_pytest_target_path()" in script_text
+    assert '${path%%::*}' in script_text
     assert "core_test_paths=(" in script_text
     assert "explicit_test_targets=(" in script_text
     assert 'cmd+=("--ignore=$optional_test_path")' in script_text

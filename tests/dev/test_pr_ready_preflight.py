@@ -260,6 +260,12 @@ def test_core_lane_collection_hook_skips_optional_paths(monkeypatch: pytest.Monk
         test_conftest.pytest_ignore_collect(Path("tests/dev/test_pr_ready_preflight.py"), None)
         is False
     )
+    assert (
+        test_conftest._is_optional_readiness_test_path(
+            "/tmp/tests-parent/repo/tests/planner/test_sonic_crowdnav.py::test_case"
+        )
+        is True
+    )
 
 
 def test_optional_lane_collection_hook_skips_core_paths(monkeypatch: pytest.MonkeyPatch) -> None:

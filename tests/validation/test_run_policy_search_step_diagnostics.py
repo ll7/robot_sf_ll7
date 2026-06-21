@@ -18,6 +18,7 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _occlusion_mask_by_distance,
     _pedestrian_state_from_sim,
     _trace_observation_payload,
+    _trace_planner_execution_mode,
     _trace_progress_summary,
 )
 
@@ -164,6 +165,41 @@ def test_trace_progress_summary_missing_steps_break_stagnant_runs() -> None:
 
     assert summary["stagnant_step_count"] == 2
     assert summary["longest_stagnant_run"] == 1
+
+
+def test_trace_planner_execution_mode_uses_observed_step_modes() -> None:
+    """Run-level mode should reflect per-step execution instead of the default alone."""
+    single_mode = _trace_planner_execution_mode(
+        [
+            {"planner_execution_mode": "command_adapter"},
+            {"planner_execution_mode": "command_adapter"},
+        ],
+        default_execution_mode="native_env_action",
+    )
+    mixed_mode = _trace_planner_execution_mode(
+        [
+            {"planner_execution_mode": "native_env_action"},
+            {"planner_execution_mode": "command_adapter"},
+        ],
+        default_execution_mode="native_env_action",
+    )
+    empty_mode = _trace_planner_execution_mode(
+        [],
+        default_execution_mode="command_adapter",
+    )
+
+    assert single_mode == {
+        "planner_execution_mode": "command_adapter",
+        "planner_execution_modes_observed": ["command_adapter"],
+    }
+    assert mixed_mode == {
+        "planner_execution_mode": "mixed",
+        "planner_execution_modes_observed": ["command_adapter", "native_env_action"],
+    }
+    assert empty_mode == {
+        "planner_execution_mode": "command_adapter",
+        "planner_execution_modes_observed": [],
+    }
 
 
 def test_planner_summary_lines_render_nested_diagnostics() -> None:

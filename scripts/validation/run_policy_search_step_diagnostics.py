@@ -254,6 +254,31 @@ def _trace_progress_summary(
     }
 
 
+def _trace_planner_execution_mode(
+    trace_rows: list[dict[str, Any]],
+    *,
+    default_execution_mode: str,
+) -> dict[str, Any]:
+    """Summarize the actual planner execution modes observed across trace rows."""
+    observed_modes = sorted(
+        {
+            str(row.get("planner_execution_mode"))
+            for row in trace_rows
+            if row.get("planner_execution_mode")
+        }
+    )
+    if not observed_modes:
+        run_mode = default_execution_mode
+    elif len(observed_modes) == 1:
+        run_mode = observed_modes[0]
+    else:
+        run_mode = "mixed"
+    return {
+        "planner_execution_mode": run_mode,
+        "planner_execution_modes_observed": observed_modes,
+    }
+
+
 def _format_planner_summary_lines(planner_summary: Any) -> list[str]:
     """Return Markdown lines for the aggregate planner diagnostics summary."""
     summary = _json_ready(planner_summary)
@@ -757,6 +782,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         env.close()
 
     progress_summary = _trace_progress_summary(trace_rows)
+    execution_mode_summary = _trace_planner_execution_mode(
+        trace_rows,
+        default_execution_mode=default_execution_mode,
+    )
     fallback_degraded_status = _planner_fallback_degraded_status(planner_summary)
     trace_payload = {
         "candidate": args.candidate,
@@ -768,7 +797,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "algo": algo,
         "algo_config": _json_ready(effective_cfg),
         "algorithm_metadata": _json_ready(algo_meta),
-        "planner_execution_mode": default_execution_mode,
+        **execution_mode_summary,
         "fallback_degraded_status": fallback_degraded_status,
         "observation_perturbation_config": {
             "position_noise_std_m": float(args.observation_noise_std_m),
@@ -809,7 +838,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         f"- Seed: `{seed}`",
         f"- Horizon: `{horizon}`",
         f"- Algorithm: `{algo}`",
-        f"- Planner execution mode: `{default_execution_mode}`",
+        f"- Planner execution mode: `{execution_mode_summary['planner_execution_mode']}`",
+        f"- Planner execution modes observed: "
+        f"`{execution_mode_summary['planner_execution_modes_observed']}`",
         f"- Fallback/degraded status: `{fallback_degraded_status}`",
         f"- Trace JSON: `{trace_path}`",
         f"- Decision counts: `{dict(decision_counter)}`",
@@ -870,6 +901,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "seed": seed,
             "decision_counts": dict(decision_counter),
             "selected_head_counts": dict(selected_head_counter),
+            **execution_mode_summary,
         },
         progress_summary=progress_summary,
         planner_summary=planner_summary,

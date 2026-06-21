@@ -88,12 +88,17 @@ All refactored modules were thoroughly tested:
 ## Future Considerations
 
 ### Remaining High-Complexity Functions
-The following functions still have complexity > 10 but are candidates for future refactoring:
-1. `robot_sf/nav/map_config.py:serialize_map()` (complexity 13)
-2. `robot_sf/render/interactive_playback.py:_handle_playback_key()` (complexity 11)
-3. `robot_sf/render/interactive_playbook.py:_rebuild_trajectories_up_to_frame()` (complexity 11)
-4. `robot_sf/gym_env/multi_robot_env.py:step()` (complexity 11)
-5. `robot_sf/data_analysis/extract_json_from_pickle.py:convert_to_serializable()` (complexity 11)
+The following functions still have complexity suppressions or complexity > 10 and are candidates
+for future refactoring:
+1. `robot_sf/benchmark/map_runner.py:_build_policy()` (C901/PLR0912/PLR0915 suppressed) - policy
+   construction registry migration in progress.
+2. `robot_sf/benchmark/camera_ready_campaign.py:run_campaign()` (C901/PLR0912/PLR0915 suppressed)
+   - campaign-stage decomposition still pending.
+3. `robot_sf/nav/map_config.py:serialize_map()` (complexity 13)
+4. `robot_sf/render/interactive_playback.py:_handle_playback_key()` (complexity 11)
+5. `robot_sf/render/interactive_playbook.py:_rebuild_trajectories_up_to_frame()` (complexity 11)
+6. `robot_sf/gym_env/multi_robot_env.py:step()` (complexity 11)
+7. `robot_sf/data_analysis/extract_json_from_pickle.py:convert_to_serializable()` (complexity 11)
 
 ### Recommended Next Steps
 1. **Incremental Refactoring**: Address remaining complex functions in future iterations

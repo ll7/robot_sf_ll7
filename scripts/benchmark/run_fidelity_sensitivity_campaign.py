@@ -500,6 +500,9 @@ def build_report(
         "ranking_stability_is_on_bounded_two_planner_slice_only",
         "full_fixed_scope_planners_not_run",
     ]
+    if not rank_report.get("rank_identifiable", True):
+        reason = str(rank_report.get("rank_identifiability_reason") or "unknown")
+        result_caveats.append(f"rank_non_identifiable_{reason}")
     if all_success_rates and max(all_success_rates) <= 0.0:
         result_caveats.append("all_observed_success_rates_zero")
     if all_collision_rates and min(all_collision_rates) >= 1.0:
@@ -549,6 +552,12 @@ def build_report(
 
 def format_markdown(report: Mapping[str, Any]) -> str:
     """Render compact evidence Markdown."""
+    rank_stability = report["rank_stability"]
+    rank_identifiable = bool(rank_stability.get("rank_identifiable", True))
+    rank_reason = str(rank_stability.get("rank_identifiability_reason") or "none")
+    rank_stable = rank_stability.get("rank_stable")
+    rank_stable_text = "not_applicable" if rank_stable is None else str(rank_stable)
+    rank_status = "identifiable" if rank_identifiable else "non-identifiable"
     lines = [
         f"# Issue #3207 Fidelity Sensitivity Actual Slice {report['date']}",
         "",
@@ -571,17 +580,28 @@ def format_markdown(report: Mapping[str, Any]) -> str:
         "",
         "## Rank Stability",
         "",
-        f"- Nominal ranking: `{', '.join(report['rank_stability']['nominal_ranking'])}`",
-        f"- Rank stable on this slice: `{report['rank_stability']['rank_stable']}`",
-        f"- Flipping variants: `{', '.join(report['rank_stability']['flipping_axes']) or 'none'}`",
+        f"- Nominal deterministic order: `{', '.join(rank_stability['nominal_ranking'])}`",
+        f"- Rank evidence status: `{rank_status}`",
+        f"- Rank identifiability reason: `{rank_reason}`",
+        f"- Rank stable on this slice: `{rank_stable_text}`",
+        f"- Flipping variants: `{', '.join(rank_stability['flipping_axes']) or 'none'}`",
+        f"- Non-identifiable variants: `{', '.join(rank_stability.get('non_identifiable_axes', [])) or 'none'}`",
         "",
-        "| Variant | Kendall tau | Rank flips | Top-1 changed |",
-        "|---|---:|---:|---|",
+        "| Variant | Rank evidence | Kendall tau | Rank flips | Top-1 changed |",
+        "|---|---|---:|---:|---|",
     ]
-    for axis in report["rank_stability"]["axes"]:
+    for axis in rank_stability["axes"]:
+        axis_identifiable = bool(axis.get("rank_identifiable", True))
+        axis_reason = str(axis.get("rank_identifiability_reason") or "none")
+        axis_status = "identifiable" if axis_identifiable else f"non-identifiable: {axis_reason}"
+        tau = axis.get("kendall_tau")
+        flips = axis.get("rank_flips")
+        top1_changed = axis.get("top1_changed")
+        tau_text = "NA" if tau is None else f"{float(tau):.6g}"
+        flips_text = "NA" if flips is None else str(int(flips))
+        top1_text = "NA" if top1_changed is None else f"`{top1_changed}`"
         lines.append(
-            f"| `{axis['axis']}` | {float(axis['kendall_tau']):.6g} | "
-            f"{int(axis['rank_flips'])} | `{axis['top1_changed']}` |"
+            f"| `{axis['axis']}` | `{axis_status}` | {tau_text} | {flips_text} | {top1_text} |"
         )
     lines.extend(
         [

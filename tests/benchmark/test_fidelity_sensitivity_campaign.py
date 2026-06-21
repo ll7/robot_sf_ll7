@@ -355,3 +355,61 @@ def test_report_classifies_actual_slice_without_paper_or_sim_to_real_claim(tmp_p
     assert "not simulator-realism" in report["claim_boundary"]
     assert "sim-to-real" in report["claim_boundary"]
     assert report["rank_stability"]["rank_stable"] is True
+
+
+def test_build_report_marks_zero_success_slice_rank_non_identifiable(tmp_path: Path) -> None:
+    """All-zero success rates are metric drift evidence, not rank-stability evidence."""
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    variants = campaign_runner.load_variant_specs(config, include_all_variants=False)
+    rows = []
+    for variant in variants:
+        for planner in ("goal_seek", "baseline_social_force"):
+            rows.append(
+                {
+                    "variant": variant.key,
+                    "planner": planner,
+                    "scenario_id": "classic_cross_trap_low",
+                    "seed": 111,
+                    "metrics": {
+                        "success_rate": 0.0,
+                        "collision_rate": 1.0,
+                        "min_clearance": 0.0,
+                        "mean_clearance": 0.0,
+                        "near_miss_rate": 1.0,
+                        "comfort_exposure_mean": 1.0,
+                        "time_to_goal_norm": 1.0,
+                    },
+                }
+            )
+
+    report = campaign_runner.build_report(
+        config=config,
+        rows=rows,
+        variants=variants,
+        scenario_set="configs/scenarios/sets/paper_cross_kinematics_v1.yaml",
+        horizon=12,
+        raw_rows_path=tmp_path / "episode_rows.jsonl",
+        git_provenance={
+            "git_head": "abc1234",
+            "git_worktree_dirty": True,
+            "git_status_short_at_generation": [" M example.py"],
+        },
+        date="2026-06-20",
+    )
+
+    rank_stability = report["rank_stability"]
+    assert rank_stability["rank_identifiable"] is False
+    assert rank_stability["rank_identifiability_reason"] == "primary_metric_zero_variance"
+    assert rank_stability["rank_stable"] is None
+    assert rank_stability["flipping_axes"] == []
+    assert rank_stability["non_identifiable_axes"]
+    assert "rank_non_identifiable_primary_metric_zero_variance" in report["result_caveats"]
+
+    markdown = campaign_runner.format_markdown(report)
+    first_axis = rank_stability["non_identifiable_axes"][0]
+    assert "Rank evidence status: `non-identifiable`" in markdown
+    assert (
+        f"| `{first_axis}` | `non-identifiable: primary_metric_zero_variance` | NA | NA | NA |"
+        in markdown
+    )
+    assert "primary_metric_zero_variance" in markdown

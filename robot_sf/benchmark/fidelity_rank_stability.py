@@ -2,11 +2,11 @@
 
 Given planner metric tables measured under a *nominal* simulation fidelity plus
 one table per *fidelity-perturbation axis* (the sweep output), this module reports
-whether the planner **ranking** is stable across fidelity assumptions and which
-axes flip it. That is the evidence behind a defensible benchmark validity
-boundary: a ranking that survives a bounded fidelity sweep is benchmark-
-strengthening; an axis that flips the ranking is a required reporting caveat and a
-calibration candidate.
+whether the planner **ranking** is identifiable and, when it is, stable across
+fidelity assumptions. That is the evidence behind a defensible benchmark validity
+boundary: an identifiable ranking that survives a bounded fidelity sweep is
+benchmark-strengthening; a non-identifiable ranking or an axis that flips the
+ranking is a required reporting caveat and a calibration candidate.
 
 Pure and deterministic: it operates on already-measured metric tables and runs no
 simulation. It is analysis tooling and makes no benchmark or sim-to-real claim;
@@ -25,7 +25,10 @@ from robot_sf.benchmark.rank_metrics import kendall_tau as _shared_kendall_tau
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-FIDELITY_RANK_STABILITY_SCHEMA = "fidelity_rank_stability.v1"
+FIDELITY_RANK_STABILITY_SCHEMA = "fidelity_rank_stability.v2"
+PRIMARY_METRIC_ZERO_VARIANCE_REASON = "primary_metric_zero_variance"
+PRIMARY_METRIC_INSUFFICIENT_REASON = "primary_metric_insufficient_finite_values"
+AXIS_PRIMARY_METRIC_NON_IDENTIFIABLE_REASON = "axis_primary_metric_non_identifiable"
 
 
 def rank_planners(
@@ -64,6 +67,24 @@ def _finite_metric_value(metrics: Mapping[str, object], metric: str) -> float | 
     if not math.isfinite(value):
         return None
     return value
+
+
+def _primary_metric_identifiability(
+    table: Mapping[str, Mapping[str, object]],
+    metric: str,
+) -> tuple[bool, str | None]:
+    """Return whether planner ranks are identifiable from ``metric`` values."""
+    values = [
+        value
+        for planner in sorted(table)
+        if (value := _finite_metric_value(table[planner], metric)) is not None
+    ]
+    if len(values) < 2:
+        return False, PRIMARY_METRIC_INSUFFICIENT_REASON
+    first = values[0]
+    if all(value == first for value in values[1:]):
+        return False, PRIMARY_METRIC_ZERO_VARIANCE_REASON
+    return True, None
 
 
 def kendall_tau(order_a: list[str], order_b: list[str]) -> float:
@@ -133,20 +154,25 @@ class AxisRankStability:
 
     axis: str
     ranking: list[str]
-    kendall_tau: float
-    rank_flips: int
-    top1_changed: bool
+    rank_identifiable: bool
+    rank_identifiability_reason: str | None
+    kendall_tau: float | None
+    rank_flips: int | None
+    top1_changed: bool | None
     metric_drift: dict[str, float]
 
     def to_dict(self) -> dict[str, object]:
         """Return JSON-safe representation.
 
         Returns:
-            Mapping with the axis ranking, tau, rank flips, top-1 change, and drift.
+            Mapping with the axis order, identifiability, tau, rank flips, top-1
+            change, and drift.
         """
         return {
             "axis": self.axis,
             "ranking": list(self.ranking),
+            "rank_identifiable": self.rank_identifiable,
+            "rank_identifiability_reason": self.rank_identifiability_reason,
             "kendall_tau": self.kendall_tau,
             "rank_flips": self.rank_flips,
             "top1_changed": self.top1_changed,
@@ -163,22 +189,28 @@ class FidelitySensitivityReport:
     nominal_ranking: list[str]
     axes: list[AxisRankStability]
     flipping_axes: list[str]
-    rank_stable: bool
+    non_identifiable_axes: list[str]
+    rank_identifiable: bool
+    rank_identifiability_reason: str | None
+    rank_stable: bool | None
 
     def to_dict(self) -> dict[str, object]:
-        """Return the ``fidelity_rank_stability.v1`` JSON-safe payload.
+        """Return the ``fidelity_rank_stability.v2`` JSON-safe payload.
 
         Returns:
-            Mapping with the schema version, nominal ranking, per-axis results,
-            flipping axes, and the validity-boundary verdict.
+            Mapping with the schema version, nominal order, per-axis results,
+            identifiable/non-identifiable axes, and the validity-boundary verdict.
         """
         return {
             "schema_version": FIDELITY_RANK_STABILITY_SCHEMA,
             "primary_metric": self.primary_metric,
             "higher_is_better": self.higher_is_better,
             "nominal_ranking": list(self.nominal_ranking),
+            "rank_identifiable": self.rank_identifiable,
+            "rank_identifiability_reason": self.rank_identifiability_reason,
             "rank_stable": self.rank_stable,
             "flipping_axes": list(self.flipping_axes),
+            "non_identifiable_axes": list(self.non_identifiable_axes),
             "axes": [axis.to_dict() for axis in self.axes],
         }
 
@@ -194,9 +226,12 @@ def analyze_fidelity_sensitivity(
     """Analyze planner-ranking stability across fidelity-perturbation axes.
 
     Each axis table must contain the same planner set as ``nominal_table``. The
-    nominal ranking (by ``primary_metric``) is the reference; each axis reports
+    nominal order (by ``primary_metric``) is the reference. When the nominal and
+    axis primary metrics contain an identifiable ordering, each axis reports
     Kendall tau, rank-flip count, top-1 change, and per-metric drift relative to
-    nominal. An axis with any rank flip is flagged as ranking-sensitive.
+    nominal. All-tied or otherwise insufficient primary metrics preserve
+    deterministic order only for serialization and return null rank-evidence
+    fields with a non-identifiable reason.
 
     Returns:
         A :class:`FidelitySensitivityReport` with per-axis results and the
@@ -212,9 +247,13 @@ def analyze_fidelity_sensitivity(
     nominal_ranking = rank_planners(
         nominal_table, primary_metric, higher_is_better=higher_is_better
     )
+    nominal_identifiable, nominal_non_identifiable_reason = _primary_metric_identifiability(
+        nominal_table, primary_metric
+    )
 
     axes: list[AxisRankStability] = []
     flipping_axes: list[str] = []
+    non_identifiable_axes: list[str] = []
     for axis_name, table in axis_tables.items():
         if set(table) != nominal_planners:
             raise ValueError(
@@ -222,19 +261,49 @@ def analyze_fidelity_sensitivity(
                 f"({sorted(table)} vs {sorted(nominal_planners)})"
             )
         ranking = rank_planners(table, primary_metric, higher_is_better=higher_is_better)
-        flips = count_rank_flips(nominal_ranking, ranking)
+        axis_identifiable, axis_non_identifiable_reason = _primary_metric_identifiability(
+            table, primary_metric
+        )
+        rank_identifiable = nominal_identifiable and axis_identifiable
+        rank_identifiability_reason = (
+            nominal_non_identifiable_reason
+            if not nominal_identifiable
+            else axis_non_identifiable_reason
+        )
+        flips: int | None = None
+        tau: float | None = None
+        top1_changed: bool | None = None
+        if rank_identifiable:
+            flips = count_rank_flips(nominal_ranking, ranking)
+            tau = kendall_tau(nominal_ranking, ranking)
+            top1_changed = bool(nominal_ranking and ranking and nominal_ranking[0] != ranking[0])
+        else:
+            non_identifiable_axes.append(axis_name)
         axes.append(
             AxisRankStability(
                 axis=axis_name,
                 ranking=ranking,
-                kendall_tau=kendall_tau(nominal_ranking, ranking),
+                rank_identifiable=rank_identifiable,
+                rank_identifiability_reason=rank_identifiability_reason,
+                kendall_tau=tau,
                 rank_flips=flips,
-                top1_changed=bool(nominal_ranking and ranking and nominal_ranking[0] != ranking[0]),
+                top1_changed=top1_changed,
                 metric_drift=metric_drift(nominal_table, table, metrics),
             )
         )
-        if flips > 0:
+        if flips is not None and flips > 0:
             flipping_axes.append(axis_name)
+
+    rank_identifiable = nominal_identifiable and not non_identifiable_axes
+    rank_identifiability_reason = nominal_non_identifiable_reason
+    if rank_identifiability_reason is None and non_identifiable_axes:
+        rank_identifiability_reason = AXIS_PRIMARY_METRIC_NON_IDENTIFIABLE_REASON
+    if flipping_axes:
+        rank_stable: bool | None = False
+    elif rank_identifiable:
+        rank_stable = True
+    else:
+        rank_stable = None
 
     return FidelitySensitivityReport(
         primary_metric=primary_metric,
@@ -242,5 +311,8 @@ def analyze_fidelity_sensitivity(
         nominal_ranking=nominal_ranking,
         axes=axes,
         flipping_axes=flipping_axes,
-        rank_stable=not flipping_axes,
+        non_identifiable_axes=non_identifiable_axes,
+        rank_identifiable=rank_identifiable,
+        rank_identifiability_reason=rank_identifiability_reason,
+        rank_stable=rank_stable,
     )

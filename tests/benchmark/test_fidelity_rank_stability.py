@@ -8,7 +8,9 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.fidelity_rank_stability import (
+    AXIS_PRIMARY_METRIC_NON_IDENTIFIABLE_REASON,
     FIDELITY_RANK_STABILITY_SCHEMA,
+    PRIMARY_METRIC_ZERO_VARIANCE_REASON,
     analyze_fidelity_sensitivity,
     count_rank_flips,
     kendall_tau,
@@ -158,6 +160,65 @@ def test_analyze_flags_ranking_flipping_axis() -> None:
     assert axis.kendall_tau < 1.0
 
 
+def test_analyze_marks_all_tie_nominal_rank_non_identifiable() -> None:
+    """All-tied nominal primary metrics preserve order only for serialization."""
+    nominal = {
+        "planner_b": {"success_rate": 0.0, "collision_rate": 1.0},
+        "planner_a": {"success_rate": 0.0, "collision_rate": 1.0},
+    }
+    axis_tables = {
+        "timestep": {
+            "planner_b": {"success_rate": 0.0, "collision_rate": 1.0},
+            "planner_a": {"success_rate": 0.0, "collision_rate": 1.0},
+        }
+    }
+
+    report = analyze_fidelity_sensitivity(
+        nominal, axis_tables, primary_metric="success_rate", drift_metrics=["success_rate"]
+    )
+
+    assert report.nominal_ranking == ["planner_a", "planner_b"]
+    assert report.rank_identifiable is False
+    assert report.rank_identifiability_reason == PRIMARY_METRIC_ZERO_VARIANCE_REASON
+    assert report.rank_stable is None
+    assert report.flipping_axes == []
+    assert report.non_identifiable_axes == ["timestep"]
+    axis = report.axes[0]
+    assert axis.ranking == ["planner_a", "planner_b"]
+    assert axis.rank_identifiable is False
+    assert axis.rank_identifiability_reason == PRIMARY_METRIC_ZERO_VARIANCE_REASON
+    assert axis.kendall_tau is None
+    assert axis.rank_flips is None
+    assert axis.top1_changed is None
+
+
+def test_analyze_marks_axis_all_tie_rank_non_identifiable() -> None:
+    """A tied axis cannot support tau/flip evidence even when nominal ranks exist."""
+    axis_tables = {
+        "observation_noise": {
+            "planner_x": {"success_rate": 0.0, "collision_rate": 1.0},
+            "planner_y": {"success_rate": 0.0, "collision_rate": 1.0},
+            "planner_z": {"success_rate": 0.0, "collision_rate": 1.0},
+        },
+    }
+
+    report = analyze_fidelity_sensitivity(
+        _NOMINAL, axis_tables, primary_metric="success_rate", drift_metrics=["success_rate"]
+    )
+
+    assert report.rank_identifiable is False
+    assert report.rank_identifiability_reason == AXIS_PRIMARY_METRIC_NON_IDENTIFIABLE_REASON
+    assert report.rank_stable is None
+    assert report.flipping_axes == []
+    assert report.non_identifiable_axes == ["observation_noise"]
+    axis = report.axes[0]
+    assert axis.rank_identifiable is False
+    assert axis.rank_identifiability_reason == PRIMARY_METRIC_ZERO_VARIANCE_REASON
+    assert axis.kendall_tau is None
+    assert axis.rank_flips is None
+    assert axis.top1_changed is None
+
+
 def test_analyze_rejects_planner_set_mismatch() -> None:
     """An axis missing a nominal planner is rejected."""
     axis_tables = {"bad": {"planner_x": {"success_rate": 0.9}}}
@@ -173,7 +234,10 @@ def test_report_to_dict_uses_schema() -> None:
     payload = report.to_dict()
     assert payload["schema_version"] == FIDELITY_RANK_STABILITY_SCHEMA
     assert payload["nominal_ranking"] == ["planner_x", "planner_y", "planner_z"]
+    assert payload["rank_identifiable"] is True
+    assert payload["rank_identifiability_reason"] is None
     assert payload["rank_stable"] is True
+    assert payload["non_identifiable_axes"] == []
 
 
 # --- shipped config -------------------------------------------------------

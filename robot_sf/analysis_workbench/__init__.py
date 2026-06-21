@@ -17,7 +17,9 @@ from robot_sf.analysis_workbench.trace_annotation import (
 from robot_sf.analysis_workbench.trace_failure_predicates import (
     TRACE_FAILURE_PREDICATE_SCHEMA_VERSION,
     TraceFailurePredicate,
+    TraceFailurePredicateDefinition,
     aggregate_trace_failure_predicate_tables,
+    build_trace_failure_predicate_definitions,
     extract_trace_failure_predicates,
     render_trace_failure_predicate_markdown,
 )
@@ -31,7 +33,9 @@ __all__ = [
     "TraceAnnotationSet",
     "TraceAnnotationSetValidationError",
     "TraceFailurePredicate",
+    "TraceFailurePredicateDefinition",
     "aggregate_trace_failure_predicate_tables",
+    "build_trace_failure_predicate_definitions",
     "extract_trace_failure_predicates",
     "load_simulation_trace_export",
     "load_trace_annotation_set",

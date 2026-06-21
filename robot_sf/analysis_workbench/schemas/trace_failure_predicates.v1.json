@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/trace_failure_predicates.v1.json",
+  "title": "Robot SF Trace Failure Predicates v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "matrix_metadata",
+    "predicate_definitions",
+    "denominator_status",
+    "summary",
+    "caveats"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "trace_failure_predicates.v1"
+    },
+    "predicate_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "table_kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["scenario_id", "seed", "planner_id", "episode_id"],
+      "properties": {
+        "scenario_id": {"type": "string", "minLength": 1},
+        "seed": {"type": "integer"},
+        "planner_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "matrix_metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "rate_interpretation", "included_trace_count"],
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "rate_interpretation": {"type": "string", "minLength": 1},
+        "included_trace_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "predicate_definitions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/predicate_definition"}
+    },
+    "denominator_status": {
+      "enum": ["valid", "not_available", "no_predicate_observed", "pipeline_failure"]
+    },
+    "predicates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/predicate_record"}
+    },
+    "rows": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/aggregate_row"}
+    },
+    "zero_predicate_groups": {
+      "type": "array",
+      "items": {"type": "object", "additionalProperties": true}
+    },
+    "predicate_denominator_health": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {"type": "integer", "minimum": 0}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "caveats": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "anyOf": [
+    {
+      "required": ["predicate_source", "trace_id", "source", "predicates"]
+    },
+    {
+      "required": ["table_kind", "rows", "zero_predicate_groups", "predicate_denominator_health"]
+    }
+  ],
+  "$defs": {
+    "predicate_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate_id",
+        "description",
+        "inputs",
+        "units",
+        "thresholds",
+        "denominator_semantics",
+        "emitted_statuses"
+      ],
+      "properties": {
+        "predicate_id": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "inputs": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "units": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "denominator_semantics": {"type": "string", "minLength": 1},
+        "emitted_statuses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"enum": ["valid", "not_available", "no_predicate_observed", "pipeline_failure"]}
+        }
+      }
+    },
+    "predicate_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate_id",
+        "time_interval_s",
+        "steps",
+        "involved_actors",
+        "scenario_family",
+        "planner_id",
+        "evidence_fields",
+        "severity",
+        "validity_status"
+      ],
+      "properties": {
+        "predicate_id": {"type": "string", "minLength": 1},
+        "time_interval_s": {
+          "type": "array",
+          "prefixItems": [{"type": ["number", "null"]}, {"type": ["number", "null"]}],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "steps": {
+          "type": "array",
+          "prefixItems": [{"type": ["integer", "null"]}, {"type": ["integer", "null"]}],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "involved_actors": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "scenario_family": {"type": "string", "minLength": 1},
+        "planner_id": {"type": "string", "minLength": 1},
+        "evidence_fields": {"type": "object", "additionalProperties": true},
+        "severity": {"type": "string", "minLength": 1},
+        "validity_status": {
+          "enum": ["valid", "not_available", "no_predicate_observed", "pipeline_failure"]
+        }
+      }
+    },
+    "aggregate_row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "scenario_family",
+        "planner_id",
+        "seed",
+        "predicate_id",
+        "validity_status",
+        "severity",
+        "predicate_count",
+        "trace_denominator",
+        "predicate_rate_per_trace"
+      ],
+      "properties": {
+        "scenario_family": {"type": "string", "minLength": 1},
+        "planner_id": {"type": "string", "minLength": 1},
+        "seed": {"type": "integer"},
+        "predicate_id": {"type": "string", "minLength": 1},
+        "validity_status": {
+          "enum": ["valid", "not_available", "no_predicate_observed", "pipeline_failure"]
+        },
+        "severity": {"type": "string", "minLength": 1},
+        "predicate_count": {"type": "integer", "minimum": 0},
+        "trace_denominator": {"type": "integer", "minimum": 0},
+        "predicate_rate_per_trace": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

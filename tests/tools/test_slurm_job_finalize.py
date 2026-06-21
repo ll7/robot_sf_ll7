@@ -257,3 +257,140 @@ def test_control_plane_contract_success_when_required_files_exist(tmp_path: Path
 
     assert report["classification"] == "success"
     assert report["artifact_status"] == "all_required_present"
+
+
+def test_success_without_durable_uri_is_pending_durable(tmp_path: Path) -> None:
+    """A successful run with no durable pointer must not look durable (fail-closed)."""
+    artifact = tmp_path / "output" / "slurm" / "job-200" / "summary.json"
+    _write(artifact, "{}\n")
+
+    report = slurm_job_finalize.build_finalization_report(
+        issue_number=3075,
+        job_id="200",
+        job_state="COMPLETED",
+        expected_artifacts=["output/slurm/job-200/summary.json"],
+        repo_root=tmp_path,
+    )
+
+    assert report["classification"] == "success"
+    assert report["durable_uri"] is None
+    assert report["durable_status"] == "pending_durable"
+
+
+def test_success_with_wandb_uri_is_durable(tmp_path: Path) -> None:
+    """A recorded W&B durable pointer promotes a successful run to durable."""
+    artifact = tmp_path / "output" / "slurm" / "job-201" / "summary.json"
+    _write(artifact, "{}\n")
+    uri = "wandb://robot-sf/hard-case/run-201:v0"
+
+    report = slurm_job_finalize.build_finalization_report(
+        issue_number=3075,
+        job_id="201",
+        job_state="COMPLETED",
+        expected_artifacts=["output/slurm/job-201/summary.json"],
+        repo_root=tmp_path,
+        durable_uri=uri,
+    )
+
+    assert report["durable_uri"] == uri
+    assert report["durable_status"] == "durable"
+    assert f"durable status: `durable` -> `{uri}`" in report["issue_update_markdown"]
+
+
+def test_failed_run_durable_status_is_not_applicable(tmp_path: Path) -> None:
+    """A durable URI on a non-success run does not make it durable."""
+    report = slurm_job_finalize.build_finalization_report(
+        issue_number=3075,
+        job_id="202",
+        job_state="FAILED",
+        expected_artifacts=["output/slurm/job-202/summary.json"],
+        repo_root=tmp_path,
+        durable_uri="wandb://robot-sf/hard-case/run-202:v0",
+    )
+
+    assert report["classification"] == "failed"
+    assert report["durable_status"] == "not_applicable"
+
+
+def test_durable_uri_rejects_non_durable_scheme(tmp_path: Path) -> None:
+    """A bare local path can never masquerade as a durable pointer."""
+    with pytest.raises(ValueError, match="must use one of"):
+        slurm_job_finalize.build_finalization_report(
+            issue_number=3075,
+            job_id="203",
+            job_state="COMPLETED",
+            expected_artifacts=["output/slurm/job-203/summary.json"],
+            repo_root=tmp_path,
+            durable_uri="output/slurm/job-203",
+        )
+
+
+def test_blank_durable_uri_is_treated_as_absent(tmp_path: Path) -> None:
+    """An empty/whitespace durable URI is normalized to None, not an error."""
+    assert slurm_job_finalize.validate_durable_uri("   ") is None
+    assert slurm_job_finalize.validate_durable_uri(None) is None
+
+
+def test_report_semantics_are_idempotent(tmp_path: Path) -> None:
+    """Re-running the finalizer must not change run semantics (only the timestamp)."""
+    artifact = tmp_path / "output" / "slurm" / "job-204" / "summary.json"
+    _write(artifact, '{"ok": true}\n')
+    kwargs = {
+        "issue_number": 3075,
+        "job_id": "204",
+        "job_state": "COMPLETED",
+        "expected_artifacts": ["output/slurm/job-204/summary.json"],
+        "repo_root": tmp_path,
+        "durable_uri": "wandb://robot-sf/hard-case/run-204:v0",
+    }
+
+    first = slurm_job_finalize.build_finalization_report(**kwargs)
+    second = slurm_job_finalize.build_finalization_report(**kwargs)
+
+    first.pop("generated_at")
+    second.pop("generated_at")
+    assert first == second
+
+
+def test_cli_rejects_non_durable_uri_scheme(tmp_path: Path) -> None:
+    """The CLI surfaces an invalid durable scheme as a usage error, not a traceback."""
+    output = tmp_path / "rejected.json"
+    with pytest.raises(SystemExit):
+        slurm_job_finalize.main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--issue",
+                "3075",
+                "--job-id",
+                "205",
+                "--job-state",
+                "COMPLETED",
+                "--expected-artifact",
+                "output/slurm/job-205/summary.json",
+                "--durable-uri",
+                "output/slurm/job-205",
+                "--output",
+                str(output),
+            ]
+        )
+
+
+def test_reconcile_extracts_finalizer_durable_uri(tmp_path: Path) -> None:
+    """The reconciler must pick up the durable pointer the finalizer records."""
+    from scripts.tools import reconcile_slurm_evidence
+
+    artifact = tmp_path / "output" / "slurm" / "job-206" / "summary.json"
+    _write(artifact, "{}\n")
+    uri = "wandb://robot-sf/hard-case/run-206:v0"
+
+    report = slurm_job_finalize.build_finalization_report(
+        issue_number=3075,
+        job_id="206",
+        job_state="COMPLETED",
+        expected_artifacts=["output/slurm/job-206/summary.json"],
+        repo_root=tmp_path,
+        durable_uri=uri,
+    )
+
+    assert reconcile_slurm_evidence._extract_finalizer_durable_pointer(report) == uri

@@ -34,6 +34,20 @@ FAILED_STATES = {"FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", "OUT_OF_MEMORY",
 INCOMPLETE_STATES = {"PENDING", "CONFIGURING", "RUNNING", "SUSPENDED", "REQUEUED"}
 UNAVAILABLE_STATES = {"NOT_AVAILABLE", "UNKNOWN", "MISSING"}
 
+# Recognized durable artifact-store URI schemes. The approved durable backend for sprint
+# studies is Weights & Biases (``wandb://`` / ``wandb-artifact://``); see
+# docs/context/issue_3075_durable_artifact_backend.md. Other schemes are accepted so a run
+# may point at an equivalent durable store, but a bare local path is never durable.
+DURABLE_URI_SCHEMES = (
+    "wandb://",
+    "wandb-artifact://",
+    "https://",
+    "http://",
+    "s3://",
+    "gs://",
+    "dvc://",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ArtifactRecord:
@@ -144,6 +158,38 @@ def normalize_job_state(job_state: str) -> str:
     return job_state.strip().upper().replace("-", "_") or "UNKNOWN"
 
 
+def validate_durable_uri(value: str | None) -> str | None:
+    """Return a stripped durable-store URI, or raise ``ValueError`` for an unknown scheme.
+
+    A blank or absent value is treated as "no durable URI yet" (the run stays
+    pending-durable); a non-empty value must use a recognized durable scheme so a bare
+    local ``output/`` path can never masquerade as durable evidence.
+    """
+    if value is None:
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    if not candidate.startswith(DURABLE_URI_SCHEMES):
+        raise ValueError(
+            f"durable URI {candidate!r} must use one of {DURABLE_URI_SCHEMES}; "
+            "the approved durable backend is Weights & Biases (wandb://entity/project/artifact:ver)."
+        )
+    return candidate
+
+
+def classify_durable_status(classification: str, durable_uri: str | None) -> str:
+    """Classify durable-store readiness, fail-closed.
+
+    Only a ``success`` run with a recorded durable URI is ``durable``; a successful run
+    without a durable pointer stays ``pending_durable`` (its artifacts still need
+    promotion before they can be cited), and non-success runs are ``not_applicable``.
+    """
+    if classification != "success":
+        return "not_applicable"
+    return "durable" if durable_uri else "pending_durable"
+
+
 def classify_finalization(
     *,
     job_state: str,
@@ -190,6 +236,8 @@ def issue_update_markdown(report: dict[str, Any]) -> str:
         f"- classification: `{report['classification']}`",
         f"- job state: `{report['job_state']}`",
         f"- artifact status: `{report['artifact_status']}`",
+        f"- durable status: `{report.get('durable_status', 'not_applicable')}`"
+        + (f" -> `{report['durable_uri']}`" if report.get("durable_uri") else ""),
         f"- claim boundary: {report['claim_boundary']}",
         "",
         "| Artifact | Required | Status | SHA256 |",
@@ -233,7 +281,7 @@ def _next_action(classification: str) -> str:
     }[classification]
 
 
-def build_finalization_report(
+def build_finalization_report(  # noqa: PLR0913
     *,
     issue_number: int,
     job_id: str,
@@ -243,8 +291,10 @@ def build_finalization_report(
     repo_root: Path = REPO_ROOT,
     manual_decision: bool = False,
     notes: str = "",
+    durable_uri: str | None = None,
 ) -> dict[str, Any]:
     """Build a compact SLURM finalization report."""
+    validated_uri = validate_durable_uri(durable_uri)
     artifacts = [
         artifact_record(path, repo_root=repo_root, role="expected", required=True)
         for path in expected_artifacts
@@ -266,6 +316,8 @@ def build_finalization_report(
         "job_state": normalize_job_state(job_state),
         "classification": classification,
         "artifact_status": _artifact_status(artifacts),
+        "durable_uri": validated_uri,
+        "durable_status": classify_durable_status(classification, validated_uri),
         "artifacts": [asdict(artifact) for artifact in artifacts],
         "claim_boundary": (
             "compact local finalization manifest only; not durable benchmark evidence until "
@@ -279,7 +331,7 @@ def build_finalization_report(
     return report
 
 
-def build_control_plane_finalization_report(
+def build_control_plane_finalization_report(  # noqa: PLR0913
     *,
     issue_number: int,
     job_id: str,
@@ -289,6 +341,7 @@ def build_control_plane_finalization_report(
     repo_root: Path = REPO_ROOT,
     manual_decision: bool = False,
     notes: str = "",
+    durable_uri: str | None = None,
 ) -> dict[str, Any]:
     """Build a report using the July 2026 research-control-plane run contract."""
     root = Path(run_root)
@@ -302,6 +355,7 @@ def build_control_plane_finalization_report(
         repo_root=repo_root,
         manual_decision=manual_decision,
         notes=notes,
+        durable_uri=durable_uri,
     )
 
 
@@ -314,6 +368,17 @@ def write_report(
     if markdown_output is not None:
         markdown_output.parent.mkdir(parents=True, exist_ok=True)
         markdown_output.write_text(report["issue_update_markdown"] + "\n", encoding="utf-8")
+
+
+def _durable_uri_cli(value: str) -> str:
+    """argparse adapter that rejects non-durable URI schemes with a clean CLI error."""
+    try:
+        validated = validate_durable_uri(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    if validated is None:
+        raise argparse.ArgumentTypeError("durable URI must be non-empty")
+    return validated
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -352,6 +417,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Force manual_decision_required even if artifacts are present.",
     )
     parser.add_argument("--notes", default="", help="Optional short note copied into the report.")
+    parser.add_argument(
+        "--durable-uri",
+        type=_durable_uri_cli,
+        help=(
+            "Durable artifact-store URI for this run (approved backend: Weights & Biases, e.g. "
+            "wandb://entity/project/artifact:version). Recorded in the manifest so "
+            "reconcile_slurm_evidence can replace pending aliases; must use a recognized "
+            "durable scheme."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -368,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=args.repo_root,
             manual_decision=args.manual_decision,
             notes=args.notes,
+            durable_uri=args.durable_uri,
         )
     else:
         report = build_finalization_report(
@@ -379,6 +455,7 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=args.repo_root,
             manual_decision=args.manual_decision,
             notes=args.notes,
+            durable_uri=args.durable_uri,
         )
     write_report(report, args.output, markdown_output=args.markdown_output)
     print(report["issue_update_markdown"])

@@ -48,6 +48,7 @@ EVIDENCE_PRESERVE_STATES = {"completed", "success"}
 RAW_ARTIFACT_LIKE_SUFFIXES = {".zip", ".pt", ".pth", ".ckpt", ".jsonl", ".out", ".err"}
 FINALIZER_SCHEMA_VERSION = "robot-sf-slurm-job-finalization.v1"
 FINALIZER_DURABLE_POINTER_KEYS = (
+    "durable_uri",
     "wandb_url",
     "wandb_run_url",
     "artifact_uri",

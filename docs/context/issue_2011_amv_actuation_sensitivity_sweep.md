@@ -35,6 +35,22 @@ planner, and scenario family. The pilot uses two scenarios, one seed, and two pl
 `classic_cross_trap_high`, `francis2023_intersection_wait`, seed `111`, planners `goal` and
 `social_force`.
 
+Issue #3284 extends the same manifest with an opt-in seeded variability-sweep mode:
+
+```bash
+uv run python scripts/tools/run_amv_actuation_sensitivity_sweep.py \
+  --manifest configs/benchmarks/issue_2011_amv_actuation_sensitivity_sweep_v0.yaml \
+  --output output/issue_3284_amv_actuation_variability_samples \
+  --sampling-mode variability-sweep \
+  --sampling-seed 3284
+```
+
+The default remains the 12 fixed low/nominal/high variants. `variability-sweep` materializes
+synthetic/provisional samples from the manifest's `variability_distribution` block and writes
+`reports/sampled_parameter_summary.{json,csv,md}` beside the generated configs. These samples are
+diagnostic-only, preserve the issue #2001 platform-proxy boundary, and are not hardware-calibrated
+AMV evidence.
+
 The implementation also adds the missing `latency_stress_profile` pass-through from
 `robot_sf.benchmark.runner.run_batch` to map-runner execution, and extends synthetic update-rate
 stress with `2.5hz-hold` so the update-rate group has distinct low/nominal/high levels.

@@ -17,6 +17,76 @@ pilot:
   workers: 1
   bootstrap_samples: 80
   output_root: output/benchmarks/issue_2011_amv_actuation_sensitivity_pilot
+variability_sampling:
+  default_mode: fixed-variants
+  sample_count: 3
+  seed: 3284
+  source_context: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
+  caveat: synthetic/provisional variability samples are diagnostic-only and not hardware-calibrated AMV evidence
+variability_distribution:
+  schema_version: synthetic-actuation-variability-distribution.v1
+  mode: synthetic-provisional
+  claim_boundary: diagnostic-only
+  source_context: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
+  parameters:
+    max_linear_accel_m_s2:
+      distribution: uniform
+      low: 2.425
+      high: 4.625
+      provenance:
+        units: m/s^2
+        source_status: accepted_platform_class_proxy_source
+        source_context: docs/context/issue_2001_amv_actuation_proxy_source_analysis.md
+        caveat: e-scooter platform-class proxy only; not hardware-calibrated AMV evidence
+    max_linear_decel_m_s2:
+      distribution: uniform
+      low: 3.210
+      high: 3.842
+      provenance:
+        units: m/s^2
+        source_status: accepted_platform_class_proxy_source
+        source_context: docs/context/issue_2001_amv_actuation_proxy_source_analysis.md
+        caveat: e-scooter braking proxy only; not hardware-calibrated AMV evidence
+    max_yaw_rate_rad_s:
+      distribution: uniform
+      low: 0.8
+      high: 1.6
+      provenance:
+        units: rad/s
+        source_status: synthetic_stress_factor
+        source_context: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
+        caveat: synthetic yaw-rate stress range unsupported by the longitudinal proxy source
+    max_angular_accel_rad_s2:
+      distribution: uniform
+      low: 2.0
+      high: 6.0
+      provenance:
+        units: rad/s^2
+        source_status: synthetic_stress_factor
+        source_context: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
+        caveat: synthetic angular-acceleration stress range unsupported by the longitudinal proxy source
+    latency_mode:
+      distribution: choice
+      choices:
+        - zero-step-delay
+        - one-step-delay
+        - two-step-delay
+      provenance:
+        units: profile-label
+        source_status: synthetic_stress_factor
+        source_context: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
+        caveat: latency is unsupported by the longitudinal proxy source
+    update_mode:
+      distribution: choice
+      choices:
+        - 2.5hz-hold
+        - 5hz-hold
+        - 10hz-matched
+      provenance:
+        units: profile-label
+        source_status: synthetic_stress_factor
+        source_context: docs/context/issue_2011_amv_actuation_sensitivity_sweep.md
+        caveat: update rate is unsupported by the longitudinal proxy source
 baseline_profile:
   max_linear_accel_m_s2: 2.819
   max_linear_decel_m_s2: 3.429

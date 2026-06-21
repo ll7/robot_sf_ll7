@@ -201,6 +201,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Scenario Zoo Index](./scenario_zoo/index.md)** - Family-oriented scenario catalog with links to source configs, maps, benchmark surfaces, and caveats
 * **[Hazard Traceability](./hazard_traceability.md)** - `hazard_traceability.v1` schema, typed loader, fixture, and coverage summary for scenario-to-hazard evidence caveats
 * **[ODD Contracts](./odd_contracts.md)** - `odd_contract.v1` schema, typed loader, fixture, and boundary for benchmark and falsification evidence assumptions
+* **[Simulation-Evidence Safety Case Template](./simulation_evidence_safety_case.md)** - Public-safe scaffold for mapping Robot SF simulation evidence, provenance, credibility gaps, and outside-simulation evidence requirements without implying certification
 * **[Scenario Contracts](./scenario_contracts.md)** - `scenario_contract.v1` schema, typed loader, fixture, and boundary between authored intent, certification, and benchmark evidence
 * **[Scenario Certification](./scenario_certification.md)** - `scenario_cert.v1` schema, CLI, labels, and fail-closed benchmark eligibility rules
 * **[Scenario Perturbation Manifest](./scenario_perturbation_manifest.md)** - `scenario_perturbation_manifest.v1` schema, no-op and bounded route-offset preflight, and evidence boundary for perturbation pilots
@@ -440,6 +441,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * [**Scenario Specification Checklist**](./scenario_spec_checklist.md) - Authoring checklist for per-scenario/archetype/manifest files
 * [**Hazard Traceability**](./hazard_traceability.md) - Summarize intended hazard coverage for scenario IDs or families without treating traceability as safety proof
 * [**ODD Contracts**](./odd_contracts.md) - Validate operating-assumption metadata that bounds benchmark and falsification evidence without certifying safety
+* [**Simulation-Evidence Safety Case Template**](./simulation_evidence_safety_case.md) - Map benchmark artifacts to bounded safety-case sections while naming simulation limits and external evidence needs
 * [**Scenario Contracts**](./scenario_contracts.md) - Validate authored scenario-intent contracts before certification or benchmark execution
 * [**Scenario Certification**](./scenario_certification.md) - Generate machine-readable validity, feasibility, stress-only, and hard-but-solvable certificates for scenario manifests
 * [**Issue #1240 Scenario Coverage Entropy**](./context/issue_1240_scenario_coverage_entropy.md) - Config-only entropy and novelty report for diagnostic scenario-set curation; not benchmark-success evidence

@@ -7,21 +7,28 @@ import argparse
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from robot_sf.training.scenario_loader import load_scenarios
+
 SCHEMA_VERSION = "issue_2777_observation_noise_live_replay.v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_2777_live_observation_noise_replay")
 DEFAULT_SCENARIO_MATRIX = Path(
-    "configs/scenarios/sets/issue_3201_pedestrian_dominated_observation_noise.yaml"
+    "configs/scenarios/sets/issue_3320_occluded_emergence_live_replay.yaml"
 )
 DEFAULT_CANDIDATE = "risk_surface_dwa_v0"
 DEFAULT_STAGE = "smoke"
 TRACE_RUNNER = Path("scripts/validation/run_policy_search_step_diagnostics.py")
+ISSUE_2756_FIXTURE_SCENARIO = "issue_2756_occluded_emergence"
+ISSUE_2756_FIXTURE_FAMILY = "occluded_emergence"
+ISSUE_2756_FIXTURE_LABEL = "deterministic_occluded_emergence"
+ISSUE_2756_FIXTURE_SEED = 111
 REQUIRED_CONDITIONS = (
     "noop",
     "low_noise",
@@ -116,60 +123,171 @@ def _repo_path(path: Path) -> Path:
     return path if path.is_absolute() else REPO_ROOT / path
 
 
-def _scenario_matrix_text(matrix_path: Path) -> str:
-    """Return scenario matrix text with includes expanded one level when possible."""
-    raw_text = matrix_path.read_text(encoding="utf-8")
+def _validate_matrix_yaml(matrix_path: Path) -> None:
+    """Raise a stable error when a selected scenario matrix is not valid YAML."""
     try:
-        payload = yaml.safe_load(raw_text) or {}
+        yaml.safe_load(matrix_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise ValueError(f"{_durable_ref(matrix_path)} is not valid YAML: {exc}") from exc
-    if not isinstance(payload, dict):
-        return raw_text
-    base_payload = dict(payload)
-    base_payload.pop("includes", None)
-    text = yaml.safe_dump(base_payload, sort_keys=False)
-    includes = payload.get("includes", []) or []
-    if not isinstance(includes, list):
-        return text
-    for include in includes:
-        include_path = (matrix_path.parent / str(include)).resolve()
-        if include_path.exists():
-            text += "\n" + include_path.read_text(encoding="utf-8")
-    return text
+
+
+def _scenario_name(scenario: Mapping[str, Any]) -> str:
+    """Return a scenario identifier from common scenario fields."""
+    return str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
+
+
+def _metadata_mapping(scenario: Mapping[str, Any]) -> dict[str, Any]:
+    """Return scenario metadata as a plain mapping."""
+    metadata = scenario.get("metadata")
+    return dict(metadata) if isinstance(metadata, Mapping) else {}
+
+
+def _fixture_mapping(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the nested fixture contract metadata as a plain mapping."""
+    fixture = metadata.get("fixture_contract")
+    return dict(fixture) if isinstance(fixture, Mapping) else {}
+
+
+def _metadata_field(metadata: Mapping[str, Any], fixture: Mapping[str, Any], key: str) -> Any:
+    """Read fixture metadata, preferring the nested fixture-contract block."""
+    return fixture.get(key, metadata.get(key))
+
+
+def _source_issue_matches(value: Any) -> bool:
+    """Return whether a source-issue metadata value points at issue #2756."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value == 2756
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return normalized == "2756" or normalized.endswith("/issues/2756")
+    return False
+
+
+def _optional_int(value: Any) -> int | None:
+    """Return a non-boolean integer when coercion is exact enough for metadata checks."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_list(value: Any) -> list[int]:
+    """Parse a list of integer-like values while ignoring invalid entries."""
+    if not isinstance(value, list):
+        return []
+    parsed: list[int] = []
+    for item in value:
+        parsed_item = _optional_int(item)
+        if parsed_item is not None:
+            parsed.append(parsed_item)
+    return parsed
+
+
+def _fixture_candidate(scenario: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract the #2756 fixture-facing metadata from one loaded scenario."""
+    metadata = _metadata_mapping(scenario)
+    fixture = _fixture_mapping(metadata)
+    return {
+        "name": _scenario_name(scenario),
+        "source_issue": metadata.get("source_issue", fixture.get("source_issue")),
+        "family": str(metadata.get("family") or scenario.get("scenario_family") or ""),
+        "label": str(metadata.get("label") or fixture.get("label") or ""),
+        "seeds": _int_list(scenario.get("seeds")),
+        "first_visible_step": _optional_int(
+            _metadata_field(metadata, fixture, "first_visible_step")
+        ),
+        "delay_steps": _optional_int(_metadata_field(metadata, fixture, "delay_steps")),
+        "delay_only_expected_first_observed_step": _optional_int(
+            _metadata_field(
+                metadata,
+                fixture,
+                "delay_only_expected_first_observed_step",
+            )
+        ),
+    }
+
+
+def _fixture_candidate_reasons(candidate: Mapping[str, Any]) -> list[str]:
+    """Return fail-closed reasons for a candidate #2756 fixture scenario."""
+    reasons: list[str] = []
+    if candidate["name"] != ISSUE_2756_FIXTURE_SCENARIO:
+        reasons.append(
+            f"scenario name is {candidate['name']!r}, expected {ISSUE_2756_FIXTURE_SCENARIO!r}"
+        )
+    if not _source_issue_matches(candidate["source_issue"]):
+        reasons.append("metadata.source_issue does not point at issue #2756")
+    if candidate["family"] != ISSUE_2756_FIXTURE_FAMILY:
+        reasons.append(
+            f"metadata family is {candidate['family']!r}, expected {ISSUE_2756_FIXTURE_FAMILY!r}"
+        )
+    if candidate["label"] != ISSUE_2756_FIXTURE_LABEL:
+        reasons.append(
+            f"metadata label is {candidate['label']!r}, expected {ISSUE_2756_FIXTURE_LABEL!r}"
+        )
+    if ISSUE_2756_FIXTURE_SEED not in candidate["seeds"]:
+        reasons.append(f"scenario seeds do not include {ISSUE_2756_FIXTURE_SEED}")
+    for key, expected in (
+        ("first_visible_step", 5),
+        ("delay_steps", 2),
+        ("delay_only_expected_first_observed_step", 7),
+    ):
+        if candidate.get(key) != expected:
+            reasons.append(f"{key} is {candidate.get(key)!r}, expected {expected!r}")
+    return reasons
 
 
 def _fixture_contract(matrix_path: Path) -> dict[str, Any]:
-    """Check whether a live matrix appears to preserve the #2755 fixture boundary."""
-    matrix_error = None
-    try:
-        matrix_text = _scenario_matrix_text(matrix_path)
-    except ValueError as exc:
-        matrix_text = ""
-        matrix_error = str(exc)
-    has_occluded_fixture = (
-        "issue_2756_occluded_emergence" in matrix_text
-        or "deterministic_occluded_emergence" in matrix_text
-    )
-    if matrix_error:
-        blocker = matrix_error
-    elif has_occluded_fixture:
-        blocker = None
-    else:
-        blocker = (
-            "No checked-in live scenario matrix preserving the #2755/#2756 "
-            "occluded-emergence fixture boundary was found in the selected matrix."
-        )
-    return {
+    """Check whether a live matrix preserves the #2755/#2756 fixture boundary."""
+    fixture_contract: dict[str, Any] = {
         "required_source_issue": 2756,
-        "required_scenario": "issue_2756_occluded_emergence",
-        "required_family": "occluded_emergence/deterministic_occluded_emergence",
+        "required_scenario": ISSUE_2756_FIXTURE_SCENARIO,
+        "required_family": f"{ISSUE_2756_FIXTURE_FAMILY}/{ISSUE_2756_FIXTURE_LABEL}",
+        "required_seed": ISSUE_2756_FIXTURE_SEED,
         "first_visible_step": 5,
         "delay_steps": 2,
         "delay_only_expected_first_observed_step": 7,
         "scenario_matrix": _durable_ref(matrix_path),
-        "satisfied": has_occluded_fixture,
-        "blocker": blocker,
+        "satisfied": False,
+        "blocker": None,
+        "matched_scenario": None,
     }
+    try:
+        _validate_matrix_yaml(matrix_path)
+        scenarios = load_scenarios(matrix_path)
+    except ValueError as exc:
+        fixture_contract["blocker"] = str(exc)
+        return fixture_contract
+    except Exception as exc:  # pragma: no cover - defensive fail-closed path
+        fixture_contract["blocker"] = (
+            f"{_durable_ref(matrix_path)} could not be loaded as a scenario matrix: {exc}"
+        )
+        return fixture_contract
+
+    candidates = [_fixture_candidate(dict(scenario)) for scenario in scenarios]
+    named_candidates = [
+        candidate for candidate in candidates if candidate["name"] == ISSUE_2756_FIXTURE_SCENARIO
+    ]
+    if not named_candidates:
+        fixture_contract["blocker"] = (
+            "No checked-in live scenario matrix preserving the #2755/#2756 "
+            "occluded-emergence fixture boundary was found in the selected matrix."
+        )
+        return fixture_contract
+
+    candidate = named_candidates[0]
+    reasons = _fixture_candidate_reasons(candidate)
+    fixture_contract["matched_scenario"] = candidate
+    if reasons:
+        fixture_contract["blocker"] = (
+            "Selected matrix contains issue_2756_occluded_emergence, but it does not "
+            f"preserve the required fixture contract: {'; '.join(reasons)}."
+        )
+        return fixture_contract
+
+    fixture_contract["satisfied"] = True
+    return fixture_contract
 
 
 def _write_generated_funnel(
@@ -186,7 +304,7 @@ def _write_generated_funnel(
         "stages": {
             stage: {
                 "scenario_matrix": _repo_path(scenario_matrix).as_posix(),
-                "seed_list": [3233],
+                "seed_list": [ISSUE_2756_FIXTURE_SEED],
                 "benchmark_profile": "experimental",
                 "horizon": int(horizon),
                 "dt": 0.1,
@@ -268,6 +386,7 @@ def _observation_totals(trace: dict[str, Any]) -> dict[str, Any]:
     totals = {
         "missed_actor_observations_total": 0,
         "occluded_actor_observations_total": 0,
+        "visibility_hidden_actor_observations_total": 0,
         "min_observed_actor_count": None,
         "max_observed_actor_count": None,
         "noise_profiles": set(),
@@ -277,6 +396,9 @@ def _observation_totals(trace: dict[str, Any]) -> dict[str, Any]:
         meta = _mapping(row.get("observation_perturbation"))
         totals["missed_actor_observations_total"] += int(meta.get("missed_actor_count", 0) or 0)
         totals["occluded_actor_observations_total"] += int(meta.get("occluded_actor_count", 0) or 0)
+        totals["visibility_hidden_actor_observations_total"] += int(
+            meta.get("visibility_hidden_actor_count", 0) or 0
+        )
         observed_counts.append(int(meta.get("observed_actor_count", 0) or 0))
         profile = meta.get("noise_profile")
         if profile:
@@ -299,6 +421,15 @@ def _progress_delta(noop: dict[str, Any], condition: dict[str, Any]) -> dict[str
         }
         for field in PROGRESS_FIELDS
     }
+
+
+def _first_observed_step(trace: dict[str, Any]) -> int | None:
+    """Return the first trace step with at least one planner-visible actor."""
+    for row in trace.get("steps", []):
+        meta = _mapping(_mapping(row).get("observation_perturbation"))
+        if int(meta.get("observed_actor_count", 0) or 0) > 0:
+            return _optional_int(row.get("step"))
+    return None
 
 
 def _classification(
@@ -390,6 +521,10 @@ def _compare_condition(
             else None,
         },
         "progress_delta": _progress_delta(noop_trace, condition_trace),
+        "fixture_visibility": {
+            "noop_first_observed_step": _first_observed_step(noop_trace),
+            "condition_first_observed_step": _first_observed_step(condition_trace),
+        },
         "classification": _classification(
             noop_trace=noop_trace,
             condition_trace=condition_trace,
@@ -648,6 +783,38 @@ def _attach_condition_comparisons(
     return blockers
 
 
+def _verify_fixture_observation_boundary(
+    *,
+    output_dir: Path,
+    fixture_contract: Mapping[str, Any],
+) -> list[str]:
+    """Verify live traces preserve the configured first-visible/delay boundary."""
+    if not fixture_contract.get("satisfied"):
+        return []
+    try:
+        noop_trace = _load_trace(output_dir / "traces" / "noop" / "trace.json")
+        delay_trace = _load_trace(output_dir / "traces" / "delay_only" / "trace.json")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return [f"Could not verify #2756 live fixture observation boundary: {exc}"]
+
+    expected_first_visible = int(fixture_contract["first_visible_step"])
+    expected_delay_first_observed = int(fixture_contract["delay_only_expected_first_observed_step"])
+    noop_first_observed = _first_observed_step(noop_trace)
+    delay_first_observed = _first_observed_step(delay_trace)
+    blockers: list[str] = []
+    if noop_first_observed != expected_first_visible:
+        blockers.append(
+            "No-op live replay did not preserve the #2756 first-visible boundary: "
+            f"observed {noop_first_observed}, expected {expected_first_visible}."
+        )
+    if delay_first_observed != expected_delay_first_observed:
+        blockers.append(
+            "Delay-only live replay did not preserve the #2756 delayed first-observed boundary: "
+            f"observed {delay_first_observed}, expected {expected_delay_first_observed}."
+        )
+    return blockers
+
+
 def _final_classification(
     *,
     blockers: list[str],
@@ -729,6 +896,12 @@ def run_live_batch(args: argparse.Namespace) -> dict[str, Any]:
             output_dir=output_dir,
             conditions=conditions,
             fixture_contract_satisfied=bool(fixture_contract["satisfied"]),
+        )
+    )
+    blockers.extend(
+        _verify_fixture_observation_boundary(
+            output_dir=output_dir,
+            fixture_contract=fixture_contract,
         )
     )
     status, classification = _final_classification(

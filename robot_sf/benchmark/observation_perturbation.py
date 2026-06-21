@@ -13,6 +13,7 @@ carry no sensor-certification semantics.
 from __future__ import annotations
 
 from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +24,7 @@ NOISE_PROFILE_GAUSSIAN = "bounded_gaussian"
 NOISE_PROFILE_MISSED_DETECTION = "missed_detection"
 NOISE_PROFILE_OCCLUSION_MASK = "occlusion_mask"
 NOISE_PROFILE_DELAYED_OBSERVATION = "delayed_observation"
+NOISE_PROFILE_FIXTURE_VISIBILITY = "fixture_visibility"
 EVIDENCE_IDEAL = "ideal_state"
 EVIDENCE_PERCEPTION_LIMITED = "perception_limited"
 
@@ -36,6 +38,7 @@ class ObservationPerturbationSpec:
     missed_detection_probability: float = 0.0
     occlusion_mask: np.ndarray | None = None
     delay_steps: int = 0
+    visibility_mask: np.ndarray | None = None
     seed: int | None = None
 
     def __post_init__(self) -> None:
@@ -57,6 +60,7 @@ class ObservationPerturbationSpec:
             and self.missed_detection_probability <= 0.0
             and self.occlusion_mask is None
             and self.delay_steps <= 0
+            and self.visibility_mask is None
         )
 
     @property
@@ -72,6 +76,8 @@ class ObservationPerturbationSpec:
             return NOISE_PROFILE_OCCLUSION_MASK
         if self.delay_steps > 0:
             return NOISE_PROFILE_DELAYED_OBSERVATION
+        if self.visibility_mask is not None:
+            return NOISE_PROFILE_FIXTURE_VISIBILITY
         return NOISE_PROFILE_NONE
 
 
@@ -97,11 +103,12 @@ class ObservationPerturbationState:
             self._delay_buffer = deque(existing, maxlen=capacity)
 
     def reset(self, initial_obs: dict[str, Any] | None = None) -> None:
-        """Reset the delay buffer, optionally seeding with an initial observation."""
+        """Reset the delay buffer, optionally seeding warmup with an initial observation."""
         capacity = max(1, self.delay_steps + 1)
         self._delay_buffer = deque(maxlen=capacity)
         if initial_obs is not None:
-            self._delay_buffer.append(initial_obs)
+            for _ in range(max(1, self.delay_steps)):
+                self._delay_buffer.append(deepcopy(initial_obs))
 
 
 def _make_rng(spec: ObservationPerturbationSpec, step: int) -> np.random.Generator | None:
@@ -150,6 +157,7 @@ class _DelayedResultContext:
     step: int
     missed_mask: np.ndarray
     occluded_mask: np.ndarray
+    visibility_hidden_mask: np.ndarray
     n_actors: int
     spec: ObservationPerturbationSpec
 
@@ -188,6 +196,7 @@ def _build_delayed_result(ctx: _DelayedResultContext) -> dict[str, Any]:
             "missed_detection_probability": ctx.spec.missed_detection_probability,
             "missed_actor_count": int(ctx.missed_mask.sum()),
             "occluded_actor_count": int(ctx.occluded_mask.sum()),
+            "visibility_hidden_actor_count": int(ctx.visibility_hidden_mask.sum()),
             "delay_steps": ctx.delay,
             "step": ctx.step,
             "actor_count": ctx.n_actors,
@@ -204,14 +213,15 @@ def _compute_observed_state(
     n_actors: int,
     spec: ObservationPerturbationSpec,
     rng: np.random.Generator,
-) -> tuple[np.ndarray, np.ndarray, list[str], np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, list[str], np.ndarray, np.ndarray, np.ndarray]:
     """Compute the observed state after missed detections, noise, and occlusion.
 
     Returns:
-        Tuple of (obs_positions, obs_velocities, obs_ids, missed_mask, occluded_mask).
+        Tuple of observed state plus missed, occluded, and fixture-hidden masks.
     """
     missed_mask = np.zeros(n_actors, dtype=bool)
     occluded_mask = np.zeros(n_actors, dtype=bool)
+    visibility_hidden_mask = np.zeros(n_actors, dtype=bool)
 
     # --- missed detections ---
     ids_out = list(actor_ids)
@@ -236,11 +246,20 @@ def _compute_observed_state(
             raise ValueError(f"occlusion_mask length {ext_mask.shape[0]} != actor count {n_actors}")
         occluded_mask = ext_mask & ~missed_mask
 
-    # Build observed array: drop missed, zero occluded positions
-    if missed_mask.any():
-        obs_pos = obs_pos_full[~missed_mask]
-        obs_vel_out = gt_vel[~missed_mask]
-        ids_out = [aid for aid, m in zip(actor_ids, ~missed_mask, strict=True) if m]
+    # --- scenario fixture visibility mask ---
+    if spec.visibility_mask is not None:
+        visible = np.asarray(spec.visibility_mask, dtype=bool).reshape(-1)
+        if visible.shape[0] != n_actors:
+            raise ValueError(f"visibility_mask length {visible.shape[0]} != actor count {n_actors}")
+        visibility_hidden_mask = ~visible
+        occluded_mask = occluded_mask & ~visibility_hidden_mask
+
+    # Build observed array: drop missed/fixture-hidden, zero occluded positions
+    drop_mask = missed_mask | visibility_hidden_mask
+    if drop_mask.any():
+        obs_pos = obs_pos_full[~drop_mask]
+        obs_vel_out = gt_vel[~drop_mask]
+        ids_out = [aid for aid, keep in zip(actor_ids, ~drop_mask, strict=True) if keep]
     else:
         obs_pos = obs_pos_full
         obs_vel_out = gt_vel.copy()
@@ -253,7 +272,7 @@ def _compute_observed_state(
             obs_pos[i] = 0.0
             obs_vel_out[i] = 0.0
 
-    return obs_pos, obs_vel_out, ids_out, missed_mask, occluded_mask
+    return obs_pos, obs_vel_out, ids_out, missed_mask, occluded_mask, visibility_hidden_mask
 
 
 def perturb_ground_truth(
@@ -319,6 +338,7 @@ def perturb_ground_truth(
                 "missed_detection_probability": 0.0,
                 "missed_actor_count": 0,
                 "occluded_actor_count": 0,
+                "visibility_hidden_actor_count": 0,
                 "delay_steps": 0,
                 "step": step,
                 "actor_count": n_actors,
@@ -328,7 +348,14 @@ def perturb_ground_truth(
 
     rng = _make_rng(spec, step)
 
-    obs_pos, obs_vel_out, ids_out, missed_mask, occluded_mask = _compute_observed_state(
+    (
+        obs_pos,
+        obs_vel_out,
+        ids_out,
+        missed_mask,
+        occluded_mask,
+        visibility_hidden_mask,
+    ) = _compute_observed_state(
         gt_pos=gt_pos,
         gt_vel=gt_vel,
         actor_ids=actor_ids,
@@ -358,6 +385,7 @@ def perturb_ground_truth(
                 step=step,
                 missed_mask=missed_mask,
                 occluded_mask=occluded_mask,
+                visibility_hidden_mask=visibility_hidden_mask,
                 n_actors=n_actors,
                 spec=spec,
             )
@@ -376,6 +404,7 @@ def perturb_ground_truth(
             "missed_detection_probability": spec.missed_detection_probability,
             "missed_actor_count": int(missed_mask.sum()),
             "occluded_actor_count": int(occluded_mask.sum()),
+            "visibility_hidden_actor_count": int(visibility_hidden_mask.sum()),
             "delay_steps": 0,
             "step": step,
             "actor_count": n_actors,

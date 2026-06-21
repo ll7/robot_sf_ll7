@@ -59,6 +59,57 @@ def test_default_strict_mode_fails_closed_without_occluded_fixture(tmp_path: Pat
     assert {condition["status"] for condition in report["conditions"]} == {"blocked"}
 
 
+def test_issue_3320_matrix_satisfies_occluded_emergence_contract() -> None:
+    """The tracked issue #3320 matrix preserves the #2756 fixture boundary."""
+    mod = _load_script()
+    matrix = mod.REPO_ROOT / "configs/scenarios/sets/issue_3320_occluded_emergence_live_replay.yaml"
+
+    contract = mod._fixture_contract(matrix)
+
+    assert contract["satisfied"] is True
+    assert contract["blocker"] is None
+    assert contract["matched_scenario"]["name"] == "issue_2756_occluded_emergence"
+    assert contract["matched_scenario"]["seeds"] == [111]
+    assert contract["matched_scenario"]["first_visible_step"] == 5
+    assert contract["matched_scenario"]["delay_steps"] == 2
+    assert contract["matched_scenario"]["delay_only_expected_first_observed_step"] == 7
+
+
+def test_mismatched_occluded_emergence_contract_fails_closed(tmp_path: Path) -> None:
+    """A named #2756 scenario must still preserve the exact boundary metadata."""
+    mod = _load_script()
+    scenario = tmp_path / "scenario.yaml"
+    scenario.write_text(
+        "scenarios:\n"
+        "- name: issue_2756_occluded_emergence\n"
+        "  metadata:\n"
+        "    source_issue: 2756\n"
+        "    family: occluded_emergence\n"
+        "    label: deterministic_occluded_emergence\n"
+        "    fixture_contract:\n"
+        "      first_visible_step: 4\n"
+        "      delay_steps: 2\n"
+        "      delay_only_expected_first_observed_step: 6\n"
+        "  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        "schema_version: robot_sf.scenario_matrix.v1\n"
+        "includes:\n"
+        "  - scenario.yaml\n"
+        "select_scenarios:\n"
+        "  - issue_2756_occluded_emergence\n",
+        encoding="utf-8",
+    )
+
+    contract = mod._fixture_contract(matrix)
+
+    assert contract["satisfied"] is False
+    assert "first_visible_step" in contract["blocker"]
+    assert "delay_only_expected_first_observed_step" in contract["blocker"]
+
+
 def test_dry_run_plans_all_live_diagnostics_commands(tmp_path: Path) -> None:
     """Proxy dry-run mode should expose the exact subprocess plan without execution."""
     mod = _load_script()
@@ -195,6 +246,63 @@ def _write_trace(path: Path, *, command: list[float], observed_count: int, close
         ],
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_observed_count_trace(path: Path, counts: list[int]) -> None:
+    """Write a tiny diagnostics trace with configurable observed actor counts."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "scenario_id": "issue_2756_occluded_emergence",
+        "seed": 111,
+        "steps": [
+            {
+                "step": step,
+                "observation_perturbation": {
+                    "observed_actor_count": count,
+                },
+            }
+            for step, count in enumerate(counts)
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_fixture_boundary_verifier_requires_noop_and_delay_first_observed_steps(
+    tmp_path: Path,
+) -> None:
+    """The live wrapper should fail closed when trace timing drifts from #2756."""
+    mod = _load_script()
+    output_dir = tmp_path / "out"
+    contract = {
+        "satisfied": True,
+        "first_visible_step": 5,
+        "delay_only_expected_first_observed_step": 7,
+    }
+    _write_observed_count_trace(output_dir / "traces/noop/trace.json", [0, 0, 0, 0, 0, 1])
+    _write_observed_count_trace(
+        output_dir / "traces/delay_only/trace.json",
+        [0, 0, 0, 0, 0, 0, 0, 1],
+    )
+
+    assert (
+        mod._verify_fixture_observation_boundary(
+            output_dir=output_dir,
+            fixture_contract=contract,
+        )
+        == []
+    )
+
+    _write_observed_count_trace(
+        output_dir / "traces/delay_only/trace.json",
+        [0, 0, 0, 0, 0, 0, 1],
+    )
+    blockers = mod._verify_fixture_observation_boundary(
+        output_dir=output_dir,
+        fixture_contract=contract,
+    )
+
+    assert blockers
+    assert "Delay-only" in blockers[0]
 
 
 def test_trace_comparison_names_scenario_seed_planner_and_policy_insensitive(

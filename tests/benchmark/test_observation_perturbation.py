@@ -9,6 +9,7 @@ from robot_sf.benchmark.observation_perturbation import (
     EVIDENCE_IDEAL,
     EVIDENCE_PERCEPTION_LIMITED,
     NOISE_PROFILE_DELAYED_OBSERVATION,
+    NOISE_PROFILE_FIXTURE_VISIBILITY,
     NOISE_PROFILE_GAUSSIAN,
     NOISE_PROFILE_MISSED_DETECTION,
     NOISE_PROFILE_NONE,
@@ -83,6 +84,7 @@ class TestNoopSpec:
             "missed_detection_probability",
             "missed_actor_count",
             "occluded_actor_count",
+            "visibility_hidden_actor_count",
             "delay_steps",
             "step",
             "actor_count",
@@ -254,6 +256,52 @@ class TestOcclusionMask:
 
         with pytest.raises(ValueError, match="occlusion_mask length"):
             perturb_ground_truth(pos, vel, ids, spec=spec)
+
+
+class TestFixtureVisibility:
+    """Scenario fixture visibility should hide actors without changing ground truth."""
+
+    def test_visibility_mask_drops_observed_actors_only(self) -> None:
+        """Fixture-hidden actors should be absent from the observed planner input."""
+        pos, vel, ids = _simple_actors()
+        spec = ObservationPerturbationSpec(visibility_mask=np.array([False, True, False]))
+
+        result = perturb_ground_truth(pos, vel, ids, spec=spec, step=0)
+
+        np.testing.assert_array_equal(result["ground_truth"]["positions"], pos)
+        assert result["ground_truth"]["ids"] == ids
+        assert result["observed"]["ids"] == ["ped_B"]
+        np.testing.assert_array_equal(result["observed"]["positions"], pos[1:2])
+        assert result["missing_ids"] == ["ped_A", "ped_C"]
+        assert result["metadata"]["visibility_hidden_actor_count"] == 2
+        assert result["metadata"]["missed_actor_count"] == 0
+        assert result["metadata"]["noise_profile"] == NOISE_PROFILE_FIXTURE_VISIBILITY
+
+    def test_seeded_delay_buffer_preserves_first_observed_boundary(self) -> None:
+        """An empty seeded delay buffer should delay first visibility by two steps."""
+        pos = np.array([[1.0, 2.0]])
+        vel = np.array([[0.1, 0.0]])
+        ids = ["ped_A"]
+        state = ObservationPerturbationState(delay_steps=2)
+        state.reset(
+            initial_obs={
+                "positions": np.zeros((0, 2), dtype=float),
+                "velocities": np.zeros((0, 2), dtype=float),
+                "ids": [],
+            }
+        )
+        observed_counts = []
+        for step in range(8):
+            visibility_mask = np.array([False]) if step < 5 else None
+            spec = ObservationPerturbationSpec(
+                delay_steps=2,
+                visibility_mask=visibility_mask,
+            )
+            result = perturb_ground_truth(pos + step, vel, ids, spec=spec, step=step, state=state)
+            observed_counts.append(result["metadata"]["observed_actor_count"])
+
+        assert observed_counts[:7] == [0, 0, 0, 0, 0, 0, 0]
+        assert observed_counts[7] == 1
 
 
 class TestDelayBehavior:
@@ -444,3 +492,24 @@ class TestStateReset:
         r = perturb_ground_truth(pos, vel, ids, spec=spec, step=0, state=state)
         # Buffer has initial_obs, delay=1: should return the seeded observation
         np.testing.assert_array_equal(r["observed"]["positions"], pos + 99)
+
+    def test_reset_with_initial_obs_copies_seeded_snapshots(self) -> None:
+        """Seeded delay-buffer warmup should not share mutable snapshot references."""
+        state = ObservationPerturbationState(delay_steps=2)
+        pos, vel, ids = _simple_actors()
+        initial_obs = {
+            "positions": pos.copy(),
+            "velocities": vel.copy(),
+            "ids": list(ids),
+        }
+
+        state.reset(initial_obs=initial_obs)
+        initial_obs["ids"].append("mutated")
+        initial_obs["positions"][0, 0] = 99.0
+
+        first, second = list(state._delay_buffer)
+        assert first is not second
+        assert first["ids"] == ids
+        assert second["ids"] == ids
+        np.testing.assert_array_equal(first["positions"], pos)
+        np.testing.assert_array_equal(second["positions"], pos)

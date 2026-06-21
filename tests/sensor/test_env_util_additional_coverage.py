@@ -22,6 +22,7 @@ from robot_sf.gym_env.env_util import (
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
+from robot_sf.sensor.goal_sensor import target_sensor_obs
 
 
 def _minimal_map_def() -> MapDefinition:
@@ -128,6 +129,11 @@ class _FakePedSim:
         return self._goal_pos
 
     @property
+    def ego_ped_next_goal_pos(self) -> tuple[float, float]:
+        """Following point for the ego pedestrian target sensor."""
+        return (3.2, 2.3)
+
+    @property
     def next_goal_pos(self) -> list[None]:
         """Current robot next-goal placeholders."""
         return [None]
@@ -212,6 +218,40 @@ def test_init_ped_spaces_and_collision_sensor_initialization() -> None:
     assert "rays" in robot_obs
     assert "drive_state" in ego_obs
     assert "rays" in ego_obs
+
+
+def test_init_ped_collision_sensor_exposes_ego_ped_next_goal() -> None:
+    """Ego-pedestrian target observations should honor the next-goal channel."""
+    map_def = _minimal_map_def()
+    cfg = PedEnvSettings()
+    cfg.sim_config.use_next_goal = True
+    _action_spaces, _obs_spaces, orig_obs_spaces = init_ped_spaces(cfg, map_def)
+    sim = _FakePedSim(map_def)
+
+    _occupancies, sensors = init_ped_collision_and_sensors(sim, cfg, orig_obs_spaces)
+
+    assert sensors[1].use_next_goal is True
+    expected = target_sensor_obs(
+        sim.ego_ped.pose,
+        sim.ego_ped_goal_pos,
+        sim.ego_ped_next_goal_pos,
+    )
+    assert sensors[1].target_sensor() == pytest.approx(expected)
+    assert sensors[1].target_sensor()[2] != pytest.approx(0.0)
+
+
+def test_init_ped_collision_sensor_respects_disabled_ego_ped_next_goal() -> None:
+    """Disabling next-goal observations should zero the ego-pedestrian turn channel."""
+    map_def = _minimal_map_def()
+    cfg = PedEnvSettings()
+    cfg.sim_config.use_next_goal = False
+    _action_spaces, _obs_spaces, orig_obs_spaces = init_ped_spaces(cfg, map_def)
+    sim = _FakePedSim(map_def)
+
+    _occupancies, sensors = init_ped_collision_and_sensors(sim, cfg, orig_obs_spaces)
+
+    assert sensors[1].use_next_goal is False
+    assert sensors[1].target_sensor()[2] == pytest.approx(0.0)
 
 
 def test_pedestrian_coords_with_ego_preserves_order_and_shape() -> None:

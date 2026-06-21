@@ -11,6 +11,7 @@ from robot_sf.common.types import Line2D, Rect
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
+from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import PedSimulator, init_ped_simulators, init_simulators
 
@@ -168,3 +169,16 @@ def test_ped_simulator_ped_and_ego_pos_returns_pysf_position_view() -> None:
     simulator.pysf_state = SimpleNamespace(ped_positions=positions)
 
     assert simulator.ped_and_ego_pos is positions
+
+
+def test_ped_simulator_ego_ped_next_goal_tracks_robot_current_waypoint() -> None:
+    """Ego-pedestrian next-goal target should follow robot route progress."""
+    simulator = PedSimulator.__new__(PedSimulator)
+    navigator = RouteNavigator(waypoints=[(2.0, 1.0), (4.0, 3.0)])
+    simulator.robot_navs = [navigator]
+
+    assert simulator.ego_ped_next_goal_pos == (2.0, 1.0)
+
+    navigator.waypoint_id = 1
+
+    assert simulator.ego_ped_next_goal_pos == (4.0, 3.0)

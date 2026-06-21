@@ -16,6 +16,16 @@ and downstream tooling.
 | `drive_state` | `(timesteps, 5)` | `[speed_x, speed_rot, target_distance, target_angle, next_target_angle]` |
 | `rays` | `(timesteps, num_rays)` | LiDAR ranges stacked over time |
 
+### Target Semantics
+
+- Robot environments set `target_distance` and `target_angle` from the robot pose to the current
+  route waypoint, and `next_target_angle` from that waypoint toward the following route waypoint
+  when `SimulationSettings.use_next_goal` is enabled.
+- Pedestrian environments set the ego-pedestrian target to the robot position. When
+  `use_next_goal` is enabled, `next_target_angle` points from that robot target toward the robot's
+  current route waypoint. This preserves the ego-pedestrian "track the robot" goal contract while
+  exposing the route direction of the moving target.
+
 ### Stacking Rules
 
 - `timesteps` equals `observation_stack.stack_steps` on the environment config.

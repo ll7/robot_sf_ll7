@@ -718,7 +718,7 @@ def test_help_includes_worktree_safe_invocation(
 
     captured = capsys.readouterr()
     assert "run_worktree_shared_venv.sh" in captured.out
-    assert "uv run python scripts/dev/check_pr_ci_status.py" in captured.out
+    assert "python scripts/dev/check_pr_ci_status.py" in captured.out
     assert "--expected-head-sha" in captured.out
     assert "--max-wall-seconds" in captured.out
     assert "no local .venv" in captured.out

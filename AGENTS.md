@@ -180,6 +180,12 @@ Before removing or pruning worktrees, enumerate them with `git worktree list --p
 main checkout. For each candidate, inspect `git -C <path> status --short --branch`; when generated
 outputs may matter, also inspect ignored output paths such as
 `[ -d "<path>/output" ] && git -C <path> status --ignored --short -uall output`.
+For token-sensitive autonomous cleanup or repositories with many linked worktrees, start with the
+compact hygiene helper instead of printing the full worktree inventory in the parent thread:
+`uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --json`. Add `--filter
+<branch-or-path-substring>` for a single branch cleanup, and read raw `git worktree list
+--porcelain` only when the compact payload is insufficient or reports a stale administrative entry
+that needs manual inspection.
 
 - Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
   by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an
@@ -522,6 +528,9 @@ read-only task classes:
 
 Spark prompts must require compact output: files inspected, exact evidence, uncertainty, and
 recommended next prompt.
+For long autonomous runs, cache Spark usage-limit failures in the active ledger with the reset time.
+Before spawning another Spark sidecar in the same run, check that ledger entry and route directly to
+the next eligible cheap worker if Spark is still unavailable.
 
 Spark is explicitly excluded from:
 

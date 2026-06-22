@@ -82,6 +82,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tests/common/test_json_pointer.py`). Also fixed `_copy_figures` in `research/imitation_report.py`
   to actually `return` its `dict[str, Path]` mapping (it previously fell through to `None` despite the
   annotation), with a regression test (#3386).
+* Relocated the shared `_build_adapter_policy` helper out of `robot_sf/benchmark/map_runner.py` into a
+  neutral `robot_sf/benchmark/map_runner_policy_common.py` (`build_adapter_policy`), re-exported under
+  the old private name so all ~17 in-module call sites are unchanged (#3403, prerequisite for the
+  #3384 adapter-family decomposition). Behavior-preserving — the helper is a verbatim move and the
+  `map_runner` regression suite passes. This lets future `map_runner_policies/` builder modules reuse
+  the helper without an import cycle back into `map_runner`.
 * Cut pull-request CI wall-clock by parallelizing the `fast-feedback` test phase. Pull requests now
   split the suite into 4 `pytest-split` shards (a matrix on the existing job, so the CI topology is
   unchanged) while `main`/`workflow_dispatch` keep a single full pass so the advisory coverage

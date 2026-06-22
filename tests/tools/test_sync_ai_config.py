@@ -12,6 +12,7 @@ from scripts.tools import sync_ai_config
 def test_supported_ai_config_mirror_set_is_explicit() -> None:
     """Only currently supported tool mirrors should be recreated by the sync set."""
     assert sync_ai_config.LINK_SPECS == (
+        sync_ai_config.LinkSpec(".claude/skills", "../.agents/skills"),
         sync_ai_config.LinkSpec(".codex/skills", "../.agents/skills"),
         sync_ai_config.LinkSpec(".opencode/skills", "../.agents/skills"),
         sync_ai_config.LinkSpec(".codex/prompts", "../.agents/prompts/codex"),

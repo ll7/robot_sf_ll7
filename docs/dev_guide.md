@@ -1084,7 +1084,7 @@ open output/coverage/htmlcov/index.html
 ```
 Name                                    Stmts   Miss  Cover   Missing
 ---------------------------------------------------------------------
-robot_sf/gym_env/environment.py           150     15  90.00%  42-45, 89-92
+robot_sf/gym_env/environment_factory.py   150     15  90.00%  42-45, 89-92
 robot_sf/sim/simulator.py                 200     50  75.00%  10-20, 150-180
 ---------------------------------------------------------------------
 TOTAL                                   10605    876  91.73%
@@ -1559,9 +1559,9 @@ Key points
 
 CLI usage
 - Run a batch with parallel workers and default resume behavior:
-  - robot_sf_bench run --matrix configs/baselines/example.yaml --out output/benchmarks/episodes.jsonl --workers 4
+  - robot_sf_bench run --matrix configs/baselines/example_matrix.yaml --out output/benchmarks/episodes.jsonl --workers 4
 - Force recomputation (disable resume):
-  - robot_sf_bench run --matrix configs/baselines/example.yaml --out output/benchmarks/episodes.jsonl --workers 4 --no-resume
+  - robot_sf_bench run --matrix configs/baselines/example_matrix.yaml --out output/benchmarks/episodes.jsonl --workers 4 --no-resume
 - Opt in to schema-backed pedestrian-impact reductions:
   - robot_sf_bench run --matrix configs/scenarios/planner_sanity_matrix_v1.yaml --out output/benchmarks/ped_impact/episodes.jsonl --experimental-ped-impact
 - Baseline computation also accepts the same flags:

@@ -24,6 +24,7 @@ CLOSED/COMPLETED; the linked notes carry their declared evidence boundaries.
 | [#3062](https://github.com/ll7/robot_sf_ll7/issues/3062) | standardized campaign manifest + artifact flow | contract | [`issue_3062_campaign_manifest_flow.md`](issue_3062_campaign_manifest_flow.md) |
 | [#3063](https://github.com/ll7/robot_sf_ll7/issues/3063) | automated campaign comparison reports | analysis-only | [`issue_3063_campaign_comparison_report.md`](issue_3063_campaign_comparison_report.md) |
 | [#3064](https://github.com/ll7/robot_sf_ll7/issues/3064) | pedestrian behavior-model variant validation | diagnostic/preflight | [`issue_3064_behavior_variants_inventory.md`](issue_3064_behavior_variants_inventory.md) |
+| [#3069](https://github.com/ll7/robot_sf_ll7/issues/3069) | multi-robot research smoke path | smoke/diagnostic-only | [`issue_3069_smoke.yaml`](../../configs/multi_robot/issue_3069_smoke.yaml), [`run_multi_robot_smoke_issue_3069.py`](../../scripts/validation/run_multi_robot_smoke_issue_3069.py) |
 | [#3070](https://github.com/ll7/robot_sf_ll7/issues/3070) | fairness + heterogeneous-pedestrian disruption metric scoping | proposal | [`issue_3184_distributional_disruption_metrics.md`](issue_3184_distributional_disruption_metrics.md) |
 
 Taken together these establish the **result-store contract**
@@ -42,13 +43,12 @@ The empirical-run and resource-gated layer is still open.
 | [#3066](https://github.com/ll7/robot_sf_ll7/issues/3066) | robot influence on pedestrian-flow v0 | ready (local) | empirical run + evidence grading |
 | [#3067](https://github.com/ll7/robot_sf_ll7/issues/3067) | sensor-noise / partial-observability robustness slice | ready (local) | empirical run + evidence grading |
 | [#3068](https://github.com/ll7/robot_sf_ll7/issues/3068) | curriculum-learning launch packet (PPO) | ready | compute (`resource:slurm`) |
-| [#3069](https://github.com/ll7/robot_sf_ll7/issues/3069) | multi-robot research smoke path | in review | PR [#3376](https://github.com/ll7/robot_sf_ll7/pull/3376) (diagnostic-only smoke) |
 
 ## Reading this synthesis
 
 - **What is proven now:** the contracts, suite freeze, metric definitions,
   manifest/artifact flow, and reporting machinery exist and are tested. The
-  multi-robot path runs as a diagnostic-only smoke (in review).
+  multi-robot path runs as a diagnostic-only smoke.
 - **What is not proven:** no headline planner-comparison, robustness, or
   influence result is claimed here. Those depend on the pending empirical
   children and must carry their own predeclared evidence.

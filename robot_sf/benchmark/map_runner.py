@@ -118,6 +118,7 @@ from robot_sf.benchmark.map_runner_observations import (
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
+from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policy_common import (
     build_adapter_policy as _build_adapter_policy,
 )
@@ -188,7 +189,10 @@ from robot_sf.planner.gap_prediction import (
     GapAwarePredictionAdapter,
     build_gap_prediction_config,
 )
-from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
+from robot_sf.planner.grid_route import (  # noqa: F401
+    GridRoutePlannerAdapter,
+    build_grid_route_config,
+)
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     build_guarded_ppo_config,
@@ -211,7 +215,7 @@ from robot_sf.planner.kinematics_model import (
     KinematicsModel,
     resolve_benchmark_kinematics_model,
 )
-from robot_sf.planner.lidar_occupancy import (
+from robot_sf.planner.lidar_occupancy import (  # noqa: F401
     LidarOccupancyPlannerAdapter,
     build_lidar_occupancy_config,
 )
@@ -233,7 +237,7 @@ from robot_sf.planner.predictive_mppi import (
     build_predictive_mppi_config,
 )
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
-from robot_sf.planner.safety_barrier import (
+from robot_sf.planner.safety_barrier import (  # noqa: F401
     SafetyBarrierPlannerAdapter,
     build_safety_barrier_config,
 )
@@ -874,7 +878,7 @@ def _update_adapter_impact_metrics(
 # Registry of migrated per-algorithm policy builders (#3384). Consulted before the
 # inline dispatch in _build_policy; families not yet migrated fall through to the
 # existing if/elif chain.
-_POLICY_BUILDERS = {
+_POLICY_BUILDERS: dict[str, Any] = {
     **dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build),
     **dict.fromkeys(
         _adapter_policy_builders.RISK_SURFACE_DWA_KEYS,
@@ -884,6 +888,7 @@ _POLICY_BUILDERS = {
         _adapter_policy_builders.LIDAR_SOCIAL_FORCE_KEYS,
         _adapter_policy_builders.build_lidar_social_force,
     ),
+    **dict.fromkeys(_safety_barrier_builder.ADAPTER_ALGO_KEYS, _safety_barrier_builder.build),
 }
 
 
@@ -1016,47 +1021,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 "diagnostic-only selector over fixed proxemic profiles; "
                 "not benchmark or comfort evidence"
             ),
-        )
-
-    if algo_key == "safety_barrier":
-        adapter: Any = SafetyBarrierPlannerAdapter(config=build_safety_barrier_config(algo_config))
-        adapter_name = "SafetyBarrierPlannerAdapter"
-        limitations = "static_obstacle_first_testing_only"
-        if algo_config.get("lidar_occupancy_adapter"):
-            adapter = LidarOccupancyPlannerAdapter(
-                planner=adapter,
-                config=build_lidar_occupancy_config(algo_config),
-            )
-            adapter_name = "LidarOccupancySafetyBarrierAdapter"
-            limitations = "lidar_derived_ego_occupancy_testing_only"
-            meta["lidar_occupancy_adapter"] = {
-                "status": "enabled",
-                "source": "lidar_rays",
-                "output": "ego_occupancy_grid",
-                "planner": "safety_barrier",
-            }
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name=adapter_name,
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations=limitations,
-        )
-
-    if algo_key == "grid_route":
-        adapter = GridRoutePlannerAdapter(config=build_grid_route_config(algo_config))
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="GridRoutePlannerAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations="static_obstacle_first_testing_only",
         )
 
     if algo_key == "topology_guided_hybrid_rule_v0":

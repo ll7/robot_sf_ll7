@@ -6,6 +6,12 @@ Decision source: [#3070](https://github.com/ll7/robot_sf_ll7/issues/3070)
 Status: proposal / metric-contract note. No benchmark result, implementation,
 or paper-facing claim is created by this note.
 Implementation follow-up: [#3194](https://github.com/ll7/robot_sf_ll7/issues/3194).
+Archetype naming follow-up: [#3261](https://github.com/ll7/robot_sf_ll7/issues/3261)
+resolved the #3206 residual as documentation-only: #3194 speed-tier cohorts are
+sufficient archetype-adjacent evidence for the current smoke, while named
+`cautious`/`standard`/`hurried` per-cohort metrics are deferred until paired
+control traces exist and a paper or dissertation claim needs named archetype
+numbers.
 
 ## Decision Boundary
 

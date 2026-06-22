@@ -1148,6 +1148,9 @@ knowledge, not every transient iteration detail.
 * [Issue #3184 Distributional Disruption Metric Contract](issue_3184_distributional_disruption_metrics.md)
   defines observable simulation-state cohorts, candidate distributional disruption formulas,
   prohibited terminology, non-claims, and the evidence gate before any implementation PR.
+  The [Issue #3206 heterogeneous-pedestrian smoke evidence](evidence/issue_3206_heterogeneous_pedestrian_smoke_2026-06-20/README.md)
+  records the #3261 decision that speed-tier cohorts are the current archetype-adjacent surface and
+  named archetype cohorts remain deferred.
 * [Issue #2456 AMV Local Navigation Evaluation Suite (proposal)](issue_2456_amv_local_nav_evaluation_suite.md)
   defines the proposed AMV local navigation suite structure with eight evaluation dimensions,
   evidence-boundary classification, and related issue links.

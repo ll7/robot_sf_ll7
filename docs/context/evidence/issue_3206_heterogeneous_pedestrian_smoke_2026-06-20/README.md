@@ -5,7 +5,6 @@
 - Input rows: worktree-local ignored artifact summarized in this report (episodes.jsonl)
 - Claim boundary: diagnostic_smoke_not_benchmark_evidence: summarizes a tiny homogeneous-vs-mixed pedestrian composition smoke. It records metric deltas and distributional-metric readiness limits; it does not establish pedestrian realism, real-world fairness, planner ranking, or a limitation-replacement decision.
 - Per-archetype distributional status: `not_computable_from_current_smoke`
-
 ## Provenance
 
 - Branch: `issue-3206-archetype-reporting`
@@ -41,6 +40,28 @@ scripts/dev/run_worktree_shared_venv.sh -- python scripts/benchmark/build_hetero
 
 - `homogeneous_standard`: `{"standard": 1.0}`
 - `mixed_balanced`: `{"cautious": 0.34, "hurried": 0.33, "standard": 0.33}`
+
+## Issue #3261 Archetype Interpretation (2026-06-22)
+
+Issue #3261 resolves the remaining #3206 archetype-metric question as
+documentation-only: do not add named per-archetype metrics for `cautious`,
+`standard`, or `hurried` on the current smoke. The implemented #3194
+distributional-disruption cohorts remain the metric contract:
+`slow_speed_tier`, `fast_speed_tier`, and `extreme_speed_tier`.
+
+Narrative mapping for this smoke is intentionally non-contractual:
+`cautious` roughly approximates the slow-speed tier, `standard` approximates
+the standard/baseline composition row, and `hurried` roughly approximates the
+fast-speed tier, with very high configured speeds remaining covered by
+`extreme_speed_tier`. This mapping is only a reader aid for interpreting the
+planned pedestrian composition. It is not a schema, metric key, report column,
+or benchmark claim.
+
+Named per-archetype distributional metrics should be revived only if a future
+paper or dissertation claim must report numbers per named archetype and paired
+robot-present/control traces exist for those named archetypes. Until then,
+`per_archetype_distributional_status` remains
+`not_computable_from_current_smoke`.
 
 ## Distributional/Fairness Boundary
 

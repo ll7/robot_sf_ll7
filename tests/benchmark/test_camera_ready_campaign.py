@@ -267,53 +267,52 @@ def test_load_campaign_config_preserves_synthetic_actuation_variability_metadata
 ) -> None:
     """Synthetic actuation variability metadata should survive typed config loading."""
     config_path = tmp_path / "campaign.yaml"
-    config_path.write_text(
-        yaml.safe_dump(
-            {
-                "name": "sampled_actuation_profile",
-                "paper_facing": False,
-                "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
-                "kinematics_matrix": ["differential_drive"],
-                "synthetic_actuation_profile": {
-                    "name": "variability_sample_000",
-                    "profile_version": "v0",
-                    "claim_scope": "synthetic-only",
-                    "claim_boundary": "diagnostic-only",
-                    "max_linear_accel_m_s2": 3.0,
-                    "max_linear_decel_m_s2": 3.4,
-                    "max_yaw_rate_rad_s": 1.0,
-                    "max_angular_accel_rad_s2": 3.0,
-                    "latency_mode": "one-step-delay",
-                    "update_mode": "5hz-hold",
-                    "variability_distribution": {
-                        "schema_version": "synthetic-actuation-variability-distribution.v1",
-                        "mode": "synthetic-provisional",
-                        "claim_boundary": "diagnostic-only",
-                        "parameters": {
-                            "max_linear_accel_m_s2": {
-                                "distribution": "uniform",
-                                "low": 2.5,
-                                "high": 4.5,
-                                "provenance": {
-                                    "units": "m/s^2",
-                                    "source_status": "synthetic_stress_factor",
-                                    "caveat": "test-only provisional range",
-                                },
-                            }
+    config_payload = {
+        "name": "sampled_actuation_profile",
+        "paper_facing": False,
+        "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
+        "kinematics_matrix": ["differential_drive"],
+        "synthetic_actuation_profile": {
+            "name": "variability_sample_000",
+            "profile_version": "v0",
+            "claim_scope": "synthetic-only",
+            "claim_boundary": "diagnostic-only",
+            "max_linear_accel_m_s2": 3.0,
+            "max_linear_decel_m_s2": 3.4,
+            "max_yaw_rate_rad_s": 1.0,
+            "max_angular_accel_rad_s2": 3.0,
+            "latency_mode": "one-step-delay",
+            "update_mode": "5hz-hold",
+            "variability_distribution": {
+                "schema_version": "synthetic-actuation-variability-distribution.v1",
+                "mode": "synthetic-provisional",
+                "claim_boundary": "diagnostic-only",
+                "parameters": {
+                    "max_linear_accel_m_s2": {
+                        "distribution": "uniform",
+                        "low": 2.5,
+                        "high": 4.5,
+                        "provenance": {
+                            "units": "m/s^2",
+                            "source_status": "synthetic_stress_factor",
+                            "caveat": "test-only provisional range",
                         },
-                    },
-                    "variability_sample": {
-                        "schema_version": "synthetic-actuation-variability-sample.v1",
-                        "mode": "variability-sweep",
-                        "sample_index": 0,
-                        "sample_id": "sample-000",
-                        "sampling_seed": 17,
-                        "sampled_parameters": {"max_linear_accel_m_s2": 3.0},
-                    },
+                    }
                 },
-                "planners": [{"key": "goal", "algo": "goal"}],
-            }
-        ),
+            },
+            "variability_sample": {
+                "schema_version": "synthetic-actuation-variability-sample.v1",
+                "mode": "variability-sweep",
+                "sample_index": 0,
+                "sample_id": "sample-000",
+                "sampling_seed": 17,
+                "sampled_parameters": {"max_linear_accel_m_s2": 3.0},
+            },
+        },
+        "planners": [{"key": "goal", "algo": "goal"}],
+    }
+    config_path.write_text(
+        yaml.safe_dump(config_payload),
         encoding="utf-8",
     )
 
@@ -323,6 +322,15 @@ def test_load_campaign_config_preserves_synthetic_actuation_variability_metadata
     metadata = cfg.synthetic_actuation_profile.to_metadata()
     assert metadata["variability_distribution"]["parameters"]["max_linear_accel_m_s2"]["low"] == 2.5
     assert metadata["variability_sample"]["sample_id"] == "sample-000"
+
+    bad_config_path = tmp_path / "campaign_null_sample.yaml"
+    bad_config_payload = dict(config_payload)
+    bad_profile_payload = dict(bad_config_payload["synthetic_actuation_profile"])
+    bad_profile_payload["variability_sample"] = None
+    bad_config_payload["synthetic_actuation_profile"] = bad_profile_payload
+    bad_config_path.write_text(yaml.safe_dump(bad_config_payload), encoding="utf-8")
+    with pytest.raises(TypeError, match="variability_sample must be a mapping"):
+        load_campaign_config(bad_config_path)
 
 
 def test_synthetic_actuation_variability_distribution_rejects_missing_provenance() -> None:
@@ -420,7 +428,7 @@ def test_synthetic_actuation_variability_sampling_is_seeded_and_summarized() -> 
 
     with pytest.raises(ValueError, match="sample_index must be >= 0"):
         sample_synthetic_actuation_profile(base_profile, distribution, seed=17, sample_index=-1)
-    with pytest.raises(ValueError, match="variability_sample.schema_version"):
+    with pytest.raises(ValueError, match=r"variability_sample\.schema_version"):
         validate_synthetic_actuation_profile(replace(base_profile, variability_sample={}))
     with pytest.raises(ValueError, match="variability_distribution must be a mapping"):
         validate_synthetic_actuation_profile(
@@ -483,6 +491,8 @@ def test_map_runner_profile_loader_preserves_variability_metadata() -> None:
         load_synthetic_actuation_profile({**payload, "claim_scope": "paper-facing"})
     with pytest.raises(TypeError, match="variability_sample must be a mapping"):
         load_synthetic_actuation_profile({**payload, "variability_sample": []})
+    with pytest.raises(TypeError, match="variability_sample must be a mapping"):
+        load_synthetic_actuation_profile({**payload, "variability_sample": None})
 
 
 def test_load_campaign_config_rejects_malformed_latency_stress_profile(

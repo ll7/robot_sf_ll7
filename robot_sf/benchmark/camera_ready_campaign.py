@@ -442,9 +442,9 @@ def _optional_synthetic_actuation_profile_mapping(
     key: str,
 ) -> Mapping[str, Any] | None:
     """Return optional synthetic-actuation profile metadata with fail-closed typing."""
-    value = payload.get(key)
-    if value is None:
+    if key not in payload:
         return None
+    value = payload[key]
     if not isinstance(value, Mapping):
         raise TypeError(f"synthetic_actuation_profile.{key} must be a mapping when provided")
     return value

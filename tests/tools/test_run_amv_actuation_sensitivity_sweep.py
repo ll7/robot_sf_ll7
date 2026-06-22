@@ -110,17 +110,20 @@ def test_issue_3284_sweep_materializes_seeded_variability_samples(tmp_path: Path
 def test_issue_3284_aggregate_carries_sample_metadata(tmp_path: Path) -> None:
     """Aggregate outputs should preserve sampled-parameter summaries for sampled variants."""
     materialized_dir = tmp_path / "materialized"
-    sweep.main(
-        [
-            "--manifest",
-            str(MANIFEST_PATH),
-            "--output",
-            str(materialized_dir),
-            "--sampling-mode",
-            "variability-sweep",
-            "--sampling-seed",
-            "17",
-        ]
+    assert (
+        sweep.main(
+            [
+                "--manifest",
+                str(MANIFEST_PATH),
+                "--output",
+                str(materialized_dir),
+                "--sampling-mode",
+                "variability-sweep",
+                "--sampling-seed",
+                "17",
+            ]
+        )
+        == 0
     )
     resolved = json.loads(
         (materialized_dir / "resolved_sweep_manifest.json").read_text(encoding="utf-8")

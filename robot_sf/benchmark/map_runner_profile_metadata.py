@@ -15,9 +15,9 @@ from robot_sf.benchmark.synthetic_actuation import (
 
 def _optional_profile_mapping(payload: dict[str, Any], key: str) -> Mapping[str, Any] | None:
     """Return an optional nested profile metadata mapping, rejecting malformed values."""
-    value = payload.get(key)
-    if value is None:
+    if key not in payload:
         return None
+    value = payload[key]
     if not isinstance(value, Mapping):
         raise TypeError(f"synthetic_actuation_profile.{key} must be a mapping when provided")
     return value

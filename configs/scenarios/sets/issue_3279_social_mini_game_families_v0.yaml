@@ -24,11 +24,11 @@
 #   generator vocabulary (density/flow/obstacle/groups/speed_var/goal_topology/
 #   robot_context) is mapped to the closest mechanism trigger per family above.
 #
-# Canonical smoke command shape (one baseline planner; full execution is follow-up):
-#   robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_3279_social_mini_game_families_v0.yaml \
-#     --out output/benchmarks/issue_3279_social_mini_game/<planner>/episodes.jsonl \
-#     --algo <planner> --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none \
-#     --no-resume --benchmark-profile baseline-safe
+# Canonical diagnostic smoke command (one baseline-safe planner, one row per family):
+#   python scripts/demo/run_robot_sf_smoke.py \
+#     --matrix configs/scenarios/sets/issue_3279_social_mini_game_families_v0.yaml \
+#     --planners simple_policy --horizon 30 --workers 1 \
+#     --output-root output/benchmarks/issue_3279_social_mini_game_smoke
 
 - id: smg_doorway_v0
   density: med

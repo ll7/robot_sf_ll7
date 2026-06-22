@@ -14,8 +14,10 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from scripts.demo.run_robot_sf_smoke import run_demo
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _FAMILIES_PATH = (
@@ -100,3 +102,33 @@ def test_families_carry_diagnostic_only_claim_boundary() -> None:
         claim = metadata["claim_boundary"].lower()
         assert "not" in claim and "benchmark" in claim
         assert int(metadata["issue"]) == 3279
+
+
+def test_simple_policy_smoke_runs_all_families(tmp_path: Path) -> None:
+    """A baseline-safe planner smoke should emit one episode record per mini-game family."""
+    output_root = tmp_path / "issue_3279_social_mini_game_smoke"
+
+    summary = run_demo(
+        output_root=output_root,
+        matrix=_FAMILIES_PATH,
+        planners=("simple_policy",),
+        horizon=30,
+        workers=1,
+    )
+
+    planner = summary["planners"][0]
+    assert summary["passed"] is True
+    assert planner["status"] == "passed"
+    assert planner["record_count"] == len(_EXPECTED_FAMILIES)
+    assert planner["run_summary"]["total_jobs"] == len(_EXPECTED_FAMILIES)
+    assert planner["run_summary"]["written"] == len(_EXPECTED_FAMILIES)
+
+    episodes_path = output_root / "episodes" / "simple_policy.jsonl"
+    records = read_jsonl(episodes_path, strict=True)
+    scenario_ids = {record["scenario_id"] for record in records}
+    canonical_algorithms = {
+        record["algorithm_metadata"]["canonical_algorithm"] for record in records
+    }
+
+    assert scenario_ids == {scenario["id"] for scenario in _load_families()}
+    assert canonical_algorithms == {"goal"}

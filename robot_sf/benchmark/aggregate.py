@@ -489,8 +489,14 @@ def _ensure_snqi(
     baseline: dict[str, dict[str, float]] | None,
     *,
     recompute: bool = False,
+    strict: bool = False,
 ) -> None:
-    """Compute and attach SNQI when missing, or recompute when ``recompute`` is set."""
+    """Compute and attach SNQI when missing, or recompute when ``recompute`` is set.
+
+    When ``strict`` is True, computation failures re-raise instead of being
+    logged-and-skipped, so paper/release runs fail closed rather than silently
+    emitting records without an SNQI value.
+    """
     if rec.get("metrics") is None:
         return
     if "snqi" in rec["metrics"] and not recompute:
@@ -499,9 +505,11 @@ def _ensure_snqi(
         return
     try:
         rec["metrics"]["snqi"] = float(snqi_fn(rec["metrics"], weights, baseline_stats=baseline))
-    except Exception:
-        # Leave untouched if computation fails
-        pass
+    except (KeyError, ValueError, TypeError):
+        rec_id = rec.get("episode_id", rec.get("scenario_id", "unknown"))
+        logger.exception("SNQI computation failed for record {}; snqi left unset", rec_id)
+        if strict:
+            raise
 
 
 def write_episode_csv(
@@ -510,15 +518,19 @@ def write_episode_csv(
     *,
     snqi_weights: dict[str, float] | None = None,
     snqi_baseline: dict[str, dict[str, float]] | None = None,
+    strict: bool = False,
 ) -> str:
     # Optionally compute SNQI per record if missing
     """Write per-episode metrics to CSV.
+
+    When ``strict`` is True, SNQI computation failures abort the write instead
+    of silently emitting records without an SNQI value.
 
     Returns:
         Path string to the written CSV file.
     """
     for rec in records:
-        _ensure_snqi(rec, snqi_weights, snqi_baseline)
+        _ensure_snqi(rec, snqi_weights, snqi_baseline, strict=strict)
 
     # Determine all metric keys across records for CSV header
     flat_rows = [flatten_metrics(r) for r in records]
@@ -568,6 +580,7 @@ def compute_aggregates(  # noqa: PLR0913
     expected_algorithms: set[str] | None = None,
     observation_track_mode: str = "strict",
     logger_ctx=None,
+    strict: bool = False,
 ) -> dict[str, dict[str, dict[str, float]]]:
     """Aggregate metrics by group and compute summary statistics.
 
@@ -575,7 +588,7 @@ def compute_aggregates(  # noqa: PLR0913
         Nested dict of group -> metric -> summary statistics.
     """
     for rec in records:
-        _ensure_snqi(rec, snqi_weights, snqi_baseline, recompute=recompute_snqi)
+        _ensure_snqi(rec, snqi_weights, snqi_baseline, recompute=recompute_snqi, strict=strict)
     observation_track_meta = ensure_observation_track_policy(
         records,
         observation_track_mode=observation_track_mode,
@@ -939,6 +952,7 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
     expected_algorithms: set[str] | None = None,
     observation_track_mode: str = "strict",
     logger_ctx=None,
+    strict: bool = False,
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """Compute grouped aggregates and optional bootstrap CIs.
 
@@ -960,6 +974,7 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
         expected_algorithms=expected_algorithms,
         observation_track_mode=observation_track_mode,
         logger_ctx=logger_ctx,
+        strict=strict,
     )
     if not return_ci or bootstrap_samples <= 0:
         # Upcast type to Any container for compatibility, but keep content unchanged
@@ -967,7 +982,7 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
 
     # Rebuild groups with flattened numeric values to avoid rework
     for rec in records:
-        _ensure_snqi(rec, snqi_weights, snqi_baseline, recompute=recompute_snqi)
+        _ensure_snqi(rec, snqi_weights, snqi_baseline, recompute=recompute_snqi, strict=strict)
     groups = _group_flattened(
         records,
         group_by=group_by,

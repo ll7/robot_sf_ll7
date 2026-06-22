@@ -13,6 +13,8 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
+from loguru import logger
+
 from robot_sf.benchmark.snqi.compute import (
     WEIGHT_NAMES,
     compute_snqi_ablation,
@@ -61,6 +63,7 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
         return 0
 
     except Exception:
+        logger.exception("SNQI recompute-weights command failed")
         return 1
 
 
@@ -205,6 +208,7 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
 
         return 0
     except Exception:
+        logger.exception("SNQI ablation-analysis command failed")
         return 1
 
 

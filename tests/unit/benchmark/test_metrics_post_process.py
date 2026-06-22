@@ -34,3 +34,27 @@ def test_post_process_metrics_drops_non_finite_values():
 
     assert "mean_distance" not in metrics
     assert metrics["near_misses"] == 0
+
+
+def test_post_process_metrics_drops_non_coercible_count():
+    """A non-coercible safety count should be set to None, not silently left as a bad value."""
+    metrics_raw = {
+        "success": 1.0,
+        "collisions": "not-a-number",
+    }
+
+    metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
+
+    assert metrics["collisions"] is None
+
+
+def test_post_process_metrics_drops_non_coercible_valid_flag():
+    """A non-coercible validity flag should be set to None, not silently left as a bad value."""
+    metrics_raw = {
+        "success": 1.0,
+        "social_proxemic_available": "bad",
+    }
+
+    metrics = post_process_metrics(metrics_raw, snqi_weights=None, snqi_baseline=None)
+
+    assert metrics["social_proxemic_available"] is None

@@ -2776,8 +2776,13 @@ def post_process_metrics(
         if count_key in metrics and metrics[count_key] is not None:
             try:
                 metrics[count_key] = int(metrics[count_key])
-            except Exception:  # pragma: no cover
-                pass
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Count metric {!r} could not be coerced to int (value={!r}); dropping",
+                    count_key,
+                    metrics[count_key],
+                )
+                metrics[count_key] = None
     for valid_key in (
         "time_to_goal_success_only_valid",
         "time_to_goal_ideal_ratio_valid",
@@ -2788,8 +2793,13 @@ def post_process_metrics(
         if valid_key in metrics and metrics[valid_key] is not None:
             try:
                 metrics[valid_key] = bool(int(metrics[valid_key]))
-            except Exception:  # pragma: no cover
-                pass
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Validity flag {!r} could not be coerced to bool (value={!r}); dropping",
+                    valid_key,
+                    metrics[valid_key],
+                )
+                metrics[valid_key] = None
     _attach_pedestrian_impact_block(metrics)
     _attach_social_acceptability_block(metrics)
     _attach_human_interaction_proxy_block(metrics)

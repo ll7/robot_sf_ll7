@@ -90,3 +90,41 @@ def test_aggregate_cli_passes_recompute_snqi_flag(
     assert exit_code == 0
     assert captured["snqi_weights"] == {"score": 1.0}
     assert captured["recompute_snqi"] is True
+
+
+def test_ensure_snqi_strict_re_raises_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """In strict mode, SNQI computation failures should re-raise, not silently pass."""
+
+    def _broken_snqi(metrics, weights, *, baseline_stats=None):
+        raise KeyError("missing metric key")
+
+    monkeypatch.setattr(aggregate, "snqi_fn", _broken_snqi)
+    rec: dict[str, Any] = {
+        "episode_id": "ep-strict",
+        "metrics": {"score": 1.0},
+    }
+
+    with pytest.raises(KeyError, match="missing metric key"):
+        aggregate._ensure_snqi(rec, {"score": 1.0}, None, strict=True)
+
+    # snqi should remain unset because the exception propagated before assignment
+    assert "snqi" not in rec["metrics"]
+
+
+def test_ensure_snqi_non_strict_logs_and_continues(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without strict mode, SNQI failures should be logged and snqi left unset, not raised."""
+
+    def _broken_snqi(metrics, weights, *, baseline_stats=None):
+        raise ValueError("bad value")
+
+    monkeypatch.setattr(aggregate, "snqi_fn", _broken_snqi)
+    rec: dict[str, Any] = {
+        "episode_id": "ep-lenient",
+        "metrics": {"score": 1.0},
+    }
+
+    # Should not raise
+    aggregate._ensure_snqi(rec, {"score": 1.0}, None, strict=False)
+
+    # snqi should remain unset
+    assert "snqi" not in rec["metrics"]

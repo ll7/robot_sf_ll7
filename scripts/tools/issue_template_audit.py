@@ -45,11 +45,16 @@ SECTION_ALIASES: dict[str, str] = {
     "question / goal": "Goal / Problem",
     "goal / question": "Goal / Problem",
     "background": "Goal / Problem",
+    "summary": "Goal / Problem",
+    "what to build": "Goal / Problem",
+    "what to build once unblocked": "Goal / Problem",
     "scope": "Scope",
     # YAML issue forms (epic/execution-run/test-debt/blocked-external-artifact) name this
     # "Scope and non-goals"; treat it as the canonical Scope section.
     "scope and non-goals": "Scope",
     "scope / out of scope": "Scope",
+    "out of scope": "Scope",
+    "scope / decision needed": "Scope",
     "added value estimation": "Added Value Estimation",
     "value estimation": "Added Value Estimation",
     "effort estimation": "Effort Estimation",
@@ -65,9 +70,10 @@ SECTION_ALIASES: dict[str, str] = {
     "definition of done": "Definition of Done",
     # YAML forms and agent-authored bodies use "Acceptance criteria" for the same contract.
     "acceptance criteria": "Definition of Done",
-    # Research/epic bodies fold the acceptance contract into a stop-rule heading.
+    # Research/epic bodies fold the acceptance contract into a stop-rule or decision heading.
     "acceptance / stop rule": "Definition of Done",
     "accept / revise / reject criteria": "Definition of Done",
+    "accept / revise / reject": "Definition of Done",
     "success metrics": "Success Metrics",
     "validation / testing": "Validation / Testing",
     "validation": "Validation / Testing",
@@ -93,6 +99,7 @@ LEANER_TEMPLATE_SIGNATURES: frozenset[str] = frozenset(
         "acceptance criteria",
         "acceptance / stop rule",
         "accept / revise / reject criteria",
+        "accept / revise / reject",
         "estimate",
         "estimate metadata",
         "validation command",
@@ -101,13 +108,15 @@ LEANER_TEMPLATE_SIGNATURES: frozenset[str] = frozenset(
     }
 )
 
-# Shared agent-ready core required of every issue regardless of template family. The full
-# markdown contract (``SECTION_ORDER``) is a superset of this and stays the default so bare
-# or markdown-style bodies keep the stricter requirement.
+# Shared agent-ready core required of every issue regardless of template family: what the
+# problem is, what is in/out of scope, when it is done, and how to validate. The full markdown
+# contract (``SECTION_ORDER``) is a superset of this and stays the default so bare or
+# markdown-style bodies keep the stricter requirement. A standalone effort estimate is not in
+# the core: leaner/agent issues state effort under ``Project Metadata`` (or defer it on blocked
+# work), and the agent-exec-spec that agents execute from carries no estimate.
 CORE_SECTION_ORDER: tuple[str, ...] = (
     "Goal / Problem",
     "Scope",
-    "Effort Estimation",
     "Definition of Done",
     "Validation / Testing",
 )

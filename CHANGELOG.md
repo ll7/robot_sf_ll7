@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
+  domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
+  language, and made "understandable" a first-class maintainer value. `docs/maintainer_values.md`
+  now carries a `## Clarity` rule, `AGENTS.md` scopes token-efficiency to agent-internal surfaces
+  (clarity wins on human-facing surfaces), and the README, docs index, and CONTRIBUTING checklist
+  link the glossary so jargon is defined on first use.
 * Added durable issue-2904 forecast-risk eligibility fixtures
   (`tests/fixtures/benchmark/forecast_risk_eligibility/`) and the regenerated
   `ForecastCalibrationReport.v1` evidence bundle under

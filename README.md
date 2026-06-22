@@ -18,6 +18,7 @@ pedestrian-filled environments.
 | I want to... | Go to |
 | --- | --- |
 | Understand the project quickly | [Why Robot SF?](#why-robot-sf) |
+| Decode an acronym or project term | [`docs/glossary.md`](docs/glossary.md) |
 | Install dependencies and run the first demos | [Quickstart](#quickstart) |
 | Browse runnable examples | [`examples/README.md`](examples/README.md) |
 | Find architecture, benchmark, and workflow docs | [`docs/README.md`](docs/README.md) |

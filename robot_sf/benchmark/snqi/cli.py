@@ -73,7 +73,7 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
 
         return 0
 
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+    except Exception:
         logger.bind(event="snqi_cli_failed", stage="recompute_weights").exception(
             "SNQI CLI failed while recomputing weights."
         )
@@ -235,7 +235,7 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
             impacts.get(comp, 0.0)
 
         return 0
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+    except Exception:
         logger.bind(event="snqi_cli_failed", stage="ablation_analysis").exception(
             "SNQI CLI failed while computing ablation analysis."
         )

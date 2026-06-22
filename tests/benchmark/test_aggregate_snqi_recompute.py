@@ -181,6 +181,53 @@ def test_compute_aggregates_logs_key_error_snqi_failure_in_diagnostic_mode(
     )
 
 
+def test_compute_aggregates_logs_unexpected_snqi_failure_in_diagnostic_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Diagnostic aggregation should log unexpected SNQI failures and continue."""
+
+    def _unexpected_snqi(
+        metrics: dict[str, float],
+        weights: dict[str, float],
+        *,
+        baseline_stats: dict[str, dict[str, float]] | None = None,
+    ) -> float:
+        raise AttributeError("unexpected snqi shape")
+
+    monkeypatch.setattr(aggregate, "snqi_fn", _unexpected_snqi)
+    records = [
+        {
+            "episode_id": "ep-attr-error",
+            "scenario_id": "sc-1",
+            "seed": 1,
+            "algo": "",
+            "scenario_params": {"algo": "nested-planner"},
+            "observation_track": "features",
+            "metrics": {"score": 2.0},
+        }
+    ]
+    captured: list = []
+    handle = logger.add(captured.append, level="ERROR")
+    try:
+        result = compute_aggregates(
+            records,
+            group_by="scenario_params.algo",
+            snqi_weights={"score": 3.0},
+            observation_track_mode="diagnostic-cross-track",
+        )
+    finally:
+        logger.remove(handle)
+
+    score_summary = next(group["score"] for group in result.values() if "score" in group)
+    assert score_summary["mean"] == 2.0
+    assert "snqi" not in records[0]["metrics"]
+    assert any(
+        msg.record["extra"].get("event") == "aggregation_snqi_compute_failed"
+        and msg.record["extra"].get("algo") == ""
+        for msg in captured
+    )
+
+
 def test_aggregate_cli_passes_recompute_snqi_flag(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

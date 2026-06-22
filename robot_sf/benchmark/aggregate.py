@@ -500,13 +500,15 @@ def _ensure_snqi(
         return
     try:
         rec["metrics"]["snqi"] = float(snqi_fn(rec["metrics"], weights, baseline_stats=baseline))
-    except (ArithmeticError, KeyError, TypeError, ValueError):
+    except Exception:
         logger.bind(
             event="aggregation_snqi_compute_failed",
             episode_id=rec.get("episode_id"),
             scenario_id=rec.get("scenario_id"),
             seed=rec.get("seed"),
-            algo=rec.get("algo") or _get_nested(rec, "scenario_params.algo"),
+            algo=rec.get("algo")
+            if rec.get("algo") is not None
+            else _get_nested(rec, "scenario_params.algo"),
             recompute_snqi=recompute,
             strict=strict,
         ).exception("Failed to compute SNQI for episode record.")

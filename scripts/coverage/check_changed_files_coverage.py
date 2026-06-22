@@ -281,6 +281,8 @@ def _changed_line_numbers(base: str, path: Path, repo_root: Path) -> set[int]:
             new_line += 1
         elif line.startswith("-") and not line.startswith("---"):
             continue
+        elif line.startswith("\\"):
+            continue
         else:
             new_line += 1
     return changed

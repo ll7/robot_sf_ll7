@@ -92,6 +92,36 @@ def test_cmd_recompute_weights_logs_expected_failure_stages(
     _assert_logged_stage(captured, "recompute_weights")
 
 
+def test_cmd_recompute_weights_logs_unexpected_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Top-level recompute command should log unexpected exceptions before returning."""
+    baseline_path = tmp_path / "baseline.json"
+    output_path = tmp_path / "weights.json"
+    baseline_path.write_text(json.dumps(_baseline_stats()), encoding="utf-8")
+
+    def _fail_recompute(**kwargs: object) -> SNQIWeights:
+        raise AttributeError("unexpected recompute state")
+
+    monkeypatch.setattr(snqi_cli, "recompute_snqi_weights", _fail_recompute)
+    captured, handle = _capture_errors()
+    try:
+        exit_code = snqi_cli.cmd_recompute_weights(
+            argparse.Namespace(
+                baseline_stats=str(baseline_path),
+                out=str(output_path),
+                method="balanced",
+                seed=7,
+            ),
+        )
+    finally:
+        logger.remove(handle)
+
+    assert exit_code == 1
+    _assert_logged_stage(captured, "recompute_weights")
+
+
 def test_cmd_ablation_analysis_logs_expected_failure_stages(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -170,4 +200,37 @@ def test_cmd_ablation_analysis_logs_expected_failure_stages(
     ]
     assert len(load_episode_logs) >= 2
     _assert_logged_stage(captured, "load_weights")
+    _assert_logged_stage(captured, "ablation_analysis")
+
+
+def test_cmd_ablation_analysis_logs_unexpected_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Top-level ablation command should log unexpected exceptions before returning."""
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text(
+        json.dumps({"metrics": {"collisions": 0, "near_misses": 1, "jerk_mean": 0.1}}) + "\n",
+        encoding="utf-8",
+    )
+
+    def _fail_ablation(**kwargs: object) -> dict[str, float]:
+        raise AttributeError("unexpected ablation state")
+
+    monkeypatch.setattr(snqi_cli, "compute_snqi_ablation", _fail_ablation)
+    captured, handle = _capture_errors()
+    try:
+        exit_code = snqi_cli.cmd_ablation_analysis(
+            argparse.Namespace(
+                episodes=str(episodes_path),
+                summary_out=str(tmp_path / "failed-out.json"),
+                weights=None,
+                components=None,
+                seed=11,
+            )
+        )
+    finally:
+        logger.remove(handle)
+
+    assert exit_code == 1
     _assert_logged_stage(captured, "ablation_analysis")

@@ -84,7 +84,9 @@ def test_each_family_generates_a_deterministic_runnable_scenario() -> None:
     # Obstacle-bearing families must actually carry obstacle geometry.
     by_id = {s["id"]: s for s in scenarios}
     doorway = generate_scenario(by_id["smg_doorway_v0"], by_id["smg_doorway_v0"]["seeds"][0])
-    blind = generate_scenario(by_id["smg_blind_corner_v0"], by_id["smg_blind_corner_v0"]["seeds"][0])
+    blind = generate_scenario(
+        by_id["smg_blind_corner_v0"], by_id["smg_blind_corner_v0"]["seeds"][0]
+    )
     assert doorway.obstacles, "doorway (bottleneck) must have obstacle geometry"
     assert blind.obstacles, "blind_corner (maze) must have obstacle geometry"
 

@@ -418,6 +418,7 @@ def _normalize_variant(variant: Any) -> Mapping[str, Any]:
         "robot_route_offset",
         "pedestrian_route_offset",
         "single_pedestrian_start_delay_offset",
+        "occluder_timing_offset",
         "single_pedestrian_speed_offset",
         "single_pedestrian_wait_duration_offset",
         "pedestrian_density_offset",
@@ -459,6 +460,8 @@ def _validate_perturbation_bounds(
         raise ValueError(f"{family} variants require a parameters mapping")
     if family == "single_pedestrian_start_delay_offset":
         return _validate_start_delay_offset_bounds(variant, manifest=manifest)
+    if family == "occluder_timing_offset":
+        return _validate_occluder_timing_offset_bounds(variant, manifest=manifest)
     if family == "single_pedestrian_speed_offset":
         return _validate_single_pedestrian_speed_offset_bounds(variant, manifest=manifest)
     if family == "single_pedestrian_wait_duration_offset":
@@ -617,6 +620,13 @@ def _resolve_scenario_dependent_perturbation_summary(
     Returns:
         dict[str, Any]: Scenario-independent or enriched perturbation summary.
     """
+    if variant["family"] == "occluder_timing_offset":
+        return _occluder_timing_summary_for_scenario(
+            variant,
+            perturbation_summary=perturbation_summary,
+            scenario_config=scenario_config,
+            scenarios=scenarios,
+        )
     if variant["family"] != "pedestrian_density_offset":
         return dict(perturbation_summary)
     return _pedestrian_density_summary_for_scenario(
@@ -657,6 +667,149 @@ def _pedestrian_density_summary_for_scenario(
     return summary
 
 
+def _occluder_timing_fixture_context(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_config: Path,
+) -> tuple[dict[str, Any], Path, Mapping[str, Any]]:
+    """Return fixture metadata required by occluder-timing perturbations."""
+    observation_visibility = scenario.get("observation_visibility")
+    if not isinstance(observation_visibility, Mapping) or (
+        observation_visibility.get("static_occlusion") is not True
+    ):
+        raise ValueError("occluder_timing_offset requires observation_visibility.static_occlusion")
+    if not bool(observation_visibility.get("enabled", False)):
+        raise ValueError("occluder_timing_offset requires observation_visibility.enabled")
+    metadata = scenario.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise ValueError("occluder_timing_offset requires scenario metadata")
+    scenario_family = str(scenario.get("scenario_family") or metadata.get("family") or "").strip()
+    if scenario_family != "occluded_emergence":
+        raise ValueError("occluder_timing_offset requires scenario_family='occluded_emergence'")
+    fixture_contract = metadata.get("fixture_contract")
+    if not isinstance(fixture_contract, Mapping):
+        raise ValueError("occluder_timing_offset requires metadata.fixture_contract")
+    for required_key in ("first_visible_step", "delay_steps"):
+        if required_key not in fixture_contract:
+            raise ValueError(
+                f"occluder_timing_offset requires metadata.fixture_contract.{required_key}"
+            )
+    source_fixture = _resolve_path(
+        metadata.get("source_fixture"),
+        base_dir=scenario_config.parent,
+        field_name="metadata.source_fixture",
+    )
+    trace_occlusion = _trace_fixture_occlusion(source_fixture)
+    if trace_occlusion.get("first_visible_step") != fixture_contract.get("first_visible_step"):
+        raise ValueError(
+            "occluder_timing_offset requires source fixture first_visible_step to match "
+            "metadata.fixture_contract.first_visible_step"
+        )
+    return dict(fixture_contract), source_fixture, trace_occlusion
+
+
+def _selected_occluder_timing_pedestrian(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_config: Path,
+    parameters: Any,
+) -> tuple[Any, dict[str, Any]]:
+    """Return the explicitly selected emerging pedestrian for an occluder-timing variant."""
+    pedestrian_id = str(parameters.get("pedestrian_id", "")).strip()
+    pedestrian_metadata = _single_pedestrian_metadata(scenario, pedestrian_id)
+    if pedestrian_metadata.get("role") != "emerging_ped":
+        raise ValueError(
+            "occluder_timing_offset requires selected pedestrian metadata.role='emerging_ped'"
+        )
+    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_config)
+    if not config.map_pool.map_defs:
+        raise ValueError("scenario map pool is empty")
+    _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    selected = _select_single_pedestrians(
+        list(map_def.single_pedestrians),
+        parameters,
+        family="occluder_timing_offset",
+    )
+    if len(selected) != 1:
+        raise ValueError("occluder_timing_offset requires exactly one selected pedestrian")
+    return selected[0], pedestrian_metadata
+
+
+def _occluder_timing_summary_for_scenario(
+    variant: Mapping[str, Any],
+    *,
+    perturbation_summary: Mapping[str, Any],
+    scenario_config: Path,
+    scenarios: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Return occlusion-specific timing facts for one occluder-timing variant."""
+    scenario = dict(select_scenario(scenarios, str(variant["scenario_id"])))
+    fixture_contract, source_fixture, trace_occlusion = _occluder_timing_fixture_context(
+        scenario,
+        scenario_config=scenario_config,
+    )
+    pedestrian, pedestrian_metadata = _selected_occluder_timing_pedestrian(
+        scenario,
+        scenario_config=scenario_config,
+        parameters=variant.get("parameters", {}),
+    )
+    baseline_start_delay_s = float(pedestrian.start_delay_s)
+    updated_start_delay_s = baseline_start_delay_s + float(perturbation_summary["dt_s"])
+    if updated_start_delay_s < 0.0:
+        raise ValueError(
+            f"occluder_timing_offset would make pedestrian {pedestrian.id!r} start_delay_s negative"
+        )
+    summary = dict(perturbation_summary)
+    summary["baseline_start_delay_s"] = baseline_start_delay_s
+    summary["updated_start_delay_s"] = updated_start_delay_s
+    summary["occlusion"] = {
+        "static_occlusion": True,
+        "source_fixture": source_fixture.as_posix(),
+        "source_fixture_occluder_id": trace_occlusion.get("occluder_id"),
+        "fixture_contract": dict(fixture_contract),
+        "selected_pedestrian_role": pedestrian_metadata.get("role"),
+    }
+    return summary
+
+
+def _trace_fixture_occlusion(source_fixture: Path) -> Mapping[str, Any]:
+    """Return the occlusion payload from a trace fixture, failing closed when incomplete."""
+    try:
+        trace_payload = json.loads(source_fixture.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(
+            f"occluder_timing_offset cannot read source fixture: {source_fixture}"
+        ) from exc
+    if not isinstance(trace_payload, Mapping):
+        raise ValueError("occluder_timing_offset source fixture must contain a mapping")
+    occlusion = trace_payload.get("occlusion")
+    if not isinstance(occlusion, Mapping):
+        raise ValueError("occluder_timing_offset requires source fixture occlusion metadata")
+    for required_key in ("first_visible_step", "occluder_id", "occluder_bounds"):
+        if required_key not in occlusion:
+            raise ValueError(
+                f"occluder_timing_offset requires source fixture occlusion.{required_key}"
+            )
+    if not isinstance(occlusion.get("occluder_bounds"), Mapping):
+        raise ValueError("occluder_timing_offset requires source fixture occluder_bounds mapping")
+    return occlusion
+
+
+def _single_pedestrian_metadata(scenario: Mapping[str, Any], pedestrian_id: str) -> dict[str, Any]:
+    """Return raw metadata for one scenario-level single pedestrian."""
+    raw_pedestrians = scenario.get("single_pedestrians")
+    if not isinstance(raw_pedestrians, list):
+        raise ValueError("occluder_timing_offset selected no single pedestrians")
+    for item in raw_pedestrians:
+        if not isinstance(item, Mapping):
+            continue
+        if str(item.get("id")) != pedestrian_id:
+            continue
+        metadata = item.get("metadata")
+        return dict(metadata) if isinstance(metadata, Mapping) else {}
+    raise ValueError(f"occluder_timing_offset selected no pedestrian {pedestrian_id!r}")
+
+
 def _validate_start_delay_offset_bounds(
     variant: Mapping[str, Any],
     *,
@@ -690,6 +843,51 @@ def _validate_start_delay_offset_bounds(
         "max_abs_dt_s": bound,
         "target": {
             "pedestrian_id": parameters.get("pedestrian_id"),
+            "selector": parameters.get("pedestrian_selector", "all"),
+        },
+    }
+    if abs_dt_s > bound:
+        return [
+            f"{family} abs_dt_s {abs_dt_s:.6f} s exceeds variant max_abs_dt_s {bound:.6f} s"
+        ], summary
+    return [], summary
+
+
+def _validate_occluder_timing_offset_bounds(
+    variant: Mapping[str, Any],
+    *,
+    manifest: Mapping[str, Any],
+) -> tuple[list[str], dict[str, Any]]:
+    """Validate bounded occluded-emergence timing perturbations.
+
+    Returns:
+        tuple[list[str], dict[str, Any]]: Fail-closed reasons and perturbation summary.
+    """
+    family = str(variant["family"])
+    parameters = variant.get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ValueError(f"{family} variants require a parameters mapping")
+    dt_s = _finite_float(parameters.get("dt_s"), field_name="parameters.dt_s")
+    variant_max = _positive_float(
+        parameters.get("max_abs_dt_s"),
+        field_name="parameters.max_abs_dt_s",
+    )
+    manifest_max = _positive_float(
+        manifest["validity"].get("max_occluder_timing_offset_s"),
+        field_name="validity.max_occluder_timing_offset_s",
+    )
+    pedestrian_id = parameters.get("pedestrian_id")
+    if not isinstance(pedestrian_id, str) or not pedestrian_id.strip():
+        raise ValueError(f"{family} requires parameters.pedestrian_id")
+    bound = min(variant_max, manifest_max)
+    abs_dt_s = abs(dt_s)
+    summary = {
+        "family": family,
+        "dt_s": dt_s,
+        "abs_dt_s": abs_dt_s,
+        "max_abs_dt_s": bound,
+        "target": {
+            "pedestrian_id": pedestrian_id,
             "selector": parameters.get("pedestrian_selector", "all"),
         },
     }
@@ -834,11 +1032,12 @@ def _certify_variant(
         raise ValueError("scenario map pool is empty")
     _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
     perturbed_map = deepcopy(map_def)
-    if variant["family"] == "single_pedestrian_start_delay_offset":
+    if variant["family"] in {"single_pedestrian_start_delay_offset", "occluder_timing_offset"}:
         _apply_start_delay_offset(
             perturbed_map.single_pedestrians,
             dt_s=float(perturbation_summary["dt_s"]),
             parameters=variant.get("parameters", {}),
+            family=str(variant["family"]),
         )
     elif variant["family"] == "single_pedestrian_speed_offset":
         _apply_single_pedestrian_speed_offset(
@@ -927,7 +1126,7 @@ def _materialize_variant_scenario(
             route_path=route_path,
         )
         scenario["route_overrides_file"] = route_path.relative_to(matrix_path.parent).as_posix()
-    elif variant["family"] == "single_pedestrian_start_delay_offset":
+    elif variant["family"] in {"single_pedestrian_start_delay_offset", "occluder_timing_offset"}:
         scenario["single_pedestrians"] = _single_pedestrian_overrides_for_start_delay(
             variant,
             scenario=scenario,
@@ -1094,16 +1293,14 @@ def _apply_start_delay_offset(
     *,
     dt_s: float,
     parameters: Any,
+    family: str = "single_pedestrian_start_delay_offset",
 ) -> None:
     """Offset selected single-pedestrian start delays in place."""
-    selected = _select_single_pedestrians(pedestrians, parameters)
+    selected = _select_single_pedestrians(pedestrians, parameters, family=family)
     for ped in selected:
         updated = float(ped.start_delay_s) + float(dt_s)
         if updated < 0.0:
-            raise ValueError(
-                "single_pedestrian_start_delay_offset would make "
-                f"pedestrian {ped.id!r} start_delay_s negative"
-            )
+            raise ValueError(f"{family} would make pedestrian {ped.id!r} start_delay_s negative")
         ped.start_delay_s = updated
 
 
@@ -1321,19 +1518,18 @@ def _single_pedestrian_overrides_for_start_delay(
     if not config.map_pool.map_defs:
         raise ValueError("scenario map pool is empty")
     _map_name, map_def = next(iter(config.map_pool.map_defs.items()))
+    family = str(variant["family"])
     selected = _select_single_pedestrians(
         list(map_def.single_pedestrians),
         variant.get("parameters", {}),
+        family=family,
     )
     selected_ids = {str(ped.id) for ped in selected}
     delays = {}
     for ped in selected:
         updated = float(ped.start_delay_s) + float(perturbation_summary["dt_s"])
         if updated < 0.0:
-            raise ValueError(
-                "single_pedestrian_start_delay_offset would make "
-                f"pedestrian {ped.id!r} start_delay_s negative"
-            )
+            raise ValueError(f"{family} would make pedestrian {ped.id!r} start_delay_s negative")
         delays[str(ped.id)] = updated
 
     raw_overrides = scenario.get("single_pedestrians")

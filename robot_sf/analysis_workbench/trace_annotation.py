@@ -17,6 +17,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExportValidationError,
     load_simulation_trace_export,
 )
+from robot_sf.common.json_pointer import json_pointer
 
 TRACE_ANNOTATION_SET_SCHEMA_VERSION = "trace_annotation_set.v1"
 TRACE_ANNOTATION_SET_SCHEMA_FILE = (
@@ -160,7 +161,7 @@ def _schema_validation_errors(payload: Mapping[str, Any]) -> list[str]:
 
     validator = Draft202012Validator(load_trace_annotation_set_schema())
     return [
-        f"{_json_pointer(error.absolute_path)}: {error.message}"
+        f"{json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(
             validator.iter_errors(payload),
             key=lambda err: list(err.absolute_path),
@@ -447,14 +448,3 @@ def _annotation_set_from_payload(payload: Mapping[str, Any]) -> TraceAnnotationS
             for annotation in payload["annotations"]
         ],
     )
-
-
-def _json_pointer(path: Any) -> str:
-    """Render a JSON Schema error path as an RFC6901-style pointer.
-
-    Returns:
-        JSON pointer string for the provided path.
-    """
-
-    parts = [str(part).replace("~", "~0").replace("/", "~1") for part in path]
-    return "/" + "/".join(parts) if parts else "/"

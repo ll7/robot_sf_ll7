@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from collections.abc import Iterable
+from robot_sf.common.json_pointer import json_pointer
 
 try:
     from jsonschema import Draft7Validator
@@ -38,24 +37,6 @@ def load_scenario_schema() -> dict[str, Any]:
     """
     with SCHEMA_FILE.open("r", encoding="utf-8") as f:
         return json.load(f)
-
-
-def _json_pointer(path_elems: Iterable[Any]) -> str:
-    """Render an RFC6901-style pointer from a jsonschema error path.
-
-    Args:
-        path_elems: Iterable of keys/indices describing a JSON path.
-
-    Returns:
-        JSON pointer string ("" for root).
-    """
-    parts: list[str] = []
-    for p in path_elems:
-        if isinstance(p, int):
-            parts.append(str(p))
-        else:
-            parts.append(str(p).replace("~", "~0").replace("/", "~1"))
-    return "/" + "/".join(parts) if parts else ""  # RFC6901 pointer-ish
 
 
 def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -78,7 +59,7 @@ def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, An
     # Per-item schema validation (keep index alignment for better messages)
     for i, s in enumerate(scenarios):
         for err in validator.iter_errors(s):
-            path = _json_pointer(err.path)
+            path = json_pointer(err.path)
             errors.append(
                 {
                     "index": i,

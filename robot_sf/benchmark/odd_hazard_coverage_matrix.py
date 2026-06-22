@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -15,6 +15,8 @@ from typing import Any
 
 import yaml
 from jsonschema import Draft202012Validator
+
+from robot_sf.common.json_pointer import json_pointer
 
 ODD_HAZARD_COVERAGE_SCHEMA_VERSION = "odd_hazard_coverage.v1"
 ODD_HAZARD_COVERAGE_SCHEMA_FILE = (
@@ -473,7 +475,7 @@ def _schema_validation_errors(payload: Mapping[str, Any]) -> list[str]:
 
     validator = Draft202012Validator(load_odd_hazard_coverage_schema())
     return [
-        f"{_json_pointer(error.absolute_path)}: {error.message}"
+        f"{json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
     ]
 
@@ -622,18 +624,6 @@ def _generation_provenance(*, repo_root: Path) -> dict[str, str]:
         "base_commit": _git_commit(repo_root=repo_root),
         "tree_state": _git_tree_state(repo_root=repo_root),
     }
-
-
-def _json_pointer(path_elems: Iterable[Any]) -> str:
-    """Render a validation error path as an RFC6901-style JSON pointer."""
-
-    parts: list[str] = []
-    for part in path_elems:
-        if isinstance(part, int):
-            parts.append(str(part))
-        else:
-            parts.append(str(part).replace("~", "~0").replace("/", "~1"))
-    return "/" + "/".join(parts) if parts else ""
 
 
 __all__ = [

@@ -11,6 +11,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.common.json_pointer import json_pointer
+
 SIMULATION_TRACE_EXPORT_SCHEMA_VERSION = "simulation_trace_export.v1"
 SIMULATION_TRACE_EXPORT_SCHEMA_FILE = (
     Path(__file__).with_name("schemas") / "simulation_trace_export.v1.json"
@@ -120,7 +122,7 @@ def _schema_validation_errors(payload: Mapping[str, Any]) -> list[str]:
 
     validator = Draft202012Validator(load_simulation_trace_export_schema())
     return [
-        f"{_json_pointer(error.absolute_path)}: {error.message}"
+        f"{json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(
             validator.iter_errors(payload),
             key=lambda err: list(err.absolute_path),
@@ -186,14 +188,3 @@ def _export_from_payload(payload: Mapping[str, Any]) -> SimulationTraceExport:
             for frame in payload["frames"]
         ],
     )
-
-
-def _json_pointer(path: Any) -> str:
-    """Render a JSON Schema error path as an RFC6901-style pointer.
-
-    Returns:
-        JSON pointer string for the provided path.
-    """
-
-    parts = [str(part).replace("~", "~0").replace("/", "~1") for part in path]
-    return "/" + "/".join(parts) if parts else "/"

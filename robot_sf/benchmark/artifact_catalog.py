@@ -15,6 +15,8 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 
+from robot_sf.common.json_pointer import json_pointer
+
 ARTIFACT_CATALOG_SCHEMA_VERSION = "artifact_catalog.v1"
 ARTIFACT_CATALOG_SCHEMA_FILE = Path(__file__).with_name("schemas") / "artifact_catalog.v1.json"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -172,7 +174,7 @@ def _schema_validation_issues(payload: Mapping[str, Any]) -> list[ArtifactCatalo
 
     validator = Draft202012Validator(load_artifact_catalog_schema())
     return [
-        ArtifactCatalogIssue(_json_pointer(error.absolute_path), error.message)
+        ArtifactCatalogIssue(json_pointer(error.absolute_path), error.message)
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
     ]
 
@@ -347,13 +349,6 @@ def _as_list(value: Any) -> list[Any]:
     """Return value when it is a list, otherwise an empty list."""
 
     return value if isinstance(value, list) else []
-
-
-def _json_pointer(path: Any) -> str:
-    """Return a JSON pointer for a schema error path."""
-
-    parts = [str(part).replace("~", "~0").replace("/", "~1") for part in path]
-    return "/" + "/".join(parts) if parts else "/"
 
 
 def _catalog_from_payload(payload: Mapping[str, Any]) -> ArtifactCatalog:

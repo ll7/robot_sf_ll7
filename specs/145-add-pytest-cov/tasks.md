@@ -93,77 +93,89 @@
 
 ---
 
-## Phase 5: User Story 3 - Identify Coverage Gaps Automatically (Priority: P3)
+## Phase 5: User Story 3 - Identify Coverage Gaps Automatically (Priority: P3) - Archived
 
-**Goal**: Developers can run a command to see ranked list of coverage gaps with actionable recommendations
+**Descope status**: Not implemented and not currently planned. Issue #3349 records the conservative
+decision to stop advertising this as active roadmap work. The historical task IDs below are retained
+only to explain the original scope; do not treat them as open implementation tasks without a fresh
+issue, acceptance criteria, and validation plan.
 
-**Independent Test**: Run `uv run python scripts/coverage/analyze_gaps.py` and verify output shows top 10 gaps ranked by priority score with file paths, coverage %, and recommendations
+**Original goal**: Developers can run a command to see ranked list of coverage gaps with actionable recommendations
 
-### Implementation for User Story 3
+**Original independent test**: Run `uv run python scripts/coverage/analyze_gaps.py` and verify output shows top 10 gaps ranked by priority score with file paths, coverage %, and recommendations
 
-- [ ] T033 [P] [US3] Implement robot_sf/coverage_tools/gap_analyzer.py with load_coverage(), identify_gaps(), generate_report() methods
-- [ ] T034 [P] [US3] Add CoverageGap, GapAnalysisReport, GapAnalysisConfig entity classes to gap_analyzer.py
-- [ ] T035 [US3] Implement gap priority scoring algorithm (uncovered_lines * location_weight + complexity_adjustment)
-- [ ] T036 [US3] Configure location_weights dict in gap_analyzer.py (gym_env: 1.5, sim: 1.5, nav: 1.4, benchmark: 1.3, render: 1.2)
-- [ ] T037 [US3] Implement terminal format output in report_formatter.py for gap analysis
-- [ ] T038 [US3] Implement JSON format output in report_formatter.py for gap analysis
-- [ ] T039 [US3] Implement markdown format output in report_formatter.py for gap analysis
-- [ ] T040 [P] [US3] Create scripts/coverage/analyze_gaps.py CLI with --coverage-file, --top-n, --min-lines, --output-format, --module-filter arguments
-- [ ] T041 [US3] Add recommendation generation logic to gap_analyzer.py based on file path patterns
-- [ ] T042 [P] [US3] Create tests/coverage_tools/test_gap_analyzer.py with unit tests for gap identification and scoring
-- [ ] T043 [P] [US3] Create tests/coverage_tools/test_report_formatter.py with tests for all output formats
-- [ ] T044 [US3] Add "Coverage Gap Analysis" task to .vscode/tasks.json running analyze_gaps.py
-- [ ] T045 [US3] Update docs/coverage_guide.md with gap analysis usage section and interpretation guide
-- [ ] T046 [US3] Add gap analysis example to quickstart.md with sample output
+### Archived implementation tasks for User Story 3
 
-**Checkpoint**: P3 Complete - Developers can identify and prioritize coverage improvements
+- T033 [P] [US3] Deferred: implement robot_sf/coverage_tools/gap_analyzer.py with load_coverage(), identify_gaps(), generate_report() methods
+- T034 [P] [US3] Deferred: add CoverageGap, GapAnalysisReport, GapAnalysisConfig entity classes to gap_analyzer.py
+- T035 [US3] Deferred: implement gap priority scoring algorithm (uncovered_lines * location_weight + complexity_adjustment)
+- T036 [US3] Deferred: configure location_weights dict in gap_analyzer.py (gym_env: 1.5, sim: 1.5, nav: 1.4, benchmark: 1.3, render: 1.2)
+- T037 [US3] Deferred: implement terminal format output in report_formatter.py for gap analysis
+- T038 [US3] Deferred: implement JSON format output in report_formatter.py for gap analysis
+- T039 [US3] Deferred: implement markdown format output in report_formatter.py for gap analysis
+- T040 [P] [US3] Deferred: create scripts/coverage/analyze_gaps.py CLI with --coverage-file, --top-n, --min-lines, --output-format, --module-filter arguments
+- T041 [US3] Deferred: add recommendation generation logic to gap_analyzer.py based on file path patterns
+- T042 [P] [US3] Deferred: create tests/coverage_tools/test_gap_analyzer.py with unit tests for gap identification and scoring
+- T043 [P] [US3] Deferred: create tests/coverage_tools/test_report_formatter.py with tests for all output formats
+- T044 [US3] Deferred: add "Coverage Gap Analysis" task to .vscode/tasks.json running analyze_gaps.py
+- T045 [US3] Deferred: update docs/coverage_guide.md with gap analysis usage section and interpretation guide
+- T046 [US3] Deferred: add gap analysis example to quickstart.md with sample output
+
+**Checkpoint**: Archived, not complete - gap analysis is not implemented.
 
 ---
 
-## Phase 6: User Story 4 - Track Quality Metrics Over Time (Priority: P4)
+## Phase 6: User Story 4 - Track Quality Metrics Over Time (Priority: P4) - Archived
 
-**Goal**: Maintainers can view historical coverage trends and understand quality evolution over time
+**Descope status**: Not implemented and not currently planned. Issue #3349 records the conservative
+decision to stop advertising this as active roadmap work. The historical task IDs below are retained
+only to explain the original scope; do not treat them as open implementation tasks without a fresh
+issue, acceptance criteria, and validation plan.
 
-**Independent Test**: Run coverage collection multiple times, run `uv run python scripts/coverage/track_trends.py report`, verify output shows trend statistics and direction
+**Original goal**: Maintainers can view historical coverage trends and understand quality evolution over time
 
-### Implementation for User Story 4
+**Original independent test**: Run coverage collection multiple times, run `uv run python scripts/coverage/track_trends.py report`, verify output shows trend statistics and direction
 
-- [ ] T047 [P] [US4] Implement robot_sf/coverage_tools/trend_tracker.py with load_trend(), append_snapshot(), apply_retention(), calculate_statistics() methods
-- [ ] T048 [P] [US4] Add CoverageTrend, TrendConfig, TrendVisualization entity classes to trend_tracker.py
-- [ ] T049 [US4] Implement JSONL storage format with one CoverageSnapshot per line in trend_tracker.py
-- [ ] T050 [US4] Implement retention policy logic (prune snapshots older than retention_commits or retention_days)
-- [ ] T051 [US4] Implement trend direction calculation (improving/stable/degrading based on linear regression)
-- [ ] T052 [US4] Implement trend rate calculation (percentage points per week)
-- [ ] T053 [P] [US4] Create scripts/coverage/track_trends.py CLI with collect, visualize, report subcommands
-- [ ] T054 [US4] Implement collect subcommand with --coverage-file, --history-file, --branch, --commit arguments
-- [ ] T055 [US4] Implement visualize subcommand with matplotlib line graph generation (--output-file, --plot-type, --time-range, --modules)
-- [ ] T056 [US4] Implement report subcommand with --history-file, --output-format arguments
-- [ ] T057 [US4] Add terminal format trend report output (trend direction, rate, date range)
-- [ ] T058 [US4] Add JSON format trend report output (full statistics)
-- [ ] T059 [US4] Add markdown format trend report output (table format)
-- [ ] T060 [P] [US4] Create tests/coverage_tools/test_trend_tracker.py with unit tests for JSONL operations and retention
-- [ ] T061 [US4] Add trend collection to .github/workflows/ci.yml for main branch (after test success)
-- [ ] T062 [US4] Configure trend storage path in ci.yml (results/coverage_history.jsonl as artifact)
-- [ ] T063 [US4] Update docs/coverage_guide.md with trend tracking section and visualization examples
-- [ ] T064 [US4] Add trend tracking example to quickstart.md
+### Archived implementation tasks for User Story 4
 
-**Checkpoint**: P4 Complete - All user stories implemented, full coverage monitoring suite available
+- T047 [P] [US4] Deferred: implement robot_sf/coverage_tools/trend_tracker.py with load_trend(), append_snapshot(), apply_retention(), calculate_statistics() methods
+- T048 [P] [US4] Deferred: add CoverageTrend, TrendConfig, TrendVisualization entity classes to trend_tracker.py
+- T049 [US4] Deferred: implement JSONL storage format with one CoverageSnapshot per line in trend_tracker.py
+- T050 [US4] Deferred: implement retention policy logic (prune snapshots older than retention_commits or retention_days)
+- T051 [US4] Deferred: implement trend direction calculation (improving/stable/degrading based on linear regression)
+- T052 [US4] Deferred: implement trend rate calculation (percentage points per week)
+- T053 [P] [US4] Deferred: create scripts/coverage/track_trends.py CLI with collect, visualize, report subcommands
+- T054 [US4] Deferred: implement collect subcommand with --coverage-file, --history-file, --branch, --commit arguments
+- T055 [US4] Deferred: implement visualize subcommand with matplotlib line graph generation (--output-file, --plot-type, --time-range, --modules)
+- T056 [US4] Deferred: implement report subcommand with --history-file, --output-format arguments
+- T057 [US4] Deferred: add terminal format trend report output (trend direction, rate, date range)
+- T058 [US4] Deferred: add JSON format trend report output (full statistics)
+- T059 [US4] Deferred: add markdown format trend report output (table format)
+- T060 [P] [US4] Deferred: create tests/coverage_tools/test_trend_tracker.py with unit tests for JSONL operations and retention
+- T061 [US4] Deferred: add trend collection to .github/workflows/ci.yml for main branch (after test success)
+- T062 [US4] Deferred: configure trend storage path in ci.yml (results/coverage_history.jsonl as artifact)
+- T063 [US4] Deferred: update docs/coverage_guide.md with trend tracking section and visualization examples
+- T064 [US4] Deferred: add trend tracking example to quickstart.md
+
+**Checkpoint**: Archived, not complete - trend tracking is not implemented.
 
 ---
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-**Purpose**: Documentation, testing, and final integration across all user stories
+**Purpose**: Documentation, testing, and final integration for implemented coverage scope only.
+Items that depended on archived US3/US4 work are retained as deferred historical scope, not active
+tasks.
 
-- [ ] T065 [P] Create comprehensive docs/coverage_guide.md with all features, troubleshooting, and best practices
+- [ ] T065 [P] Create comprehensive docs/coverage_guide.md for implemented features, troubleshooting, and best practices
 - [ ] T066 [P] Update docs/README.md to link to coverage_guide.md in appropriate section
 - [ ] T067 [P] Create examples/coverage_example.py demonstrating programmatic use of coverage_tools modules
-- [ ] T068 Run all validation scripts to ensure coverage collection, CI integration, gap analysis, and trends work end-to-end
+- T068 Deferred: run all validation scripts to ensure coverage collection, CI integration, gap analysis, and trends work end-to-end
 - [ ] T069 [P] Add CHANGELOG.md entry for pytest-cov integration feature
 - [ ] T070 [P] Update pyproject.toml project version if needed (following semantic versioning)
 - [ ] T071 Verify all constitutional principles still satisfied (run through constitution checklist)
 - [ ] T072 Run quality gates: Install Dependencies → Ruff: Format and Fix → Check Code Quality → Type Check → Run Tests
-- [ ] T073 Final smoke test: Complete workflow from test run → gap analysis → trend collection → CI warning simulation
+- T073 Deferred: final smoke test for complete workflow from test run → gap analysis → trend collection → CI warning simulation
 
 ---
 
@@ -175,23 +187,23 @@
 - **Foundational (Phase 2)**: Depends on Setup completion (T001-T005) - BLOCKS all user stories
 - **User Story 1 (Phase 3)**: Depends on Foundational (T006-T011) - Can start after foundation ready
 - **User Story 2 (Phase 4)**: Depends on Foundational - Can start in parallel with US1 (uses same coverage.json output)
-- **User Story 3 (Phase 5)**: Depends on Foundational - Can start in parallel with US1/US2 (uses same coverage.json output)
-- **User Story 4 (Phase 6)**: Depends on Foundational - Can start in parallel with US1/US2/US3
-- **Polish (Phase 7)**: Depends on desired user stories being complete
+- **User Story 3 (Phase 5)**: Archived by issue #3349; not currently planned
+- **User Story 4 (Phase 6)**: Archived by issue #3349; not currently planned
+- **Polish (Phase 7)**: Applies only to the implemented US1/US2 scope unless a future issue reopens archived scope
 
 ### User Story Dependencies
 
 - **User Story 1 (P1)**: Independent - only depends on Foundational phase
 - **User Story 2 (P2)**: Independent - does not depend on US1, can run in parallel
-- **User Story 3 (P3)**: Independent - does not depend on US1/US2, can run in parallel
-- **User Story 4 (P4)**: Independent - does not depend on US1/US2/US3, can run in parallel
+- **User Story 3 (P3)**: Archived; not an active task set
+- **User Story 4 (P4)**: Archived; not an active task set
 
 ### Within Each User Story
 
 - US1: Configuration → VS Code tasks → Validation → Documentation
 - US2: Library modules [P] → CLI script → CI workflow → Tests [P] → Documentation
-- US3: Library modules [P] → CLI script → Tests [P] → VS Code task → Documentation
-- US4: Library modules [P] → CLI script → Visualization → CI integration → Tests [P] → Documentation
+- US3: Archived; no current implementation sequence
+- US4: Archived; no current implementation sequence
 
 ### Parallel Opportunities
 
@@ -209,14 +221,10 @@
 - T030 (tests) can run in parallel with implementation
 
 **User Story 3**:
-- T033, T034, T040 (library module and CLI) can run in parallel
-- T037-T039 (output formats) can run in parallel
-- T042, T043 (tests) can run in parallel with implementation
+- Archived; no active parallel work is planned
 
 **User Story 4**:
-- T047, T048, T053 (library module and CLI) can run in parallel
-- T057-T059 (output formats) can run in parallel
-- T060 (tests) can run in parallel with implementation
+- Archived; no active parallel work is planned
 
 **Polish Phase**:
 - T065, T066, T067, T069, T070 (documentation and metadata) can run in parallel
@@ -255,9 +263,10 @@ Task T030: "Create tests/coverage_tools/test_baseline_comparator.py"
 5. **Demo**: Show developers coverage working automatically
 6. Estimated total: **~4-6 hours for working MVP**
 
-### Incremental Delivery (Recommended)
+### Implemented Delivery
 
-**Why**: Each user story adds value independently, can be deployed/tested separately
+**Status**: The implemented scope is automatic coverage collection plus baseline comparison
+warnings. Archived US3/US4 ideas are not part of the active delivery sequence.
 
 1. **MVP Release**: US1 only (automatic coverage collection)
    - Developers start seeing coverage immediately
@@ -265,27 +274,20 @@ Task T030: "Create tests/coverage_tools/test_baseline_comparator.py"
 2. **V2 Release**: Add US2 (CI warnings)
    - PRs now get coverage feedback
    - Value: Prevent coverage regression
-3. **V3 Release**: Add US3 (gap analysis)
-   - Developers can identify improvement areas
-   - Value: Prioritized testing guidance
-4. **V4 Release**: Add US4 (trend tracking)
-   - Maintainers see long-term quality trends
-   - Value: Project health monitoring
+3. **Archived scope**: US3 gap analysis, US4 trend tracking, automated prioritization, and badges
+   require a future issue before implementation.
 
-### Parallel Team Strategy
+### Historical Parallel Team Strategy
 
-With 2-3 developers after foundation completes:
+The original parallelization plan below no longer applies to archived US3/US4 work. It is retained
+only as historical context for the implemented US1/US2 delivery.
 
 1. **Team completes Setup + Foundational together** (T001-T011)
 2. **Then split**:
    - Developer A: User Story 1 (T012-T019) - 2-3 hours
    - Developer B: User Story 2 (T020-T032) - 4-5 hours
-   - Developer C: User Story 3 (T033-T046) - 4-5 hours
-3. **Later (after US1-3)**:
-   - Developer D: User Story 4 (T047-T064) - 5-6 hours
-4. **Finally together**: Polish phase (T065-T073)
-
-**Total parallel time**: ~1-2 days with 3 developers vs ~3-4 days sequential
+3. **Archived scope**: User Story 3 (T033-T046) and User Story 4 (T047-T064) are not planned.
+4. **Finally together**: Polish only the implemented scope.
 
 ---
 
@@ -295,10 +297,10 @@ With 2-3 developers after foundation completes:
 - **Foundational**: 6 tasks (CRITICAL - blocks all stories)
 - **User Story 1 (P1)**: 8 tasks (MVP)
 - **User Story 2 (P2)**: 13 tasks
-- **User Story 3 (P3)**: 14 tasks
-- **User Story 4 (P4)**: 18 tasks
-- **Polish**: 9 tasks
-- **Total**: 73 tasks
+- **User Story 3 (P3)**: 14 archived tasks
+- **User Story 4 (P4)**: 18 archived tasks
+- **Polish**: 7 active tasks, 2 deferred tasks
+- **Total historical task IDs**: 73 tasks
 
 ### Parallel Opportunities
 
@@ -306,10 +308,10 @@ With 2-3 developers after foundation completes:
 - Foundational: 4-5 parallel tasks
 - US1: 3 parallel tasks
 - US2: 7 parallel tasks
-- US3: 6 parallel tasks
-- US4: 7 parallel tasks
-- Polish: 5 parallel tasks
-- **Total parallel opportunities**: ~37 tasks (~50%)
+- US3: archived
+- US4: archived
+- Polish: 5 active parallel tasks
+- **Active parallel opportunities**: setup, foundational, US1, US2, and implemented-scope polish only
 
 ### Suggested MVP Scope
 
@@ -325,7 +327,8 @@ With 2-3 developers after foundation completes:
 
 - [P] tasks = different files, no dependencies, can run in parallel
 - [Story] label (US1, US2, US3, US4) maps task to specific user story for traceability
-- Each user story is independently completable and testable
+- US3 and US4 are archived by issue #3349 and are not active implementation tasks
+- Implemented user stories are independently completable and testable
 - Commit after each task or logical group of related tasks
 - Stop at any checkpoint to validate story independently
 - All library code in robot_sf/coverage_tools/ follows library-first principle (Principle XI)

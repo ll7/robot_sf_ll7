@@ -3,7 +3,13 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
@@ -18,11 +24,24 @@ env:
   SDL_VIDEODRIVER: dummy
   MPLBACKEND: Agg
   PYGAME_HIDE_SUPPORT_PROMPT: "1"
+  # Use CPython 3.12+ sys.monitoring backend for coverage: dramatically lower
+  # instrumentation overhead than the default trace-based core.
+  COVERAGE_CORE: sysmon
 
 jobs:
   fast-feedback:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # On pull requests, split the suite into parallel shards (pytest-split) for
+    # fast feedback. On main/workflow_dispatch run a single full pass so the
+    # advisory coverage baseline stays accurate without cross-shard combining.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ github.event_name == 'pull_request' && fromJSON('[1, 2, 3, 4]') || fromJSON('[1]') }}
+    env:
+      PYTEST_SHARD_COUNT: ${{ github.event_name == 'pull_request' && '4' || '1' }}
+      PYTEST_SHARD_INDEX: ${{ matrix.shard }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -38,16 +57,21 @@ jobs:
           restore-keys: |
             pytest-${{ runner.os }}-
 
+      # Lint and typecheck are shard-independent; run them once (shard 1 only)
+      # to avoid quadruplicated annotations on pull-request shard matrices.
       - name: Lint
+        if: ${{ matrix.shard == 1 }}
         run: scripts/dev/ci_driver.sh lint
 
       - name: Type check
+        if: ${{ matrix.shard == 1 }}
         run: scripts/dev/ci_driver.sh typecheck
 
       - name: Unit tests
         run: scripts/dev/ci_driver.sh test
 
       - name: Restore coverage baseline
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: output/coverage/.coverage-baseline.json
@@ -56,6 +80,7 @@ jobs:
             coverage-baseline-main
 
       - name: Compare coverage with baseline
+        if: ${{ github.event_name != 'pull_request' }}
         continue-on-error: true
         run: |
           if [ -f output/coverage/.coverage-baseline.json ]; then
@@ -84,7 +109,7 @@ jobs:
           key: coverage-baseline-${{ github.ref_name }}-${{ github.sha }}
 
       - name: Upload coverage reports
-        if: failure() || github.ref == 'refs/heads/main'
+        if: ${{ github.event_name != 'pull_request' && (failure() || github.ref == 'refs/heads/main') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-reports

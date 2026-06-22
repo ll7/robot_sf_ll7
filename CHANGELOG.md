@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now carries a `## Clarity` rule, `AGENTS.md` scopes token-efficiency to agent-internal surfaces
   (clarity wins on human-facing surfaces), and the README, docs index, and CONTRIBUTING checklist
   link the glossary so jargon is defined on first use.
+* Added a diagnostic-only multi-robot research smoke foothold (#3069): a small
+  runnable scenario config (`configs/multi_robot/issue_3069_smoke.yaml`), a smoke
+  runner (`scripts/validation/run_multi_robot_smoke_issue_3069.py`) that rolls out
+  the multi-robot environment via `make_multi_robot_env` and reports per-agent
+  inter-robot collision and goal-progress telemetry from the environment's native
+  `info["agents"]` metadata, and a guard test
+  (`tests/gym_env/test_multi_robot_smoke_issue_3069.py`). The report carries an
+  explicit `claim_boundary: diagnostic_only` / `evidence_tier: smoke` and
+  `multi_robot_benchmark_claim: false`; it proves only that the multi-robot path
+  runs end-to-end and is not a fleet-scale, MAPPO, or paper-facing claim (#3069).
 * Added durable issue-2904 forecast-risk eligibility fixtures
   (`tests/fixtures/benchmark/forecast_risk_eligibility/`) and the regenerated
   `ForecastCalibrationReport.v1` evidence bundle under
@@ -29,6 +39,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed `scripts/tools/issue_template_audit.py` so it recognizes the repo's own YAML issue
+  forms (`epic`/`execution-run`/`test-debt`/`blocked-external-artifact`) and agent-authored
+  bodies instead of only the markdown templates. The audit previously matched a single strict
+  12-section markdown contract and reported 8–12 false "missing section" gaps on nearly every
+  issue filed from the leaner YAML forms. The auditor now (a) maps heading variants such as
+  `Scope and non-goals`/`Out of scope`/`Scope / decision needed`, `Acceptance criteria`/
+  `Acceptance / stop rule`/`Accept / revise / reject`, `Estimate`/`Estimate metadata`,
+  `Validation commands`, and `Question / Goal`/`Background`/`Summary`/`What to build` to their
+  canonical sections; (b) strips trailing parenthetical qualifiers (e.g.
+  `Acceptance criteria (mirrors body)`); (c) credits `###` contract subheadings carried inside
+  the appended `agent-exec-spec` block; and (d) audits leaner-template issues against a shared
+  agent-ready core (`Goal / Problem`, `Scope`, `Definition of Done`, `Validation / Testing`)
+  while bare/markdown-style bodies keep the strict full 12-section contract. A standalone effort
+  estimate is intentionally not in the core: leaner/agent issues state effort under
+  `Project Metadata` or defer it on blocked work, and the agent-exec-spec agents execute from
+  carries no estimate. Across the 91 open issues this cut spurious "missing section" findings
+  from 762 (≈87 issues, many with 8–12 false gaps) to ~30 (26 issues, genuinely-absent
+  sections), with 65 issues now fully clean. The archetype-metadata audit and
+  `audit_archetype_metadata` API are unchanged.
+* Expanded the canonical issue-archetype taxonomy in
+  `docs/context/issue_1512_issue_archetypes.md` and the validator
+  (`scripts/tools/issue_template_audit.py`) to bless the work-type archetypes the issue
+  automation already emits — `implementation`, `test`, `refactor`, `data` — and to accept the
+  deprecated spellings `agent_task` (→ `implementation`) and the evidence tier `proposal`
+  (→ `idea`) on read without rewriting issue bodies. This clears the validator's
+  invalid-metadata findings on the four affected open issues (#2000, #3069, #3071, #3206)
+  without per-issue edits, and wires `implementation`/`data` into
+  `issue_archetype_sync.py`'s `SAFE_ARCHETYPE_LABEL_MAP` (`type:implementation`/`type:data`,
+  both existing labels).
 * Fixed `scripts/validation/validate_forecast_risk_calibration_filter.py` so its
   `_any_eligible_for_risk_scoring` gate recognizes the canonical `eligible_analysis_only` token
   emitted by `build_forecast_calibration_report`. The gate previously matched only the legacy
@@ -38,6 +77,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Cut pull-request CI wall-clock by parallelizing the `fast-feedback` test phase. Pull requests now
+  split the suite into 4 `pytest-split` shards (a matrix on the existing job, so the CI topology is
+  unchanged) while `main`/`workflow_dispatch` keep a single full pass so the advisory coverage
+  baseline stays accurate without cross-shard combining. The shared `run_tests_parallel.sh` wrapper
+  gained `PYTEST_SHARD_COUNT`/`PYTEST_SHARD_INDEX` env hooks (`--splits`/`--group`); coverage is
+  skipped while sharding. Also enabled the CPython 3.12+ `COVERAGE_CORE=sysmon` backend to lower
+  coverage instrumentation overhead, and added a docs-only `paths-ignore` filter so Markdown/`docs/`
+  changes no longer trigger the full CI workflow. Adds `pytest-split` to the `dev` dependency group.
 * Removed redundant Black/autopep8 formatter configuration and the unused Black optional
   development dependency; Ruff format remains the canonical formatter.
 * Extended the issue-1515 hybrid-evidence matrix validator with an opt-in git-history proof path:

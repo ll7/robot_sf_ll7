@@ -31,7 +31,16 @@ EVIDENCE_TIER = "diagnostic-only"
 DENOMINATOR_POLICY = "counterfactual_pairs_not_benchmark_denominator"
 GENERATOR_ID = "create_counterfactual_scenario_pair"
 _SUCCESS_EVIDENCE_CANDIDATE = "eligible_success_evidence_candidate"
-_SUPPORTED_FEATURES = frozenset({"robot_route_offset", "occluder_timing_offset"})
+_SUPPORTED_FEATURES = frozenset(
+    {
+        "occluder_timing_offset",
+        "pedestrian_route_offset",
+        "robot_route_offset",
+        "single_pedestrian_speed_offset",
+        "single_pedestrian_start_delay_offset",
+        "single_pedestrian_wait_duration_offset",
+    },
+)
 _FEATURE_ALIASES = {
     "occluder_timing": "occluder_timing_offset",
 }
@@ -50,6 +59,24 @@ _MECHANISM_TAXONOMY_BY_FEATURE = {
         "mechanism_hypothesis": (
             "A bounded robot-route offset changes clearance pressure while holding the scenario, "
             "planner, and seed fixed."
+        ),
+        "expected_metric_direction": {
+            "clearance_min_distance_m": "direction_depends_on_offset_sign",
+            "collision_or_near_miss_risk": "may_increase_when_offset_reduces_clearance",
+            "success": "no_directional_claim_from_pair_manifest",
+        },
+        "validity_constraints": [
+            "baseline and intervention must both pass perturbation preflight",
+            "seed and source scenario must remain unchanged",
+            "single pair is a mechanism hypothesis input, not causal evidence",
+        ],
+    },
+    "pedestrian_route_offset": {
+        "label": "clearance_pressure",
+        "label_source": MECHANISM_TAXONOMY_SCHEMA_VERSION,
+        "mechanism_hypothesis": (
+            "A bounded pedestrian-route offset changes clearance pressure while holding the "
+            "source scenario, planner, and seed fixed."
         ),
         "expected_metric_direction": {
             "clearance_min_distance_m": "direction_depends_on_offset_sign",
@@ -81,6 +108,60 @@ _MECHANISM_TAXONOMY_BY_FEATURE = {
             "single pair is a diagnostic input, not benchmark or causal evidence",
         ],
     },
+    "single_pedestrian_speed_offset": {
+        "label": "bottleneck_negotiation",
+        "label_source": MECHANISM_TAXONOMY_SCHEMA_VERSION,
+        "mechanism_hypothesis": (
+            "A bounded single-pedestrian speed offset changes crossing timing while holding the "
+            "source scenario, planner, and seed fixed."
+        ),
+        "expected_metric_direction": {
+            "time_to_conflict_zone_s": "direction_depends_on_speed_delta_sign",
+            "collision_or_near_miss_risk": "may_increase_when_arrival_time_aligns_with_robot",
+            "success": "no_directional_claim_from_pair_manifest",
+        },
+        "validity_constraints": [
+            "baseline and intervention must both pass perturbation preflight",
+            "seed and source scenario must remain unchanged",
+            "single pair is a mechanism hypothesis input, not causal evidence",
+        ],
+    },
+    "single_pedestrian_start_delay_offset": {
+        "label": "bottleneck_negotiation",
+        "label_source": MECHANISM_TAXONOMY_SCHEMA_VERSION,
+        "mechanism_hypothesis": (
+            "A bounded single-pedestrian start-delay offset changes interaction timing while "
+            "holding the source scenario, planner, and seed fixed."
+        ),
+        "expected_metric_direction": {
+            "time_to_conflict_zone_s": "direction_depends_on_delay_delta_sign",
+            "collision_or_near_miss_risk": "may_increase_when_arrival_time_aligns_with_robot",
+            "success": "no_directional_claim_from_pair_manifest",
+        },
+        "validity_constraints": [
+            "baseline and intervention must both pass perturbation preflight",
+            "seed and source scenario must remain unchanged",
+            "single pair is a mechanism hypothesis input, not causal evidence",
+        ],
+    },
+    "single_pedestrian_wait_duration_offset": {
+        "label": "signal_compliance",
+        "label_source": MECHANISM_TAXONOMY_SCHEMA_VERSION,
+        "mechanism_hypothesis": (
+            "A bounded authored wait-duration offset changes yielding or waiting timing while "
+            "holding the source scenario, planner, and seed fixed."
+        ),
+        "expected_metric_direction": {
+            "forced_wait_duration_s": "direction_depends_on_wait_delta_sign",
+            "collision_or_near_miss_risk": "may_increase_when_release_time_aligns_with_robot",
+            "success": "no_directional_claim_from_pair_manifest",
+        },
+        "validity_constraints": [
+            "baseline and intervention must both pass perturbation preflight",
+            "seed and source scenario must remain unchanged",
+            "single pair is a mechanism hypothesis input, not causal evidence",
+        ],
+    },
 }
 
 if TYPE_CHECKING:
@@ -98,17 +179,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--feature",
         required=True,
-        help=(
-            "Perturbation family to vary. Supported: robot_route_offset, occluder_timing_offset."
-        ),
+        help=("Perturbation family to vary. Supported: " + ", ".join(sorted(_SUPPORTED_FEATURES))),
     )
     parser.add_argument(
         "--magnitude",
         type=float,
         required=True,
         help=(
-            "Feature magnitude. For robot_route_offset this is dx_m in meters; "
-            "for occluder_timing_offset this is dt_s in seconds."
+            "Feature magnitude. Route offsets use dx_m in meters; occluder-timing and "
+            "single-pedestrian start-delay offsets use dt_s in seconds; speed and "
+            "wait-duration offsets use their family-specific signed delta."
         ),
     )
     parser.add_argument(
@@ -170,11 +250,7 @@ def create_pair_manifest(
             "baseline_seeds": [seed],
             "replay_seed_policy": "explicit",
         },
-        "validity": {
-            "require_scenario_certification": True,
-            "max_route_offset_m": abs(magnitude),
-            "invalid_variant_evidence_policy": "exclude_from_success_evidence",
-        },
+        "validity": _validity_policy(feature=family.name, magnitude=magnitude),
         "variants": [
             {
                 "variant_id": baseline_variant_id,
@@ -274,8 +350,8 @@ def _intervention_parameters(
         raise CounterfactualPairError("magnitude must be finite")
     if magnitude == 0.0:
         raise CounterfactualPairError("magnitude must be non-zero for a counterfactual pair")
-    if feature == "robot_route_offset":
-        max_magnitude = abs(magnitude)
+    max_magnitude = abs(magnitude)
+    if feature in {"pedestrian_route_offset", "robot_route_offset"}:
         return {
             "dx_m": magnitude,
             "dy_m": 0.0,
@@ -284,13 +360,52 @@ def _intervention_parameters(
     if feature == "occluder_timing_offset":
         if not isinstance(pedestrian_id, str) or not pedestrian_id.strip():
             raise CounterfactualPairError("occluder_timing_offset requires --pedestrian-id")
-        max_abs_dt_s = abs(magnitude)
         return {
             "dt_s": magnitude,
-            "max_abs_dt_s": max_abs_dt_s,
+            "max_abs_dt_s": max_magnitude,
             "pedestrian_id": pedestrian_id.strip(),
         }
+    if feature == "single_pedestrian_start_delay_offset":
+        return {
+            "dt_s": magnitude,
+            "max_abs_dt_s": max_magnitude,
+        }
+    if feature == "single_pedestrian_speed_offset":
+        return {
+            "speed_delta_m_s": magnitude,
+            "max_abs_speed_delta_m_s": max_magnitude,
+        }
+    if feature == "single_pedestrian_wait_duration_offset":
+        return {
+            "wait_delta_s": magnitude,
+            "max_abs_wait_delta_s": max_magnitude,
+        }
     raise CounterfactualPairError(f"unsupported counterfactual feature: {feature}")
+
+
+def _validity_policy(*, feature: str, magnitude: float) -> dict[str, Any]:
+    """Return manifest-level validity caps for the selected perturbation family."""
+    max_magnitude = abs(magnitude)
+    validity: dict[str, Any] = {
+        "require_scenario_certification": True,
+        # The public perturbation-manifest schema requires this cap even for non-route families.
+        "max_route_offset_m": max_magnitude,
+        "invalid_variant_evidence_policy": "exclude_from_success_evidence",
+    }
+    if feature in {"pedestrian_route_offset", "robot_route_offset"}:
+        validity["max_route_offset_m"] = max_magnitude
+    elif feature == "single_pedestrian_start_delay_offset":
+        validity["max_start_delay_offset_s"] = max_magnitude
+    elif feature == "single_pedestrian_speed_offset":
+        validity["max_single_pedestrian_speed_delta_m_s"] = max_magnitude
+    elif feature == "single_pedestrian_wait_duration_offset":
+        validity["max_wait_duration_offset_s"] = max_magnitude
+    elif feature == "occluder_timing_offset":
+        # The occluder-timing cap is added by _validity_bounds_for_feature.
+        pass
+    else:
+        raise CounterfactualPairError(f"unsupported counterfactual feature: {feature}")
+    return validity
 
 
 def _validity_bounds_for_feature(feature: str, magnitude: float) -> dict[str, float]:

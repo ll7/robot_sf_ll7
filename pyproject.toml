@@ -477,6 +477,7 @@ dev = [
     "setuptools>=70.0.0",
     "pylint>=3.3.4",
     "pytest-xdist>=3.6.1",
+    "pytest-split>=0.9.0",
 ]
 docs = [
     "myst-parser>=4.0.0",

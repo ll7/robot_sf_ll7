@@ -1,0 +1,84 @@
+{
+  "status": "diagnostic_local_pilot_complete",
+  "evidence_tier": "diagnostic-only, not benchmark/causal/paper-grade",
+  "claim_boundary": "diagnostic counterfactual sensitivity input/result for the occluder-timing family; not benchmark-strength, causal, or paper-facing evidence",
+  "issue": "#3372",
+  "parent_issue": "#3369",
+  "provenance": {
+    "base_commit": "877b603831309af9ddb93df49093096521209db4",
+    "manifest": "configs/scenarios/perturbations/issue_3369_occluder_timing_pilot_v1.yaml",
+    "scenario_fixture": "configs/scenarios/single/issue_2756_occluded_emergence_live.yaml",
+    "planner": "goal",
+    "seed": 111,
+    "seed_limit": 1,
+    "horizon": 80,
+    "dt": 0.1,
+    "preflight_schema_version": "scenario_perturbation_preflight.v1",
+    "materialization_schema_version": "scenario_perturbation_pilot_matrix.v1",
+    "trace_response_schema_version": "scenario_perturbation_trace_response.v1"
+  },
+  "local_output_note": "<run-dir> is any git-ignored local directory (the run used a path under the ignored output/ tree). The materialized matrix and raw trace_response.json/.md are reproducible from the tracked manifest and these commands and are not mirrored here.",
+  "commands": [
+    "uv run python scripts/tools/preflight_scenario_perturbations.py configs/scenarios/perturbations/issue_3369_occluder_timing_pilot_v1.yaml --output <run-dir>/preflight.json",
+    "uv run python scripts/tools/materialize_scenario_perturbation_pilot.py configs/scenarios/perturbations/issue_3369_occluder_timing_pilot_v1.yaml --output-dir <run-dir>/matrix",
+    "uv run --extra training python scripts/validation/run_scenario_perturbation_trace_response.py configs/scenarios/perturbations/issue_3369_occluder_timing_pilot_v1.yaml --materialized-output-dir <run-dir>/matrix --output <run-dir>/trace_response.json --markdown-output <run-dir>/trace_response.md --source-scenario-id issue_2756_occluded_emergence --perturbed-family occluder_timing_offset --perturbed-variant-id issue_2756_occluded_emergence_occluder_timing_h1_p050 --planner goal --seed-limit 1 --horizon 80"
+  ],
+  "preflight": {
+    "included_variants": [
+      "issue_2756_occluded_emergence_noop",
+      "issue_2756_occluded_emergence_occluder_timing_h1_p050"
+    ],
+    "excluded_variants": [],
+    "noop_validity_status": "valid",
+    "perturbed_validity_status": "valid",
+    "perturbed_reasons": ["dynamic_interaction_present"]
+  },
+  "rows": [
+    {
+      "row": "noop_baseline",
+      "variant_id": "issue_2756_occluded_emergence_noop",
+      "family": "noop",
+      "planner": "goal",
+      "seed": 111,
+      "row_status": "valid_diagnostic_result",
+      "pair_status": "completed",
+      "termination_reason": "max_steps",
+      "closest_approach": {
+        "step": 79,
+        "time_s": 8.0,
+        "clearance_m": 20.917907,
+        "center_distance_m": 22.317907
+      }
+    },
+    {
+      "row": "occluder_timing_offset_h1_p050",
+      "variant_id": "issue_2756_occluded_emergence_occluder_timing_h1_p050",
+      "family": "occluder_timing_offset",
+      "parameters": {"dt_s": 0.5, "max_abs_dt_s": 0.5, "pedestrian_id": "h1"},
+      "planner": "goal",
+      "seed": 111,
+      "row_status": "valid_diagnostic_result",
+      "pair_status": "completed",
+      "termination_reason": "max_steps",
+      "closest_approach": {
+        "step": 79,
+        "time_s": 8.0,
+        "clearance_m": 25.517635,
+        "center_distance_m": 26.917635
+      }
+    }
+  ],
+  "pair_delta": {
+    "planner": "goal",
+    "pairs": 1,
+    "status_counts": {"completed": 1},
+    "closest_approach_delta": {
+      "clearance_m": 4.599728,
+      "center_distance_m": 4.599728,
+      "time_s": 0.0,
+      "goal_distance_m": 0.0,
+      "progress_m": 0.0
+    },
+    "interpretation": "A +0.5 s occluder release delay increased the robot closest-approach clearance to the emerging pedestrian by ~4.60 m under the goal planner at seed 111, with closest-approach timing unchanged (step 79). Single seed and single planner; diagnostic-only sensitivity input, not a causal or benchmark claim."
+  }
+}

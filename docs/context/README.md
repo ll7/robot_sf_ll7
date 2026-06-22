@@ -90,7 +90,12 @@ knowledge, not every transient iteration detail.
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
+* Researcher's Guide (question → evidence tier → manifest → validation → publish):
+  [docs/researchers_guide.md](../researchers_guide.md)
+* Research-engine month-one synthesis (#3057 landed-vs-pending, synthesis only):
+  [research_month_one_synthesis_2026-06.md](research_month_one_synthesis_2026-06.md)
 * Issue #2946 mechanism-evidence figure pack: [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md)
+* Issue #3279 Social Mini-Game scenario families (v0): [issue_3279_social_mini_game_families.md](issue_3279_social_mini_game_families.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Skill Consolidation Audit Issue #3189 2026-06-20:

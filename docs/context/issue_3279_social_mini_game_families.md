@@ -64,7 +64,7 @@ behavior; nothing here is planner-ranking, transfer, or benchmark-strength mecha
 - `uv run python -c "import robot_sf.benchmark.scenario_generator"` → import OK
 - `python scripts/demo/run_robot_sf_smoke.py --matrix configs/scenarios/sets/issue_3279_social_mini_game_families_v0.yaml --planners simple_policy --horizon 30 --workers 1 --output-root output/benchmarks/issue_3279_social_mini_game_smoke` → passed, 5 episode records
 
-## Validation runs (2026-06-22, Issue #3423 update)
+## Validation Runs (2026-06-22, Issue #3423 Update)
 
 - `uv run pytest tests/benchmark/test_social_mini_game_families_issue_3279.py -q`
   validates the control metadata, blind-corner L-corner equivalent, deterministic generation, and

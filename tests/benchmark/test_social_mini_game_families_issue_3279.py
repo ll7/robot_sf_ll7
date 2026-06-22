@@ -120,10 +120,10 @@ def test_blind_corner_declares_l_corner_equivalent_and_generates_obstacles() -> 
 
     generated = generate_scenario(blind, blind["seeds"][0])
     vertical_segments = [
-        obstacle for obstacle in generated.obstacles if obstacle[0] == obstacle[2]
+        obstacle for obstacle in generated.obstacles if np.isclose(obstacle[0], obstacle[2])
     ]
     horizontal_segments = [
-        obstacle for obstacle in generated.obstacles if obstacle[1] == obstacle[3]
+        obstacle for obstacle in generated.obstacles if np.isclose(obstacle[1], obstacle[3])
     ]
     assert vertical_segments, "blind-corner equivalent should include vertical occluder geometry"
     assert horizontal_segments, "blind-corner equivalent should include horizontal occluder geometry"

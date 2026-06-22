@@ -226,6 +226,10 @@ knowledge, not every transient iteration detail.
   ([JSON report](evidence/issue_2784_dissertation_gap_report/gap_report.json),
   [Markdown report](evidence/issue_2784_dissertation_gap_report/gap_report.md),
   [validation test](../../tests/docs/test_dissertation_gap_report.py))
+* Issue #3426 result-card generator:
+  [issue_3426_result_cards.md](issue_3426_result_cards.md)
+  records the fail-closed bridge from accepted evidence summaries to dissertation-ready result-card
+  Markdown/JSON/LaTeX snippets.
 * Negative result register (Issue #2762):
   [negative_result_register.md](negative_result_register.md)
   ([JSON register](evidence/issue_2762_negative_result_register/register.json),

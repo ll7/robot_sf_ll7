@@ -522,6 +522,26 @@ Manifest-driven decisions remain dry-run and mutation-free. Complete artifacts c
 artifacts, failed validation text, stale expected heads, risky manifest paths, and draft PRs stay
 reroute/stop signals instead of task acceptance.
 
+For phase-end token audits, record one compact route-efficiency row before
+starting another delegated batch:
+
+- latest Codex usage snapshot and whether it is close to the user-defined stop
+  guard;
+- largest parent-thread outputs since the previous audit, such as broad
+  multi-directory `rg` results, full skill rereads, raw validation output, raw
+  GitHub JSON, or verbose delegate final messages;
+- cache hits and misses for loaded skills, issue or PR snapshots, route quota
+  facts, CI monitor commands, and validation artifacts;
+- accepted, rejected, rerouted, and skipped delegates, with the reason the route
+  was or was not cheaper than direct Codex work;
+- next route change, such as using `rg --files | rg <pattern>` before content
+  search, requiring smaller app-agent final messages, or reusing a recorded
+  quota reset instead of retrying the same blocked route.
+
+Keep the row in the active ledger or a common-Git-dir self-review note. Promote
+it into durable docs only when the same leak repeats, the leak was expensive, or
+the user explicitly asks for workflow improvements.
+
 For historical route audits, add `--dashboard` and pass multiple routed-worker
 manifest files. Dashboard mode emits `route_efficiency_dashboard.v1` JSON or
 Markdown with overall metrics, per-manifest breakdowns, provider trends,

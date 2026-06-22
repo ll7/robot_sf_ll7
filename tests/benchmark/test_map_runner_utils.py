@@ -57,6 +57,7 @@ from robot_sf.benchmark.map_runner_batch_plan import (
     resolve_batch_kinematics_tag,
 )
 from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
+from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
@@ -703,6 +704,12 @@ def test_build_policy_risk_dwa_routes_through_registered_adapter_builder(
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
     assert meta["planner_kinematics"]["adapter_name"] == "RiskDWAPlannerAdapter"
     assert hasattr(policy, "_planner_adapter")
+
+
+def test_safety_barrier_policy_builder_rejects_unsupported_algo_key() -> None:
+    """Extracted safety-barrier/grid-route builder should fail closed on bad keys."""
+    with pytest.raises(ValueError, match="unsupported_adapter"):
+        safety_barrier_policy_builder.build("unsupported_adapter", {})
 
 
 def test_build_policy_risk_surface_dwa_wires_surface_adapter(

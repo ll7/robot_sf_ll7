@@ -40,6 +40,13 @@ def build(
     Returns:
         Policy callable and enriched metadata dictionary.
     """
+    if algo_key not in ADAPTER_ALGO_KEYS:
+        supported = ", ".join(sorted(ADAPTER_ALGO_KEYS))
+        raise ValueError(
+            f"Unsupported safety-barrier/grid-route policy algo_key {algo_key!r}; "
+            f"expected one of: {supported}"
+        )
+
     from robot_sf.benchmark.map_runner_policy_common import (  # noqa: PLC0415
         build_adapter_policy,
     )

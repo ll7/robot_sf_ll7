@@ -17,6 +17,11 @@ from loguru import logger
 
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
+from robot_sf.benchmark.camera_ready._artifacts import (
+    _write_csv,
+    _write_json,
+    _write_table_artifacts,
+)
 from robot_sf.benchmark.camera_ready._preflight import (
     _build_preflight_preview_payload,
     _build_preflight_validate_payload,
@@ -1873,6 +1878,58 @@ def test_sha256_file_raises_clear_error_for_unreadable_path(tmp_path: Path) -> N
 
     with pytest.raises(RuntimeError, match="Failed to hash file"):
         _sha256_file(missing_path)
+
+
+def test_artifact_writers_preserve_stable_formatting_and_injection_guards(
+    tmp_path: Path,
+) -> None:
+    """Artifact writers should preserve JSON formatting and escape table/CSV injection cases."""
+    json_path = tmp_path / "nested" / "payload.json"
+    _write_json(json_path, {"z": 1, "a": {"b": 2}})
+
+    assert json_path.read_text(encoding="utf-8") == '{\n  "z": 1,\n  "a": {\n    "b": 2\n  }\n}\n'
+
+    csv_path = tmp_path / "rows.csv"
+    _write_csv(
+        csv_path,
+        [
+            {"name": "=SUM(1,1)", "notes": "plain"},
+            {"name": "+cmd", "notes": "@handle"},
+        ],
+    )
+
+    csv_rows = list(csv.DictReader(io.StringIO(csv_path.read_text(encoding="utf-8"))))
+    assert csv_rows == [
+        {"name": "'=SUM(1,1)", "notes": "plain"},
+        {"name": "'+cmd", "notes": "'@handle"},
+    ]
+
+
+def test_table_artifact_writer_projects_headers_and_escapes_markdown(
+    tmp_path: Path,
+) -> None:
+    """Table artifact writer should use explicit CSV headers and markdown-safe cells."""
+    csv_path, md_path = _write_table_artifacts(
+        tmp_path,
+        "summary",
+        [
+            {
+                "planner": "goal|baseline",
+                "status": "ok\naccepted",
+                "ignored": "not exported",
+            }
+        ],
+        headers=("planner", "status", "missing"),
+    )
+
+    assert csv_path == tmp_path / "summary.csv"
+    assert md_path == tmp_path / "summary.md"
+    assert list(csv.DictReader(io.StringIO(csv_path.read_text(encoding="utf-8")))) == [
+        {"planner": "goal|baseline", "status": "ok\naccepted", "missing": ""}
+    ]
+    assert md_path.read_text(encoding="utf-8") == (
+        "| planner | status | missing |\n|---|---|---|\n| goal\\|baseline | ok accepted |  |\n"
+    )
 
 
 def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noqa: PLR0915

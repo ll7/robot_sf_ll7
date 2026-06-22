@@ -1,0 +1,23 @@
+# Multi-robot research smoke foothold (issue #3069).
+#
+# Diagnostic-only / smoke evidence tier. This is NOT a benchmark suite and makes
+# no fleet-scale, MAPPO, or paper-facing multi-robot claim. It defines the
+# smallest runnable multi-robot rollout so the research lane has a foothold that
+# is guarded against silent rot.
+#
+# Consumed by scripts/validation/run_multi_robot_smoke_issue_3069.py, which maps
+# these fields onto MultiRobotConfig and rolls out a fixed number of steps,
+# reporting per-agent collision and progress telemetry from the environment's
+# native info["agents"] meta dicts.
+schema_version: multi_robot_smoke.v1
+issue: 3069
+evidence_tier: smoke
+claim_boundary: diagnostic_only
+num_robots: 2
+steps: 40
+seed: 0
+# Disable stochastic lidar noise so the smoke rollout is reproducible.
+deterministic_lidar: true
+# Simple unicycle goal-seeking controller; falls back to hold-position when an
+# agent has no resolvable goal. No learned policy is involved.
+policy: goal_seeking

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a diagnostic-only multi-robot research smoke foothold (#3069): a small
+  runnable scenario config (`configs/multi_robot/issue_3069_smoke.yaml`), a smoke
+  runner (`scripts/validation/run_multi_robot_smoke_issue_3069.py`) that rolls out
+  the multi-robot environment via `make_multi_robot_env` and reports per-agent
+  inter-robot collision and goal-progress telemetry from the environment's native
+  `info["agents"]` metadata, and a guard test
+  (`tests/gym_env/test_multi_robot_smoke_issue_3069.py`). The report carries an
+  explicit `claim_boundary: diagnostic_only` / `evidence_tier: smoke` and
+  `multi_robot_benchmark_claim: false`; it proves only that the multi-robot path
+  runs end-to-end and is not a fleet-scale, MAPPO, or paper-facing claim (#3069).
 * Added durable issue-2904 forecast-risk eligibility fixtures
   (`tests/fixtures/benchmark/forecast_risk_eligibility/`) and the regenerated
   `ForecastCalibrationReport.v1` evidence bundle under

@@ -161,6 +161,63 @@ def load_archive(path: Path | None) -> tuple[str, str, dict[str, Any], bool]:
         )
 
 
+def build_archive_evaluation_provenance(
+    archive_data: dict[str, Any],
+    *,
+    state: str,
+    synthetic_archive: bool,
+    split_seed: int,
+) -> dict[str, Any]:
+    """Build archive-evaluation provenance for the comparison report.
+
+    For the diagnostic/blocked plumbing paths this preserves the historical
+    placeholder provenance (no disjoint split). For an active real-archive run it
+    computes a disjoint scenario-family split, real fit/eval overlap provenance
+    (scenario-family / seed / archive-id), and a fail-closed held-out-evidence
+    classification. The held-out claim stays fail-closed here: independent
+    (non-archive-nearness) planner outcomes are not yet available, so eligibility
+    resolves to a precise ``not_available`` reason.
+
+    Returns:
+        A JSON-safe provenance dict.
+    """
+    provenance: dict[str, Any] = {
+        "archive_sha256": _payload_sha256(archive_data),
+        "evaluation_outcome_sha256": None,
+        "split_policy": "none_plumbing_fixture",
+        "scenario_family_overlap": "not_checked",
+        "seed_overlap": "not_checked",
+        "archive_id_overlap": "not_checked",
+        "disjointness_checks_passed": False,
+        "required_for_held_out_claim": True,
+    }
+    if state != "active" or synthetic_archive:
+        provenance["held_out_evidence_status"] = "not_available_plumbing_fixture"
+        return provenance
+
+    from robot_sf.adversarial.disjoint_evaluation import (
+        archive_sha256,
+        classify_held_out_evidence,
+        compute_overlap_provenance,
+        disjoint_family_split,
+    )
+
+    entries = archive_data.get("entries", [])
+    split = disjoint_family_split(entries, eval_fraction=0.5, seed=split_seed)
+    overlap = compute_overlap_provenance(split.fit_entries, split.eval_entries)
+    provenance.update(overlap)
+    provenance["fit_archive_sha256"] = archive_sha256(split.fit_entries)
+    provenance["eval_archive_sha256"] = archive_sha256(split.eval_entries)
+    provenance["independent_outcome_evaluation"] = "not_available_requires_planner_execution"
+    provenance["held_out_evidence_status"] = classify_held_out_evidence(
+        disjointness_checks_passed=overlap["disjointness_checks_passed"],
+        independent_outcomes_available=False,
+        certification_available=False,
+        null_tests_reject_null=False,
+    )
+    return provenance
+
+
 def compute_metrics(selection: list[Any], evaluate_fn: Any) -> dict[str, Any]:
     """Compute summary metrics for a candidate selection."""
     objs = [evaluate_fn(c) for c in selection]
@@ -273,16 +330,12 @@ def main() -> int:
 
     proposal_metrics["certification_statuses_advisory"] = cert_statuses_advisory
     proposal_metrics["certification_statuses_strict"] = cert_statuses_strict
-    provenance = {
-        "archive_sha256": _payload_sha256(archive_data),
-        "evaluation_outcome_sha256": None,
-        "split_policy": "none_plumbing_fixture",
-        "scenario_family_overlap": "not_checked",
-        "seed_overlap": "not_checked",
-        "archive_id_overlap": "not_checked",
-        "disjointness_checks_passed": False,
-        "required_for_held_out_claim": True,
-    }
+    provenance = build_archive_evaluation_provenance(
+        archive_data,
+        state=state,
+        synthetic_archive=synthetic_archive,
+        split_seed=args.seed,
+    )
 
     report = {
         "schema_version": "adversarial_proposal_comparison.v1",

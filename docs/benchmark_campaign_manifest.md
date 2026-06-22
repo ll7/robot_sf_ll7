@@ -107,7 +107,18 @@ For this repository-level contract, run:
 uv run pytest tests/benchmark/test_research_campaign_manifest_contract.py
 ```
 
+To generate a compact dry-run packet from a manifest, run:
+
+```bash
+uv run python scripts/validation/run_research_campaign_manifest.py \
+  configs/benchmarks/research_campaign_manifest.example.yaml
+```
+
+The runner writes `manifest_resolved.json`, `rows.jsonl`, `summary.json`, `report.md`, and a
+`context_note.md` draft under the manifest's local `output/` root by default. Those files are
+diagnostic packet outputs unless a campaign-specific runner replaces dry-run rows with executed
+measurements and the durable evidence plan is satisfied.
+
 For a concrete campaign, also run the loader, dry-run, or schema command named
 in that campaign manifest. If the manifest only defines a proposal, record that
 status in `campaign.evidence_tier` and do not treat it as run evidence.
-

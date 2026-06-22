@@ -13,12 +13,19 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
+from loguru import logger
+
 from robot_sf.benchmark.snqi.compute import (
     WEIGHT_NAMES,
     compute_snqi_ablation,
     recompute_snqi_weights,
 )
 from robot_sf.benchmark.snqi.types import SNQIWeights
+
+
+def _log_cli_failure(stage: str, message: str, **context: object) -> None:
+    """Log a structured SNQI CLI failure before returning a non-zero status."""
+    logger.bind(event="snqi_cli_failed", stage=stage, **context).error(message)
 
 
 def cmd_recompute_weights(args: argparse.Namespace) -> int:
@@ -31,6 +38,11 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
         # Load baseline statistics
         baseline_stats_path = Path(args.baseline_stats)
         if not baseline_stats_path.exists():
+            _log_cli_failure(
+                "load_baseline_stats",
+                "SNQI CLI baseline statistics file is missing.",
+                path=str(baseline_stats_path),
+            )
             return 1
 
         with baseline_stats_path.open("r", encoding="utf-8") as f:
@@ -39,6 +51,7 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
         method = args.method
 
         if method not in {"canonical", "balanced", "optimized"}:
+            _log_cli_failure("validate_method", "SNQI CLI recompute method is unsupported.")
             return 2
 
         # Recompute SNQI weights using baseline statistics
@@ -61,6 +74,9 @@ def cmd_recompute_weights(args: argparse.Namespace) -> int:
         return 0
 
     except Exception:
+        logger.bind(event="snqi_cli_failed", stage="recompute_weights").exception(
+            "SNQI CLI failed while recomputing weights."
+        )
         return 1
 
 
@@ -146,10 +162,20 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
     try:
         episodes_path = Path(args.episodes)
         if not episodes_path.exists():
+            _log_cli_failure(
+                "load_episodes",
+                "SNQI CLI episodes file is missing.",
+                path=str(episodes_path),
+            )
             return 1
 
         episodes = _load_episodes_jsonl(episodes_path)
         if not episodes:
+            _log_cli_failure(
+                "load_episodes",
+                "SNQI CLI episodes file produced no valid records.",
+                path=str(episodes_path),
+            )
             return 1
 
         # Determine weights
@@ -157,6 +183,11 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
         if args.weights:
             weights_path = Path(args.weights)
             if not weights_path.exists():
+                _log_cli_failure(
+                    "load_weights",
+                    "SNQI CLI weights file is missing.",
+                    path=str(weights_path),
+                )
                 return 1
             weight_obj = SNQIWeights.load(weights_path)
             weight_map = dict(weight_obj.weights)
@@ -205,6 +236,9 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
 
         return 0
     except Exception:
+        logger.bind(event="snqi_cli_failed", stage="ablation_analysis").exception(
+            "SNQI CLI failed while computing ablation analysis."
+        )
         return 1
 
 

@@ -489,6 +489,7 @@ def _ensure_snqi(
     baseline: dict[str, dict[str, float]] | None,
     *,
     recompute: bool = False,
+    strict: bool = False,
 ) -> None:
     """Compute and attach SNQI when missing, or recompute when ``recompute`` is set."""
     if rec.get("metrics") is None:
@@ -500,8 +501,19 @@ def _ensure_snqi(
     try:
         rec["metrics"]["snqi"] = float(snqi_fn(rec["metrics"], weights, baseline_stats=baseline))
     except Exception:
-        # Leave untouched if computation fails
-        pass
+        logger.bind(
+            event="aggregation_snqi_compute_failed",
+            episode_id=rec.get("episode_id"),
+            scenario_id=rec.get("scenario_id"),
+            seed=rec.get("seed"),
+            algo=rec.get("algo")
+            if rec.get("algo") is not None
+            else _get_nested(rec, "scenario_params.algo"),
+            recompute_snqi=recompute,
+            strict=strict,
+        ).exception("Failed to compute SNQI for episode record.")
+        if strict:
+            raise
 
 
 def write_episode_csv(
@@ -575,7 +587,13 @@ def compute_aggregates(  # noqa: PLR0913
         Nested dict of group -> metric -> summary statistics.
     """
     for rec in records:
-        _ensure_snqi(rec, snqi_weights, snqi_baseline, recompute=recompute_snqi)
+        _ensure_snqi(
+            rec,
+            snqi_weights,
+            snqi_baseline,
+            recompute=recompute_snqi,
+            strict=_normalize_observation_track_mode(observation_track_mode) == "strict",
+        )
     observation_track_meta = ensure_observation_track_policy(
         records,
         observation_track_mode=observation_track_mode,
@@ -967,7 +985,13 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
 
     # Rebuild groups with flattened numeric values to avoid rework
     for rec in records:
-        _ensure_snqi(rec, snqi_weights, snqi_baseline, recompute=recompute_snqi)
+        _ensure_snqi(
+            rec,
+            snqi_weights,
+            snqi_baseline,
+            recompute=recompute_snqi,
+            strict=_normalize_observation_track_mode(observation_track_mode) == "strict",
+        )
     groups = _group_flattened(
         records,
         group_by=group_by,

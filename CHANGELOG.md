@@ -38,16 +38,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bodies instead of only the markdown templates. The audit previously matched a single strict
   12-section markdown contract and reported 8–12 false "missing section" gaps on nearly every
   issue filed from the leaner YAML forms. The auditor now (a) maps heading variants such as
-  `Scope and non-goals`, `Acceptance criteria`/`Acceptance / stop rule`, `Estimate metadata`,
-  `Validation commands`, and `Question / Goal`/`Background` to their canonical sections;
-  (b) strips trailing parenthetical qualifiers (e.g. `Acceptance criteria (mirrors body)`);
-  (c) credits `###` contract subheadings carried inside the appended `agent-exec-spec` block;
-  and (d) audits leaner-template issues against a shared agent-ready core
-  (`Goal / Problem`, `Scope`, `Effort Estimation`, `Definition of Done`, `Validation / Testing`)
-  while bare/markdown-style bodies keep the strict full contract. Across the 91 open issues this
-  cut spurious "missing section" reports from ~87 issues (many with 8–12 false gaps) to a small
-  set of genuine gaps. The archetype-metadata audit and `audit_archetype_metadata` API are
-  unchanged.
+  `Scope and non-goals`/`Out of scope`/`Scope / decision needed`, `Acceptance criteria`/
+  `Acceptance / stop rule`/`Accept / revise / reject`, `Estimate`/`Estimate metadata`,
+  `Validation commands`, and `Question / Goal`/`Background`/`Summary`/`What to build` to their
+  canonical sections; (b) strips trailing parenthetical qualifiers (e.g.
+  `Acceptance criteria (mirrors body)`); (c) credits `###` contract subheadings carried inside
+  the appended `agent-exec-spec` block; and (d) audits leaner-template issues against a shared
+  agent-ready core (`Goal / Problem`, `Scope`, `Definition of Done`, `Validation / Testing`)
+  while bare/markdown-style bodies keep the strict full 12-section contract. A standalone effort
+  estimate is intentionally not in the core: leaner/agent issues state effort under
+  `Project Metadata` or defer it on blocked work, and the agent-exec-spec agents execute from
+  carries no estimate. Across the 91 open issues this cut spurious "missing section" findings
+  from 762 (≈87 issues, many with 8–12 false gaps) to ~30 (26 issues, genuinely-absent
+  sections), with 65 issues now fully clean. The archetype-metadata audit and
+  `audit_archetype_metadata` API are unchanged.
 * Expanded the canonical issue-archetype taxonomy in
   `docs/context/issue_1512_issue_archetypes.md` and the validator
   (`scripts/tools/issue_template_audit.py`) to bless the work-type archetypes the issue

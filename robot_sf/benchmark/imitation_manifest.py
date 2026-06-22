@@ -7,9 +7,6 @@ where possible so artefacts remain portable across machines and CI runners.
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -24,6 +21,7 @@ from robot_sf.common.artifact_paths import (
     get_repository_root,
     get_trajectory_dataset_dir,
 )
+from robot_sf.common.atomic_io import atomic_write_json
 
 if TYPE_CHECKING:  # pragma: no cover - import surface for type checkers only
     from collections.abc import Mapping
@@ -116,25 +114,6 @@ def _serialize_metrics_map(metrics: Mapping[str, MetricAggregate]) -> dict[str, 
         Mapping of metric names to serialized metric dicts.
     """
     return {name: _serialize_metric(metric) for name, metric in sorted(metrics.items())}
-
-
-def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    """Atomically write a JSON payload to disk."""
-    path = path.resolve(strict=False)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_fd, tmp_name = tempfile.mkstemp(prefix=f"{path.name}.", dir=str(path.parent))
-    try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_name, path)
-    finally:
-        if os.path.exists(tmp_name):
-            try:
-                os.unlink(tmp_name)
-            except OSError:  # pragma: no cover - defensive cleanup
-                pass
 
 
 def serialize_expert_policy(artifact: ExpertPolicyArtifact) -> dict[str, Any]:
@@ -240,7 +219,7 @@ def write_expert_policy_manifest(
         if manifest_path is not None
         else get_expert_policy_manifest_path(artifact.policy_id)
     )
-    _atomic_write_json(target, payload)
+    atomic_write_json(target, payload)
     logger.debug("Expert policy manifest written to {}", target)
     return target
 
@@ -262,7 +241,7 @@ def write_trajectory_dataset_manifest(
         target = base / f"{artifact.dataset_id}.json"
     else:
         target = Path(manifest_path)
-    _atomic_write_json(target, payload)
+    atomic_write_json(target, payload)
     logger.debug("Trajectory dataset manifest written to {}", target)
     return target
 
@@ -296,7 +275,7 @@ def write_training_run_manifest(
         if manifest_path is not None
         else get_training_run_manifest_path(artifact.run_id)
     )
-    _atomic_write_json(target, payload)
+    atomic_write_json(target, payload)
     logger.debug("Training run manifest written to {}", target)
     return target
 

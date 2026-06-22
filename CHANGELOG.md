@@ -96,6 +96,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-exported from `camera_ready_campaign`, so existing imports (e.g. in `release_protocol.py`,
   `orca_preflight.py`, and tests) are unchanged. Behavior-preserving verbatim move; the
   camera-ready/release regression suites pass.
+* Consolidated the duplicated durable atomic-JSON-write helper into a single shared
+  `robot_sf.common.atomic_io.atomic_write_json` (#3386). The `mkstemp -> fsync -> os.replace` helper
+  previously copy-pasted in `benchmark/imitation_manifest.py` and `benchmark/full_classic/io_utils.py`
+  now imports the shared version; behavior is preserved (the helper resolves the path and creates the
+  parent directory, a safe superset of the prior two). `benchmark/forecast_dataset_recorder.py` keeps
+  its own writer for now because it has a different output contract (trailing newline, no `fsync`).
+  Covered by `tests/common/test_atomic_io.py`.
 * Began decomposing the ~1270-line `_build_policy` dispatcher in `robot_sf/benchmark/map_runner.py`
   into a `robot_sf/benchmark/map_runner_policies/` builder package backed by a registry (#3400, first
   slice of Issue #3384). The built-in goal/simple policy family now lives in `map_runner_policies/goal.py`

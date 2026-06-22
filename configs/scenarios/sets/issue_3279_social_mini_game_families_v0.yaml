@@ -1,0 +1,141 @@
+# Issue #3279 — Social Mini-Game scenario families (v0, first cut)
+#
+# Purpose:
+#   Runnable Robot SF scenario families for the Social Mini-Game local-navigation
+#   mechanisms called out in the research report: doorway, hallway, intersection,
+#   blind/L-corner, and crowded-traffic. Each entry is a *parameterized generated*
+#   scenario (consumed by robot_sf.benchmark.scenario_generator.generate_scenario)
+#   with a deterministic seed, so the same id+seed reproduces the same layout.
+#
+# Claim boundary:
+#   Proposal / diagnostic-smoke tier. These families are scenario *inputs* only.
+#   They are NOT planner-ranking, transfer, or benchmark-strength mechanism
+#   evidence, and a generated layout alone proves nothing about planner behavior.
+#
+# Mechanism coverage (this file):
+#   doorway          -> doorway_bottleneck_negotiation   (obstacle=bottleneck, flow=bi)
+#   hallway          -> hallway_bidirectional_passing     (obstacle=open,       flow=bi)
+#   intersection     -> intersection_crossing_negotiation (obstacle=open,       flow=cross)
+#   blind_corner     -> blind_corner_occlusion_exposure   (obstacle=maze,       flow=uni)
+#   crowded_traffic  -> crowded_traffic_merge_negotiation  (obstacle=open,      flow=merge, density=high)
+#
+# Not yet exposed as first-class generator parameters (tracked follow-up, #3279):
+#   width_m, occlusion_geometry, start_timing_s, yielding_pressure. The current
+#   generator vocabulary (density/flow/obstacle/groups/speed_var/goal_topology/
+#   robot_context) is mapped to the closest mechanism trigger per family above.
+#
+# Canonical smoke command shape (one baseline planner; full execution is follow-up):
+#   robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_3279_social_mini_game_families_v0.yaml \
+#     --out output/benchmarks/issue_3279_social_mini_game/<planner>/episodes.jsonl \
+#     --algo <planner> --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none \
+#     --no-resume --benchmark-profile baseline-safe
+
+- id: smg_doorway_v0
+  density: med
+  flow: bi
+  obstacle: bottleneck
+  groups: 0.0
+  speed_var: low
+  goal_topology: swap
+  robot_context: embedded
+  repeats: 1
+  seeds: [3279]
+  metadata:
+    social_mini_game_family: doorway
+    mechanism_aware_suite_id: doorway_bottleneck_negotiation
+    target_mechanism: local_bottleneck_or_doorway_coordination
+    issue: 3279
+    evidence_tier: diagnostic_smoke
+    claim_boundary: >
+      Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
+      not planner-ranking or benchmark-strength mechanism evidence.
+    generator_param_mapping: "obstacle=bottleneck (doorway), flow=bi (converging streams)"
+    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+
+- id: smg_hallway_v0
+  density: med
+  flow: bi
+  obstacle: open
+  groups: 0.0
+  speed_var: low
+  goal_topology: swap
+  robot_context: embedded
+  repeats: 1
+  seeds: [3279]
+  metadata:
+    social_mini_game_family: hallway
+    mechanism_aware_suite_id: hallway_bidirectional_passing
+    target_mechanism: bidirectional_corridor_passing
+    issue: 3279
+    evidence_tier: diagnostic_smoke
+    claim_boundary: >
+      Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
+      not planner-ranking or benchmark-strength mechanism evidence.
+    generator_param_mapping: "obstacle=open, flow=bi (opposing corridor streams)"
+    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+
+- id: smg_intersection_v0
+  density: med
+  flow: cross
+  obstacle: open
+  groups: 0.0
+  speed_var: low
+  goal_topology: point
+  robot_context: embedded
+  repeats: 1
+  seeds: [3279]
+  metadata:
+    social_mini_game_family: intersection
+    mechanism_aware_suite_id: intersection_crossing_negotiation
+    target_mechanism: crossing_flow_right_of_way
+    issue: 3279
+    evidence_tier: diagnostic_smoke
+    claim_boundary: >
+      Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
+      not planner-ranking or benchmark-strength mechanism evidence.
+    generator_param_mapping: "obstacle=open, flow=cross (perpendicular crossing streams)"
+    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+
+- id: smg_blind_corner_v0
+  density: low
+  flow: uni
+  obstacle: maze
+  groups: 0.0
+  speed_var: low
+  goal_topology: point
+  robot_context: ahead
+  repeats: 1
+  seeds: [3279]
+  metadata:
+    social_mini_game_family: blind_corner
+    mechanism_aware_suite_id: blind_corner_occlusion_exposure
+    target_mechanism: occluded_emergence_exposure
+    issue: 3279
+    evidence_tier: diagnostic_smoke
+    claim_boundary: >
+      Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
+      not planner-ranking or benchmark-strength mechanism evidence.
+    generator_param_mapping: "obstacle=maze (L-corner occlusion proxy), flow=uni"
+    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+
+- id: smg_crowded_traffic_v0
+  density: high
+  flow: merge
+  obstacle: open
+  groups: 0.2
+  speed_var: high
+  goal_topology: circulate
+  robot_context: embedded
+  repeats: 1
+  seeds: [3279]
+  metadata:
+    social_mini_game_family: crowded_traffic
+    mechanism_aware_suite_id: crowded_traffic_merge_negotiation
+    target_mechanism: dense_merge_negotiation
+    issue: 3279
+    evidence_tier: diagnostic_smoke
+    claim_boundary: >
+      Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
+      not planner-ranking or benchmark-strength mechanism evidence.
+    generator_param_mapping: "density=high, flow=merge (converging crowd), groups=0.2"
+    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]

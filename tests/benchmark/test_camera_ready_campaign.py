@@ -17,6 +17,10 @@ from loguru import logger
 
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
+from robot_sf.benchmark.camera_ready._preflight import (
+    _build_preflight_preview_payload,
+    _build_preflight_validate_payload,
+)
 from robot_sf.benchmark.camera_ready._util import (
     _kinematics_matrix_or_default,
     _stable_json_bytes,
@@ -871,6 +875,32 @@ def test_prepare_campaign_preflight_resolves_synthetic_actuation_slice_metadata(
     )
     validate_payload = json.loads(
         Path(prepared["validate_config_path"]).read_text(encoding="utf-8")
+    )
+    assert (
+        _build_preflight_validate_payload(
+            cfg,
+            campaign_id=prepared["campaign_id"],
+            created_at_utc=prepared["created_at_utc"],
+            scenarios=prepared["scenarios"],
+            resolved_seeds=prepared["resolved_seeds"],
+            scenario_horizons_summary=prepared["manifest_payload"]["scenario_horizons"],
+            route_clearance_warnings=validate_payload["route_clearance_warnings"],
+            route_clearance_warning_summary=validate_payload["route_clearance_warning_summary"],
+            noise_spec=validate_payload["observation_noise"],
+            noise_hash=validate_payload["observation_noise_hash"],
+        )
+        == validate_payload
+    )
+    assert (
+        _build_preflight_preview_payload(
+            cfg,
+            campaign_id=prepared["campaign_id"],
+            created_at_utc=prepared["created_at_utc"],
+            scenarios=prepared["scenarios"],
+            route_clearance_warnings=preview_payload["route_clearance_warnings"],
+            route_clearance_warning_summary=preview_payload["route_clearance_warning_summary"],
+        )
+        == preview_payload
     )
     assert validate_payload["scenario_candidates"]["requested"] == [
         "classic_overtaking_medium",

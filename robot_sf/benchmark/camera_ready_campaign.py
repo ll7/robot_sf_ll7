@@ -28,6 +28,12 @@ from shapely.geometry import LineString, Polygon
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
+from robot_sf.benchmark.camera_ready._preflight import (
+    _build_preflight_preview_payload,
+    _build_preflight_validate_payload,
+    _latency_stress_metadata,
+    _synthetic_actuation_metadata,
+)
 from robot_sf.benchmark.camera_ready._util import (  # noqa: F401 - re-exported for back-compat
     _hash_payload,
     _jsonable,
@@ -60,7 +66,6 @@ from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode as _resolve_benchmark_execution_mode,
 )
 from robot_sf.benchmark.latency_stress import (
-    LatencyStressProfile,
     load_latency_stress_profile,
     not_available_latency_metrics,
     validate_latency_stress_profile,
@@ -1594,26 +1599,6 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 
 
-def _synthetic_actuation_metadata(
-    profile: SyntheticActuationProfile | None,
-) -> dict[str, Any] | None:
-    """Return a JSON-safe synthetic-actuation metadata payload when configured."""
-    if profile is None:
-        return None
-    return profile.to_metadata()
-
-
-def _latency_stress_metadata(
-    profile: LatencyStressProfile | None,
-    *,
-    dt: float | None = None,
-) -> dict[str, Any] | None:
-    """Return a JSON-safe latency-stress metadata payload when configured."""
-    if profile is None:
-        return None
-    return profile.to_metadata(dt=dt)
-
-
 def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple[str, ...]) -> None:
     """Write a table in Markdown format using explicit header order."""
     lines = [
@@ -2610,135 +2595,26 @@ def prepare_campaign_preflight(
 
     validate_config_path = preflight_dir / "validate_config.json"
     preview_scenarios_path = preflight_dir / "preview_scenarios.json"
-    validate_payload = {
-        "schema_version": "benchmark-preflight-validate-config.v1",
-        "campaign_id": campaign_id,
-        "generated_at_utc": created_at_utc,
-        "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
-        "scenario_count": len(scenarios),
-        "scenario_candidates": {
-            "requested": list(cfg.scenario_candidates.names),
-            "resolved": [
-                str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
-                for scenario in scenarios
-            ],
-        },
-        "scenario_amv_overrides": {
-            scenario_name: dict(values)
-            for scenario_name, values in sorted(cfg.scenario_amv_overrides.items())
-        },
-        "planner_count": len([planner for planner in cfg.planners if planner.enabled]),
-        "workers": cfg.workers,
-        "horizon": cfg.horizon,
-        "dt": cfg.dt,
-        "resume": cfg.resume,
-        "seed_policy": {
-            "mode": cfg.seed_policy.mode,
-            "seed_set": cfg.seed_policy.seed_set,
-            "seeds": list(cfg.seed_policy.seeds),
-            "resolved_seeds": resolved_seeds,
-            "seed_sets_path": _repo_relative(cfg.seed_policy.seed_sets_path),
-        },
-        "amv_profile": {
-            "name": cfg.amv_profile.name,
-            "contract_version": cfg.amv_profile.contract_version,
-            "coverage_enforcement": cfg.amv_profile.coverage_enforcement,
-            "required_dimensions": {
-                key: list(values) for key, values in cfg.amv_profile.required_dimensions.items()
-            },
-        },
-        "synthetic_actuation_profile": _synthetic_actuation_metadata(
-            cfg.synthetic_actuation_profile
-        ),
-        "latency_stress_profile": _latency_stress_metadata(
-            cfg.latency_stress_profile,
-            dt=cfg.dt,
-        ),
-        "latency_stress_metrics": (
-            not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
-        ),
-        "comparability_mapping": (
-            _repo_relative(cfg.comparability_mapping_path)
-            if cfg.comparability_mapping_path is not None
-            else None
-        ),
-        "snqi_contract": {
-            "enabled": bool(cfg.snqi_contract.enabled),
-            "enforcement": cfg.snqi_contract.enforcement,
-            "rank_alignment_warn_threshold": cfg.snqi_contract.rank_alignment_warn_threshold,
-            "rank_alignment_fail_threshold": cfg.snqi_contract.rank_alignment_fail_threshold,
-            "outcome_separation_warn_threshold": cfg.snqi_contract.outcome_separation_warn_threshold,
-            "outcome_separation_fail_threshold": cfg.snqi_contract.outcome_separation_fail_threshold,
-            "max_component_dominance_warn_threshold": (
-                cfg.snqi_contract.max_component_dominance_warn_threshold
-            ),
-            "max_component_dominance_fail_threshold": (
-                cfg.snqi_contract.max_component_dominance_fail_threshold
-            ),
-            "calibration_seed": cfg.snqi_contract.calibration_seed,
-            "calibration_trials": cfg.snqi_contract.calibration_trials,
-        },
-        "snqi_weights_path": (
-            _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
-        ),
-        "snqi_baseline_path": (
-            _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
-        ),
-        "route_clearance_warnings": route_clearance_warnings,
-        "route_clearance_warning_count": len(route_clearance_warnings),
-        "route_clearance_warning_summary": route_clearance_warning_summary,
-        "route_clearance_certifications_path": (
-            _repo_relative(cfg.route_clearance_certifications_path)
-            if cfg.route_clearance_certifications_path is not None
-            else None
-        ),
-        "observation_noise": noise_spec,
-        "observation_noise_hash": noise_hash,
-    }
-    if scenario_horizons_summary is not None:
-        validate_payload["scenario_horizons"] = scenario_horizons_summary
-    preview_limit = max(0, int(cfg.preview_scenario_limit))
-    preview_payload = {
-        "schema_version": "benchmark-preflight-preview-scenarios.v1",
-        "campaign_id": campaign_id,
-        "generated_at_utc": created_at_utc,
-        "scenario_count": len(scenarios),
-        "preview_limit": preview_limit,
-        "scenario_candidates": list(cfg.scenario_candidates.names),
-        "synthetic_actuation_profile": _synthetic_actuation_metadata(
-            cfg.synthetic_actuation_profile
-        ),
-        "latency_stress_profile": _latency_stress_metadata(
-            cfg.latency_stress_profile,
-            dt=cfg.dt,
-        ),
-        "latency_stress_metrics": (
-            not_available_latency_metrics() if cfg.latency_stress_profile is not None else None
-        ),
-        "route_clearance_warnings": route_clearance_warnings,
-        "route_clearance_warning_count": len(route_clearance_warnings),
-        "route_clearance_warning_summary": route_clearance_warning_summary,
-        "route_clearance_certifications_path": (
-            _repo_relative(cfg.route_clearance_certifications_path)
-            if cfg.route_clearance_certifications_path is not None
-            else None
-        ),
-    }
-    if len(scenarios) > preview_limit:
-        preview_payload["truncated"] = True
-        preview_payload["total_scenarios"] = len(scenarios)
-        preview_payload["scenarios"] = [
-            {
-                "name": scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"),
-                "map_file": scenario.get("map_file"),
-                "seeds": scenario.get("seeds"),
-                "metadata": scenario.get("metadata"),
-            }
-            for scenario in scenarios[:preview_limit]
-        ]
-    else:
-        preview_payload["truncated"] = False
-        preview_payload["scenarios"] = scenarios
+    validate_payload = _build_preflight_validate_payload(
+        cfg,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+        scenarios=scenarios,
+        resolved_seeds=resolved_seeds,
+        scenario_horizons_summary=scenario_horizons_summary,
+        route_clearance_warnings=route_clearance_warnings,
+        route_clearance_warning_summary=route_clearance_warning_summary,
+        noise_spec=noise_spec,
+        noise_hash=noise_hash,
+    )
+    preview_payload = _build_preflight_preview_payload(
+        cfg,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+        scenarios=scenarios,
+        route_clearance_warnings=route_clearance_warnings,
+        route_clearance_warning_summary=route_clearance_warning_summary,
+    )
     _write_json(validate_config_path, validate_payload)
     _write_json(preview_scenarios_path, preview_payload)
 

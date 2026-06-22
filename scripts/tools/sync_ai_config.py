@@ -19,6 +19,7 @@ class LinkSpec:
 
 
 LINK_SPECS = (
+    LinkSpec(".claude/skills", "../.agents/skills"),
     LinkSpec(".codex/skills", "../.agents/skills"),
     LinkSpec(".opencode/skills", "../.agents/skills"),
     LinkSpec(".codex/prompts", "../.agents/prompts/codex"),

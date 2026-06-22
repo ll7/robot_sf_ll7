@@ -126,7 +126,9 @@ def test_blind_corner_declares_l_corner_equivalent_and_generates_obstacles() -> 
         obstacle for obstacle in generated.obstacles if np.isclose(obstacle[1], obstacle[3])
     ]
     assert vertical_segments, "blind-corner equivalent should include vertical occluder geometry"
-    assert horizontal_segments, "blind-corner equivalent should include horizontal occluder geometry"
+    assert horizontal_segments, (
+        "blind-corner equivalent should include horizontal occluder geometry"
+    )
 
 
 def test_each_family_generates_a_deterministic_runnable_scenario() -> None:

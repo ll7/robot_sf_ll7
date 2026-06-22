@@ -33,6 +33,8 @@ SAFE_ARCHETYPE_LABEL_MAP: dict[str, str] = {
     "benchmark-campaign": "type:benchmark",
     "analysis": "type:analysis",
     "training-campaign": "type:training",
+    "implementation": "type:implementation",
+    "data": "type:data",
 }
 
 TYPED_LABEL_PREFIX = "type:"

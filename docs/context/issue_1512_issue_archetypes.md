@@ -25,6 +25,19 @@ Every issue should declare exactly one `archetype` from this set:
 | `docs` | Documentation-only contract or guidance updates |
 | `benchmark-campaign` | A benchmark campaign intended to produce benchmark evidence |
 | `training-campaign` | A training campaign intended to produce model or training evidence |
+| `implementation` | Building or changing simulator/benchmark/runtime code to add a capability or runnable path (not primarily a campaign, analysis, or docs change) |
+| `test` | Adding, repairing, or de-flaking test coverage or test infrastructure |
+| `refactor` | Restructuring existing code without changing intended behavior |
+| `data` | Acquiring, staging, ingesting, or making reproducible a dataset/trace/artifact input (often paired with `blocked` evidence when the source is external) |
+
+### Deprecated archetype spellings
+
+These are accepted on read and treated as their canonical value; prefer the canonical form for new
+issues:
+
+| Deprecated | Canonical | Note |
+|---|---|---|
+| `agent_task` | `implementation` | Generic agent placeholder; declare the specific archetype (e.g. `docs`, `analysis`) when it is clear |
 
 ## Canonical Evidence-Tier Values
 
@@ -43,6 +56,14 @@ Every issue should declare exactly one `evidence_tier` from this set:
 | `synthesis` | Evidence is a synthesis of prior durable inputs rather than a new run |
 | `paper_grade` | Paper-facing, benchmark-success, or release-grade evidence |
 | `blocked` | The requested evidence could not be produced because a prerequisite is missing or invalid |
+
+### Deprecated evidence-tier spellings
+
+Accepted on read and treated as their canonical value; prefer the canonical form for new issues:
+
+| Deprecated | Canonical | Note |
+|---|---|---|
+| `proposal` | `idea` | Early proposal/scoping work with no execution evidence yet |
 
 ## Short Metadata Block
 

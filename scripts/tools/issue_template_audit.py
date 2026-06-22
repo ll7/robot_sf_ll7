@@ -37,26 +37,80 @@ SECTION_ORDER: tuple[str, ...] = (
 SECTION_ALIASES: dict[str, str] = {
     "goal / problem": "Goal / Problem",
     "goal/problem": "Goal / Problem",
+    "goal": "Goal / Problem",
     "problem": "Goal / Problem",
     "objective": "Goal / Problem",
     "problem description": "Goal / Problem",
+    # Agent-authored bodies open with these instead of "Goal / Problem".
+    "question / goal": "Goal / Problem",
+    "goal / question": "Goal / Problem",
+    "background": "Goal / Problem",
     "scope": "Scope",
+    # YAML issue forms (epic/execution-run/test-debt/blocked-external-artifact) name this
+    # "Scope and non-goals"; treat it as the canonical Scope section.
+    "scope and non-goals": "Scope",
+    "scope / out of scope": "Scope",
     "added value estimation": "Added Value Estimation",
     "value estimation": "Added Value Estimation",
     "effort estimation": "Effort Estimation",
+    # YAML forms collapse the granular estimate sections into one "Estimate metadata"
+    # block; agent-authored bodies use a bare "Estimate". Map both to the effort section
+    # so the leaner core (below) is satisfied without inventing the markdown-only sub-sections.
+    "estimate": "Effort Estimation",
+    "estimate metadata": "Effort Estimation",
     "complexity estimation": "Complexity Estimation",
     "risk assessment": "Risk Assessment",
     "affected files": "Affected Files",
     "files and components": "Affected Files",
     "definition of done": "Definition of Done",
+    # YAML forms and agent-authored bodies use "Acceptance criteria" for the same contract.
+    "acceptance criteria": "Definition of Done",
+    # Research/epic bodies fold the acceptance contract into a stop-rule heading.
+    "acceptance / stop rule": "Definition of Done",
+    "accept / revise / reject criteria": "Definition of Done",
     "success metrics": "Success Metrics",
     "validation / testing": "Validation / Testing",
     "validation": "Validation / Testing",
     "testing": "Validation / Testing",
+    # YAML-form validation heading variants.
+    "validation command": "Validation / Testing",
+    # Agent-exec-spec blocks use the plural "Validation commands".
+    "validation commands": "Validation / Testing",
+    "targeted validation": "Validation / Testing",
     "estimate discussion": "Estimate Discussion",
     "estimate rationale": "Estimate Discussion",
     "project metadata": "Project Metadata",
 }
+
+# Headings emitted by the YAML issue forms and agent-authored bodies but never by the
+# markdown templates. Their presence positively identifies a leaner-template issue, which
+# is audited against ``CORE_SECTION_ORDER`` instead of the full markdown contract.
+LEANER_TEMPLATE_SIGNATURES: frozenset[str] = frozenset(
+    {
+        "scope and non-goals",
+        "scope / out of scope",
+        "non-goals",
+        "acceptance criteria",
+        "acceptance / stop rule",
+        "accept / revise / reject criteria",
+        "estimate",
+        "estimate metadata",
+        "validation command",
+        "targeted validation",
+        "implementation plan",
+    }
+)
+
+# Shared agent-ready core required of every issue regardless of template family. The full
+# markdown contract (``SECTION_ORDER``) is a superset of this and stays the default so bare
+# or markdown-style bodies keep the stricter requirement.
+CORE_SECTION_ORDER: tuple[str, ...] = (
+    "Goal / Problem",
+    "Scope",
+    "Effort Estimation",
+    "Definition of Done",
+    "Validation / Testing",
+)
 
 SECTION_PLACEHOLDERS: dict[str, str] = {
     "Goal / Problem": "<!-- Describe the problem or goal here. -->",
@@ -73,7 +127,11 @@ SECTION_PLACEHOLDERS: dict[str, str] = {
     "Project Metadata": "- Priority:\n- Effort (h):\n- Reviewed:",
 }
 
-HEADING_RE = re.compile(r"^##\s+(?P<title>.+?)\s*$", re.MULTILINE)
+# Match level-2 and level-3 ATX headings. Agent-authored bodies carry their
+# contract content (acceptance/validation/steps) as ``###`` subheadings inside the
+# appended ``<!-- agent-exec-spec:v1 -->`` block, so crediting ``###`` lets the audit
+# see content that genuinely exists instead of reporting it as missing.
+HEADING_RE = re.compile(r"^#{2,3}\s+(?P<title>.+?)\s*$", re.MULTILINE)
 METADATA_SECTION_TITLE = "Archetype Metadata"
 METADATA_YAML_RE = re.compile(
     r"^[ \t]*```ya?ml\s*\r?\n(?P<block>.*?)(?:\r?\n)?^[ \t]*```",
@@ -94,7 +152,19 @@ VALID_ARCHETYPES: tuple[str, ...] = (
     "docs",
     "benchmark-campaign",
     "training-campaign",
+    # Work-type archetypes the issue automation emits; canonical per the 2026-06-22
+    # taxonomy expansion (see docs/context/issue_1512_issue_archetypes.md).
+    "implementation",
+    "test",
+    "refactor",
+    "data",
 )
+# Deprecated archetype spellings accepted on read and treated as their canonical value.
+# The auditor does not rewrite issue bodies; aliases only prevent false "invalid value"
+# findings for values the automation still emits.
+ARCHETYPE_ALIASES: dict[str, str] = {
+    "agent_task": "implementation",
+}
 VALID_EVIDENCE_TIERS: tuple[str, ...] = (
     "idea",
     "launch_packet",
@@ -108,6 +178,10 @@ VALID_EVIDENCE_TIERS: tuple[str, ...] = (
     "paper_grade",
     "blocked",
 )
+# Deprecated evidence-tier spellings accepted on read and treated as their canonical value.
+EVIDENCE_TIER_ALIASES: dict[str, str] = {
+    "proposal": "idea",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,16 +225,43 @@ class ArchetypeMetadataAuditResult:
         return tuple(result)
 
 
-def normalize_section_title(raw_title: str) -> str:
-    """Map a markdown heading to a canonical template section name."""
+def _clean_heading(raw_title: str) -> str:
+    """Strip decoration/punctuation from a heading without alias mapping."""
 
     cleaned = raw_title.strip()
     cleaned = re.sub(r"^[^\w]+", "", cleaned)
+    # Drop a trailing parenthetical qualifier, e.g. "Acceptance criteria (mirrors body)"
+    # or "Entry points (verified)", so qualified agent-exec-spec headings still normalize.
+    cleaned = re.sub(r"\s*\([^()]*\)\s*$", "", cleaned)
     cleaned = re.sub(r"\s*/\s*", " / ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = re.sub(r"[:：]+$", "", cleaned)
-    normalized = cleaned.lower()
-    return SECTION_ALIASES.get(normalized, cleaned)
+    return cleaned
+
+
+def normalize_section_title(raw_title: str) -> str:
+    """Map a markdown heading to a canonical template section name."""
+
+    cleaned = _clean_heading(raw_title)
+    return SECTION_ALIASES.get(cleaned.lower(), cleaned)
+
+
+def select_required_sections(body: str) -> tuple[str, ...]:
+    """Pick the required-section contract matching the issue's template family.
+
+    The markdown issue templates emit the full granular contract
+    (``SECTION_ORDER``). The YAML issue forms and agent-authored bodies use a
+    leaner vocabulary (e.g. ``Acceptance criteria``, ``Estimate metadata``) and
+    deliberately omit the markdown-only sub-sections. When a body positively
+    signals the leaner family we audit it against the shared agent-ready core so
+    it is not flagged for sections its template never produced. Bare or
+    markdown-style bodies keep the stricter full contract by default.
+    """
+
+    for match in HEADING_RE.finditer(body):
+        if _clean_heading(match.group("title")).lower() in LEANER_TEMPLATE_SIGNATURES:
+            return CORE_SECTION_ORDER
+    return SECTION_ORDER
 
 
 def extract_present_sections(body: str) -> tuple[str, ...]:
@@ -190,11 +291,20 @@ def _extract_named_section(body: str, expected_title: str) -> str | None:
 
 
 def _validate_canonical_value(
-    key: str, value: object, allowed_values: tuple[str, ...]
+    key: str,
+    value: object,
+    allowed_values: tuple[str, ...],
+    aliases: dict[str, str] | None = None,
 ) -> str | None:
-    """Return a finding when a metadata value is absent from the canonical set."""
+    """Return a finding when a metadata value is absent from the canonical set.
 
-    if not isinstance(value, str) or value not in allowed_values:
+    Deprecated spellings listed in ``aliases`` are accepted (the auditor never
+    rewrites issue bodies), so values the automation still emits do not surface as
+    invalid.
+    """
+
+    accepted = isinstance(value, str) and (value in allowed_values or value in (aliases or {}))
+    if not accepted:
         return f"Invalid {key!r} value {value!r}; expected one of: " + ", ".join(allowed_values)
     return None
 
@@ -252,14 +362,17 @@ def audit_archetype_metadata(body: str) -> ArchetypeMetadataAuditResult:
 
     if "archetype" in parsed:
         archetype_finding = _validate_canonical_value(
-            "archetype", parsed.get("archetype"), VALID_ARCHETYPES
+            "archetype", parsed.get("archetype"), VALID_ARCHETYPES, ARCHETYPE_ALIASES
         )
         if archetype_finding is not None:
             invalid_values["archetype"] = parsed.get("archetype")
 
     if "evidence_tier" in parsed:
         evidence_tier_finding = _validate_canonical_value(
-            "evidence_tier", parsed.get("evidence_tier"), VALID_EVIDENCE_TIERS
+            "evidence_tier",
+            parsed.get("evidence_tier"),
+            VALID_EVIDENCE_TIERS,
+            EVIDENCE_TIER_ALIASES,
         )
         if evidence_tier_finding is not None:
             invalid_values["evidence_tier"] = parsed.get("evidence_tier")
@@ -298,7 +411,7 @@ def audit_issue_body(body: str) -> IssueAuditResult:
     """Audit an issue body against the repo's template contract."""
 
     present = extract_present_sections(body)
-    missing = missing_sections(body)
+    missing = missing_sections(body, select_required_sections(body))
     repaired = build_repaired_body(body, missing)
     return IssueAuditResult(
         present_sections=present,

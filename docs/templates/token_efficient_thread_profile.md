@@ -22,6 +22,7 @@ changes.
 - output_budget: [parent-thread summary length and exact artifact paths to return]
 - stop_guard: [usage threshold, wall-clock limit, or external blocker]
 - validation_plan: [commands or checks that prove this task class]
+- phase_audit_record: [latest compact token-spend review, route changes, and reusable lesson path]
 - handoff_target: [PR, issue comment, context note, or final handoff]
 ```
 
@@ -58,6 +59,10 @@ changes.
   the failure itself needs a short excerpt.
 - `stop_guard` is binding for autonomous loops. When a usage threshold fires,
   record the pause in the common Git dir and avoid starting a fresh batch.
+- `phase_audit_record` keeps the token-spend review outside the parent thread.
+  Record the latest usage snapshot, reused context cache, skipped broad reads,
+  accepted or rejected delegates, and any candidate lesson note. Link the
+  common-Git-dir artifact instead of pasting raw route logs.
 
 ## Phase Audit
 
@@ -65,10 +70,17 @@ At each phase boundary, review the active thread for token leaks before starting
 new work. Keep the audit to one compact paragraph or checklist, and patch the
 workflow only when the savings are reusable.
 
+- Start from the current `resume_checkpoint`, `loaded_context_cache`, and
+  `phase_audit_record`. Reread long skills, issue bodies, PR snapshots, or
+  context notes only when their recorded freshness key changed.
 - Run one usage check per phase, record the reset window, and reuse it until a
   cooldown, direct user request, or new phase makes it stale.
 - Refresh the issue or PR head SHA before implementation and before review
   repair so closed, merged, or superseded work is detected before editing.
+- Treat parent-thread search output as a budgeted surface. Prefer file-name
+  discovery (`rg --files | rg <focused-pattern>`), `rg -l`, and bounded
+  `sed -n` ranges; redirect broad `rg -n` or multi-directory searches to a
+  private artifact and report only paths plus the decision-relevant excerpt.
 - Use filtered status helpers for local state:
   `uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --filter <branch> --json`
   for branch cleanup, and raw `git worktree list --porcelain` only when the
@@ -82,8 +94,32 @@ workflow only when the savings are reusable.
 - Require delegated workers to return only files inspected, files changed,
   validation, blockers, and recommendation. Ask for raw logs only after the
   parent identifies a specific uncertainty.
+- Reject or reroute worker output that lacks compact artifacts before reading
+  full logs. Accept sparse or app-agent-only output only after parent-owned diff
+  review and validation prove the result independently.
+- After every accepted, rejected, or rerouted delegate, append a one-paragraph
+  self-review note when the route created reusable evidence about output size,
+  artifact quality, quota pressure, or validation cost.
 - When usage is close to the stop guard, finish the active PR or blocker record,
   then hand off instead of opening a fresh batch.
+
+## Token-Spend Review
+
+Use this compact review before creating workflow-improvement PRs or continuing a
+long goal near a usage guard:
+
+- `usage`: latest primary and secondary remaining percentages, reset times, and
+  whether the stop guard is close.
+- `largest_parent_outputs`: broad commands, full skill reads, raw logs, or
+  verbose delegate messages that entered the parent thread.
+- `delegation_economics`: delegates accepted, rejected, rerouted, or skipped,
+  plus whether reviewing them was cheaper than direct Codex work.
+- `cache_hits`: skills, docs, snapshots, issue state, route facts, and usage
+  readings reused instead of reread.
+- `cache_misses`: repeated reads or rediscovery that should become ledger
+  fields, route-cache entries, or worker prompt constraints.
+- `next_savings`: three to ten concrete changes, each phrased as a rule that
+  prevents a repeated token leak and names the evidence that triggered it.
 
 ## Delegated Worker Artifact Contract
 

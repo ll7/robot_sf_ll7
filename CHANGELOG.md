@@ -71,6 +71,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Consolidated the RFC6901 JSON-pointer renderer that was copy-pasted in eight modules into a single
+  shared helper `robot_sf.common.json_pointer.json_pointer` (#3386). The eight schema-validation call
+  sites (`benchmark/{scenario_schema,odd_contract,hazard_traceability,scenario_contract,odd_hazard_coverage_matrix,artifact_catalog}.py`
+  and `analysis_workbench/{simulation_trace_export,trace_annotation}.py`) now import it, removing the
+  latent hazard of an escaping fix diverging between copies. As part of unifying the two prior copies,
+  the three `analysis_workbench`/`artifact_catalog` sites now render the *root* path (empty error path)
+  as the RFC6901-correct empty string `""` instead of `"/"`; this only affects the rare root-level
+  schema-error message string and is covered by a new unit test
+  (`tests/common/test_json_pointer.py`). Also fixed `_copy_figures` in `research/imitation_report.py`
+  to actually `return` its `dict[str, Path]` mapping (it previously fell through to `None` despite the
+  annotation), with a regression test (#3386).
 * Cut pull-request CI wall-clock by parallelizing the `fast-feedback` test phase. Pull requests now
   split the suite into 4 `pytest-split` shards (a matrix on the existing job, so the CI topology is
   unchanged) while `main`/`workflow_dispatch` keep a single full pass so the advisory coverage

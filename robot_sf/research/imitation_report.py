@@ -440,7 +440,11 @@ def _figure_paths(summary_path: Path) -> dict[str, Path]:
 
 
 def _copy_figures(figures: dict[str, Path], destination: Path) -> dict[str, Path]:
-    """Copy figure files into the report figures/ directory and render PDF copies."""
+    """Copy figure files into the report figures/ directory and render PDF copies.
+
+    Returns:
+        Mapping of figure label to the copied PNG path in ``destination``.
+    """
 
     destination.mkdir(parents=True, exist_ok=True)
     copied: dict[str, Path] = {}
@@ -462,6 +466,8 @@ def _copy_figures(figures: dict[str, Path], destination: Path) -> dict[str, Path
         finally:
             if fig:
                 plt.close(fig)
+
+    return copied
 
 
 def _extract_seeds(summary: dict[str, Any]) -> list[int]:

@@ -12,6 +12,8 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 
+from robot_sf.common.json_pointer import json_pointer
+
 HAZARD_TRACEABILITY_SCHEMA_VERSION = "hazard_traceability.v1"
 HAZARD_COVERAGE_SUMMARY_SCHEMA_VERSION = "hazard-traceability-coverage.v1"
 HAZARD_TRACEABILITY_SCHEMA_FILE = (
@@ -186,7 +188,7 @@ def _schema_validation_errors(payload: Mapping[str, Any]) -> list[str]:
 
     validator = Draft202012Validator(load_hazard_traceability_schema())
     return [
-        f"{_json_pointer(error.absolute_path)}: {error.message}"
+        f"{json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
     ]
 
@@ -283,22 +285,6 @@ def _mapping_from_payload(payload: Mapping[str, Any]) -> HazardTraceability:
         ),
         extensions=dict(payload.get("extensions", {})),
     )
-
-
-def _json_pointer(path_elems: Iterable[Any]) -> str:
-    """Render a validation error path as an RFC6901-style JSON pointer.
-
-    Returns:
-        JSON pointer string, or an empty string for the root path.
-    """
-
-    parts: list[str] = []
-    for part in path_elems:
-        if isinstance(part, int):
-            parts.append(str(part))
-        else:
-            parts.append(str(part).replace("~", "~0").replace("/", "~1"))
-    return "/" + "/".join(parts) if parts else ""
 
 
 __all__ = [

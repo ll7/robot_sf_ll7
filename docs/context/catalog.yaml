@@ -17,6 +17,18 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_3372_occluder_timing_pilot_2026-06-22/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3372_occluder_timing_pilot_2026-06-22/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3372_occluder_timing_pilot_2026-06-22/checksums.sha256
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3342_nearfield_turn_budget_2026-06-21/README.md
     status: evidence
     freshness: evidence

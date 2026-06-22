@@ -19,10 +19,12 @@
 #   blind_corner     -> blind_corner_occlusion_exposure   (obstacle=maze,       flow=uni)
 #   crowded_traffic  -> crowded_traffic_merge_negotiation  (obstacle=open,      flow=merge, density=high)
 #
-# Not yet exposed as first-class generator parameters (tracked follow-up, #3279):
-#   width_m, occlusion_geometry, start_timing_s, yielding_pressure. The current
-#   generator vocabulary (density/flow/obstacle/groups/speed_var/goal_topology/
-#   robot_context) is mapped to the closest mechanism trigger per family above.
+# Issue #3423 control exposure:
+#   Each family declares metadata.social_mini_game_controls for width_m,
+#   occlusion_geometry, start_timing_s, and yielding_pressure. The current
+#   generated-scenario schema still consumes density/flow/obstacle/groups/
+#   speed_var/goal_topology/robot_context; the control block records the
+#   documented equivalent used for mechanism traceability.
 #
 # Canonical diagnostic smoke command (one baseline-safe planner, one row per family):
 #   python scripts/demo/run_robot_sf_smoke.py \
@@ -45,12 +47,29 @@
     mechanism_aware_suite_id: doorway_bottleneck_negotiation
     target_mechanism: local_bottleneck_or_doorway_coordination
     issue: 3279
+    control_exposure_issue: 3423
     evidence_tier: diagnostic_smoke
     claim_boundary: >
       Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
       not planner-ranking or benchmark-strength mechanism evidence.
     generator_param_mapping: "obstacle=bottleneck (doorway), flow=bi (converging streams)"
-    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+    social_mini_game_controls:
+      width_m:
+        value_m: 1.4
+        support: documented_equivalent
+        equivalent: "narrow passage implied by obstacle=bottleneck"
+      occlusion_geometry:
+        value: doorway_bottleneck
+        support: documented_equivalent
+        equivalent: "bottleneck obstacle geometry constrains visibility and passing width"
+      start_timing_s:
+        value_s: 0.0
+        support: fixed_seed_equivalent
+        equivalent: "seeded generated initial state; no delayed actor spawn"
+      yielding_pressure:
+        level: medium
+        support: documented_equivalent
+        equivalent: "bidirectional flow through a narrow bottleneck"
 
 - id: smg_hallway_v0
   density: med
@@ -67,12 +86,29 @@
     mechanism_aware_suite_id: hallway_bidirectional_passing
     target_mechanism: bidirectional_corridor_passing
     issue: 3279
+    control_exposure_issue: 3423
     evidence_tier: diagnostic_smoke
     claim_boundary: >
       Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
       not planner-ranking or benchmark-strength mechanism evidence.
     generator_param_mapping: "obstacle=open, flow=bi (opposing corridor streams)"
-    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+    social_mini_game_controls:
+      width_m:
+        value_m: 2.4
+        support: documented_equivalent
+        equivalent: "open corridor width represented by obstacle=open"
+      occlusion_geometry:
+        value: none
+        support: documented_equivalent
+        equivalent: "open sightline hallway; no static occluder"
+      start_timing_s:
+        value_s: 0.0
+        support: fixed_seed_equivalent
+        equivalent: "seeded generated initial state; simultaneous opposing flow"
+      yielding_pressure:
+        level: medium
+        support: documented_equivalent
+        equivalent: "bidirectional passing pressure from flow=bi"
 
 - id: smg_intersection_v0
   density: med
@@ -89,12 +125,29 @@
     mechanism_aware_suite_id: intersection_crossing_negotiation
     target_mechanism: crossing_flow_right_of_way
     issue: 3279
+    control_exposure_issue: 3423
     evidence_tier: diagnostic_smoke
     claim_boundary: >
       Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
       not planner-ranking or benchmark-strength mechanism evidence.
     generator_param_mapping: "obstacle=open, flow=cross (perpendicular crossing streams)"
-    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+    social_mini_game_controls:
+      width_m:
+        value_m: 2.8
+        support: documented_equivalent
+        equivalent: "open crossing area represented by obstacle=open"
+      occlusion_geometry:
+        value: none
+        support: documented_equivalent
+        equivalent: "open intersection; no static occluder"
+      start_timing_s:
+        value_s: 0.0
+        support: fixed_seed_equivalent
+        equivalent: "seeded generated initial state; crossing flow starts together"
+      yielding_pressure:
+        level: high
+        support: documented_equivalent
+        equivalent: "perpendicular right-of-way pressure from flow=cross"
 
 - id: smg_blind_corner_v0
   density: low
@@ -111,12 +164,29 @@
     mechanism_aware_suite_id: blind_corner_occlusion_exposure
     target_mechanism: occluded_emergence_exposure
     issue: 3279
+    control_exposure_issue: 3423
     evidence_tier: diagnostic_smoke
     claim_boundary: >
       Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
       not planner-ranking or benchmark-strength mechanism evidence.
-    generator_param_mapping: "obstacle=maze (L-corner occlusion proxy), flow=uni"
-    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+    generator_param_mapping: "obstacle=maze (generated L-corner / blind-corner equivalent), flow=uni"
+    social_mini_game_controls:
+      width_m:
+        value_m: 1.6
+        support: documented_equivalent
+        equivalent: "narrow L-corner corridor represented by obstacle=maze"
+      occlusion_geometry:
+        value: l_corner_blind_corner
+        support: documented_equivalent
+        equivalent: "generated maze obstacle documented as the L-corner / blind-corner equivalent"
+      start_timing_s:
+        value_s: 0.0
+        support: fixed_seed_equivalent
+        equivalent: "seeded generated initial state; emerging actor timing is geometric, not delayed spawn"
+      yielding_pressure:
+        level: medium
+        support: documented_equivalent
+        equivalent: "single-direction blind-corner exposure with robot_context=ahead"
 
 - id: smg_crowded_traffic_v0
   density: high
@@ -133,9 +203,26 @@
     mechanism_aware_suite_id: crowded_traffic_merge_negotiation
     target_mechanism: dense_merge_negotiation
     issue: 3279
+    control_exposure_issue: 3423
     evidence_tier: diagnostic_smoke
     claim_boundary: >
       Proposal-tier Social Mini-Game scenario family; diagnostic smoke input only,
       not planner-ranking or benchmark-strength mechanism evidence.
     generator_param_mapping: "density=high, flow=merge (converging crowd), groups=0.2"
-    unexposed_parameters: [width_m, occlusion_geometry, start_timing_s, yielding_pressure]
+    social_mini_game_controls:
+      width_m:
+        value_m: 3.0
+        support: documented_equivalent
+        equivalent: "open merge area represented by obstacle=open"
+      occlusion_geometry:
+        value: none
+        support: documented_equivalent
+        equivalent: "crowd pressure scenario without static occluder"
+      start_timing_s:
+        value_s: 0.0
+        support: fixed_seed_equivalent
+        equivalent: "seeded generated initial state; merge pressure begins at episode start"
+      yielding_pressure:
+        level: high
+        support: documented_equivalent
+        equivalent: "density=high, flow=merge, groups=0.2"

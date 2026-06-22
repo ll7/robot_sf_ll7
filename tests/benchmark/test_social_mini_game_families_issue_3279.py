@@ -31,6 +31,12 @@ _EXPECTED_FAMILIES = {
     "blind_corner",
     "crowded_traffic",
 }
+_EXPECTED_CONTROL_KEYS = {
+    "width_m",
+    "occlusion_geometry",
+    "start_timing_s",
+    "yielding_pressure",
+}
 
 
 def _load_families() -> list[dict]:
@@ -64,6 +70,63 @@ def test_each_family_uses_distinct_generator_parameters() -> None:
     scenarios = _load_families()
     combos = [(s["flow"], s["obstacle"], s["density"]) for s in scenarios]
     assert len(combos) == len(set(combos)), f"families must use distinct param combos: {combos}"
+
+
+def test_each_family_exposes_social_mini_game_controls() -> None:
+    """Issue #3423 controls must be visible as first-class manifest metadata."""
+    scenarios = _load_families()
+    for scenario in scenarios:
+        metadata = scenario["metadata"]
+        assert "unexposed_parameters" not in metadata
+        assert int(metadata["control_exposure_issue"]) == 3423
+
+        controls = metadata["social_mini_game_controls"]
+        assert set(controls) == _EXPECTED_CONTROL_KEYS
+
+        width = controls["width_m"]
+        assert width["support"] == "documented_equivalent"
+        assert width["value_m"] > 0.0
+        assert width["equivalent"]
+
+        occlusion = controls["occlusion_geometry"]
+        assert occlusion["support"] == "documented_equivalent"
+        assert occlusion["value"] in {
+            "doorway_bottleneck",
+            "none",
+            "l_corner_blind_corner",
+        }
+        assert occlusion["equivalent"]
+
+        timing = controls["start_timing_s"]
+        assert timing["support"] == "fixed_seed_equivalent"
+        assert timing["value_s"] >= 0.0
+        assert "seed" in timing["equivalent"].lower()
+
+        yielding = controls["yielding_pressure"]
+        assert yielding["support"] == "documented_equivalent"
+        assert yielding["level"] in {"medium", "high"}
+        assert yielding["equivalent"]
+
+
+def test_blind_corner_declares_l_corner_equivalent_and_generates_obstacles() -> None:
+    """The blind-corner family should no longer be only a vague maze proxy."""
+    scenarios = _load_families()
+    blind = next(scenario for scenario in scenarios if scenario["id"] == "smg_blind_corner_v0")
+
+    controls = blind["metadata"]["social_mini_game_controls"]
+    assert controls["occlusion_geometry"]["value"] == "l_corner_blind_corner"
+    assert "l-corner" in controls["occlusion_geometry"]["equivalent"].lower()
+    assert "L-corner" in blind["metadata"]["generator_param_mapping"]
+
+    generated = generate_scenario(blind, blind["seeds"][0])
+    vertical_segments = [
+        obstacle for obstacle in generated.obstacles if np.isclose(obstacle[0], obstacle[2])
+    ]
+    horizontal_segments = [
+        obstacle for obstacle in generated.obstacles if np.isclose(obstacle[1], obstacle[3])
+    ]
+    assert vertical_segments, "blind-corner equivalent should include vertical occluder geometry"
+    assert horizontal_segments, "blind-corner equivalent should include horizontal occluder geometry"
 
 
 def test_each_family_generates_a_deterministic_runnable_scenario() -> None:

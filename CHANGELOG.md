@@ -82,6 +82,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tests/common/test_json_pointer.py`). Also fixed `_copy_figures` in `research/imitation_report.py`
   to actually `return` its `dict[str, Path]` mapping (it previously fell through to `None` despite the
   annotation), with a regression test (#3386).
+* Began decomposing the ~4967-line `robot_sf/benchmark/camera_ready_campaign.py` (the largest module in
+  `robot_sf/`) by extracting its 6 config dataclasses (`AmvProfileConfig`, `SeedPolicy`,
+  `ScenarioCandidateSelection`, `PlannerSpec`, `SnqiContractConfig`, `CampaignConfig`) plus the
+  `_AMV_DIMENSIONS` / `DEFAULT_SEED_SETS_PATH` constants into a new
+  `robot_sf/benchmark/camera_ready_campaign_config.py` (#3405, first slice of #3385). The names are
+  re-exported from `camera_ready_campaign`, so existing imports (e.g. in `release_protocol.py`,
+  `orca_preflight.py`, and tests) are unchanged. Behavior-preserving verbatim move; the
+  camera-ready/release regression suites pass.
 * Cut pull-request CI wall-clock by parallelizing the `fast-feedback` test phase. Pull requests now
   split the suite into 4 `pytest-split` shards (a matrix on the existing job, so the CI topology is
   unchanged) while `main`/`workflow_dispatch` keep a single full pass so the advisory coverage

@@ -6,12 +6,12 @@ Implemented in tasks T025 (append, write_manifest integration) and updated later
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+from robot_sf.common.atomic_io import atomic_write_json
 
 
 def _ensure_parent(path: Path) -> None:
@@ -44,23 +44,6 @@ def _serialize_obj(obj: Any):  # separated to keep write_manifest simple
     return str(obj)
 
 
-def _atomic_write_json(path: Path, data: dict) -> None:
-    """Write JSON atomically via a temporary file and replace."""
-    tmp_fd, tmp_path = tempfile.mkstemp(prefix=path.name, dir=str(path.parent))
-    try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
-            json.dump(data, tmp_f, indent=2, sort_keys=True)
-            tmp_f.flush()
-            os.fsync(tmp_f.fileno())
-        os.replace(tmp_path, path)
-    finally:  # cleanup tmp if failure prior to replace
-        if os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except OSError:  # pragma: no cover
-                pass
-
-
 def append_episode_record(path, record):  # T025
     """Append a single episode record as JSON line.
 
@@ -86,5 +69,5 @@ def write_manifest(manifest, path):  # T025
     for key in ("git_hash", "scenario_matrix_hash", "config"):
         if key not in data:
             raise ValueError(f"Manifest missing required key: {key}")
-    _atomic_write_json(p, data)
+    atomic_write_json(p, data)
     logger.debug("Manifest written: {}", p)

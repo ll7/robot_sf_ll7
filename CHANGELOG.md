@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
+  domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
+  language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)
+  now carries a `## Clarity` rule, `AGENTS.md` scopes token-efficiency to agent-internal surfaces
+  (clarity wins on human-facing surfaces), and the README, docs index, and CONTRIBUTING checklist
+  link the glossary so jargon is defined on first use.
 * Added a diagnostic-only multi-robot research smoke foothold (#3069): a small
   runnable scenario config (`configs/multi_robot/issue_3069_smoke.yaml`), a smoke
   runner (`scripts/validation/run_multi_robot_smoke_issue_3069.py`) that rolls out
@@ -71,6 +77,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Continued the `_build_policy` decomposition (#3384) by migrating the `risk_surface_dwa` and
+  `lidar_social_force` adapter families from the inline dispatcher into
+  `robot_sf/benchmark/map_runner_policies/adapters.py`, registered in `_POLICY_BUILDERS`. The builders
+  reuse the neutral `map_runner_policy_common.build_adapter_policy` (#3403) and import their adapter
+  classes from `robot_sf.planner.*`, so no import cycle is introduced. Behavior-preserving (the
+  `map_runner` regression suite passes; one test monkeypatch repoints to the new builder namespace).
+  Adapter families that still depend on `map_runner`-local helpers (e.g. `trivial_reference` via
+  `_build_socnav_config`) are deferred to a later slice.
 * Consolidated the RFC6901 JSON-pointer renderer that was copy-pasted in eight modules into a single
   shared helper `robot_sf.common.json_pointer.json_pointer` (#3386). The eight schema-validation call
   sites (`benchmark/{scenario_schema,odd_contract,hazard_traceability,scenario_contract,odd_hazard_coverage_matrix,artifact_catalog}.py`
@@ -90,9 +104,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-exported from `camera_ready_campaign`, so existing imports (e.g. in `release_protocol.py`,
   `orca_preflight.py`, and tests) are unchanged. Behavior-preserving verbatim move; the
   camera-ready/release regression suites pass.
+* Consolidated the duplicated durable atomic-JSON-write helper into a single shared
+  `robot_sf.common.atomic_io.atomic_write_json` (#3386). The `mkstemp -> fsync -> os.replace` helper
+  previously copy-pasted in `benchmark/imitation_manifest.py` and `benchmark/full_classic/io_utils.py`
+  now imports the shared version; behavior is preserved (the helper resolves the path and creates the
+  parent directory, a safe superset of the prior two). `benchmark/forecast_dataset_recorder.py` keeps
+  its own writer for now because it has a different output contract (trailing newline, no `fsync`).
+  Covered by `tests/common/test_atomic_io.py`.
 * Began decomposing the ~1270-line `_build_policy` dispatcher in `robot_sf/benchmark/map_runner.py`
   into a `robot_sf/benchmark/map_runner_policies/` builder package backed by a registry (#3400, first
-  slice of #3384). The built-in goal/simple policy family now lives in `map_runner_policies/goal.py`
+  slice of Issue #3384). The built-in goal/simple policy family now lives in `map_runner_policies/goal.py`
   (`build(...) -> (policy_fn, meta)`); `_build_policy` consults `_POLICY_BUILDERS` before its remaining
   inline branches, which are unchanged. Behavior-preserving (the regression net in
   `tests/benchmark/test_map_runner_utils.py` still passes); the only test change repoints one
@@ -100,7 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Relocated the shared `_build_adapter_policy` helper out of `robot_sf/benchmark/map_runner.py` into a
   neutral `robot_sf/benchmark/map_runner_policy_common.py` (`build_adapter_policy`), re-exported under
   the old private name so all ~17 in-module call sites are unchanged (#3403, prerequisite for the
-  #3384 adapter-family decomposition). Behavior-preserving — the helper is a verbatim move and the
+  Issue #3384 adapter-family decomposition). Behavior-preserving — the helper is a verbatim move and the
   `map_runner` regression suite passes. This lets future `map_runner_policies/` builder modules reuse
   the helper without an import cycle back into `map_runner`.
 * Cut pull-request CI wall-clock by parallelizing the `fast-feedback` test phase. Pull requests now

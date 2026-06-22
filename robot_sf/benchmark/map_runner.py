@@ -116,6 +116,7 @@ from robot_sf.benchmark.map_runner_observations import (
     obs_to_external_mpc_format as _obs_to_external_mpc_format,
 )
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
+from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policy_common import (
     build_adapter_policy as _build_adapter_policy,
@@ -210,16 +211,11 @@ from robot_sf.planner.kinematics_model import (
     KinematicsModel,
     resolve_benchmark_kinematics_model,
 )
-from robot_sf.planner.learned_risk_surface import (
-    RiskSurfacePlannerAdapter,
-    build_local_risk_surface_spec,
-)
 from robot_sf.planner.lidar_occupancy import (
     LidarOccupancyPlannerAdapter,
     build_lidar_occupancy_config,
 )
 from robot_sf.planner.lidar_occupancy_grid import build_lidar_grid_route_adapter
-from robot_sf.planner.lidar_tracked_agents import build_lidar_tracked_social_force_adapter
 from robot_sf.planner.mppi_social import (
     MPPISocialPlannerAdapter,
     build_mppi_social_config,
@@ -236,7 +232,7 @@ from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
     build_predictive_mppi_config,
 )
-from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
+from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
 from robot_sf.planner.safety_barrier import (
     SafetyBarrierPlannerAdapter,
     build_safety_barrier_config,
@@ -878,7 +874,17 @@ def _update_adapter_impact_metrics(
 # Registry of migrated per-algorithm policy builders (#3384). Consulted before the
 # inline dispatch in _build_policy; families not yet migrated fall through to the
 # existing if/elif chain.
-_POLICY_BUILDERS = dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build)
+_POLICY_BUILDERS = {
+    **dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build),
+    **dict.fromkeys(
+        _adapter_policy_builders.RISK_SURFACE_DWA_KEYS,
+        _adapter_policy_builders.build_risk_surface_dwa,
+    ),
+    **dict.fromkeys(
+        _adapter_policy_builders.LIDAR_SOCIAL_FORCE_KEYS,
+        _adapter_policy_builders.build_lidar_social_force,
+    ),
+}
 
 
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
@@ -928,50 +934,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
             limitations=registered_adapter_spec.limitations,
-        )
-
-    if algo_key in {"risk_surface_dwa", "risk_surface_dwa_v0"}:
-        risk_surface_cfg = (
-            algo_config.get("risk_surface")
-            if isinstance(algo_config.get("risk_surface"), dict)
-            else {}
-        )
-        risk_dwa_cfg = (
-            algo_config.get("risk_dwa") if isinstance(algo_config.get("risk_dwa"), dict) else {}
-        )
-        adapter = RiskSurfacePlannerAdapter(
-            spec=build_local_risk_surface_spec(risk_surface_cfg),
-            planner=RiskDWAPlannerAdapter(config=build_risk_dwa_config(risk_dwa_cfg)),
-        )
-        meta["risk_surface_planner"] = {
-            "status": "enabled",
-            "producer": "deterministic_pedestrian_risk_surface",
-            "wrapped_planner": "risk_dwa",
-            "benchmark_strength": False,
-            "claim_boundary": "exploratory_smoke_only",
-        }
-        return _build_adapter_policy(
-            algo_key="risk_surface_dwa",
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="RiskSurfacePlannerAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations="deterministic_risk_surface_fixture_not_benchmark_evidence",
-        )
-
-    if algo_key in {"lidar_social_force", "lidar_tracked_social_force"}:
-        adapter = build_lidar_tracked_social_force_adapter(algo_config)
-        return _build_adapter_policy(
-            algo_key="lidar_social_force",
-            algo_config=algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="LidarTrackedSocialForceAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations="lidar_endpoint_tracked_social_force_testing_only",
         )
 
     if algo_key in {"trivial_reference", "reference_adapter"}:

@@ -145,3 +145,25 @@ def test_unicycle_over_limit_negative_steering_clipped():
     motion.move(state, (0.0, -100.0), 1.0)
     pos_after, _ = state.pose
     assert pos_after[0] > 0.0
+
+
+def test_default_unicycle_state_can_move():
+    """A default-constructed UnicycleDriveState steps without raising and reports a well-formed speed.
+
+    Covers the previously untested default path where ``velocity`` is not passed explicitly.
+    Regression for the tuple-vs-scalar default bug.
+    """
+    state = UnicycleDriveState()
+    assert state.velocity == 0.0
+    speed, orient = state.current_speed
+    assert speed == 0.0
+    assert orient == 0.0
+
+    motion = UnicycleMotion(UnicycleDriveSettings())
+    motion.move(state, (1.0, 0.0), 0.1)
+
+    assert isinstance(state.velocity, float)
+    assert state.velocity > 0.0
+    speed_after, orient_after = state.current_speed
+    assert speed_after == state.velocity
+    assert orient_after == 0.0

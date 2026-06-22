@@ -18,6 +18,8 @@ def _escape_markdown_cell(value: Any) -> str:
     Returns:
         Escaped single-line markdown-safe cell value.
     """
+    if value is None:
+        return ""
     text = str(value)
     text = text.replace("\\", "\\\\")
     text = text.replace("|", "\\|")
@@ -33,6 +35,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple[str, ...]) -> None:
     """Write a table in Markdown format using explicit header order."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         "| " + " | ".join(headers) + " |",
         "|" + "|".join("---" for _ in headers) + "|",
@@ -45,6 +48,7 @@ def _write_markdown_table(path: Path, rows: list[dict[str, Any]], headers: tuple
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     """Write campaign summary table in CSV format."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
         path.write_text("", encoding="utf-8")
         return

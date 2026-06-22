@@ -1889,7 +1889,7 @@ def test_artifact_writers_preserve_stable_formatting_and_injection_guards(
 
     assert json_path.read_text(encoding="utf-8") == '{\n  "z": 1,\n  "a": {\n    "b": 2\n  }\n}\n'
 
-    csv_path = tmp_path / "rows.csv"
+    csv_path = tmp_path / "nested" / "tables" / "rows.csv"
     _write_csv(
         csv_path,
         [
@@ -1916,20 +1916,32 @@ def test_table_artifact_writer_projects_headers_and_escapes_markdown(
             {
                 "planner": "goal|baseline",
                 "status": "ok\naccepted",
+                "notes": None,
                 "ignored": "not exported",
             }
         ],
-        headers=("planner", "status", "missing"),
+        headers=("planner", "status", "notes", "missing"),
     )
 
     assert csv_path == tmp_path / "summary.csv"
     assert md_path == tmp_path / "summary.md"
     assert list(csv.DictReader(io.StringIO(csv_path.read_text(encoding="utf-8")))) == [
-        {"planner": "goal|baseline", "status": "ok\naccepted", "missing": ""}
+        {"planner": "goal|baseline", "status": "ok\naccepted", "notes": "", "missing": ""}
     ]
     assert md_path.read_text(encoding="utf-8") == (
-        "| planner | status | missing |\n|---|---|---|\n| goal\\|baseline | ok accepted |  |\n"
+        "| planner | status | notes | missing |\n"
+        "|---|---|---|---|\n"
+        "| goal\\|baseline | ok accepted |  |  |\n"
     )
+
+    nested_csv, nested_md = _write_table_artifacts(
+        tmp_path / "nested" / "reports",
+        "summary",
+        [{"planner": "goal"}],
+        headers=("planner",),
+    )
+    assert nested_csv.exists()
+    assert nested_md.exists()
 
 
 def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noqa: PLR0915

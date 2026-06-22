@@ -23,6 +23,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed `scripts/tools/issue_template_audit.py` so it recognizes the repo's own YAML issue
+  forms (`epic`/`execution-run`/`test-debt`/`blocked-external-artifact`) and agent-authored
+  bodies instead of only the markdown templates. The audit previously matched a single strict
+  12-section markdown contract and reported 8–12 false "missing section" gaps on nearly every
+  issue filed from the leaner YAML forms. The auditor now (a) maps heading variants such as
+  `Scope and non-goals`, `Acceptance criteria`/`Acceptance / stop rule`, `Estimate metadata`,
+  `Validation commands`, and `Question / Goal`/`Background` to their canonical sections;
+  (b) strips trailing parenthetical qualifiers (e.g. `Acceptance criteria (mirrors body)`);
+  (c) credits `###` contract subheadings carried inside the appended `agent-exec-spec` block;
+  and (d) audits leaner-template issues against a shared agent-ready core
+  (`Goal / Problem`, `Scope`, `Effort Estimation`, `Definition of Done`, `Validation / Testing`)
+  while bare/markdown-style bodies keep the strict full contract. Across the 91 open issues this
+  cut spurious "missing section" reports from ~87 issues (many with 8–12 false gaps) to a small
+  set of genuine gaps. The archetype-metadata audit and `audit_archetype_metadata` API are
+  unchanged.
+* Expanded the canonical issue-archetype taxonomy in
+  `docs/context/issue_1512_issue_archetypes.md` and the validator
+  (`scripts/tools/issue_template_audit.py`) to bless the work-type archetypes the issue
+  automation already emits — `implementation`, `test`, `refactor`, `data` — and to accept the
+  deprecated spellings `agent_task` (→ `implementation`) and the evidence tier `proposal`
+  (→ `idea`) on read without rewriting issue bodies. This clears the validator's
+  invalid-metadata findings on the four affected open issues (#2000, #3069, #3071, #3206)
+  without per-issue edits, and wires `implementation`/`data` into
+  `issue_archetype_sync.py`'s `SAFE_ARCHETYPE_LABEL_MAP` (`type:implementation`/`type:data`,
+  both existing labels).
 * Fixed `scripts/validation/validate_forecast_risk_calibration_filter.py` so its
   `_any_eligible_for_risk_scoring` gate recognizes the canonical `eligible_analysis_only` token
   emitted by `build_forecast_calibration_report`. The gate previously matched only the legacy

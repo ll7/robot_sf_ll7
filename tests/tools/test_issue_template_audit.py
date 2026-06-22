@@ -5,13 +5,126 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from scripts.tools.issue_template_audit import (
+    CORE_SECTION_ORDER,
+    SECTION_ORDER,
     audit_issue_body,
     main,
     normalize_section_title,
+    select_required_sections,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def test_yaml_form_issue_audits_against_leaner_core() -> None:
+    """Verify YAML-form issues are audited against the shared core, not the full markdown set.
+
+    This matters because the repo ships YAML issue forms (epic/execution-run/...) whose
+    headings (``Scope and non-goals``, ``Acceptance criteria``, ``Estimate metadata``)
+    deliberately omit the markdown-only sub-sections; auditing them against the full
+    markdown contract produced false "missing section" reports.
+    """
+
+    body = """## Goal / Problem
+
+Ship the thing.
+
+## Scope and non-goals
+
+- In scope: the thing.
+- Out of scope: everything else.
+
+## Acceptance criteria
+
+- [ ] The thing works.
+
+## Validation / Testing
+
+- [ ] Run the gate.
+
+## Estimate metadata
+
+- Effort: 4h.
+"""
+
+    assert select_required_sections(body) == CORE_SECTION_ORDER
+    result = audit_issue_body(body)
+    assert result.missing_sections == ()
+
+
+def test_agent_exec_spec_h3_content_counts_as_present() -> None:
+    """Verify contract content carried as ``###`` headings in the agent-exec-spec is credited.
+
+    This matters because agent-authored bodies place acceptance/validation content as
+    ``###`` subheadings (often with parenthetical qualifiers) inside the appended
+    ``agent-exec-spec`` block; the audit must see that real content instead of flagging it.
+    """
+
+    body = """## Goal / Problem
+
+Do the work.
+
+## Scope
+
+- In scope: x.
+
+## Estimate
+
+- 6h.
+
+<!-- agent-exec-spec:v1 -->
+## 🤖 Agent execution spec (codex gpt5.5 medium)
+
+### Acceptance criteria (mirrors body)
+
+- [ ] Done.
+
+### Validation commands
+
+```bash
+uv run pytest -q
+```
+"""
+
+    assert select_required_sections(body) == CORE_SECTION_ORDER
+    result = audit_issue_body(body)
+    assert "Definition of Done" not in result.missing_sections
+    assert "Validation / Testing" not in result.missing_sections
+    assert "Effort Estimation" not in result.missing_sections
+    assert result.missing_sections == ()
+
+
+def test_bare_body_still_uses_full_markdown_contract() -> None:
+    """Verify a bare body with no leaner signals keeps the strict full contract.
+
+    This matters because the leaner core must only apply when a body positively signals
+    the YAML-form/agent family; otherwise incomplete markdown issues would stop being flagged.
+    """
+
+    body = """## Goal / Problem
+
+Bare body.
+
+## Scope
+
+- In scope:
+"""
+
+    assert select_required_sections(body) == SECTION_ORDER
+    result = audit_issue_body(body)
+    assert "Added Value Estimation" in result.missing_sections
+    assert "Project Metadata" in result.missing_sections
+
+
+def test_normalize_section_title_handles_variants() -> None:
+    """Verify new heading aliases and parenthetical stripping map to canonical sections."""
+
+    assert normalize_section_title("Scope and non-goals") == "Scope"
+    assert normalize_section_title("Acceptance criteria (mirrors body)") == "Definition of Done"
+    assert normalize_section_title("Validation commands") == "Validation / Testing"
+    assert normalize_section_title("Estimate metadata") == "Effort Estimation"
+    assert normalize_section_title("Question / Goal") == "Goal / Problem"
 
 
 def test_issue_template_audit_repairs_missing_sections() -> None:
@@ -374,6 +487,62 @@ linked_policy: [docs/context/issue_1512_issue_archetypes.md
 
     assert result.metadata.parse_error is not None
     assert result.metadata.findings[0].startswith("Malformed archetype metadata YAML:")
+
+
+def test_issue_template_audit_accepts_expanded_archetypes() -> None:
+    """Verify the 2026-06-22 work-type archetypes validate without findings.
+
+    This matters because the issue automation emits implementation/test/refactor/data and the
+    maintainer chose to bless them as canonical instead of remapping every issue.
+    """
+
+    for archetype in ("implementation", "test", "refactor", "data"):
+        body = f"""## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: {archetype}
+evidence_tier: smoke
+linked_policy:
+  - docs/context/issue_1512_issue_archetypes.md
+```
+"""
+        result = audit_issue_body(body)
+        assert result.metadata.invalid_values == {}, archetype
+        assert result.metadata.findings == (), archetype
+
+
+def test_issue_template_audit_accepts_deprecated_metadata_aliases() -> None:
+    """Verify deprecated archetype/evidence-tier spellings are accepted on read.
+
+    This matters because ``agent_task`` and ``proposal`` are still emitted by older automation,
+    and the auditor should not flag them as invalid (it never rewrites issue bodies).
+    """
+
+    body = """## Goal / Problem
+
+Context.
+
+## Archetype Metadata
+
+```yaml
+archetype: agent_task
+evidence_tier: proposal
+linked_policy:
+  - docs/context/issue_1512_issue_archetypes.md
+```
+"""
+
+    result = audit_issue_body(body)
+    assert result.metadata.invalid_values == {}
+    assert result.metadata.findings == ()
+    # The body is preserved verbatim; aliases are accepted, not rewritten.
+    assert result.metadata.parsed_metadata is not None
+    assert result.metadata.parsed_metadata["archetype"] == "agent_task"
+    assert result.metadata.parsed_metadata["evidence_tier"] == "proposal"
 
 
 def test_issue_template_audit_cli_repairs_body(tmp_path: Path, capsys) -> None:

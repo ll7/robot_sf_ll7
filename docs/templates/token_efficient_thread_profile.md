@@ -59,6 +59,32 @@ changes.
 - `stop_guard` is binding for autonomous loops. When a usage threshold fires,
   record the pause in the common Git dir and avoid starting a fresh batch.
 
+## Phase Audit
+
+At each phase boundary, review the active thread for token leaks before starting
+new work. Keep the audit to one compact paragraph or checklist, and patch the
+workflow only when the savings are reusable.
+
+- Run one usage check per phase, record the reset window, and reuse it until a
+  cooldown, direct user request, or new phase makes it stale.
+- Refresh the issue or PR head SHA before implementation and before review
+  repair so closed, merged, or superseded work is detected before editing.
+- Use filtered status helpers for local state:
+  `uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --filter <branch> --json`
+  for branch cleanup, and raw `git worktree list --porcelain` only when the
+  helper reports a stale entry or missing detail.
+- Keep CI and validation loops bounded in the parent thread. Store full output
+  in compact-validation artifacts and report only command, exit code, failing
+  node IDs, artifact paths, and the next action.
+- Check `route_cache` before spawning a delegate. If a model or helper is
+  quota-blocked, reuse the recorded reset time and route directly to the next
+  eligible worker.
+- Require delegated workers to return only files inspected, files changed,
+  validation, blockers, and recommendation. Ask for raw logs only after the
+  parent identifies a specific uncertainty.
+- When usage is close to the stop guard, finish the active PR or blocker record,
+  then hand off instead of opening a fresh batch.
+
 ## Delegated Worker Artifact Contract
 
 Each delegated implementation or review worker should return a compact artifact

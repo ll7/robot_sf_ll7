@@ -92,6 +92,10 @@ compact snapshots and validation wrappers before broad reads, and keep raw logs 
 agent-run artifacts with only artifact paths and short excerpts in the parent thread. Delegated
 worker outputs are route evidence only: parent Codex still reviews the diff, checks the artifact
 bundle, and runs the selected validation before accepting, rerouting, or rejecting the work.
+At each autonomous phase boundary, run the profile's `Phase Audit` checklist before opening another
+batch: reuse recorded usage and route-cache facts, check issue/PR freshness before editing,
+prefer filtered worktree/status snapshots, bound CI polling output, and hand off instead of starting
+new work when usage is close to the stop guard.
 
 ## Shared Knowledge Graph
 

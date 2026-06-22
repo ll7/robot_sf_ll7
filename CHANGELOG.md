@@ -90,6 +90,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-exported from `camera_ready_campaign`, so existing imports (e.g. in `release_protocol.py`,
   `orca_preflight.py`, and tests) are unchanged. Behavior-preserving verbatim move; the
   camera-ready/release regression suites pass.
+* Began decomposing the ~1270-line `_build_policy` dispatcher in `robot_sf/benchmark/map_runner.py`
+  into a `robot_sf/benchmark/map_runner_policies/` builder package backed by a registry (#3400, first
+  slice of #3384). The built-in goal/simple policy family now lives in `map_runner_policies/goal.py`
+  (`build(...) -> (policy_fn, meta)`); `_build_policy` consults `_POLICY_BUILDERS` before its remaining
+  inline branches, which are unchanged. Behavior-preserving (the regression net in
+  `tests/benchmark/test_map_runner_utils.py` still passes); the only test change repoints one
+  monkeypatch to the new builder namespace.
 * Relocated the shared `_build_adapter_policy` helper out of `robot_sf/benchmark/map_runner.py` into a
   neutral `robot_sf/benchmark/map_runner_policy_common.py` (`build_adapter_policy`), re-exported under
   the old private name so all ~17 in-module call sites are unchanged (#3403, prerequisite for the

@@ -31,7 +31,10 @@ EVIDENCE_TIER = "diagnostic-only"
 DENOMINATOR_POLICY = "counterfactual_pairs_not_benchmark_denominator"
 GENERATOR_ID = "create_counterfactual_scenario_pair"
 _SUCCESS_EVIDENCE_CANDIDATE = "eligible_success_evidence_candidate"
-_SUPPORTED_FEATURES = frozenset({"robot_route_offset"})
+_SUPPORTED_FEATURES = frozenset({"robot_route_offset", "occluder_timing_offset"})
+_FEATURE_ALIASES = {
+    "occluder_timing": "occluder_timing_offset",
+}
 MECHANISM_TAXONOMY_LABELS = (
     "clearance_pressure",
     "bottleneck_negotiation",
@@ -58,7 +61,26 @@ _MECHANISM_TAXONOMY_BY_FEATURE = {
             "seed and source scenario must remain unchanged",
             "single pair is a mechanism hypothesis input, not causal evidence",
         ],
-    }
+    },
+    "occluder_timing_offset": {
+        "label": "occlusion_exposure",
+        "label_source": MECHANISM_TAXONOMY_SCHEMA_VERSION,
+        "mechanism_hypothesis": (
+            "A bounded release-time offset for the emerging pedestrian changes occlusion exposure "
+            "while holding the source scenario, seed, and map geometry fixed."
+        ),
+        "expected_metric_direction": {
+            "first_visible_step": "changes_with_release_timing",
+            "collision_or_near_miss_risk": "may_increase_when_visibility_window_shrinks",
+            "success": "no_directional_claim_from_pair_manifest",
+        },
+        "validity_constraints": [
+            "baseline and intervention must both pass perturbation preflight",
+            "source scenario must declare static occlusion and fixture timing metadata",
+            "selected pedestrian must be the emerging pedestrian",
+            "single pair is a diagnostic input, not benchmark or causal evidence",
+        ],
+    },
 }
 
 if TYPE_CHECKING:
@@ -76,13 +98,22 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--feature",
         required=True,
-        help="Perturbation family to vary. This narrow slice supports robot_route_offset.",
+        help=(
+            "Perturbation family to vary. Supported: robot_route_offset, occluder_timing_offset."
+        ),
     )
     parser.add_argument(
         "--magnitude",
         type=float,
         required=True,
-        help="Feature magnitude. For robot_route_offset this is dx_m in meters.",
+        help=(
+            "Feature magnitude. For robot_route_offset this is dx_m in meters; "
+            "for occluder_timing_offset this is dt_s in seconds."
+        ),
+    )
+    parser.add_argument(
+        "--pedestrian-id",
+        help="Selected emerging pedestrian id for occluder_timing_offset.",
     )
     parser.add_argument("--seed", type=int, required=True, help="Replay seed held fixed.")
     parser.add_argument(
@@ -107,6 +138,7 @@ def create_pair_manifest(
     magnitude: float,
     seed: int,
     scenario_config: Path,
+    pedestrian_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a preflight-validated counterfactual pair payload.
 
@@ -116,7 +148,11 @@ def create_pair_manifest(
     if seed < 0:
         raise CounterfactualPairError("seed must be non-negative")
     family = _supported_family(feature)
-    parameters = _intervention_parameters(feature=family.name, magnitude=magnitude)
+    parameters = _intervention_parameters(
+        feature=family.name,
+        magnitude=magnitude,
+        pedestrian_id=pedestrian_id,
+    )
     parameter_reasons, family_entry = validate_perturbation_family_parameters(
         family.name,
         parameters,
@@ -155,6 +191,7 @@ def create_pair_manifest(
             },
         ],
     }
+    perturbation_manifest["validity"].update(_validity_bounds_for_feature(family.name, magnitude))
     preflight_payload = _preflight_embedded_manifest(perturbation_manifest)
     _require_pair_preflight_success(preflight_payload)
 
@@ -213,8 +250,9 @@ def create_pair_manifest(
 
 def _supported_family(feature: str):
     """Return the registered family entry for a supported counterfactual feature."""
+    normalized = _FEATURE_ALIASES.get(feature, feature)
     try:
-        family = perturbation_family(feature)
+        family = perturbation_family(normalized)
     except ValueError as exc:
         raise CounterfactualPairError(f"unsupported counterfactual feature: {feature}") from exc
     if family.name not in _SUPPORTED_FEATURES:
@@ -225,20 +263,41 @@ def _supported_family(feature: str):
     return family
 
 
-def _intervention_parameters(*, feature: str, magnitude: float) -> dict[str, float]:
+def _intervention_parameters(
+    *,
+    feature: str,
+    magnitude: float,
+    pedestrian_id: str | None,
+) -> dict[str, Any]:
     """Map the CLI feature magnitude onto registered perturbation-family parameters."""
-    if feature != "robot_route_offset":
-        raise CounterfactualPairError(f"unsupported counterfactual feature: {feature}")
     if not math.isfinite(magnitude):
         raise CounterfactualPairError("magnitude must be finite")
     if magnitude == 0.0:
         raise CounterfactualPairError("magnitude must be non-zero for a counterfactual pair")
-    max_magnitude = abs(magnitude)
-    return {
-        "dx_m": magnitude,
-        "dy_m": 0.0,
-        "max_magnitude_m": max_magnitude,
-    }
+    if feature == "robot_route_offset":
+        max_magnitude = abs(magnitude)
+        return {
+            "dx_m": magnitude,
+            "dy_m": 0.0,
+            "max_magnitude_m": max_magnitude,
+        }
+    if feature == "occluder_timing_offset":
+        if not isinstance(pedestrian_id, str) or not pedestrian_id.strip():
+            raise CounterfactualPairError("occluder_timing_offset requires --pedestrian-id")
+        max_abs_dt_s = abs(magnitude)
+        return {
+            "dt_s": magnitude,
+            "max_abs_dt_s": max_abs_dt_s,
+            "pedestrian_id": pedestrian_id.strip(),
+        }
+    raise CounterfactualPairError(f"unsupported counterfactual feature: {feature}")
+
+
+def _validity_bounds_for_feature(feature: str, magnitude: float) -> dict[str, float]:
+    """Return feature-specific manifest validity bounds."""
+    if feature == "occluder_timing_offset":
+        return {"max_occluder_timing_offset_s": abs(magnitude)}
+    return {}
 
 
 def _mechanism_taxonomy_for_feature(feature: str) -> dict[str, Any]:
@@ -370,6 +429,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             magnitude=args.magnitude,
             seed=args.seed,
             scenario_config=args.scenario_config,
+            pedestrian_id=args.pedestrian_id,
         )
     except CounterfactualPairError as exc:
         print(f"error: {exc}", file=sys.stderr)

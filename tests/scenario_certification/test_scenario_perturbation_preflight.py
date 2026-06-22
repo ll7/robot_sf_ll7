@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import jsonschema
 import pytest
@@ -20,6 +21,9 @@ from robot_sf.training.scenario_loader import (
     load_scenarios,
     select_scenario,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _write_manifest(path: Path, *, max_route_offset_m: float = 0.5) -> Path:
@@ -143,6 +147,71 @@ def _write_start_delay_manifest(
             },
         ],
     }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def _write_occluder_timing_manifest(
+    path: Path,
+    *,
+    scenario_config: str = "configs/scenarios/single/issue_2756_occluded_emergence_live.yaml",
+    scenario_id: str = "issue_2756_occluded_emergence",
+    dt_s: float = 0.5,
+    max_abs_dt_s: float = 0.5,
+    pedestrian_id: str = "h1",
+) -> Path:
+    """Write a perturbation manifest that offsets occluded-emergence timing."""
+    payload = {
+        "schema_version": PERTURBATION_MANIFEST_SCHEMA_VERSION,
+        "manifest_id": "test_occluder_timing_perturbation_manifest",
+        "scenario_config": scenario_config,
+        "seed_controls": {
+            "baseline_seeds": [111],
+            "replay_seed_policy": "explicit",
+        },
+        "validity": {
+            "require_scenario_certification": True,
+            "max_route_offset_m": 0.5,
+            "max_occluder_timing_offset_s": 0.5,
+            "invalid_variant_evidence_policy": "exclude_from_success_evidence",
+        },
+        "variants": [
+            {
+                "variant_id": f"{scenario_id}_noop",
+                "scenario_id": scenario_id,
+                "family": "noop",
+                "seeds": [111],
+            },
+            {
+                "variant_id": f"{scenario_id}_occluder_timing_offset",
+                "scenario_id": scenario_id,
+                "family": "occluder_timing_offset",
+                "seeds": [111],
+                "parameters": {
+                    "dt_s": dt_s,
+                    "max_abs_dt_s": max_abs_dt_s,
+                    "pedestrian_id": pedestrian_id,
+                },
+            },
+        ],
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def _write_occluder_timing_scenario_config(
+    path: Path,
+    *,
+    mutate: Callable[[dict], None],
+) -> Path:
+    """Write a temporary occluded-emergence scenario config with one targeted mutation."""
+    source_path = Path("configs/scenarios/single/issue_2756_occluded_emergence_live.yaml")
+    payload = yaml.safe_load(source_path.read_text(encoding="utf-8"))
+    scenario = payload["scenarios"][0]
+    scenario["map_file"] = (
+        Path("maps/svg_maps/francis2023/francis2023_blind_corner.svg").resolve().as_posix()
+    )
+    mutate(scenario)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
     return path
 
@@ -412,6 +481,38 @@ def test_manifest_schema_requires_manifest_timing_cap_for_start_delay_offset(
         jsonschema.validate(manifest, schema)
 
 
+def test_manifest_schema_accepts_bounded_occluder_timing_offset(
+    tmp_path: Path,
+) -> None:
+    """The public schema should expose the occlusion-gated timing family."""
+    manifest_path = _write_occluder_timing_manifest(tmp_path / "perturbations.yaml")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    jsonschema.validate(manifest, schema)
+
+
+def test_manifest_schema_requires_manifest_timing_cap_for_occluder_timing_offset(
+    tmp_path: Path,
+) -> None:
+    """Occluder-timing manifests should carry variant-local and policy-level bounds."""
+    manifest_path = _write_occluder_timing_manifest(tmp_path / "perturbations.yaml")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    del manifest["validity"]["max_occluder_timing_offset_s"]
+    schema = json.loads(
+        Path("robot_sf/benchmark/schemas/scenario_perturbation_manifest.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    with pytest.raises(jsonschema.ValidationError, match="max_occluder_timing_offset_s"):
+        jsonschema.validate(manifest, schema)
+
+
 def test_manifest_schema_accepts_bounded_single_pedestrian_speed_offset(
     tmp_path: Path,
 ) -> None:
@@ -589,6 +690,16 @@ def test_manifest_schema_rejects_cross_family_parameters(tmp_path: Path) -> None
     timing_manifest["variants"][1]["parameters"]["dx_m"] = 0.0
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(timing_manifest, schema)
+
+    occluder_timing_manifest_path = _write_occluder_timing_manifest(
+        tmp_path / "occluder_timing_perturbations.yaml"
+    )
+    occluder_timing_manifest = yaml.safe_load(
+        occluder_timing_manifest_path.read_text(encoding="utf-8")
+    )
+    occluder_timing_manifest["variants"][1]["parameters"]["dx_m"] = 0.0
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(occluder_timing_manifest, schema)
 
     speed_manifest_path = _write_speed_manifest(
         tmp_path / "speed_perturbations.yaml",
@@ -776,6 +887,198 @@ def test_preflight_excludes_negative_start_delay_result(tmp_path: Path) -> None:
     assert excluded.reasons == [
         "preflight_error: single_pedestrian_start_delay_offset would make pedestrian 'h3' start_delay_s negative"
     ]
+
+
+def test_preflight_certifies_bounded_occluder_timing_offset(
+    tmp_path: Path,
+) -> None:
+    """Occluder timing should certify only with explicit occlusion fixture metadata."""
+    manifest_path = _write_occluder_timing_manifest(tmp_path / "perturbations.yaml")
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    assert [result.variant_id for result in report.results] == [
+        "issue_2756_occluded_emergence_noop",
+        "issue_2756_occluded_emergence_occluder_timing_offset",
+    ]
+    assert {result.validity_status for result in report.results} == {"valid"}
+    result = report.results[1]
+    assert result.family == "occluder_timing_offset"
+    assert result.perturbation_summary["dt_s"] == pytest.approx(0.5)
+    assert result.perturbation_summary["target"]["pedestrian_id"] == "h1"
+    assert result.perturbation_summary["baseline_start_delay_s"] == pytest.approx(0.0)
+    assert result.perturbation_summary["updated_start_delay_s"] == pytest.approx(0.5)
+    occlusion = result.perturbation_summary["occlusion"]
+    assert occlusion["static_occlusion"] is True
+    assert occlusion["source_fixture_occluder_id"] == "static_wall_behind_corner"
+    assert occlusion["fixture_contract"]["first_visible_step"] == 5
+    assert occlusion["fixture_contract"]["delay_steps"] == 2
+    assert occlusion["selected_pedestrian_role"] == "emerging_ped"
+
+
+def test_preflight_excludes_occluder_timing_for_non_emergence_scenario(
+    tmp_path: Path,
+) -> None:
+    """Occluder timing must not silently degrade into a generic start-delay offset."""
+    manifest_path = _write_occluder_timing_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_config="configs/scenarios/single/observation_visibility_blind_corner_smoke.yaml",
+        scenario_id="observation_visibility_blind_corner_smoke",
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.family == "occluder_timing_offset"
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: occluder_timing_offset requires scenario_family='occluded_emergence'"
+    ]
+
+
+def test_preflight_excludes_occluder_timing_without_fixture_contract(
+    tmp_path: Path,
+) -> None:
+    """Occluder timing must fail closed without fixture timing metadata."""
+    scenario_config = _write_occluder_timing_scenario_config(
+        tmp_path / "occluded_emergence.yaml",
+        mutate=lambda scenario: scenario["metadata"].pop("fixture_contract"),
+    )
+    manifest_path = _write_occluder_timing_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_config=scenario_config.as_posix(),
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: occluder_timing_offset requires metadata.fixture_contract"
+    ]
+
+
+def test_preflight_excludes_occluder_timing_with_unreadable_source_fixture(
+    tmp_path: Path,
+) -> None:
+    """Occluder timing must fail closed when the source trace fixture is missing."""
+
+    def _break_source_fixture(scenario: dict) -> None:
+        scenario["metadata"]["source_fixture"] = "tests/fixtures/missing_occlusion_trace.json"
+
+    scenario_config = _write_occluder_timing_scenario_config(
+        tmp_path / "occluded_emergence.yaml",
+        mutate=_break_source_fixture,
+    )
+    manifest_path = _write_occluder_timing_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_config=scenario_config.as_posix(),
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons[0].startswith(
+        "preflight_error: occluder_timing_offset cannot read source fixture:"
+    )
+
+
+def test_preflight_excludes_occluder_timing_with_fixture_step_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Occluder timing must fail closed when trace and scenario fixture metadata diverge."""
+
+    def _shift_fixture_contract(scenario: dict) -> None:
+        scenario["metadata"]["fixture_contract"]["first_visible_step"] = 6
+
+    scenario_config = _write_occluder_timing_scenario_config(
+        tmp_path / "occluded_emergence.yaml",
+        mutate=_shift_fixture_contract,
+    )
+    manifest_path = _write_occluder_timing_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_config=scenario_config.as_posix(),
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: occluder_timing_offset requires source fixture first_visible_step "
+        "to match metadata.fixture_contract.first_visible_step"
+    ]
+
+
+def test_preflight_excludes_occluder_timing_without_emerging_pedestrian_role(
+    tmp_path: Path,
+) -> None:
+    """Occluder timing requires the selected pedestrian to be the emerging pedestrian."""
+
+    def _remove_emerging_role(scenario: dict) -> None:
+        scenario["single_pedestrians"][0]["metadata"]["role"] = "bystander"
+
+    scenario_config = _write_occluder_timing_scenario_config(
+        tmp_path / "occluded_emergence.yaml",
+        mutate=_remove_emerging_role,
+    )
+    manifest_path = _write_occluder_timing_manifest(
+        tmp_path / "perturbations.yaml",
+        scenario_config=scenario_config.as_posix(),
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: occluder_timing_offset requires selected pedestrian "
+        "metadata.role='emerging_ped'"
+    ]
+
+
+def test_preflight_excludes_negative_occluder_timing_result(tmp_path: Path) -> None:
+    """Occluder timing cannot make the emerging pedestrian start before time zero."""
+    manifest_path = _write_occluder_timing_manifest(
+        tmp_path / "perturbations.yaml",
+        dt_s=-0.5,
+        max_abs_dt_s=0.5,
+    )
+
+    report = preflight_perturbation_manifest(manifest_path)
+
+    excluded = report.results[1]
+    assert excluded.validity_status == "invalid"
+    assert excluded.benchmark_evidence_status == "excluded_from_success_evidence"
+    assert excluded.certificate is None
+    assert excluded.reasons == [
+        "preflight_error: occluder_timing_offset would make pedestrian 'h1' start_delay_s negative"
+    ]
+
+
+def test_tracked_occluder_timing_manifest_preflights() -> None:
+    """The checked-in #3369 pilot manifest should remain schema-valid and preflight-clean."""
+    report = preflight_perturbation_manifest(
+        "configs/scenarios/perturbations/issue_3369_occluder_timing_pilot_v1.yaml"
+    )
+
+    assert [result.variant_id for result in report.results] == [
+        "issue_2756_occluded_emergence_noop",
+        "issue_2756_occluded_emergence_occluder_timing_h1_p050",
+    ]
+    assert {result.validity_status for result in report.results} == {"valid"}
+    assert report.results[1].perturbation_summary["updated_start_delay_s"] == pytest.approx(0.5)
 
 
 def test_preflight_certifies_bounded_single_pedestrian_speed_offset(
@@ -1303,6 +1606,41 @@ def test_materialize_pilot_matrix_writes_start_delay_overrides(tmp_path: Path) -
     _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
     delays = {ped.id: ped.start_delay_s for ped in offset_map.single_pedestrians}
     assert delays["h3"] == pytest.approx(0.5)
+
+
+def test_materialize_pilot_matrix_writes_occluder_timing_overrides(tmp_path: Path) -> None:
+    """Occluder-timing variants should update only the emerging pedestrian delay."""
+    manifest_path = _write_occluder_timing_manifest(tmp_path / "perturbations.yaml")
+
+    materialized = materialize_perturbation_pilot_matrix(
+        manifest_path,
+        output_dir=tmp_path / "pilot",
+        seed_limit=1,
+    )
+
+    assert materialized.included_variants == (
+        "issue_2756_occluded_emergence_noop",
+        "issue_2756_occluded_emergence_occluder_timing_offset",
+    )
+    matrix_path = Path(materialized.scenario_matrix_path)
+    generated_scenarios = load_scenarios(matrix_path)
+    offset_scenario = generated_scenarios[1]
+    overrides = {entry["id"]: entry for entry in offset_scenario["single_pedestrians"]}
+    assert overrides["h1"]["metadata"]["role"] == "emerging_ped"
+    assert overrides["h1"]["start_delay_s"] == pytest.approx(0.5)
+    metadata = offset_scenario["metadata"]["scenario_perturbation"]
+    assert metadata["family"] == "occluder_timing_offset"
+    assert metadata["perturbation_summary"]["occlusion"]["selected_pedestrian_role"] == (
+        "emerging_ped"
+    )
+
+    offset_config = build_robot_config_from_scenario(
+        offset_scenario,
+        scenario_path=matrix_path,
+    )
+    _map_name, offset_map = next(iter(offset_config.map_pool.map_defs.items()))
+    delays = {ped.id: ped.start_delay_s for ped in offset_map.single_pedestrians}
+    assert delays["h1"] == pytest.approx(0.5)
 
 
 def test_materialize_pilot_matrix_start_delay_selector_all(tmp_path: Path) -> None:

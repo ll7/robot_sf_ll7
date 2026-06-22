@@ -57,6 +57,7 @@ core_test_paths=(
   tests/contract
   tests/factories
   tests/guard
+  tests/scenario_certification
   tests/sensor
   tests/sim
   tests/unit

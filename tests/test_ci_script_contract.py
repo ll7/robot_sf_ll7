@@ -88,6 +88,7 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "${path%%::*}" in script_text
     assert "core_test_paths=(" in script_text
     assert "tests/analysis_workbench" in script_text
+    assert "tests/scenario_certification" in script_text
     assert "explicit_test_targets=(" in script_text
     assert 'cmd+=("--ignore=$optional_test_path")' in script_text
     assert 'pytest_args+=("$optional_test_path")' in script_text
@@ -112,6 +113,8 @@ def test_pytest_coverage_is_explicit_opt_in() -> None:
         'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core'
         in pr_ready_text
     )
+    assert 'optional_pytest_addopts="${PYTEST_ADDOPTS:-}"' in pr_ready_text
+    assert "--cov-append" in pr_ready_text
 
 
 def test_run_tests_parallel_validates_dist_mode_before_resolving_workers() -> None:
@@ -271,7 +274,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
         in script_text
     )
     assert (
-        'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional'
+        'PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional'
         in script_text
     )
     assert "Optional-extra changed files requiring the predictive lane" in script_text

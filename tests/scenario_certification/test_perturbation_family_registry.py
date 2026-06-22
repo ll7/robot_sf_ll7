@@ -24,6 +24,7 @@ def test_supported_families_covers_manifest_enum() -> None:
         "robot_route_offset",
         "pedestrian_route_offset",
         "single_pedestrian_start_delay_offset",
+        "occluder_timing_offset",
         "single_pedestrian_speed_offset",
         "single_pedestrian_wait_duration_offset",
         "single_pedestrian_trajectory_waypoint_offset",
@@ -35,7 +36,7 @@ def test_supported_families_covers_manifest_enum() -> None:
 def test_perturbation_families_iterable_is_ordered() -> None:
     """The families tuple should return the same order each call."""
     families = perturbation_families()
-    assert len(families) == 8
+    assert len(families) == 9
     names = [f.name for f in families]
     assert names[0] == "noop"
     assert names[-1] == "pedestrian_density_offset"
@@ -156,3 +157,14 @@ def test_density_family_optional_max_ped_density() -> None:
     assert "max_ped_density" in family.optional_parameters
     assert "density_delta" in family.required_parameters
     assert "max_abs_density_delta" in family.required_parameters
+
+
+def test_occluder_timing_family_requires_explicit_emerging_pedestrian() -> None:
+    """Occluder timing must be stricter than generic pedestrian start-delay offsets."""
+    family = perturbation_family("occluder_timing_offset")
+
+    assert "max_occluder_timing_offset_s" in family.validity_constraints
+    assert "pedestrian_id" in family.required_parameters
+    assert "dt_s" in family.required_parameters
+    assert "max_abs_dt_s" in family.required_parameters
+    assert "static_occlusion_required" in family.validity_constraints

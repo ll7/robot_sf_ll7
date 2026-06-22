@@ -71,6 +71,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Consolidated the duplicated durable atomic-JSON-write helper into a single shared
+  `robot_sf.common.atomic_io.atomic_write_json` (#3386). The `mkstemp -> fsync -> os.replace` helper
+  previously copy-pasted in `benchmark/imitation_manifest.py` and `benchmark/full_classic/io_utils.py`
+  now imports the shared version; behavior is preserved (the helper resolves the path and creates the
+  parent directory, a safe superset of the prior two). `benchmark/forecast_dataset_recorder.py` keeps
+  its own writer for now because it has a different output contract (trailing newline, no `fsync`).
+  Covered by `tests/common/test_atomic_io.py`.
 * Cut pull-request CI wall-clock by parallelizing the `fast-feedback` test phase. Pull requests now
   split the suite into 4 `pytest-split` shards (a matrix on the existing job, so the CI topology is
   unchanged) while `main`/`workflow_dispatch` keep a single full pass so the advisory coverage

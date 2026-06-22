@@ -9,7 +9,6 @@ collection time by a dynamic condition inside the test body.
 
 from __future__ import annotations
 
-import importlib
 from typing import TYPE_CHECKING
 
 import pytest
@@ -35,16 +34,15 @@ class DummyCfg:
 
 
 def test_insufficient_replay_skip(tmp_path: Path):
-    # Skip dynamically if SimulationView truly unavailable
     """TODO docstring. Document this function.
 
     Args:
         tmp_path: TODO docstring.
     """
-    try:
-        importlib.import_module("robot_sf.render.sim_view")
-    except Exception:
-        pytest.skip("SimulationView not importable; skip insufficient replay test")
+    # Skip dynamically only when SimulationView is genuinely unavailable.
+    # Narrow guard (importorskip) instead of a blanket `except Exception` so a
+    # real import-time regression surfaces as a failure rather than a silent skip.
+    pytest.importorskip("robot_sf.render.sim_view")
 
     records = [
         {

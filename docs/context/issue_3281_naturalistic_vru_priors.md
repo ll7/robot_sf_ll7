@@ -14,12 +14,18 @@ Generated `adversarial_scenario_manifest.v1` records now include an additive
 - `profile: urban_vru_default_v1`
 - inclusive interpretable bounds for `pedestrian_speed_mps`, `pedestrian_delay_s`, and
   `spawn_time_s`
+- optional explicit-control bounds for `pedestrian_acceleration_mps2` and `group_size` when those
+  controls are present in the generated manifest
+- cyclist-specific speed and acceleration bounds when `candidate_controls.vru_profile: cyclist`
+  selects the cyclist profile
 - `passed` plus `violation_flags`
 - per-constraint observed value and pass/fail metadata
 
-The v1 prior intentionally uses only fields already present in `CandidateSpec`. Acceleration,
-Social Force, IDM/MOBIL, group-behavior, and cyclist-specific priors are deferred until manifests
-carry those controls explicitly.
+The v1 prior intentionally uses only explicit generated controls in `CandidateSpec` and
+`candidate_controls`. Acceleration, group-size, and cyclist checks are evaluated only when those
+controls are present in the manifest. Social Force, IDM/MOBIL, trajectory-derived acceleration,
+route curvature, and density priors remain deferred because the generated manifest surface does not
+carry those values explicitly.
 
 ## Claim Boundary
 
@@ -29,6 +35,10 @@ local bounds profile only. It is not a paper-facing realism claim.
 `naturalistic_prior.passed: false` separates an intentionally unrealistic or stress-only generated
 candidate from plausible hard cases. It does not automatically make the manifest structurally
 invalid; downstream tooling can filter or report the candidate by naturalness status.
+
+`candidate_controls.vru_profile` is a profile selector, not a numeric naturalistic constraint. The
+generated-candidate schema accepts `pedestrian_acceleration_mps2` and `group_size` as numeric
+constraint fields, while profile selection is represented by the prior `profile` value.
 
 ## Quality Summary
 
@@ -53,4 +63,3 @@ uv run python -m pytest \
   tests/benchmark/test_generated_scenario_candidate_schema.py -q
 uv run python scripts/tools/summarize_adversarial_manifest_quality.py --help
 ```
-

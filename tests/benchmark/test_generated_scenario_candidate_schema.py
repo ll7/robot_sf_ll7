@@ -87,14 +87,18 @@ def _heuristic_candidate() -> dict:
     }
 
 
-def _naturalistic_prior(*, passed: bool = True) -> dict:
+def _naturalistic_prior(
+    *,
+    passed: bool = True,
+    field: str = "pedestrian_speed_mps",
+) -> dict:
     """Return a generated-candidate naturalistic-prior payload."""
     return {
         "schema_version": "naturalistic_vru_prior.v1",
         "profile": "urban_vru_default_v1",
         "constraints": [
             {
-                "field": "pedestrian_speed_mps",
+                "field": field,
                 "min": 0.4,
                 "max": 2.2,
                 "observed": 1.2 if passed else 3.5,
@@ -186,9 +190,15 @@ class TestHeuristicCandidate:
     def test_naturalistic_prior_rejects_unsupported_field(self) -> None:
         payload = _heuristic_candidate()
         payload["naturalistic_prior"] = _naturalistic_prior()
-        payload["naturalistic_prior"]["constraints"][0]["field"] = "acceleration_mps2"
-        with pytest.raises(jsonschema.ValidationError, match="acceleration_mps2"):
+        payload["naturalistic_prior"]["constraints"][0]["field"] = "runtime_acceleration_mps2"
+        with pytest.raises(jsonschema.ValidationError, match="runtime_acceleration_mps2"):
             jsonschema.validate(instance=payload, schema=SCHEMA)
+
+    @pytest.mark.parametrize("field", ["pedestrian_acceleration_mps2", "group_size"])
+    def test_naturalistic_prior_accepts_explicit_optional_control_fields(self, field: str) -> None:
+        payload = _heuristic_candidate()
+        payload["naturalistic_prior"] = _naturalistic_prior(field=field)
+        jsonschema.validate(instance=payload, schema=SCHEMA)
 
 
 class TestRLAdversaryCandidate:

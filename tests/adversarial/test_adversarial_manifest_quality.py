@@ -33,8 +33,11 @@ def _candidate_controls(
     goal_x: float,
     goal_y: float,
     scenario_seed: int = 7,
+    pedestrian_acceleration_mps2: float | None = None,
+    group_size: int | None = None,
+    vru_profile: str | None = None,
 ) -> dict:
-    return {
+    controls = {
         "start": {"x": float(start_x), "y": float(start_y)},
         "goal": {"x": float(goal_x), "y": float(goal_y)},
         "spawn_time_s": 0.0,
@@ -42,6 +45,13 @@ def _candidate_controls(
         "pedestrian_delay_s": 0.0,
         "scenario_seed": scenario_seed,
     }
+    if pedestrian_acceleration_mps2 is not None:
+        controls["pedestrian_acceleration_mps2"] = pedestrian_acceleration_mps2
+    if group_size is not None:
+        controls["group_size"] = group_size
+    if vru_profile is not None:
+        controls["vru_profile"] = vru_profile
+    return controls
 
 
 def _naturalistic_prior_payload(*, passed: bool, flags: list[str] | None = None) -> dict:
@@ -76,6 +86,13 @@ def _manifest_payload(
         pedestrian_speed_mps=float(controls["pedestrian_speed_mps"]),
         pedestrian_delay_s=float(controls["pedestrian_delay_s"]),
         scenario_seed=int(controls["scenario_seed"]),
+        pedestrian_acceleration_mps2=(
+            float(controls["pedestrian_acceleration_mps2"])
+            if "pedestrian_acceleration_mps2" in controls
+            else None
+        ),
+        group_size=int(controls["group_size"]) if "group_size" in controls else None,
+        vru_profile=str(controls["vru_profile"]) if "vru_profile" in controls else None,
     )
     payload = {
         "schema_version": "adversarial_scenario_manifest.v1",
@@ -293,6 +310,27 @@ def test_summarize_naturalistic_prior_rates_and_filters(tmp_path: Path) -> None:
     assert violated.naturalistic_prior_fail_count == 1
     assert missing.manifest_count == 1
     assert missing.naturalistic_prior_unavailable_count == 1
+
+
+def test_normalized_hash_fallback_includes_optional_explicit_controls(tmp_path: Path) -> None:
+    base_controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    optional_controls = _candidate_controls(
+        start_x=1.0,
+        start_y=2.0,
+        goal_x=5.0,
+        goal_y=2.0,
+        pedestrian_acceleration_mps2=1.0,
+        group_size=2,
+        vru_profile="cyclist",
+    )
+    _write_manifest(tmp_path / "base.yaml", base_controls, "valid")
+    _write_manifest(tmp_path / "optional.yaml", optional_controls, "valid")
+
+    result = summarize_adversarial_manifest_quality([tmp_path])
+
+    assert result.manifest_count == 2
+    assert result.unique_hash_count == 2
+    assert result.duplicate_hash_count == 0
 
 
 def test_naturalistic_status_filter_rejects_unknown_value(tmp_path: Path) -> None:

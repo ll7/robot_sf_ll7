@@ -130,6 +130,23 @@ def test_compute_control_hash_changes_with_fields() -> None:
     assert compute_control_hash(modified) != base_hash
 
 
+def test_compute_control_hash_includes_optional_explicit_controls() -> None:
+    base = _valid_candidate()
+    modified = CandidateSpec(
+        start=base.start,
+        goal=base.goal,
+        spawn_time_s=base.spawn_time_s,
+        pedestrian_speed_mps=base.pedestrian_speed_mps,
+        pedestrian_delay_s=base.pedestrian_delay_s,
+        scenario_seed=base.scenario_seed,
+        pedestrian_acceleration_mps2=1.0,
+        group_size=2,
+        vru_profile="cyclist",
+    )
+
+    assert compute_control_hash(modified) != compute_control_hash(base)
+
+
 def test_compute_control_hash_normalizes_signed_zero() -> None:
     positive_zero = CandidateSpec(
         start=Pose2D(0.0, 0.0),
@@ -412,6 +429,91 @@ def test_naturalistic_prior_flags_unrealistic_speed_without_invalidating_control
     )
 
 
+def test_naturalistic_prior_keeps_legacy_scalar_controls_backward_compatible() -> None:
+    candidate = _valid_candidate()
+    manifest = build_manifest(candidate, source=_source(), generator=_generator())
+
+    assert manifest.candidate_controls is not None
+    assert "pedestrian_acceleration_mps2" not in manifest.candidate_controls
+    assert "group_size" not in manifest.candidate_controls
+    assert "vru_profile" not in manifest.candidate_controls
+    assert manifest.naturalistic_prior is not None
+    assert manifest.naturalistic_prior.profile == "urban_vru_default_v1"
+    assert tuple(c["field"] for c in manifest.naturalistic_prior.constraints) == (
+        "pedestrian_speed_mps",
+        "pedestrian_delay_s",
+        "spawn_time_s",
+    )
+
+
+def test_naturalistic_prior_uses_explicit_optional_controls() -> None:
+    candidate = CandidateSpec(
+        start=Pose2D(1.0, 2.0),
+        goal=Pose2D(5.0, 2.0),
+        spawn_time_s=0.0,
+        pedestrian_speed_mps=1.0,
+        pedestrian_delay_s=0.0,
+        scenario_seed=7,
+        pedestrian_acceleration_mps2=1.5,
+        group_size=3,
+    )
+
+    manifest = build_manifest(candidate, source=_source(), generator=_generator())
+
+    assert manifest.candidate_controls is not None
+    assert manifest.candidate_controls["pedestrian_acceleration_mps2"] == 1.5
+    assert manifest.candidate_controls["group_size"] == 3
+    assert manifest.naturalistic_prior is not None
+    assert manifest.naturalistic_prior.passed is True
+    assert {c["field"] for c in manifest.naturalistic_prior.constraints} == {
+        "pedestrian_speed_mps",
+        "pedestrian_delay_s",
+        "spawn_time_s",
+        "pedestrian_acceleration_mps2",
+        "group_size",
+    }
+
+
+def test_naturalistic_prior_flags_optional_control_violations() -> None:
+    candidate = CandidateSpec(
+        start=Pose2D(1.0, 2.0),
+        goal=Pose2D(5.0, 2.0),
+        spawn_time_s=0.0,
+        pedestrian_speed_mps=1.0,
+        pedestrian_delay_s=0.0,
+        scenario_seed=7,
+        pedestrian_acceleration_mps2=5.0,
+        group_size=5,
+    )
+
+    prior = evaluate_naturalistic_prior(candidate)
+
+    assert prior.passed is False
+    assert prior.violation_flags == (
+        "pedestrian_acceleration_mps2_outside_urban_vru_default_v1",
+        "group_size_outside_urban_vru_default_v1",
+    )
+
+
+def test_naturalistic_prior_uses_cyclist_profile_for_explicit_cyclist_controls() -> None:
+    candidate = CandidateSpec(
+        start=Pose2D(1.0, 2.0),
+        goal=Pose2D(5.0, 2.0),
+        spawn_time_s=0.0,
+        pedestrian_speed_mps=4.0,
+        pedestrian_delay_s=0.0,
+        scenario_seed=7,
+        pedestrian_acceleration_mps2=3.5,
+        vru_profile="cyclist",
+    )
+
+    prior = evaluate_naturalistic_prior(candidate)
+
+    assert prior.profile == "urban_cyclist_vru_default_v1"
+    assert prior.passed is True
+    assert prior.violation_flags == ()
+
+
 def test_validate_manifest_payload_rejects_inconsistent_naturalistic_prior_metadata() -> None:
     candidate = CandidateSpec(
         start=Pose2D(1.0, 2.0),
@@ -429,6 +531,27 @@ def test_validate_manifest_payload_rejects_inconsistent_naturalistic_prior_metad
 
     assert record.status == ManifestCategory.INVALID
     assert "naturalistic_prior.passed does not match candidate controls" in record.errors
+    assert "naturalistic_prior.violation_flags do not match candidate controls" in record.errors
+
+
+def test_validate_manifest_payload_rejects_inconsistent_optional_prior_metadata() -> None:
+    candidate = CandidateSpec(
+        start=Pose2D(1.0, 2.0),
+        goal=Pose2D(5.0, 2.0),
+        spawn_time_s=0.0,
+        pedestrian_speed_mps=1.0,
+        pedestrian_delay_s=0.0,
+        scenario_seed=7,
+        pedestrian_acceleration_mps2=5.0,
+    )
+    payload = build_manifest(candidate, source=_source(), generator=_generator()).to_dict()
+    payload["naturalistic_prior"]["violation_flags"] = [
+        "pedestrian_speed_mps_outside_urban_vru_default_v1"
+    ]
+
+    record = validate_manifest_payload(payload)
+
+    assert record.status == ManifestCategory.INVALID
     assert "naturalistic_prior.violation_flags do not match candidate controls" in record.errors
 
 

@@ -308,7 +308,9 @@
           "enum": [
             "pedestrian_speed_mps",
             "pedestrian_delay_s",
-            "spawn_time_s"
+            "spawn_time_s",
+            "pedestrian_acceleration_mps2",
+            "group_size"
           ]
         },
         "min": {

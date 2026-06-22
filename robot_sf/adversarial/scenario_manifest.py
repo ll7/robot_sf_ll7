@@ -22,6 +22,7 @@ EVIDENCE_TIER = "diagnostic-only"
 DENOMINATOR_POLICY = "generated_candidates_not_benchmark_denominator"
 NATURALISTIC_PRIOR_SCHEMA_VERSION = "naturalistic_vru_prior.v1"
 DEFAULT_NATURALISTIC_PRIOR_PROFILE = "urban_vru_default_v1"
+CYCLIST_NATURALISTIC_PRIOR_PROFILE = "urban_cyclist_vru_default_v1"
 
 _DEFAULT_NATURALISTIC_PRIOR_BOUNDS: dict[str, tuple[float, float, str]] = {
     "pedestrian_speed_mps": (
@@ -38,6 +39,30 @@ _DEFAULT_NATURALISTIC_PRIOR_BOUNDS: dict[str, tuple[float, float, str]] = {
         0.0,
         10.0,
         "bounded scenario-entry timing for generated stress candidates",
+    ),
+}
+_OPTIONAL_NATURALISTIC_PRIOR_BOUNDS: dict[str, tuple[float, float, str]] = {
+    "pedestrian_acceleration_mps2": (
+        0.0,
+        3.0,
+        "bounded explicit VRU acceleration control for plausible hard cases",
+    ),
+    "group_size": (
+        1.0,
+        4.0,
+        "bounded explicit VRU group-size control for small-group interaction cases",
+    ),
+}
+_CYCLIST_NATURALISTIC_PRIOR_BOUNDS: dict[str, tuple[float, float, str]] = {
+    "pedestrian_speed_mps": (
+        2.0,
+        8.0,
+        "bounded cyclist-like VRU speed for plausible hard cases",
+    ),
+    "pedestrian_acceleration_mps2": (
+        0.0,
+        4.0,
+        "bounded cyclist-like VRU acceleration control for plausible hard cases",
     ),
 }
 
@@ -275,19 +300,37 @@ def _require_mapping_fields(
 def evaluate_naturalistic_prior(candidate: CandidateSpec) -> NaturalisticPriorRecord:
     """Evaluate the default interpretable VRU naturalness prior for a candidate.
 
-    The v1 adversarial manifest only encodes scalar speed and timing controls, so the default
-    profile intentionally starts there. Trajectory acceleration priors stay out of this function
-    until generated manifests carry time-indexed trajectory controls.
+    Optional acceleration, group, and cyclist-specific checks are evaluated only when those controls
+    are explicitly present in the generated manifest surface. No runtime trajectory state is inferred.
     """
     observed_values = {
         "pedestrian_speed_mps": candidate.pedestrian_speed_mps,
         "pedestrian_delay_s": candidate.pedestrian_delay_s,
         "spawn_time_s": candidate.spawn_time_s,
     }
+    bounds = dict(_DEFAULT_NATURALISTIC_PRIOR_BOUNDS)
+    profile = DEFAULT_NATURALISTIC_PRIOR_PROFILE
+    vru_profile = (
+        str(candidate.vru_profile).strip().lower() if candidate.vru_profile is not None else ""
+    )
+    if vru_profile == "cyclist":
+        bounds.update(_CYCLIST_NATURALISTIC_PRIOR_BOUNDS)
+        profile = CYCLIST_NATURALISTIC_PRIOR_PROFILE
+    if candidate.pedestrian_acceleration_mps2 is not None:
+        observed_values["pedestrian_acceleration_mps2"] = candidate.pedestrian_acceleration_mps2
+        bounds.setdefault(
+            "pedestrian_acceleration_mps2",
+            _OPTIONAL_NATURALISTIC_PRIOR_BOUNDS["pedestrian_acceleration_mps2"],
+        )
+    if candidate.group_size is not None:
+        observed_values["group_size"] = float(candidate.group_size)
+        bounds["group_size"] = _OPTIONAL_NATURALISTIC_PRIOR_BOUNDS["group_size"]
     constraints: list[dict[str, Any]] = []
     violation_flags: list[str] = []
 
-    for field, (min_value, max_value, description) in _DEFAULT_NATURALISTIC_PRIOR_BOUNDS.items():
+    for field, (min_value, max_value, description) in bounds.items():
+        if field not in observed_values:
+            continue
         observed = float(observed_values[field])
         passed = math.isfinite(observed) and min_value <= observed <= max_value
         constraints.append(
@@ -301,9 +344,10 @@ def evaluate_naturalistic_prior(candidate: CandidateSpec) -> NaturalisticPriorRe
             }
         )
         if not passed:
-            violation_flags.append(f"{field}_outside_{DEFAULT_NATURALISTIC_PRIOR_PROFILE}")
+            violation_flags.append(f"{field}_outside_{profile}")
 
     return NaturalisticPriorRecord(
+        profile=profile,
         constraints=tuple(constraints),
         passed=not violation_flags,
         violation_flags=tuple(violation_flags),
@@ -390,12 +434,24 @@ def compute_control_hash(candidate: CandidateSpec, precision: int = 6) -> str:
         round(float(candidate.pedestrian_delay_s), precision) + 0.0,
         int(candidate.scenario_seed),
     )
-    raw = json.dumps(values, sort_keys=True, ensure_ascii=False)
+    optional_values: list[Any] = []
+    if candidate.pedestrian_acceleration_mps2 is not None:
+        optional_values.append(
+            (
+                "pedestrian_acceleration_mps2",
+                round(float(candidate.pedestrian_acceleration_mps2), precision) + 0.0,
+            )
+        )
+    if candidate.group_size is not None:
+        optional_values.append(("group_size", int(candidate.group_size)))
+    if candidate.vru_profile is not None:
+        optional_values.append(("vru_profile", str(candidate.vru_profile).strip().lower()))
+    raw = json.dumps((*values, *optional_values), sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def _candidate_controls_dict(candidate: CandidateSpec) -> dict[str, Any]:
-    return {
+    controls: dict[str, Any] = {
         "start": {"x": float(candidate.start.x), "y": float(candidate.start.y)},
         "goal": {"x": float(candidate.goal.x), "y": float(candidate.goal.y)},
         "spawn_time_s": float(candidate.spawn_time_s),
@@ -403,6 +459,13 @@ def _candidate_controls_dict(candidate: CandidateSpec) -> dict[str, Any]:
         "pedestrian_delay_s": float(candidate.pedestrian_delay_s),
         "scenario_seed": int(candidate.scenario_seed),
     }
+    if candidate.pedestrian_acceleration_mps2 is not None:
+        controls["pedestrian_acceleration_mps2"] = float(candidate.pedestrian_acceleration_mps2)
+    if candidate.group_size is not None:
+        controls["group_size"] = int(candidate.group_size)
+    if candidate.vru_profile is not None:
+        controls["vru_profile"] = str(candidate.vru_profile)
+    return controls
 
 
 def _candidate_from_controls(controls: dict[str, Any]) -> CandidateSpec:
@@ -426,6 +489,12 @@ def _candidate_from_controls(controls: dict[str, Any]) -> CandidateSpec:
     scenario_seed_value = float(controls["scenario_seed"])
     if not scenario_seed_value.is_integer():
         raise ValueError("candidate_controls.scenario_seed must be an integer")
+    group_size: int | None = None
+    if "group_size" in controls:
+        group_size_value = float(controls["group_size"])
+        if not group_size_value.is_integer():
+            raise ValueError("candidate_controls.group_size must be an integer")
+        group_size = int(group_size_value)
     start = _pose("start")
     goal = _pose("goal")
     return CandidateSpec(
@@ -435,6 +504,13 @@ def _candidate_from_controls(controls: dict[str, Any]) -> CandidateSpec:
         pedestrian_speed_mps=_float("pedestrian_speed_mps"),
         pedestrian_delay_s=_float("pedestrian_delay_s"),
         scenario_seed=int(scenario_seed_value),
+        pedestrian_acceleration_mps2=(
+            _float("pedestrian_acceleration_mps2")
+            if "pedestrian_acceleration_mps2" in controls
+            else None
+        ),
+        group_size=group_size,
+        vru_profile=str(controls["vru_profile"]).strip() if "vru_profile" in controls else None,
     )
 
 
@@ -573,6 +649,50 @@ def validate_manifest_payload(
     )
 
 
+def _validate_candidate_without_search_space(candidate: CandidateSpec) -> list[str]:
+    """Validate intrinsic candidate invariants when no search-space config is available."""
+    errors: list[str] = []
+    values = {
+        "start.x": candidate.start.x,
+        "start.y": candidate.start.y,
+        "goal.x": candidate.goal.x,
+        "goal.y": candidate.goal.y,
+        "spawn_time_s": candidate.spawn_time_s,
+        "pedestrian_speed_mps": candidate.pedestrian_speed_mps,
+        "pedestrian_delay_s": candidate.pedestrian_delay_s,
+    }
+    for name, value in values.items():
+        if not math.isfinite(float(value)):
+            errors.append(f"{name} must be finite")
+    if candidate.spawn_time_s < 0.0:
+        errors.append("spawn_time_s must be non-negative")
+    if candidate.pedestrian_speed_mps <= 0.0:
+        errors.append("pedestrian_speed_mps must be positive")
+    if candidate.pedestrian_delay_s < 0.0:
+        errors.append("pedestrian_delay_s must be non-negative")
+    if candidate.scenario_seed < 0:
+        errors.append("scenario_seed must be non-negative")
+    errors.extend(_validate_optional_candidate_controls(candidate))
+    return errors
+
+
+def _validate_optional_candidate_controls(candidate: CandidateSpec) -> list[str]:
+    """Validate optional explicit candidate controls."""
+    errors: list[str] = []
+    if candidate.pedestrian_acceleration_mps2 is not None:
+        if not math.isfinite(float(candidate.pedestrian_acceleration_mps2)):
+            errors.append("pedestrian_acceleration_mps2 must be finite")
+        elif candidate.pedestrian_acceleration_mps2 < 0.0:
+            errors.append("pedestrian_acceleration_mps2 must be non-negative")
+    if candidate.group_size is not None and candidate.group_size < 1:
+        errors.append("group_size must be >= 1")
+    if candidate.vru_profile is not None:
+        vru_profile = str(candidate.vru_profile).strip().lower()
+        if vru_profile not in {"pedestrian", "cyclist"}:
+            errors.append("vru_profile must be pedestrian or cyclist")
+    return errors
+
+
 def validate_candidate_manifest(
     candidate: CandidateSpec,
     search_space: SearchSpaceConfig | None = None,
@@ -589,26 +709,7 @@ def validate_candidate_manifest(
     if search_space is not None:
         errors.extend(search_space.validate_candidate(candidate))
     else:
-        values = {
-            "start.x": candidate.start.x,
-            "start.y": candidate.start.y,
-            "goal.x": candidate.goal.x,
-            "goal.y": candidate.goal.y,
-            "spawn_time_s": candidate.spawn_time_s,
-            "pedestrian_speed_mps": candidate.pedestrian_speed_mps,
-            "pedestrian_delay_s": candidate.pedestrian_delay_s,
-        }
-        for name, value in values.items():
-            if not math.isfinite(float(value)):
-                errors.append(f"{name} must be finite")
-        if candidate.spawn_time_s < 0.0:
-            errors.append("spawn_time_s must be non-negative")
-        if candidate.pedestrian_speed_mps <= 0.0:
-            errors.append("pedestrian_speed_mps must be positive")
-        if candidate.pedestrian_delay_s < 0.0:
-            errors.append("pedestrian_delay_s must be non-negative")
-        if candidate.scenario_seed < 0:
-            errors.append("scenario_seed must be non-negative")
+        errors.extend(_validate_candidate_without_search_space(candidate))
 
     if existing_hashes is not None:
         control_hash = compute_control_hash(candidate)

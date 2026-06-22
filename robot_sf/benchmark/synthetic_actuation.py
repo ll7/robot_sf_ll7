@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 import re
 from collections import deque
 from collections.abc import Mapping
@@ -11,6 +12,8 @@ from typing import Any
 
 SYNTHETIC_ACTUATION_CLAIM_SCOPE = "synthetic-only"
 SYNTHETIC_ACTUATION_CLAIM_BOUNDARY = "diagnostic-only"
+SYNTHETIC_ACTUATION_VARIABILITY_SCHEMA_VERSION = "synthetic-actuation-variability-distribution.v1"
+SYNTHETIC_ACTUATION_VARIABILITY_SAMPLE_SCHEMA_VERSION = "synthetic-actuation-variability-sample.v1"
 CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS = (
     "source_id",
     "source_uri",
@@ -33,6 +36,22 @@ _UPDATE_MODE_TO_STEPS = {
     "2.5hz-hold": 4,
 }
 _SATURATION_TOL = 1e-9
+_NUMERIC_VARIABILITY_FIELDS = (
+    "max_linear_accel_m_s2",
+    "max_linear_decel_m_s2",
+    "max_yaw_rate_rad_s",
+    "max_angular_accel_rad_s2",
+)
+_CATEGORICAL_VARIABILITY_FIELDS = ("latency_mode", "update_mode")
+_VARIABILITY_FIELDS = _NUMERIC_VARIABILITY_FIELDS + _CATEGORICAL_VARIABILITY_FIELDS
+_VARIABILITY_FIELD_UNITS = {
+    "max_linear_accel_m_s2": "m/s^2",
+    "max_linear_decel_m_s2": "m/s^2",
+    "max_yaw_rate_rad_s": "rad/s",
+    "max_angular_accel_rad_s2": "rad/s^2",
+    "latency_mode": "profile-label",
+    "update_mode": "profile-label",
+}
 
 
 @dataclass(frozen=True)
@@ -49,10 +68,12 @@ class SyntheticActuationProfile:
     profile_version: str = "v0"
     claim_scope: str = SYNTHETIC_ACTUATION_CLAIM_SCOPE
     claim_boundary: str = SYNTHETIC_ACTUATION_CLAIM_BOUNDARY
+    variability_distribution: Mapping[str, Any] | None = None
+    variability_sample: Mapping[str, Any] | None = None
 
     def to_metadata(self) -> dict[str, Any]:
         """Return a JSON-safe metadata payload."""
-        return {
+        payload = {
             "name": self.name,
             "profile_version": self.profile_version,
             "claim_scope": self.claim_scope,
@@ -64,6 +85,11 @@ class SyntheticActuationProfile:
             "latency_mode": self.latency_mode,
             "update_mode": self.update_mode,
         }
+        if self.variability_distribution is not None:
+            payload["variability_distribution"] = _json_safe_mapping(self.variability_distribution)
+        if self.variability_sample is not None:
+            payload["variability_sample"] = _json_safe_mapping(self.variability_sample)
+        return payload
 
 
 def known_latency_modes() -> tuple[str, ...]:
@@ -74,6 +100,29 @@ def known_latency_modes() -> tuple[str, ...]:
 def known_update_modes() -> tuple[str, ...]:
     """Return supported synthetic update-mode labels."""
     return tuple(_UPDATE_MODE_TO_STEPS)
+
+
+def actuation_variability_fields() -> tuple[str, ...]:
+    """Return profile fields that may be sampled by synthetic variability distributions."""
+    return _VARIABILITY_FIELDS
+
+
+def _json_safe_mapping(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a JSON-safe copy of one metadata mapping."""
+    return {
+        str(key): _json_safe_value(value) for key, value in payload.items() if value is not None
+    }
+
+
+def _json_safe_value(value: Any) -> Any:
+    """Return a JSON-safe copy of nested metadata values."""
+    if isinstance(value, Mapping):
+        return _json_safe_mapping(value)
+    if isinstance(value, tuple):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, list):
+        return [_json_safe_value(item) for item in value]
+    return value
 
 
 def _non_empty_string(value: Any) -> bool:
@@ -187,12 +236,265 @@ def _validate_mode(value: str, *, field_name: str, known: tuple[str, ...]) -> No
         )
 
 
+def _validate_variability_provenance(
+    provenance: Any,
+    *,
+    field_name: str,
+) -> Mapping[str, Any]:
+    """Validate the source-status metadata attached to one variability distribution.
+
+    Returns:
+        The original provenance mapping after validation.
+    """
+    if not isinstance(provenance, Mapping):
+        raise ValueError(
+            f"synthetic_actuation_profile.variability_distribution.parameters."
+            f"{field_name}.provenance must be a mapping"
+        )
+    required = ("source_status", "caveat", "units")
+    missing = [name for name in required if not _non_empty_string(provenance.get(name))]
+    expected_units = _VARIABILITY_FIELD_UNITS[field_name]
+    if _non_empty_string(provenance.get("units")) and str(provenance["units"]) != expected_units:
+        missing.append("units")
+    if missing:
+        raise ValueError(
+            f"synthetic_actuation_profile.variability_distribution.parameters.{field_name}"
+            f".provenance missing fields: {', '.join(sorted(set(missing)))}"
+        )
+    return provenance
+
+
+def _validate_numeric_variability_spec(field_name: str, spec: Mapping[str, Any]) -> None:
+    """Validate one numeric uniform distribution spec."""
+    if str(spec.get("distribution", "")).strip() != "uniform":
+        raise ValueError(
+            "Numeric synthetic actuation variability fields currently support only "
+            f"uniform distributions: {field_name}"
+        )
+    try:
+        low = float(spec.get("low"))
+        high = float(spec.get("high"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "synthetic_actuation_profile.variability_distribution.parameters."
+            f"{field_name} requires numeric low/high bounds"
+        ) from exc
+    if not math.isfinite(low) or not math.isfinite(high) or low <= 0.0 or high < low:
+        raise ValueError(
+            "synthetic_actuation_profile.variability_distribution.parameters."
+            f"{field_name} requires finite 0 < low <= high"
+        )
+
+
+def _validate_categorical_variability_spec(field_name: str, spec: Mapping[str, Any]) -> None:
+    """Validate one categorical choice distribution spec."""
+    if str(spec.get("distribution", "")).strip() != "choice":
+        raise ValueError(
+            "Categorical synthetic actuation variability fields currently support only "
+            f"choice distributions: {field_name}"
+        )
+    choices = spec.get("choices")
+    if not isinstance(choices, list | tuple) or not choices:
+        raise ValueError(
+            "synthetic_actuation_profile.variability_distribution.parameters."
+            f"{field_name}.choices must be a non-empty sequence"
+        )
+    known = known_latency_modes() if field_name == "latency_mode" else known_update_modes()
+    for choice in choices:
+        _validate_mode(str(choice), field_name=field_name, known=known)
+
+
+def validate_synthetic_actuation_variability_distribution(
+    distribution: Mapping[str, Any],
+) -> None:
+    """Validate a synthetic/provisional distribution over actuation profile fields."""
+    if not isinstance(distribution, Mapping):
+        raise ValueError("synthetic_actuation_profile.variability_distribution must be a mapping")
+    if distribution.get("schema_version") != SYNTHETIC_ACTUATION_VARIABILITY_SCHEMA_VERSION:
+        raise ValueError(
+            "synthetic_actuation_profile.variability_distribution.schema_version must be "
+            f"'{SYNTHETIC_ACTUATION_VARIABILITY_SCHEMA_VERSION}'"
+        )
+    mode = str(distribution.get("mode", "")).strip()
+    if mode != "synthetic-provisional":
+        raise ValueError(
+            "synthetic_actuation_profile.variability_distribution.mode must be "
+            "'synthetic-provisional'"
+        )
+    claim_boundary = str(
+        distribution.get("claim_boundary", SYNTHETIC_ACTUATION_CLAIM_BOUNDARY)
+    ).strip()
+    if claim_boundary != SYNTHETIC_ACTUATION_CLAIM_BOUNDARY:
+        raise ValueError(
+            "synthetic_actuation_profile.variability_distribution.claim_boundary must be "
+            f"'{SYNTHETIC_ACTUATION_CLAIM_BOUNDARY}'"
+        )
+    parameters = distribution.get("parameters")
+    if not isinstance(parameters, Mapping) or not parameters:
+        raise ValueError(
+            "synthetic_actuation_profile.variability_distribution.parameters must be a "
+            "non-empty mapping"
+        )
+    for raw_field_name, raw_spec in parameters.items():
+        field_name = str(raw_field_name)
+        if field_name not in _VARIABILITY_FIELDS:
+            known = ", ".join(_VARIABILITY_FIELDS)
+            raise ValueError(
+                "Unsupported synthetic_actuation_profile.variability_distribution "
+                f"field '{field_name}'. Expected one of: {known}"
+            )
+        if not isinstance(raw_spec, Mapping):
+            raise ValueError(
+                "synthetic_actuation_profile.variability_distribution.parameters."
+                f"{field_name} must be a mapping"
+            )
+        _validate_variability_provenance(raw_spec.get("provenance"), field_name=field_name)
+        if field_name in _NUMERIC_VARIABILITY_FIELDS:
+            _validate_numeric_variability_spec(field_name, raw_spec)
+        else:
+            _validate_categorical_variability_spec(field_name, raw_spec)
+
+
+def _profile_field_value(profile: SyntheticActuationProfile, field_name: str) -> Any:
+    """Return one supported field value from a synthetic actuation profile."""
+    return getattr(profile, field_name)
+
+
+def _sample_distribution_value(
+    field_name: str,
+    spec: Mapping[str, Any],
+    *,
+    rng: random.Random,
+) -> Any:
+    """Sample one concrete profile value from a validated field distribution.
+
+    Returns:
+        A sampled numeric or categorical profile value.
+    """
+    if field_name in _NUMERIC_VARIABILITY_FIELDS:
+        return float(rng.uniform(float(spec["low"]), float(spec["high"])))
+    choices = [str(choice) for choice in spec["choices"]]
+    return choices[rng.randrange(len(choices))]
+
+
+def sample_synthetic_actuation_profile(
+    base_profile: SyntheticActuationProfile,
+    distribution: Mapping[str, Any],
+    *,
+    seed: int,
+    sample_index: int,
+    name: str | None = None,
+) -> SyntheticActuationProfile:
+    """Materialize one deterministic synthetic variability sample as scalar profile values.
+
+    Returns:
+        A validated scalar synthetic actuation profile carrying sample metadata.
+    """
+    validate_synthetic_actuation_profile(base_profile)
+    validate_synthetic_actuation_variability_distribution(distribution)
+    if sample_index < 0:
+        raise ValueError("sample_index must be >= 0")
+
+    parameters = distribution["parameters"]
+    rng = random.Random(int(seed) + sample_index * 1_000_003)
+    sampled_values: dict[str, Any] = {}
+    for field_name, raw_spec in sorted(parameters.items()):
+        spec = raw_spec if isinstance(raw_spec, Mapping) else {}
+        sampled_values[str(field_name)] = _sample_distribution_value(str(field_name), spec, rng=rng)
+
+    sample_payload = {
+        "schema_version": SYNTHETIC_ACTUATION_VARIABILITY_SAMPLE_SCHEMA_VERSION,
+        "mode": "variability-sweep",
+        "sample_index": int(sample_index),
+        "sample_id": f"sample-{sample_index:03d}",
+        "sampling_seed": int(seed),
+        "sampled_parameters": _json_safe_mapping(sampled_values),
+        "summary": {
+            field_name: {
+                "value": _json_safe_value(value),
+                "units": _VARIABILITY_FIELD_UNITS[field_name],
+            }
+            for field_name, value in sampled_values.items()
+        },
+    }
+
+    values = {
+        field_name: _profile_field_value(base_profile, field_name)
+        for field_name in _VARIABILITY_FIELDS
+    }
+    values.update(sampled_values)
+    return SyntheticActuationProfile(
+        name=name or f"{base_profile.name}-{sample_payload['sample_id']}",
+        profile_version=base_profile.profile_version,
+        claim_scope=base_profile.claim_scope,
+        claim_boundary=base_profile.claim_boundary,
+        max_linear_accel_m_s2=float(values["max_linear_accel_m_s2"]),
+        max_linear_decel_m_s2=float(values["max_linear_decel_m_s2"]),
+        max_yaw_rate_rad_s=float(values["max_yaw_rate_rad_s"]),
+        max_angular_accel_rad_s2=float(values["max_angular_accel_rad_s2"]),
+        latency_mode=str(values["latency_mode"]),
+        update_mode=str(values["update_mode"]),
+        variability_distribution=distribution,
+        variability_sample=sample_payload,
+    )
+
+
+def summarize_synthetic_actuation_samples(
+    profiles: list[SyntheticActuationProfile],
+) -> dict[str, Any]:
+    """Summarize sampled actuation parameters for materialized variability sweeps.
+
+    Returns:
+        JSON-safe sampled-parameter summary rows.
+    """
+    rows: list[dict[str, Any]] = []
+    for profile in profiles:
+        metadata = profile.to_metadata()
+        sample = metadata.get("variability_sample")
+        if not isinstance(sample, Mapping):
+            continue
+        row = {
+            "profile_name": profile.name,
+            "sample_id": str(sample.get("sample_id", "")),
+            "sample_index": int(sample.get("sample_index", -1)),
+            "sampling_seed": int(sample.get("sampling_seed", 0)),
+            "sampled_parameters": dict(sample.get("sampled_parameters", {})),
+            "summary": dict(sample.get("summary", {})),
+            "claim_boundary": profile.claim_boundary,
+        }
+        rows.append(row)
+    return {
+        "schema_version": "synthetic-actuation-sampled-parameter-summary.v1",
+        "claim_boundary": SYNTHETIC_ACTUATION_CLAIM_BOUNDARY,
+        "row_count": len(rows),
+        "rows": rows,
+    }
+
+
+def _validate_variability_sample(sample: Any) -> None:
+    """Validate optional sampled-parameter metadata on a synthetic profile."""
+    if not isinstance(sample, Mapping):
+        raise ValueError("synthetic_actuation_profile.variability_sample must be a mapping")
+    if sample.get("schema_version") != SYNTHETIC_ACTUATION_VARIABILITY_SAMPLE_SCHEMA_VERSION:
+        raise ValueError(
+            "synthetic_actuation_profile.variability_sample.schema_version must be "
+            f"'{SYNTHETIC_ACTUATION_VARIABILITY_SAMPLE_SCHEMA_VERSION}'"
+        )
+
+
 def validate_synthetic_actuation_profile(profile: SyntheticActuationProfile) -> None:
     """Validate that one synthetic profile is usable for differential-drive diagnostics."""
     if not profile.name.strip():
         raise ValueError("synthetic_actuation_profile.name must be non-empty")
     if not profile.profile_version.strip():
         raise ValueError("synthetic_actuation_profile.profile_version must be non-empty")
+    if profile.variability_distribution is not None and not isinstance(
+        profile.variability_distribution, Mapping
+    ):
+        raise ValueError("synthetic_actuation_profile.variability_distribution must be a mapping")
+    sample = profile.variability_sample
+    if sample is not None and not isinstance(sample, Mapping):
+        raise ValueError("synthetic_actuation_profile.variability_sample must be a mapping")
     profile_metadata = profile.to_metadata()
     if _looks_calibrated_actuation_profile(profile_metadata):
         _validate_calibrated_actuation_provenance(
@@ -219,6 +521,10 @@ def validate_synthetic_actuation_profile(profile: SyntheticActuationProfile) -> 
         field_name="update_mode",
         known=known_update_modes(),
     )
+    if profile.variability_distribution is not None:
+        validate_synthetic_actuation_variability_distribution(profile.variability_distribution)
+    if sample is not None:
+        _validate_variability_sample(sample)
 
 
 @dataclass(frozen=True)

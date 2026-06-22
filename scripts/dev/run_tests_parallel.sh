@@ -52,11 +52,13 @@ order_mode="${PYTEST_ORDER_MODE:-failed-first}"
 worker_override="${PYTEST_NUM_WORKERS:-}"
 lane_mode="${ROBOT_SF_TEST_LANE:-all}"
 core_test_paths=(
+  tests/adversarial
   tests/analysis_workbench
   tests/common
   tests/contract
   tests/factories
   tests/guard
+  tests/scenario_certification
   tests/sensor
   tests/sim
   tests/unit

@@ -111,9 +111,14 @@ Every candidate is subject to:
 | Map existence | `map_id` must resolve to an existing SVG | Reject candidate |
 | Spawn collision | Pedestrian spawn must not overlap existing agents | Reject candidate |
 | Goal reachability | Pedestrian goal must be on navigable surface | Reject candidate |
+| Naturalistic VRU prior | Candidate records optional `naturalistic_vru_prior.v1` pass/fail metadata for authored speed and timing bounds | Filter or label as plausible hard case vs stress-only; not a structural rejection by itself |
 
 Validity preflight is **not** benchmark execution evidence. It is a minimum gate for
 candidate admission.
+
+Naturalistic-prior metadata is additive. A prior violation separates implausible or stress-only
+samples from plausible hard cases, but it does not by itself prove that a passing candidate is
+real-world calibrated.
 
 ---
 

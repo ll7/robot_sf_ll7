@@ -10,8 +10,9 @@ coverage, planner weakness, leaderboard movement, or paper-facing benchmark evid
 Issue #2567 adds a compact `adversarial_manifest_quality_summary.v1` path for
 `adversarial_scenario_manifest.v1` batches. The summary is a generator-quality and pre-benchmark
 gate: it can show whether generated manifests are valid, non-degenerate, novel, meaningfully
-perturbed from a reference manifest, and whether an optional planner smoke summary contains
-aggregate or per-episode failure/near-miss yield signals.
+perturbed from a reference manifest, whether generated candidates pass the additive
+`naturalistic_vru_prior.v1` plausibility screen, and whether an optional planner smoke summary
+contains aggregate or per-episode failure/near-miss yield signals.
 
 ## What Was Built
 
@@ -22,6 +23,10 @@ aggregate or per-episode failure/near-miss yield signals.
   - Computes perturbation distance from an optional reference manifest using continuous controls
     only; `scenario_seed` remains part of duplicate hashing but is not treated as a geometric
     perturbation dimension.
+  - Summarizes additive naturalistic-prior metadata as available/pass/fail/missing counts and
+    violation counts. Legacy manifests without prior metadata are `missing`, not failed.
+  - Supports `--naturalistic-status passed|violated|missing|all` filtering so plausible hard cases
+    and intentionally unrealistic stress cases can be inspected separately.
   - Reads optional planner-smoke summaries. When episode JSONL rows are available, it computes
     failure and near-miss yields from rows. When only aggregate metrics are durable, it derives
     failure yield from aggregate success counts and leaves near-miss yield unavailable unless
@@ -63,7 +68,9 @@ These metrics are quality and gating signals for generated candidate batches. Th
 adversarial coverage, planner weakness, benchmark ranking, or paper-facing results. The #2562
 `social_force` signal is adapter-mode diagnostic evidence only. Any #2568 RL/diffusion expansion
 should use these metrics to reject invalid, duplicate, degenerate, or low-yield batches before
-larger execution.
+larger execution. Naturalistic-prior pass/fail is an authored local plausibility screen, not a
+real-world calibration claim; prior-fail candidates should be reported as stress-only or
+intentionally unrealistic rather than mixed into plausible-hard-case summaries.
 
 ## Validation
 

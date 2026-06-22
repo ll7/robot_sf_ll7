@@ -24,7 +24,8 @@ fail-closed validation.
 ### Core module: `robot_sf/adversarial/scenario_manifest.py`
 
 - `AdversarialScenarioManifest` dataclass with `schema_version`, `source`, `generator`,
-  `candidate_controls`, `validation`, `execution_status`, and `evidence_boundary`.
+  `candidate_controls`, additive `naturalistic_prior`, `validation`, `execution_status`, and
+  `evidence_boundary`.
 - `build_manifest()` builds a validated manifest from a `CandidateSpec`.
 - `validate_candidate_manifest()` checks all constraints from the task:
   - non-finite values -> degenerate
@@ -75,6 +76,18 @@ candidate_controls:
   pedestrian_speed_mps: 1.0
   pedestrian_delay_s: 0.0
   scenario_seed: 7
+naturalistic_prior:
+  schema_version: naturalistic_vru_prior.v1
+  profile: urban_vru_default_v1
+  passed: true
+  violation_flags: []
+  constraints:
+    - field: pedestrian_speed_mps
+      min: 0.4
+      max: 2.2
+      observed: 1.0
+      passed: true
+      description: bounded walking-to-running VRU speed for plausible hard cases
 validation:
   status: valid
   errors: []
@@ -123,6 +136,9 @@ JSON parsed successfully, and the context catalog consistency check passed.
 - Broad RL, diffusion, or learned-proposal expansion must also pass the Issue #2562 planner-smoke
   path and Issue #2567 quality metrics under the Issue #2568 learned-expansion gate before it is
   treated as ready.
+- `naturalistic_prior` pass/fail is an authored local plausibility screen for generated VRU speed
+  and timing controls. It separates plausible hard cases from stress-only candidates but is not a
+  real-world calibration or benchmark-strength claim.
 
 ## Follow-Up Risks
 

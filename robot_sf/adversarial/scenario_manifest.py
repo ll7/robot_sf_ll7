@@ -20,6 +20,26 @@ MANIFEST_SCHEMA_VERSION = "adversarial_scenario_manifest.v1"
 VALIDATOR_VERSION = "adversarial_scenario_manifest_validator.v1"
 EVIDENCE_TIER = "diagnostic-only"
 DENOMINATOR_POLICY = "generated_candidates_not_benchmark_denominator"
+NATURALISTIC_PRIOR_SCHEMA_VERSION = "naturalistic_vru_prior.v1"
+DEFAULT_NATURALISTIC_PRIOR_PROFILE = "urban_vru_default_v1"
+
+_DEFAULT_NATURALISTIC_PRIOR_BOUNDS: dict[str, tuple[float, float, str]] = {
+    "pedestrian_speed_mps": (
+        0.4,
+        2.2,
+        "bounded walking-to-running VRU speed for plausible hard cases",
+    ),
+    "pedestrian_delay_s": (
+        0.0,
+        3.0,
+        "bounded VRU reaction or release delay before route following",
+    ),
+    "spawn_time_s": (
+        0.0,
+        10.0,
+        "bounded scenario-entry timing for generated stress candidates",
+    ),
+}
 
 
 class ManifestCategory(Enum):
@@ -87,6 +107,27 @@ class ValidationRecord:
 
 
 @dataclass(frozen=True)
+class NaturalisticPriorRecord:
+    """Interpretable VRU naturalness-prior result for one generated candidate."""
+
+    schema_version: str = NATURALISTIC_PRIOR_SCHEMA_VERSION
+    profile: str = DEFAULT_NATURALISTIC_PRIOR_PROFILE
+    constraints: tuple[dict[str, Any], ...] = ()
+    passed: bool = True
+    violation_flags: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a JSON/YAML-safe dict."""
+        return {
+            "schema_version": self.schema_version,
+            "profile": self.profile,
+            "constraints": [dict(constraint) for constraint in self.constraints],
+            "passed": bool(self.passed),
+            "violation_flags": list(self.violation_flags),
+        }
+
+
+@dataclass(frozen=True)
 class AdversarialScenarioManifest:
     """An adversarial_scenario_manifest.v1 candidate with source, controls, and validation."""
 
@@ -94,6 +135,7 @@ class AdversarialScenarioManifest:
     source: SourceLineage | None = None
     generator: GeneratorInfo | None = None
     candidate_controls: dict[str, Any] | None = None
+    naturalistic_prior: NaturalisticPriorRecord | None = None
     validation: ValidationRecord | None = None
     execution_status: str = "generated_only"
     validator_version: str = VALIDATOR_VERSION
@@ -127,6 +169,8 @@ class AdversarialScenarioManifest:
             result["generator"] = self.generator.to_dict()
         if self.candidate_controls is not None:
             result["candidate_controls"] = dict(self.candidate_controls)
+        if self.naturalistic_prior is not None:
+            result["naturalistic_prior"] = self.naturalistic_prior.to_dict()
         if self.validation is not None:
             result["validation"] = self.validation.to_dict()
         return result
@@ -143,6 +187,7 @@ class AdversarialScenarioManifest:
             source=SourceLineage(**payload["source"]) if "source" in payload else None,
             generator=GeneratorInfo(**payload["generator"]) if "generator" in payload else None,
             candidate_controls=payload.get("candidate_controls"),
+            naturalistic_prior=_naturalistic_prior_from_dict(payload.get("naturalistic_prior")),
             validation=_validation_from_dict(payload.get("validation")),
             execution_status=_optional_string(payload.get("execution_status"), "generated_only"),
             validator_version=_optional_string(payload.get("validator_version"), VALIDATOR_VERSION),
@@ -189,6 +234,28 @@ def _validation_from_dict(payload: Any) -> ValidationRecord | None:
     )
 
 
+def _naturalistic_prior_from_dict(payload: Any) -> NaturalisticPriorRecord | None:
+    if payload is None or not isinstance(payload, dict):
+        return None
+    constraints_raw = payload.get("constraints", [])
+    constraints: list[dict[str, Any]] = []
+    if isinstance(constraints_raw, list):
+        constraints = [dict(item) for item in constraints_raw if isinstance(item, dict)]
+    flags_raw = payload.get("violation_flags", [])
+    flags: list[str] = []
+    if isinstance(flags_raw, list):
+        flags = [str(flag) for flag in flags_raw]
+    return NaturalisticPriorRecord(
+        schema_version=_optional_string(
+            payload.get("schema_version"), NATURALISTIC_PRIOR_SCHEMA_VERSION
+        ),
+        profile=_optional_string(payload.get("profile"), DEFAULT_NATURALISTIC_PRIOR_PROFILE),
+        constraints=tuple(constraints),
+        passed=bool(payload.get("passed", not flags)),
+        violation_flags=tuple(flags),
+    )
+
+
 def _require_mapping_fields(
     payload: Any,
     *,
@@ -202,6 +269,112 @@ def _require_mapping_fields(
     for field, expected_type, descriptor in requirements:
         if not isinstance(payload.get(field), expected_type):
             errors.append(f"{namespace}.{field} must be {descriptor}")
+    return errors
+
+
+def evaluate_naturalistic_prior(candidate: CandidateSpec) -> NaturalisticPriorRecord:
+    """Evaluate the default interpretable VRU naturalness prior for a candidate.
+
+    The v1 adversarial manifest only encodes scalar speed and timing controls, so the default
+    profile intentionally starts there. Trajectory acceleration priors stay out of this function
+    until generated manifests carry time-indexed trajectory controls.
+    """
+    observed_values = {
+        "pedestrian_speed_mps": candidate.pedestrian_speed_mps,
+        "pedestrian_delay_s": candidate.pedestrian_delay_s,
+        "spawn_time_s": candidate.spawn_time_s,
+    }
+    constraints: list[dict[str, Any]] = []
+    violation_flags: list[str] = []
+
+    for field, (min_value, max_value, description) in _DEFAULT_NATURALISTIC_PRIOR_BOUNDS.items():
+        observed = float(observed_values[field])
+        passed = math.isfinite(observed) and min_value <= observed <= max_value
+        constraints.append(
+            {
+                "field": field,
+                "min": min_value,
+                "max": max_value,
+                "observed": observed,
+                "passed": passed,
+                "description": description,
+            }
+        )
+        if not passed:
+            violation_flags.append(f"{field}_outside_{DEFAULT_NATURALISTIC_PRIOR_PROFILE}")
+
+    return NaturalisticPriorRecord(
+        constraints=tuple(constraints),
+        passed=not violation_flags,
+        violation_flags=tuple(violation_flags),
+    )
+
+
+def _naturalistic_prior_warnings(prior: NaturalisticPriorRecord) -> list[str]:
+    """Return human-readable validation warnings for failed naturalistic constraints."""
+    warnings: list[str] = []
+    for constraint in prior.constraints:
+        if bool(constraint.get("passed", False)):
+            continue
+        field = str(constraint.get("field", "unknown"))
+        observed = constraint.get("observed")
+        min_value = constraint.get("min")
+        max_value = constraint.get("max")
+        warnings.append(
+            "naturalistic prior violation: "
+            f"{field}={observed} outside [{min_value}, {max_value}] "
+            f"for {prior.profile}"
+        )
+    return warnings
+
+
+def _validate_naturalistic_prior_payload(
+    payload: Any,
+    *,
+    computed: NaturalisticPriorRecord,
+) -> tuple[list[str], list[str]]:
+    """Validate optional serialized prior metadata against computed controls."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    if payload is None:
+        return errors, _naturalistic_prior_warnings(computed)
+    if not isinstance(payload, dict):
+        return ["naturalistic_prior must be a mapping"], warnings
+
+    prior = _naturalistic_prior_from_dict(payload)
+    if prior is None:
+        return ["naturalistic_prior must be a mapping"], warnings
+
+    errors.extend(_naturalistic_prior_shape_errors(payload, prior))
+
+    if prior.passed != computed.passed:
+        errors.append("naturalistic_prior.passed does not match candidate controls")
+    if tuple(prior.violation_flags) != tuple(computed.violation_flags):
+        errors.append("naturalistic_prior.violation_flags do not match candidate controls")
+
+    warnings.extend(_naturalistic_prior_warnings(computed))
+    return errors, warnings
+
+
+def _naturalistic_prior_shape_errors(
+    payload: dict[str, Any],
+    prior: NaturalisticPriorRecord,
+) -> list[str]:
+    """Return schema-shape errors for serialized naturalistic-prior metadata."""
+    errors: list[str] = []
+    if prior.schema_version != NATURALISTIC_PRIOR_SCHEMA_VERSION:
+        errors.append(
+            f"naturalistic_prior.schema_version must be {NATURALISTIC_PRIOR_SCHEMA_VERSION}"
+        )
+    if not isinstance(payload.get("profile"), str):
+        errors.append("naturalistic_prior.profile must be a string")
+    if not isinstance(payload.get("constraints"), list):
+        errors.append("naturalistic_prior.constraints must be a list")
+    if not isinstance(payload.get("passed"), bool):
+        errors.append("naturalistic_prior.passed must be a boolean")
+    raw_flags = payload.get("violation_flags", [])
+    if not isinstance(raw_flags, list) or not all(isinstance(flag, str) for flag in raw_flags):
+        errors.append("naturalistic_prior.violation_flags must be a list of strings")
     return errors
 
 
@@ -285,6 +458,7 @@ def _classify_errors(errors: list[str]) -> ManifestCategory:
     )
     invalid_exact = (
         "candidate_controls must be a mapping",
+        "naturalistic_prior must be a mapping",
         "source must be a mapping",
         "generator must be a mapping",
     )
@@ -299,6 +473,8 @@ def _classify_errors(errors: list[str]) -> ManifestCategory:
 
     for err in errors:
         if err in invalid_exact or err.startswith(invalid_prefixes):
+            return ManifestCategory.INVALID
+        if err.startswith("naturalistic_prior."):
             return ManifestCategory.INVALID
         if "outside search space" in err or "scenario_seed must be non-negative" in err:
             return ManifestCategory.INVALID
@@ -376,6 +552,13 @@ def validate_manifest_payload(
         existing_hashes=existing_hashes,
     )
     errors.extend(candidate_errors)
+    computed_prior = evaluate_naturalistic_prior(candidate)
+    prior_errors, prior_warnings = _validate_naturalistic_prior_payload(
+        payload.get("naturalistic_prior"),
+        computed=computed_prior,
+    )
+    errors.extend(prior_errors)
+    warnings.extend(prior_warnings)
     status = _classify_errors(errors)
     has_duplicate_warning = any(
         "duplicate normalized control hash" in warning for warning in warnings
@@ -456,6 +639,8 @@ def build_manifest(
     if status is ManifestCategory.VALID and has_duplicate_warning:
         status = ManifestCategory.DEGENERATE
     control_hash = compute_control_hash(candidate)
+    naturalistic_prior = evaluate_naturalistic_prior(candidate)
+    warnings.extend(_naturalistic_prior_warnings(naturalistic_prior))
 
     validation = ValidationRecord(
         status=status,
@@ -468,6 +653,7 @@ def build_manifest(
         source=source,
         generator=generator,
         candidate_controls=_candidate_controls_dict(candidate),
+        naturalistic_prior=naturalistic_prior,
         validation=validation,
     )
 
@@ -534,7 +720,40 @@ def _build_summary(
         "valid": counts.get("valid", 0),
         "invalid": counts.get("invalid", 0),
         "degenerate": counts.get("degenerate", 0),
+        "naturalistic_prior": _build_naturalistic_prior_summary(manifests),
         "rejection_reasons": dict(sorted(rejection_reasons.items())),
+    }
+
+
+def _build_naturalistic_prior_summary(
+    manifests: list[AdversarialScenarioManifest],
+) -> dict[str, Any]:
+    """Summarize naturalistic-prior pass/fail counts for a generated batch."""
+    pass_count = 0
+    fail_count = 0
+    unavailable_count = 0
+    violation_counts: dict[str, int] = {}
+    for manifest in manifests:
+        prior = manifest.naturalistic_prior
+        if prior is None:
+            unavailable_count += 1
+            continue
+        if prior.passed:
+            pass_count += 1
+        else:
+            fail_count += 1
+        for flag in prior.violation_flags:
+            violation_counts[flag] = violation_counts.get(flag, 0) + 1
+
+    total = len(manifests)
+    return {
+        "profile": DEFAULT_NATURALISTIC_PRIOR_PROFILE,
+        "pass": pass_count,
+        "fail": fail_count,
+        "unavailable": unavailable_count,
+        "pass_rate": round(pass_count / total, 6) if total else 0.0,
+        "fail_rate": round(fail_count / total, 6) if total else 0.0,
+        "violation_counts": dict(sorted(violation_counts.items())),
     }
 
 

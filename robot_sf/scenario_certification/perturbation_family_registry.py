@@ -92,6 +92,35 @@ _PERTURBATION_FAMILIES: tuple[PerturbationFamily, ...] = (
         optional_parameters=("pedestrian_id", "pedestrian_selector"),
     ),
     PerturbationFamily(
+        name="occluder_timing_offset",
+        description=(
+            "Bounded timing offset for the explicit emerging pedestrian in an occluded-emergence "
+            "scenario"
+        ),
+        target_surface="occluded_emergence_single_pedestrian_start_delay_s",
+        semantic_boundary=(
+            "|dt_s| ≤ min(variant_max_abs_dt_s, manifest_max_occluder_timing_offset_s); "
+            "scenario must declare static occlusion, fixture timing metadata, and an emerging "
+            "pedestrian"
+        ),
+        validity_constraints=(
+            "max_occluder_timing_offset_s",
+            "static_occlusion_required",
+            "fixture_contract_required",
+            "emerging_pedestrian_role_required",
+            "pedestrian_id_required",
+        ),
+        fail_closed_rules=(
+            "abs_dt_s > bound excludes variant",
+            "scenario without observation_visibility.static_occlusion excludes variant",
+            "scenario without metadata.fixture_contract excludes variant",
+            "selected pedestrian without metadata.role=emerging_ped excludes variant",
+            "updated start_delay_s < 0 excludes variant",
+        ),
+        required_parameters=("dt_s", "max_abs_dt_s", "pedestrian_id"),
+        optional_parameters=("pedestrian_selector",),
+    ),
+    PerturbationFamily(
         name="single_pedestrian_speed_offset",
         description="Bounded speed offset for explicit single_pedestrians",
         target_surface="single_pedestrian_speed_m_s",

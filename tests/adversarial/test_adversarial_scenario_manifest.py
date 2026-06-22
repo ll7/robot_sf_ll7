@@ -10,6 +10,7 @@ import yaml
 from robot_sf.adversarial.config import CandidateSpec, Pose2D, SearchSpaceConfig
 from robot_sf.adversarial.scenario_manifest import (
     MANIFEST_SCHEMA_VERSION,
+    NATURALISTIC_PRIOR_SCHEMA_VERSION,
     AdversarialScenarioManifest,
     GeneratorInfo,
     ManifestCategory,
@@ -17,6 +18,7 @@ from robot_sf.adversarial.scenario_manifest import (
     ValidationRecord,
     build_manifest,
     compute_control_hash,
+    evaluate_naturalistic_prior,
     generate_manifests,
     validate_candidate_manifest,
     validate_manifest_payload,
@@ -305,6 +307,10 @@ def test_manifest_serializes_to_yaml(tmp_path: Path) -> None:
     assert loaded["execution_status"] == "generated_only"
     assert "diagnostic-only" in loaded["evidence_boundary"]
     assert loaded["source"]["map_id"] == "classic_cross_trap"
+    assert loaded["naturalistic_prior"]["schema_version"] == NATURALISTIC_PRIOR_SCHEMA_VERSION
+    assert loaded["naturalistic_prior"]["profile"] == "urban_vru_default_v1"
+    assert loaded["naturalistic_prior"]["passed"] is True
+    assert loaded["naturalistic_prior"]["violation_flags"] == []
     assert validate_lineage_contract(loaded) == []
 
 
@@ -317,6 +323,9 @@ def test_manifest_round_trips_through_yaml(tmp_path: Path) -> None:
     assert restored.execution_status == original.execution_status
     assert restored.evidence_boundary == original.evidence_boundary
     assert restored.candidate_controls == original.candidate_controls
+    assert restored.naturalistic_prior is not None
+    assert original.naturalistic_prior is not None
+    assert restored.naturalistic_prior.passed == original.naturalistic_prior.passed
     assert restored.validation is not None
     assert original.validation is not None
     assert restored.validation.status == original.validation.status
@@ -371,11 +380,78 @@ def test_validate_manifest_payload_rejects_missing_controls() -> None:
 def test_validate_manifest_payload_classifies_degenerate_controls() -> None:
     payload = _valid_manifest_payload()
     payload["candidate_controls"]["pedestrian_speed_mps"] = 0.0
+    payload.pop("naturalistic_prior")
 
     record = validate_manifest_payload(payload)
 
     assert record.status == ManifestCategory.DEGENERATE
     assert record.errors == ("pedestrian_speed_mps must be positive",)
+
+
+def test_naturalistic_prior_flags_unrealistic_speed_without_invalidating_controls() -> None:
+    candidate = CandidateSpec(
+        start=Pose2D(1.0, 2.0),
+        goal=Pose2D(5.0, 2.0),
+        spawn_time_s=0.0,
+        pedestrian_speed_mps=3.5,
+        pedestrian_delay_s=0.0,
+        scenario_seed=7,
+    )
+
+    manifest = build_manifest(candidate, source=_source(), generator=_generator())
+
+    assert manifest.validation is not None
+    assert manifest.validation.status == ManifestCategory.VALID
+    assert any(
+        "naturalistic prior violation" in warning for warning in manifest.validation.warnings
+    )
+    assert manifest.naturalistic_prior is not None
+    assert manifest.naturalistic_prior.passed is False
+    assert manifest.naturalistic_prior.violation_flags == (
+        "pedestrian_speed_mps_outside_urban_vru_default_v1",
+    )
+
+
+def test_validate_manifest_payload_rejects_inconsistent_naturalistic_prior_metadata() -> None:
+    candidate = CandidateSpec(
+        start=Pose2D(1.0, 2.0),
+        goal=Pose2D(5.0, 2.0),
+        spawn_time_s=0.0,
+        pedestrian_speed_mps=3.5,
+        pedestrian_delay_s=0.0,
+        scenario_seed=7,
+    )
+    payload = build_manifest(candidate, source=_source(), generator=_generator()).to_dict()
+    payload["naturalistic_prior"]["passed"] = True
+    payload["naturalistic_prior"]["violation_flags"] = []
+
+    record = validate_manifest_payload(payload)
+
+    assert record.status == ManifestCategory.INVALID
+    assert "naturalistic_prior.passed does not match candidate controls" in record.errors
+    assert "naturalistic_prior.violation_flags do not match candidate controls" in record.errors
+
+
+def test_evaluate_naturalistic_prior_inclusive_bounds() -> None:
+    low = CandidateSpec(
+        start=Pose2D(1.0, 2.0),
+        goal=Pose2D(5.0, 2.0),
+        spawn_time_s=0.0,
+        pedestrian_speed_mps=0.4,
+        pedestrian_delay_s=0.0,
+        scenario_seed=7,
+    )
+    high = CandidateSpec(
+        start=Pose2D(1.0, 2.0),
+        goal=Pose2D(5.0, 2.0),
+        spawn_time_s=10.0,
+        pedestrian_speed_mps=2.2,
+        pedestrian_delay_s=3.0,
+        scenario_seed=7,
+    )
+
+    assert evaluate_naturalistic_prior(low).passed is True
+    assert evaluate_naturalistic_prior(high).passed is True
 
 
 def test_validate_manifest_payload_rejects_fractional_seed() -> None:
@@ -429,6 +505,13 @@ def test_generate_manifests_summary_shape() -> None:
     _manifests, summary = generate_manifests(ss, seed=0, count=8)
     assert summary["total_candidates"] == 8
     assert summary["valid"] + summary["invalid"] + summary["degenerate"] == 8
+    assert summary["naturalistic_prior"]["profile"] == "urban_vru_default_v1"
+    assert (
+        summary["naturalistic_prior"]["pass"]
+        + summary["naturalistic_prior"]["fail"]
+        + summary["naturalistic_prior"]["unavailable"]
+        == 8
+    )
     assert isinstance(summary["rejection_reasons"], dict)
 
 
@@ -553,6 +636,7 @@ def test_cli_generates_expected_files(tmp_path: Path) -> None:
         assert cand_path.exists(), f"missing {cand_path}"
         loaded = yaml.safe_load(cand_path.read_text(encoding="utf-8"))
         assert loaded["schema_version"] == MANIFEST_SCHEMA_VERSION
+        assert loaded["naturalistic_prior"]["passed"] is True
         record = validate_manifest_payload(loaded, search_space=search_space)
         assert record.status == ManifestCategory.VALID
 

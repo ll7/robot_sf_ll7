@@ -87,6 +87,26 @@ def _heuristic_candidate() -> dict:
     }
 
 
+def _naturalistic_prior(*, passed: bool = True) -> dict:
+    """Return a generated-candidate naturalistic-prior payload."""
+    return {
+        "schema_version": "naturalistic_vru_prior.v1",
+        "profile": "urban_vru_default_v1",
+        "constraints": [
+            {
+                "field": "pedestrian_speed_mps",
+                "min": 0.4,
+                "max": 2.2,
+                "observed": 1.2 if passed else 3.5,
+                "passed": passed,
+                "description": "bounded walking-to-running VRU speed for plausible hard cases",
+            }
+        ],
+        "passed": passed,
+        "violation_flags": [] if passed else ["pedestrian_speed_mps_outside_urban_vru_default_v1"],
+    }
+
+
 def _rl_adversary_candidate() -> dict:
     """Return a valid RL-adversary candidate."""
     base = _heuristic_candidate()
@@ -145,6 +165,30 @@ class TestHeuristicCandidate:
     def test_noop_candidate_valid(self) -> None:
         payload = _noop_candidate()
         jsonschema.validate(instance=payload, schema=SCHEMA)
+
+    def test_candidate_with_naturalistic_prior_valid(self) -> None:
+        payload = _heuristic_candidate()
+        payload["naturalistic_prior"] = _naturalistic_prior()
+        jsonschema.validate(instance=payload, schema=SCHEMA)
+
+    def test_candidate_with_naturalistic_prior_violation_valid(self) -> None:
+        payload = _heuristic_candidate()
+        payload["naturalistic_prior"] = _naturalistic_prior(passed=False)
+        jsonschema.validate(instance=payload, schema=SCHEMA)
+
+    def test_passed_naturalistic_prior_rejects_violation_flags(self) -> None:
+        payload = _heuristic_candidate()
+        payload["naturalistic_prior"] = _naturalistic_prior()
+        payload["naturalistic_prior"]["violation_flags"] = ["inconsistent"]
+        with pytest.raises(jsonschema.ValidationError, match="is expected to be empty"):
+            jsonschema.validate(instance=payload, schema=SCHEMA)
+
+    def test_naturalistic_prior_rejects_unsupported_field(self) -> None:
+        payload = _heuristic_candidate()
+        payload["naturalistic_prior"] = _naturalistic_prior()
+        payload["naturalistic_prior"]["constraints"][0]["field"] = "acceleration_mps2"
+        with pytest.raises(jsonschema.ValidationError, match="acceleration_mps2"):
+            jsonschema.validate(instance=payload, schema=SCHEMA)
 
 
 class TestRLAdversaryCandidate:

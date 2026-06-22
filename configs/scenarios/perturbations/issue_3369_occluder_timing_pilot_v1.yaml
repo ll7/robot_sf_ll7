@@ -1,0 +1,44 @@
+schema_version: scenario_perturbation_manifest.v1
+manifest_id: issue_3369_occluder_timing_pilot_v1
+description: >
+  Diagnostic-only occluder-timing perturbation pilot for issue #3369. This manifest shifts the
+  emerging pedestrian release time in the tracked issue #2756 occluded-emergence live fixture while
+  keeping the source scenario, seed, map, and route geometry fixed. Preflight eligibility is input
+  validation only; it is not benchmark evidence.
+scenario_config: configs/scenarios/single/issue_2756_occluded_emergence_live.yaml
+seed_controls:
+  baseline_seeds:
+  - 111
+  replay_seed_policy: explicit
+  source: issue_2756_occluded_emergence_fixture
+validity:
+  require_scenario_certification: true
+  max_route_offset_m: 0.5
+  max_occluder_timing_offset_s: 0.5
+  invalid_variant_evidence_policy: exclude_from_success_evidence
+  notes: >
+    Occluder timing variants require observation_visibility.static_occlusion=true,
+    metadata.fixture_contract timing fields, and selected single_pedestrians metadata.role=emerging_ped.
+variants:
+- variant_id: issue_2756_occluded_emergence_noop
+  scenario_id: issue_2756_occluded_emergence
+  family: noop
+  seeds:
+  - 111
+- variant_id: issue_2756_occluded_emergence_occluder_timing_h1_p050
+  scenario_id: issue_2756_occluded_emergence
+  family: occluder_timing_offset
+  seeds:
+  - 111
+  rationale: >
+    Delay the emerging pedestrian by 0.5 s to generate a diagnostic counterfactual input for
+    occlusion-exposure sensitivity. This does not assert any benchmark outcome.
+  parameters:
+    dt_s: 0.5
+    max_abs_dt_s: 0.5
+    pedestrian_id: h1
+pilot_matrix_note:
+  parent_issue: "#3369"
+  next_step: >
+    Use materialized pilot inputs only as diagnostic counterfactual candidates after preflight.
+  evidence_boundary: local_pilot_input_not_benchmark_evidence

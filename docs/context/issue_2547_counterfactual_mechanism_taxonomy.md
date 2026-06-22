@@ -26,9 +26,15 @@ The manifest now includes:
 - `pair_report.artifact_manifest_ref`;
 - `pair_report.expected_vs_observed_metric_change`.
 
-The first supported feature remains `robot_route_offset`, mapped to the `clearance_pressure`
-mechanism label. Because the pair generator does not execute a smoke run, the expected-vs-observed
-section is deliberately `not_available` with the reason
+Supported features currently include:
+
+- `robot_route_offset`, mapped to the `clearance_pressure` mechanism label.
+- `occluder_timing_offset` (Issue #3369), mapped to the `occlusion_exposure` mechanism label after
+  preflight proves the source scenario is an occluded-emergence fixture with static occlusion,
+  fixture timing metadata, and an explicit `emerging_ped` target.
+
+Because the pair generator does not execute a smoke run, the expected-vs-observed section is
+deliberately `not_available` with the reason
 `no smoke-run metrics were supplied to this pair manifest`.
 
 ## Evidence
@@ -47,6 +53,9 @@ expected-vs-observed status.
 rtk uv run pytest tests/tools/test_create_counterfactual_scenario_pair.py -q
 rtk uv run ruff check scripts/tools/create_counterfactual_scenario_pair.py tests/tools/test_create_counterfactual_scenario_pair.py
 ```
+
+Issue #3369 additionally validates the occluder-timing manifest and preflight/materialization
+surface through `tests/scenario_certification/test_scenario_perturbation_preflight.py`.
 
 Expected result: targeted generator tests pass and Ruff reports no issues.
 

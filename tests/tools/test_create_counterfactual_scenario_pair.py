@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.manifest_lineage import validate_lineage_contract
@@ -127,6 +128,92 @@ def test_create_supported_robot_route_offset_pair(tmp_path: Path) -> None:
     )
     assert "&id" not in output_text
     assert "*id" not in output_text
+
+
+@pytest.mark.parametrize(
+    (
+        "source",
+        "feature",
+        "scenario_config",
+        "expected_parameters",
+        "expected_taxonomy_label",
+    ),
+    [
+        (
+            "classic_group_crossing_high",
+            "pedestrian_route_offset",
+            "configs/scenarios/classic_interactions_francis2023.yaml",
+            {"dx_m": 0.25, "dy_m": 0.0, "max_magnitude_m": 0.25},
+            "clearance_pressure",
+        ),
+        (
+            "francis2023_join_group",
+            "single_pedestrian_start_delay_offset",
+            "configs/scenarios/classic_interactions_francis2023.yaml",
+            {"dt_s": 0.25, "max_abs_dt_s": 0.25},
+            "bottleneck_negotiation",
+        ),
+        (
+            "francis2023_join_group",
+            "single_pedestrian_speed_offset",
+            "configs/scenarios/classic_interactions_francis2023.yaml",
+            {"speed_delta_m_s": 0.25, "max_abs_speed_delta_m_s": 0.25},
+            "bottleneck_negotiation",
+        ),
+        (
+            "francis2023_intersection_wait",
+            "single_pedestrian_wait_duration_offset",
+            "configs/scenarios/classic_interactions_francis2023.yaml",
+            {"wait_delta_s": 0.25, "max_abs_wait_delta_s": 0.25},
+            "signal_compliance",
+        ),
+    ],
+)
+def test_create_supported_non_robot_counterfactual_pairs(
+    tmp_path: Path,
+    source: str,
+    feature: str,
+    scenario_config: str,
+    expected_parameters: dict[str, float],
+    expected_taxonomy_label: str,
+) -> None:
+    """Registered non-robot perturbation families should produce preflight-valid pairs."""
+    output_path = tmp_path / f"{feature}.yaml"
+
+    result = create_counterfactual_scenario_pair.main(
+        [
+            "--source",
+            source,
+            "--feature",
+            feature,
+            "--magnitude",
+            "0.25",
+            "--seed",
+            "111",
+            "--scenario-config",
+            scenario_config,
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert result == 0
+    payload = yaml.safe_load(output_path.read_text(encoding="utf-8"))
+    assert payload["changed_feature"] == feature
+    assert payload["changed_factor"] == feature
+    assert payload["source"] == {
+        "scenario_config": scenario_config,
+        "source_scenario_id": source,
+    }
+    assert validate_lineage_contract(payload) == []
+    assert payload["intervention"]["family"] == feature
+    assert payload["intervention"]["parameters"] == expected_parameters
+    assert payload["mechanism_taxonomy"]["label"] == expected_taxonomy_label
+    assert payload["pair_report"]["changed_factor"] == feature
+    assert [row["benchmark_evidence_status"] for row in payload["preflight"]["results"]] == [
+        "eligible_success_evidence_candidate",
+        "eligible_success_evidence_candidate",
+    ]
 
 
 def test_create_supported_occluder_timing_pair(tmp_path: Path) -> None:

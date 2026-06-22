@@ -8,7 +8,7 @@ import pytest
 from loguru import logger
 
 from robot_sf.benchmark import aggregate
-from robot_sf.benchmark.aggregate import compute_aggregates
+from robot_sf.benchmark.aggregate import compute_aggregates, compute_aggregates_with_ci
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -52,6 +52,49 @@ def test_compute_aggregates_recomputes_stored_snqi_when_requested(
         recompute_snqi=True,
     )
     assert recomputed["planner-a"]["snqi"]["mean"] == 6.0
+
+
+def test_compute_aggregates_with_ci_runs_snqi_recompute_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CI aggregation should apply the same SNQI recompute controls as base aggregation."""
+
+    def _fake_snqi(
+        metrics: dict[str, float],
+        weights: dict[str, float],
+        *,
+        baseline_stats: dict[str, dict[str, float]] | None = None,
+    ) -> float:
+        return float(metrics["score"] * weights["score"])
+
+    monkeypatch.setattr(aggregate, "snqi_fn", _fake_snqi)
+    records = [
+        {
+            "episode_id": "ep-ci-1",
+            "scenario_id": "sc-1",
+            "seed": 1,
+            "algo": "planner-a",
+            "metrics": {"score": 2.0},
+        },
+        {
+            "episode_id": "ep-ci-2",
+            "scenario_id": "sc-1",
+            "seed": 2,
+            "algo": "planner-a",
+            "metrics": {"score": 4.0},
+        },
+    ]
+
+    summary = compute_aggregates_with_ci(
+        records,
+        group_by="algo",
+        snqi_weights={"score": 3.0},
+        bootstrap_samples=5,
+        bootstrap_seed=7,
+    )
+
+    assert summary["planner-a"]["snqi"]["mean"] == 9.0
+    assert "mean_ci" in summary["planner-a"]["snqi"]
 
 
 def test_compute_aggregates_logs_record_id_and_reraises_snqi_failure_in_strict_mode(

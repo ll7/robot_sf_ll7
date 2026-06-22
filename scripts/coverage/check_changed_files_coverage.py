@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import re
 import subprocess
 import sys
 from fnmatch import fnmatch
@@ -228,6 +229,89 @@ def _load_coverage_index(coverage_path: Path, repo_root: Path) -> dict[str, floa
     return index
 
 
+def _load_coverage_file_data(coverage_path: Path, repo_root: Path) -> dict[str, dict[str, object]]:
+    """Load normalized coverage.py file data keyed by repository path.
+
+    Returns:
+        Mapping from normalized file path to the raw coverage.py file payload.
+    """
+    data = json.loads(coverage_path.read_text(encoding="utf-8"))
+    files: dict[str, dict[str, object]] = {}
+    for file_path, file_data in data.get("files", {}).items():
+        if isinstance(file_data, dict):
+            files[_normalize_path(Path(file_path), repo_root)] = file_data
+    return files
+
+
+def _changed_line_numbers(base: str, path: Path, repo_root: Path) -> set[int]:
+    """Return new-file line numbers touched by the diff against *base*.
+
+    Returns:
+        Set of line numbers on ``HEAD`` that were added or modified relative to the merge-base.
+    """
+    proc = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--unified=0",
+            "--diff-filter=ACMRT",
+            f"{base}...HEAD",
+            "--",
+            path.as_posix(),
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return set()
+
+    changed: set[int] = set()
+    new_line: int | None = None
+    for line in proc.stdout.splitlines():
+        hunk_match = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+        if hunk_match:
+            new_line = int(hunk_match.group(1))
+            continue
+        if new_line is None:
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
+            changed.add(new_line)
+            new_line += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            continue
+        else:
+            new_line += 1
+    return changed
+
+
+def _coverage_for_changed_lines(
+    *,
+    file_data: dict[str, object] | None,
+    changed_lines: set[int],
+) -> tuple[float | None, str]:
+    """Return executable changed-line coverage, falling back when data is insufficient.
+
+    Returns:
+        Pair of coverage percent and a compact scope label.
+    """
+    if file_data is None or not changed_lines:
+        return None, "file"
+
+    executed = {int(line) for line in file_data.get("executed_lines", [])}
+    missing = {int(line) for line in file_data.get("missing_lines", [])}
+    statement_lines = executed | missing
+    changed_statements = changed_lines & statement_lines
+    if not changed_statements:
+        return 100.0, "changed executable lines 0/0"
+    covered_changed = changed_statements & executed
+    return (
+        100.0 * len(covered_changed) / len(changed_statements),
+        f"changed executable lines {len(covered_changed)}/{len(changed_statements)}",
+    )
+
+
 def _print_lines(lines: Iterable[str]) -> None:
     """Print lines in order."""
     for line in lines:
@@ -313,6 +397,10 @@ def _select_changed_files(
 def _build_results(
     selected: list[str],
     coverage_index: dict[str, float],
+    coverage_file_data: dict[str, dict[str, object]],
+    *,
+    base: str,
+    repo_root: Path,
 ) -> list[dict[str, object]]:
     """Attach coverage data to selected changed files.
 
@@ -322,12 +410,23 @@ def _build_results(
     """
     results: list[dict[str, object]] = []
     for path_str in selected:
-        coverage, resolved = _resolve_coverage(path_str, coverage_index)
+        file_coverage, resolved = _resolve_coverage(path_str, coverage_index)
+        coverage = file_coverage
+        scope = "file"
+        if resolved is not None:
+            changed_coverage, changed_scope = _coverage_for_changed_lines(
+                file_data=coverage_file_data.get(resolved),
+                changed_lines=_changed_line_numbers(base, Path(path_str), repo_root),
+            )
+            if changed_coverage is not None:
+                coverage = changed_coverage
+                scope = changed_scope
         results.append(
             {
                 "file": path_str,
                 "coverage": coverage,
                 "resolved": resolved,
+                "scope": scope,
             }
         )
     return results
@@ -361,12 +460,14 @@ def _print_results(
         if cov is None:
             print(f"- {file_path}: coverage missing")
             continue
+        scope = r.get("scope")
+        scope_suffix = f" ({scope})" if scope and scope != "file" else ""
         status = "OK"
         if cov < min_required:
             status = "FAIL"
         elif cov < goal:
             status = "WARN"
-        print(f"- {file_path}: {cov:.1f}% [{status}]")
+        print(f"- {file_path}: {cov:.1f}% [{status}]{scope_suffix}")
 
 
 def _report_failures(
@@ -464,6 +565,7 @@ def _run_check(args: argparse.Namespace) -> int:
         return 0
 
     coverage_index = _load_coverage_index(coverage_path, repo_root)
+    coverage_file_data = _load_coverage_file_data(coverage_path, repo_root)
     doc_only = [
         path_str
         for path_str in selected
@@ -479,7 +581,13 @@ def _run_check(args: argparse.Namespace) -> int:
         _report_skipped(skipped, args.show_skipped)
         return 0
 
-    results = _build_results(selected, coverage_index)
+    results = _build_results(
+        selected,
+        coverage_index,
+        coverage_file_data,
+        base=args.base,
+        repo_root=repo_root,
+    )
 
     _log_header(args)
     _print_results(results, args.min, args.goal)

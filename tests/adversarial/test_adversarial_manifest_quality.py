@@ -44,7 +44,31 @@ def _candidate_controls(
     }
 
 
-def _manifest_payload(controls: dict, status: str) -> dict:
+def _naturalistic_prior_payload(*, passed: bool, flags: list[str] | None = None) -> dict:
+    return {
+        "schema_version": "naturalistic_vru_prior.v1",
+        "profile": "urban_vru_default_v1",
+        "constraints": [
+            {
+                "field": "pedestrian_speed_mps",
+                "min": 0.4,
+                "max": 2.2,
+                "observed": 1.0 if passed else 3.5,
+                "passed": passed,
+                "description": "bounded walking-to-running VRU speed for plausible hard cases",
+            }
+        ],
+        "passed": passed,
+        "violation_flags": flags or [],
+    }
+
+
+def _manifest_payload(
+    controls: dict,
+    status: str,
+    *,
+    naturalistic_prior: dict | None = None,
+) -> dict:
     candidate = CandidateSpec(
         start=Pose2D(controls["start"]["x"], controls["start"]["y"]),
         goal=Pose2D(controls["goal"]["x"], controls["goal"]["y"]),
@@ -53,7 +77,7 @@ def _manifest_payload(controls: dict, status: str) -> dict:
         pedestrian_delay_s=float(controls["pedestrian_delay_s"]),
         scenario_seed=int(controls["scenario_seed"]),
     )
-    return {
+    payload = {
         "schema_version": "adversarial_scenario_manifest.v1",
         "candidate_controls": controls,
         "validation": {
@@ -63,11 +87,24 @@ def _manifest_payload(controls: dict, status: str) -> dict:
             "normalized_control_hash": compute_control_hash(candidate),
         },
     }
+    if naturalistic_prior is not None:
+        payload["naturalistic_prior"] = naturalistic_prior
+    return payload
 
 
-def _write_manifest(path: Path, controls: dict, status: str) -> None:
+def _write_manifest(
+    path: Path,
+    controls: dict,
+    status: str,
+    *,
+    naturalistic_prior: dict | None = None,
+) -> None:
     path.write_text(
-        yaml.safe_dump(_manifest_payload(controls, status), sort_keys=False, allow_unicode=True),
+        yaml.safe_dump(
+            _manifest_payload(controls, status, naturalistic_prior=naturalistic_prior),
+            sort_keys=False,
+            allow_unicode=True,
+        ),
         encoding="utf-8",
     )
 
@@ -214,6 +251,56 @@ def test_summarize_manifest_rates_and_novelty(tmp_path: Path) -> None:
     assert result.unique_hash_count == 3
     assert result.novelty_rate == 0.75
     assert result.duplicate_rate == 0.25
+
+
+def test_summarize_naturalistic_prior_rates_and_filters(tmp_path: Path) -> None:
+    controls_a = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    controls_b = _candidate_controls(start_x=1.5, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    controls_c = _candidate_controls(start_x=2.0, start_y=2.0, goal_x=6.0, goal_y=2.0)
+
+    violation_flag = "pedestrian_speed_mps_outside_urban_vru_default_v1"
+    _write_manifest(
+        tmp_path / "passed.yaml",
+        controls_a,
+        "valid",
+        naturalistic_prior=_naturalistic_prior_payload(passed=True),
+    )
+    _write_manifest(
+        tmp_path / "violated.yaml",
+        controls_b,
+        "valid",
+        naturalistic_prior=_naturalistic_prior_payload(passed=False, flags=[violation_flag]),
+    )
+    _write_manifest(tmp_path / "legacy.yaml", controls_c, "valid")
+
+    result = summarize_adversarial_manifest_quality([tmp_path])
+
+    assert result.naturalistic_prior_available_count == 2
+    assert result.naturalistic_prior_pass_count == 1
+    assert result.naturalistic_prior_fail_count == 1
+    assert result.naturalistic_prior_unavailable_count == 1
+    assert result.naturalistic_prior_pass_rate == 0.5
+    assert result.naturalistic_prior_fail_rate == 0.5
+    assert result.naturalistic_prior_violation_counts == {violation_flag: 1}
+
+    passed = summarize_adversarial_manifest_quality([tmp_path], naturalistic_status="passed")
+    violated = summarize_adversarial_manifest_quality([tmp_path], naturalistic_status="violated")
+    missing = summarize_adversarial_manifest_quality([tmp_path], naturalistic_status="missing")
+
+    assert passed.manifest_count == 1
+    assert passed.naturalistic_prior_pass_count == 1
+    assert violated.manifest_count == 1
+    assert violated.naturalistic_prior_fail_count == 1
+    assert missing.manifest_count == 1
+    assert missing.naturalistic_prior_unavailable_count == 1
+
+
+def test_naturalistic_status_filter_rejects_unknown_value(tmp_path: Path) -> None:
+    controls = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    _write_manifest(tmp_path / "a.yaml", controls, "valid")
+
+    with pytest.raises(ValueError, match="Unsupported naturalistic status"):
+        summarize_adversarial_manifest_quality([tmp_path], naturalistic_status="other")
 
 
 def test_public_record_loader_feeds_summary_without_path_reload(tmp_path: Path) -> None:
@@ -500,6 +587,30 @@ def test_manifest_quality_cli_writes_output_json(tmp_path: Path) -> None:
     assert loaded["schema_version"] == MANIFEST_QUALITY_SCHEMA_VERSION
     assert loaded["manifest_count"] == 1
     assert loaded["rates"]["validity_rate"] == 1.0
+    assert loaded["naturalistic_prior"]["unavailable_count"] == 1
+
+
+def test_manifest_quality_cli_filters_naturalistic_status(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    controls_a = _candidate_controls(start_x=1.0, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    controls_b = _candidate_controls(start_x=1.5, start_y=2.0, goal_x=5.0, goal_y=2.0)
+    _write_manifest(
+        tmp_path / "passed.yaml",
+        controls_a,
+        "valid",
+        naturalistic_prior=_naturalistic_prior_payload(passed=True),
+    )
+    _write_manifest(
+        tmp_path / "legacy.yaml",
+        controls_b,
+        "valid",
+    )
+
+    assert quality_cli_main([str(tmp_path), "--naturalistic-status", "passed"]) == 0
+    stdout = capsys.readouterr().out
+    assert json.loads(stdout)["manifest_count"] == 1
 
 
 def test_manifest_quality_cli_prints_json_and_reports_errors(

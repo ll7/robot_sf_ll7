@@ -87,6 +87,7 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "normalize_pytest_target_path()" in script_text
     assert "${path%%::*}" in script_text
     assert "core_test_paths=(" in script_text
+    assert "tests/adversarial" in script_text
     assert "tests/analysis_workbench" in script_text
     assert "tests/scenario_certification" in script_text
     assert "explicit_test_targets=(" in script_text

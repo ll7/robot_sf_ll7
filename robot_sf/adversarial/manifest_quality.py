@@ -28,6 +28,7 @@ EVIDENCE_BOUNDARY = (
 )
 
 VALID_STATUSES = ("valid", "invalid", "degenerate")
+NATURALISTIC_STATUS_CHOICES = ("all", "passed", "violated", "missing")
 _CONTROL_FIELDS = (
     ("start", "x"),
     ("start", "y"),
@@ -191,6 +192,8 @@ class ManifestQualityRecord:
     normalized_control_hash: str | None = None
     parse_error: str | None = None
     perturbation_distance: float | None = None
+    naturalistic_prior_passed: bool | None = None
+    naturalistic_prior_violations: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return JSON-safe representation."""
@@ -205,6 +208,11 @@ class ManifestQualityRecord:
             payload["parse_error"] = self.parse_error
         if self.perturbation_distance is not None:
             payload["perturbation_distance"] = self.perturbation_distance
+        if self.naturalistic_prior_passed is not None:
+            payload["naturalistic_prior"] = {
+                "passed": self.naturalistic_prior_passed,
+                "violation_flags": list(self.naturalistic_prior_violations),
+            }
         return payload
 
 
@@ -275,6 +283,13 @@ class ManifestsQualitySummary:
     perturbation_mean: float | None
     perturbation_min: float | None
     perturbation_max: float | None
+    naturalistic_prior_available_count: int
+    naturalistic_prior_pass_count: int
+    naturalistic_prior_fail_count: int
+    naturalistic_prior_unavailable_count: int
+    naturalistic_prior_pass_rate: float
+    naturalistic_prior_fail_rate: float
+    naturalistic_prior_violation_counts: dict[str, int]
     planner_outcomes: PlannerOutcomeSummary | None
 
     def to_dict(self) -> dict[str, Any]:
@@ -303,6 +318,15 @@ class ManifestsQualitySummary:
                 "mean_distance": self.perturbation_mean,
                 "min_distance": self.perturbation_min,
                 "max_distance": self.perturbation_max,
+            },
+            "naturalistic_prior": {
+                "available_count": self.naturalistic_prior_available_count,
+                "pass_count": self.naturalistic_prior_pass_count,
+                "fail_count": self.naturalistic_prior_fail_count,
+                "unavailable_count": self.naturalistic_prior_unavailable_count,
+                "pass_rate": self.naturalistic_prior_pass_rate,
+                "fail_rate": self.naturalistic_prior_fail_rate,
+                "violation_counts": dict(self.naturalistic_prior_violation_counts),
             },
             "manifest_inputs": [str(path) for path in self.input_paths],
         }
@@ -337,6 +361,21 @@ def _manifest_hash(payload: dict[str, Any]) -> str | None:
     return compute_control_hash(candidate)
 
 
+def _naturalistic_prior_fields(payload: dict[str, Any]) -> tuple[bool | None, tuple[str, ...]]:
+    """Extract naturalistic-prior pass/fail fields from a manifest payload."""
+    prior = payload.get("naturalistic_prior")
+    if not isinstance(prior, dict):
+        return None, ()
+    passed = prior.get("passed")
+    if not isinstance(passed, bool):
+        passed = None
+    raw_flags = prior.get("violation_flags")
+    flags: tuple[str, ...] = ()
+    if isinstance(raw_flags, list):
+        flags = tuple(str(flag) for flag in raw_flags if isinstance(flag, str))
+    return passed, flags
+
+
 def _load_records(
     manifest_paths: list[Path],
     reference_vector: tuple[float, ...] | None,
@@ -356,6 +395,7 @@ def _load_records(
             status = _manifest_status(payload)
             status = status if status in VALID_STATUSES else "invalid"
             manifest_hash = _manifest_hash(payload)
+            naturalistic_passed, naturalistic_violations = _naturalistic_prior_fields(payload)
             schema_version = payload.get("schema_version")
             schema_version = str(schema_version) if schema_version is not None else None
             perturbation_distance = None
@@ -379,6 +419,8 @@ def _load_records(
                     schema_version=schema_version,
                     normalized_control_hash=manifest_hash,
                     perturbation_distance=perturbation_distance,
+                    naturalistic_prior_passed=naturalistic_passed,
+                    naturalistic_prior_violations=naturalistic_violations,
                 )
             )
         except (OSError, ValueError) as exc:
@@ -432,6 +474,55 @@ def _summarize_perturbations(
         round(mean(distances), 6),
         round(min(distances), 6),
         round(max(distances), 6),
+    )
+
+
+def _summarize_naturalistic_prior(
+    records: list[ManifestQualityRecord],
+) -> tuple[int, int, int, int, float, float, dict[str, int]]:
+    """Return naturalistic-prior availability, pass/fail, and violation counts."""
+    available_count = 0
+    pass_count = 0
+    fail_count = 0
+    violation_counts: Counter[str] = Counter()
+    for record in records:
+        if record.naturalistic_prior_passed is None:
+            continue
+        available_count += 1
+        if record.naturalistic_prior_passed:
+            pass_count += 1
+        else:
+            fail_count += 1
+        violation_counts.update(record.naturalistic_prior_violations)
+
+    unavailable_count = len(records) - available_count
+    return (
+        available_count,
+        pass_count,
+        fail_count,
+        unavailable_count,
+        _safe_rate(pass_count, available_count),
+        _safe_rate(fail_count, available_count),
+        dict(sorted(violation_counts.items())),
+    )
+
+
+def _record_matches_naturalistic_status(
+    record: ManifestQualityRecord,
+    naturalistic_status: str,
+) -> bool:
+    """Return whether a record passes the requested naturalistic-prior filter."""
+    if naturalistic_status == "all":
+        return True
+    if naturalistic_status == "missing":
+        return record.naturalistic_prior_passed is None
+    if naturalistic_status == "passed":
+        return record.naturalistic_prior_passed is True
+    if naturalistic_status == "violated":
+        return record.naturalistic_prior_passed is False
+    raise ValueError(
+        f"Unsupported naturalistic status {naturalistic_status!r}; "
+        f"expected one of {', '.join(NATURALISTIC_STATUS_CHOICES)}"
     )
 
 
@@ -639,8 +730,14 @@ def summarize_adversarial_manifest_quality_records(
     *,
     reference_manifest: str | Path | None = None,
     smoke_summary_json: str | Path | None = None,
+    naturalistic_status: str = "all",
 ) -> ManifestsQualitySummary:
     """Return a compact quality summary from already-loaded manifest records."""
+    records = [
+        record
+        for record in records
+        if _record_matches_naturalistic_status(record, naturalistic_status)
+    ]
     status_counts = Counter(record.status for record in records)
     valid = status_counts.get("valid", 0)
     invalid = status_counts.get("invalid", 0)
@@ -653,6 +750,15 @@ def summarize_adversarial_manifest_quality_records(
     perturbation_count, perturbation_mean, perturbation_min, perturbation_max = (
         _summarize_perturbations(records)
     )
+    (
+        naturalistic_available_count,
+        naturalistic_pass_count,
+        naturalistic_fail_count,
+        naturalistic_unavailable_count,
+        naturalistic_pass_rate,
+        naturalistic_fail_rate,
+        naturalistic_violation_counts,
+    ) = _summarize_naturalistic_prior(records)
 
     planner_outcomes = _summarize_planner_outcomes(
         Path(smoke_summary_json) if smoke_summary_json is not None else None
@@ -679,6 +785,13 @@ def summarize_adversarial_manifest_quality_records(
         perturbation_mean=perturbation_mean,
         perturbation_min=perturbation_min,
         perturbation_max=perturbation_max,
+        naturalistic_prior_available_count=naturalistic_available_count,
+        naturalistic_prior_pass_count=naturalistic_pass_count,
+        naturalistic_prior_fail_count=naturalistic_fail_count,
+        naturalistic_prior_unavailable_count=naturalistic_unavailable_count,
+        naturalistic_prior_pass_rate=naturalistic_pass_rate,
+        naturalistic_prior_fail_rate=naturalistic_fail_rate,
+        naturalistic_prior_violation_counts=naturalistic_violation_counts,
         planner_outcomes=planner_outcomes,
     )
 
@@ -688,6 +801,7 @@ def summarize_adversarial_manifest_quality(
     *,
     reference_manifest: str | Path | None = None,
     smoke_summary_json: str | Path | None = None,
+    naturalistic_status: str = "all",
 ) -> ManifestsQualitySummary:
     """Return a compact quality summary for a batch of manifests."""
     records = load_adversarial_manifest_quality_records(
@@ -698,6 +812,7 @@ def summarize_adversarial_manifest_quality(
         records,
         reference_manifest=reference_manifest,
         smoke_summary_json=smoke_summary_json,
+        naturalistic_status=naturalistic_status,
     )
 
 
@@ -730,6 +845,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Write JSON output to this path; if omitted, print to stdout.",
     )
+    parser.add_argument(
+        "--naturalistic-status",
+        choices=NATURALISTIC_STATUS_CHOICES,
+        default="all",
+        help=(
+            "Filter manifests by naturalistic-prior status: all, passed, violated, or missing "
+            "(legacy manifests without prior metadata)."
+        ),
+    )
     return parser
 
 
@@ -742,6 +866,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest_inputs=[*args.manifests],
             reference_manifest=args.reference_manifest,
             smoke_summary_json=args.smoke_summary_json,
+            naturalistic_status=args.naturalistic_status,
         )
         payload = summary.to_dict()
         text = json.dumps(payload, indent=2, sort_keys=True)

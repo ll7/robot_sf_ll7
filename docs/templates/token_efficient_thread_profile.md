@@ -16,6 +16,7 @@ changes.
 - worktree: [absolute or repo-relative worktree path and branch]
 - context_budget: [compact snapshots first; raw logs only by artifact path]
 - resume_checkpoint: [active ledger path plus loaded skills/docs, current PR/issue/head SHA, and next stale-state trigger]
+- loaded_context_cache: [skills/docs/snapshots already read this phase, plus the condition that requires rereading]
 - route_cache: [unavailable routes and reset times, known-good worker lane, and current CI monitor command]
 - delegation_artifacts: [RESULT.md, changed files, diffstat, validation, blockers, mutations]
 - output_budget: [parent-thread summary length and exact artifact paths to return]
@@ -41,6 +42,11 @@ changes.
 - `resume_checkpoint` should be the first thing refreshed after compaction or
   automatic continuation. If it is fresh, do not reread full skills, broad
   issue queues, or full worktree inventories before the next mutation.
+- `loaded_context_cache` prevents compaction recovery from becoming another
+  broad-read pass. Record each long skill, issue body, PR snapshot, and context
+  note already loaded in the current phase, then reread only when the branch,
+  issue/PR head SHA, skill file modification time, or explicit stale-state
+  trigger changes.
 - `route_cache` keeps quota and invocation facts close to the active work:
   Spark usage-limit resets, failed helper flags, the exact bounded CI monitor
   command, and the current fallback worker. Reuse it before retrying a route.

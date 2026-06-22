@@ -156,6 +156,11 @@ def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(monkeypatch, 
     assert payload["git"]["compact_status"]["full_untracked_inventory_omitted"] is True
     assert payload["controller_checkpoint"]["branch"] == "issue-2671-compact-state-snapshots"
     assert payload["controller_checkpoint"]["next_action"] == "continue_from_snapshot"
+    assert payload["controller_checkpoint"]["token_efficiency"] == {
+        "parent_output_limit_lines": 200,
+        "compact_first": True,
+        "recommended_next_steps": list(snapshot.TOKEN_EFFICIENCY_ACTIONS),
+    }
     assert payload["claims"] == [
         {
             "issue": 2671,

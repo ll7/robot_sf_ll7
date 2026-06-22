@@ -39,7 +39,7 @@ class UnicycleDriveState:
     """A class that represents the state of a unicycle drive pedestrian."""
 
     pose: PedPose = field(default_factory=lambda: ((0.0, 0.0), 0.0))
-    velocity: PolarVec2D = field(default_factory=lambda: (0.0, 0.0))
+    velocity: float = 0.0
 
     @property
     def pos(self) -> Vec2D:

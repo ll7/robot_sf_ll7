@@ -117,6 +117,9 @@ from robot_sf.benchmark.map_runner_observations import (
 )
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
+from robot_sf.benchmark.map_runner_policy_common import (
+    build_adapter_policy as _build_adapter_policy,
+)
 from robot_sf.benchmark.map_runner_policy_metadata import (
     apply_direct_world_velocity_metadata as _apply_direct_world_velocity_metadata,
 )
@@ -345,86 +348,6 @@ _validate_planner_contract = planner_commands.validate_planner_contract
 
 _load_synthetic_actuation_profile = _load_synthetic_actuation_profile_impl
 _load_latency_stress_profile = _load_latency_profile
-
-
-def _build_adapter_policy(
-    *,
-    algo_key: str,
-    algo_config: dict[str, Any],
-    meta: dict[str, Any],
-    adapter: Any,
-    adapter_name: str,
-    robot_kinematics: str | None,
-    normalized_robot_command_mode: str | None,
-    limitations: str | None = None,
-) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
-    """Construct a projected adapter policy with standard metadata wiring.
-
-    Returns:
-        tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
-            Projected policy callable and populated benchmark metadata.
-    """
-    meta.update(
-        {
-            "status": "ok",
-            "config": algo_config,
-            "config_hash": _config_hash(algo_config),
-        }
-    )
-    meta = enrich_algorithm_metadata(
-        algo=algo_key,
-        metadata=meta,
-        execution_mode="adapter",
-        adapter_name=adapter_name,
-        robot_kinematics=robot_kinematics,
-    )
-    _init_feasibility_metadata(meta)
-    planner_meta = meta.get("planner_kinematics")
-    if isinstance(planner_meta, dict):
-        planner_meta["planner_command_space"] = _default_robot_command_space(
-            robot_kinematics,
-            algo_config,
-            robot_command_mode=normalized_robot_command_mode,
-        )
-        if limitations is not None:
-            planner_meta["limitations"] = limitations
-    adapter_kinematics_model = resolve_benchmark_kinematics_model(
-        robot_kinematics=robot_kinematics,
-        command_limits=algo_config,
-    )
-
-    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-        """Run an adapter-backed planner and project command feasibility.
-
-        Returns:
-            tuple[float, float]: Projected linear and angular command.
-        """
-        linear, angular = adapter.plan(obs)
-        return _project_with_feasibility(
-            model=adapter_kinematics_model,
-            command=(float(linear), float(angular)),
-            meta=meta,
-        )
-
-    _attach_planner_reset(_policy, adapter)
-    _policy._planner_adapter = adapter
-    if hasattr(adapter, "bind_env"):
-        _policy._planner_bind_env = adapter.bind_env
-    if hasattr(adapter, "close"):
-        _policy._planner_close = adapter.close
-    if hasattr(adapter, "diagnostics"):
-
-        def _planner_stats() -> dict[str, Any]:
-            """Expose adapter diagnostics for episode metadata.
-
-            Returns:
-                dict[str, Any]: Adapter diagnostic payload.
-            """
-            return adapter.diagnostics()
-
-        _policy._planner_stats = _planner_stats
-
-    return _policy, meta
 
 
 class _ExternalMPCAdapter:

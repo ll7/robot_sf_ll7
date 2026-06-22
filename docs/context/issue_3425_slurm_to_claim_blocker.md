@@ -1,4 +1,4 @@
-# Issue #3425 SLURM-To-Claim Blocker
+# Issue #3425 SLURM-to-Claim Blocker
 
 Issue: [#3425](https://github.com/ll7/robot_sf_ll7/issues/3425)
 

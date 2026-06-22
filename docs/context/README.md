@@ -146,7 +146,7 @@ knowledge, not every transient iteration detail.
   [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md)
 * Issue #3075 durable artifact backend decision (W&B):
   [issue_3075_durable_artifact_backend.md](issue_3075_durable_artifact_backend.md)
-* Issue #3425 SLURM-to-claim blocker:
+* Issue #3425 SLURM-to-Claim Blocker:
   [issue_3425_slurm_to_claim_blocker.md](issue_3425_slurm_to_claim_blocker.md)
   records why the requested vertical slice cannot be submitted from the current local machine and
   the smallest valid external action.

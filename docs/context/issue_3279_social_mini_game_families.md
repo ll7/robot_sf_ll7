@@ -13,30 +13,45 @@ the research report, implemented as *parameterized generated* scenarios on the e
 
 Each family entry is a deterministic fixture (fixed `id` + `seeds: [3279]`) **and** a
 parameterized generator path (consumed by `generate_scenario`); the manifest records a
-mechanism label and the parameter values in `metadata`.
+mechanism label, the generator parameters, and the Issue #3423
+`metadata.social_mini_game_controls` block in `metadata`.
 
 ## Covered mechanisms (this cut)
 
-| Family | mechanism_aware_suite_id | Generator mapping |
-| --- | --- | --- |
-| doorway | `doorway_bottleneck_negotiation` | `obstacle=bottleneck`, `flow=bi` |
-| hallway | `hallway_bidirectional_passing` | `obstacle=open`, `flow=bi` |
-| intersection | `intersection_crossing_negotiation` | `obstacle=open`, `flow=cross` |
-| blind_corner | `blind_corner_occlusion_exposure` | `obstacle=maze`, `flow=uni` |
-| crowded_traffic | `crowded_traffic_merge_negotiation` | `density=high`, `flow=merge`, `groups=0.2` |
+| Family | mechanism_aware_suite_id | Generator mapping | Issue #3423 controls |
+| --- | --- | --- | --- |
+| doorway | `doorway_bottleneck_negotiation` | `obstacle=bottleneck`, `flow=bi` | narrow `width_m`, doorway-bottleneck `occlusion_geometry`, fixed-seed `start_timing_s`, medium `yielding_pressure` |
+| hallway | `hallway_bidirectional_passing` | `obstacle=open`, `flow=bi` | open-corridor `width_m`, no static `occlusion_geometry`, fixed-seed `start_timing_s`, medium `yielding_pressure` |
+| intersection | `intersection_crossing_negotiation` | `obstacle=open`, `flow=cross` | open-crossing `width_m`, no static `occlusion_geometry`, fixed-seed `start_timing_s`, high `yielding_pressure` |
+| blind_corner | `blind_corner_occlusion_exposure` | `obstacle=maze`, `flow=uni` | narrow L-corner `width_m`, documented `l_corner_blind_corner` `occlusion_geometry`, fixed-seed `start_timing_s`, medium `yielding_pressure` |
+| crowded_traffic | `crowded_traffic_merge_negotiation` | `density=high`, `flow=merge`, `groups=0.2` | open-merge `width_m`, no static `occlusion_geometry`, fixed-seed `start_timing_s`, high `yielding_pressure` |
 
-## Not yet covered (follow-up under #3279)
+## Issue #3423 Control Exposure
 
-- **First-class parameter exposure** for `width_m`, `occlusion_geometry`, `start_timing_s`,
-  and `yielding_pressure`. The current generator vocabulary
-  (`density`/`flow`/`obstacle`/`groups`/`speed_var`/`goal_topology`/`robot_context`) only
-  *approximates* these triggers; extending the generator schema is deferred.
+The manifest now exposes `width_m`, `occlusion_geometry`, `start_timing_s`, and
+`yielding_pressure` as first-class Social Mini-Game metadata under
+`metadata.social_mini_game_controls`. These controls are documented equivalents
+for the existing generated-scenario vocabulary
+(`density`/`flow`/`obstacle`/`groups`/`speed_var`/`goal_topology`/`robot_context`),
+not a new generator engine or behavioral certification layer.
+
+`blind_corner` no longer relies on an unnamed coarse proxy: its control metadata
+declares `occlusion_geometry: l_corner_blind_corner`, and the test suite checks
+that the generated `maze` obstacle path contains both vertical and horizontal
+occluder segments suitable for the documented L-corner / blind-corner
+equivalent.
+
+## Still Not Covered
+
+- **Parameterized generator semantics.** The Issue #3423 controls are manifest-level documented
+  equivalents. The lower-level generator still consumes the existing vocabulary, so changing
+  `width_m`, delayed actor starts, or continuous yielding-pressure dynamics remains future work.
 - **Planner smoke scope.** The v0 family set now has an executable diagnostic smoke against the
   baseline-safe `simple_policy` planner. This proves the benchmark runner can emit one episode
   record per family; it is still not planner-ranking or benchmark-strength mechanism evidence.
   Broader planner comparisons remain out of scope for this note.
-- **L-corner geometry fidelity.** `blind_corner` uses the coarse `maze` obstacle layout as an
-  occlusion proxy; a dedicated L-corner geometry is a follow-up.
+- **Geometry fidelity.** The blind-corner row is an explicit generated L-corner equivalent, not a
+  calibrated reproduction of a real built environment or the Francis 2023 map.
 
 ## Claim boundary
 
@@ -45,6 +60,12 @@ behavior; nothing here is planner-ranking, transfer, or benchmark-strength mecha
 
 ## Validation runs (2026-06-22)
 
-- `uv run pytest tests/benchmark/test_social_mini_game_families_issue_3279.py -q` → 5 passed
+- `uv run pytest tests/benchmark/test_social_mini_game_families_issue_3279.py -q` → 8 passed
 - `uv run python -c "import robot_sf.benchmark.scenario_generator"` → import OK
 - `python scripts/demo/run_robot_sf_smoke.py --matrix configs/scenarios/sets/issue_3279_social_mini_game_families_v0.yaml --planners simple_policy --horizon 30 --workers 1 --output-root output/benchmarks/issue_3279_social_mini_game_smoke` → passed, 5 episode records
+
+## Validation runs (2026-06-22, Issue #3423 update)
+
+- `uv run pytest tests/benchmark/test_social_mini_game_families_issue_3279.py -q`
+  validates the control metadata, blind-corner L-corner equivalent, deterministic generation, and
+  one-episode-per-family `simple_policy` smoke.

@@ -36,7 +36,15 @@ def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_fd, tmp_name = tempfile.mkstemp(prefix=f"{path.name}.", dir=str(path.parent))
     try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as handle:
+        try:
+            handle = os.fdopen(tmp_fd, "w", encoding="utf-8")
+        except Exception:
+            try:
+                os.close(tmp_fd)
+            except OSError:  # pragma: no cover - defensive cleanup
+                pass
+            raise
+        with handle:
             json.dump(payload, handle, indent=2, sort_keys=True)
             handle.flush()
             os.fsync(handle.fileno())

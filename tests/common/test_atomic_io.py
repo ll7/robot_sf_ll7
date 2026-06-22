@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import TYPE_CHECKING
+
+import pytest
 
 from robot_sf.common.atomic_io import atomic_write_json
 
@@ -42,3 +45,25 @@ def test_overwrites_existing_file_atomically(tmp_path: Path):
     assert json.loads(target.read_text(encoding="utf-8")) == {"v": 2}
     # Only the final file remains in the directory (temp file was cleaned up).
     assert [p.name for p in tmp_path.iterdir()] == ["data.json"]
+
+
+def test_closes_temp_fd_when_fdopen_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The raw mkstemp fd is closed if os.fdopen fails before owning it."""
+    target = tmp_path / "data.json"
+    captured_fd: int | None = None
+
+    def fail_fdopen(fd: int, *args: object, **kwargs: object):
+        nonlocal captured_fd
+        captured_fd = fd
+        raise OSError("fdopen failed")
+
+    monkeypatch.setattr(os, "fdopen", fail_fdopen)
+
+    with pytest.raises(OSError, match="fdopen failed"):
+        atomic_write_json(target, {"v": 1})
+
+    assert captured_fd is not None
+    with pytest.raises(OSError):
+        os.fstat(captured_fd)
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []

@@ -32,7 +32,7 @@ from robot_sf.benchmark.camera_ready._util import (  # noqa: F401 - re-exported 
     _hash_payload,
     _jsonable,
     _jsonable_repo_relative,
-    _normalized_kinematics_matrix,
+    _kinematics_matrix_or_default,
     _repo_relative,
     _sanitize_csv_cell,
     _sha256_file,
@@ -118,6 +118,7 @@ if TYPE_CHECKING:
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
+_normalized_kinematics_matrix = _kinematics_matrix_or_default
 
 _REPORT_METRICS: tuple[str, ...] = (
     "success",
@@ -1682,7 +1683,7 @@ def _build_matrix_summary_rows(
         _repo_relative(cfg.scenario_horizons_path) if cfg.scenario_horizons_path is not None else ""
     )
     rows: list[dict[str, Any]] = []
-    normalized_kinematics = _normalized_kinematics_matrix(cfg.kinematics_matrix)
+    normalized_kinematics = _kinematics_matrix_or_default(cfg.kinematics_matrix)
     for planner in cfg.planners:
         if not planner.enabled:
             continue
@@ -3669,7 +3670,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     planner_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
     seed_variability_records: list[dict[str, Any]] = []
-    kinematics_matrix = _normalized_kinematics_matrix(cfg.kinematics_matrix)
+    kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
     stop_requested = False
 
     def _scenario_with_kinematics(

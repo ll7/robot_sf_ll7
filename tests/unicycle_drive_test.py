@@ -99,6 +99,19 @@ def test_unicycle_acceleration():
     assert speed == 0  # assert not moving backwards
 
 
+def test_unicycle_default_state_moves_with_scalar_current_speed():
+    """Default state uses scalar velocity compatible with motion integration."""
+    motion = UnicycleMotion(UnicycleDriveSettings())
+    state = UnicycleDriveState()
+
+    motion.move(state, (1.0, 0.0), 1.0)
+
+    current_speed = state.current_speed
+    assert isinstance(state.velocity, float)
+    assert isinstance(current_speed[0], float)
+    assert current_speed == (1.0, state.orient)
+
+
 def test_unicycle_over_limit_acceleration_clipped():
     """Acceleration beyond max_accel is clipped."""
     motion = UnicycleMotion(UnicycleDriveSettings(max_accel=1.0))
@@ -132,3 +145,25 @@ def test_unicycle_over_limit_negative_steering_clipped():
     motion.move(state, (0.0, -100.0), 1.0)
     pos_after, _ = state.pose
     assert pos_after[0] > 0.0
+
+
+def test_default_unicycle_state_can_move():
+    """A default-constructed UnicycleDriveState steps without raising and reports a well-formed speed.
+
+    Covers the previously untested default path where ``velocity`` is not passed explicitly.
+    Regression for the tuple-vs-scalar default bug.
+    """
+    state = UnicycleDriveState()
+    assert state.velocity == 0.0
+    speed, orient = state.current_speed
+    assert speed == 0.0
+    assert orient == 0.0
+
+    motion = UnicycleMotion(UnicycleDriveSettings())
+    motion.move(state, (1.0, 0.0), 0.1)
+
+    assert isinstance(state.velocity, float)
+    assert state.velocity > 0.0
+    speed_after, orient_after = state.current_speed
+    assert speed_after == state.velocity
+    assert orient_after == 0.0

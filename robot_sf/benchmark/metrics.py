@@ -2776,8 +2776,13 @@ def post_process_metrics(
         if count_key in metrics and metrics[count_key] is not None:
             try:
                 metrics[count_key] = int(metrics[count_key])
-            except Exception:  # pragma: no cover
-                pass
+            except (OverflowError, TypeError, ValueError):
+                invalid_value = metrics.pop(count_key, None)
+                logger.bind(
+                    event="metrics_count_coercion_failed",
+                    metric_key=count_key,
+                    metric_value=repr(invalid_value),
+                ).warning("Dropping metric count value that could not be coerced to int.")
     for valid_key in (
         "time_to_goal_success_only_valid",
         "time_to_goal_ideal_ratio_valid",
@@ -2788,8 +2793,13 @@ def post_process_metrics(
         if valid_key in metrics and metrics[valid_key] is not None:
             try:
                 metrics[valid_key] = bool(int(metrics[valid_key]))
-            except Exception:  # pragma: no cover
-                pass
+            except (OverflowError, TypeError, ValueError):
+                invalid_value = metrics.pop(valid_key, None)
+                logger.bind(
+                    event="metrics_flag_coercion_failed",
+                    metric_key=valid_key,
+                    metric_value=repr(invalid_value),
+                ).warning("Dropping metric flag value that could not be coerced to bool.")
     _attach_pedestrian_impact_block(metrics)
     _attach_social_acceptability_block(metrics)
     _attach_human_interaction_proxy_block(metrics)

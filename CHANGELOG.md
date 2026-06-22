@@ -77,6 +77,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Consolidated the RFC6901 JSON-pointer renderer that was copy-pasted in eight modules into a single
+  shared helper `robot_sf.common.json_pointer.json_pointer` (#3386). The eight schema-validation call
+  sites (`benchmark/{scenario_schema,odd_contract,hazard_traceability,scenario_contract,odd_hazard_coverage_matrix,artifact_catalog}.py`
+  and `analysis_workbench/{simulation_trace_export,trace_annotation}.py`) now import it, removing the
+  latent hazard of an escaping fix diverging between copies. As part of unifying the two prior copies,
+  the three `analysis_workbench`/`artifact_catalog` sites now render the *root* path (empty error path)
+  as the RFC6901-correct empty string `""` instead of `"/"`; this only affects the rare root-level
+  schema-error message string and is covered by a new unit test
+  (`tests/common/test_json_pointer.py`). Also fixed `_copy_figures` in `research/imitation_report.py`
+  to actually `return` its `dict[str, Path]` mapping (it previously fell through to `None` despite the
+  annotation), with a regression test (#3386).
+* Began decomposing the ~4967-line `robot_sf/benchmark/camera_ready_campaign.py` (the largest module in
+  `robot_sf/`) by extracting its 6 config dataclasses (`AmvProfileConfig`, `SeedPolicy`,
+  `ScenarioCandidateSelection`, `PlannerSpec`, `SnqiContractConfig`, `CampaignConfig`) plus the
+  `_AMV_DIMENSIONS` / `DEFAULT_SEED_SETS_PATH` constants into a new
+  `robot_sf/benchmark/camera_ready_campaign_config.py` (#3405, first slice of #3385). The names are
+  re-exported from `camera_ready_campaign`, so existing imports (e.g. in `release_protocol.py`,
+  `orca_preflight.py`, and tests) are unchanged. Behavior-preserving verbatim move; the
+  camera-ready/release regression suites pass.
+* Began decomposing the ~1270-line `_build_policy` dispatcher in `robot_sf/benchmark/map_runner.py`
+  into a `robot_sf/benchmark/map_runner_policies/` builder package backed by a registry (#3400, first
+  slice of #3384). The built-in goal/simple policy family now lives in `map_runner_policies/goal.py`
+  (`build(...) -> (policy_fn, meta)`); `_build_policy` consults `_POLICY_BUILDERS` before its remaining
+  inline branches, which are unchanged. Behavior-preserving (the regression net in
+  `tests/benchmark/test_map_runner_utils.py` still passes); the only test change repoints one
+  monkeypatch to the new builder namespace.
+* Relocated the shared `_build_adapter_policy` helper out of `robot_sf/benchmark/map_runner.py` into a
+  neutral `robot_sf/benchmark/map_runner_policy_common.py` (`build_adapter_policy`), re-exported under
+  the old private name so all ~17 in-module call sites are unchanged (#3403, prerequisite for the
+  #3384 adapter-family decomposition). Behavior-preserving — the helper is a verbatim move and the
+  `map_runner` regression suite passes. This lets future `map_runner_policies/` builder modules reuse
+  the helper without an import cycle back into `map_runner`.
 * Cut pull-request CI wall-clock by parallelizing the `fast-feedback` test phase. Pull requests now
   split the suite into 4 `pytest-split` shards (a matrix on the existing job, so the CI topology is
   unchanged) while `main`/`workflow_dispatch` keep a single full pass so the advisory coverage

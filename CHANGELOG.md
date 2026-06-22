@@ -82,6 +82,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tests/common/test_json_pointer.py`). Also fixed `_copy_figures` in `research/imitation_report.py`
   to actually `return` its `dict[str, Path]` mapping (it previously fell through to `None` despite the
   annotation), with a regression test (#3386).
+* Began decomposing the ~4967-line `robot_sf/benchmark/camera_ready_campaign.py` (the largest module in
+  `robot_sf/`) by extracting its 6 config dataclasses (`AmvProfileConfig`, `SeedPolicy`,
+  `ScenarioCandidateSelection`, `PlannerSpec`, `SnqiContractConfig`, `CampaignConfig`) plus the
+  `_AMV_DIMENSIONS` / `DEFAULT_SEED_SETS_PATH` constants into a new
+  `robot_sf/benchmark/camera_ready_campaign_config.py` (#3405, first slice of #3385). The names are
+  re-exported from `camera_ready_campaign`, so existing imports (e.g. in `release_protocol.py`,
+  `orca_preflight.py`, and tests) are unchanged. Behavior-preserving verbatim move; the
+  camera-ready/release regression suites pass.
 * Began decomposing the ~1270-line `_build_policy` dispatcher in `robot_sf/benchmark/map_runner.py`
   into a `robot_sf/benchmark/map_runner_policies/` builder package backed by a registry (#3400, first
   slice of #3384). The built-in goal/simple policy family now lives in `map_runner_policies/goal.py`

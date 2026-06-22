@@ -2297,8 +2297,10 @@ def test_build_policy_goal_path_uses_kinematics_contract(
         resolver_calls.append(dict(kwargs))
         return model
 
+    # The goal/simple builder was extracted to map_runner_policies.goal (#3400), which
+    # resolves the kinematics model in its own namespace; patch it there.
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        "robot_sf.benchmark.map_runner_policies.goal.resolve_benchmark_kinematics_model",
         _resolver,
     )
     policy, meta = _build_policy("goal", {"max_speed": 10.0}, robot_kinematics="bicycle_drive")

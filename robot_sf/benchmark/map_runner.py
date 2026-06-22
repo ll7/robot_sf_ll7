@@ -116,6 +116,7 @@ from robot_sf.benchmark.map_runner_observations import (
     obs_to_external_mpc_format as _obs_to_external_mpc_format,
 )
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
+from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policy_metadata import (
     apply_direct_world_velocity_metadata as _apply_direct_world_velocity_metadata,
 )
@@ -951,6 +952,12 @@ def _update_adapter_impact_metrics(
     impact["status"] = "collecting"
 
 
+# Registry of migrated per-algorithm policy builders (#3384). Consulted before the
+# inline dispatch in _build_policy; families not yet migrated fall through to the
+# existing if/elif chain.
+_POLICY_BUILDERS = dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build)
+
+
 def _build_policy(  # noqa: C901, PLR0912, PLR0915
     algo: str,
     algo_config: dict[str, Any],
@@ -978,48 +985,14 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     normalized_robot_command_mode = (
         str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
     )
-    if algo_key in {"goal", "simple", "goal_policy", "simple_policy"}:
-        goal_kinematics_model = resolve_benchmark_kinematics_model(
+    registered_builder = _POLICY_BUILDERS.get(algo_key)
+    if registered_builder is not None:
+        return registered_builder(
+            algo_key,
+            algo_config,
             robot_kinematics=robot_kinematics,
-            command_limits=algo_config,
+            robot_command_mode=robot_command_mode,
         )
-
-        meta.update(
-            {
-                "status": "ok",
-                "config": algo_config,
-                "config_hash": _config_hash(algo_config),
-            }
-        )
-        meta = enrich_algorithm_metadata(
-            algo=algo_key,
-            metadata=meta,
-            execution_mode="native",
-            robot_kinematics=robot_kinematics,
-        )
-        _init_feasibility_metadata(meta)
-        planner_meta = meta.get("planner_kinematics")
-        if isinstance(planner_meta, dict):
-            planner_meta["planner_command_space"] = _default_robot_command_space(
-                robot_kinematics,
-                algo_config,
-                robot_command_mode=normalized_robot_command_mode,
-            )
-
-        def _policy(obs: dict[str, Any]) -> tuple[float, float]:
-            """Run the built-in goal policy with feasibility projection.
-
-            Returns:
-                tuple[float, float]: Projected linear and angular command.
-            """
-            linear, angular = _goal_policy(obs, max_speed=float(algo_config.get("max_speed", 1.0)))
-            return _project_with_feasibility(
-                model=goal_kinematics_model,
-                command=(linear, angular),
-                meta=meta,
-            )
-
-        return _policy, meta
 
     registered_adapter_spec = build_registered_adapter_policy_spec(algo_key, algo_config)
     if registered_adapter_spec is not None:

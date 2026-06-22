@@ -31,9 +31,19 @@ from robot_sf.benchmark.camera_ready_campaign import (
     prepare_campaign_preflight,
     run_campaign,
 )
-from robot_sf.benchmark.synthetic_actuation import known_latency_modes, known_update_modes
+from robot_sf.benchmark.synthetic_actuation import (
+    SYNTHETIC_ACTUATION_CLAIM_BOUNDARY,
+    SyntheticActuationProfile,
+    known_latency_modes,
+    known_update_modes,
+    sample_synthetic_actuation_profile,
+    summarize_synthetic_actuation_samples,
+    validate_synthetic_actuation_profile,
+    validate_synthetic_actuation_variability_distribution,
+)
 
 _SCHEMA_VERSION = "robot-sf-amv-actuation-sensitivity-results.v1"
+_SAMPLING_MODES = ("fixed-variants", "variability-sweep", "all")
 _METRICS = (
     "success",
     "collisions",
@@ -75,6 +85,21 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("materialize", "preflight", "pilot", "aggregate"),
         default="materialize",
         help="Materialize configs, run preflight, run the pilot matrix, or aggregate existing runs.",
+    )
+    parser.add_argument(
+        "--sampling-mode",
+        choices=_SAMPLING_MODES,
+        default=None,
+        help=(
+            "Actuation profile materialization mode. Defaults to the manifest "
+            "variability_sampling.default_mode, which remains fixed-variants."
+        ),
+    )
+    parser.add_argument(
+        "--sampling-seed",
+        type=int,
+        default=None,
+        help="Override the manifest seed for deterministic variability-sweep sampling.",
     )
     parser.add_argument(
         "--campaign-root",
@@ -144,12 +169,93 @@ def _write_yaml(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(yaml.safe_dump(dict(payload), sort_keys=False), encoding="utf-8")
 
 
+def _sampling_settings(manifest: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return optional variability sampling settings from the manifest."""
+    settings = manifest.get("variability_sampling")
+    if settings is None:
+        return {}
+    if not isinstance(settings, Mapping):
+        raise TypeError("variability_sampling must be a mapping when provided")
+    return settings
+
+
+def _resolve_sampling_mode(
+    manifest: Mapping[str, Any],
+    sampling_mode: str | None,
+) -> str:
+    """Resolve the requested actuation materialization mode."""
+    settings = _sampling_settings(manifest)
+    mode = str(sampling_mode or settings.get("default_mode", "fixed-variants")).strip()
+    if mode not in _SAMPLING_MODES:
+        raise ValueError(
+            f"Unsupported sampling mode '{mode}'. Expected one of: {', '.join(_SAMPLING_MODES)}"
+        )
+    return mode
+
+
+def _resolve_sampling_seed(
+    manifest: Mapping[str, Any],
+    sampling_seed: int | None,
+) -> int:
+    """Resolve the deterministic variability sampling seed."""
+    if sampling_seed is not None:
+        return int(sampling_seed)
+    settings = _sampling_settings(manifest)
+    return int(settings.get("seed", 3284))
+
+
+def _resolve_sample_count(manifest: Mapping[str, Any]) -> int:
+    """Resolve the number of variability samples to materialize."""
+    settings = _sampling_settings(manifest)
+    sample_count = int(settings.get("sample_count", 3))
+    if sample_count <= 0:
+        raise ValueError("variability_sampling.sample_count must be > 0")
+    return sample_count
+
+
+def _variability_distribution(manifest: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Return validated variability distribution metadata when the manifest declares it."""
+    distribution = manifest.get("variability_distribution")
+    if distribution is None:
+        return None
+    if not isinstance(distribution, Mapping):
+        raise TypeError("variability_distribution must be a mapping when provided")
+    validate_synthetic_actuation_variability_distribution(distribution)
+    return distribution
+
+
+def _base_synthetic_profile(manifest: Mapping[str, Any]) -> SyntheticActuationProfile:
+    """Return the manifest baseline profile as a validated typed profile."""
+    baseline = manifest.get("baseline_profile")
+    if not isinstance(baseline, Mapping):
+        raise ValueError("Sweep manifest baseline_profile must be a mapping")
+    profile = SyntheticActuationProfile(
+        name=f"{manifest['name']}_baseline",
+        profile_version="v0",
+        claim_scope="synthetic-only",
+        claim_boundary=SYNTHETIC_ACTUATION_CLAIM_BOUNDARY,
+        max_linear_accel_m_s2=float(baseline["max_linear_accel_m_s2"]),
+        max_linear_decel_m_s2=float(baseline["max_linear_decel_m_s2"]),
+        max_yaw_rate_rad_s=float(baseline["max_yaw_rate_rad_s"]),
+        max_angular_accel_rad_s2=float(baseline["max_angular_accel_rad_s2"]),
+        latency_mode=str(baseline["latency_mode"]),
+        update_mode=str(baseline["update_mode"]),
+    )
+    validate_synthetic_actuation_profile(profile)
+    return profile
+
+
 def _validate_manifest(manifest: Mapping[str, Any]) -> None:  # noqa: C901
     """Validate the sweep manifest before materializing configs."""
     if manifest.get("schema_version") != "robot-sf-amv-actuation-sensitivity-sweep.v1":
         raise ValueError("Unsupported sweep manifest schema_version")
     if str(manifest.get("claim_boundary", "")).strip() != "diagnostic-only":
         raise ValueError("Sweep claim_boundary must stay diagnostic-only")
+    _base_synthetic_profile(manifest)
+    _resolve_sampling_mode(manifest, None)
+    _resolve_sample_count(manifest)
+    _resolve_sampling_seed(manifest, None)
+    _variability_distribution(manifest)
     variants = manifest.get("variants")
     if not isinstance(variants, list) or not variants:
         raise ValueError("Sweep manifest must define non-empty variants")
@@ -205,6 +311,9 @@ def _materialize_variant_config(  # noqa: C901
     if not isinstance(profile_patch, dict):
         raise TypeError("Sweep variant profile must be a mapping")
     baseline.update(profile_patch)
+    distribution = _variability_distribution(manifest)
+    if distribution is not None and "variability_distribution" not in baseline:
+        baseline["variability_distribution"] = deepcopy(dict(distribution))
 
     update_mode = str(baseline.get("update_mode", "")).strip()
     latency_mode = str(baseline.get("latency_mode", "")).strip()
@@ -235,6 +344,11 @@ def _materialize_variant_config(  # noqa: C901
         "latency_mode": latency_mode,
         "update_mode": update_mode,
     }
+    for metadata_key in ("variability_distribution", "variability_sample"):
+        if isinstance(baseline.get(metadata_key), Mapping):
+            payload["synthetic_actuation_profile"][metadata_key] = deepcopy(
+                dict(baseline[metadata_key])
+            )
 
     latency_steps = _LATENCY_MODE_TO_STEPS[latency_mode]
     update_mode_label, update_period = _UPDATE_MODE_TO_PERIOD[update_mode]
@@ -294,24 +408,231 @@ def _materialize_variant_config(  # noqa: C901
         "supported_fields": list(variant.get("supported_fields") or []),
         "source_context": str(variant.get("source_context", "")),
         "caveat": str(variant.get("caveat", "")),
+        "sampling_mode": str(variant.get("sampling_mode", "fixed-variants")),
     }
+    for metadata_key in ("sample_id", "sample_index", "sampling_seed", "sampled_parameters"):
+        if metadata_key in variant:
+            payload["issue_2011_sweep_variant"][metadata_key] = deepcopy(variant[metadata_key])
     return payload
+
+
+def _entry_from_variant(
+    *,
+    variant: Mapping[str, Any],
+    config_path: Path,
+    root: Path,
+) -> dict[str, Any]:
+    """Return one resolved manifest entry for a materialized config."""
+    entry = {
+        "variant_name": str(variant["name"]),
+        "field_group": str(variant["field_group"]),
+        "level": str(variant["level"]),
+        "source_status": str(variant["source_status"]),
+        "config_path": _repo_relative(config_path, root=root),
+        "config_sha256": _sha256_file(config_path),
+        "supported_fields": list(variant.get("supported_fields") or []),
+        "source_context": str(variant.get("source_context", "")),
+        "caveat": str(variant.get("caveat", "")),
+        "sampling_mode": str(variant.get("sampling_mode", "fixed-variants")),
+    }
+    for key in ("sample_id", "sample_index", "sampling_seed", "sampled_parameters"):
+        if key in variant:
+            entry[key] = deepcopy(variant[key])
+    return entry
+
+
+def _sample_variants(
+    *,
+    manifest: Mapping[str, Any],
+    seed: int,
+) -> tuple[list[dict[str, Any]], list[SyntheticActuationProfile]]:
+    """Return deterministic sampled-variability pseudo-variants and profiles."""
+    distribution = _variability_distribution(manifest)
+    if distribution is None:
+        raise ValueError("variability-sweep mode requires manifest variability_distribution")
+    sample_count = _resolve_sample_count(manifest)
+    base_profile = _base_synthetic_profile(manifest)
+    settings = _sampling_settings(manifest)
+    source_context = str(
+        distribution.get("source_context")
+        or settings.get("source_context")
+        or "configs/benchmarks/issue_2011_amv_actuation_sensitivity_sweep_v0.yaml"
+    )
+    caveat = str(
+        settings.get("caveat")
+        or "Synthetic/provisional variability samples are diagnostic-only and not "
+        "hardware-calibrated AMV evidence."
+    )
+    parameters = distribution.get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ValueError("variability_distribution.parameters must be a mapping")
+
+    variants: list[dict[str, Any]] = []
+    profiles: list[SyntheticActuationProfile] = []
+    for sample_index in range(sample_count):
+        variant_name = f"variability_sample_{sample_index:03d}"
+        profile = sample_synthetic_actuation_profile(
+            base_profile,
+            distribution,
+            seed=seed,
+            sample_index=sample_index,
+            name=variant_name,
+        )
+        metadata = profile.to_metadata()
+        sample = metadata.get("variability_sample")
+        sampled_parameters = (
+            dict(sample.get("sampled_parameters", {})) if isinstance(sample, Mapping) else {}
+        )
+        variants.append(
+            {
+                "name": variant_name,
+                "field_group": "variability_sample",
+                "level": f"sample-{sample_index:03d}",
+                "source_status": "synthetic_provisional_distribution",
+                "supported_fields": list(parameters),
+                "source_context": source_context,
+                "caveat": caveat,
+                "profile": metadata,
+                "sampling_mode": "variability-sweep",
+                "sample_id": f"sample-{sample_index:03d}",
+                "sample_index": sample_index,
+                "sampling_seed": seed,
+                "sampled_parameters": sampled_parameters,
+            }
+        )
+        profiles.append(profile)
+    return variants, profiles
+
+
+def _sample_summary_from_entries(entries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Return a compact sampled-parameter summary from resolved manifest entries."""
+    rows = []
+    for entry in entries:
+        if str(entry.get("sampling_mode", "")) != "variability-sweep":
+            continue
+        rows.append(
+            {
+                "profile_name": str(entry.get("variant_name", "")),
+                "sample_id": str(entry.get("sample_id", "")),
+                "sample_index": int(entry.get("sample_index", -1)),
+                "sampling_seed": int(entry.get("sampling_seed", 0)),
+                "sampled_parameters": dict(entry.get("sampled_parameters", {})),
+                "claim_boundary": SYNTHETIC_ACTUATION_CLAIM_BOUNDARY,
+            }
+        )
+    return {
+        "schema_version": "synthetic-actuation-sampled-parameter-summary.v1",
+        "claim_boundary": SYNTHETIC_ACTUATION_CLAIM_BOUNDARY,
+        "row_count": len(rows),
+        "rows": rows,
+    }
+
+
+def _write_sampled_parameter_summary(
+    output_dir: Path,
+    summary: Mapping[str, Any],
+) -> None:
+    """Write JSON, CSV, and Markdown summaries for sampled variability parameters."""
+    rows = summary.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return
+    reports_dir = output_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(reports_dir / "sampled_parameter_summary.json", summary)
+
+    field_names = sorted(
+        {
+            str(field_name)
+            for row in rows
+            if isinstance(row, Mapping)
+            for field_name in dict(row.get("sampled_parameters", {}))
+        }
+    )
+    csv_path = reports_dir / "sampled_parameter_summary.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "profile_name",
+                "sample_id",
+                "sample_index",
+                "sampling_seed",
+                "claim_boundary",
+                *field_names,
+            ],
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            sampled = dict(row.get("sampled_parameters", {}))
+            writer.writerow(
+                {
+                    "profile_name": str(row.get("profile_name", "")),
+                    "sample_id": str(row.get("sample_id", "")),
+                    "sample_index": int(row.get("sample_index", -1)),
+                    "sampling_seed": int(row.get("sampling_seed", 0)),
+                    "claim_boundary": str(row.get("claim_boundary", "")),
+                    **{field_name: sampled.get(field_name, "") for field_name in field_names},
+                }
+            )
+
+    lines = [
+        "# Issue #3284 Sampled Actuation Parameters",
+        "",
+        "diagnostic-only synthetic/provisional variability samples. These rows are not "
+        "hardware-calibrated AMV evidence.",
+        "",
+        "| Profile | Sample | Seed | Claim boundary | Sampled parameters |",
+        "| --- | --- | ---: | --- | --- |",
+    ]
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        sampled = json.dumps(dict(row.get("sampled_parameters", {})), sort_keys=True)
+        lines.append(
+            "| "
+            f"{row.get('profile_name')} | {row.get('sample_id')} | "
+            f"{row.get('sampling_seed')} | {row.get('claim_boundary')} | "
+            f"`{sampled}` |"
+        )
+    (reports_dir / "sampled_parameter_summary.md").write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8",
+    )
 
 
 def materialize_configs(
     *,
     manifest_path: Path,
     output_dir: Path,
+    sampling_mode: str | None = None,
+    sampling_seed: int | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Write generated camera-ready configs and return the resolved manifest/index."""
     root = _repo_root()
     manifest = _load_yaml(manifest_path)
     _validate_manifest(manifest)
+    resolved_sampling_mode = _resolve_sampling_mode(manifest, sampling_mode)
+    resolved_sampling_seed = _resolve_sampling_seed(manifest, sampling_seed)
     base_config_path = root / str(manifest["base_config"])
     base_payload = _load_yaml(base_config_path)
     configs_dir = output_dir / "generated_configs"
     entries: list[dict[str, Any]] = []
-    for variant in manifest["variants"]:
+
+    materialized_variants: list[dict[str, Any]] = []
+    if resolved_sampling_mode in {"fixed-variants", "all"}:
+        materialized_variants.extend(dict(variant) for variant in manifest["variants"])
+    sampled_profiles: list[SyntheticActuationProfile] = []
+    if resolved_sampling_mode in {"variability-sweep", "all"}:
+        sample_variants, sampled_profiles = _sample_variants(
+            manifest=manifest,
+            seed=resolved_sampling_seed,
+        )
+        materialized_variants.extend(sample_variants)
+
+    for variant in materialized_variants:
         config_payload = _materialize_variant_config(
             manifest=manifest,
             base_payload=base_payload,
@@ -319,19 +640,13 @@ def materialize_configs(
         )
         config_path = configs_dir / f"{variant['name']}.yaml"
         _write_yaml(config_path, config_payload)
-        entries.append(
-            {
-                "variant_name": str(variant["name"]),
-                "field_group": str(variant["field_group"]),
-                "level": str(variant["level"]),
-                "source_status": str(variant["source_status"]),
-                "config_path": _repo_relative(config_path, root=root),
-                "config_sha256": _sha256_file(config_path),
-                "supported_fields": list(variant.get("supported_fields") or []),
-                "source_context": str(variant.get("source_context", "")),
-                "caveat": str(variant.get("caveat", "")),
-            }
-        )
+        entries.append(_entry_from_variant(variant=variant, config_path=config_path, root=root))
+
+    sampled_parameter_summary = summarize_synthetic_actuation_samples(sampled_profiles)
+    if not sampled_parameter_summary["rows"]:
+        sampled_parameter_summary = _sample_summary_from_entries(entries)
+    _write_sampled_parameter_summary(output_dir, sampled_parameter_summary)
+
     resolved = {
         "schema_version": _SCHEMA_VERSION,
         "name": str(manifest["name"]),
@@ -342,6 +657,17 @@ def materialize_configs(
         "claim_boundary": "diagnostic-only",
         "paper_facing": False,
         "pilot": manifest["pilot"],
+        "variability_sampling": {
+            "mode": resolved_sampling_mode,
+            "seed": resolved_sampling_seed,
+            "sample_count": _resolve_sample_count(manifest),
+        },
+        "variability_distribution": (
+            deepcopy(dict(_variability_distribution(manifest)))
+            if _variability_distribution(manifest) is not None
+            else None
+        ),
+        "sampled_parameter_summary": sampled_parameter_summary,
         "variants": entries,
     }
     _write_json(output_dir / "resolved_sweep_manifest.json", resolved)
@@ -516,7 +842,7 @@ def _format_optional_float(value: float | None) -> str:
     return "nan" if value is None else f"{value:.6f}"
 
 
-def aggregate_campaigns(  # noqa: C901, PLR0912
+def aggregate_campaigns(  # noqa: C901, PLR0912, PLR0915
     *,
     output_dir: Path,
     entries: Sequence[Mapping[str, Any]],
@@ -592,6 +918,8 @@ def aggregate_campaigns(  # noqa: C901, PLR0912
             "variant_name": variant_name,
             "level": str(entry["level"]),
             "source_status": str(entry["source_status"]),
+            "sampling_mode": str(entry.get("sampling_mode", "fixed-variants")),
+            "sample_id": str(entry.get("sample_id", "")),
             **campaign_status_by_variant.get(
                 variant_name,
                 {
@@ -605,6 +933,9 @@ def aggregate_campaigns(  # noqa: C901, PLR0912
             "scenario_family": scenario_family,
             "episodes": int(bucket["episodes"]),
         }
+        sampled_parameters = dict(entry.get("sampled_parameters", {}))
+        if sampled_parameters:
+            row["sampled_parameters"] = json.dumps(sampled_parameters, sort_keys=True)
         for metric in _METRICS:
             mean = _mean(bucket[metric])
             base_mean = baseline.get(metric)
@@ -634,6 +965,7 @@ def aggregate_campaigns(  # noqa: C901, PLR0912
         {
             "schema_version": _SCHEMA_VERSION,
             "claim_boundary": "diagnostic-only",
+            "sampled_parameter_summary": _sample_summary_from_entries(entries),
             "rows": rows,
         },
     )
@@ -649,6 +981,8 @@ def _write_effect_markdown(path: Path, rows: Sequence[Mapping[str, Any]]) -> Non
         "",
         "diagnostic-only pilot summary. Longitudinal rows use platform-class proxy values; "
         "yaw, latency, and update-rate rows remain synthetic stress factors.",
+        "Variability-sweep rows, when present, are synthetic/provisional samples and not "
+        "hardware-calibrated AMV evidence.",
         "",
         "| Field group | Level | Campaign status | Benchmark success | Planner | Scenario family | Episodes | Success delta | Collision delta | Near-miss delta |",
         "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
@@ -725,7 +1059,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger.remove()
     logger.add(sys.stderr, level=args.log_level)
     args.output.mkdir(parents=True, exist_ok=True)
-    manifest, entries = materialize_configs(manifest_path=args.manifest, output_dir=args.output)
+    manifest, entries = materialize_configs(
+        manifest_path=args.manifest,
+        output_dir=args.output,
+        sampling_mode=args.sampling_mode,
+        sampling_seed=args.sampling_seed,
+    )
     source_manifest = _load_yaml(args.manifest)
     if args.mode == "preflight":
         run_preflights(

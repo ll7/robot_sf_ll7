@@ -437,6 +437,19 @@ def _normalized_kinematics_matrix(kinematics: tuple[str, ...]) -> tuple[str, ...
     )
 
 
+def _optional_synthetic_actuation_profile_mapping(
+    payload: Mapping[str, Any],
+    key: str,
+) -> Mapping[str, Any] | None:
+    """Return optional synthetic-actuation profile metadata with fail-closed typing."""
+    if key not in payload:
+        return None
+    value = payload[key]
+    if not isinstance(value, Mapping):
+        raise TypeError(f"synthetic_actuation_profile.{key} must be a mapping when provided")
+    return value
+
+
 def _sanitize_name(name: str) -> str:
     """Normalize names for stable directory identifiers.
 
@@ -1715,6 +1728,14 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                 ),
                 update_mode=(
                     str(synthetic_actuation_raw.get("update_mode", "10hz-matched")).strip().lower()
+                ),
+                variability_distribution=_optional_synthetic_actuation_profile_mapping(
+                    synthetic_actuation_raw,
+                    "variability_distribution",
+                ),
+                variability_sample=_optional_synthetic_actuation_profile_mapping(
+                    synthetic_actuation_raw,
+                    "variability_sample",
                 ),
             )
             if synthetic_actuation_raw is not None

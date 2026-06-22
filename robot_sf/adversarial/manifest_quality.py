@@ -134,6 +134,31 @@ def _same_path(left: Path, right: Path) -> bool:
         return left == right
 
 
+def _optional_candidate_controls_from_mapping(
+    controls: dict[str, Any],
+) -> tuple[float | None, int | None, str | None]:
+    """Parse optional explicit controls from a manifest candidate-controls mapping."""
+    acceleration = None
+    if "pedestrian_acceleration_mps2" in controls:
+        acceleration = _safe_float(controls.get("pedestrian_acceleration_mps2"))
+        if acceleration is None:
+            raise ValueError("candidate_controls.pedestrian_acceleration_mps2 must be finite")
+
+    group_size = None
+    if "group_size" in controls:
+        group_size = _safe_int(controls.get("group_size"))
+        if group_size is None:
+            raise ValueError("candidate_controls.group_size must be an integer")
+
+    vru_profile = None
+    if "vru_profile" in controls:
+        raw_profile = controls.get("vru_profile")
+        if not isinstance(raw_profile, str) or not raw_profile.strip():
+            raise ValueError("candidate_controls.vru_profile must be a non-empty string")
+        vru_profile = raw_profile.strip()
+    return acceleration, group_size, vru_profile
+
+
 def _candidate_from_controls(controls: Any) -> CandidateSpec:
     """Build a deterministic candidate from controls mapping."""
     if not isinstance(controls, dict):
@@ -158,6 +183,7 @@ def _candidate_from_controls(controls: Any) -> CandidateSpec:
             "candidate_controls must include finite spawn_time_s/pedestrian_speed_mps/"
             "pedestrian_delay_s and integer scenario_seed"
         )
+    acceleration, group_size, vru_profile = _optional_candidate_controls_from_mapping(controls)
     return CandidateSpec(
         start=Pose2D(start_x, start_y),
         goal=Pose2D(goal_x, goal_y),
@@ -165,6 +191,9 @@ def _candidate_from_controls(controls: Any) -> CandidateSpec:
         pedestrian_speed_mps=speed,
         pedestrian_delay_s=delay,
         scenario_seed=seed,
+        pedestrian_acceleration_mps2=acceleration,
+        group_size=group_size,
+        vru_profile=vru_profile,
     )
 
 

@@ -136,9 +136,11 @@ JSON parsed successfully, and the context catalog consistency check passed.
 - Broad RL, diffusion, or learned-proposal expansion must also pass the Issue #2562 planner-smoke
   path and Issue #2567 quality metrics under the Issue #2568 learned-expansion gate before it is
   treated as ready.
-- `naturalistic_prior` pass/fail is an authored local plausibility screen for generated VRU speed
-  and timing controls. It separates plausible hard cases from stress-only candidates but is not a
-  real-world calibration or benchmark-strength claim.
+- `naturalistic_prior` pass/fail is an authored local plausibility screen for explicit generated
+  VRU controls: scalar speed/timing controls, plus optional explicit acceleration, group-size, and
+  cyclist-profile controls when present. It separates plausible hard cases from stress-only
+  candidates but is not a real-world calibration or benchmark-strength claim, and it does not infer
+  trajectory acceleration, density, or route-shape values from runtime state.
 
 ## Follow-Up Risks
 

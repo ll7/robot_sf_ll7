@@ -45,10 +45,13 @@ class CandidateSpec:
     pedestrian_speed_mps: float
     pedestrian_delay_s: float
     scenario_seed: int
+    pedestrian_acceleration_mps2: float | None = None
+    group_size: int | None = None
+    vru_profile: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable candidate payload."""
-        return {
+        payload: dict[str, Any] = {
             "start": self.start.to_json(),
             "goal": self.goal.to_json(),
             "spawn_time_s": float(self.spawn_time_s),
@@ -56,6 +59,13 @@ class CandidateSpec:
             "pedestrian_delay_s": float(self.pedestrian_delay_s),
             "scenario_seed": int(self.scenario_seed),
         }
+        if self.pedestrian_acceleration_mps2 is not None:
+            payload["pedestrian_acceleration_mps2"] = float(self.pedestrian_acceleration_mps2)
+        if self.group_size is not None:
+            payload["group_size"] = int(self.group_size)
+        if self.vru_profile is not None:
+            payload["vru_profile"] = str(self.vru_profile)
+        return payload
 
 
 @dataclass(frozen=True)

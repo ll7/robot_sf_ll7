@@ -57,11 +57,15 @@ In token-efficient mode:
   ledger and compact PR/issue/worktree snapshots first. Reopen full skills,
   docs, raw CI output, or broad GitHub/worktree inventories only when the
   ledger is missing, stale, or lacks a field needed for the next mutation.
+  Record the loaded-context cache in the active profile so repeated resumes do
+  not reread long skill/docs surfaces that are already fresh for the current
+  branch, issue/PR head SHA, and phase.
 - Prefer compact parent-thread snapshots before broad repository, GitHub,
   worktree, CI, or validation output.
 - For routine orientation, start with `scripts/dev/autopilot_state_snapshot.py`
   instead of repeated broad `gh issue list`, `gh pr view`, `git worktree list`,
-  or claim-state calls.
+  or claim-state calls. Read its `controller_checkpoint.token_efficiency`
+  recommendations before deciding whether a broader command is still needed.
 - Require artifact-first compact worker artifacts before reading raw logs.
 - For every delegated implementation/review/queue task, the worker **must** write compact artifacts in
   `<run_artifact_dir>` as: `result.json`, `RESULT.md`, `diffstat.txt`, and `validation.json`.
@@ -78,6 +82,10 @@ In token-efficient mode:
   a context pack, snapshot, or targeted artifact is missing and the broad read is explicitly
   justified. Redirect larger command output to private artifacts and return only a compact summary
   with inspected files, command exit codes, and short evidence excerpts.
+- If a command is expected to exceed that cap, run it through
+  `scripts/dev/run_compact_validation.py`, a purpose-built snapshot helper, or a
+  private common-Git-dir artifact and paste only the path plus the short
+  evidence needed for the next controller decision.
 - A successful worker command exit code, positive wrapper message, or candidate commit is route evidence
   only. The parent phase is not complete until this evidence is reviewed, diff status is verified locally,
   and required commands are rerun from the parent with parent-owned proof.

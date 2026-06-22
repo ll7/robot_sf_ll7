@@ -34,6 +34,13 @@ GENERATED_STATUS_PATHS = (
     "__pycache__",
 )
 STATUS_LINE_LIMIT = 30
+TOKEN_EFFICIENCY_ACTIONS = (
+    "refresh this snapshot or the active ledger before reopening full skill/docs context",
+    "prefer compact issue/PR/CI helpers before broad gh, git worktree, or rg output",
+    "review delegate artifacts in result -> validation -> diffstat order before raw logs",
+    "store verbose validation, worker, and CI logs outside the parent thread",
+    "record unavailable worker routes and reset times before retrying delegation",
+)
 
 
 @dataclass(frozen=True)
@@ -303,6 +310,11 @@ def controller_checkpoint(
         ],
         "issue_numbers": [issue.get("number") for issue in issues],
         "prs": pr_next_actions,
+        "token_efficiency": {
+            "parent_output_limit_lines": 200,
+            "compact_first": True,
+            "recommended_next_steps": list(TOKEN_EFFICIENCY_ACTIONS),
+        },
         "next_action": next_action,
     }
 

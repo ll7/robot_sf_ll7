@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -13,6 +13,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.benchmark.observation_quality import ObservationQuality
+from robot_sf.common.json_pointer import json_pointer
 
 ODD_CONTRACT_SCHEMA_VERSION = "odd_contract.v1"
 ODD_CONTRACT_SCHEMA_FILE = Path(__file__).with_name("schemas") / "odd_contract.v1.json"
@@ -247,7 +248,7 @@ def _schema_validation_errors(payload: Mapping[str, Any]) -> list[str]:
 
     validator = Draft202012Validator(load_odd_contract_schema())
     return [
-        f"{_json_pointer(error.absolute_path)}: {error.message}"
+        f"{json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
     ]
 
@@ -328,22 +329,6 @@ def _contract_from_payload(payload: Mapping[str, Any]) -> OddContract:
         ),
         extensions=dict(payload.get("extensions", {})),
     )
-
-
-def _json_pointer(path_elems: Iterable[Any]) -> str:
-    """Render a validation error path as an RFC6901-style JSON pointer.
-
-    Returns:
-        JSON pointer string, or an empty string for the root path.
-    """
-
-    parts: list[str] = []
-    for part in path_elems:
-        if isinstance(part, int):
-            parts.append(str(part))
-        else:
-            parts.append(str(part).replace("~", "~0").replace("/", "~1"))
-    return "/" + "/".join(parts) if parts else ""
 
 
 __all__ = [

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 from robot_sf.research.imitation_report import (
     ImitationReportConfig,
     _ci_from_samples,
+    _copy_figures,
     _fmt_ci,
     generate_imitation_report,
 )
@@ -140,3 +141,26 @@ def test_parse_hparams_handles_valid_and_invalid(monkeypatch):
     assert parsed["epochs"] == "5"
     assert parsed["dataset"] == "1000"
     assert "" not in parsed
+
+
+def test_copy_figures_returns_copied_mapping(tmp_path: Path):
+    """_copy_figures returns the label -> destination mapping it builds (issue #3386).
+
+    Regression guard: the function is annotated ``-> dict[str, Path]`` but used to
+    fall off the end returning ``None``.
+    """
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    fig_png = src_dir / "loss_curve.png"
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    )
+    fig_png.write_bytes(png_bytes)
+
+    dest_dir = tmp_path / "report" / "figures"
+    copied = _copy_figures({"loss_curve": fig_png}, dest_dir)
+
+    assert isinstance(copied, dict)
+    assert set(copied) == {"loss_curve"}
+    assert copied["loss_curve"] == dest_dir / "loss_curve.png"
+    assert copied["loss_curve"].exists()

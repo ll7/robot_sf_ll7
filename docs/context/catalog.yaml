@@ -1818,6 +1818,10 @@ entries:
     status: proposal
     freshness: maintained
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3206_heterogeneous_pedestrian_smoke_2026-06-20/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/issue_3062_campaign_manifest_flow.md
     status: proposal
     freshness: maintained

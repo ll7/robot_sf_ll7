@@ -113,6 +113,23 @@ def test_smoke_report_marks_distributional_status_computable_when_support_exists
     assert report["per_archetype_distributional_status"] == "computable"
 
 
+def test_smoke_report_markdown_records_issue_3261_scope_decision() -> None:
+    """Generated evidence README text should preserve the #3261 decision boundary."""
+    report = builder.build_report(
+        [
+            _row("homogeneous_standard", 101, 3.0),
+            _row("mixed_balanced", 101, 4.0),
+        ]
+    )
+
+    markdown = builder.format_markdown(report)
+
+    assert "## Issue #3261 Archetype Interpretation (2026-06-22)" in markdown
+    assert "`slow_speed_tier`, `fast_speed_tier`, and `extreme_speed_tier`" in markdown
+    assert "`per_archetype_distributional_status` remains" in markdown
+    assert "`not_computable_from_current_smoke`" in markdown
+
+
 def test_smoke_report_requires_baseline_and_variant_conditions() -> None:
     """Missing comparison conditions should fail loudly."""
     with pytest.raises(ValueError, match="variant condition"):

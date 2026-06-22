@@ -67,6 +67,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Cut pull-request CI wall-clock by parallelizing the `fast-feedback` test phase. Pull requests now
+  split the suite into 4 `pytest-split` shards (a matrix on the existing job, so the CI topology is
+  unchanged) while `main`/`workflow_dispatch` keep a single full pass so the advisory coverage
+  baseline stays accurate without cross-shard combining. The shared `run_tests_parallel.sh` wrapper
+  gained `PYTEST_SHARD_COUNT`/`PYTEST_SHARD_INDEX` env hooks (`--splits`/`--group`); coverage is
+  skipped while sharding. Also enabled the CPython 3.12+ `COVERAGE_CORE=sysmon` backend to lower
+  coverage instrumentation overhead, and added a docs-only `paths-ignore` filter so Markdown/`docs/`
+  changes no longer trigger the full CI workflow. Adds `pytest-split` to the `dev` dependency group.
 * Removed redundant Black/autopep8 formatter configuration and the unused Black optional
   development dependency; Ruff format remains the canonical formatter.
 * Extended the issue-1515 hybrid-evidence matrix validator with an opt-in git-history proof path:

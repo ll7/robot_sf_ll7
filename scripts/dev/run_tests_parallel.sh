@@ -28,6 +28,12 @@ Environment overrides:
   PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup
   PYTEST_ORDER_MODE=failed-first|new-first|none
   PYTEST_NUM_WORKERS=<int>|auto
+  PYTEST_SHARD_COUNT=<int>
+    pytest-split shard count (default 1). When >1, runs a disjoint subset via
+    `--splits N --group G` and disables coverage (partial shard data cannot be
+    combined in the single-job CI topology).
+  PYTEST_SHARD_INDEX=<int>
+    pytest-split shard index in 1..PYTEST_SHARD_COUNT (default 1).
 
 Examples:
   scripts/dev/run_tests_parallel.sh
@@ -227,11 +233,29 @@ echo "Resolved pytest-xdist workers: $worker_spec" >&2
 
 cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
 
+# pytest-split sharding: when CI provisions multiple shards, run a disjoint
+# subset per shard so the suite parallelizes across runners. Coverage is skipped
+# while sharding because partial per-shard data cannot be combined in this
+# single-job topology; the full coverage pass runs unsharded on
+# main/workflow_dispatch (PYTEST_SHARD_COUNT=1).
+shard_count="${PYTEST_SHARD_COUNT:-1}"
+shard_index="${PYTEST_SHARD_INDEX:-1}"
+sharding_active="0"
+if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
+  if ! [[ "$shard_index" =~ ^[0-9]+$ ]] || [[ "$shard_index" -lt 1 ]] || [[ "$shard_index" -gt "$shard_count" ]]; then
+    echo "PYTEST_SHARD_INDEX must be an integer in 1..$shard_count when PYTEST_SHARD_COUNT>1 (got '$shard_index')." >&2
+    exit 2
+  fi
+  sharding_active="1"
+  cmd+=("--splits" "$shard_count" "--group" "$shard_index")
+  echo "Resolved pytest-split shard: group $shard_index of $shard_count" >&2
+fi
+
 coverage_requested="${ROBOT_SF_PYTEST_COVERAGE:-}"
-if [[ "${CI:-}" == "true" ]] || [[ "$coverage_requested" == "1" ]] || \
+if [[ "$sharding_active" != "1" ]] && { [[ "${CI:-}" == "true" ]] || [[ "$coverage_requested" == "1" ]] || \
   [[ "$coverage_requested" == [Tt][Rr][Uu][Ee] ]] || \
   [[ "$coverage_requested" == [Yy][Ee][Ss] ]] || \
-  [[ "$coverage_requested" == [Oo][Nn] ]]; then
+  [[ "$coverage_requested" == [Oo][Nn] ]]; }; then
   cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")
 fi
 

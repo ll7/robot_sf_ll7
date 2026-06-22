@@ -388,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     epilog = """\
 Recommended agent workflow (fresh linked worktree, no local .venv):
 
-  scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \\
+  scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \\
       <pr-number> --expected-head-sha <head-sha> --poll-attempts 40 \\
       --poll-interval 30 --max-wall-seconds 1200 --json
 

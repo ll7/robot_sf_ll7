@@ -53,6 +53,10 @@ In token-efficient mode:
 - Codex is the loop controller, reviewer, and final acceptance authority.
 - Delegate workers only when compact review cost is lower than direct Codex
   execution.
+- On continuation or after context compaction, rebuild state from the active
+  ledger and compact PR/issue/worktree snapshots first. Reopen full skills,
+  docs, raw CI output, or broad GitHub/worktree inventories only when the
+  ledger is missing, stale, or lacks a field needed for the next mutation.
 - Prefer compact parent-thread snapshots before broad repository, GitHub,
   worktree, CI, or validation output.
 - For routine orientation, start with `scripts/dev/autopilot_state_snapshot.py`
@@ -77,7 +81,9 @@ In token-efficient mode:
 - A successful worker command exit code, positive wrapper message, or candidate commit is route evidence
   only. The parent phase is not complete until this evidence is reviewed, diff status is verified locally,
   and required commands are rerun from the parent with parent-owned proof.
-- Offload routine CI waits to read-only monitors when safe work remains.
+- Offload routine CI waits to read-only monitors when safe work remains, but
+  give monitors a local wall-clock cap and stop them before patching or pushing
+  the watched branch.
 - Keep final GitHub mutation, publication, merge-readiness, benchmark, paper,
   and safety decisions local.
 
@@ -178,6 +184,10 @@ Before each phase, run a delegation checkpoint:
   incomplete and retry with an explicit local timeout + heartbeat plan.
 - Start at least one eligible routed worker or Spark sidecar for any phase likely to exceed about
   10 minutes, unless the next action is a local-only publication step or all routes are unavailable.
+- Before spawning a Spark sidecar, check the active ledger or most recent route
+  snapshot for a Spark quota reset/usage-limit marker. If Spark is unavailable,
+  record the reset time and route directly to the next eligible cheap worker
+  instead of discovering the quota limit by failed spawn.
 - If no helper is used, record `delegation_skipped: <reason>` with one of: `tiny`,
   `critical-path-blocker`, `route-unavailable`, `sensitive-context`, `pure-synthesis`, or
   `local-publication-step`.
@@ -199,10 +209,11 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
    agent sessions, use bounded polling rather than `gh pr checks --watch`:
 
    ```bash
-   uv run python scripts/dev/check_pr_ci_status.py <pr-number> \
+   scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py <pr-number> \
      --expected-head-sha <head-sha> \
      --poll-attempts 40 \
      --poll-interval 30 \
+     --max-wall-seconds 1200 \
      --json
    ```
 
@@ -216,7 +227,10 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
    ```
 
    For longer delegated monitor waits, add `--emit-progress-json-every <seconds>` so the worker
-   returns compact progress evidence instead of silent polling.
+   returns compact progress evidence instead of silent polling. Do not leave
+   long JSON poll streams in the parent thread when no decision changes; store
+   verbose progress in the ledger or private artifacts and surface only check
+   counts, failures, stale-head state, and terminal status.
 
 3. Continue with non-conflicting work on the main thread: review other PRs, merge already-green
    `merge-ready` PRs, or run bounded discovery. Do not mutate the waiting PR branch or resolve its

@@ -338,7 +338,7 @@ wrapper so uv reuses the owning checkout's environment and does not create or pr
 `.venv`:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
   <pr-number> \
   --expected-head-sha <head-sha> \
   --poll-attempts 40 \

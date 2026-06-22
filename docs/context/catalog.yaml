@@ -65,6 +65,10 @@ entries:
     status: current
     freshness: maintained
     area: context_architecture
+  - path: docs/context/research_month_one_synthesis_2026-06.md
+    status: current
+    freshness: dated
+    area: context_architecture
   - path: docs/context/issue_3014_evidence_catalog_backlog.md
     status: current
     freshness: maintained

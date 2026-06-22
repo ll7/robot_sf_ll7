@@ -233,3 +233,97 @@ def test_rejects_vague_command_pointer(tmp_path: Path) -> None:
                 "baseline",
             ]
         )
+
+
+def test_rejects_non_finite_cli_metric(tmp_path: Path) -> None:
+    """Explicit metrics should not smuggle NaN or infinity into result cards."""
+    summary = tmp_path / "summary.json"
+    summary.write_text(
+        json.dumps(
+            {
+                "claim_boundary": "Diagnostic only.",
+                "source_command": "uv run python scripts/example.py --flag",
+                "caveats": ["Synthetic fixture."],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit):
+        cards.main(
+            [
+                str(summary),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--evidence-tier",
+                "smoke",
+                "--decision",
+                "diagnostic",
+                "--comparator",
+                "baseline",
+                "--metric",
+                "bad=NaN",
+            ]
+        )
+
+
+def test_ignores_non_mapping_variant_results(tmp_path: Path) -> None:
+    """Malformed variant_results should be ignored instead of crashing."""
+    summary = tmp_path / "summary.json"
+    summary.write_text(
+        json.dumps(
+            {
+                "claim_boundary": "Diagnostic only.",
+                "source_command": "uv run python scripts/example.py --flag",
+                "metric_count": 1,
+                "caveats": ["Synthetic fixture."],
+                "rows": [{"variant_results": ["not", "a", "mapping"]}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cards.main(
+        [
+            str(summary),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--evidence-tier",
+            "smoke",
+            "--decision",
+            "diagnostic",
+            "--comparator",
+            "baseline",
+        ]
+    )
+
+    payload = json.loads((tmp_path / "out/result_card.json").read_text(encoding="utf-8"))
+    assert payload["metrics"]["row_count"] == 1
+
+
+def test_local_output_detection_uses_path_components() -> None:
+    """Only real output path components should trigger local-output rejection."""
+    assert cards._looks_local_output("output/benchmarks/run.json")
+    assert cards._looks_local_output("/tmp/worktree/output/benchmarks/run.json")
+    assert not cards._looks_local_output("docs/context/evidence/not_output_summary.json")
+
+
+def test_main_reports_invalid_json_as_cli_error(tmp_path: Path) -> None:
+    """Invalid JSON input should be reported through argparse rather than a traceback."""
+    summary = tmp_path / "summary.json"
+    summary.write_text("{not json", encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        cards.main(
+            [
+                str(summary),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--evidence-tier",
+                "smoke",
+                "--decision",
+                "diagnostic",
+                "--comparator",
+                "baseline",
+            ]
+        )

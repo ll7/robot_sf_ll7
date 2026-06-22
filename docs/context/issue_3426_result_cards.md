@@ -1,4 +1,4 @@
-# Issue 3426 Result Cards
+# Issue #3426 Result Cards
 
 Issue #3426 adds `scripts/reporting/generate_result_card.py`, a conservative helper for turning
 accepted evidence summaries into reusable dissertation material without widening the claim.

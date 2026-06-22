@@ -7,7 +7,7 @@ import argparse
 import json
 import math
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 DECISIONS = ("promote", "diagnostic", "blocked", "stopped")
@@ -91,6 +91,9 @@ def _parse_cli_metrics(cli_metrics: list[str]) -> dict[str, Any]:
             value: Any = float(raw_value)
         except ValueError:
             value = raw_value.strip()
+        else:
+            if not math.isfinite(value):
+                raise ValueError(f"Metric value must be finite: {metric}")
         metrics[key] = value
     return metrics
 
@@ -116,7 +119,10 @@ def _extract_variant_metrics(summary: dict[str, Any], metrics: dict[str, Any]) -
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            for variant_name, variant in (row.get("variant_results") or {}).items():
+            variant_results = row.get("variant_results")
+            if not isinstance(variant_results, dict):
+                continue
+            for variant_name, variant in variant_results.items():
                 if not isinstance(variant, dict):
                     continue
                 closed_loop = variant.get("closed_loop_metrics")
@@ -211,13 +217,11 @@ def _dedupe(values: list[str]) -> list[str]:
 
 def _looks_local_output(path_text: str) -> bool:
     normalized = path_text.replace("\\", "/").strip()
-    return (
-        normalized == "output"
-        or normalized.startswith("output/")
-        or "/output/" in normalized
-        or "<local-output>" in normalized
-        or "worktree-local" in normalized.lower()
-    )
+    lower_normalized = normalized.lower()
+    if "<local-output>" in normalized or "worktree-local" in lower_normalized:
+        return True
+    parts = PurePosixPath(normalized).parts
+    return "output" in parts
 
 
 def _validate_summary_status(summary: dict[str, Any], decision: str) -> None:
@@ -393,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         card = build_result_card(args)
         outputs = write_outputs(card, args.output_dir, args.latex_table)
-    except ValueError as exc:
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
     print(json.dumps({"schema": SCHEMA, "outputs": outputs}, indent=2, sort_keys=True))
     return 0

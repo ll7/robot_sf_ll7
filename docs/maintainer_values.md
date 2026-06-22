@@ -35,7 +35,7 @@ information only when labeled that way.
 Understandability is a first-class value, not a nice-to-have. If a newcomer cannot tell what a
 feature does or why it matters, the work is effectively unusable no matter how correct it is.
 
-- **Clarity wins on human-facing surfaces.** Token-efficiency (see `AGENTS.md`) governs
+- **Clarity wins on human-facing surfaces.** Token-efficiency (see [`AGENTS.md`](../AGENTS.md)) governs
   agent-internal prompts, scratch, and handoff notes. It does **not** override clarity on the
   README, `docs/`, feature names, `CHANGELOG.md`, public docstrings, and PR/issue titles. When the
   two conflict on a human-facing surface, prefer the version a newcomer understands.

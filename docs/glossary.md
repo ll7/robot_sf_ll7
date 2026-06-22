@@ -4,7 +4,7 @@
 
 Canonical definitions for acronyms and project-specific terms used across Robot SF. This file is the
 single source of truth referenced by the `## Clarity` rule in
-[`docs/maintainer_values.md`](./maintainer_values.md): when a human-facing surface uses one of these
+[`maintainer_values.md`](./maintainer_values.md#clarity): when a human-facing surface uses one of these
 terms, expand it on first use or link here.
 
 If you add a new acronym or domain term to the codebase or docs, add it here in the same change.
@@ -61,4 +61,4 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 
 **Last updated**: 2026-06-22
 **Source of truth for**: acronyms and project-specific terms on human-facing surfaces (see the
-`## Clarity` rule in [`docs/maintainer_values.md`](./maintainer_values.md)).
+`## Clarity` rule in [`maintainer_values.md`](./maintainer_values.md#clarity)).

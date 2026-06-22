@@ -192,7 +192,7 @@ Then open a PR on GitHub with:
 - [ ] Pre-commit checks pass: `scripts/dev/ruff_fix_format.sh`
 - [ ] PR readiness verified: `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 - [ ] Docstrings and comments are clear
-- [ ] Acronyms and project terms are expanded on first use or linked to [`docs/glossary.md`](docs/glossary.md); user-facing changes lead with a plain-language summary (see the `## Clarity` rule in [`docs/maintainer_values.md`](docs/maintainer_values.md))
+- [ ] Acronyms and project terms are expanded on first use or linked to [`glossary.md`](docs/glossary.md); user-facing changes lead with a plain-language summary (see the `## Clarity` rule in [`maintainer_values.md`](docs/maintainer_values.md#clarity))
 - [ ] Examples work (if relevant)
 
 ### In the PR Description

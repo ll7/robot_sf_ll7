@@ -6,7 +6,7 @@ This document covers briefly the repository structure, coding style, testing wor
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
 Keep agent prompts, internal instructions, and handoff notes as streamlined and token-efficient as possible while preserving the same meaning and constraints.
-This token-efficiency goal applies to agent-internal surfaces only. For human-facing surfaces (README, `docs/`, feature names, `CHANGELOG.md`, public docstrings, and PR/issue titles), prioritize clarity per the `## Clarity` rule in `docs/maintainer_values.md`: define every acronym or project term on first use or link it to `docs/glossary.md`, and lead with a plain-language summary before dense terminology. When the two goals conflict on a human-facing surface, clarity wins.
+This token-efficiency goal applies to agent-internal surfaces only. For human-facing surfaces (README, `docs/`, feature names, `CHANGELOG.md`, public docstrings, and PR/issue titles), prioritize clarity per the `## Clarity` rule in [`maintainer_values.md`](docs/maintainer_values.md#clarity): define every acronym or project term on first use or link it to [`glossary.md`](docs/glossary.md), and lead with a plain-language summary before dense terminology. When the two goals conflict on a human-facing surface, clarity wins.
 
 ## Maintainer Value Hierarchy
 
@@ -47,7 +47,7 @@ Use validation proportional to the file/change type, with claim strength as an e
 
 | Change class | Minimum proof | Full `pr_ready_check` required when |
 | --- | --- | --- |
-| Docs-only or instruction-only | Inspect diff; verify changed links or paths where practical; run available lightweight markdown, index, or sync checks. On human-facing surfaces, also run a clarity pass: expand acronyms/project terms or link `docs/glossary.md`, and lead with a plain-language summary (see the `## Clarity` rule in `docs/maintainer_values.md`). | The text changes generated indexes, compatibility surfaces, or makes evidence-sensitive claims. |
+| Docs-only or instruction-only | Inspect diff; verify changed links or paths where practical; run available lightweight markdown, index, or sync checks. On human-facing surfaces, also run a clarity pass: expand acronyms/project terms or link [`glossary.md`](docs/glossary.md), and lead with a plain-language summary (see the `## Clarity` rule in [`maintainer_values.md`](docs/maintainer_values.md#clarity)). | The text changes generated indexes, compatibility surfaces, or makes evidence-sensitive claims. |
 | Workflow/tooling docs or skills | Cheap docs proof plus relevant skill/schema/sync checks such as `uv run python scripts/dev/check_skills.py --preflight <skill>` or `uv run python scripts/tools/sync_ai_config.py --check`. | Scripts, schemas, generated indexes, routing behavior, or automation behavior changes. |
 | Runtime code | Focused tests for changed behavior plus lint/format gates. | The change is user-facing, cross-module, release-facing, or affects shared execution paths. |
 | Benchmark, metric, schema, model-provenance | Executable proof on the intended contract with provenance and fallback/degraded exclusions. | Almost always; skip only for explicit diagnostic-only docs with no semantic change. |

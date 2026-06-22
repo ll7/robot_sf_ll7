@@ -725,7 +725,12 @@ def test_build_policy_risk_surface_dwa_wires_surface_adapter(
             """Return diagnostics preserving the prototype claim boundary."""
             return {"benchmark_strength": False, "status": "ok"}
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.RiskSurfacePlannerAdapter", _DummyAdapter)
+    # The risk_surface_dwa family was extracted to map_runner_policies.adapters (#3384),
+    # which constructs the adapter in its own namespace; patch it there.
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_policies.adapters.RiskSurfacePlannerAdapter",
+        _DummyAdapter,
+    )
     policy, meta = _build_policy(
         "risk_surface_dwa_v0",
         {

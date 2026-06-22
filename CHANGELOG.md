@@ -71,6 +71,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Continued the `_build_policy` decomposition (#3384) by migrating the `risk_surface_dwa` and
+  `lidar_social_force` adapter families from the inline dispatcher into
+  `robot_sf/benchmark/map_runner_policies/adapters.py`, registered in `_POLICY_BUILDERS`. The builders
+  reuse the neutral `map_runner_policy_common.build_adapter_policy` (#3403) and import their adapter
+  classes from `robot_sf.planner.*`, so no import cycle is introduced. Behavior-preserving (the
+  `map_runner` regression suite passes; one test monkeypatch repoints to the new builder namespace).
+  Adapter families that still depend on `map_runner`-local helpers (e.g. `trivial_reference` via
+  `_build_socnav_config`) are deferred to a later slice.
 * Consolidated the RFC6901 JSON-pointer renderer that was copy-pasted in eight modules into a single
   shared helper `robot_sf.common.json_pointer.json_pointer` (#3386). The eight schema-validation call
   sites (`benchmark/{scenario_schema,odd_contract,hazard_traceability,scenario_contract,odd_hazard_coverage_matrix,artifact_catalog}.py`

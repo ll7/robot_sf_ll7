@@ -91,6 +91,7 @@ knowledge, not every transient iteration detail.
 * Docs index entry: [docs/README.md](../README.md)
 * AI-facing orientation: [docs/ai/repo_overview.md](../ai/repo_overview.md)
 * Issue #2946 mechanism-evidence figure pack: [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md)
+* Issue #3279 Social Mini-Game scenario families (v0): [issue_3279_social_mini_game_families.md](issue_3279_social_mini_game_families.md)
 * Goal-driven agent loops:
   [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md)
 * Skill Consolidation Audit Issue #3189 2026-06-20:

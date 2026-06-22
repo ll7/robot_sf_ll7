@@ -31,10 +31,10 @@ mechanism label and the parameter values in `metadata`.
   and `yielding_pressure`. The current generator vocabulary
   (`density`/`flow`/`obstacle`/`groups`/`speed_var`/`goal_topology`/`robot_context`) only
   *approximates* these triggers; extending the generator schema is deferred.
-- **Full planner smoke run.** This cut proves the families generate deterministic, schema-valid
-  scenario inputs. It does **not** run a baseline planner across the families. The canonical
-  smoke command shape is documented in the config header; producing episode outputs against a
-  baseline is the next step and remains diagnostic-smoke, not benchmark-strength evidence.
+- **Planner smoke scope.** The v0 family set now has an executable diagnostic smoke against the
+  baseline-safe `simple_policy` planner. This proves the benchmark runner can emit one episode
+  record per family; it is still not planner-ranking or benchmark-strength mechanism evidence.
+  Broader planner comparisons remain out of scope for this note.
 - **L-corner geometry fidelity.** `blind_corner` uses the coarse `maze` obstacle layout as an
   occlusion proxy; a dedicated L-corner geometry is a follow-up.
 
@@ -43,7 +43,8 @@ mechanism label and the parameter values in `metadata`.
 These families are scenario *inputs* only. A generated layout proves nothing about planner
 behavior; nothing here is planner-ranking, transfer, or benchmark-strength mechanism evidence.
 
-## Validation run (2026-06-22)
+## Validation runs (2026-06-22)
 
 - `uv run pytest tests/benchmark/test_social_mini_game_families_issue_3279.py -q` → 5 passed
 - `uv run python -c "import robot_sf.benchmark.scenario_generator"` → import OK
+- `python scripts/demo/run_robot_sf_smoke.py --matrix configs/scenarios/sets/issue_3279_social_mini_game_families_v0.yaml --planners simple_policy --horizon 30 --workers 1 --output-root output/benchmarks/issue_3279_social_mini_game_smoke` → passed, 5 episode records

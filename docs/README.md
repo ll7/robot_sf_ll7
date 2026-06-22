@@ -2,6 +2,8 @@
 
 Welcome to the Robot SF documentation! This directory contains comprehensive guides and references for using and developing with the Robot SF simulation framework.
 
+**New to the terminology?** Start with the [Glossary](./glossary.md) — the canonical definitions for acronyms and project-specific terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and more).
+
 <!-- This document should mainly serve as a navigation hub and overview for the various components and guides available within the Robot SF project. Refer to individual files for detailed information. -->
 
 **Artifact root**: All generated artifacts (JSONL, figures, videos) must live under the git-ignored `output/` directory. Legacy `results/` paths have been migrated; update commands accordingly when running examples or scripts. Small, reviewable copies of durable evidence may be promoted into [docs/context/evidence](./context/evidence/README.md); do not mirror `output/` wholesale.

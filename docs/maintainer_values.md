@@ -7,7 +7,7 @@ link here instead of repeating the full value hierarchy.
 
 ## Hard Rule
 
-Be honest, transparent, and reproducible.
+Be honest, transparent, reproducible, and understandable.
 
 Do not present a result as established when it only worked once, cannot be reproduced, or cannot be
 implemented in the repository. Benchmark, metric, schema, artifact-provenance, and paper-facing
@@ -29,6 +29,29 @@ Only after this ordering can result interpretation and recommendation appear.
 
 Fallback or degraded benchmark execution is never success evidence. It may be useful diagnostic
 information only when labeled that way.
+
+## Clarity
+
+Understandability is a first-class value, not a nice-to-have. If a newcomer cannot tell what a
+feature does or why it matters, the work is effectively unusable no matter how correct it is.
+
+- **Clarity wins on human-facing surfaces.** Token-efficiency (see [`AGENTS.md`](../AGENTS.md)) governs
+  agent-internal prompts, scratch, and handoff notes. It does **not** override clarity on the
+  README, `docs/`, feature names, `CHANGELOG.md`, public docstrings, and PR/issue titles. When the
+  two conflict on a human-facing surface, prefer the version a newcomer understands.
+- **Define jargon on first use.** Every acronym and project-specific term (for example VRU, AMV,
+  AMMV, SNQI, occluder, "claim boundary") must be expanded on first use in a document or linked to
+  [`docs/glossary.md`](./glossary.md), which is the canonical source for term definitions.
+- **Lead with a plain-language summary.** Each user-facing feature, doc section, and changelog
+  entry should open with one plain sentence — what it does and why a reader should care — before any
+  precise-but-dense terminology. Keep the exact technical term; add a short gloss alongside it.
+  Example: "Occluder timing perturbations: randomly vary *when* obstacles block the robot's view,
+  so planners are tested against realistic sensing gaps."
+- **Prefer one canonical name.** When the repository expands the same acronym several ways, fix the
+  canonical expansion in the glossary and converge on it instead of leaving readers to guess.
+
+This is a standing rule plus a glossary, not a one-time rewrite: re-apply it whenever a human-facing
+surface is touched so dense prose does not silently re-accumulate.
 
 Reports with mixed or limited benchmark evidence should put the claim boundary first: evidence
 status, major caveats, fallback/degraded exclusions, and uncertainty belong before result

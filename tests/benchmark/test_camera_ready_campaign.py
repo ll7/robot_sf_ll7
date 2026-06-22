@@ -17,6 +17,10 @@ from loguru import logger
 
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
+from robot_sf.benchmark.camera_ready._util import (
+    _kinematics_matrix_or_default,
+    _stable_json_bytes,
+)
 from robot_sf.benchmark.camera_ready_campaign import (
     DEFAULT_SEED_SETS_PATH,
     CampaignConfig,
@@ -3312,8 +3316,24 @@ def test_sanitize_csv_cell_prefixes_formula_like_values() -> None:
     """CSV sanitizer should neutralize spreadsheet formula prefixes."""
     assert _sanitize_csv_cell("=1+1") == "'=1+1"
     assert _sanitize_csv_cell("@SUM(A1:A2)") == "'@SUM(A1:A2)"
+    assert _sanitize_csv_cell("\t=cmd|' /C calc'!A0") == "'\t=cmd|' /C calc'!A0"
+    assert _sanitize_csv_cell(" \r\n+SUM(A1:A2)") == "' \r\n+SUM(A1:A2)"
     assert _sanitize_csv_cell("safe") == "safe"
     assert _sanitize_csv_cell(42) == 42
+
+
+def test_stable_json_bytes_use_canonical_hash_encoding() -> None:
+    """Hash payload helpers should share the same deterministic JSON bytes."""
+    assert _stable_json_bytes({"b": 2, "a": 1}) == b'{"a":1,"b":2}'
+
+
+def test_kinematics_matrix_or_default_documents_default_behavior() -> None:
+    """Leaf helper should normalize labels and only supply the matrix default when empty."""
+    assert _kinematics_matrix_or_default((" Holonomic ", "BICYCLE_DRIVE")) == (
+        "holonomic",
+        "bicycle_drive",
+    )
+    assert _kinematics_matrix_or_default(()) == ("differential_drive",)
 
 
 def test_prepare_campaign_preflight_validates_campaign_config(tmp_path: Path) -> None:

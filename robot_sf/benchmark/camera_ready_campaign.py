@@ -8,7 +8,6 @@ bundle for archival/release pipelines.
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import math
 import re
@@ -18,7 +17,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
@@ -29,6 +28,17 @@ from shapely.geometry import LineString, Polygon
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
+from robot_sf.benchmark.camera_ready._util import (  # noqa: F401 - re-exported for back-compat
+    _hash_payload,
+    _jsonable,
+    _jsonable_repo_relative,
+    _kinematics_matrix_or_default,
+    _repo_relative,
+    _sanitize_csv_cell,
+    _sha256_file,
+    _sha256_payload,
+    _utc_now,
+)
 from robot_sf.benchmark.camera_ready_campaign_config import (  # re-exported for back-compat
     _AMV_DIMENSIONS,
     DEFAULT_SEED_SETS_PATH,
@@ -108,6 +118,7 @@ if TYPE_CHECKING:
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
+_normalized_kinematics_matrix = _kinematics_matrix_or_default
 
 _REPORT_METRICS: tuple[str, ...] = (
     "success",
@@ -233,103 +244,6 @@ def _normalize_kinematics_matrix(raw: Any) -> tuple[str, ...]:
         if text:
             normalized.append(text)
     return tuple(normalized)
-
-
-def _repo_relative(path: Path) -> str:
-    """Return a repository-relative path when possible."""
-    path_resolved = path.resolve()
-    repo_root = get_repository_root().resolve()
-    try:
-        return path_resolved.relative_to(repo_root).as_posix()
-    except ValueError:
-        return str(path_resolved)
-
-
-def _utc_now() -> str:
-    """Return an ISO-8601 UTC timestamp with trailing ``Z``."""
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _hash_payload(payload: Any) -> str:
-    """Compute a deterministic SHA1 short hash for a JSON-serializable payload.
-
-    Returns:
-        Twelve-character SHA1 digest prefix.
-    """
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha1(encoded).hexdigest()[:12]
-
-
-def _sha256_payload(payload: Any) -> str:
-    """Return a stable SHA-256 digest for a JSON-serializable payload."""
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _sha256_file(path: Path) -> str:
-    """Return a stable SHA-256 digest for a file."""
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-    except OSError as exc:
-        raise RuntimeError(f"Failed to hash file '{path}': {exc}") from exc
-    return digest.hexdigest()
-
-
-def _jsonable(value: Any) -> Any:
-    """Convert nested values into JSON-serializable primitives.
-
-    Returns:
-        JSON-serializable value with ``Path`` objects converted to strings.
-    """
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
-    return value
-
-
-def _jsonable_repo_relative(value: Any) -> Any:
-    """Convert nested values into JSON-serializable primitives with repo-relative paths.
-
-    Returns:
-        JSON-serializable value with ``Path`` objects normalized to stable repo-relative strings.
-    """
-    if isinstance(value, Path):
-        return _repo_relative(value)
-    if isinstance(value, dict):
-        return {str(key): _jsonable_repo_relative(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable_repo_relative(item) for item in value]
-    return value
-
-
-def _sanitize_csv_cell(value: Any) -> Any:
-    """Prevent spreadsheet formula execution for untrusted CSV cell values.
-
-    Returns:
-        Original value, or a quote-prefixed string for formula-like text cells.
-    """
-    if not isinstance(value, str):
-        return value
-    if value.startswith(("=", "+", "-", "@")):
-        return "'" + value
-    return value
-
-
-def _normalized_kinematics_matrix(kinematics: tuple[str, ...]) -> tuple[str, ...]:
-    """Return normalized kinematics labels with a deterministic default fallback.
-
-    Returns:
-        Lowercase non-empty kinematics tuple, defaulting to ``("differential_drive",)``.
-    """
-    return tuple(str(value).strip().lower() for value in kinematics if str(value).strip()) or (
-        "differential_drive",
-    )
 
 
 def _optional_synthetic_actuation_profile_mapping(
@@ -1769,7 +1683,7 @@ def _build_matrix_summary_rows(
         _repo_relative(cfg.scenario_horizons_path) if cfg.scenario_horizons_path is not None else ""
     )
     rows: list[dict[str, Any]] = []
-    normalized_kinematics = _normalized_kinematics_matrix(cfg.kinematics_matrix)
+    normalized_kinematics = _kinematics_matrix_or_default(cfg.kinematics_matrix)
     for planner in cfg.planners:
         if not planner.enabled:
             continue
@@ -3756,7 +3670,7 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     planner_rows: list[dict[str, Any]] = []
     warnings: list[str] = []
     seed_variability_records: list[dict[str, Any]] = []
-    kinematics_matrix = _normalized_kinematics_matrix(cfg.kinematics_matrix)
+    kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
     stop_requested = False
 
     def _scenario_with_kinematics(

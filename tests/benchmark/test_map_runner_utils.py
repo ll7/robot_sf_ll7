@@ -470,6 +470,13 @@ def test_goal_policy_and_build_policy() -> None:
     assert linear > 0.0
     assert abs(angular) <= 1.0
 
+    default_speed_policy, _ = _build_policy("goal", {"max_speed": None})
+    stopped_policy, _ = _build_policy("goal", {"max_speed": 0.0})
+    default_linear, _ = default_speed_policy(obs)
+    stopped_linear, _ = stopped_policy(obs)
+    assert default_linear > 0.0
+    assert stopped_linear == pytest.approx(0.0)
+
 
 def test_build_policy_trivial_reference_adapter_exposes_template_contract() -> None:
     """The documented reference adapter should build through the real map-runner seam."""

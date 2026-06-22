@@ -982,9 +982,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
-    normalized_robot_command_mode = (
-        str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
-    )
     registered_builder = _POLICY_BUILDERS.get(algo_key)
     if registered_builder is not None:
         return registered_builder(
@@ -994,6 +991,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             robot_command_mode=robot_command_mode,
         )
 
+    normalized_robot_command_mode = (
+        str(robot_command_mode).strip().lower() if robot_command_mode is not None else None
+    )
     registered_adapter_spec = build_registered_adapter_policy_spec(algo_key, algo_config)
     if registered_adapter_spec is not None:
         return _build_adapter_policy(

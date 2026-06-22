@@ -53,14 +53,12 @@ def build(
         command_limits=algo_config,
     )
 
-    meta: dict[str, Any] = {"algorithm": algo_key}
-    meta.update(
-        {
-            "status": "ok",
-            "config": algo_config,
-            "config_hash": _config_hash(algo_config),
-        }
-    )
+    meta: dict[str, Any] = {
+        "algorithm": algo_key,
+        "status": "ok",
+        "config": algo_config,
+        "config_hash": _config_hash(algo_config),
+    }
     meta = enrich_algorithm_metadata(
         algo=algo_key,
         metadata=meta,
@@ -82,7 +80,9 @@ def build(
         Returns:
             tuple[float, float]: Projected linear and angular command.
         """
-        linear, angular = _goal_policy(obs, max_speed=float(algo_config.get("max_speed", 1.0)))
+        configured_max_speed = algo_config.get("max_speed")
+        max_speed = 1.0 if configured_max_speed is None else float(configured_max_speed)
+        linear, angular = _goal_policy(obs, max_speed=max_speed)
         return planner_commands.project_with_feasibility(
             model=goal_kinematics_model,
             command=(linear, angular),

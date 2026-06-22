@@ -8,6 +8,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
+from loguru import logger
 
 from robot_sf.benchmark.snqi import cli as snqi_cli
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
@@ -162,6 +163,41 @@ def test_cmd_recompute_weights_rejects_missing_or_unknown_inputs(tmp_path: Path)
         ),
     )
     assert unknown_method == 2
+
+
+def test_cmd_recompute_weights_logs_failing_stage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unexpected SNQI recompute failures should log the stage before returning non-zero."""
+    baseline_path = tmp_path / "baseline.json"
+    output_path = tmp_path / "weights.json"
+    baseline_path.write_text(json.dumps(_baseline_stats()), encoding="utf-8")
+
+    def _fail_recompute(**kwargs: object) -> SNQIWeights:
+        raise ValueError("cannot recompute")
+
+    monkeypatch.setattr(snqi_cli, "recompute_snqi_weights", _fail_recompute)
+    captured: list = []
+    handle = logger.add(captured.append, level="ERROR")
+    try:
+        exit_code = snqi_cli.cmd_recompute_weights(
+            argparse.Namespace(
+                baseline_stats=str(baseline_path),
+                out=str(output_path),
+                method="balanced",
+                seed=7,
+            ),
+        )
+    finally:
+        logger.remove(handle)
+
+    assert exit_code == 1
+    assert any(
+        msg.record["extra"].get("event") == "snqi_cli_failed"
+        and msg.record["extra"].get("stage") == "recompute_weights"
+        for msg in captured
+    )
 
 
 def test_episode_loading_and_baseline_stats_helpers(tmp_path: Path) -> None:

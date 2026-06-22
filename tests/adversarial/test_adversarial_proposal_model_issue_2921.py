@@ -276,3 +276,95 @@ def test_real_archive_without_search_space_fails_closed(tmp_path: Path, monkeypa
     assert report["synthetic_archive"] is False
     assert report["synthetic_search_space"] is True
     assert report["archive_evaluation_provenance"]["disjointness_checks_passed"] is False
+
+
+_SEARCH_SPACE_YAML = """\
+schema_version: adversarial-search-space.v1
+variables:
+  start_x: {min: 1.0, max: 3.0}
+  start_y: {min: 2.0, max: 4.0}
+  goal_x: {min: 7.0, max: 9.0}
+  goal_y: {min: 2.0, max: 4.0}
+  spawn_time_s: {min: 0.0, max: 2.0}
+  pedestrian_speed_mps: {min: 0.8, max: 1.4}
+  pedestrian_delay_s: {min: 0.0, max: 2.0}
+  scenario_seed: {min: 100, max: 999}
+constraints:
+  min_start_goal_distance_m: 2.0
+"""
+
+
+def _two_family_archive() -> dict:
+    """Build a small two-family archive with disjoint families/ids/seeds."""
+    entries = []
+    for family in ("goal_collision", "orca_collision"):
+        for i in range(3):
+            seed = (100 if family == "goal_collision" else 200) + i
+            entries.append(
+                {
+                    "archive_id": f"{family}_{i}",
+                    "cluster_key": family,
+                    "candidate": {
+                        "start": {"x": 2.0, "y": 3.0},
+                        "goal": {"x": 8.0, "y": 3.0},
+                        "spawn_time_s": 1.0,
+                        "pedestrian_speed_mps": 1.0,
+                        "pedestrian_delay_s": 0.5,
+                        "scenario_seed": seed,
+                    },
+                    "failure_attribution": {"primary_failure": "collision"},
+                    "objective_value": 8.0,
+                    "normalized_perturbation": 0.1,
+                }
+            )
+    return {"schema_version": "adversarial_failure_archive.v1", "entries": entries}
+
+
+def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An active real-archive run computes a real disjoint split yet stays fail-closed."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    archive_path = tmp_path / "archive.json"
+    search_space_path = tmp_path / "search_space.yaml"
+    output_json = tmp_path / "report.json"
+    archive_path.write_text(json.dumps(_two_family_archive()), encoding="utf-8")
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--archive",
+            archive_path.as_posix(),
+            "--search-space",
+            search_space_path.as_posix(),
+            "--budget",
+            "3",
+            "--seed",
+            "7",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    assert report["state"] == "active"
+    assert report["synthetic_archive"] is False
+    assert report["synthetic_search_space"] is False
+
+    provenance = report["archive_evaluation_provenance"]
+    assert provenance["split_policy"] == "disjoint_scenario_family"
+    assert provenance["disjointness_checks_passed"] is True
+    assert provenance["scenario_family_overlap"] == []
+    assert provenance["archive_id_overlap"] == []
+    assert provenance["fit_size"] > 0
+    assert provenance["eval_size"] > 0
+
+    # Held-out yield stays fail-closed: independent planner outcomes are not wired yet.
+    assert report["held_out_evidence"] is False
+    assert provenance["held_out_evidence_status"] == (
+        "not_available_requires_independent_planner_outcomes"
+    )

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Documented how to obtain, place, and **share external datasets across git worktrees** in
+  [`docs/external_data_setup.md`](docs/external_data_setup.md) (#1498): a per-asset obtain/place/
+  validate quick-reference for `sdd`, `socnavbench-s3dis-eth`, and `socnavbench-control` (all
+  license/agreement-gated — no scriptable download), plus a "Sharing external data across git
+  worktrees" section. Staging paths resolve per-worktree, so the guide shows staging one physical
+  copy at a machine-stable location and symlinking it into each worktree's git-ignored expected
+  path, the `--source` validation option, and the planned `ROBOT_SF_EXTERNAL_DATA_ROOT` shared-root
+  follow-up. Docs-only; actual licensed acquisition remains a manual user step (#1498).
 * Added legacy PPO snapshot parity checks (#3469):
   [`scripts/validation/check_legacy_ppo_snapshot_parity.py`](scripts/validation/check_legacy_ppo_snapshot_parity.py)
   inventories supported BR-06 PPO registry checkpoints, verifies durable GitHub-release pointers,

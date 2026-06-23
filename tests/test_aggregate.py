@@ -598,6 +598,71 @@ def test_flatten_metrics_skips_empty_social_mini_game_block() -> None:
     assert "social_mini_game_mechanism_family" not in flat
 
 
+def test_compute_aggregates_flattens_clear_tracking_uncertainty_block() -> None:
+    """CLEAR tracking uncertainty blocks should expose MOTA/MOTP as aggregate columns."""
+    records = [
+        {
+            "episode_id": "ep-1",
+            "scenario_id": "sc-1",
+            "seed": 1,
+            "algo": "planner-a",
+            "metrics": {
+                "success": True,
+                "clear_tracking_uncertainty": {
+                    "schema_version": "clear-tracking-metrics.v1",
+                    "enabled": True,
+                    "mota": 0.5,
+                    "motp_m": 0.25,
+                    "counts": {
+                        "ground_truth": 2,
+                        "detections": 1,
+                        "missed_detections": 1,
+                        "false_positives": 0,
+                        "id_switches": 0,
+                        "motp_matches": 1,
+                    },
+                },
+            },
+        },
+        {
+            "episode_id": "ep-2",
+            "scenario_id": "sc-1",
+            "seed": 2,
+            "algo": "planner-a",
+            "metrics": {
+                "success": True,
+                "clear_tracking_uncertainty": {
+                    "schema_version": "clear-tracking-metrics.v1",
+                    "enabled": True,
+                    "mota": 1.0,
+                    "motp_m": 0.0,
+                    "counts": {
+                        "ground_truth": 2,
+                        "detections": 2,
+                        "missed_detections": 0,
+                        "false_positives": 0,
+                        "id_switches": 0,
+                        "motp_matches": 2,
+                    },
+                },
+            },
+        },
+    ]
+
+    flat = flatten_metrics(records[0])
+    assert "clear_tracking_uncertainty" not in flat
+    assert flat["clear_mota"] == 0.5
+    assert flat["clear_motp_m"] == 0.25
+    assert flat["clear_missed_detection_count"] == 1
+
+    summary = compute_aggregates(records, group_by="algo")
+
+    metrics = summary["planner-a"]
+    assert metrics["clear_mota"]["mean"] == pytest.approx(0.75)
+    assert metrics["clear_motp_m"]["mean"] == pytest.approx(0.125)
+    assert metrics["clear_missed_detection_count"]["mean"] == pytest.approx(0.5)
+
+
 def test_flatten_metrics_keeps_distributional_disruption_nested_out_of_scalar_rows() -> None:
     """Distributional disruption is a schema block, not a scalar aggregate metric."""
     record = {

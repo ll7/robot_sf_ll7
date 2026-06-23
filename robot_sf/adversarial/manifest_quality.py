@@ -257,6 +257,8 @@ class PlannerOutcome:
     near_miss_yield: float | None
     source: str
     note: str | None = None
+    low_progress_count: int | None = None
+    low_progress_yield: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return JSON-safe representation."""
@@ -267,6 +269,8 @@ class PlannerOutcome:
             "near_miss_count": self.near_miss_count,
             "failure_yield": self.failure_yield,
             "near_miss_yield": self.near_miss_yield,
+            "low_progress_count": self.low_progress_count,
+            "low_progress_yield": self.low_progress_yield,
             "source": self.source,
         }
         if self.note is not None:
@@ -320,6 +324,7 @@ class ManifestsQualitySummary:
     naturalistic_prior_fail_rate: float
     naturalistic_prior_violation_counts: dict[str, int]
     planner_outcomes: PlannerOutcomeSummary | None
+    runner_compatibility_rate: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return JSON-safe representation."""
@@ -333,6 +338,7 @@ class ManifestsQualitySummary:
                 "validity_rate": self.validity_rate,
                 "invalid_rate": self.invalid_rate,
                 "degenerate_rate": self.degenerate_rate,
+                "runner_compatibility_rate": self.runner_compatibility_rate,
             },
             "novelty": {
                 "hashable_count": self.hashable_count,
@@ -573,6 +579,18 @@ def _has_near_miss(row: dict[str, Any]) -> bool:
     return near_miss_value is not None and near_miss_value > 0.0
 
 
+def _has_low_progress(row: dict[str, Any]) -> bool:
+    """Return whether one episode row reports low progress (timeout with minimal displacement)."""
+    termination = str(row.get("termination_reason", "")).strip().lower()
+    if not termination or termination == "success":
+        return False
+    if termination not in ("timeout", "truncated", "max_steps"):
+        return False
+    displacement = _safe_float(row.get("robot_displacement_m"))
+    low_progress_threshold = 0.25
+    return displacement is not None and displacement < low_progress_threshold
+
+
 def _metric_stat(metrics: dict[str, Any], metric_name: str, stat_name: str) -> float | None:
     """Read a finite metric statistic from an aggregate metric payload."""
     raw_metric = metrics.get(metric_name)
@@ -654,11 +672,14 @@ def _summarize_single_planner_run(
 
     failures = 0
     near_misses = 0
+    low_progress = 0
     for row in rows:
         if _row_is_failure(row):
             failures += 1
         if _has_near_miss(row):
             near_misses += 1
+        if _has_low_progress(row):
+            low_progress += 1
     total = len(rows)
     return PlannerOutcome(
         planner=planner,
@@ -667,6 +688,8 @@ def _summarize_single_planner_run(
         near_miss_count=near_misses,
         failure_yield=_safe_rate(failures, total),
         near_miss_yield=_safe_rate(near_misses, total),
+        low_progress_count=low_progress,
+        low_progress_yield=_safe_rate(low_progress, total),
         source="episode_rows",
     )
 
@@ -710,6 +733,14 @@ def _summarize_planner_run_from_aggregates(
         near_miss_count = near_miss_count_value
         near_miss_yield = _safe_rate(near_miss_count, episodes)
 
+    low_progress_count_value = _count_like_sum(
+        _metric_stat(metrics, "low_progress", "sum") if isinstance(metrics, dict) else None,
+        episodes,
+    )
+    low_progress_yield_val = None
+    if episodes is not None and low_progress_count_value is not None:
+        low_progress_yield_val = _safe_rate(low_progress_count_value, episodes)
+
     return PlannerOutcome(
         planner=planner,
         episodes=episodes,
@@ -717,6 +748,8 @@ def _summarize_planner_run_from_aggregates(
         near_miss_count=near_miss_count,
         failure_yield=failure_yield,
         near_miss_yield=near_miss_yield,
+        low_progress_count=low_progress_count_value,
+        low_progress_yield=low_progress_yield_val,
         source="aggregate_metrics",
         note=(
             "failure_yield derived from count-like aggregate success sums; near_miss_yield "
@@ -793,11 +826,15 @@ def summarize_adversarial_manifest_quality_records(
         Path(smoke_summary_json) if smoke_summary_json is not None else None
     )
     reference_manifest_path = Path(reference_manifest) if reference_manifest is not None else None
+    parse_failures = sum(1 for record in records if record.parse_error is not None)
+    compatible = total - parse_failures - degenerate
+    runner_compatibility_rate_val = _safe_rate(compatible, total) if total > 0 else None
 
     return ManifestsQualitySummary(
+        runner_compatibility_rate=runner_compatibility_rate_val,
         input_paths=sorted({record.path for record in records}),
         manifest_count=total,
-        parse_failures=sum(1 for record in records if record.parse_error is not None),
+        parse_failures=parse_failures,
         status_counts=dict(status_counts),
         validity_rate=_safe_rate(valid, total),
         invalid_rate=_safe_rate(invalid, total),

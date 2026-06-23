@@ -1,0 +1,18 @@
+{
+  "schema_version": "orca_residual_progress_probe_decision_provenance.v1",
+  "issue": 2445,
+  "created_at": "2026-06-23",
+  "evidence_grade": "analysis_only",
+  "decision": "stop",
+  "command": "uv run python scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py --output-dir docs/context/evidence/issue_2445_orca_residual_progress_probe_decision_2026-06-23",
+  "source_commit": "fedee58afe8c5834f4e6ccb1179cdc00a8354606",
+  "prior_decision_issue": 2408,
+  "input_artifact": {
+    "path": "docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json",
+    "sha256": "338a61b69690be8fe6375b4649d604777e3056b44bf1748f1828734387912c23",
+    "slurm_job_id": "12913",
+    "candidate": "orca_residual_guarded_ppo_progress_v1",
+    "smoke_source_commit": "dcb14927f08277d123d9666ad91b8d6abbc4fe9d"
+  },
+  "claim_boundary": "Analysis-only decision over failed-closed smoke evidence. Not readiness evidence; must not justify nominal or larger SLURM reruns."
+}

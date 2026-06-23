@@ -14,6 +14,8 @@
     "rejected_count",
     "validity_rate",
     "rejection_counts",
+    "post_execution_outcome_counts",
+    "post_execution_outcome_note",
     "policy",
     "candidates"
   ],
@@ -54,6 +56,38 @@
         "type": "integer",
         "minimum": 0
       }
+    },
+    "post_execution_outcome_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "simulation_failure",
+        "fallback",
+        "degraded",
+        "genuine_behavioral_failure"
+      ],
+      "properties": {
+        "simulation_failure": {
+          "type": "integer",
+          "const": 0
+        },
+        "fallback": {
+          "type": "integer",
+          "const": 0
+        },
+        "degraded": {
+          "type": "integer",
+          "const": 0
+        },
+        "genuine_behavioral_failure": {
+          "type": "integer",
+          "const": 0
+        }
+      }
+    },
+    "post_execution_outcome_note": {
+      "type": "string",
+      "minLength": 1
     },
     "policy": {
       "type": "object",

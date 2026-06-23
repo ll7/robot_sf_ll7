@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Automated stale state-label cleanup at issue closure (#3456): a new GitHub Action
+  [`.github/workflows/strip-closed-state-labels.yml`](.github/workflows/strip-closed-state-labels.yml)
+  triggers on `issues: closed` and strips any live `state:*` label (`state:ready`/`state:running`/
+  `state:blocked`) from the just-closed issue — covering all close paths (manual, duplicate/wontfix,
+  PR-merge) at one choke point, with least-privilege `issues: write`, a read-then-write CLOSED
+  re-confirm, and no-op when no stale label is present. `scripts/dev/closed_state_label_hygiene.py`
+  gains a `--fix` mode that reuses the same `LIVE_STATE_LABELS` (single source of truth), so the
+  read-only detector remains the periodic CI/backstop while the event-driven Action removes the root
+  cause of recurring manual scrubs (134 stale labels on 2026-06-18, ~66 more in 5 days). Documented
+  in [`docs/context/issue_3098_closed_state_label_hygiene.md`](docs/context/issue_3098_closed_state_label_hygiene.md) (#3456).
 * Added the Qwen-RobotNav feasibility assessment (#2952):
   [`docs/context/issue_2952_qwen_robotnav_assessment.md`](docs/context/issue_2952_qwen_robotnav_assessment.md)
   audits availability (weights/code/license/size/hardware) and compares Qwen-RobotNav's

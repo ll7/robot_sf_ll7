@@ -53,7 +53,10 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.ped_npc.ped_population import populate_single_pedestrians
-from scripts.tools.compare_adversarial_samplers import run_sampler_comparison
+from scripts.tools.compare_adversarial_samplers import (
+    _comparison_row_from_manifest,
+    run_sampler_comparison,
+)
 
 _MULTI_PED_FAMILY_FIXTURES = (
     (
@@ -1435,6 +1438,118 @@ def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:
     assert {row.num_candidates for row in rows} == {2}
     assert all(Path(row.manifest_path).exists() for row in rows)
     assert all(row.num_failed_evaluations == 0 for row in rows)
+    assert all(row.best_valid_objective is not None for row in rows)
+
+
+def test_sampler_comparison_package_b_budget_seed_grid(tmp_path: Path) -> None:
+    """Package-B helper should run fixed candidate budgets under repeated seeds."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    _write_space(search_space)
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "comparison",
+        budget=1,
+        seed=23,
+    )
+
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("random", "coordinate"),
+        synthetic=True,
+        budgets=(16, 32, 64),
+        seeds=(101, 202),
+    )
+
+    assert {(row.budget, row.seed) for row in rows} == {
+        (16, 101),
+        (16, 202),
+        (32, 101),
+        (32, 202),
+        (64, 101),
+        (64, 202),
+    }
+    assert {row.num_candidates for row in rows} == {16, 32, 64}
+    assert all(row.held_out_family_status == "not_evaluated_narrow_archive" for row in rows)
+    assert all("learned failure proposal #2921" in " ".join(row.caveats) for row in rows)
+
+
+def test_sampler_comparison_reports_certified_replayable_failures(tmp_path: Path) -> None:
+    """Manifest-derived rows should separate certified failures from exclusions."""
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    scenario_path = bundle_dir / "scenario.yaml"
+    episode_path = bundle_dir / "episode_records.jsonl"
+    trajectory_path = bundle_dir / "trajectory.csv"
+    for path in (scenario_path, episode_path, trajectory_path):
+        path.write_text("fixture\n", encoding="utf-8")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "adversarial-search-manifest.v1",
+                "candidates": [
+                    {
+                        "certification_status": {"status": "passed"},
+                        "objective_value": 4.0,
+                        "failure_attribution": {
+                            "primary_failure": "collision",
+                            "details": {},
+                        },
+                        "scenario_yaml_path": scenario_path.as_posix(),
+                        "episode_record_path": episode_path.as_posix(),
+                        "trajectory_csv_path": trajectory_path.as_posix(),
+                        "bundle_path": bundle_dir.as_posix(),
+                        "error": None,
+                    },
+                    {
+                        "certification_status": {"status": "failed"},
+                        "objective_value": None,
+                        "failure_attribution": {
+                            "primary_failure": "invalid_candidate",
+                            "details": {},
+                        },
+                        "error": "invalid",
+                    },
+                    {
+                        "certification_status": {"status": "passed"},
+                        "objective_value": 2.0,
+                        "failure_attribution": {
+                            "primary_failure": "success",
+                            "details": {"readiness_status": "fallback"},
+                        },
+                        "error": None,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = _comparison_row_from_manifest(
+        sampler="random",
+        budget=3,
+        seed=11,
+        manifest_path=manifest_path,
+        best_bundle_path=bundle_dir,
+        best_objective_value=4.0,
+        num_candidates=3,
+        num_valid_candidates=2,
+        num_invalid_candidates=1,
+        num_failed_evaluations=0,
+    )
+
+    assert row.first_failure_iteration == 1
+    assert row.best_valid_objective == 4.0
+    assert row.invalid_candidate_rate == pytest.approx(1 / 3)
+    assert row.certified_valid_failure_count == 1
+    assert row.replayable_valid_failure_count == 1
+    assert row.replay_success_rate == 1.0
+    assert row.fallback_candidate_count == 1
 
 
 def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Path) -> None:

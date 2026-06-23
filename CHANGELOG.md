@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added legacy PPO snapshot parity checks (#3469):
+  [`scripts/validation/check_legacy_ppo_snapshot_parity.py`](scripts/validation/check_legacy_ppo_snapshot_parity.py)
+  inventories supported BR-06 PPO registry checkpoints, verifies durable GitHub-release pointers,
+  explicitly classifies root-local debug `.zip` snapshots as unsupported for durable compatibility,
+  and provides an opt-in hydrated-checkpoint one-step Gymnasium smoke path. Focused tests cover the
+  inventory, fail-closed durable-pointer checks, unsupported local snapshots, JSON CLI output, and a
+  mocked model/factory step smoke (#3469).
 * Added a lightweight PR body-contract workflow (#3472):
   [`.github/workflows/pr-body-contracts.yml`](.github/workflows/pr-body-contracts.yml)
   now validates live pull-request bodies with

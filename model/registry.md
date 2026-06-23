@@ -162,6 +162,32 @@ Deprecated legacy entries kept for traceability:
 - `ppo_expert_br06_v2_15m_all_maps_20260302T152332` (killed early, deprecated)
 - `ppo_expert_br06_v2_15m_all_maps_20260303T074433`
 
+### Legacy PPO Snapshot Compatibility
+
+The following legacy PPO checkpoints remain supported through the durable model registry and are
+covered by `scripts/validation/check_legacy_ppo_snapshot_parity.py`:
+
+- `ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200`
+- `ppo_expert_br06_v2_15m_all_maps_20260302T152332`
+- `ppo_expert_br06_v2_15m_all_maps_20260303T074433`
+
+Each supported row must keep a GitHub release pointer with `asset_name`, `sha256`, and
+`size_bytes`. The validation script's default inventory mode is cheap and does not download
+checkpoints. When a checkpoint is already hydrated, or when download cost is explicitly acceptable,
+run the opt-in one-step smoke with:
+
+```bash
+uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py \
+  --smoke-model-id ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200 \
+  --allow-download
+```
+
+Root-local debug checkpoints such as `model/run_023.zip`, `model/run_043.zip`,
+`model/ppo_model_retrained_10m_2024-09-17.zip`, and
+`model/ppo_model_retrained_10m_2025-02-01.zip` are explicitly unsupported for durable compatibility
+because they lack registry provenance and release checksums. They may remain useful for local
+debugging, but benchmark or regression workflows should use a registry `model_id`.
+
 ## Predictive Planner Models
 
 Current predictive planner model ids in `model/registry.yaml` include:

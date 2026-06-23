@@ -63,7 +63,9 @@ In token-efficient mode:
   from this thread, stop treating the old ledger next action as active work.
   Preserve its exact resumption point, create a fresh docs-or-workflow worktree
   from `origin/main`, and limit the new PR to reusable guidance proven by the
-  observed thread failures or token leaks.
+  observed thread failures or token leaks. Use
+  `docs/templates/token_efficient_thread_profile.md#meta-workflow-instruction-pull-request-gate`
+  as the acceptance gate for these PRs.
 - On continuation or after context compaction, rebuild state from the active
   ledger and compact PR/issue/worktree snapshots first. Reopen full skills,
   docs, raw CI output, or broad GitHub/worktree inventories only when the
@@ -321,6 +323,11 @@ Use `compact_worktree_snapshot.py` before expensive commands to detect fresh wor
 bootstrap. Prefer `--filter <issue-or-branch-slug>` so large worktree fleets do not re-enter the
 parent thread. The `is_fresh` and `bootstrap_required` fields indicate whether `local.machine.md`
 symlink and `uv sync` steps are needed.
+In repositories with a known large worktree fleet, do not run raw
+`git worktree list --porcelain` as the first inventory command. Use
+`scripts/dev/worktree_hygiene_snapshot.py --repo-status --filter <branch-or-path> --json` or
+`compact_worktree_snapshot.py --filter <slug> --json`; if raw porcelain output is truly needed,
+redirect it to a common-Git-dir artifact and report only the relevant rows.
 
 Use `compact_ci_snapshot.py` for token-efficient PR CI monitoring. The optional `--include-drift`
 flag adds recent successful run timings to recommend an updated wait budget after timeout. Pass
@@ -381,6 +388,8 @@ Track only the fields needed to resume safely in under one minute:
 - workers: current worker run IDs, worker artifact paths, artifact status, and accepted/rejected
   evidence tier;
 - cleanup: app-agent or worker close status, claim release status, worktree/artifact decision;
+- instruction PRs: token leaks addressed, acceptance criteria chosen, instruction files edited,
+  docs-only or skill validation command, and parked prior-goal state;
 - stale-state triggers: missing or mismatched claim refs, issue/PR state changes, branch/head SHA
   drift, expected PR head SHA drift, stale origin/main, CI rerun/retry, failed validation,
   interrupted worker, missing compact artifacts, or elapsed freshness window.

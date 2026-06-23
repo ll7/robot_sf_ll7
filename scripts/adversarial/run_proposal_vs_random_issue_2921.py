@@ -17,6 +17,14 @@ CLAIM_BOUNDARY = (
     "evidence, or evidence that learned proposals improve failure discovery."
 )
 
+HELD_OUT_DIAGNOSTIC_BOUNDARY = (
+    "held_out_diagnostic_only: proposal-vs-random deltas use externally supplied independent "
+    "planner-execution outcomes plus candidate certification and null-test checks. This is "
+    "diagnostic evidence for issue #3275 only; it is not benchmark evidence, paper evidence, or "
+    "a planner-performance claim without the durable execution artifacts named by the outcome "
+    "payload."
+)
+
 
 def create_synthetic_search_space() -> Any:
     """Create a default synthetic search space config for diagnostics."""
@@ -167,6 +175,7 @@ def build_archive_evaluation_provenance(
     state: str,
     synthetic_archive: bool,
     split_seed: int,
+    independent_evaluation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build archive-evaluation provenance for the comparison report.
 
@@ -181,9 +190,10 @@ def build_archive_evaluation_provenance(
     Returns:
         A JSON-safe provenance dict.
     """
+    independent_evaluation = independent_evaluation or {}
     provenance: dict[str, Any] = {
         "archive_sha256": _payload_sha256(archive_data),
-        "evaluation_outcome_sha256": None,
+        "evaluation_outcome_sha256": independent_evaluation.get("payload_sha256"),
         "split_policy": "none_plumbing_fixture",
         "scenario_family_overlap": "not_checked",
         "seed_overlap": "not_checked",
@@ -208,12 +218,16 @@ def build_archive_evaluation_provenance(
     provenance.update(overlap)
     provenance["fit_archive_sha256"] = archive_sha256(split.fit_entries)
     provenance["eval_archive_sha256"] = archive_sha256(split.eval_entries)
-    provenance["independent_outcome_evaluation"] = "not_available_requires_planner_execution"
+    provenance["independent_outcome_evaluation"] = independent_evaluation.get(
+        "status", "not_available_requires_planner_execution"
+    )
     provenance["held_out_evidence_status"] = classify_held_out_evidence(
         disjointness_checks_passed=overlap["disjointness_checks_passed"],
-        independent_outcomes_available=False,
-        certification_available=False,
-        null_tests_reject_null=False,
+        independent_outcomes_available=bool(
+            independent_evaluation.get("independent_outcomes_available")
+        ),
+        certification_available=bool(independent_evaluation.get("certification_available")),
+        null_tests_reject_null=bool(independent_evaluation.get("null_tests_reject_null")),
     )
     return provenance
 
@@ -263,9 +277,26 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Path to write the comparison JSON report.",
     )
+    parser.add_argument(
+        "--evaluation-outcomes",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON payload with independent planner-execution outcomes. "
+            "Absent payload keeps held-out evidence fail-closed."
+        ),
+    )
+    parser.add_argument(
+        "--null-test-permutations",
+        type=int,
+        default=1000,
+        help="Number of permutations for independent-outcome null tests.",
+    )
     args = parser.parse_args()
     if args.budget < 0:
         parser.error("--budget must be >= 0")
+    if args.null_test_permutations < 1:
+        parser.error("--null-test-permutations must be >= 1")
     return args
 
 
@@ -277,12 +308,22 @@ def main() -> int:
         load_search_space(args.search_space)
     )
     archive_state, archive_reason, archive_data, synthetic_archive = load_archive(args.archive)
+    from robot_sf.adversarial.independent_outcomes import (
+        build_independent_outcome_evaluation,
+        load_independent_outcomes,
+    )
+
+    outcome_state, outcome_reason, outcome_data = load_independent_outcomes(
+        args.evaluation_outcomes
+    )
     state = archive_state
-    reason_parts = [archive_reason, search_space_reason]
+    reason_parts = [archive_reason, search_space_reason, outcome_reason]
     if not synthetic_archive and synthetic_search_space:
         state = "blocked"
         reason_parts.append("Real-archive runs require a real search-space config.")
     if search_space_state == "blocked" and state == "active":
+        state = "blocked"
+    if outcome_state == "blocked":
         state = "blocked"
     reason = " ".join(reason_parts)
 
@@ -336,14 +377,32 @@ def main() -> int:
         synthetic_archive=synthetic_archive,
         split_seed=args.seed,
     )
+    independent_evaluation = build_independent_outcome_evaluation(
+        outcome_data,
+        budget=args.budget,
+        n_permutations=args.null_test_permutations,
+        seed=args.seed,
+        expected_eval_archive_sha256=provenance.get("eval_archive_sha256"),
+    )
+    provenance = build_archive_evaluation_provenance(
+        archive_data,
+        state=state,
+        synthetic_archive=synthetic_archive,
+        split_seed=args.seed,
+        independent_evaluation=independent_evaluation,
+    )
+    held_out_status = provenance.get("held_out_evidence_status")
+    held_out_evidence = held_out_status == "eligible_held_out_diagnostic"
 
     report = {
         "schema_version": "adversarial_proposal_comparison.v1",
         "state": state,
         "reason": reason,
-        "claim_boundary": CLAIM_BOUNDARY,
-        "result_classification": "plumbing_validation_only",
-        "held_out_evidence": False,
+        "claim_boundary": HELD_OUT_DIAGNOSTIC_BOUNDARY if held_out_evidence else CLAIM_BOUNDARY,
+        "result_classification": (
+            "held_out_diagnostic_only" if held_out_evidence else "plumbing_validation_only"
+        ),
+        "held_out_evidence": held_out_evidence,
         "benchmark_evidence": False,
         "planner_performance_claim": False,
         "synthetic_archive": synthetic_archive,
@@ -354,7 +413,11 @@ def main() -> int:
         "random_metrics": random_metrics,
         "proposal_metrics": proposal_metrics,
         "comparison": {
-            "interpretation": "plumbing_only_circular_archive_nearness_objective",
+            "interpretation": (
+                "independent_planner_execution_outcomes"
+                if held_out_evidence
+                else "plumbing_only_circular_archive_nearness_objective"
+            ),
             "mean_objective_improvement": round(
                 proposal_metrics["mean_objective"] - random_metrics["mean_objective"], 4
             ),
@@ -366,11 +429,15 @@ def main() -> int:
             ),
         },
         "archive_evaluation_provenance": provenance,
-        "null_tests": {
-            "shuffled_archive_outcomes": "not_run_requires_real_certified_archive",
-            "proposal_ranking_permutation": "not_run_requires_real_certified_archive",
-            "required_for_held_out_claim": True,
-        },
+        "independent_outcome_evaluation": independent_evaluation,
+        "null_tests": independent_evaluation.get(
+            "null_tests",
+            {
+                "shuffled_archive_outcomes": "not_run_requires_real_certified_archive",
+                "proposal_ranking_permutation": "not_run_requires_real_certified_archive",
+                "required_for_held_out_claim": True,
+            },
+        ),
     }
 
     report_str = json.dumps(report, indent=2, sort_keys=True)

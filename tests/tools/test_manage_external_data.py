@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -19,6 +20,15 @@ def _init_git_repo(path: Path, *, gitignore: str = "") -> None:
     subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
     if gitignore:
         (path / ".gitignore").write_text(gitignore, encoding="utf-8")
+
+
+def _write_sdd_fixture(path: Path) -> None:
+    """Create a minimal SDD annotation fixture."""
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "annotations.txt").write_text(
+        "1 0 0 10 10 0 0 0 0 Pedestrian\n",
+        encoding="utf-8",
+    )
 
 
 def test_registry_covers_initial_required_asset_groups() -> None:
@@ -39,6 +49,101 @@ def test_missing_license_gated_asset_fails_closed(tmp_path: Path) -> None:
     assert report["status"] == "missing"
     assert report["auto_download_allowed"] is False
     assert "official acquisition" in report["action"]
+
+
+def test_unset_external_data_root_preserves_repo_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without the shared-root env var, asset paths remain repo-local."""
+    monkeypatch.delenv(manage_external_data.EXTERNAL_DATA_ROOT_ENV, raising=False)
+    asset = manage_external_data._get_asset("sdd")
+
+    assert manage_external_data.external_data_root() is None
+    assert manage_external_data.resolve_asset_local_path(asset) == asset.expected_local_path
+
+
+def test_external_data_root_overrides_asset_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shared data root should replace repo-local default paths for all registered assets."""
+    shared_root = tmp_path / "robot_sf_external_data"
+    monkeypatch.setenv(manage_external_data.EXTERNAL_DATA_ROOT_ENV, str(shared_root))
+
+    assert manage_external_data.resolve_asset_local_path_by_id("sdd") == shared_root / "sdd"
+    assert (
+        manage_external_data.resolve_asset_local_path_by_id("socnavbench-control")
+        == shared_root / "socnavbench"
+    )
+    assert (
+        manage_external_data.resolve_asset_local_path_by_id("socnavbench-s3dis-eth")
+        == shared_root / "socnavbench"
+    )
+    assert (
+        manage_external_data.resolve_asset_local_path_by_id("amv-calibration")
+        == shared_root / "amv_calibration"
+    )
+
+
+def test_check_uses_external_data_root_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default checks should validate the shared-root copy when configured."""
+    shared_root = tmp_path / "robot_sf_external_data"
+    _write_sdd_fixture(shared_root / "sdd")
+    monkeypatch.setenv(manage_external_data.EXTERNAL_DATA_ROOT_ENV, str(shared_root))
+
+    report = manage_external_data.check_asset("sdd")
+
+    assert report["ok"] is True
+    assert report["source_path"] == str((shared_root / "sdd").resolve())
+    assert report["expected_local_path"] == str(shared_root.resolve() / "sdd")
+    assert report["default_local_path"].endswith("output/external_data/sdd")
+    assert report["external_data_root"] == str(shared_root.resolve())
+
+
+def test_stage_defaults_to_external_data_root_when_source_omitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stage subcommand path should be worktree-portable without per-worktree symlinks."""
+    shared_root = tmp_path / "robot_sf_external_data"
+    _write_sdd_fixture(shared_root / "sdd")
+    manifest_path = tmp_path / "sdd.provenance.json"
+    monkeypatch.setenv(manage_external_data.EXTERNAL_DATA_ROOT_ENV, str(shared_root))
+
+    manifest = manage_external_data.stage_asset("sdd", manifest_out=manifest_path)
+
+    assert manifest_path.is_file()
+    assert manifest["local_path"] == str((shared_root / "sdd").resolve())
+    assert manifest["validation_command"].endswith(
+        f"check sdd --source {(shared_root / 'sdd').resolve()}"
+    )
+
+
+def test_cli_list_and_check_report_external_data_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CLI JSON output should expose the shared-root path for routing/debugging."""
+    shared_root = tmp_path / "robot_sf_external_data"
+    _write_sdd_fixture(shared_root / "sdd")
+    monkeypatch.setenv(manage_external_data.EXTERNAL_DATA_ROOT_ENV, str(shared_root))
+
+    list_result = subprocess.run(
+        [sys.executable, "scripts/tools/manage_external_data.py", "--json", "list"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    list_payload = json.loads(list_result.stdout)
+    sdd_entry = next(entry for entry in list_payload if entry["asset_id"] == "sdd")
+    assert sdd_entry["expected_local_path"] == str(shared_root.resolve() / "sdd")
+
+    check_result = subprocess.run(
+        [sys.executable, "scripts/tools/manage_external_data.py", "--json", "check", "sdd"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    check_payload = json.loads(check_result.stdout)
+    assert check_payload["ok"] is True
+    assert check_payload["source_path"] == str((shared_root / "sdd").resolve())
 
 
 def test_download_for_gated_asset_is_rejected() -> None:

@@ -12,6 +12,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST_DIR = REPO_ROOT / "output" / "external_data" / "manifests"
+EXTERNAL_DATA_ROOT_ENV = "ROBOT_SF_EXTERNAL_DATA_ROOT"
 
 # Canonical SDD staging manifest. This is the single editable provenance contract for the SDD
 # asset (issues #2657, #3473): maintainers pin `expected_tree_sha256` and tune the disk-check size
@@ -57,6 +59,7 @@ class AssetSpec:
     asset_id: str
     title: str
     expected_local_path: Path
+    shared_root_subpath: Path
     source_url: str
     source_note: str
     license_note: str
@@ -77,6 +80,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         asset_id="sdd",
         title="Stanford Drone Dataset annotations",
         expected_local_path=REPO_ROOT / "output" / "external_data" / "sdd",
+        shared_root_subpath=Path("sdd"),
         source_url="https://cvgl.stanford.edu/projects/uav_data/",
         source_note=(
             "Official Stanford Drone Dataset project page. Stage only files obtained under the "
@@ -106,6 +110,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         asset_id="socnavbench-s3dis-eth",
         title="SocNavBench/S3DIS ETH traversible assets",
         expected_local_path=REPO_ROOT / "third_party" / "socnavbench",
+        shared_root_subpath=Path("socnavbench"),
         source_url="https://github.com/CMU-TBD/SocNavBench",
         source_note=(
             "SocNavBench code and install docs point to the official curated asset package; "
@@ -137,6 +142,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         asset_id="socnavbench-control",
         title="SocNavBench control-pipeline assets",
         expected_local_path=REPO_ROOT / "third_party" / "socnavbench",
+        shared_root_subpath=Path("socnavbench"),
         source_url="https://github.com/CMU-TBD/SocNavBench",
         source_note=(
             "SocNavBench wayptnav_data assets used by the control/waypoint navigation pipeline."
@@ -162,6 +168,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         asset_id="amv-calibration",
         title="AMV calibration source provenance",
         expected_local_path=REPO_ROOT / "output" / "external_data" / "amv_calibration",
+        shared_root_subpath=Path("amv_calibration"),
         source_url="https://github.com/ll7/robot_sf_ll7/issues/1585",
         source_note=(
             "Local-only accepted source bundle for AMV actuation calibration provenance. "
@@ -212,6 +219,27 @@ ASSETS: tuple[AssetSpec, ...] = (
         related_issues=(1585, 1559),
     ),
 )
+
+
+def external_data_root() -> Path | None:
+    """Return the configured shared external-data root, when one is set."""
+    raw_root = os.environ.get(EXTERNAL_DATA_ROOT_ENV)
+    if raw_root is None or not raw_root.strip():
+        return None
+    return Path(raw_root).expanduser().resolve()
+
+
+def resolve_asset_local_path(asset: AssetSpec) -> Path:
+    """Return the effective local path for an asset, honoring the shared-data root."""
+    root = external_data_root()
+    if root is None:
+        return asset.expected_local_path
+    return root / asset.shared_root_subpath
+
+
+def resolve_asset_local_path_by_id(asset_id: str) -> Path:
+    """Return the effective local path for a supported asset id."""
+    return resolve_asset_local_path(_get_asset(asset_id))
 
 
 def list_assets() -> tuple[AssetSpec, ...]:
@@ -316,12 +344,16 @@ def _tree_checksum(source_root: Path, matched_paths: list[Path]) -> dict[str, An
 def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, Any]:
     """Validate the local path for one external asset."""
     asset = _get_asset(asset_id)
-    root = (source_path or asset.expected_local_path).expanduser().resolve()
+    expected_local_path = resolve_asset_local_path(asset)
+    root = (source_path or expected_local_path).expanduser().resolve()
     report: dict[str, Any] = {
         "asset_id": asset.asset_id,
         "title": asset.title,
         "source_path": str(root),
-        "expected_local_path": str(asset.expected_local_path),
+        "expected_local_path": str(expected_local_path),
+        "default_local_path": str(asset.expected_local_path),
+        "external_data_root_env": EXTERNAL_DATA_ROOT_ENV,
+        "external_data_root": str(external_data_root()) if external_data_root() else None,
         "source_url": asset.source_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,
@@ -408,13 +440,13 @@ def _ensure_repo_local_raw_paths_ignored(
 def stage_asset(
     asset_id: str,
     *,
-    source_path: Path,
+    source_path: Path | None = None,
     manifest_out: Path | None = None,
     repo_root: Path = REPO_ROOT,
 ) -> dict[str, Any]:
     """Validate source_path and write a compact provenance manifest."""
     asset = _get_asset(asset_id)
-    source_root = source_path.expanduser().resolve()
+    source_root = (source_path or resolve_asset_local_path(asset)).expanduser().resolve()
     report = check_asset(asset_id, source_path=source_root)
     if not report["ok"]:
         raise ExternalDataError(f"Cannot stage {asset_id}: {report['action']}")
@@ -523,11 +555,18 @@ def _resolve_sdd_staging_dir(staging_dir_raw: str, *, manifest_path: Path) -> Pa
         raise ExternalDataError("Manifest staging_dir must not contain path traversal (`..`).")
 
     unresolved = staging_dir if staging_dir.is_absolute() else REPO_ROOT / staging_dir
+    if not staging_dir.is_absolute() and external_data_root() is not None:
+        sdd_asset = _get_asset("sdd")
+        repo_default = sdd_asset.expected_local_path.relative_to(REPO_ROOT)
+        if staging_dir == repo_default:
+            unresolved = external_data_root() / sdd_asset.shared_root_subpath
     if unresolved.is_symlink():
         raise ExternalDataError(f"Manifest staging_dir must not be a symlink: {unresolved}")
 
     resolved = unresolved.resolve(strict=False)
-    allowed_roots = (DEFAULT_STAGING_ROOT, manifest_path.resolve(strict=False).parent)
+    allowed_roots = [DEFAULT_STAGING_ROOT, manifest_path.resolve(strict=False).parent]
+    if external_data_root() is not None:
+        allowed_roots.append(external_data_root())
     if not any(resolved == root or resolved.is_relative_to(root) for root in allowed_roots):
         allowed = ", ".join(str(root) for root in allowed_roots)
         raise ExternalDataError(
@@ -979,10 +1018,14 @@ def _print_json(payload: Any) -> None:
 
 def _asset_summary(asset: AssetSpec, *, include_status: bool) -> dict[str, Any]:
     """Return one list/explain payload."""
+    expected_local_path = resolve_asset_local_path(asset)
     payload: dict[str, Any] = {
         "asset_id": asset.asset_id,
         "title": asset.title,
-        "expected_local_path": str(asset.expected_local_path),
+        "expected_local_path": str(expected_local_path),
+        "default_local_path": str(asset.expected_local_path),
+        "external_data_root_env": EXTERNAL_DATA_ROOT_ENV,
+        "external_data_root": str(external_data_root()) if external_data_root() else None,
         "source_url": asset.source_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,
@@ -1029,7 +1072,14 @@ def parse_args() -> argparse.Namespace:
 
     stage_parser = subparsers.add_parser("stage", help="Validate a local path and write manifest.")
     stage_parser.add_argument("asset_id")
-    stage_parser.add_argument("--source", type=Path, required=True)
+    stage_parser.add_argument(
+        "--source",
+        type=Path,
+        help=(
+            "Override local source path. Defaults to the resolved asset path, including "
+            f"{EXTERNAL_DATA_ROOT_ENV} when set."
+        ),
+    )
     stage_parser.add_argument("--manifest-out", type=Path)
 
     download_parser = subparsers.add_parser(

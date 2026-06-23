@@ -35,7 +35,9 @@ citation: >-
   Trajectory Understanding in Crowded Scenes." ECCV 2016.
 
 # --- Staging location (git-ignored) ----------------------------------------------------------
-# Path is repo-relative. `output/` is git-ignored, so raw SDD data never enters version control.
+# Path is repo-relative unless ROBOT_SF_EXTERNAL_DATA_ROOT is set; then the canonical staging tool
+# resolves this default to $ROBOT_SF_EXTERNAL_DATA_ROOT/sdd. `output/` is git-ignored, so raw SDD
+# data never enters version control in the default layout.
 staging_dir: output/external_data/sdd
 download_url: null  # No repository-approved direct download URL is encoded; see access_note.
 access_note: >-

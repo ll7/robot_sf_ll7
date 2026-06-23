@@ -1993,6 +1993,27 @@ def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
         assert _resolved_seed_inventory(_load_campaign_scenarios(cfg)) == expected_seeds
 
 
+def test_issue_1554_h500_s20_config_preserves_h500_matrix_contract() -> None:
+    """Issue #1554 S20 config should change only the h500 seed schedule."""
+    base_cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml")
+    )
+    s20_cfg = load_campaign_config(
+        Path("configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml")
+    )
+
+    assert s20_cfg.paper_facing is True
+    assert s20_cfg.paper_profile_version == base_cfg.paper_profile_version == "paper-matrix-v1"
+    assert s20_cfg.scenario_matrix_path == base_cfg.scenario_matrix_path
+    assert s20_cfg.scenario_horizons_path == base_cfg.scenario_horizons_path
+    assert s20_cfg.comparability_mapping_path == base_cfg.comparability_mapping_path
+    assert s20_cfg.kinematics_matrix == base_cfg.kinematics_matrix == ("differential_drive",)
+    assert s20_cfg.seed_policy.mode == "seed-set"
+    assert s20_cfg.seed_policy.seed_set == "paper_eval_s20"
+    assert s20_cfg.planners == base_cfg.planners
+    assert _resolved_seed_inventory(_load_campaign_scenarios(s20_cfg)) == list(range(111, 131))
+
+
 def test_issue_821_extended_matrix_is_evidence_only_until_release_doi_exists() -> None:
     """Issue 821 matrix should not export bundles while its DOI is a placeholder."""
     cfg = load_campaign_config(

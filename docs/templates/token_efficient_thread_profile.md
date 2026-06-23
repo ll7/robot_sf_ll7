@@ -51,6 +51,9 @@ changes.
 - `route_cache` keeps quota and invocation facts close to the active work:
   Spark usage-limit resets, failed helper flags, the exact bounded CI monitor
   command, and the current fallback worker. Reuse it before retrying a route.
+  If a Codex app subagent spawn fails because the model quota is exhausted,
+  record the reset time immediately, close the handle when possible, and do not
+  retry that model during the same phase.
 - `delegation_artifacts` are route evidence, not task acceptance. Codex still
   inspects the diff, verifies changed files, and runs the selected validation.
 - `output_budget` should return the result, changed files, validation status,
@@ -90,6 +93,9 @@ workflow only when the savings are reusable.
   `uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --filter <branch> --json`
   for branch cleanup, and raw `git worktree list --porcelain` only when the
   helper reports a stale entry or missing detail.
+- For Slurm work, prove the owning worktree exists on the submit host before
+  submitting. A local worktree preflight is not enough when the private submit
+  wrapper reaches the cluster through SSH.
 - Keep CI and validation loops bounded in the parent thread. Store full output
   in compact-validation artifacts and report only command, exit code, failing
   node IDs, artifact paths, and the next action.

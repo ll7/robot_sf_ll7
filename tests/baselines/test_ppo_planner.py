@@ -86,6 +86,40 @@ def test_build_model_obs_dict_reshapes_to_model_space():
     assert converted["occupancy_grid"].dtype == np.float32
 
 
+def test_build_model_obs_dict_flattens_structured_socnav_observation() -> None:
+    """PPO dict mode should align structured SocNav observations to flat SB3 keys."""
+    planner = PPOPlanner(_planner_config(obs_mode="dict"))
+    planner._model = SimpleNamespace(
+        observation_space=SimpleNamespace(
+            spaces={
+                "robot_position": SimpleNamespace(shape=(2,), dtype=np.float32),
+                "robot_speed": SimpleNamespace(shape=(2,), dtype=np.float32),
+                "goal_current": SimpleNamespace(shape=(2,), dtype=np.float32),
+                "pedestrians_positions": SimpleNamespace(shape=(1, 2), dtype=np.float32),
+                "sim_timestep": SimpleNamespace(shape=(1,), dtype=np.float32),
+            },
+        ),
+    )
+
+    converted = planner._build_model_obs_dict(
+        {
+            "robot": {
+                "position": np.array([1.0, 2.0], dtype=np.float32),
+                "velocity_xy": np.array([0.3, 0.4], dtype=np.float32),
+            },
+            "goal": {"current": np.array([5.0, 6.0], dtype=np.float32)},
+            "pedestrians": {"positions": np.array([[2.0, 3.0]], dtype=np.float32)},
+            "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+        }
+    )
+
+    assert converted["robot_position"].tolist() == pytest.approx([1.0, 2.0])
+    assert converted["robot_speed"].tolist() == pytest.approx([0.3, 0.4])
+    assert converted["goal_current"].tolist() == pytest.approx([5.0, 6.0])
+    assert converted["pedestrians_positions"].shape == (1, 2)
+    assert converted["sim_timestep"].tolist() == pytest.approx([0.1])
+
+
 def test_step_dict_mode_flattens_runtime_dict_for_box_checkpoint() -> None:
     """BC checkpoints trained with FlattenObservation should receive flat Box inputs."""
     planner = PPOPlanner(_planner_config(obs_mode="dict", action_space="unicycle"))

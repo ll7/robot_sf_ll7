@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the AMMV contrastive mechanism panel (partial #2227, AMV sub-target):
+  [`scripts/analysis/build_ammv_mechanism_panel_issue_2227.py`](scripts/analysis/build_ammv_mechanism_panel_issue_2227.py)
+  runs `SocialForcePlanner` twice on one fixed scenario (seed 42) toggling only `ammv_aware_enabled`
+  in `configs/baselines/social_force_ammv_aware.yaml`, exports both arms as schema-validated
+  `simulation_trace_export.v1` traces, and renders contrastive trajectory panels via
+  `generate_trajectory_panel_bundle`. Applies #2444's finding (PR #3451) that the AMMV term is a
+  genuine same-seed divergent pair: AMMV-off max force 0.0 vs AMMV-on 2.64, final-position
+  divergence 0.58 m. Evidence is `diagnostic_only`/`stress`, not paper-grade — a planner-level
+  mechanism difference, not a navigation-success or benchmark claim. Tracked panels + captions +
+  provenance under `docs/context/evidence/issue_2227_ammv_mechanism_panel_2026-06-23/`. The
+  static-recentering and topology-guided-recovery panel sub-targets of #2227 remain follow-up
+  (Refs #2227).
+
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
   language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)

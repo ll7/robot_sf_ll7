@@ -53,6 +53,7 @@ else:
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
+from robot_sf.benchmark.event_ledger import validate_record_event_ledger
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
 from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.map_runner import run_map_batch
@@ -1398,6 +1399,7 @@ def validate_and_write(
     """Validate an episode record against schema and append to JSONL."""
     schema = load_schema(schema_path)
     violations = validate_episode_success_integrity(record)
+    violations.extend(validate_record_event_ledger(record))
     if violations:
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(record, schema)
@@ -1466,6 +1468,7 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
 def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[str, Any]) -> None:
     """Validate a record against schema and append to JSONL."""
     violations = validate_episode_success_integrity(rec)
+    violations.extend(validate_record_event_ledger(rec))
     if violations:
         raise ValueError("Episode integrity contradictions detected: " + "; ".join(violations))
     validate_episode(rec, schema)

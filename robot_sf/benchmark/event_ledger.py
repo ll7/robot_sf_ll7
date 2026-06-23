@@ -1,0 +1,261 @@
+"""Canonical per-episode safety-event ledger helpers."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+EPISODE_EVENT_LEDGER_SCHEMA_VERSION = "EpisodeEventLedger.v1"
+
+
+@dataclass(frozen=True, slots=True)
+class ExactEvents:
+    """Exact simulator outcome events for one episode."""
+
+    collision: bool
+    goal_reached: bool
+    timeout: bool
+    invalid_run: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SurrogateEvents:
+    """Derived diagnostic safety events for one episode."""
+
+    near_miss: bool = False
+    clearance_breach: bool = False
+    ttc_breach: bool = False
+    oscillation: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeEventLedger:
+    """Versioned source-of-truth event block for benchmark episode records."""
+
+    schema_version: str
+    scenario_id: str
+    seed: int
+    planner: str
+    software_commit: str | None
+    exact_events: ExactEvents
+    surrogate_events: SurrogateEvents = field(default_factory=SurrogateEvents)
+    metric_definitions: dict[str, dict[str, str]] = field(default_factory=dict)
+    reconciliation: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable ledger payload."""
+        return asdict(self)
+
+
+def _bool_at(payload: Mapping[str, Any], key: str, *, default: bool = False) -> bool:
+    """Read a boolean-like field from a mapping.
+
+    Returns:
+        Parsed boolean value, or ``default`` when the key is absent or unrecognized.
+    """
+    if key not in payload:
+        return default
+    value = payload.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off", ""}:
+            return False
+    return default
+
+
+def _safe_int(value: Any, *, default: int = 0) -> int:
+    """Return an integer value when available.
+
+    Returns:
+        Parsed integer, or ``default`` when parsing fails.
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _finite_float(value: Any) -> float | None:
+    """Return a finite float value when available."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _metric_value(metrics: Mapping[str, Any], *keys: str) -> tuple[float | None, str | None]:
+    """Return the first finite metric value and source path."""
+    for key in keys:
+        if key not in metrics:
+            continue
+        value = _finite_float(metrics.get(key))
+        if value is not None:
+            return value, f"metrics.{key}"
+    return None, None
+
+
+def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Build an ``EpisodeEventLedger.v1`` payload from an episode record.
+
+    Returns:
+        JSON-serializable ledger payload.
+    """
+    metrics = record.get("metrics")
+    metrics = metrics if isinstance(metrics, Mapping) else {}
+    outcome = record.get("outcome")
+    outcome = outcome if isinstance(outcome, Mapping) else {}
+    termination_reason = str(record.get("termination_reason") or "")
+
+    collision_value, collision_source = _metric_value(
+        metrics,
+        "total_collision_count",
+        "collisions",
+        "collision_count",
+        "collision_rate",
+    )
+    near_miss_value, near_miss_source = _metric_value(metrics, "near_misses", "near_miss_count")
+    min_clearance, min_clearance_source = _metric_value(metrics, "min_clearance", "min_distance")
+    ttc_value, ttc_source = _metric_value(metrics, "ttc_breach_count", "ttc_violations")
+    oscillation_value, oscillation_source = _metric_value(
+        metrics,
+        "oscillation_count",
+        "heading_rate_sign_changes",
+    )
+
+    metric_definitions = {
+        "collision_count": {
+            "kind": "exact_or_sampled",
+            "source": collision_source or "missing",
+        },
+        "near_miss": {
+            "kind": "derived",
+            "source": near_miss_source or "missing",
+        },
+        "clearance_breach": {
+            "kind": "derived",
+            "source": min_clearance_source or "missing",
+        },
+        "ttc_breach": {
+            "kind": "derived",
+            "source": ttc_source or "missing",
+        },
+        "oscillation": {
+            "kind": "derived",
+            "source": oscillation_source or "missing",
+        },
+    }
+    exact = ExactEvents(
+        collision=_bool_at(outcome, "collision_event") or termination_reason == "collision",
+        goal_reached=_bool_at(outcome, "route_complete") or termination_reason == "success",
+        timeout=_bool_at(outcome, "timeout_event")
+        or termination_reason in {"max_steps", "truncated"},
+        invalid_run=termination_reason == "error" or record.get("status") in {"error", "invalid"},
+    )
+    surrogate = SurrogateEvents(
+        near_miss=near_miss_value is not None and near_miss_value > 0.0,
+        clearance_breach=min_clearance is not None and min_clearance <= 0.0,
+        ttc_breach=ttc_value is not None and ttc_value > 0.0,
+        oscillation=oscillation_value is not None and oscillation_value > 0.0,
+    )
+    reconciliation = {
+        "collision_metric_value": collision_value,
+        "collision_metric_source": collision_source,
+        "audit_result": "unchecked",
+    }
+    ledger = EpisodeEventLedger(
+        schema_version=EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
+        scenario_id=str(record.get("scenario_id") or "unknown"),
+        seed=_safe_int(record.get("seed"), default=0),
+        planner=str(record.get("algo") or record.get("planner") or "unknown"),
+        software_commit=(
+            str(record.get("git_hash")) if record.get("git_hash") is not None else None
+        ),
+        exact_events=exact,
+        surrogate_events=surrogate,
+        metric_definitions=metric_definitions,
+        reconciliation=reconciliation,
+        provenance={"source": "episode_record"},
+    )
+    payload = ledger.to_dict()
+    payload["reconciliation"]["audit_result"] = (
+        "pass" if not reconcile_event_ledger(payload) else "fail"
+    )
+    return payload
+
+
+def ensure_event_ledger(record: dict[str, Any]) -> dict[str, Any]:
+    """Attach a canonical event ledger to an episode record when missing.
+
+    Returns:
+        The existing or newly attached event ledger payload.
+    """
+    ledger = record.get("event_ledger")
+    if (
+        not isinstance(ledger, dict)
+        or ledger.get("schema_version") != EPISODE_EVENT_LEDGER_SCHEMA_VERSION
+    ):
+        record["event_ledger"] = build_event_ledger(record)
+    return record["event_ledger"]
+
+
+def reconcile_event_ledger(ledger: Mapping[str, Any]) -> list[str]:
+    """Return reconciliation violations for one event ledger."""
+    violations: list[str] = []
+    exact = ledger.get("exact_events")
+    exact = exact if isinstance(exact, Mapping) else {}
+    reconciliation = ledger.get("reconciliation")
+    reconciliation = reconciliation if isinstance(reconciliation, Mapping) else {}
+    metric_definitions = ledger.get("metric_definitions")
+    metric_definitions = metric_definitions if isinstance(metric_definitions, Mapping) else {}
+
+    collision_metric = _finite_float(reconciliation.get("collision_metric_value"))
+    if bool(exact.get("collision")) and (collision_metric is None or collision_metric <= 0.0):
+        violations.append("exact collision event requires collision metric > 0")
+    if bool(exact.get("goal_reached")) and bool(exact.get("invalid_run")):
+        violations.append("goal_reached and invalid_run are mutually exclusive")
+    missing_definitions = [
+        name
+        for name in (
+            "collision_count",
+            "near_miss",
+            "clearance_breach",
+            "ttc_breach",
+            "oscillation",
+        )
+        if not isinstance(metric_definitions.get(name), Mapping)
+        or not metric_definitions[name].get("kind")
+    ]
+    if missing_definitions:
+        violations.append("missing metric definitions: " + ", ".join(missing_definitions))
+    return violations
+
+
+def validate_record_event_ledger(record: dict[str, Any]) -> list[str]:
+    """Ensure and reconcile the event ledger on one episode record.
+
+    Returns:
+        Reconciliation violation messages, if any.
+    """
+    return reconcile_event_ledger(ensure_event_ledger(record))
+
+
+__all__ = [
+    "EPISODE_EVENT_LEDGER_SCHEMA_VERSION",
+    "EpisodeEventLedger",
+    "ExactEvents",
+    "SurrogateEvents",
+    "build_event_ledger",
+    "ensure_event_ledger",
+    "reconcile_event_ledger",
+    "validate_record_event_ledger",
+]

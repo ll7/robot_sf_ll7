@@ -36,6 +36,11 @@ def _scenario_with_rollover_stability(config: dict) -> SimpleNamespace:
     return SimpleNamespace(raw={"metadata": {"rollover_stability": config}}, map_path="")
 
 
+def _scenario_with_clear_tracking(config: dict) -> SimpleNamespace:
+    """Return a minimal scenario descriptor with CLEAR tracking instrumentation metadata."""
+    return SimpleNamespace(raw={"metadata": {"clear_tracking_uncertainty": config}}, map_path="")
+
+
 def _rollover_episode(*, steps: int = 4) -> EpisodeData:
     """Return a minimal no-pedestrian episode for rollover metric tests."""
     return EpisodeData(
@@ -107,6 +112,34 @@ def test_runtime_metadata_omits_disabled_rollover_stability_config() -> None:
     """Default-disabled TWV rollover metadata should not alter benchmark metrics."""
     metadata = _episode_metadata_for_metrics(
         _scenario_with_rollover_stability({"enabled": False, "yaw_rate": 3.0})
+    )
+
+    assert metadata is None
+
+
+def test_runtime_metadata_carries_enabled_clear_tracking_config() -> None:
+    """Full-classic metrics should receive opt-in CLEAR tracking instrumentation metadata."""
+    config = {
+        "enabled": True,
+        "ground_truth_count": 2,
+        "detection_count": 1,
+        "missed_detection_count": 1,
+        "false_positive_count": 0,
+        "id_switch_count": 0,
+        "mota": 0.5,
+        "motp_m": 0.25,
+        "motp_match_count": 1,
+    }
+
+    metadata = _episode_metadata_for_metrics(_scenario_with_clear_tracking(config))
+
+    assert metadata == {"clear_tracking_uncertainty": config}
+
+
+def test_runtime_metadata_omits_disabled_clear_tracking_config() -> None:
+    """Default-disabled CLEAR tracking metadata should not alter benchmark metrics."""
+    metadata = _episode_metadata_for_metrics(
+        _scenario_with_clear_tracking({"enabled": False, "mota": 0.5})
     )
 
     assert metadata is None

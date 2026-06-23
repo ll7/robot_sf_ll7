@@ -1,0 +1,119 @@
+# Issue #3216 — Headline 7x7 CI + Rank-Stability SLURM Launch Packet
+#
+# Purpose: make the increased-seed-budget 7x7 headline planner comparison run
+# concrete enough for SLURM routing so that issue #3216 can attach per-cell
+# confidence intervals and bootstrap rank-stability to the headline grid with
+# statistical support rather than bare point estimates.
+#
+# This is a LAUNCH PACKET, not a runnable campaign config. It points at the
+# REAL canonical configs (verified to exist, with sha256 below) and the report
+# harness that consumes the resulting rows. The paper-grade run itself is SLURM.
+#
+# Honesty boundary: NO paper-grade or planner-ranking claim may be made until
+# this run executes at S20 (or a predeclared S30) and the report harness +
+# claim-card review classify the bundle. The local deliverable for #3216 is the
+# report harness + small-seed smoke + this packet; it does not fabricate
+# paper-grade numbers.
+
+schema_version: issue_3216_headline_ci_rank_stability_launch_packet.v1
+issue: 3216
+depends_on:
+  # S20/S30 seed set + the per-planner-by-seed bundle is owned by #1554.
+  - issue: 1554
+    why: "Provides the predeclared S20 seed schedule (paper_eval_s20) and the
+      increased-seed-budget headline campaign; #3216 consumes its rows."
+  - issue: 3078
+    why: "Package A seed/planner-rank stability + held-out transfer campaign.
+      #3216 is the distinct GRID-LEVEL per-cell (planner x scenario) headline
+      report; coordinate to avoid duplicating rank-stability surfaces."
+
+claim_gate:
+  target_claim: >-
+    The paper-facing 7x7 headline planner comparison is stable enough to support
+    planner-ranking or safety-delta language after per-cell confidence intervals
+    and bootstrap rank-stability analysis.
+  no_claim_until_run: true
+  why_s10_s3_insufficient: >-
+    S10/S3 cannot support manuscript-relied planner rankings; per-cell CIs and
+    bootstrap rank-stability require the predeclared S20 (and ideally S30) seed
+    budget before any ranking/safety-delta claim is promoted beyond diagnostic.
+
+# Canonical campaign config + scenario/horizon/seed references. All paths
+# verified to exist in-tree at packet authoring time; sha256 recorded for drift
+# detection. Re-verify with: sha256sum <path>.
+runnable_config:
+  config: configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml
+  config_sha256: 3bf75ebb05cc5523c33271e956b21b14749fc427fc9d986438c83d09eee8b75c
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_matrix_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  horizon_schedule: configs/policy_search/scenario_horizons_h500.yaml
+  horizon_schedule_sha256: 4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce
+  seed_sets: configs/benchmarks/seed_sets_v1.yaml
+  seed_sets_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+  # 7-planner headline grid reference (planner rows for the 7x7 comparison).
+  planner_matrix: configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml
+  planner_matrix_sha256: 43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7
+  kinematics: differential_drive
+
+seed_budget:
+  primary:
+    tier: S20
+    seed_set: paper_eval_s20  # seeds 111..130, tracked in seed_sets_v1.yaml
+    status: available
+  optional:
+    tier: S30
+    seed_set: paper_eval_s30
+    status: available_for_launch
+    note: >-
+      Issue #1554 added the predeclared paper_eval_s30 seed schedule. No S30
+      campaign rows exist yet, so S30 remains launch-only until the SLURM run
+      produces durable rows. Do NOT synthesize ad hoc seeds at submit time.
+
+metric_surface:
+  # Primary metrics carried with per-cell CIs; snqi is the rank metric.
+  ci_metrics:
+    - success
+    - collisions
+    - near_misses
+    - snqi
+  rank_metric: snqi
+  rank_higher_is_better: true
+
+campaign_command: |
+  uv run python scripts/tools/run_camera_ready_benchmark.py \
+    --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml \
+    --campaign-id issue3216_s20_headline_ci
+
+report_command: |
+  # After the campaign finishes, build the per-cell CI + rank-stability report
+  # from the headline rows. The harness REUSES canonical owners (seed_variance,
+  # fidelity_rank_stability, canonical_table_export) and fails closed on
+  # degraded/fallback/not_available cells.
+  uv run python scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py \
+    --campaign <issue3216_s20_headline_ci_root> \
+    --rank-metric snqi \
+    --output-dir docs/context/evidence/issue_3216_headline_ci_rank_stability
+
+expected_artifacts:
+  - path: "<campaign_root>/reports/headline_rows.json"
+    description: "Headline 7x7 comparison rows (planner x scenario, multi-seed)."
+  - path: "<report_dir>/result.json"
+    description: "Per-cell CIs + rank-stability + fail-closed classification."
+  - path: "<report_dir>/report.md"
+    description: "Markdown summary of per-cell CIs and rank-stability."
+
+validation:
+  - "Re-verify every config sha256 above before submit (drift guard)."
+  - "Confirm paper_eval_s20 resolves to 20 seeds in seed_sets_v1.yaml."
+  - "Rows with fallback/degraded/failed/partial-failure/unavailable execution
+    remain excluded from promoted claims and carry explicit row status."
+  - "Run the report harness and confirm it does NOT self-certify paper_grade;
+    promotion requires claim-card review."
+
+decision_outcomes:
+  # Classify the final bundle as exactly one of these.
+  - paper_grade_for_named_claims
+  - not_distinguishable_at_s20
+  - diagnostic_only_missing_rows
+  - blocked_missing_durable_artifacts
+  - failed_closed

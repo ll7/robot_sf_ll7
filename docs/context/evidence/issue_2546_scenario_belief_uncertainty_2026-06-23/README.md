@@ -1,4 +1,4 @@
-# ScenarioBelief Uncertainty Diagnostic — issue #2546
+# Issue #2546 ScenarioBelief Uncertainty Diagnostic
 
 - **claim_boundary**: `diagnostic_only`
 - **evidence_tier**: `stress`

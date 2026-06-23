@@ -37,11 +37,15 @@ import argparse
 import json
 import subprocess
 import sys
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 import numpy as np
 
@@ -67,6 +71,17 @@ DEFAULT_SEED = 2546
 # The corridor pedestrian is the agent the planner actually reacts to; it is the
 # one we perturb across uncertainty conditions so behavior changes are legible.
 _CORRIDOR_AGENT_INDEX = 0
+
+
+@contextmanager
+def _temporary_numpy_seed(seed: int) -> Iterator[None]:
+    """Set NumPy's global RNG seed for this diagnostic, then restore caller state."""
+    previous_state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(previous_state)
 
 
 def _oracle_belief() -> ScenarioBelief:
@@ -341,17 +356,17 @@ def run_diagnostic(*, seed: int) -> dict[str, Any]:
     Returns:
         dict[str, Any]: Deterministic JSON-ready diagnostic report.
     """
-    np.random.seed(seed)
-    oracle = _oracle_belief()
+    with _temporary_numpy_seed(seed):
+        oracle = _oracle_belief()
 
-    # The consuming planner opts into uncertainty gating so degraded uncertainty
-    # can actually change which pedestrians it reacts to.
-    consuming_config = StreamGapPlannerConfig(uncertainty_gating_enabled=True)
+        # The consuming planner opts into uncertainty gating so degraded uncertainty
+        # can actually change which pedestrians it reacts to.
+        consuming_config = StreamGapPlannerConfig(uncertainty_gating_enabled=True)
 
-    conditions: dict[str, dict[str, Any]] = {}
-    for name, builder in CONDITION_BUILDERS.items():
-        belief = builder(oracle)
-        conditions[name] = _run_condition(name, belief, consuming_config=consuming_config)
+        conditions: dict[str, dict[str, Any]] = {}
+        for name, builder in CONDITION_BUILDERS.items():
+            belief = builder(oracle)
+            conditions[name] = _run_condition(name, belief, consuming_config=consuming_config)
 
     oracle_predicates = conditions["oracle"]["failure_predicates"]
     predicate_diffs: dict[str, dict[str, Any]] = {}
@@ -411,7 +426,7 @@ def run_diagnostic(*, seed: int) -> dict[str, Any]:
 def _render_markdown(report: dict[str, Any]) -> str:
     """Render a compact human-readable markdown summary of the diagnostic report."""
     lines: list[str] = []
-    lines.append(f"# ScenarioBelief Uncertainty Diagnostic (issue #{ISSUE})")
+    lines.append(f"# Issue #{ISSUE} ScenarioBelief Uncertainty Diagnostic")
     lines.append("")
     lines.append(f"- schema: `{report['schema_version']}`")
     lines.append(f"- git HEAD: `{report['git_head']}`")

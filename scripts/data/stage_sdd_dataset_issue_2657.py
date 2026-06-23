@@ -157,17 +157,57 @@ def load_manifest(manifest_path: Path = DEFAULT_MANIFEST_PATH) -> SddManifest:
 def _resolve_staging_dir(staging_dir_raw: str, *, manifest_path: Path) -> Path:
     """Resolve a manifest staging dir while rejecting unsafe path escapes."""
     staging_dir = Path(staging_dir_raw).expanduser()
-    resolved = (
-        staging_dir.resolve() if staging_dir.is_absolute() else (REPO_ROOT / staging_dir).resolve()
-    )
-    allowed_roots = (DEFAULT_STAGING_ROOT, manifest_path.resolve().parent)
-    if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+    if ".." in staging_dir.parts:
+        raise SddStagingError("Manifest staging_dir must not contain path traversal (`..`).")
+
+    unresolved = staging_dir if staging_dir.is_absolute() else REPO_ROOT / staging_dir
+    if unresolved.is_symlink():
+        raise SddStagingError(f"Manifest staging_dir must not be a symlink: {unresolved}")
+
+    resolved = unresolved.resolve(strict=False)
+    allowed_roots = (DEFAULT_STAGING_ROOT, manifest_path.resolve(strict=False).parent)
+    if not any(resolved == root or resolved.is_relative_to(root) for root in allowed_roots):
         allowed = ", ".join(str(root) for root in allowed_roots)
         raise SddStagingError(
             f"Manifest staging_dir resolves outside allowed roots: {resolved}. "
             f"Allowed roots: {allowed}."
         )
     return resolved
+
+
+def _cached_staging_gate(manifest: SddManifest) -> dict[str, Any] | None:
+    """Return a dataset-backed gate from cached status when it is still structurally valid."""
+    status_path = manifest.staging_dir / STAGING_STATUS_FILENAME
+    if not status_path.is_file():
+        return None
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(status, dict):
+        return None
+    if status.get("local_availability") != "staged":
+        return None
+    if (
+        status.get("asset_id") != manifest.asset_id
+        or status.get("version_tag") != manifest.version_tag
+    ):
+        return None
+
+    for expected in manifest.expected_files:
+        if len(_match_expected(manifest.staging_dir, expected)) < expected.min_count:
+            return None
+
+    return {
+        "mode": MODE_DATASET_BACKED,
+        "dataset_backed": True,
+        "reason": f"SDD is staged and validated (cached via {STAGING_STATUS_FILENAME}).",
+        "asset_id": manifest.asset_id,
+        "version_tag": manifest.version_tag,
+        "tree_sha256": status.get("tree_sha256"),
+        "staging_dir": str(manifest.staging_dir),
+        "report": status,
+    }
 
 
 def _match_expected(staging_dir: Path, expected: ExpectedFile) -> list[Path]:
@@ -328,6 +368,9 @@ def resolve_scenario_prior_mode(
     ``report`` for provenance.
     """
     manifest = manifest or load_manifest(manifest_path)
+    if cached_gate := _cached_staging_gate(manifest):
+        return cached_gate
+
     report = validate_staging(manifest)
     dataset_backed = bool(report["ok"])
     return {

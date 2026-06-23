@@ -14,15 +14,12 @@ download anything. They verify the safety contract:
 from __future__ import annotations
 
 import argparse
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 import yaml
 
 from scripts.data import stage_sdd_dataset_issue_2657 as stage
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_manifest(
@@ -128,6 +125,26 @@ def test_manifest_rejects_staging_dir_escape(tmp_path: Path) -> None:
     manifest_path = _write_manifest(tmp_path, staging_dir=outside)
 
     with pytest.raises(stage.SddStagingError, match="outside allowed roots"):
+        stage.load_manifest(manifest_path)
+
+
+def test_manifest_rejects_path_traversal_segments(tmp_path: Path) -> None:
+    """Relative traversal segments in manifest paths fail closed before resolution."""
+    manifest_path = _write_manifest(tmp_path, staging_dir=Path("../outside-sdd"))
+
+    with pytest.raises(stage.SddStagingError, match="path traversal"):
+        stage.load_manifest(manifest_path)
+
+
+def test_manifest_rejects_staging_dir_symlink(tmp_path: Path) -> None:
+    """The unresolved staging dir cannot be a symlink."""
+    target = tmp_path / "real-sdd"
+    target.mkdir()
+    link = tmp_path / "linked-sdd"
+    link.symlink_to(target, target_is_directory=True)
+    manifest_path = _write_manifest(tmp_path, staging_dir=link)
+
+    with pytest.raises(stage.SddStagingError, match="must not be a symlink"):
         stage.load_manifest(manifest_path)
 
 
@@ -259,6 +276,26 @@ def test_mode_gate_unlocks_dataset_backed_when_staged(tmp_path: Path) -> None:
     assert gate["mode"] == stage.MODE_DATASET_BACKED
     assert gate["dataset_backed"] is True
     assert gate["tree_sha256"]
+
+
+def test_mode_gate_uses_cached_status_without_rehashing(monkeypatch, tmp_path: Path) -> None:
+    """A valid staging-status cache avoids re-hashing the staged tree on import paths."""
+    staging_dir = tmp_path / "sdd"
+    _stage_annotation(staging_dir)
+    manifest = stage.load_manifest(_write_manifest(tmp_path, staging_dir=staging_dir))
+    report = stage.validate_staging(manifest)
+    stage._write_staging_status(manifest, report)
+
+    def fail_checksum(*_args, **_kwargs):
+        raise AssertionError("tree checksum should not run when cached status is valid")
+
+    monkeypatch.setattr(stage, "_tree_checksum", fail_checksum)
+
+    gate = stage.resolve_scenario_prior_mode(manifest)
+
+    assert gate["mode"] == stage.MODE_DATASET_BACKED
+    assert gate["dataset_backed"] is True
+    assert gate["tree_sha256"] == report["tree_sha256"]
 
 
 # --- shipped manifest sanity -----------------------------------------------------------------

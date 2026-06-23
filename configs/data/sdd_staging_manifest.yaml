@@ -1,0 +1,79 @@
+# Stanford Drone Dataset (SDD) staging manifest -- Issue #2657
+#
+# This manifest is the reproducible provenance contract for staging the Stanford Drone Dataset
+# locally so that scenario-prior generation can run in `dataset_backed_prior` mode. It is consumed
+# by scripts/data/stage_sdd_dataset_issue_2657.py.
+#
+# SAFETY CONTRACT (enforced by the staging script):
+#   * The script NEVER auto-downloads. A default run only PLANS/REPORTS and exits.
+#   * A network fetch requires an explicit `--confirm-download` flag AND an interactive y/N prompt
+#     (the prompt is skipped only when `--yes` is also passed for non-interactive confirmation).
+#   * Available disk space is checked against `expected_total_size_bytes` before any fetch; the
+#     script fails closed if free space is insufficient.
+#   * Downloaded files are validated against the expected structure and checksums are recorded.
+#   * Until the local copy is staged AND validated, `local_availability` is reported as `missing`
+#     and scenario-prior generation is forced into `proxy_schema_smoke` mode.
+
+schema: robot_sf_sdd_staging_manifest.v1
+asset_id: sdd
+title: Stanford Drone Dataset annotations
+version_tag: sdd-v1.0-uav-data
+
+# --- Source & license provenance -------------------------------------------------------------
+source_url: https://cvgl.stanford.edu/projects/uav_data/
+source_note: >-
+  Official Stanford Drone Dataset (SDD) project page. Robot SF currently needs the original SDD
+  annotation text files for the SDD importer (scripts/tools/import_sdd_scenarios.py). Only stage
+  files you obtained under the dataset terms.
+license: Creative Commons Attribution-NonCommercial-ShareAlike 3.0
+license_url: https://creativecommons.org/licenses/by-nc-sa/3.0/
+readme_pointer: docs/context/issue_2657_sdd_staging.md
+citation: >-
+  A. Robicquet, A. Sadeghian, A. Alahi, S. Savarese. "Learning Social Etiquette: Human
+  Trajectory Understanding in Crowded Scenes." ECCV 2016.
+
+# --- Staging location (git-ignored) ----------------------------------------------------------
+# Path is repo-relative. `output/` is git-ignored, so raw SDD data never enters version control.
+staging_dir: output/external_data/sdd
+download_url: null  # No repository-approved direct download URL is encoded; see access_note.
+access_note: >-
+  License-gated / manual acquisition. There is no repository-approved direct download URL. Obtain
+  the annotation archive from the official SDD project page under the dataset terms, then either
+  point the staging script at your downloaded archive or place the extracted annotations under the
+  staging_dir. The staging script will NOT fetch data from the network without an explicit
+  user-confirmed `--confirm-download` decision and a configured download URL.
+
+# --- Expected layout & size ------------------------------------------------------------------
+# At least one `annotations.txt` is required by the SDD importer. These are the files the staging
+# script validates after a download/extraction completes.
+expected_files:
+  - pattern: "**/annotations.txt"
+    kind: file
+    description: Original SDD annotation text file(s) consumed by the SDD importer.
+    min_count: 1
+
+# Conservative over-estimate of the on-disk footprint of the SDD annotation set used for the
+# pre-download disk-space check. The full SDD (with videos) is far larger; Robot SF only needs the
+# annotation text files, but the disk check stays conservative to fail closed safely.
+expected_total_size_bytes: 524288000  # ~500 MiB headroom for annotations + extraction scratch
+
+# --- Checksums (filled on real download) -----------------------------------------------------
+# These are placeholders. On a real, user-confirmed staging run the script computes an aggregate
+# tree checksum over the matched annotation files and records it under `tree_sha256` in the
+# generated staging-status manifest written to the staging_dir. They are intentionally empty here
+# because no data is bundled with the repository.
+checksums:
+  algorithm: SHA-256
+  tree_sha256: null            # filled on real staging (aggregate over matched files)
+  expected_tree_sha256: null   # pin here after first trusted staging to detect drift
+
+# --- Availability gate -----------------------------------------------------------------------
+# `missing` until the staging script validates a local copy. Scenario-prior generation reads this
+# (via the staging script's status mode) and refuses dataset-backed mode while it is `missing`.
+local_availability: missing  # one of: missing | staged
+
+related_issues:
+  - 2657
+  - 1497
+  - 1126
+  - 3161

@@ -74,7 +74,8 @@ Both options below target git-ignored paths, so nothing about the raw data is ev
 mkdir -p ~/robot_sf_external_data
 # ...place SDD under ~/robot_sf_external_data/sdd and SocNavBench under ~/robot_sf_external_data/socnavbench...
 
-# 2. In EACH worktree (and the main checkout), link the expected paths to that copy:
+# 2. In EACH worktree (and the main checkout), create ignored parent dirs and link the expected paths:
+mkdir -p output/external_data third_party
 ln -sfn ~/robot_sf_external_data/sdd        output/external_data/sdd
 ln -sfn ~/robot_sf_external_data/socnavbench third_party/socnavbench
 ```

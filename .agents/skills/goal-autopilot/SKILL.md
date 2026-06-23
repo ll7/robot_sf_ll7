@@ -53,6 +53,12 @@ In token-efficient mode:
 - Codex is the loop controller, reviewer, and final acceptance authority.
 - Delegate workers only when compact review cost is lower than direct Codex
   execution.
+- On every resume, compaction recovery, interruption return, or new user
+  message, first run a current-request guard: compare the newest request with
+  the active ledger action, identify active worktree/PR/issue/delegates, and
+  decide whether the previous goal action is still the current objective. If
+  the newest request supersedes it, park the old batch with a compact handoff
+  and cleanup status before editing or opening a new PR for the new request.
 - On continuation or after context compaction, rebuild state from the active
   ledger and compact PR/issue/worktree snapshots first. Reopen full skills,
   docs, raw CI output, or broad GitHub/worktree inventories only when the
@@ -344,6 +350,8 @@ final summaries.
 
 Track only the fields needed to resume safely in under one minute:
 
+- current request: newest user request, whether it supersedes the prior ledger
+  action, and the parked-work handoff path when a pivot occurs;
 - route: provider/tool, model or agent role, run ID or artifact path, and route status;
 - loaded context: skill/doc summaries already read for the active phase, plus the freshness keys
   that make them reusable or stale;
@@ -373,6 +381,12 @@ anti-pattern unless a stale-state trigger fired or the compact snapshot lacks th
 the next decision. Fresh live checks are still required before issue claim, push, PR publication,
 label/project mutation, merge-ready application, merge, claim release, or any benchmark/paper-facing
 publication decision.
+
+If the user switches from a goal loop to an instruction, review, cleanup, or
+single-PR request, do not continue implementing the old issue just because the
+ledger has a next action. Record the old worktree, dirty status, active PRs,
+subagent lifecycle state, and next safe resumption command in the ledger, then
+scope the new branch and PR to the new request only.
 
 Distinguish route success from task success. A delegate command exiting zero or producing a report
 only proves `route_status: completed`; the parent phase is not complete until the main agent has
@@ -485,6 +499,10 @@ one of:
 
 A phase is not complete until the cleanup checkpoint passes for every delegate used
 in that phase.
+
+Run the cleanup checkpoint again before honoring a user pivot or final handoff.
+The result should state `closed`, `preserved`, or `not_applicable` for each
+subagent/worker, and should explain any dirty worktree left behind.
 
 ### Spark Sidecar Routing
 

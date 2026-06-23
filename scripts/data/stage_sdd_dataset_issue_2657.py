@@ -51,6 +51,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST_PATH = REPO_ROOT / "configs" / "data" / "sdd_staging_manifest.yaml"
 STAGING_STATUS_FILENAME = "sdd_staging_status.json"
+DEFAULT_STAGING_ROOT = (REPO_ROOT / "output").resolve()
 
 # Mode tags surfaced to scenario-prior generation. These names are part of the public contract.
 MODE_PROXY = "proxy_schema_smoke"
@@ -108,9 +109,7 @@ def load_manifest(manifest_path: Path = DEFAULT_MANIFEST_PATH) -> SddManifest:
     staging_dir_raw = str(raw.get("staging_dir", "")).strip()
     if not staging_dir_raw:
         raise SddStagingError("Manifest is missing required `staging_dir`.")
-    staging_dir = Path(staging_dir_raw)
-    if not staging_dir.is_absolute():
-        staging_dir = (REPO_ROOT / staging_dir).resolve()
+    staging_dir = _resolve_staging_dir(staging_dir_raw, manifest_path=manifest_path)
 
     expected_files_raw = raw.get("expected_files") or []
     if not isinstance(expected_files_raw, list) or not expected_files_raw:
@@ -153,6 +152,22 @@ def load_manifest(manifest_path: Path = DEFAULT_MANIFEST_PATH) -> SddManifest:
         ),
         local_availability_declared=str(raw.get("local_availability", "missing")),
     )
+
+
+def _resolve_staging_dir(staging_dir_raw: str, *, manifest_path: Path) -> Path:
+    """Resolve a manifest staging dir while rejecting unsafe path escapes."""
+    staging_dir = Path(staging_dir_raw).expanduser()
+    resolved = (
+        staging_dir.resolve() if staging_dir.is_absolute() else (REPO_ROOT / staging_dir).resolve()
+    )
+    allowed_roots = (DEFAULT_STAGING_ROOT, manifest_path.resolve().parent)
+    if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+        allowed = ", ".join(str(root) for root in allowed_roots)
+        raise SddStagingError(
+            f"Manifest staging_dir resolves outside allowed roots: {resolved}. "
+            f"Allowed roots: {allowed}."
+        )
+    return resolved
 
 
 def _match_expected(staging_dir: Path, expected: ExpectedFile) -> list[Path]:
@@ -209,7 +224,7 @@ def _tree_checksum(staging_dir: Path, matched_paths: list[Path]) -> dict[str, An
     }
 
 
-def validate_staging(manifest: SddManifest) -> dict[str, Any]:
+def validate_staging(manifest: SddManifest, *, compute_checksum: bool = True) -> dict[str, Any]:
     """Validate the locally-staged SDD copy against the manifest contract.
 
     Returns a report dict. ``ok`` is True only when every expected-file group meets its minimum
@@ -257,6 +272,17 @@ def validate_staging(manifest: SddManifest) -> dict[str, Any]:
             "SDD is not staged or is incomplete. Follow the manifest access_note to acquire SDD "
             "under its license, then re-run validation. Until then, scenario-prior generation is "
             f"forced to `{MODE_PROXY}`."
+        )
+        return report
+
+    if not compute_checksum:
+        report["checksum_skipped"] = (
+            "tree checksum omitted for plan/status speed; run `validate` for checksum proof"
+        )
+        report["local_availability"] = "present_unvalidated"
+        report["action"] = (
+            f"SDD expected files are present. Run `validate` to compute checksums before treating "
+            f"the copy as `{MODE_DATASET_BACKED}` evidence."
         )
         return report
 
@@ -337,7 +363,7 @@ def check_disk_space(manifest: SddManifest) -> dict[str, Any]:
 
 def build_plan(manifest: SddManifest) -> dict[str, Any]:
     """Build the plan/report payload for a default (non-downloading) invocation."""
-    validation = validate_staging(manifest)
+    validation = validate_staging(manifest, compute_checksum=False)
     disk = check_disk_space(manifest)
     return {
         "schema": "sdd_staging_plan.v1",

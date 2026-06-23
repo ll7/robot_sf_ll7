@@ -1,4 +1,4 @@
-# Issue #2657 — Stanford Drone Dataset (SDD) Staging
+# Issue #2657 Stanford Drone Dataset (SDD) Staging
 
 This note makes SDD scenario-prior staging reproducible and connects staging state to
 scenario-prior generation, so dataset-backed claims cannot be implied without dataset-backed

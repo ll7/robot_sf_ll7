@@ -109,6 +109,28 @@ def test_plan_reports_disk_check(tmp_path: Path) -> None:
     assert plan["disk_check"]["required_bytes"] == manifest.expected_total_size_bytes
 
 
+def test_plan_skips_tree_checksum_for_present_files(tmp_path: Path) -> None:
+    """Plan-only output must not hash a potentially large staged dataset."""
+    staging_dir = tmp_path / "sdd"
+    _stage_annotation(staging_dir)
+    manifest = stage.load_manifest(_write_manifest(tmp_path, staging_dir=staging_dir))
+
+    plan = stage.build_plan(manifest)
+
+    assert plan["validation"]["checksum_skipped"]
+    assert plan["local_availability"] == "present_unvalidated"
+    assert plan["scenario_prior_mode"] == stage.MODE_PROXY
+
+
+def test_manifest_rejects_staging_dir_escape(tmp_path: Path) -> None:
+    """A manifest cannot point staging outside the repo output or manifest-local roots."""
+    outside = tmp_path.parent / "outside-sdd"
+    manifest_path = _write_manifest(tmp_path, staging_dir=outside)
+
+    with pytest.raises(stage.SddStagingError, match="outside allowed roots"):
+        stage.load_manifest(manifest_path)
+
+
 # --- download confirmation gate --------------------------------------------------------------
 
 

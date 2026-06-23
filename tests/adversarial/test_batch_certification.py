@@ -161,6 +161,16 @@ def test_to_dict_emits_candidate_quality_v1() -> None:
         "reject_duplicates": True,
         "min_batch_validity_rate": None,
     }
+    assert payload["post_execution_outcome_counts"] == {
+        "simulation_failure": 0,
+        "fallback": 0,
+        "degraded": 0,
+        "genuine_behavioral_failure": 0,
+    }
+    assert (
+        "pre-planner certification does not execute planners"
+        in payload["post_execution_outcome_note"]
+    )
     assert payload["total"] == 1
     assert payload["candidates"][0]["path"] == "a"
 
@@ -281,6 +291,18 @@ def test_candidate_quality_payload_validates_against_schema(tmp_path: Path) -> N
     schema = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
 
     jsonschema.Draft202012Validator(schema).validate(payload)
+
+
+def test_candidate_quality_schema_keeps_post_execution_counts_reserved(tmp_path: Path) -> None:
+    """Pre-planner summaries reserve post-execution buckets without deriving them."""
+    _write_manifest(tmp_path / "a.yaml", _controls(0.0), "valid")
+
+    payload = certify_candidate_batch([tmp_path]).to_dict()
+    payload["post_execution_outcome_counts"]["fallback"] = 1
+    schema = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft202012Validator(schema).validate(payload)
 
 
 def test_batch_certification_cli_writes_output_json_and_exits_zero(

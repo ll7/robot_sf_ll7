@@ -14,6 +14,11 @@ produced by running the planner and are classified by the fail-closed benchmark
 row-status policy, not here. Emitting them would require planner execution,
 which this gate exists to avoid for rejected candidates.
 
+The emitted payload reserves explicit post-execution outcome buckets so downstream
+reports keep simulation failure, fallback, degraded rows, and genuine behavioral
+failures distinct. Pre-planner certification leaves those counts at zero and marks
+them as not derived because computing them would require planner execution.
+
 This is quality-signal-only evidence: it measures generator/candidate health and
 makes no planner benchmark claim.
 """
@@ -50,6 +55,16 @@ ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA = "adversarial_candidate_quality.v1"
 REASON_INVALID = "invalid"
 REASON_DEGENERATE = "degenerate"
 REASON_DUPLICATE = "duplicate"
+POST_EXECUTION_OUTCOME_COUNTS: dict[str, int] = {
+    "simulation_failure": 0,
+    "fallback": 0,
+    "degraded": 0,
+    "genuine_behavioral_failure": 0,
+}
+POST_EXECUTION_OUTCOME_NOTE: str = (
+    "Reserved post-execution buckets; pre-planner certification does not execute planners, "
+    "so these counts are not derived here."
+)
 
 
 @dataclass(frozen=True)
@@ -142,6 +157,8 @@ class BatchCertification:
             "rejected_count": self.rejected_count,
             "validity_rate": self.validity_rate,
             "rejection_counts": dict(self.rejection_counts),
+            "post_execution_outcome_counts": dict(POST_EXECUTION_OUTCOME_COUNTS),
+            "post_execution_outcome_note": POST_EXECUTION_OUTCOME_NOTE,
             "policy": self.policy.to_dict(),
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }

@@ -567,6 +567,14 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             "residual_clipped": False,
             "hard_guard_authoritative": True,
         }
+        if label != "prior_residual_safe" and action_adaptation.get("mode") == "prior_residual":
+            action_adaptation = {
+                "mode": "direct_policy_command",
+                "raw_policy_action": [float(ppo_command[0]), float(ppo_command[1])],
+                "adapted_action": [float(ppo_command[0]), float(ppo_command[1])],
+                "residual_clipped": False,
+                "hard_guard_authoritative": True,
+            }
         selected_matches_ppo = np.isclose(float(ppo_command[0]), float(filtered_command[0])) and (
             np.isclose(float(ppo_command[1]), float(filtered_command[1]))
         )

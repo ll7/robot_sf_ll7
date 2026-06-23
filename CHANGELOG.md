@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a bounded, same-seed forecast-risk closed-loop coupling gate (#2916): a deterministic risk
+  adapter [`robot_sf/benchmark/forecast_risk_adapter.py`](robot_sf/benchmark/forecast_risk_adapter.py)
+  mapping a `ForecastBatch.v1` to a bounded `[0,1]` per-step risk signal (fail-closed on
+  degraded/fallback/oracle batches), a config
+  [`configs/research/forecast_risk_coupling_issue_2916.yaml`](configs/research/forecast_risk_coupling_issue_2916.yaml)
+  with `no_forecast`/`cv_risk`/`semantic_risk`/`interaction_risk` rows pinned to identical
+  seed/scenario, and a fixture-driven runner
+  [`scripts/benchmark/run_forecast_risk_coupling_gate.py`](scripts/benchmark/run_forecast_risk_coupling_gate.py)
+  that scores collision/near-miss, route progress, stop/yield timing, false-positive stopping,
+  runtime, and SNQI per row and emits a `continue|revise|stop` verdict with the
+  false-positive-stopping vs safety-benefit trade-off explicit. On the bundled single-pedestrian
+  occluded-emergence fixture the gate returns `continue` (forecast risk removed the near-miss with 0
+  false-positive stops at a throughput cost). Evidence is `diagnostic_only`/`stress`, not
+  paper-grade, and promotes no learned predictor; the three forecast sources are indistinguishable on
+  this single fixture (caveat recorded). Tracked summary under
+  `docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23/` (#2916).
 * Added a bounded ScenarioBelief uncertainty diagnostic (#2546):
   [`scripts/analysis/run_scenario_belief_uncertainty_diagnostic_issue_2546.py`](scripts/analysis/run_scenario_belief_uncertainty_diagnostic_issue_2546.py)
   compares a fixed scenario across five belief conditions (oracle/deterministic, visibility-limited,

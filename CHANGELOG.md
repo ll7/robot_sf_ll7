@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added S20/S30 seed-budget archival tooling + SLURM launch packet (#1554): [`scripts/benchmark/build_s20_s30_seed_budget_bundle_issue_1554.py`](scripts/benchmark/build_s20_s30_seed_budget_bundle_issue_1554.py) builds a durable per-planner-by-seed comparison bundle (success/collision/near-miss/timeout/clearance-uncertainty/`time_to_goal_norm`) with bootstrap/per-seed uncertainty and a seed-resampling rank-flip analysis, REUSING the canonical stats (`seed_variance`, `snqi.bootstrap.bootstrap_stability`, `rank_metrics.kendall_tau`/`rank_order`) rather than reinventing them. Fail-closed (fallback/degraded/unavailable/failed/partial/not_available/diagnostic_only rows never count as success); when no real S20/S30 rows exist it emits `blocked_until_run` instead of fabricating a bundle. Ships the SLURM run as a launch packet (`configs/benchmarks/s20_s30_seed_budget_issue_1554_launch_packet.yaml`, real referenced configs + sha256) and a context note recording the claim-map gate and #1545 seed-budget methodology. The heavy S20/S30 h500 run remains SLURM (Refs #1554).
+
 * Clarified token-efficient goal-thread startup rules for workflow-improvement turns: agents now
   explicitly park stale prior work after compaction or user pivots, scope meta-workflow requests to
   fresh docs-or-workflow worktrees, and classify high-priority SLURM work through the appropriate

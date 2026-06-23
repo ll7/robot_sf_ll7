@@ -94,6 +94,19 @@ def test_unknown_contract_is_clear_error(capsys) -> None:
     assert "unknown contract" in capsys.readouterr().err.lower()
 
 
+def test_malformed_row_is_structured_cli_error(tmp_path, capsys) -> None:
+    """Malformed row input exits with a structured command error."""
+    row_path = tmp_path / "row.json"
+    row_path.write_text("not json", encoding="utf-8")
+
+    exit_code = main(["orca_residual_smoke", "--row", str(row_path), "--json"])
+
+    assert exit_code == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report["contract_id"] == "orca_residual_smoke"
+    assert "preflight evaluation failed" in report["error"]
+
+
 def test_required_fields_come_from_canonical_owner() -> None:
     """The registry's required fields must be the owner's exported tuple, not a copy.
 

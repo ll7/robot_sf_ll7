@@ -274,12 +274,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {message}", file=sys.stderr)
         return 2
 
-    if args.row is not None:
-        row = _load_row(args.row)
-    else:
-        row = spec.representative_row()
+    try:
+        if args.row is not None:
+            row = _load_row(args.row)
+        else:
+            row = spec.representative_row()
+        report = _evaluate(spec, row)
+    except (OSError, json.JSONDecodeError, ValueError, RuntimeError) as exc:
+        message = f"preflight evaluation failed for {args.contract_id!r}: {exc}"
+        if args.json:
+            print(json.dumps({"contract_id": args.contract_id, "error": message}))
+        else:
+            print(f"error: {message}", file=sys.stderr)
+        return 2
 
-    report = _evaluate(spec, row)
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

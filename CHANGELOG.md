@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Documented how to obtain, place, and **share external datasets across git worktrees** in
+  [`docs/external_data_setup.md`](docs/external_data_setup.md) (#1498): a per-asset obtain/place/
+  validate quick-reference for `sdd`, `socnavbench-s3dis-eth`, and `socnavbench-control` (all
+  license/agreement-gated — no scriptable download), plus a "Sharing external data across git
+  worktrees" section. Staging paths resolve per-worktree, so the guide shows staging one physical
+  copy at a machine-stable location and symlinking it into each worktree's git-ignored expected
+  path, the `--source` validation option, and the planned `ROBOT_SF_EXTERNAL_DATA_ROOT` shared-root
+  follow-up. Docs-only; actual licensed acquisition remains a manual user step (#1498).
+
 * Added a bounded robot-influence-on-pedestrian-flow v0 slice (#3066):
   [`scripts/benchmark/run_robot_influence_flow_slice_issue_3066.py`](scripts/benchmark/run_robot_influence_flow_slice_issue_3066.py)
   runs a small same-seed campaign (reusing `robot_sf.benchmark.runner.run_batch`) comparing two

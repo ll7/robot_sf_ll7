@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Made SDD scenario-prior staging reproducible (#2657): added
+  [`scripts/data/stage_sdd_dataset_issue_2657.py`](scripts/data/stage_sdd_dataset_issue_2657.py)
+  (subcommands `plan`/`validate`/`status`/`mode`/`download`) and a provenance manifest
+  [`configs/data/sdd_staging_manifest.yaml`](configs/data/sdd_staging_manifest.yaml) (source URL,
+  CC BY-NC-SA 3.0 license + readme pointer, version tag, expected files/size, checksum placeholders,
+  `local_availability`). The tool **never auto-downloads**: a bare run only plans/reports (disk check,
+  availability) and exits without network access; `download` requires explicit `--confirm-download` +
+  y/N (or `--yes`), checks free disk vs expected size and fails closed if insufficient, stages into a
+  git-ignored subfolder (`output/external_data/sdd`), and validates a SHA-256 tree checksum before
+  marking `staged`. Wired a `proxy_schema_smoke` vs `dataset_backed_prior` gate into the scenario-prior
+  generator (#2726) so a missing/unvalidated SDD can never be presented as dataset-backed evidence.
+  Audit doc: [`docs/context/issue_2657_sdd_staging.md`](docs/context/issue_2657_sdd_staging.md) (#2657).
+
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
   language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)

@@ -1,0 +1,114 @@
+# Issue #2657 — Stanford Drone Dataset (SDD) Staging
+
+This note makes SDD scenario-prior staging reproducible and connects staging state to
+scenario-prior generation, so dataset-backed claims cannot be implied without dataset-backed
+input. It follows [`docs/templates/external_data_audit.md`](../templates/external_data_audit.md).
+
+## Summary
+
+- Dataset or asset name: Stanford Drone Dataset (SDD) annotations
+- Upstream source URL: <https://cvgl.stanford.edu/projects/uav_data/>
+- Upstream version, tag, or release: `sdd-v1.0-uav-data` (manifest `version_tag`)
+- Related issue: `Issue #2657` (also #1497, #1126 importer lineage; #3161 real-world staging)
+- Intended Robot SF use: provide original SDD annotation text files to the SDD importer
+  (`scripts/tools/import_sdd_scenarios.py`) so scenario-prior generation can run in
+  `dataset_backed_prior` mode.
+
+## License And Access
+
+- Observed license: Creative Commons Attribution-NonCommercial-ShareAlike 3.0
+- License URL: <https://creativecommons.org/licenses/by-nc-sa/3.0/>
+- Access restrictions: license-gated / manual acquisition; **no repository-approved direct
+  download URL is encoded**.
+- Citation requirement: cite Robicquet et al., "Learning Social Etiquette: Human Trajectory
+  Understanding in Crowded Scenes," ECCV 2016.
+- Redistribution: non-commercial, share-alike; Robot SF does **not** redistribute raw SDD.
+- License compatibility decision: reference-only for now; raw data stays local and git-ignored.
+
+## Download And Raw-File Policy (no-auto-download safety contract)
+
+The staging tool is `scripts/data/stage_sdd_dataset_issue_2657.py`, driven by the manifest
+`configs/data/sdd_staging_manifest.yaml`. Its safety contract is enforced in code:
+
+- **Never auto-downloads.** The default invocation only PLANS/REPORTS (what would be downloaded,
+  where, expected size, disk check) and exits without touching the network.
+- A network fetch requires an explicit `--confirm-download` flag **and** an interactive `y/N`
+  prompt; the prompt is skipped only when `--yes` is also given for non-interactive confirmation.
+- **Disk-space check before any fetch:** free space at the staging location is checked against the
+  manifest's `expected_total_size_bytes`; the tool fails closed (refuses) if insufficient,
+  reporting required vs available.
+- **License-gated fail-closed:** even after confirmation and a passing disk check, the tool refuses
+  because no approved download URL is encoded. A maintainer must add a license-approved URL to the
+  manifest and wire the fetch before the download path can run.
+- Raw data is staged into the **git-ignored** subfolder `output/external_data/sdd`
+  (`output/` is already covered by `.gitignore`).
+- Expected raw files: at least one `**/annotations.txt` (the SDD importer's input format).
+- Fail-closed when raw files are missing: availability is reported `missing` and scenario-prior
+  generation is forced to `proxy_schema_smoke`.
+
+Acquisition steps (user action, outside this tooling):
+
+1. Obtain the SDD annotation archive from the official project page under its license.
+2. Place the extracted annotation files under `output/external_data/sdd/` (keep the license with
+   your local copy), or configure a license-approved `download_url` in the manifest.
+3. Run `uv run python scripts/data/stage_sdd_dataset_issue_2657.py validate` to validate and
+   record an aggregate checksum.
+
+## Checksums And Manifest
+
+- Manifest path: `configs/data/sdd_staging_manifest.yaml`
+- Checksum algorithm: SHA-256 (aggregate tree checksum over relative path, size, and per-file
+  sha256 for every matched annotation file).
+- `checksums.tree_sha256` / `expected_tree_sha256` are **placeholders** filled on a real,
+  user-confirmed staging run; pin `expected_tree_sha256` after first trusted staging to detect
+  drift (a mismatch fails closed and refuses to mark SDD as `staged`).
+- On a successful `validate`, the tool writes `sdd_staging_status.json` into the (git-ignored)
+  staging dir recording the checksum, file count, and `local_availability: staged`.
+- Verification command:
+  `uv run python scripts/data/stage_sdd_dataset_issue_2657.py --check`
+
+## Proxy-vs-dataset-backed gate
+
+`scenario_prior.v1` distinguishes two modes:
+
+- `proxy_schema_smoke` — no validated SDD; schema/proxy evidence only.
+- `dataset_backed_prior` — SDD staged **and** validated (expected files present and, if pinned,
+  checksum match).
+
+The gate is exposed by `resolve_scenario_prior_mode()` in the staging tool and consumed by
+scenario-prior generation (`scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py`
+surfaces `scenario_prior_mode` / `dataset_backed` / `sdd_staging_gate` in its registry YAML and
+`report.json`). A missing or unvalidated SDD copy forces `proxy_schema_smoke`; only a
+staged-and-validated copy unlocks `dataset_backed_prior`. The trace-cluster calibration script is
+proxy by construction (it consumes simulation traces, not SDD) and surfaces the SDD state for
+provenance only — it never reports dataset-backed.
+
+## Robot SF Use Decision
+
+- Use status: reference-only until SDD is locally staged and validated.
+- Benchmark eligibility: blocked until hydrated; `proxy_schema_smoke` is smoke-only.
+- Redistribution status: no redistribution of raw SDD.
+- Required follow-up: real-world staging/calibration tracked under `Issue #3161`.
+
+## Reproducibility commands
+
+```bash
+# Plan only -- NEVER downloads (default):
+uv run python scripts/data/stage_sdd_dataset_issue_2657.py
+# Availability status / checksums (no download):
+uv run python scripts/data/stage_sdd_dataset_issue_2657.py --check
+# Validate a locally-staged copy (no download):
+uv run python scripts/data/stage_sdd_dataset_issue_2657.py validate
+# Print the scenario-prior mode gate:
+uv run python scripts/data/stage_sdd_dataset_issue_2657.py mode
+```
+
+## Validation Checklist
+
+- [x] Source URL and version tag are recorded.
+- [x] License, access restrictions, and citation requirements are recorded.
+- [x] Raw files, derived files, and redistribution decisions are separated.
+- [x] Checksum plan recorded (aggregate SHA-256; placeholders until real staging).
+- [x] Robot SF use decision is reference-only / smoke-only until hydrated.
+- [x] Missing artifacts fail closed with an actionable message and force `proxy_schema_smoke`.
+- [x] No restricted raw data is committed; staging dir is git-ignored.

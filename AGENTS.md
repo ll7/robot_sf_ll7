@@ -118,10 +118,11 @@ delegates, and next safe command, then scope the PR to reusable instruction chan
 last thread only for decision-level evidence: repeated broad reads, command failures, unclear
 instruction loops, stale-state drift, delegate lifecycle leaks, and missed route choices.
 Before editing, convert the review into three to ten acceptance criteria and use the
-`Meta-Workflow Instruction PR Gate` in `docs/templates/token_efficient_thread_profile.md`. If an
-instruction already covers an observed leak, tighten the existing wording instead of adding a
-parallel rule. Validate with the cheapest official docs or skill path for the changed surface, and
-reserve full readiness for executable or evidence-sensitive changes.
+`Meta-Workflow Instruction Pull Request Gate` in
+`docs/templates/token_efficient_thread_profile.md`. If an instruction already covers an observed
+leak, tighten the existing wording instead of adding a parallel rule. Validate with the cheapest
+official docs or skill path for the changed surface, and reserve full readiness for executable or
+evidence-sensitive changes.
 
 When the user elevates SLURM work as a current priority, make it a first-class lane in the next
 phase audit instead of treating it as optional background work. Use `goal-slurm-experiment` for the

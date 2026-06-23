@@ -184,7 +184,7 @@ long goal near a usage guard:
   and why the change belongs in reusable guidance instead of one-off handoff
   prose.
 
-## Meta-Workflow Instruction PR Gate
+## Meta-Workflow Instruction Pull Request Gate
 
 Use this gate when the newest user request asks to improve instructions,
 review Codex token spending, audit the last implementation thread, or make the
@@ -210,9 +210,9 @@ explicitly asks to resume it.
   changes need diff inspection and referenced-path checks; skill changes also
   need the relevant skill/schema/sync check when available. Full PR readiness
   is reserved for executable or evidence-sensitive changes.
-- The PR body should list the token leaks addressed, files changed, validation
-  run, parked work, and any instruction gaps intentionally left for a later
-  issue.
+- The Pull Request (PR) body should list the token leaks addressed, files
+  changed, validation run, parked work, and any instruction gaps intentionally
+  left for a later issue.
 
 ## Delegated Worker Artifact Contract
 

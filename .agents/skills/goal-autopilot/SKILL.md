@@ -64,7 +64,7 @@ In token-efficient mode:
   Preserve its exact resumption point, create a fresh docs-or-workflow worktree
   from `origin/main`, and limit the new PR to reusable guidance proven by the
   observed thread failures or token leaks. Use
-  `docs/templates/token_efficient_thread_profile.md#meta-workflow-instruction-pr-gate`
+  `docs/templates/token_efficient_thread_profile.md#meta-workflow-instruction-pull-request-gate`
   as the acceptance gate for these PRs.
 - On continuation or after context compaction, rebuild state from the active
   ledger and compact PR/issue/worktree snapshots first. Reopen full skills,

@@ -25,6 +25,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paper-grade, and promotes no learned predictor; the three forecast sources are indistinguishable on
   this single fixture (caveat recorded). Tracked summary under
   `docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23/` (#2916).
+* Added a bounded ScenarioBelief uncertainty diagnostic (#2546):
+  [`scripts/analysis/run_scenario_belief_uncertainty_diagnostic_issue_2546.py`](scripts/analysis/run_scenario_belief_uncertainty_diagnostic_issue_2546.py)
+  compares a fixed scenario across five belief conditions (oracle/deterministic, visibility-limited,
+  covariance-inflated, class-probability uncertainty, existence-confidence degradation), projecting
+  each through `project_scenario_belief_for_planner` for both a consuming planner (`stream_gap`) and
+  an unsupported one (`predictive_planner_v2`). The run finds a difference (not null): every
+  uncertain condition flips the consuming planner's single-step decision from WAIT to COMMIT versus
+  oracle by dropping the uncertain corridor agent (at the visibility-projection step or the opt-in
+  `stream_gap` uncertainty gate), while the unsupported planner fails closed
+  (`unsupported_uncertainty_planner`). The WAIT→COMMIT flip is explicitly flagged as the expected
+  consequence of dropping uncertain agents, **not** a safety improvement. Follow-up decision:
+  `continue` (a runtime uncertainty producer + end-to-end stress run is the next bounded step).
+  Evidence is `diagnostic_only`/`stress`, not paper-grade; tracked summary under
+  `docs/context/evidence/issue_2546_scenario_belief_uncertainty_2026-06-23/` (#2546).
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
   language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)

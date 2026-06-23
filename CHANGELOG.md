@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the Qwen-RobotNav feasibility assessment (#2952):
+  [`docs/context/issue_2952_qwen_robotnav_assessment.md`](docs/context/issue_2952_qwen_robotnav_assessment.md)
+  audits availability (weights/code/license/size/hardware) and compares Qwen-RobotNav's
+  observation/action/tool interface against the real Robot SF local-navigation surfaces
+  (`robot_sf/nav/`, `robot_sf/gym_env/`, differential-drive `step()` contract). Decision:
+  **`blocked_asset_tracking`** — the report is real (arXiv 2606.18112) and on-target, but public
+  weights, a concrete code repo, and a usable license are all **unverified** (with one source
+  conflict explicitly flagged), and the interface gaps are large (camera-history obs vs LiDAR+ego;
+  8-waypoint output vs single `(v, ω)`; agentic two-tier vs stateless numeric `step`). Every
+  availability claim is tabulated as verified/unverified with its source; `evidence_tier: idea`,
+  exploratory only — no integration, no weights downloaded. Indexed in
+  [`docs/context/INDEX.md`](docs/context/INDEX.md) (#2952).
+
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
   language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)

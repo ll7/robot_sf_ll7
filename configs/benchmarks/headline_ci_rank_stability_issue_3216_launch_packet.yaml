@@ -49,7 +49,7 @@ runnable_config:
   horizon_schedule: configs/policy_search/scenario_horizons_h500.yaml
   horizon_schedule_sha256: 4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce
   seed_sets: configs/benchmarks/seed_sets_v1.yaml
-  seed_sets_sha256: 50cfb61a41b3e64a93cbd7d232c0eb38f656a87d69ab01ccf4cbdee8b4eecbac
+  seed_sets_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
   # 7-planner headline grid reference (planner rows for the 7x7 comparison).
   planner_matrix: configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml
   planner_matrix_sha256: 43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7
@@ -63,12 +63,11 @@ seed_budget:
   optional:
     tier: S30
     seed_set: paper_eval_s30
-    status: blocked_until_predeclared
+    status: available_for_launch
     note: >-
-      No S30 seed set is tracked in configs/benchmarks/seed_sets_v1.yaml as of
-      this packet (confirmed in docs/context/issue_1554_s20_h500_launch_packet.md
-      "S30 Boundary"). S30 is blocked until a seed schedule is predeclared and
-      tested. Do NOT synthesize ad hoc seeds at submit time.
+      Issue #1554 added the predeclared paper_eval_s30 seed schedule. No S30
+      campaign rows exist yet, so S30 remains launch-only until the SLURM run
+      produces durable rows. Do NOT synthesize ad hoc seeds at submit time.
 
 metric_surface:
   # Primary metrics carried with per-cell CIs; snqi is the rank metric.

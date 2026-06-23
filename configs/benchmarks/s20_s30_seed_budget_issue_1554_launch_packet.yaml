@@ -1,0 +1,126 @@
+schema_version: s20-s30-seed-budget-launch-packet.v1
+campaign_id: issue_1554_s20_s30_h500_social_navigation_v1
+generating_commit: "{generating_commit}"
+# This packet is a PRE-LAUNCH specification authored BEFORE any S20/S30 campaign run.
+# The heavy run is SLURM and is a separate downstream issue. Authoring this packet does
+# not produce S20/S30 results.
+evidence_status: proposal
+no_benchmark_result_claim: true
+no_claim_statement: >
+  No S20/S30 comparison, significance, ranking, or safety claim exists for this campaign.
+  The repository currently has durable S10 h500 comparison evidence (issue #1454), not
+  durable S20 or S30 comparison evidence. Any future S20/S30 claim requires the SLURM run
+  below, the predeclared primary metric surface, fail-closed row classification, and durable
+  artifacts recorded under durable_storage_plan. Until then, the
+  build_s20_s30_seed_budget_bundle_issue_1554.py bundle is blocked_until_run.
+
+# Target claim recorded conservatively for the claim-map gate. All claim-map inputs are
+# "to be confirmed by maintainer"; this packet asserts no paper claim.
+claim_map_gate:
+  target_claim: >
+    On the h500 social-navigation surface, the per-planner safety/quality ordering observed
+    at S10 is stable under a paper-facing S20 (and, if rankings still flip, S30) seed budget,
+    with bootstrap per-seed uncertainty small enough to support the declared primary deltas.
+  status: to_be_confirmed_by_maintainer
+  required_metric_surface: [success, collisions, near_misses, time_to_goal_norm]
+  descriptive_only_metrics: [min_clearance, min_distance, mean_clearance,
+                             raw_timeout_or_unfinished_rate, low_progress_rate]
+  planner_rows_to_confirm: [goal, social_force, orca, ppo, prediction_planner,
+                            socnav_sampling, sacadrl]
+  seed_tier: s20_then_s30_if_rankflip
+  why_s10_insufficient: >
+    Issue #1545 records material aggregate seed instability across the 10 fixed S10 seeds
+    (e.g. success range across planner-level seed means median 0.1875, max 0.2917) and
+    SNQI contract status fail on the S10 h500 surface, so close paper-facing comparisons
+    need a larger seed budget. To be confirmed by maintainer before any paper claim.
+
+methodology_reference: docs/context/issue_1545_power_aware_seed_budget_planning.md
+
+# Canonical campaign config + scenario matrix. The S10 candidate config is the closest
+# durable h500 social-navigation comparison surface; the S20/S30 run reuses it with the
+# larger seed set. Checksums computed at authoring time.
+campaign_config:
+  base_config: configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_horizons: configs/policy_search/scenario_horizons_h500.yaml
+  comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+  snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+  snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+  checksums:
+    configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml: 63314360ebcc146e93ed59ee3a528d7834a5ac1d22d6f0269cbb3b2cd8fd53a9
+    configs/scenarios/classic_interactions_francis2023.yaml: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+    configs/policy_search/scenario_horizons_h500.yaml: 4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce
+    configs/benchmarks/alyassi_comparability_map_v1.yaml: 22fc166ea438aa30da79c4888e270eee4afba8f1b9611080a3d51f4bb2cf200d
+    configs/benchmarks/snqi_weights_camera_ready_v3.json: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
+    configs/benchmarks/snqi_baseline_camera_ready_v3.json: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
+
+# Seed set. paper_eval_s20 already exists (111-130); paper_eval_s30 (111-140) was added by
+# this issue and preserves the frozen S3 eval seeds (111-113) and S10/S20 ordering.
+seed_policy:
+  mode: seed-set
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  primary_seed_set: paper_eval_s20
+  escalation_seed_set: paper_eval_s30
+  escalate_to_s30_when: >
+    Run the bundle tool on the S20 result store; if seed_resampling_rank_flip reports
+    rank_flip_observed for a primary metric, or a primary delta is below the issue #1545
+    effect-size threshold, escalate to paper_eval_s30.
+  checksums:
+    configs/benchmarks/seed_sets_v1.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+
+planner_rows:
+  - goal
+  - social_force
+  - orca
+  - ppo
+  - prediction_planner
+  - socnav_sampling
+  - sacadrl
+
+# Fail-closed policy (issue #691). These statuses never count as benchmark-success evidence
+# and are classified fail-closed by the bundle tool.
+fail_closed_policy:
+  valid_row_statuses: [native, adapter]
+  fail_closed_statuses: [fallback, degraded, unavailable, failed, partial, not_available,
+                         diagnostic_only]
+
+expected_artifacts:
+  result_store: output/campaign_result_store/s20_s30_h500_social_navigation
+  result_store_required_files:
+    - episodes.parquet
+    - summary.json
+    - analysis.json
+    - claim_card.yaml
+    - reproduction.md
+  bundle:
+    - output/issue_1554_s20_s30/bundle.json
+    - output/issue_1554_s20_s30/BUNDLE.md
+
+slurm_command_shape: >
+  Submit a dedicated follow-up SLURM issue after this packet lands. The future command must
+  run scripts/tools/run_camera_ready_benchmark.py against
+  configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml with
+  seed_policy.seed_set overridden to paper_eval_s20 (then paper_eval_s30 on rank flip),
+  write a canonical campaign result store, and keep fail-closed row classification intact
+  before any S20/S30 claim.
+
+validation_command: >
+  uv run python scripts/benchmark/build_s20_s30_seed_budget_bundle_issue_1554.py
+  --rows output/campaign_result_store/s20_s30_h500_social_navigation
+  --output-dir output/issue_1554_s20_s30
+
+durable_storage_plan:
+  checkpoints_in_git: false
+  raw_logs_in_git: false
+  raw_archive: >
+    Preserve the full raw campaign tree as a namespaced artifact/* GitHub release (mirroring
+    the issue #1454 S10 h500 bundle) and record its sha256 in the evidence README.
+  promote_to_evidence: >
+    Promote only compact reviewable outputs (campaign_summary, seed_variability,
+    statistical_sufficiency, bundle.json/BUNDLE.md) under
+    docs/context/evidence/issue_1554_s20_s30_seed_budget_<date>/ after the run.
+
+execution_boundary:
+  full_campaign_in_this_issue: false
+  submit_slurm_from_this_issue: false
+  bundle_status_until_run: blocked_until_run

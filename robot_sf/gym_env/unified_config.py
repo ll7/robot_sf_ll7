@@ -87,6 +87,7 @@ class ObservationVisibilitySettings:
     max_range_m: float | None = None
     static_occlusion: bool = False
     dynamic_occlusion: bool = False
+    tracking_noise_std_m: float = 0.0
 
     def to_metadata(self) -> dict[str, bool | float | None]:
         """Return JSON-safe visibility settings metadata."""
@@ -96,6 +97,7 @@ class ObservationVisibilitySettings:
             "max_range_m": None if self.max_range_m is None else float(self.max_range_m),
             "static_occlusion": bool(self.static_occlusion),
             "dynamic_occlusion": bool(self.dynamic_occlusion),
+            "tracking_noise_std_m": float(self.tracking_noise_std_m),
         }
 
 

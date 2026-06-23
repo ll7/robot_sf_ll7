@@ -48,9 +48,9 @@ References the real canonical configs with verified sha256:
 - `seed_sets_v1.yaml`, `classic_interactions_francis2023.yaml`,
   `scenario_horizons_h500.yaml`
 
-S20 (`paper_eval_s20`) is available; **S30 is blocked until a seed schedule is
-predeclared and tested** (no S30 set is tracked in `seed_sets_v1.yaml`, matching
-`docs/context/issue_1554_s20_h500_launch_packet.md` "S30 Boundary").
+S20 (`paper_eval_s20`) and the launch-only S30 schedule (`paper_eval_s30`) are
+available via #1554. No S20/S30 campaign rows exist yet, so the report remains
+blocked until the SLURM run produces durable rows.
 
 ## Reuse of canonical owners (no reinvention)
 
@@ -67,9 +67,9 @@ No second bootstrap / rank / Kendall implementation was added.
 
 ## Coordination
 
-- **#1554** (S20/S30 per-seed bundle, PR #3506): supplies the S20 seed schedule
-  and the increased-seed-budget headline campaign. #3216 **consumes** the
-  resulting rows; it does not own the seed schedule. S30 remains blocked there.
+- **#1554** (S20/S30 per-seed bundle, PR #3506): supplies the S20/S30 seed
+  schedules and the increased-seed-budget headline campaign. #3216 **consumes**
+  the resulting rows; it does not own the seed schedule or campaign execution.
 - **#3078** (Package A rank-stability + held-out-family transfer campaign):
   a broader seed/planner-rank stability + transfer campaign. #3216 is the
   **distinct grid-level per-cell** (planner x scenario) headline CI/rank-stability

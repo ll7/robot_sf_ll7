@@ -66,6 +66,7 @@ if TYPE_CHECKING:
 
 ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
+CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 
 
 @dataclass
@@ -1312,6 +1313,46 @@ def rollover_stability_metrics(data: EpisodeData) -> dict[str, Any]:
         ),
         "rollover_lateral_accel_abs_max": float(np.nanmax(lateral_accel)),
         "rollover_event": ROLLOVER_CRITICAL_EVENT if critical_count else "",
+    }
+
+
+def clear_tracking_metrics(data: EpisodeData) -> dict[str, Any]:
+    """Return optional CLEAR tracking uncertainty metrics from episode metadata.
+
+    The payload is produced by ScenarioBelief diagnostics and copied into flat
+    campaign columns only when ``episode_metadata["clear_tracking_uncertainty"]``
+    carries ``enabled: true``. Default benchmark rows are unchanged.
+
+    Returns:
+        Flat CLEAR metric columns, or an empty mapping when the diagnostic is off.
+    """
+    metadata = data.episode_metadata
+    if not isinstance(metadata, Mapping):
+        return {}
+    raw = metadata.get(CLEAR_TRACKING_METADATA_KEY)
+    if not isinstance(raw, Mapping) or not bool(raw.get("enabled", False)):
+        return {}
+
+    def _float_value(key: str, default: float = float("nan")) -> float:
+        try:
+            return float(raw.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    def _count_value(key: str) -> float:
+        value = _float_value(key, 0.0)
+        return value if math.isfinite(value) and value >= 0.0 else 0.0
+
+    return {
+        "clear_tracking_enabled": 1.0,
+        "clear_ground_truth_count": _count_value("ground_truth_count"),
+        "clear_detection_count": _count_value("detection_count"),
+        "clear_missed_detection_count": _count_value("missed_detection_count"),
+        "clear_false_positive_count": _count_value("false_positive_count"),
+        "clear_id_switch_count": _count_value("id_switch_count"),
+        "clear_mota": _float_value("mota"),
+        "clear_motp_m": _float_value("motp_m"),
+        "clear_motp_match_count": _count_value("motp_match_count"),
     }
 
 
@@ -2857,6 +2898,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values["avg_speed"] = avg_speed(data)
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
     values.update(rollover_stability_metrics(data))
+    values.update(clear_tracking_metrics(data))
     values["wall_collisions"] = values["obstacle_collision_count"]
     values["clearing_distance_min"] = clearing_distance_min(data)
     values["clearing_distance_avg"] = clearing_distance_avg(data)
@@ -2974,6 +3016,7 @@ def post_process_metrics(
     _attach_pedestrian_impact_block(metrics)
     _attach_social_acceptability_block(metrics)
     _attach_human_interaction_proxy_block(metrics)
+    _attach_clear_tracking_block(metrics)
     _attach_social_mini_game_block(metrics)
     metrics.pop("_episode_metadata", None)
     return _sanitize_metrics(metrics)
@@ -3096,6 +3139,30 @@ def _attach_human_interaction_proxy_block(metrics: dict[str, Any]) -> None:
         "interpretation": (
             "Diagnostic simulation-proxy metrics for mechanism reports only; not validated "
             "human comfort, human-subject, safety, or paper-grade social-compliance evidence."
+        ),
+    }
+
+
+def _attach_clear_tracking_block(metrics: dict[str, Any]) -> None:
+    """Attach a schema-backed CLEAR tracking diagnostic block when present."""
+    if "clear_tracking_enabled" not in metrics:
+        return
+    metrics["clear_tracking_uncertainty"] = {
+        "schema_version": "clear-tracking-metrics.v1",
+        "enabled": bool(metrics.get("clear_tracking_enabled")),
+        "mota": metrics.get("clear_mota"),
+        "motp_m": metrics.get("clear_motp_m"),
+        "counts": {
+            "ground_truth": metrics.get("clear_ground_truth_count"),
+            "detections": metrics.get("clear_detection_count"),
+            "missed_detections": metrics.get("clear_missed_detection_count"),
+            "false_positives": metrics.get("clear_false_positive_count"),
+            "id_switches": metrics.get("clear_id_switch_count"),
+            "motp_matches": metrics.get("clear_motp_match_count"),
+        },
+        "claim_boundary": (
+            "CLEAR-style diagnostic metrics for synthetic ScenarioBelief observation "
+            "contracts; not calibrated real-sensor evidence."
         ),
     }
 

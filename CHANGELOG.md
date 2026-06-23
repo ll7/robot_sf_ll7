@@ -22,6 +22,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exploratory only — no integration, no weights downloaded. Indexed in
   [`docs/context/INDEX.md`](docs/context/INDEX.md) (#2952).
 
+* Added a bounded, same-seed forecast-risk closed-loop coupling gate (#2916): a deterministic risk
+  adapter [`robot_sf/benchmark/forecast_risk_adapter.py`](robot_sf/benchmark/forecast_risk_adapter.py)
+  mapping a `ForecastBatch.v1` to a bounded `[0,1]` per-step risk signal (fail-closed on
+  degraded/fallback/oracle batches), a config
+  [`configs/research/forecast_risk_coupling_issue_2916.yaml`](configs/research/forecast_risk_coupling_issue_2916.yaml)
+  with `no_forecast`/`cv_risk`/`semantic_risk`/`interaction_risk` rows pinned to identical
+  seed/scenario, and a fixture-driven runner
+  [`scripts/benchmark/run_forecast_risk_coupling_gate.py`](scripts/benchmark/run_forecast_risk_coupling_gate.py)
+  that scores collision/near-miss, route progress, stop/yield timing, false-positive stopping,
+  runtime, and SNQI per row and emits a `continue|revise|stop` verdict with the
+  false-positive-stopping vs safety-benefit trade-off explicit. On the bundled single-pedestrian
+  occluded-emergence fixture the gate returns `continue` (forecast risk removed the near-miss with 0
+  false-positive stops at a throughput cost). Evidence is `diagnostic_only`/`stress`, not
+  paper-grade, and promotes no learned predictor; the three forecast sources are indistinguishable on
+  this single fixture (caveat recorded). Tracked summary under
+  `docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23/` (#2916).
+* Added a bounded ScenarioBelief uncertainty diagnostic (#2546):
+  [`scripts/analysis/run_scenario_belief_uncertainty_diagnostic_issue_2546.py`](scripts/analysis/run_scenario_belief_uncertainty_diagnostic_issue_2546.py)
+  compares a fixed scenario across five belief conditions (oracle/deterministic, visibility-limited,
+  covariance-inflated, class-probability uncertainty, existence-confidence degradation), projecting
+  each through `project_scenario_belief_for_planner` for both a consuming planner (`stream_gap`) and
+  an unsupported one (`predictive_planner_v2`). The run finds a difference (not null): every
+  uncertain condition flips the consuming planner's single-step decision from WAIT to COMMIT versus
+  oracle by dropping the uncertain corridor agent (at the visibility-projection step or the opt-in
+  `stream_gap` uncertainty gate), while the unsupported planner fails closed
+  (`unsupported_uncertainty_planner`). The WAIT→COMMIT flip is explicitly flagged as the expected
+  consequence of dropping uncertain agents, **not** a safety improvement. Follow-up decision:
+  `continue` (a runtime uncertainty producer + end-to-end stress run is the next bounded step).
+  Evidence is `diagnostic_only`/`stress`, not paper-grade; tracked summary under
+  `docs/context/evidence/issue_2546_scenario_belief_uncertainty_2026-06-23/` (#2546).
+* Added an AMMV mechanism-divergence classification diagnostic (#2444):
+  [`scripts/analysis/run_ammv_divergence_classification_issue_2444.py`](scripts/analysis/run_ammv_divergence_classification_issue_2444.py)
+  runs direct `SocialForcePlanner` mechanism probes (bypassing the differential-drive benchmark
+  adapter that produced #2434's zero-delta result) with an **AMMV-isolated control** -- the same
+  AMMV-aware config with `ammv_aware_enabled` toggled off, so the paired delta reflects only the
+  AMMV term. Result: `nonzero_divergence_found` -- the AMMV term activates (~2.64 N) and changes the
+  same-seed trajectory (robot-state delta 0.21-0.78 m) under isolation, so #2434's zero result is an
+  adapter-mode artifact, not a globally inactive mechanism. Includes a zero-divergence guard so
+  identical (#2434-style) pairs cannot be reused as behavioral evidence in #2159/#2227 panels.
+  `scripts/tools/run_ammv_social_force_pair_diagnostic.py::_run_mechanism_probe` gained a
+  backward-compatible `default_config` parameter to support the isolated control. Evidence is
+  `diagnostic_only`/`stress`, not paper-grade; tracked under
+  `docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/` (#2444).
+* Made SDD scenario-prior staging reproducible (#2657): added
+  [`scripts/data/stage_sdd_dataset_issue_2657.py`](scripts/data/stage_sdd_dataset_issue_2657.py)
+  (subcommands `plan`/`validate`/`status`/`mode`/`download`) and a provenance manifest
+  [`configs/data/sdd_staging_manifest.yaml`](configs/data/sdd_staging_manifest.yaml) (source URL,
+  CC BY-NC-SA 3.0 license + readme pointer, version tag, expected files/size, checksum placeholders,
+  `local_availability`). The tool **never auto-downloads**: a bare run only plans/reports (disk check,
+  availability) and exits without network access; `download` requires explicit `--confirm-download` +
+  y/N (or `--yes`), checks free disk vs expected size and fails closed if insufficient, stages into a
+  git-ignored subfolder (`output/external_data/sdd`), and validates a SHA-256 tree checksum before
+  marking `staged`. Wired a `proxy_schema_smoke` vs `dataset_backed_prior` gate into the scenario-prior
+  generator (#2726) so a missing/unvalidated SDD can never be presented as dataset-backed evidence.
+  Audit doc: [`docs/context/issue_2657_sdd_staging.md`](docs/context/issue_2657_sdd_staging.md) (#2657).
+* Added the AMMV contrastive mechanism panel (partial #2227, AMV sub-target):
+  [`scripts/analysis/build_ammv_mechanism_panel_issue_2227.py`](scripts/analysis/build_ammv_mechanism_panel_issue_2227.py)
+  runs `SocialForcePlanner` twice on one fixed scenario (seed 42) toggling only `ammv_aware_enabled`
+  in `configs/baselines/social_force_ammv_aware.yaml`, exports both arms as schema-validated
+  `simulation_trace_export.v1` traces, and renders contrastive trajectory panels via
+  `generate_trajectory_panel_bundle`. Applies #2444's finding (PR #3451) that the AMMV term is a
+  genuine same-seed divergent pair: AMMV-off max force 0.0 vs AMMV-on 2.64, final-position
+  divergence 0.58 m. Evidence is `diagnostic_only`/`stress`, not paper-grade — a planner-level
+  mechanism difference, not a navigation-success or benchmark claim. Tracked panels + captions +
+  provenance under `docs/context/evidence/issue_2227_ammv_mechanism_panel_2026-06-23/`. The
+  static-recentering and topology-guided-recovery panel sub-targets of #2227 remain follow-up
+  (Refs #2227).
+* Completed #2227 mechanism panels with the static-recentering and topology-guided-recovery
+  contrastive sub-targets:
+  [`scripts/analysis/build_recenter_topology_panels_issue_2227.py`](scripts/analysis/build_recenter_topology_panels_issue_2227.py)
+  runs each mechanism's planner twice on one fixed activation-capable scenario, toggling ONLY the
+  mechanism flag (`static_recenter_enabled`; `topology_command_enabled`), exports schema-valid
+  `simulation_trace_export.v1` traces, and renders contrastive trajectory panels with per-step
+  activation diagnostics and command-source. Findings (real, diagnostic-only/stress): static
+  recentering activates (recenter term positive from step 7) and the on-arm reaches the goal where
+  the off-arm fails; the topology command activates but the on-arm *degrades* the outcome versus the
+  off-arm — reported honestly as a single-row degradation, not a benefit (consistent with the prior
+  #2752 "no useful topology alternative" diagnosis). Together with the AMV/AMMV panel sub-target this
+  completes #2227. Tracked panels + captions + provenance under
+  `docs/context/evidence/issue_2227_recenter_topology_panels_2026-06-23/` (#2227).
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
   language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)

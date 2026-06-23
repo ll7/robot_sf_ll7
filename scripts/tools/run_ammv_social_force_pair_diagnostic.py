@@ -164,8 +164,15 @@ def _run_mechanism_probe(
     ammv_config_path: Path,
     *,
     probe_name: str = "issue_2168_close_front_agent_probe",
+    default_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run a deterministic direct probe that exposes AMMV metadata."""
+    """Run a deterministic direct probe that exposes AMMV metadata.
+
+    By default the control arm uses bare ``SFPlannerConfig()``. Pass ``default_config`` (a config
+    mapping) to control the comparison baseline explicitly -- e.g. the AMMV config with
+    ``ammv_aware_enabled`` toggled off, so the paired delta isolates the AMMV term rather than
+    conflating it with unrelated config differences.
+    """
     spec = _mechanism_probe_spec(probe_name)
     dt = float(spec["dt"])
     steps = int(spec["steps"])
@@ -179,8 +186,9 @@ def _run_mechanism_probe(
         agents=agents,
         obstacles=[],
     )
+    default_planner_config = default_config if default_config is not None else SFPlannerConfig()
     planners = {
-        "default_social_force": SocialForcePlanner(SFPlannerConfig(), seed=42),
+        "default_social_force": SocialForcePlanner(default_planner_config, seed=42),
         "ammv_social_force": SocialForcePlanner(_load_config(ammv_config_path), seed=42),
     }
     traces: dict[str, dict[str, Any]] = {}

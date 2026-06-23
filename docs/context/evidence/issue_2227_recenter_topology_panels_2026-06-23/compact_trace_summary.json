@@ -1,0 +1,66 @@
+{
+  "static_recenter": {
+    "off": {
+      "first_frame_pose": [
+        18.498376331271185,
+        29.896807121354158
+      ],
+      "frame_count": 160,
+      "last_frame_pose": [
+        18.767929416230803,
+        28.80133955959912
+      ],
+      "mechanism_active_step_count": 0,
+      "planner_id": "hybrid_rule_local_planner_static_recenter_enabled_off",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 113
+    },
+    "on": {
+      "first_frame_pose": [
+        18.498376331271185,
+        29.896807121354158
+      ],
+      "frame_count": 122,
+      "last_frame_pose": [
+        20.44765936712915,
+        9.255032156489564
+      ],
+      "mechanism_active_step_count": 4,
+      "planner_id": "hybrid_rule_local_planner_static_recenter_enabled_on",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 113
+    }
+  },
+  "topology_command": {
+    "off": {
+      "first_frame_pose": [
+        19.45661626614107,
+        30.57414097749167
+      ],
+      "frame_count": 157,
+      "last_frame_pose": [
+        21.12990256934242,
+        8.115591358063755
+      ],
+      "mechanism_active_step_count": 0,
+      "planner_id": "topology_guided_hybrid_rule_v0_topology_command_enabled_off",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111
+    },
+    "on": {
+      "first_frame_pose": [
+        19.45661626614107,
+        30.57414097749167
+      ],
+      "frame_count": 160,
+      "last_frame_pose": [
+        20.972502142443027,
+        9.950496285912122
+      ],
+      "mechanism_active_step_count": 37,
+      "planner_id": "topology_guided_hybrid_rule_v0_topology_command_enabled_on",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111
+    }
+  }
+}

@@ -195,10 +195,12 @@ explicitly asks to resume it.
   reusable improvements. Each improvement should name the observed leak or
   failure it prevents, such as raw worktree fleet output, full skill rereads,
   stale-goal continuation after a user pivot, helper-path confusion, unbounded
-  CI polling, missing delegate cleanup, or PR-body contract retries.
-- Make those improvements acceptance criteria before editing. If the current
-  instruction surface already covers one, do not duplicate it; either tighten
-  the existing wording with the new evidence or leave it out of scope.
+  continuous integration (CI) polling, missing delegate cleanup, or pull
+  request (PR) body contract retries.
+- Make those improvements acceptance criteria, meaning specific conditions the
+  instruction change must satisfy, before editing. If the current instruction
+  surface already covers one, do not duplicate it; either tighten the existing
+  wording with the new evidence or leave it out of scope.
 - Create a fresh docs-or-workflow worktree from `origin/main`. Record parked
   PRs, jobs, dirty worktrees, and active delegates in the ledger, then keep the
   new branch limited to instruction changes.

@@ -208,6 +208,10 @@ This isolates branches, not file snapshots. Pending jobs normally read the workt
 they start, so avoid incompatible edits to that worktree's configs or scripts while a queued job is
 waiting.
 
+If submission is performed by a private wrapper over SSH, create or refresh the owning worktree on
+the submit host before `sbatch`, then record the host-side branch, commit, and clean status. A local
+dry run proves the command shape, but it does not prove that the cluster can see the same worktree.
+
 `local.machine.md` is gitignored. If the same login-node policy should apply to every local
 worktree, symlink it from the original checkout:
 
@@ -248,6 +252,11 @@ For worktrees, prefer one sibling private overlay shared by all checkouts:
 ~/git/robot_sf_ll7.worktrees/<branch>/
 ~/git/robot_sf_ll7-private-ops/
 ```
+
+When a private overlay queue entry is blocked on a prerequisite that may have changed, reconcile the
+blocker against current public issue comments, merged PRs, and the relevant source/tests before
+submitting. If the prerequisite is satisfied, record that evidence in the private ledger or handoff;
+if the queue and public state conflict without clear evidence, keep the job blocked.
 
 ## Auxme issue-791 private helper
 

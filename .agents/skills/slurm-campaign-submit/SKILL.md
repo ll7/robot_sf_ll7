@@ -50,19 +50,27 @@ Use this skill for generic SLURM campaign submission: learned-risk, shielded PPO
    `uv run python scripts/dev/submit_training_jobs.py --dry-run` and submit through
    `uv run python scripts/dev/submit_training_jobs.py --submit` only when the generated manifest
    shows the intended config, launcher, job name, output root, and duplicate-check evidence.
-8. Submit non-queue campaigns with explicit config and job name; capture job ID plus stdout/stderr paths.
-9. Record output root and expected artifacts: manifest, checkpoint, report, metrics, videos, or release bundle.
-10. Classify pre-health status as `route_accepted`, `blocked`, or `failed_preflight`; classify
+8. When a private queue entry is blocked by a named prerequisite, reconcile that
+   blocker against current public code, issue comments, and merged PRs before
+   treating it as still blocked. If the prerequisite is now satisfied, record
+   the evidence and proceed as a rerun; if it is ambiguous, stop before
+   submitting.
+9. Submit non-queue campaigns with explicit config and job name; capture job ID plus stdout/stderr paths.
+   If submission is routed through a remote host, first prove the owning public
+   worktree exists and is clean on that host at the intended commit. A local
+   worktree with the same branch name is not sufficient evidence.
+10. Record output root and expected artifacts: manifest, checkpoint, report, metrics, videos, or release bundle.
+11. Classify pre-health status as `route_accepted`, `blocked`, or `failed_preflight`; classify
     successful route acceptance with missing issue/PR or private-ledger traceability as
     `partial_traceable`; classify failures as config, cluster capacity, wrapper, dependency, or unknown.
-11. Immediately run a submission health check (`squeue`, `sacct`, initial stderr availability) and apply the
+12. Immediately run a submission health check (`squeue`, `sacct`, initial stderr availability) and apply the
     shared checklist in `docs/dev/slurm_submission.md`.
-12. Hand artifact classification to `artifact-provenance` before downstream reports depend on local `output/`.
-13. A clean `submitted` state requires both immediate health-check success and the checklist traceability update
+13. Hand artifact classification to `artifact-provenance` before downstream reports depend on local `output/`.
+14. A clean `submitted` state requires both immediate health-check success and the checklist traceability update
     (issue/PR comment plus private-ledger or handoff reference). If route acceptance succeeds but
     either traceability record is missing, keep `partial_traceable`. `sbatch`/`sacct` acceptance alone is only
     route evidence and does not imply benchmark or report proof.
-14. After completion or predeclared cancellation, route results before rerunning:
+15. After completion or predeclared cancellation, route results before rerunning:
     - cancelled runs may be diagnostic evidence only when the early-stop criteria were declared and
       the configured preservation action captured logs, manifest, config, commit, and artifact
       status;
@@ -104,6 +112,11 @@ mode. The single `gse-` background lane in `goal-slurm-experiment` remains indep
 - Do not bypass `scripts/dev/submit_training_jobs.py` for queue-backed training jobs unless the
   helper cannot represent the launcher; record the exception and the equivalent duplicate checks.
 - Do not submit from an unintended branch or dirty tree without calling that out.
+- Do not submit through a remote wrapper until the submit-host worktree, branch,
+  commit, and cleanliness have been checked on that host.
+- Do not preserve a stale queue blocker after the blocking prerequisite is
+  proven satisfied by current code, merged PRs, or issue comments; update the
+  queue/ledger rationale or classify the mismatch as an ambiguity.
 - Do not treat a queued job as completed evidence.
 - Do not cancel a low-signal training job as diagnostic evidence unless the early-stop rule was
   predeclared and the diagnostic-preservation action has been completed.

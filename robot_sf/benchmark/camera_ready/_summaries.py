@@ -391,6 +391,7 @@ def _build_actuation_envelope_summary(
         "claim_boundary": (
             "Synthetic diagnostic only; not a hardware-calibrated or paper-facing AMV claim."
         ),
+        "actuation_profile_type": "synthetic_diagnostic",
         "synthetic_actuation_profile": profile.to_metadata(),
         "amv_coverage_status": amv_coverage_status,
         "scenario_amv_rows": scenario_amv_rows,

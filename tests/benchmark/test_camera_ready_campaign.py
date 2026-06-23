@@ -529,15 +529,15 @@ def test_load_campaign_config_rejects_malformed_latency_stress_profile(
         load_campaign_config(config_path)
 
 
-def test_load_campaign_config_rejects_non_synthetic_actuation_claim_scope(
+def test_load_campaign_config_accepts_calibrated_actuation_profile_with_provenance(
     tmp_path: Path,
 ) -> None:
-    """Synthetic actuation diagnostics should reject hardware or paper-facing claim scopes."""
+    """A calibrated-actuation profile with provenance should be accepted by the campaign loader."""
     config_path = tmp_path / "campaign.yaml"
     config_path.write_text(
         yaml.safe_dump(
             {
-                "name": "bad_actuation_scope",
+                "name": "calibrated_actuation_scope",
                 "paper_facing": False,
                 "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
                 "kinematics_matrix": ["differential_drive"],
@@ -583,8 +583,9 @@ def test_load_campaign_config_rejects_non_synthetic_actuation_claim_scope(
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="claim_scope must be 'synthetic-only'"):
-        load_campaign_config(config_path)
+    cfg = load_campaign_config(config_path)
+    assert cfg.synthetic_actuation_profile is not None
+    assert cfg.synthetic_actuation_profile.claim_scope == "hardware-calibrated"
 
 
 def test_load_campaign_config_rejects_synthetic_profile_without_diagnostic_boundary(
@@ -704,6 +705,105 @@ def test_calibrated_actuation_profile_provenance_contract_names_required_fields(
         "units",
         "claim_boundary",
     )
+
+
+def test_synthetic_profile_with_calibrated_markers_rejected() -> None:
+    """A synthetic-only profile that looks calibrated should be rejected as conflation."""
+    with pytest.raises(ValueError, match="calibrated-looking markers"):
+        validate_actuation_profile_claim_boundary(
+            {
+                "name": "amv-actuation-calibrated-synthetic-v0",
+                "profile_version": "v0",
+                "claim_scope": "synthetic-only",
+                "claim_boundary": "diagnostic-only",
+                "calibration_status": "hardware-calibrated",
+                "max_linear_accel_m_s2": 2.0,
+                "max_linear_decel_m_s2": 2.5,
+                "max_yaw_rate_rad_s": 1.2,
+                "max_angular_accel_rad_s2": 4.0,
+                "latency_mode": "one-step-delay",
+                "update_mode": "5hz-hold",
+            }
+        )
+
+
+def test_calibrated_profile_with_provenance_passes_validation() -> None:
+    """A calibrated profile with complete provenance should pass validation."""
+    validate_actuation_profile_claim_boundary(
+        {
+            "name": "amv-actuation-calibrated-v0",
+            "profile_version": "v0",
+            "claim_scope": "hardware-calibrated",
+            "claim_boundary": "calibrated-amv-actuation",
+            "max_linear_accel_m_s2": 1.5,
+            "max_linear_decel_m_s2": 2.0,
+            "max_yaw_rate_rad_s": 0.9,
+            "max_angular_accel_rad_s2": 2.5,
+            "latency_mode": "one-step-delay",
+            "update_mode": "5hz-hold",
+            "provenance": {
+                "source_id": "test-source-001",
+                "source_uri": "https://example.com/calibrated-trace",
+                "source_type": "hardware-trace-collection",
+                "profile_version": "v1-calibrated",
+                "measurement_date": "2026-06-01",
+                "supported_actuation_fields": [
+                    "max_linear_accel_m_s2",
+                    "max_linear_decel_m_s2",
+                ],
+                "units": {
+                    "max_linear_accel_m_s2": "m/s^2",
+                    "max_linear_decel_m_s2": "m/s^2",
+                },
+                "claim_boundary": "calibrated-amv-actuation",
+            },
+        },
+        label="calibrated_actuation_profile",
+    )
+
+
+def test_typed_synthetic_profile_with_calibrated_name_rejected() -> None:
+    """A SyntheticActuationProfile with synthetic-only scope but calibrated name is rejected."""
+    with pytest.raises(ValueError, match="calibrated-looking markers"):
+        validate_synthetic_actuation_profile(
+            SyntheticActuationProfile(
+                name="hardware-calibrated-profile-v0",
+                profile_version="v0",
+                claim_scope="synthetic-only",
+                claim_boundary="diagnostic-only",
+                max_linear_accel_m_s2=2.0,
+                max_linear_decel_m_s2=2.5,
+                max_yaw_rate_rad_s=1.2,
+                max_angular_accel_rad_s2=4.0,
+                latency_mode="one-step-delay",
+                update_mode="5hz-hold",
+            )
+        )
+
+
+def test_actuation_envelope_summary_distinguishes_profile_type() -> None:
+    """Evidence summary should include an actuation_profile_type field."""
+    profile = SyntheticActuationProfile(
+        name="test-profile",
+        profile_version="v0",
+        claim_scope="synthetic-only",
+        claim_boundary="diagnostic-only",
+        max_linear_accel_m_s2=2.0,
+        max_linear_decel_m_s2=2.5,
+        max_yaw_rate_rad_s=1.2,
+        max_angular_accel_rad_s2=4.0,
+        latency_mode="one-step-delay",
+        update_mode="5hz-hold",
+    )
+    from robot_sf.benchmark.camera_ready._summaries import _build_actuation_envelope_summary
+
+    summary = _build_actuation_envelope_summary(
+        campaign_id="test-campaign",
+        generated_at_utc="2026-06-23T00:00:00Z",
+        profile=profile,
+        planner_rows=[],
+    )
+    assert summary["actuation_profile_type"] == "synthetic_diagnostic"
 
 
 def test_load_campaign_config_rejects_invalid_latency_stress_scope(

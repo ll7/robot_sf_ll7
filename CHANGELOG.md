@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a bounded robot-influence-on-pedestrian-flow v0 slice (#3066):
+  [`scripts/benchmark/run_robot_influence_flow_slice_issue_3066.py`](scripts/benchmark/run_robot_influence_flow_slice_issue_3066.py)
+  runs a small same-seed campaign (reusing `robot_sf.benchmark.runner.run_batch`) comparing two
+  rule-based robot policies (`social_force` vs `orca`, CPU-only) on a corridor/crossing subset of the
+  issue-3059 suite (seeds 111/112/113, 12 episodes, 0 degraded) and measures whether the robot policy
+  changes pedestrian-flow dynamics (near-vs-far pedestrian accel/turn-rate), reporting per-row
+  success/safety + flow/comfort + denominator/uncertainty with fail-closed status and a robot-influence
+  interpretation kept separate from nav performance. Result: `diagnostic` — 3 of 4 powered flow deltas
+  exceed pooled seed variance, but tiny n, low density, an outlier-dominated corridor cell, and
+  confounding with nav outcome keep it diagnostic-only. Smoke/diagnostic, not paper-grade; no
+  real-world or sim-to-real claim. Tracked summary under
+  `docs/context/evidence/issue_3066_robot_influence_flow_2026-06-23/`. Unblocked once #3062 merged
+  (#3066).
+
 * Added a bounded, same-seed forecast-risk closed-loop coupling gate (#2916): a deterministic risk
   adapter [`robot_sf/benchmark/forecast_risk_adapter.py`](robot_sf/benchmark/forecast_risk_adapter.py)
   mapping a `ForecastBatch.v1` to a bounded `[0,1]` per-step risk signal (fail-closed on

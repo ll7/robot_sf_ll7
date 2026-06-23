@@ -1,0 +1,637 @@
+{
+  "schema": "robot-influence-flow-slice.issue-3066.v1",
+  "issue": 3066,
+  "generated_at": "2026-06-23T10:37:34.623959+00:00",
+  "git_head": "cbec866be3deb99858bce200f2824000a3c28e6b",
+  "claim_boundary": "diagnostic_only",
+  "evidence_tier": "smoke",
+  "paper_grade": false,
+  "non_claims": "No real-world pedestrian-flow, crowd-comfort, fairness, or sim-to-real claim. Robot-influence signals are diagnostic simulation proxies and are interpreted separately from nav performance.",
+  "config": {
+    "policies": [
+      "social_force",
+      "orca"
+    ],
+    "scenarios": [
+      "classic_head_on_corridor_low",
+      "classic_crossing_low"
+    ],
+    "seeds": [
+      111,
+      112,
+      113
+    ],
+    "horizon": 240,
+    "policy_baseline": "social_force",
+    "policy_comparison": "orca",
+    "influence_metrics": [
+      "ped_impact_accel_delta_mean",
+      "ped_impact_turn_rate_delta_mean"
+    ]
+  },
+  "row_counts": {
+    "total": 12,
+    "usable": 12,
+    "degraded_failclosed": 0
+  },
+  "rows": [
+    {
+      "policy": "social_force",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 111,
+      "row_status": "failure",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": -22.834501291636045,
+        "ped_impact_turn_rate_delta_mean": 0.12829128060804346
+      },
+      "context": {
+        "avg_speed": 1.0822906672515302,
+        "robot_ped_within_5m_frac": 0.32916666666666666,
+        "social_proxemic_intrusion_frac": 0.14166666666666666,
+        "min_distance": 1.794240658273805,
+        "mean_clearance": 5.767774106515018,
+        "near_misses": 10.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 0.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 13.0,
+        "ped_impact_far_samples": 463.0,
+        "ped_impact_ped_count": 2.0,
+        "ped_impact_accel_delta_valid": 1.0,
+        "ped_impact_turn_rate_delta_valid": 1.0
+      }
+    },
+    {
+      "policy": "social_force",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 112,
+      "row_status": "failure",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": -25.85523342935451,
+        "ped_impact_turn_rate_delta_mean": 1.3608070820004183
+      },
+      "context": {
+        "avg_speed": 1.0873535644755359,
+        "robot_ped_within_5m_frac": 0.2916666666666667,
+        "social_proxemic_intrusion_frac": 0.14583333333333334,
+        "min_distance": 1.407455223547045,
+        "mean_clearance": 10.27522068565746,
+        "near_misses": 22.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 0.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 24.0,
+        "ped_impact_far_samples": 452.0,
+        "ped_impact_ped_count": 2.0,
+        "ped_impact_accel_delta_valid": 1.0,
+        "ped_impact_turn_rate_delta_valid": 1.0
+      }
+    },
+    {
+      "policy": "social_force",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 113,
+      "row_status": "failure",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": -22.738579333862017,
+        "ped_impact_turn_rate_delta_mean": 1.2876308668663006
+      },
+      "context": {
+        "avg_speed": 1.096052174986694,
+        "robot_ped_within_5m_frac": 0.2708333333333333,
+        "social_proxemic_intrusion_frac": 0.11666666666666667,
+        "min_distance": 1.6950843067992734,
+        "mean_clearance": 9.507831984505746,
+        "near_misses": 12.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 0.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 14.0,
+        "ped_impact_far_samples": 462.0,
+        "ped_impact_ped_count": 2.0,
+        "ped_impact_accel_delta_valid": 1.0,
+        "ped_impact_turn_rate_delta_valid": 1.0
+      }
+    },
+    {
+      "policy": "orca",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 111,
+      "row_status": "success",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": 0.40779492780563464,
+        "ped_impact_turn_rate_delta_mean": 0.6511110304399871
+      },
+      "context": {
+        "avg_speed": 1.99998300516447,
+        "robot_ped_within_5m_frac": 0.31690140845070425,
+        "social_proxemic_intrusion_frac": 0.15492957746478872,
+        "min_distance": 1.6702469202849204,
+        "mean_clearance": 7.123989847471108,
+        "near_misses": 8.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 1.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 13.0,
+        "ped_impact_far_samples": 267.0,
+        "ped_impact_ped_count": 2.0,
+        "ped_impact_accel_delta_valid": 2.0,
+        "ped_impact_turn_rate_delta_valid": 2.0
+      }
+    },
+    {
+      "policy": "orca",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 112,
+      "row_status": "success",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": NaN,
+        "ped_impact_turn_rate_delta_mean": NaN
+      },
+      "context": {
+        "avg_speed": 1.9644665839502433,
+        "robot_ped_within_5m_frac": 0.21019108280254778,
+        "social_proxemic_intrusion_frac": 0.03821656050955414,
+        "min_distance": 2.456543393213765,
+        "mean_clearance": 11.468662081896813,
+        "near_misses": 0.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 1.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 0.0,
+        "ped_impact_far_samples": 310.0,
+        "ped_impact_ped_count": 2.0,
+        "ped_impact_accel_delta_valid": 0.0,
+        "ped_impact_turn_rate_delta_valid": 0.0
+      }
+    },
+    {
+      "policy": "orca",
+      "scenario": "classic_head_on_corridor_low",
+      "seed": 113,
+      "row_status": "success",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": NaN,
+        "ped_impact_turn_rate_delta_mean": NaN
+      },
+      "context": {
+        "avg_speed": 1.9910404591381274,
+        "robot_ped_within_5m_frac": 0.19205298013245034,
+        "social_proxemic_intrusion_frac": 0.0,
+        "min_distance": 3.3312621167916094,
+        "mean_clearance": 9.700799355096551,
+        "near_misses": 0.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 1.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 0.0,
+        "ped_impact_far_samples": 298.0,
+        "ped_impact_ped_count": 2.0,
+        "ped_impact_accel_delta_valid": 0.0,
+        "ped_impact_turn_rate_delta_valid": 0.0
+      }
+    },
+    {
+      "policy": "social_force",
+      "scenario": "classic_crossing_low",
+      "seed": 111,
+      "row_status": "failure",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": 0.036901191835328334,
+        "ped_impact_turn_rate_delta_mean": 0.018345424781930825
+      },
+      "context": {
+        "avg_speed": 0.6188629032270778,
+        "robot_ped_within_5m_frac": 1.0,
+        "social_proxemic_intrusion_frac": 0.7291666666666666,
+        "min_distance": 1.7118143266248902,
+        "mean_clearance": 0.9051403291192105,
+        "near_misses": 25.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 0.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 84.0,
+        "ped_impact_far_samples": 630.0,
+        "ped_impact_ped_count": 3.0,
+        "ped_impact_accel_delta_valid": 1.0,
+        "ped_impact_turn_rate_delta_valid": 1.0
+      }
+    },
+    {
+      "policy": "social_force",
+      "scenario": "classic_crossing_low",
+      "seed": 112,
+      "row_status": "failure",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": NaN,
+        "ped_impact_turn_rate_delta_mean": NaN
+      },
+      "context": {
+        "avg_speed": 0.6269670672762623,
+        "robot_ped_within_5m_frac": 0.42083333333333334,
+        "social_proxemic_intrusion_frac": 0.0,
+        "min_distance": 3.577854937886109,
+        "mean_clearance": 4.798297424709804,
+        "near_misses": 0.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 0.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 0.0,
+        "ped_impact_far_samples": 714.0,
+        "ped_impact_ped_count": 3.0,
+        "ped_impact_accel_delta_valid": 0.0,
+        "ped_impact_turn_rate_delta_valid": 0.0
+      }
+    },
+    {
+      "policy": "social_force",
+      "scenario": "classic_crossing_low",
+      "seed": 113,
+      "row_status": "failure",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": NaN,
+        "ped_impact_turn_rate_delta_mean": NaN
+      },
+      "context": {
+        "avg_speed": 0.6597676586021239,
+        "robot_ped_within_5m_frac": 0.0,
+        "social_proxemic_intrusion_frac": 0.0,
+        "min_distance": 6.904403543969916,
+        "mean_clearance": 15.440620077879677,
+        "near_misses": 0.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 0.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 0.0,
+        "ped_impact_far_samples": 714.0,
+        "ped_impact_ped_count": 3.0,
+        "ped_impact_accel_delta_valid": 0.0,
+        "ped_impact_turn_rate_delta_valid": 0.0
+      }
+    },
+    {
+      "policy": "orca",
+      "scenario": "classic_crossing_low",
+      "seed": 111,
+      "row_status": "success",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": 0.276918272201649,
+        "ped_impact_turn_rate_delta_mean": 0.5300585903229077
+      },
+      "context": {
+        "avg_speed": 1.991029022890672,
+        "robot_ped_within_5m_frac": 0.6123348017621145,
+        "social_proxemic_intrusion_frac": 0.3656387665198238,
+        "min_distance": 1.6934849037567956,
+        "mean_clearance": 3.457525634560022,
+        "near_misses": 29.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 1.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 41.0,
+        "ped_impact_far_samples": 634.0,
+        "ped_impact_ped_count": 3.0,
+        "ped_impact_accel_delta_valid": 3.0,
+        "ped_impact_turn_rate_delta_valid": 3.0
+      }
+    },
+    {
+      "policy": "orca",
+      "scenario": "classic_crossing_low",
+      "seed": 112,
+      "row_status": "success",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": NaN,
+        "ped_impact_turn_rate_delta_mean": NaN
+      },
+      "context": {
+        "avg_speed": 1.991466826675284,
+        "robot_ped_within_5m_frac": 0.044444444444444446,
+        "social_proxemic_intrusion_frac": 0.0,
+        "min_distance": 3.7482887327295664,
+        "mean_clearance": 16.97922714165305,
+        "near_misses": 0.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 1.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 0.0,
+        "ped_impact_far_samples": 669.0,
+        "ped_impact_ped_count": 3.0,
+        "ped_impact_accel_delta_valid": 0.0,
+        "ped_impact_turn_rate_delta_valid": 0.0
+      }
+    },
+    {
+      "policy": "orca",
+      "scenario": "classic_crossing_low",
+      "seed": 113,
+      "row_status": "success",
+      "usable": true,
+      "degraded_reason": null,
+      "influence": {
+        "ped_impact_accel_delta_mean": NaN,
+        "ped_impact_turn_rate_delta_mean": NaN
+      },
+      "context": {
+        "avg_speed": 1.9999311390111862,
+        "robot_ped_within_5m_frac": 0.05855855855855856,
+        "social_proxemic_intrusion_frac": 0.0,
+        "min_distance": 3.584956697766366,
+        "mean_clearance": 16.25862651499664,
+        "near_misses": 0.0,
+        "near_miss_rate": NaN
+      },
+      "nav": {
+        "success": 1.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denominators": {
+        "ped_impact_near_samples": 0.0,
+        "ped_impact_far_samples": 660.0,
+        "ped_impact_ped_count": 3.0,
+        "ped_impact_accel_delta_valid": 0.0,
+        "ped_impact_turn_rate_delta_valid": 0.0
+      }
+    }
+  ],
+  "aggregates": [
+    {
+      "policy": "social_force",
+      "scenario": "classic_head_on_corridor_low",
+      "n_rows": 3,
+      "n_usable": 3,
+      "n_degraded": 0,
+      "influence_mean": {
+        "ped_impact_accel_delta_mean": -23.809438018284187,
+        "ped_impact_turn_rate_delta_mean": 0.9255764098249207
+      },
+      "influence_std": {
+        "ped_impact_accel_delta_mean": 1.7723598402872602,
+        "ped_impact_turn_rate_delta_mean": 0.6914379021778588
+      },
+      "context_mean": {
+        "avg_speed": 1.0885654689045867,
+        "robot_ped_within_5m_frac": 0.2972222222222222,
+        "social_proxemic_intrusion_frac": 0.13472222222222222,
+        "min_distance": 1.6322600628733746,
+        "mean_clearance": 8.516942258892742,
+        "near_misses": 14.666666666666666,
+        "near_miss_rate": NaN
+      },
+      "nav_mean": {
+        "success": 0.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denom_sum": {
+        "ped_impact_near_samples": 51.0,
+        "ped_impact_far_samples": 1377.0,
+        "ped_impact_ped_count": 6.0,
+        "ped_impact_accel_delta_valid": 3.0,
+        "ped_impact_turn_rate_delta_valid": 3.0
+      }
+    },
+    {
+      "policy": "orca",
+      "scenario": "classic_head_on_corridor_low",
+      "n_rows": 3,
+      "n_usable": 3,
+      "n_degraded": 0,
+      "influence_mean": {
+        "ped_impact_accel_delta_mean": 0.40779492780563464,
+        "ped_impact_turn_rate_delta_mean": 0.6511110304399871
+      },
+      "influence_std": {
+        "ped_impact_accel_delta_mean": 0.0,
+        "ped_impact_turn_rate_delta_mean": 0.0
+      },
+      "context_mean": {
+        "avg_speed": 1.9851633494176137,
+        "robot_ped_within_5m_frac": 0.23971515712856747,
+        "social_proxemic_intrusion_frac": 0.06438204599144762,
+        "min_distance": 2.4860174767634313,
+        "mean_clearance": 9.431150428154824,
+        "near_misses": 2.6666666666666665,
+        "near_miss_rate": NaN
+      },
+      "nav_mean": {
+        "success": 1.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denom_sum": {
+        "ped_impact_near_samples": 13.0,
+        "ped_impact_far_samples": 875.0,
+        "ped_impact_ped_count": 6.0,
+        "ped_impact_accel_delta_valid": 2.0,
+        "ped_impact_turn_rate_delta_valid": 2.0
+      }
+    },
+    {
+      "policy": "social_force",
+      "scenario": "classic_crossing_low",
+      "n_rows": 3,
+      "n_usable": 3,
+      "n_degraded": 0,
+      "influence_mean": {
+        "ped_impact_accel_delta_mean": 0.036901191835328334,
+        "ped_impact_turn_rate_delta_mean": 0.018345424781930825
+      },
+      "influence_std": {
+        "ped_impact_accel_delta_mean": 0.0,
+        "ped_impact_turn_rate_delta_mean": 0.0
+      },
+      "context_mean": {
+        "avg_speed": 0.6351992097018213,
+        "robot_ped_within_5m_frac": 0.47361111111111115,
+        "social_proxemic_intrusion_frac": 0.24305555555555555,
+        "min_distance": 4.0646909361603045,
+        "mean_clearance": 7.048019277236231,
+        "near_misses": 8.333333333333334,
+        "near_miss_rate": NaN
+      },
+      "nav_mean": {
+        "success": 0.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denom_sum": {
+        "ped_impact_near_samples": 84.0,
+        "ped_impact_far_samples": 2058.0,
+        "ped_impact_ped_count": 9.0,
+        "ped_impact_accel_delta_valid": 1.0,
+        "ped_impact_turn_rate_delta_valid": 1.0
+      }
+    },
+    {
+      "policy": "orca",
+      "scenario": "classic_crossing_low",
+      "n_rows": 3,
+      "n_usable": 3,
+      "n_degraded": 0,
+      "influence_mean": {
+        "ped_impact_accel_delta_mean": 0.276918272201649,
+        "ped_impact_turn_rate_delta_mean": 0.5300585903229077
+      },
+      "influence_std": {
+        "ped_impact_accel_delta_mean": 0.0,
+        "ped_impact_turn_rate_delta_mean": 0.0
+      },
+      "context_mean": {
+        "avg_speed": 1.9941423295257141,
+        "robot_ped_within_5m_frac": 0.23844593492170585,
+        "social_proxemic_intrusion_frac": 0.12187958883994127,
+        "min_distance": 3.008910111417576,
+        "mean_clearance": 12.231793097069904,
+        "near_misses": 9.666666666666666,
+        "near_miss_rate": NaN
+      },
+      "nav_mean": {
+        "success": 1.0,
+        "total_collision_count": 0.0,
+        "ped_collision_count": 0.0
+      },
+      "denom_sum": {
+        "ped_impact_near_samples": 41.0,
+        "ped_impact_far_samples": 1963.0,
+        "ped_impact_ped_count": 9.0,
+        "ped_impact_accel_delta_valid": 3.0,
+        "ped_impact_turn_rate_delta_valid": 3.0
+      }
+    }
+  ],
+  "flow_deltas": [
+    {
+      "scenario": "classic_crossing_low",
+      "metric": "ped_impact_accel_delta_mean",
+      "policy_a": "social_force",
+      "policy_b": "orca",
+      "mean_a": 0.036901191835328334,
+      "mean_b": 0.276918272201649,
+      "delta": 0.24001708036632066,
+      "seed_variance": 0.0,
+      "exceeds_variance": true,
+      "powered": true,
+      "note": "delta magnitude exceeds pooled seed variance"
+    },
+    {
+      "scenario": "classic_crossing_low",
+      "metric": "ped_impact_turn_rate_delta_mean",
+      "policy_a": "social_force",
+      "policy_b": "orca",
+      "mean_a": 0.018345424781930825,
+      "mean_b": 0.5300585903229077,
+      "delta": 0.5117131655409769,
+      "seed_variance": 0.0,
+      "exceeds_variance": true,
+      "powered": true,
+      "note": "delta magnitude exceeds pooled seed variance"
+    },
+    {
+      "scenario": "classic_head_on_corridor_low",
+      "metric": "ped_impact_accel_delta_mean",
+      "policy_a": "social_force",
+      "policy_b": "orca",
+      "mean_a": -23.809438018284187,
+      "mean_b": 0.40779492780563464,
+      "delta": 24.217232946089823,
+      "seed_variance": 1.253247661769828,
+      "exceeds_variance": true,
+      "powered": true,
+      "note": "delta magnitude exceeds pooled seed variance"
+    },
+    {
+      "scenario": "classic_head_on_corridor_low",
+      "metric": "ped_impact_turn_rate_delta_mean",
+      "policy_a": "social_force",
+      "policy_b": "orca",
+      "mean_a": 0.9255764098249207,
+      "mean_b": 0.6511110304399871,
+      "delta": -0.27446537938493365,
+      "seed_variance": 0.48892042939936464,
+      "exceeds_variance": false,
+      "powered": true,
+      "note": "delta within pooled seed variance"
+    }
+  ],
+  "classification": "diagnostic",
+  "rationale": "3/4 powered flow deltas exceed seed variance; robot-policy influence is suggested but remains diagnostic-only at v0 smoke tier (not a real-world or benchmark-strength claim)"
+}

@@ -368,3 +368,127 @@ def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
     assert provenance["held_out_evidence_status"] == (
         "not_available_requires_independent_planner_outcomes"
     )
+
+
+def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A valid independent outcome packet opens only the diagnostic held-out gate."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    archive_path = tmp_path / "archive.json"
+    search_space_path = tmp_path / "search_space.yaml"
+    outcomes_path = tmp_path / "outcomes.json"
+    output_json = tmp_path / "report.json"
+    archive = _two_family_archive()
+    archive_path.write_text(json.dumps(archive), encoding="utf-8")
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
+
+    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
+    outcomes_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "adversarial_independent_outcomes.v1",
+                "source": "unit-test-fixture",
+                "artifact": "docs/context/evidence/unit-test.json",
+                "eval_archive_sha256": archive_sha256(split.eval_entries),
+                "outcome_source": "planner_execution",
+                "objective": "certified_failure_outcome",
+                "proposal_outcomes": [10.0, 10.0, 10.0, 10.0],
+                "random_outcomes": [0.0, 0.0, 0.0, 0.0],
+                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
+                "certification_statuses": ["passed"] * 8,
+                "row_statuses": ["success"] * 8,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--archive",
+            archive_path.as_posix(),
+            "--search-space",
+            search_space_path.as_posix(),
+            "--evaluation-outcomes",
+            outcomes_path.as_posix(),
+            "--budget",
+            "4",
+            "--seed",
+            "7",
+            "--null-test-permutations",
+            "200",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    assert report["held_out_evidence"] is True
+    assert report["benchmark_evidence"] is False
+    assert report["planner_performance_claim"] is False
+    assert report["result_classification"] == "held_out_diagnostic_only"
+    assert report["archive_evaluation_provenance"]["held_out_evidence_status"] == (
+        "eligible_held_out_diagnostic"
+    )
+    assert report["independent_outcome_evaluation"]["certification_available"] is True
+    assert report["independent_outcome_evaluation"]["null_tests_reject_null"] is True
+
+
+def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, monkeypatch) -> None:
+    """Archive-nearness outcome packets are rejected as circular."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    archive_path = tmp_path / "archive.json"
+    search_space_path = tmp_path / "search_space.yaml"
+    outcomes_path = tmp_path / "outcomes.json"
+    output_json = tmp_path / "report.json"
+    archive_path.write_text(json.dumps(_two_family_archive()), encoding="utf-8")
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+    outcomes_path.write_text(
+        json.dumps(
+            {
+                "outcome_source": "planner_execution",
+                "objective": "archive_nearness",
+                "proposal_outcomes": [10.0],
+                "random_outcomes": [0.0],
+                "ranked_outcomes": [10.0, 0.0],
+                "certification_statuses": ["passed", "passed"],
+                "row_statuses": ["success", "success"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--archive",
+            archive_path.as_posix(),
+            "--search-space",
+            search_space_path.as_posix(),
+            "--evaluation-outcomes",
+            outcomes_path.as_posix(),
+            "--budget",
+            "1",
+            "--seed",
+            "7",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    assert report["held_out_evidence"] is False
+    assert report["archive_evaluation_provenance"]["held_out_evidence_status"] == (
+        "not_available_requires_independent_planner_outcomes"
+    )
+    assert report["independent_outcome_evaluation"]["status"] == (
+        "blocked_invalid_independent_outcomes"
+    )

@@ -1,0 +1,53 @@
+{
+  "ammv_config": "configs/baselines/social_force_ammv_aware.yaml",
+  "benchmark_evidence": false,
+  "claim_boundary": "diagnostic_only",
+  "classification": "diagnostic",
+  "git_head": "fedee58afe8c5834f4e6ccb1179cdc00a8354606",
+  "issue_2434_baseline": {
+    "path": "docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/",
+    "result": "max_per_frame_abs_delta=0.0, max_episode_metric_abs_delta=0.0 over 15 matched default-vs-AMMV adapter-mode pairs (rendering fixtures, not behavioral evidence)."
+  },
+  "limitations": [
+    "Direct robot-planner probe only; pedestrian dynamics are simulator-owned and not measured here (max_pedestrian_state_delta is None by construction).",
+    "Diagnostic-only: a nonzero divergence proves the AMMV term is active and behaviorally non-identical at the planner level, not a benchmark advantage.",
+    "The control arm toggles only ammv_aware_enabled on the same config, so the paired delta isolates the AMMV term and is not confounded by other config differences.",
+    "Two-probe slice; not a benchmark matrix or parameter sweep."
+  ],
+  "paper_facing": false,
+  "result_classification": "nonzero_divergence_found",
+  "schema_version": "issue_2444_ammv_divergence_classification.v1",
+  "selections": [
+    {
+      "ammv_candidate": "ammv config with ammv_aware_enabled=true (AMMV term on)",
+      "default_candidate": "ammv config with ammv_aware_enabled=false (AMMV term off; all other params identical)",
+      "frame_count": 20,
+      "max_ammv_force_delta": 2.6418021882844833,
+      "max_pedestrian_state_delta": null,
+      "max_robot_state_delta": 0.21487587760444726,
+      "max_selected_action_delta": 0.21487587760444726,
+      "mechanism_activation_observed": true,
+      "outcome_changed": true,
+      "result_classification": "nonzero_divergence_found",
+      "scenario_id": "issue_2168_close_front_agent_probe",
+      "seed": 42
+    },
+    {
+      "ammv_candidate": "ammv config with ammv_aware_enabled=true (AMMV term on)",
+      "default_candidate": "ammv config with ammv_aware_enabled=false (AMMV term off; all other params identical)",
+      "frame_count": 24,
+      "max_ammv_force_delta": 2.642145800358019,
+      "max_pedestrian_state_delta": null,
+      "max_robot_state_delta": 0.7834767523869807,
+      "max_selected_action_delta": 0.7834767523869807,
+      "mechanism_activation_observed": true,
+      "outcome_changed": true,
+      "result_classification": "nonzero_divergence_found",
+      "scenario_id": "issue_3202_anticipatory_crossing_probe",
+      "seed": 3202
+    }
+  ],
+  "slice_description": "Direct SocialForcePlanner mechanism probes (bypassing the differential-drive benchmark adapter that produced the #2434 zero-delta result). The control arm is the same AMMV-aware config with ammv_aware_enabled toggled off, so the paired delta isolates the AMMV interaction term.",
+  "title": "Issue #2444 AMMV Divergence Classification",
+  "zero_divergence_guard": "A probe is treated as behavioral evidence only when max_ammv_force_delta > 0 AND a paired delta is strictly nonzero. Identical (zero-divergence) pairs are rejected."
+}

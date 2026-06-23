@@ -77,6 +77,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Refined the `goal-pr-review` skill (`.agents/skills/goal-pr-review/SKILL.md`) for clarity and
+  determinism: added a mapping table that bridges `scripts/dev/pr_loop_policy.py` classifications
+  (`pending_ci`, `failed_ci`, `missing_artifacts`, `stale_worktree`, `ready_to_merge`, `no_action`)
+  to the skill's own state machine, noting that `ready_to_merge` is a candidate signal still gated by
+  the intended-design and proof bars; split `## Read First` into always-read versus
+  read-when-applicable (`gh-pr-comment-fixer` only for unresolved threads, `review-benchmark-change`
+  only for benchmark-facing PRs); and tidied the `## When to use` section formatting. Docs-only; the
+  skill validator (`scripts/dev/check_skills.py`) passes.
 * Continued the `_build_policy` decomposition (#3384) by migrating the `risk_surface_dwa` and
   `lidar_social_force` adapter families from the inline dispatcher into
   `robot_sf/benchmark/map_runner_policies/adapters.py`, registered in `_POLICY_BUILDERS`. The builders

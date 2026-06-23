@@ -48,15 +48,20 @@ Do not use it for:
 
 ## Read First
 
+Always read:
+
 - `AGENTS.md`
 - `docs/code_review.md`
 - `docs/dev_guide.md`
 - `docs/context/goal_driven_agent_loops_2026-05-13.md`
 - `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
 - `.agents/skills/implementation-verification/SKILL.md`
-- `.agents/skills/gh-pr-comment-fixer/SKILL.md`
-- `.agents/skills/review-benchmark-change/SKILL.md`
 - `scripts/dev/check_skills.py --preflight goal-pr-review` (for preflight validation before review loop)
+
+Read when applicable:
+
+- `.agents/skills/gh-pr-comment-fixer/SKILL.md` (only when a PR has unresolved review threads to fix)
+- `.agents/skills/review-benchmark-change/SKILL.md` (only for benchmark-facing PRs)
 
 ## Preflight
 
@@ -83,6 +88,24 @@ Each PR is in one state:
 
 Avoid loops:
 - do not bounce `fixing` ↔ `awaiting_ci` without changes affecting proof.
+
+### Mapping policy output to states
+
+`scripts/dev/pr_loop_policy.py` (see Review Workflow) classifies PRs with its own vocabulary.
+Map each policy classification to a state in this skill so policy output drives state transitions
+deterministically:
+
+| `pr_loop_policy.py` classification | Recommended action | This skill's state |
+| --- | --- | --- |
+| `pending_ci` | `wait_ci` | `awaiting_ci` |
+| `failed_ci` | `inspect_failed_ci` | `fixing` if the failure is a fixable regression on a writable branch, else `blocked_external` |
+| `missing_artifacts` | `verify_artifacts` | `under_review` |
+| `stale_worktree` | `refresh_snapshot` | `under_review` (re-snapshot the advanced head before deciding) |
+| `ready_to_merge` | `mark_ready_candidate` | `merge_ready` only after the full proof bar in `## Proof and Validation` closes; otherwise `under_review` |
+| `no_action` | `no_action` | keep the current state (`awaiting_reviewer`, `blocked_external`, `deferred_scope`, or `closed_out`) |
+
+`ready_to_merge` is a candidate signal, not a merge decision: the policy only checks CI and label
+presence, so `merge_ready` still requires the intended-design and proof gates below.
 
 ## Review Workflow
 
@@ -266,10 +289,11 @@ For each reviewed PR, report:
 - `merge-ready` decision + confidence,
 - blockers and `follow-up` issues,
 - artifact classification decision.
+
 ## When to use
 
 Use this skill for the scope named in its frontmatter description and registry metadata.
-
+See `## Trigger Boundary` for the precise in-scope and out-of-scope actions.
 
 ## Guardrails
 

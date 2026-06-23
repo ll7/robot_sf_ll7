@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -78,7 +79,10 @@ def _git_head() -> str:
 
 
 def _max_abs_delta(paired_delta: dict[str, float]) -> float:
-    return max((abs(float(v)) for v in paired_delta.values()), default=0.0)
+    return max(
+        (abs(delta) for v in paired_delta.values() if math.isfinite(delta := float(v))),
+        default=0.0,
+    )
 
 
 def build_selection_block(probe_result: dict[str, Any], *, seed: int) -> dict[str, Any]:
@@ -99,13 +103,21 @@ def build_selection_block(probe_result: dict[str, Any], *, seed: int) -> dict[st
         "min_robot_ped_clearance_m",
     )
     max_robot_state_delta = max(
-        (abs(float(paired_delta[k])) for k in robot_state_keys if k in paired_delta),
+        (
+            abs(delta)
+            for k in robot_state_keys
+            if k in paired_delta and math.isfinite(delta := float(paired_delta[k]))
+        ),
         default=0.0,
     )
     # The "selected action" surface here is the robot speed/lateral-velocity response.
     max_selected_action_delta = max(
-        abs(float(paired_delta.get("mean_robot_speed_mps", 0.0))),
-        abs(float(paired_delta.get("max_abs_lateral_velocity_mps", 0.0))),
+        (
+            abs(delta)
+            for key in ("mean_robot_speed_mps", "max_abs_lateral_velocity_mps")
+            if math.isfinite(delta := float(paired_delta.get(key, 0.0)))
+        ),
+        default=0.0,
     )
     mechanism_activation_observed = max_force > 0.0
     behavioral = mechanism_activation_observed and _max_abs_delta(paired_delta) > DELTA_EPSILON

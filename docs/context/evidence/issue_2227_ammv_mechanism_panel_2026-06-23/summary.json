@@ -1,0 +1,31 @@
+{
+  "ammv_off_max_force_magnitude": 0.0,
+  "ammv_on_max_force_magnitude": 2.6418021882844833,
+  "captions_path": "output/issue_2227_ammv_panel/ammv_mechanism_captions.md",
+  "claim_boundary": "diagnostic_only",
+  "command": "uv run python scripts/analysis/build_ammv_mechanism_panel_issue_2227.py",
+  "commit": "fedee58afe8c5834f4e6ccb1179cdc00a8354606",
+  "control_trace": "output/issue_2227_ammv_panel/traces/ammv_off_control_trace.json",
+  "dt": 0.1,
+  "evidence_tier": "stress",
+  "intervention_trace": "output/issue_2227_ammv_panel/traces/ammv_on_intervention_trace.json",
+  "manifest_path": "output/issue_2227_ammv_panel/panel/trajectory_panel_manifest.json",
+  "panel_pdfs": [
+    "output/issue_2227_ammv_panel/panel/trajectory_panels/trajectory_panel_social_force_ammv_off_issue_2227_ammv_close_front_static_ped_other_issue_2227_ammv_close_front_static_ped_ammv_off_seed42.pdf",
+    "output/issue_2227_ammv_panel/panel/trajectory_panels/trajectory_panel_social_force_ammv_on_issue_2227_ammv_close_front_static_ped_other_issue_2227_ammv_close_front_static_ped_ammv_on_seed42.pdf"
+  ],
+  "panel_pngs": [
+    "output/issue_2227_ammv_panel/panel/trajectory_panels/trajectory_panel_social_force_ammv_off_issue_2227_ammv_close_front_static_ped_other_issue_2227_ammv_close_front_static_ped_ammv_off_seed42.png",
+    "output/issue_2227_ammv_panel/panel/trajectory_panels/trajectory_panel_social_force_ammv_on_issue_2227_ammv_close_front_static_ped_other_issue_2227_ammv_close_front_static_ped_ammv_on_seed42.png"
+  ],
+  "paper_grade": false,
+  "scenario_id": "issue_2227_ammv_close_front_static_ped",
+  "seed": 42,
+  "selection_csv": "output/issue_2227_ammv_panel/panel/representative_episode_selection.csv",
+  "steps": 24,
+  "trajectory_delta": {
+    "final_lateral_offset_delta_m": 0.1700915491929511,
+    "final_position_distance_m": 0.582848512549503,
+    "step1_linear_velocity_delta_mps": 0.0
+  }
+}

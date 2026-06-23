@@ -15,14 +15,14 @@ Issue #2444 asked us to find or generate an AMMV / default Social Force trace pa
 mechanism divergence**, OR honestly classify the AMMV mechanism as inactive under the tested
 settings.
 
-## #2434 negative baseline (cited)
+## Issue #2434 Negative Baseline (Cited)
 
 `docs/context/evidence/issue_2434_ammv_scenario_sweep_2026-06-06/` recorded
 `max_per_frame_abs_delta = 0.0` and `max_episode_metric_abs_delta = 0.0` across 15 matched
 default-vs-AMMV episode pairs. Those pairs ran through the **differential-drive benchmark adapter**
 and are therefore rendering fixtures, NOT behavioral-difference evidence.
 
-## More-sensitive slice run here
+## More-Sensitive Slice Run Here
 
 This bundle ran a deterministic, **direct `SocialForcePlanner` mechanism probe** that bypasses the
 benchmark adapter and exposes the AMMV force term directly (reusing
@@ -49,7 +49,7 @@ attributable to AMMV and not to incidental config differences. The #2434 zero-de
 therefore an **adapter-mode artifact** (the differential-drive benchmark adapter washes out the
 term), not evidence that the AMMV mechanism is globally inactive.
 
-## Zero-divergence guard (acceptance criterion)
+## Zero-Divergence Guard (Acceptance Criterion)
 
 `classify_divergence` / `build_selection_block` only treat a pair as behavioral evidence when
 `max_ammv_force_delta > 0` AND a paired delta is strictly nonzero. An identical (zero-force,

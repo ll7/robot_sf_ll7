@@ -1,0 +1,92 @@
+# Forecast-risk closed-loop coupling gate (issue #2916)
+#
+# Bounded, same-seed harness that tests whether forecast-DERIVED risk improves
+# navigation OUTCOMES (collision/near-miss, progress, stop/yield timing,
+# false-positive stopping, runtime, SNQI) rather than only prediction metrics.
+#
+# evidence_tier: stress
+# claim_boundary: diagnostic_only
+# paper_grade: false
+#
+# Hard rules honored by the runner:
+#   - All four rows run against the SAME fixture frames, the SAME seed, and the
+#     SAME scenario.  The only thing that varies across rows is the forecast risk
+#     SOURCE feeding the bounded risk gate.
+#   - Degraded / fallback / not-available rows fail closed and never count as a
+#     success row.
+#   - No learned predictor is promoted; all risk sources are deterministic,
+#     hand-specified CV-family baselines from robot_sf.benchmark.pedestrian_forecast.
+
+schema_version: forecast_risk_coupling.v1
+issue: 2916
+evidence_tier: stress
+claim_boundary: diagnostic_only
+paper_grade: false
+
+# Identical across every row. The fixture provides per-frame ground-truth
+# pedestrian state (for forecast construction), deployable observed_pedestrians
+# (for the fail-closed observation tier), the robot trajectory, and conflict
+# timing with stop/yield feasibility.
+fixture:
+  trace_path: >-
+    tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json
+  scenario_id: issue_2756_occluded_emergence
+  seed: 111
+  dt_s: 0.1
+
+# Bounded risk-gate planner proxy. When the per-step forecast risk exceeds the
+# stop threshold the gate commands a STOP (defensive). A near-but-below value
+# commands a YIELD (slow). These are deterministic thresholds, not a learned
+# policy. They are shared across all forecast-driven rows so differences come
+# only from the risk SOURCE, never from the gate.
+risk_gate:
+  influence_radius_m: 3.0
+  stop_risk_threshold: 0.6
+  yield_risk_threshold: 0.35
+  # Distance (m) below which a real conflict exists. Used to label a stop as a
+  # true-positive (conflict present) vs a false-positive (no conflict present).
+  conflict_distance_m: 1.5
+
+# Verdict thresholds for the continue | revise | stop gate. The trade-off
+# between safety benefit and false-positive stopping is made explicit:
+#   continue: forecast risk reduces collisions/near-misses AND does not blow up
+#             false-positive stops or runtime.
+#   stop:     forecast risk makes outcomes WORSE (more collisions/near-misses or
+#             a false-positive-stop explosion) with no safety benefit.
+#   revise:   neither clear win nor clear regression (the conservative default).
+verdict:
+  # Minimum reduction in (collisions + near_misses) vs the no_forecast row for a
+  # forecast row to count as a safety benefit.
+  min_safety_event_reduction: 1
+  # A row whose false-positive stops exceed this multiple of the no_forecast row
+  # is flagged as a false-positive regression.
+  max_false_positive_stop_ratio: 3.0
+  # Runtime budget guard (seconds) per row; exceeding it is a runtime regression.
+  max_runtime_s: 5.0
+
+# Four rows; identical seed/scenario/fixture. Only the risk SOURCE differs.
+rows:
+  - name: no_forecast
+    risk_source: none
+    description: >-
+      Control row. No forecast risk is fed to the gate; the gate never stops or
+      yields on forecast risk. Establishes the baseline navigation outcome.
+  - name: cv_risk
+    risk_source: constant_velocity
+    description: >-
+      Risk derived from a deterministic constant-velocity Gaussian forecast
+      (constant_velocity_gaussian_baseline). Tests plain motion-extrapolation
+      risk coupling.
+  - name: semantic_risk
+    risk_source: semantic_cv
+    description: >-
+      Risk derived from the semantic CV forecast (semantic_cv_baseline) that
+      composes signal- and intent-aware adjustments. Tests whether semantic
+      context in the forecast changes navigation outcomes.
+  - name: interaction_risk
+    risk_source: interaction_aware_cv
+    description: >-
+      Risk derived from the interaction-aware CV forecast
+      (interaction_aware_cv_baseline) using neighbor context. Tests whether
+      modeling pedestrian-pedestrian interaction in the forecast changes
+      navigation outcomes.

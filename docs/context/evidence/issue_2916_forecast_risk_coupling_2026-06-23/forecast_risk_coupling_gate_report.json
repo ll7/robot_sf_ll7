@@ -1,0 +1,264 @@
+{
+  "schema_version": "forecast_risk_coupling_gate.v1",
+  "issue": 2916,
+  "evidence_tier": "stress",
+  "claim_boundary": "diagnostic_only",
+  "paper_grade": false,
+  "claim_boundary_text": "Diagnostic-only forecast-risk closed-loop coupling gate on a single deterministic occluded-emergence fixture. Not paper-facing benchmark evidence. Tests whether forecast-derived risk changes navigation outcomes, not whether any predictor is accurate. No learned predictor is promoted.",
+  "reproducibility": {
+    "issue": 2916,
+    "generated_at_utc": "2026-06-23T07:34:20.813118+00:00",
+    "command": "uv run python scripts/benchmark/run_forecast_risk_coupling_gate.py --config configs/research/forecast_risk_coupling_issue_2916.yaml --output-dir output/issue_2916_coupling_gate",
+    "repo_head": "566d820e",
+    "config_path": "configs/research/forecast_risk_coupling_issue_2916.yaml"
+  },
+  "config": {
+    "config_path": "configs/research/forecast_risk_coupling_issue_2916.yaml",
+    "fixture": {
+      "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/occluded_emergence_episode_0000.json",
+      "scenario_id": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "dt_s": 0.1
+    },
+    "risk_gate": {
+      "influence_radius_m": 3.0,
+      "stop_risk_threshold": 0.6,
+      "yield_risk_threshold": 0.35,
+      "conflict_distance_m": 1.5
+    },
+    "verdict_thresholds": {
+      "min_safety_event_reduction": 1,
+      "max_false_positive_stop_ratio": 3.0,
+      "max_runtime_s": 5.0
+    }
+  },
+  "rows": [
+    {
+      "row": "no_forecast",
+      "risk_source": "none",
+      "description": "Control row. No forecast risk is fed to the gate; the gate never stops or yields on forecast risk. Establishes the baseline navigation outcome.",
+      "classification": "ok",
+      "classification_reason": "control row; no forecast risk required",
+      "metrics": {
+        "collision": false,
+        "near_miss": true,
+        "safety_events": 1,
+        "min_distance_m": 0.5,
+        "progress_m": 0.82,
+        "first_stop_step": null,
+        "first_yield_step": null,
+        "stop_yield_timing_steps": null,
+        "false_positive_stops": 0,
+        "true_positive_stops": 0,
+        "runtime_s": 0.000115,
+        "snqi": 0.273333
+      },
+      "diagnostics": {
+        "conflict_steps": 15,
+        "risk_available_steps": 0,
+        "risk_unavailable_in_conflict": 0,
+        "gate_actions": [
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go",
+          "go"
+        ]
+      }
+    },
+    {
+      "row": "cv_risk",
+      "risk_source": "constant_velocity",
+      "description": "Risk derived from a deterministic constant-velocity Gaussian forecast (constant_velocity_gaussian_baseline). Tests plain motion-extrapolation risk coupling.",
+      "classification": "ok",
+      "classification_reason": "forecast risk available in the conflict window",
+      "metrics": {
+        "collision": false,
+        "near_miss": false,
+        "safety_events": 0,
+        "min_distance_m": 0.8,
+        "progress_m": 0.45,
+        "first_stop_step": 5,
+        "first_yield_step": 14,
+        "stop_yield_timing_steps": 5,
+        "false_positive_stops": 0,
+        "true_positive_stops": 9,
+        "runtime_s": 0.000756,
+        "snqi": 0.65
+      },
+      "diagnostics": {
+        "conflict_steps": 15,
+        "risk_available_steps": 11,
+        "risk_unavailable_in_conflict": 4,
+        "gate_actions": [
+          "go",
+          "go",
+          "go",
+          "go",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "yield",
+          "yield"
+        ]
+      }
+    },
+    {
+      "row": "semantic_risk",
+      "risk_source": "semantic_cv",
+      "description": "Risk derived from the semantic CV forecast (semantic_cv_baseline) that composes signal- and intent-aware adjustments. Tests whether semantic context in the forecast changes navigation outcomes.",
+      "classification": "ok",
+      "classification_reason": "forecast risk available in the conflict window",
+      "metrics": {
+        "collision": false,
+        "near_miss": false,
+        "safety_events": 0,
+        "min_distance_m": 0.8,
+        "progress_m": 0.45,
+        "first_stop_step": 5,
+        "first_yield_step": 14,
+        "stop_yield_timing_steps": 5,
+        "false_positive_stops": 0,
+        "true_positive_stops": 9,
+        "runtime_s": 0.000602,
+        "snqi": 0.65
+      },
+      "diagnostics": {
+        "conflict_steps": 15,
+        "risk_available_steps": 11,
+        "risk_unavailable_in_conflict": 4,
+        "gate_actions": [
+          "go",
+          "go",
+          "go",
+          "go",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "yield",
+          "yield"
+        ]
+      }
+    },
+    {
+      "row": "interaction_risk",
+      "risk_source": "interaction_aware_cv",
+      "description": "Risk derived from the interaction-aware CV forecast (interaction_aware_cv_baseline) using neighbor context. Tests whether modeling pedestrian-pedestrian interaction in the forecast changes navigation outcomes.",
+      "classification": "ok",
+      "classification_reason": "forecast risk available in the conflict window",
+      "metrics": {
+        "collision": false,
+        "near_miss": false,
+        "safety_events": 0,
+        "min_distance_m": 0.8,
+        "progress_m": 0.45,
+        "first_stop_step": 5,
+        "first_yield_step": 14,
+        "stop_yield_timing_steps": 5,
+        "false_positive_stops": 0,
+        "true_positive_stops": 9,
+        "runtime_s": 0.000603,
+        "snqi": 0.65
+      },
+      "diagnostics": {
+        "conflict_steps": 15,
+        "risk_available_steps": 11,
+        "risk_unavailable_in_conflict": 4,
+        "gate_actions": [
+          "go",
+          "go",
+          "go",
+          "go",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "stop",
+          "yield",
+          "yield"
+        ]
+      }
+    }
+  ],
+  "verdict": {
+    "decision": "continue",
+    "rationale": "At least one forecast-risk row reduced safety events vs the control without a false-positive-stop or runtime regression. Forecast-risk coupling shows a navigation-outcome benefit worth pursuing.",
+    "control_safety_events": 1,
+    "control_false_positive_stops": 0,
+    "blocked_rows": [],
+    "tradeoff": [
+      {
+        "row": "cv_risk",
+        "blocked": false,
+        "safety_events": 0,
+        "safety_event_reduction_vs_control": 1,
+        "false_positive_stops": 0,
+        "false_positive_stop_ratio_vs_control": 1.0,
+        "runtime_s": 0.000756,
+        "is_safety_benefit": true,
+        "fp_regression": false,
+        "runtime_regression": false,
+        "outcome_regression": false
+      },
+      {
+        "row": "semantic_risk",
+        "blocked": false,
+        "safety_events": 0,
+        "safety_event_reduction_vs_control": 1,
+        "false_positive_stops": 0,
+        "false_positive_stop_ratio_vs_control": 1.0,
+        "runtime_s": 0.000602,
+        "is_safety_benefit": true,
+        "fp_regression": false,
+        "runtime_regression": false,
+        "outcome_regression": false
+      },
+      {
+        "row": "interaction_risk",
+        "blocked": false,
+        "safety_events": 0,
+        "safety_event_reduction_vs_control": 1,
+        "false_positive_stops": 0,
+        "false_positive_stop_ratio_vs_control": 1.0,
+        "runtime_s": 0.000603,
+        "is_safety_benefit": true,
+        "fp_regression": false,
+        "runtime_regression": false,
+        "outcome_regression": false
+      }
+    ]
+  },
+  "caveats": [
+    "Single deterministic fixture (seed=111), single occluded-emergence scenario.",
+    "Closed-loop proxy: robot replays the fixture trajectory under a gate hold; no live planner or simulator is re-executed.",
+    "interaction_risk degrades to plain CV mean (single observed pedestrian, no neighbor context); it is reported honestly, not as interaction evidence.",
+    "Ground-truth pedestrian distance is used only for OUTCOME scoring, never as a risk source. Risk sources use the deployable tracked-agents observation tier.",
+    "Not statistically powered; diagnostic_only."
+  ]
+}

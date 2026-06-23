@@ -107,6 +107,23 @@ def test_nonzero_divergence_branch() -> None:
     assert classify_divergence([block]) == "nonzero_divergence_found"
 
 
+def test_non_finite_deltas_are_ignored_when_computing_maxima() -> None:
+    """NaN/Inf values must not dominate the diagnostic max-delta fields."""
+    probe = _divergent_probe_result()
+    probe["paired_delta"] = {
+        "mean_robot_speed_mps": float("nan"),
+        "max_abs_lateral_velocity_mps": float("inf"),
+        "final_robot_lateral_offset_m": 0.25,
+        "min_robot_ped_clearance_m": -0.5,
+    }
+
+    block = build_selection_block(probe, seed=3202)
+
+    assert block["max_robot_state_delta"] == 0.5
+    assert block["max_selected_action_delta"] == 0.0
+    assert block["result_classification"] == "nonzero_divergence_found"
+
+
 def test_blocked_branch_when_no_probes_run() -> None:
     """An empty selection list maps to the missing-instrumentation classification."""
     assert classify_divergence([]) == "blocked_missing_instrumentation"

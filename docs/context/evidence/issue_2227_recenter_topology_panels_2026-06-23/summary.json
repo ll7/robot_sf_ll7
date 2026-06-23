@@ -1,0 +1,136 @@
+{
+  "claim_boundary": "diagnostic_only",
+  "command": "uv run python scripts/analysis/build_recenter_topology_panels_issue_2227.py",
+  "commit": "fedee58afe8c5834f4e6ccb1179cdc00a8354606",
+  "evidence_tier": "stress",
+  "issue": 2227,
+  "mechanisms": [
+    {
+      "activated": true,
+      "activation_diagnostic": {
+        "active": true,
+        "diagnostic": "static_recenter_term_positive_in_decision_trace",
+        "first_activation_step": 7,
+        "recenter_term_activation_count": 4,
+        "static_recenter_command_selected_count": 0
+      },
+      "classification": "activated_outcome_changed",
+      "command_source_changed": true,
+      "dt": 0.1,
+      "expected_reason": "static deadlock / local-minimum bottleneck where the recenter probe is expected to perturb the robot off the wall (Issue #2592 active row)",
+      "expected_to_act": true,
+      "flag": "static_recenter_enabled",
+      "horizon": 160,
+      "mechanism_id": "static_recenter",
+      "null_reason": null,
+      "off_selected_source_counts": {
+        "dynamic_window": 158,
+        "path_follow_0.5m": 1,
+        "route_guide": 1
+      },
+      "off_terminal": {
+        "collisions": 0,
+        "near_misses": 0,
+        "status": "failure",
+        "steps": 160,
+        "success": false,
+        "termination_reason": "max_steps"
+      },
+      "off_trace": "output/issue_2227_recenter_topology/traces/static_recenter/static_recenter_off.json",
+      "on_selected_source_counts": {
+        "dynamic_window": 105,
+        "path_follow_0.5m": 16,
+        "route_guide": 1
+      },
+      "on_terminal": {
+        "collisions": 0,
+        "near_misses": 0,
+        "status": "success",
+        "steps": 122,
+        "success": true,
+        "termination_reason": "success"
+      },
+      "on_trace": "output/issue_2227_recenter_topology/traces/static_recenter/static_recenter_on.json",
+      "outcome_changed": true,
+      "panel_artifacts": [
+        "trajectory_panel_hybrid_rule_local_planner_static_recenter_enabled_off_classic_bottleneck_low_other_static_recenter_off_seed113",
+        "trajectory_panel_hybrid_rule_local_planner_static_recenter_enabled_on_classic_bottleneck_low_other_static_recenter_on_seed113"
+      ],
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 113,
+      "trajectory_delta_m": 19.618349212020885
+    },
+    {
+      "activated": true,
+      "activation_diagnostic": {
+        "active": true,
+        "diagnostic": "topology_status_counts_and_topology_hypothesis_source",
+        "selected_hypothesis_counts": {
+          "masked_cell_76_87": 7,
+          "masked_cell_77_87": 13,
+          "masked_cell_78_87": 2,
+          "primary_route": 121
+        },
+        "status_counts": {
+          "insufficient_hypotheses": 12,
+          "not_available": 5,
+          "ok": 143
+        },
+        "topology_command_enabled": true,
+        "topology_hypothesis_command_count": 37
+      },
+      "classification": "activated_outcome_changed",
+      "command_source_changed": true,
+      "dt": 0.1,
+      "expected_reason": "bottleneck route-ambiguity slice where >=2 distinct masked-route hypotheses are expected, allowing a topology-hypothesis command to be selected (topology reselection hard slice)",
+      "expected_to_act": true,
+      "flag": "topology_command_enabled",
+      "horizon": 160,
+      "mechanism_id": "topology_command",
+      "null_reason": null,
+      "off_selected_source_counts": {
+        "corridor_subgoal": 2,
+        "dynamic_window": 119,
+        "path_follow_0.5m": 10,
+        "route_guide": 18,
+        "topology_fail_closed": 8
+      },
+      "off_terminal": {
+        "collisions": 0,
+        "near_misses": 9,
+        "status": "success",
+        "steps": 157,
+        "success": true,
+        "termination_reason": "success"
+      },
+      "off_trace": "output/issue_2227_recenter_topology/traces/topology_command/topology_command_off.json",
+      "on_selected_source_counts": {
+        "corridor_subgoal": 6,
+        "dynamic_window": 103,
+        "path_follow_0.5m": 6,
+        "route_guide": 3,
+        "topology_fail_closed": 5,
+        "topology_hypothesis": 37
+      },
+      "on_terminal": {
+        "collisions": 0,
+        "near_misses": 0,
+        "status": "failure",
+        "steps": 160,
+        "success": false,
+        "termination_reason": "max_steps"
+      },
+      "on_trace": "output/issue_2227_recenter_topology/traces/topology_command/topology_command_on.json",
+      "outcome_changed": true,
+      "panel_artifacts": [
+        "trajectory_panel_topology_guided_hybrid_rule_v0_topology_command_enabled_off_classic_bottleneck_medium_other_topology_command_off_seed111",
+        "trajectory_panel_topology_guided_hybrid_rule_v0_topology_command_enabled_on_classic_bottleneck_medium_other_topology_command_on_seed111"
+      ],
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111,
+      "trajectory_delta_m": 1.8416435563458886
+    }
+  ],
+  "paper_grade": false,
+  "schema_version": "issue_2227_recenter_topology_panels.v1"
+}

@@ -100,6 +100,8 @@ parent-thread outputs since the previous phase, including broad searches, full s
 raw validation logs, verbose delegate notifications, failed command families, repeated monitor
 noise, and unclear instructions that caused retries. Convert repeated leaks into a compact ledger
 field, route-cache entry, worker prompt constraint, or docs patch before the next batch.
+For Slurm-backed phases, also record the private-queue freshness check, the submit-host worktree
+proof, and any model-route quota failures so resumes do not rediscover the same blockers.
 
 ## Shared Knowledge Graph
 
@@ -539,6 +541,8 @@ recommended next prompt.
 For long autonomous runs, cache Spark usage-limit failures in the active ledger with the reset time.
 Before spawning another Spark sidecar in the same run, check that ledger entry and route directly to
 the next eligible cheap worker if Spark is still unavailable.
+If a Spark spawn still fails for quota, close any allocated subagent handle immediately and treat
+the failure as route evidence only.
 
 Spark is explicitly excluded from:
 

@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   real-world or sim-to-real claim. Tracked summary under
   `docs/context/evidence/issue_3066_robot_influence_flow_2026-06-23/`. Unblocked once #3062 merged
   (#3066).
+* Added a bounded sensor-noise / partial-observability robustness slice (#3067):
+  [`scripts/benchmark/run_sensor_noise_robustness_slice_issue_3067.py`](scripts/benchmark/run_sensor_noise_robustness_slice_issue_3067.py)
+  runs a same-seed clean / noisy / partial-observation comparison on a pedestrian-dominated fixture,
+  reusing the observation-noise/perturbation wrappers, and reports clean-vs-perturbed deltas
+  (min observed distance, observation continuity, near-field exposure, observation count) per row
+  with fail-closed status — and the overall classification kept separate from nominal performance.
+  Result: `diagnostic` (non-null — perturbations measurably change the observed state the policy
+  would consume; partial observation drops actor observations/continuity/near-field), trace-derived,
+  single fixture/seed. Diagnostic-only/smoke, not paper-grade; explicitly NOT a real-sensor
+  certification or sim-to-real claim. Tracked summary under
+  `docs/context/evidence/issue_3067_sensor_noise_robustness_2026-06-23/`. Unblocked once #3062 merged
+  (#3067).
 
 * Added a bounded, same-seed forecast-risk closed-loop coupling gate (#2916): a deterministic risk
   adapter [`robot_sf/benchmark/forecast_risk_adapter.py`](robot_sf/benchmark/forecast_risk_adapter.py)
@@ -66,6 +78,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   backward-compatible `default_config` parameter to support the isolated control. Evidence is
   `diagnostic_only`/`stress`, not paper-grade; tracked under
   `docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/` (#2444).
+* Made SDD scenario-prior staging reproducible (#2657): added
+  [`scripts/data/stage_sdd_dataset_issue_2657.py`](scripts/data/stage_sdd_dataset_issue_2657.py)
+  (subcommands `plan`/`validate`/`status`/`mode`/`download`) and a provenance manifest
+  [`configs/data/sdd_staging_manifest.yaml`](configs/data/sdd_staging_manifest.yaml) (source URL,
+  CC BY-NC-SA 3.0 license + readme pointer, version tag, expected files/size, checksum placeholders,
+  `local_availability`). The tool **never auto-downloads**: a bare run only plans/reports (disk check,
+  availability) and exits without network access; `download` requires explicit `--confirm-download` +
+  y/N (or `--yes`), checks free disk vs expected size and fails closed if insufficient, stages into a
+  git-ignored subfolder (`output/external_data/sdd`), and validates a SHA-256 tree checksum before
+  marking `staged`. Wired a `proxy_schema_smoke` vs `dataset_backed_prior` gate into the scenario-prior
+  generator (#2726) so a missing/unvalidated SDD can never be presented as dataset-backed evidence.
+  Audit doc: [`docs/context/issue_2657_sdd_staging.md`](docs/context/issue_2657_sdd_staging.md) (#2657).
 * Added the AMMV contrastive mechanism panel (partial #2227, AMV sub-target):
   [`scripts/analysis/build_ammv_mechanism_panel_issue_2227.py`](scripts/analysis/build_ammv_mechanism_panel_issue_2227.py)
   runs `SocialForcePlanner` twice on one fixed scenario (seed 42) toggling only `ammv_aware_enabled`

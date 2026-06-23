@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the PPO curriculum-learning launch packet (#3068): a pre-launch spec
+  ([`configs/training/ppo_curriculum_issue_3068_launch_packet.yaml`](configs/training/ppo_curriculum_issue_3068_launch_packet.yaml),
+  schema `ppo-curriculum-launch-packet.v1`) defining a 4-stage density/complexity curriculum over
+  real env knobs, a matched fixed-difficulty PPO baseline comparator, seeds, run budget, stop rule,
+  metrics, expected artifacts, validation command, and durable-artifact policy — with the three
+  competing explanations (extra-budget vs curriculum; train-curve vs final benchmark; insufficient
+  provenance) encoded as discriminating checks. All referenced configs exist with verified sha256
+  checksums; the context doc
+  [`docs/context/issue_3068_ppo_curriculum_launch_packet.md`](docs/context/issue_3068_ppo_curriculum_launch_packet.md)
+  records the no-claim boundary and flags the per-stage scheduler wiring as a downstream
+  prerequisite. Authoring-only and `evidence:proposal` — no training-result or benchmark claim; the
+  long training run remains a separate SLURM issue (#3068).
+
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
   language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)

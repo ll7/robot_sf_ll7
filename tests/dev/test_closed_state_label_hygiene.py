@@ -55,7 +55,6 @@ def test_collect_stale_issues_ignores_pull_request_rows() -> None:
                 "title": "closed PR with a state label",
                 "url": "https://github.com/ll7/robot_sf_ll7/pull/12",
                 "state": "closed",
-                "isPullRequest": True,
                 "labels": [{"name": "state:ready"}],
             }
         ],
@@ -103,7 +102,8 @@ def test_build_search_command_uses_read_only_closed_issue_search() -> None:
     assert command[command.index("--state") + 1] == "closed"
     assert "--label" in command
     assert command[command.index("--label") + 1] == "state:ready"
-    assert "isPullRequest" in command[command.index("--json") + 1].split(",")
+    assert "url" in command[command.index("--json") + 1].split(",")
+    assert "isPullRequest" not in command[command.index("--json") + 1].split(",")
     assert "--project" not in command
     assert "edit" not in command
 
@@ -290,7 +290,10 @@ def test_confirm_issue_closed_reads_state_via_gh(monkeypatch: pytest.MonkeyPatch
         return subprocess.CompletedProcess(
             args=tuple(command),
             returncode=0,
-            stdout='{"number": 12, "state": "CLOSED", "isPullRequest": false}',
+            stdout=(
+                '{"number": 12, "state": "CLOSED", '
+                '"url": "https://github.com/ll7/robot_sf_ll7/issues/12"}'
+            ),
         )
 
     monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
@@ -304,7 +307,9 @@ def test_confirm_issue_closed_is_false_for_open_or_pr(monkeypatch: pytest.Monkey
 
     def fake_run_open(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
-            args=tuple(command), returncode=0, stdout='{"state": "OPEN", "isPullRequest": false}'
+            args=tuple(command),
+            returncode=0,
+            stdout='{"state": "OPEN", "url": "https://github.com/ll7/robot_sf_ll7/issues/12"}',
         )
 
     monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run_open)
@@ -312,7 +317,9 @@ def test_confirm_issue_closed_is_false_for_open_or_pr(monkeypatch: pytest.Monkey
 
     def fake_run_pr(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
-            args=tuple(command), returncode=0, stdout='{"state": "CLOSED", "isPullRequest": true}'
+            args=tuple(command),
+            returncode=0,
+            stdout='{"state": "CLOSED", "url": "https://github.com/ll7/robot_sf_ll7/pull/12"}',
         )
 
     monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run_pr)
@@ -356,7 +363,7 @@ def test_main_fix_mode_strips_labels_and_reports(
             return subprocess.CompletedProcess(
                 args=tuple(command),
                 returncode=0,
-                stdout='{"state": "CLOSED", "isPullRequest": false}',
+                stdout='{"state": "CLOSED", "url": "https://github.com/ll7/robot_sf_ll7/issues/12"}',
             )
         edits.append(command)
         return subprocess.CompletedProcess(args=tuple(command), returncode=0, stdout="")

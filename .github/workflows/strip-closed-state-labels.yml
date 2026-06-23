@@ -42,19 +42,19 @@ jobs:
           echo "Live state labels: ${LIVE_LABELS[*]}"
 
           # Read-then-write (defense-in-depth): the trigger already implies the issue is closed,
-          # but re-confirm CLOSED and non-PR via the API before any write.
+          # but re-confirm CLOSED and non-PR-shaped URL via the API before any write.
           issue_state=$(
-            gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json state,isPullRequest \
-              --jq '[.state, (.isPullRequest | tostring)] | @tsv'
+            gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json state,url \
+              --jq '[.state, .url] | @tsv'
           )
-          read -r state is_pull_request <<<"$issue_state"
-          echo "Issue #$ISSUE_NUMBER state: $state isPullRequest: $is_pull_request"
+          read -r state issue_url <<<"$issue_state"
+          echo "Issue #$ISSUE_NUMBER state: $state url: $issue_url"
           if [ "$state" != "CLOSED" ]; then
             echo "Issue #$ISSUE_NUMBER is not CLOSED ($state); skipping (no-op)."
             exit 0
           fi
-          if [ "$is_pull_request" = "true" ]; then
-            echo "Issue #$ISSUE_NUMBER is a pull request; skipping (no-op)."
+          if [[ "$issue_url" == */pull/* ]]; then
+            echo "Issue #$ISSUE_NUMBER has a pull request URL; skipping (no-op)."
             exit 0
           fi
 

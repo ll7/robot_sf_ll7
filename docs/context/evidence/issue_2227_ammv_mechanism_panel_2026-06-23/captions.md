@@ -1,4 +1,4 @@
-# Issue #2227 AMMV Contrastive Mechanism Panel
+# Issue #2227 AMMV Contrastive Mechanism Panel (2026-06-23)
 
 Two same-seed, same-scenario direct `SocialForcePlanner` runs. The ONLY config
 difference is `ammv_aware_enabled` (false=control, true=intervention) in

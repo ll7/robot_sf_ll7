@@ -79,6 +79,11 @@ def _action_command(action: dict[str, float]) -> tuple[float, float]:
     return linear_velocity, heading
 
 
+def _wrapped_angle_delta(target: float, source: float) -> float:
+    """Return the shortest signed angular delta from source to target."""
+    return math.atan2(math.sin(target - source), math.cos(target - source))
+
+
 def run_arm(
     *,
     ammv_enabled: bool,
@@ -119,7 +124,7 @@ def run_arm(
         ammv_force_magnitudes.append(ammv_force)
 
         linear_velocity, heading = _action_command(action)
-        angular_velocity = (heading - prev_heading) / DT
+        angular_velocity = _wrapped_angle_delta(heading, prev_heading) / DT
 
         frames.append(
             {

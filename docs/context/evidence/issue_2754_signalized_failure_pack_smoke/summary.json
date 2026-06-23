@@ -2,6 +2,8 @@
   "schema_version": "signalized_crossing_failure_pack.v1",
   "negative_control": false,
   "status": "failures_present",
+  "diagnostic_only": true,
+  "figure_eligible": false,
   "cases": [
     {
       "episode_id": "issue_2868_signalized_crossing_episode_0000",

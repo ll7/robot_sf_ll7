@@ -41,6 +41,7 @@ Missing/optional data handling:
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -61,6 +62,10 @@ from robot_sf.benchmark.signal_metrics import calculate_signal_metrics
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+
+ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
+ROLLOVER_CRITICAL_EVENT = "ROLLOVER_CRITICAL"
 
 
 @dataclass
@@ -1146,6 +1151,168 @@ def avg_speed(data: EpisodeData) -> float:
     if speeds.size == 0:
         return 0.0
     return float(np.mean(speeds))
+
+
+def evaluate_stability_margin(
+    v: float,
+    yaw_rate: float,
+    *,
+    t_w: float = 0.8,
+    L: float = 1.2,
+    h_c: float = 0.6,
+    a: float = 0.5,
+) -> float:
+    """Compute a three-wheeled-vehicle rollover stability margin.
+
+    A value of ``1.0`` indicates no lateral-acceleration load, while ``0.0`` means the
+    estimated lateral acceleration is at or beyond the critical rollover threshold. Geometry
+    parameters follow the reviewer-supplied TWV proxy: rear track width ``t_w``, wheelbase
+    ``L``, center-of-gravity height ``h_c``, and CG distance from the front axle ``a``.
+
+    Returns:
+        Stability margin in ``[0.0, 1.0]`` or ``NaN`` when speed/yaw-rate samples are invalid.
+    """
+    speed = float(v)
+    turn_rate = float(yaw_rate)
+    for name, value in {"t_w": t_w, "L": L, "h_c": h_c, "a": a}.items():
+        if not math.isfinite(float(value)) or float(value) <= 0.0:
+            raise ValueError(f"{name} must be finite and positive")
+    if not math.isfinite(speed) or not math.isfinite(turn_rate):
+        return float("nan")
+    critical_lateral_accel = 9.81 * (float(t_w) / (2.0 * float(h_c))) * (float(a) / float(L))
+    if critical_lateral_accel <= 0.0:
+        return float("nan")
+    lateral_accel = abs(speed * turn_rate)
+    return float(max(0.0, min(1.0, 1.0 - lateral_accel / critical_lateral_accel)))
+
+
+def _rollover_stability_config(data: EpisodeData) -> dict[str, Any] | None:
+    """Return opt-in rollover instrumentation config from episode metadata."""
+    metadata = data.episode_metadata
+    if not isinstance(metadata, Mapping):
+        return None
+    raw = metadata.get(ROLLOVER_STABILITY_METADATA_KEY)
+    if not isinstance(raw, Mapping) or not bool(raw.get("enabled", False)):
+        return None
+    return dict(raw)
+
+
+def _metadata_series(value: object, *, length: int) -> np.ndarray | None:
+    """Return a finite numeric metadata series broadcast or trimmed to episode length."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return None
+    if isinstance(value, Sequence):
+        arr = np.asarray(value, dtype=float).reshape(-1)
+    else:
+        try:
+            arr = np.asarray([float(value)], dtype=float)
+        except (TypeError, ValueError):
+            return None
+    if arr.size == 0:
+        return None
+    if arr.size == 1:
+        arr = np.full(length, float(arr[0]), dtype=float)
+    elif arr.size < length:
+        arr = np.pad(arr, (0, length - arr.size), mode="edge")
+    elif arr.size > length:
+        arr = arr[:length]
+    return arr.astype(float, copy=False)
+
+
+def _robot_speed_series(data: EpisodeData) -> np.ndarray:
+    """Return per-timestep robot forward-speed magnitudes."""
+    if data.robot_vel.size:
+        speeds = np.linalg.norm(np.asarray(data.robot_vel, dtype=float), axis=1)
+    elif data.robot_pos.shape[0] >= 2 and data.dt > 0:
+        step_speeds = np.linalg.norm(np.diff(data.robot_pos, axis=0), axis=1) / float(data.dt)
+        speeds = np.pad(step_speeds, (1, 0), mode="edge")
+    else:
+        speeds = np.zeros(int(data.robot_pos.shape[0]), dtype=float)
+    return speeds.astype(float, copy=False)
+
+
+def _robot_yaw_rate_series(data: EpisodeData, config: Mapping[str, Any]) -> np.ndarray:
+    """Return explicit or velocity-heading-derived yaw-rate samples."""
+    length = int(data.robot_pos.shape[0])
+    for key in ("yaw_rates", "yaw_rate", "robot_yaw_rates", "robot_yaw_rate"):
+        series = _metadata_series(config.get(key), length=length)
+        if series is not None:
+            return series
+
+    velocities = np.asarray(data.robot_vel, dtype=float)
+    if velocities.ndim != 2 or velocities.shape[0] < 2 or data.dt <= 0.0:
+        return np.zeros(length, dtype=float)
+
+    speeds = np.linalg.norm(velocities, axis=1)
+    headings = np.unwrap(np.arctan2(velocities[:, 1], velocities[:, 0]))
+    deltas = np.diff(headings) / float(data.dt)
+    yaw_rates = np.pad(deltas, (1, 0), mode="edge")
+    yaw_rates[speeds <= 1e-9] = 0.0
+    if yaw_rates.size < length:
+        yaw_rates = np.pad(yaw_rates, (0, length - yaw_rates.size), mode="edge")
+    return yaw_rates[:length].astype(float, copy=False)
+
+
+def rollover_stability_metrics(data: EpisodeData) -> dict[str, Any]:
+    """Compute optional TWV rollover-stability metrics for one episode.
+
+    The block is disabled unless ``episode_metadata["rollover_stability"]["enabled"]`` is true.
+    This keeps existing benchmark evidence unchanged while letting successor campaigns expose
+    dynamically unsafe, collision-free maneuvers alongside collision counters.
+
+    Returns:
+        Optional flat metrics for campaign rows, or an empty mapping when instrumentation is off.
+    """
+    config = _rollover_stability_config(data)
+    if config is None:
+        return {}
+
+    speeds = _robot_speed_series(data)
+    yaw_rates = _robot_yaw_rate_series(data, config)
+    sample_count = int(min(speeds.size, yaw_rates.size))
+    if sample_count == 0:
+        return {
+            "rollover_stability_enabled": 1.0,
+            "rollover_critical": 0.0,
+            "rollover_critical_count": 0.0,
+            "rollover_critical_fraction": 0.0,
+            "rollover_min_stability_margin": float("nan"),
+            "rollover_lateral_accel_abs_max": float("nan"),
+            "rollover_event": "",
+        }
+
+    params = {
+        "t_w": float(config.get("t_w", 0.8)),
+        "L": float(config.get("L", 1.2)),
+        "h_c": float(config.get("h_c", 0.6)),
+        "a": float(config.get("a", 0.5)),
+    }
+    margins = np.asarray(
+        [
+            evaluate_stability_margin(speed, yaw_rate, **params)
+            for speed, yaw_rate in zip(speeds[:sample_count], yaw_rates[:sample_count], strict=True)
+        ],
+        dtype=float,
+    )
+    lateral_accel = np.abs(speeds[:sample_count] * yaw_rates[:sample_count])
+    finite_margins = margins[np.isfinite(margins)]
+    critical_count = int(np.count_nonzero(finite_margins <= 0.0))
+    denominator = int(finite_margins.size)
+    return {
+        "rollover_stability_enabled": 1.0,
+        "rollover_critical": 1.0 if critical_count else 0.0,
+        "rollover_critical_count": float(critical_count),
+        "rollover_critical_fraction": (
+            float(critical_count / denominator) if denominator else float("nan")
+        ),
+        "rollover_min_stability_margin": (
+            float(np.min(finite_margins)) if denominator else float("nan")
+        ),
+        "rollover_lateral_accel_abs_max": float(np.nanmax(lateral_accel)),
+        "rollover_event": ROLLOVER_CRITICAL_EVENT if critical_count else "",
+    }
 
 
 def _bilinear(x: float, y: float, X: np.ndarray, Y: np.ndarray, V: np.ndarray) -> float:
@@ -2689,6 +2856,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values["energy"] = energy(data)
     values["avg_speed"] = avg_speed(data)
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
+    values.update(rollover_stability_metrics(data))
     values["wall_collisions"] = values["obstacle_collision_count"]
     values["clearing_distance_min"] = clearing_distance_min(data)
     values["clearing_distance_avg"] = clearing_distance_avg(data)
@@ -2772,6 +2940,7 @@ def post_process_metrics(
         "signal_pedestrian_conflict_during_legal_crossing_count",
         "signal_unavailable_exclusion_count",
         "signal_metrics_denominator",
+        "rollover_critical_count",
     ):
         if count_key in metrics and metrics[count_key] is not None:
             try:
@@ -2789,6 +2958,8 @@ def post_process_metrics(
         "social_proxemic_available",
         "human_proxy_available",
         "group_split_intrusion_available",
+        "rollover_stability_enabled",
+        "rollover_critical",
     ):
         if valid_key in metrics and metrics[valid_key] is not None:
             try:
@@ -3347,6 +3518,7 @@ def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
 
 __all__ = [
     "METRIC_NAMES",
+    "ROLLOVER_CRITICAL_EVENT",
     "EpisodeData",
     "acceleration_avg",
     "acceleration_max",
@@ -3364,6 +3536,7 @@ __all__ = [
     "curvature_mean",
     "distance_to_human_min",
     "energy",
+    "evaluate_stability_margin",
     "experimental_human_interaction_proxy_metrics",
     "experimental_social_acceptability_metrics",
     "failure_to_progress",

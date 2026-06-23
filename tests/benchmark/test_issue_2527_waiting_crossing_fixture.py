@@ -295,6 +295,24 @@ def test_proxy_signal_state_metric_metadata_stays_denominator_excluded() -> None
     }
 
 
+def test_metric_metadata_carries_enabled_rollover_stability_config() -> None:
+    """Map-runner episode metadata should carry opt-in TWV rollover instrumentation."""
+    scenario = {"metadata": {"rollover_stability": {"enabled": True, "yaw_rate": 3.0}}}
+
+    metric_metadata = _episode_metadata_for_signal_metrics(scenario)
+
+    assert metric_metadata == {"rollover_stability": {"enabled": True, "yaw_rate": 3.0}}
+
+
+def test_metric_metadata_omits_disabled_rollover_stability_config() -> None:
+    """Disabled TWV rollover instrumentation must leave default metric rows unchanged."""
+    scenario = {"metadata": {"rollover_stability": {"enabled": False, "yaw_rate": 3.0}}}
+
+    metric_metadata = _episode_metadata_for_signal_metrics(scenario)
+
+    assert metric_metadata is None
+
+
 def test_observable_signal_state_metric_metadata_carries_required_fields() -> None:
     """Metric metadata should include only explicit observable benchmark signal fields."""
     signal_state = {

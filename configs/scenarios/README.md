@@ -38,6 +38,28 @@ metadata:
       force_q95: null
 ```
 
+## Optional Rollover Stability Instrumentation
+
+Scenarios may opt in to a three-wheeled vehicle (TWV) rollover-stability proxy through
+`metadata.rollover_stability`. The flag is disabled by default, so existing benchmark evidence and
+campaign tables are unchanged unless a scenario explicitly enables it.
+
+```yaml
+metadata:
+  rollover_stability:
+    enabled: true
+    t_w: 0.8     # rear track width in meters
+    L: 1.2       # wheelbase in meters
+    h_c: 0.6     # center-of-gravity height in meters
+    a: 0.5       # center-of-gravity distance from the front axle in meters
+```
+
+When enabled, metric rows may include `rollover_critical_count`,
+`rollover_min_stability_margin`, `rollover_lateral_accel_abs_max`, and `rollover_event`.
+`rollover_event: ROLLOVER_CRITICAL` marks timesteps where the lateral-acceleration proxy reaches
+the configured rollover threshold. This is a bounded instrumentation check, not a full vehicle
+dynamics model.
+
 ## Draft authoring workflow
 
 For a small reviewable starting point, generate a draft YAML from the v1 authoring template and

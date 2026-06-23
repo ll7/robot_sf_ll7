@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
+ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
+
+
 def _scenario_id(scenario: dict[str, Any]) -> str:
     """Resolve a scenario identifier from common manifest fields.
 
@@ -487,14 +490,22 @@ def _episode_metadata_for_signal_metrics(scenario: dict[str, Any]) -> dict[str, 
     """Build optional episode metadata consumed by signal metrics.
 
     Returns:
-        Optional episode metadata when the scenario carries usable signal-state evidence.
+        Optional episode metadata when the scenario carries metric-facing metadata.
     """
     metadata = scenario.get("metadata") if isinstance(scenario.get("metadata"), dict) else {}
+    episode_metadata: dict[str, Any] = {}
     signal_state = metadata.get("signal_state") if isinstance(metadata, dict) else None
     metric_signal_state = _signal_state_for_metric_metadata(signal_state)
-    if metric_signal_state is None:
+    if metric_signal_state is not None:
+        episode_metadata["signal_state"] = metric_signal_state
+
+    rollover_stability = metadata.get(ROLLOVER_STABILITY_METADATA_KEY)
+    if isinstance(rollover_stability, dict) and bool(rollover_stability.get("enabled", False)):
+        episode_metadata[ROLLOVER_STABILITY_METADATA_KEY] = dict(rollover_stability)
+
+    if not episode_metadata:
         return None
-    return {"signal_state": metric_signal_state}
+    return episode_metadata
 
 
 def _synth_robot_stop_or_yield_expectation(

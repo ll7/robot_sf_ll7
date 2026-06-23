@@ -26,6 +26,7 @@ from robot_sf.benchmark.seed_variance import (
     build_seed_variability_rows,
     build_statistical_sufficiency_rows,
 )
+from robot_sf.benchmark.synthetic_actuation import CALIBRATED_ACTUATION_CLAIM_SCOPE
 from robot_sf.benchmark.utils import _config_hash
 
 if TYPE_CHECKING:
@@ -388,10 +389,12 @@ def _build_actuation_envelope_summary(
         "campaign_id": campaign_id,
         "generated_at_utc": generated_at_utc,
         "paper_facing": False,
-        "claim_boundary": (
-            "Synthetic diagnostic only; not a hardware-calibrated or paper-facing AMV claim."
+        "claim_boundary": profile.claim_boundary,
+        "actuation_profile_type": (
+            "calibrated_amv_actuation"
+            if profile.claim_scope == CALIBRATED_ACTUATION_CLAIM_SCOPE
+            else "synthetic_diagnostic"
         ),
-        "actuation_profile_type": "synthetic_diagnostic",
         "synthetic_actuation_profile": profile.to_metadata(),
         "amv_coverage_status": amv_coverage_status,
         "scenario_amv_rows": scenario_amv_rows,

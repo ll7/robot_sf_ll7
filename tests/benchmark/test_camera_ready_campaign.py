@@ -804,6 +804,39 @@ def test_actuation_envelope_summary_distinguishes_profile_type() -> None:
         planner_rows=[],
     )
     assert summary["actuation_profile_type"] == "synthetic_diagnostic"
+    assert summary["claim_boundary"] == "diagnostic-only"
+
+    calibrated_profile = SyntheticActuationProfile(
+        name="test-calibrated-profile",
+        profile_version="v0",
+        claim_scope="hardware-calibrated",
+        claim_boundary="calibrated-amv-actuation",
+        max_linear_accel_m_s2=2.0,
+        max_linear_decel_m_s2=2.5,
+        max_yaw_rate_rad_s=1.2,
+        max_angular_accel_rad_s2=4.0,
+        latency_mode="one-step-delay",
+        update_mode="5hz-hold",
+        provenance={
+            "source_id": "test-source-001",
+            "source_uri": "https://example.com/calibrated-trace",
+            "source_type": "hardware-trace-collection",
+            "profile_version": "v1-calibrated",
+            "measurement_date": "2026-06-01",
+            "supported_actuation_fields": ["max_linear_accel_m_s2"],
+            "units": {"max_linear_accel_m_s2": "m/s^2"},
+            "claim_boundary": "calibrated-amv-actuation",
+        },
+    )
+
+    calibrated_summary = _build_actuation_envelope_summary(
+        campaign_id="test-campaign",
+        generated_at_utc="2026-06-23T00:00:00Z",
+        profile=calibrated_profile,
+        planner_rows=[],
+    )
+    assert calibrated_summary["actuation_profile_type"] == "calibrated_amv_actuation"
+    assert calibrated_summary["claim_boundary"] == "calibrated-amv-actuation"
 
 
 def test_load_campaign_config_rejects_invalid_latency_stress_scope(
@@ -2638,7 +2671,7 @@ def test_run_campaign_writes_synthetic_actuation_artifacts(
     assert summary_payload["artifacts"]["actuation_envelope_md"].endswith(
         "reports/actuation_envelope_summary.md"
     )
-    assert actuation_payload["claim_boundary"].startswith("Synthetic diagnostic only")
+    assert actuation_payload["claim_boundary"] == "diagnostic-only"
     assert actuation_payload["synthetic_actuation_profile"]["update_mode"] == "5hz-hold"
     assert "metric_means" in actuation_payload["rows"][0]
     assert "metrics" not in actuation_payload["rows"][0]

@@ -1,0 +1,48 @@
+{
+  "claim_boundary": "diagnostic trace-review evidence only; not benchmark or paper evidence",
+  "figure_catalog": [
+    {
+      "case_id": "head_on_corridor_route_offset_response",
+      "claim_boundary": "diagnostic local trace inspection only",
+      "report_path": "case_head_on_corridor_route_offset_response.md",
+      "sha256": "ea9a0b2980727ea1e1b3f872505cc39c4d418f63716a5cb2d74c3dce91016038"
+    },
+    {
+      "case_id": "leave_group_speed_outcome_flip",
+      "claim_boundary": "diagnostic local trace inspection only",
+      "report_path": "case_leave_group_speed_outcome_flip.md",
+      "sha256": "f91a85dc4b137bb715b861b113f2d5c4d729bc2bd9e00ea2e5b06f07f05d8d60"
+    },
+    {
+      "case_id": "intersection_wait_speed_p050_phase_response",
+      "claim_boundary": "diagnostic local trace inspection only",
+      "report_path": "case_intersection_wait_speed_p050_phase_response.md",
+      "sha256": "d4de9abec30c4252be03d23be882d10765829a9b8d2f0b80182ae969883b755e"
+    }
+  ],
+  "generated_at_utc": "2026-06-23T00:00:00+00:00",
+  "input_artifacts": [
+    {
+      "name": "trace_slices_head_on_corridor_route_offset_response",
+      "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-2159-research-v1-failure-pack/docs/context/evidence/issue_1939_corridor_trace_response_2026-05-31/closest_approach_trace_slices.json",
+      "sha256": "964f2a6f45bea05fb5147b637af0ed92bd62383a441a316ef8836020d4ae2774"
+    },
+    {
+      "name": "trace_slices_leave_group_speed_outcome_flip",
+      "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-2159-research-v1-failure-pack/docs/context/evidence/issue_1945_orca_leave_group_speed_trace_2026-06-01/closest_approach_trace_slices.json",
+      "sha256": "d5cce329b233b5b690593c738de0b0accca13a58094102d214e60ec3dac76eb6"
+    },
+    {
+      "name": "trace_slices_intersection_wait_speed_p050_phase_response",
+      "path": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-2159-research-v1-failure-pack/docs/context/evidence/issue_1953_intersection_wait_speed_grid_trace_2026-06-01/closest_approach_trace_slices_speed_h1_p050.json",
+      "sha256": "e3d1260d1a95dce80fbb24361fa698ace4e88d574c21b8408cd169c71ddd7fc4"
+    }
+  ],
+  "pack_type": "research-v1-trace-review-pack",
+  "paper_facing": false,
+  "schema_version": "research_v1_failure_pack_manifest.v1",
+  "source_issue_lineage": [
+    "#2159",
+    "#2269"
+  ]
+}

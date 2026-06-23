@@ -70,12 +70,12 @@ def _load_config(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _action_command(action: dict[str, float]) -> tuple[float, float]:
+def _action_command(action: dict[str, float], *, previous_heading: float) -> tuple[float, float]:
     """Return ``(linear_velocity, heading)`` for a velocity-mode planner action."""
     vx = float(action.get("vx", action.get("v", 0.0)))
     vy = float(action.get("vy", 0.0))
     linear_velocity = math.hypot(vx, vy)
-    heading = math.atan2(vy, vx)
+    heading = previous_heading if linear_velocity == 0.0 else math.atan2(vy, vx)
     return linear_velocity, heading
 
 
@@ -123,7 +123,7 @@ def run_arm(
         ammv_force = float(metadata.get("ammv_force_magnitude", 0.0) or 0.0)
         ammv_force_magnitudes.append(ammv_force)
 
-        linear_velocity, heading = _action_command(action)
+        linear_velocity, heading = _action_command(action, previous_heading=prev_heading)
         angular_velocity = _wrapped_angle_delta(heading, prev_heading) / DT
 
         frames.append(

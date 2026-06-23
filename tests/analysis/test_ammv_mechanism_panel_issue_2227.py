@@ -104,6 +104,16 @@ def test_determinism(panel_module, tmp_path):
     )
 
 
+def test_zero_velocity_action_preserves_previous_heading(panel_module):
+    """Stopped actions should not synthesize a turn toward heading zero."""
+    linear_velocity, heading = panel_module._action_command(
+        {"vx": 0.0, "vy": 0.0},
+        previous_heading=1.25,
+    )
+    assert linear_velocity == 0.0
+    assert heading == 1.25
+
+
 def test_claim_boundary_is_diagnostic_only(panel_run):
     """The summary records a diagnostic-only, non-paper-grade claim boundary."""
     summary, _ = panel_run

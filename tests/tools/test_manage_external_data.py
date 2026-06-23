@@ -47,6 +47,14 @@ def test_missing_license_gated_asset_fails_closed(tmp_path: Path) -> None:
 
     assert report["ok"] is False
     assert report["status"] == "missing"
+    assert report["availability"] == {
+        "schema": "robot_sf_external_data_availability.v1",
+        "state": "missing",
+        "mode": manage_external_data.SDD_MODE_PROXY,
+        "dataset_backed": False,
+        "validated": False,
+        "proxy_only": True,
+    }
     assert report["auto_download_allowed"] is False
     assert "official acquisition" in report["action"]
 
@@ -93,6 +101,9 @@ def test_check_uses_external_data_root_by_default(
     report = manage_external_data.check_asset("sdd")
 
     assert report["ok"] is True
+    assert report["availability"]["state"] == "staged"
+    assert report["availability"]["mode"] == manage_external_data.SDD_MODE_PROXY
+    assert report["availability"]["proxy_only"] is True
     assert report["source_path"] == str((shared_root / "sdd").resolve())
     assert report["expected_local_path"] == str(shared_root.resolve() / "sdd")
     assert report["default_local_path"].endswith("output/external_data/sdd")
@@ -112,6 +123,10 @@ def test_stage_defaults_to_external_data_root_when_source_omitted(
 
     assert manifest_path.is_file()
     assert manifest["local_path"] == str((shared_root / "sdd").resolve())
+    assert manifest["availability"]["state"] == "validated"
+    assert manifest["availability"]["mode"] == manage_external_data.SDD_MODE_PROXY
+    assert manifest["availability"]["validated"] is True
+    assert manifest["availability"]["dataset_backed"] is False
     assert manifest["validation_command"].endswith(
         f"check sdd --source {(shared_root / 'sdd').resolve()}"
     )
@@ -134,6 +149,7 @@ def test_cli_list_and_check_report_external_data_root(
     list_payload = json.loads(list_result.stdout)
     sdd_entry = next(entry for entry in list_payload if entry["asset_id"] == "sdd")
     assert sdd_entry["expected_local_path"] == str(shared_root.resolve() / "sdd")
+    assert sdd_entry["availability"]["state"] == "staged"
 
     check_result = subprocess.run(
         [sys.executable, "scripts/tools/manage_external_data.py", "--json", "check", "sdd"],
@@ -143,6 +159,7 @@ def test_cli_list_and_check_report_external_data_root(
     )
     check_payload = json.loads(check_result.stdout)
     assert check_payload["ok"] is True
+    assert check_payload["availability"]["state"] == "staged"
     assert check_payload["source_path"] == str((shared_root / "sdd").resolve())
 
 

@@ -111,6 +111,8 @@ def test_proxy_decision_identical_canonical_and_wrapper(tmp_path: Path) -> None:
     assert canonical_gate == wrapper_gate
     assert canonical_gate["mode"] == canonical.SDD_MODE_PROXY
     assert canonical_gate["dataset_backed"] is False
+    assert canonical_gate["availability"]["state"] == "missing"
+    assert canonical_gate["availability"]["proxy_only"] is True
 
 
 # --- dataset-backed decision parity ----------------------------------------------------------
@@ -134,6 +136,8 @@ def test_dataset_backed_decision_identical_canonical_and_wrapper(tmp_path: Path)
     assert canonical_gate == wrapper_gate
     assert canonical_gate["mode"] == canonical.SDD_MODE_DATASET_BACKED
     assert canonical_gate["dataset_backed"] is True
+    assert canonical_gate["availability"]["state"] == "dataset_backed"
+    assert canonical_gate["availability"]["validated"] is True
     assert canonical_gate["tree_sha256"]
 
 
@@ -150,6 +154,7 @@ def test_pinned_checksum_mismatch_fails_closed_in_canonical(tmp_path: Path) -> N
     assert report["ok"] is False
     assert report["checksum_match"] is False
     assert report["mode"] == canonical.SDD_MODE_PROXY
+    assert report["availability"]["state"] == "proxy_only"
 
 
 # --- no-auto-download safety preserved -------------------------------------------------------

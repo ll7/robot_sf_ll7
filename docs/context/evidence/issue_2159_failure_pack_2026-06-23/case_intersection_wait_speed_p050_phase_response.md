@@ -17,39 +17,39 @@
 
 ## Per-Seed Detail
 
-**Seed 240**
+**Planner goal, seed 240**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 241**
+**Planner goal, seed 241**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 242**
+**Planner goal, seed 242**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 240**
+**Planner orca, seed 240**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 241**
+**Planner orca, seed 241**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 242**
+**Planner orca, seed 242**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 240**
+**Planner scenario_adaptive_hybrid_orca_v2_collision_guard, seed 240**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 241**
+**Planner scenario_adaptive_hybrid_orca_v2_collision_guard, seed 241**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 242**
+**Planner scenario_adaptive_hybrid_orca_v2_collision_guard, seed 242**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 

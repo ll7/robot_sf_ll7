@@ -98,11 +98,29 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
+def _mapping_or_empty(value: Any) -> dict[str, Any]:
+    """Return a mapping payload or an empty mapping for malformed optional blocks."""
+    return value if isinstance(value, dict) else {}
+
+
+def _list_or_empty(value: Any) -> list[Any]:
+    """Return a list payload or an empty list for malformed optional blocks."""
+    return value if isinstance(value, list) else []
+
+
+def _repo_relative(path: Path, repo_root: Path) -> str:
+    """Return a stable repository-relative path when possible."""
+    try:
+        return str(path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        return str(path)
+
+
 def _build_planner_summary(pair: dict[str, Any]) -> str:
     """Build a planner-decision summary from one trace pair entry."""
     parts: list[str] = []
-    noop = pair.get("no_op", {})
-    perturbed = pair.get("perturbed", {})
+    noop = _mapping_or_empty(pair.get("no_op"))
+    perturbed = _mapping_or_empty(pair.get("perturbed"))
     for label, row in [("No-op", noop), ("Perturbed", perturbed)]:
         term = row.get("termination_reason", "unknown")
         clearance = row.get("closest_approach_m")
@@ -122,16 +140,21 @@ def _build_planner_summary(pair: dict[str, Any]) -> str:
 
 def _build_seed_detail(pair: dict[str, Any], seed: int) -> str:
     """Build per-seed detail including episode-level metrics."""
-    parts: list[str] = [f"**Seed {seed}**"]
+    planner = pair.get("planner_key", pair.get("planner"))
+    title = f"**Seed {seed}**"
+    if planner:
+        title = f"**Planner {planner}, seed {seed}**"
+    parts: list[str] = [title]
     for label in ("no_op", "perturbed"):
-        row = pair.get(label, {})
-        frame_range = row.get("frame_range", {})
-        events = row.get("events", [])
+        row = _mapping_or_empty(pair.get(label))
+        frame_range = _mapping_or_empty(row.get("frame_range"))
+        events = _list_or_empty(row.get("events"))
         frame_start = frame_range.get("start", "?")
         frame_end = frame_range.get("end", "?")
         parts.append(f"- {label.capitalize()} frame range: [{frame_start}, {frame_end}]")
         if events:
             for ev in events[:5]:  # cap at 5 events per case
+                ev = _mapping_or_empty(ev)
                 ev_id = ev.get("event_id", ev.get("type", "?"))
                 ev_frame = ev.get("frame", "?")
                 parts.append(f"  - Event `{ev_id}` at frame {ev_frame}")
@@ -154,7 +177,8 @@ def _build_pair_summary_table(pair_summary: dict[str, Any]) -> str:
     total = pair_summary.get("total_pairs", 0)
     completed = pair_summary.get("completed_pairs", 0)
     clearance_delta_rows: list[str] = []
-    for row in pair_summary.get("clearance_delta_rows", []):
+    for row in _list_or_empty(pair_summary.get("clearance_delta_rows")):
+        row = _mapping_or_empty(row)
         planner = row.get("planner_key", row.get("planner", "?"))
         seed = row.get("seed", "?")
         delta = row.get("clearance_delta_m")
@@ -184,9 +208,9 @@ def build_case_report(case_input: dict[str, Any]) -> str:
     slice_path = evidence_dir / case_input["slice_file"]
     slices = read_json(slice_path)
 
-    planner_runs = slices.get("planner_runs", {})
-    trace_pairs = slices.get("trace_pairs", [])
-    pair_summary = slices.get("pair_summary", {})
+    planner_runs = _mapping_or_empty(slices.get("planner_runs"))
+    trace_pairs = _list_or_empty(slices.get("trace_pairs"))
+    pair_summary = _mapping_or_empty(slices.get("pair_summary"))
 
     report: list[str] = [
         f"# {case_input['report_title']}",
@@ -209,6 +233,7 @@ def build_case_report(case_input: dict[str, Any]) -> str:
         report.append("## Per-Seed Detail")
         report.append("")
         for pair in trace_pairs:
+            pair = _mapping_or_empty(pair)
             seed = pair.get("seed", pair.get("seed_id", "?"))
             report.append(_build_seed_detail(pair, seed))
             report.append("")
@@ -220,13 +245,15 @@ def build_case_report(case_input: dict[str, Any]) -> str:
             report.append("")
             if isinstance(runs, list):
                 for run in runs:
+                    run = _mapping_or_empty(run)
                     seed = run.get("seed", "?")
                     report.append(_build_seed_detail({"no_op": run, "perturbed": {}}, seed))
             elif isinstance(runs, dict):
                 for seed_label, run in sorted(runs.items()):
+                    run = _mapping_or_empty(run)
                     report.append(f"**{seed_label}**")
-                    noop = run.get("no_op", run)
-                    perturbed = run.get("perturbed", {})
+                    noop = _mapping_or_empty(run.get("no_op")) or run
+                    perturbed = _mapping_or_empty(run.get("perturbed"))
                     report.append(_build_planner_summary({"no_op": noop, "perturbed": perturbed}))
                     report.append("")
             report.append("")
@@ -255,6 +282,7 @@ def build_manifest(
     input_artifacts: list[InputArtifact],
     case_inputs: list[dict[str, Any]],
     output_dir: Path,
+    repo_root: Path,
 ) -> dict[str, Any]:
     """Build the failure-pack manifest JSON payload."""
     artifact_records: list[dict[str, Any]] = []
@@ -263,7 +291,7 @@ def build_manifest(
             artifact_records.append(
                 {
                     "name": artifact.name,
-                    "path": str(artifact.path),
+                    "path": _repo_relative(artifact.path, repo_root),
                     "sha256": sha256_file(artifact.path),
                 }
             )
@@ -384,6 +412,7 @@ def main(argv: list[str] | None = None) -> None:
         input_artifacts=input_artifacts,
         case_inputs=CASE_INPUTS,
         output_dir=output_dir,
+        repo_root=repo_root,
     )
     manifest_path = output_dir / "failure_pack_manifest.json"
     manifest_path.write_text(
@@ -402,10 +431,10 @@ def main(argv: list[str] | None = None) -> None:
 
     # Write checksums
     checksums: list[str] = []
-    for path in sorted(output_dir.rglob("*")):
-        if path.is_file():
-            checksums.append(f"{sha256_file(path)}  {path.relative_to(output_dir)}")
     checksums_path = output_dir / "checksums.sha256"
+    for path in sorted(output_dir.rglob("*")):
+        if path.is_file() and path != checksums_path:
+            checksums.append(f"{sha256_file(path)}  {path.relative_to(output_dir)}")
     checksums_path.write_text("\n".join(checksums) + "\n", encoding="utf-8")
 
     case_names = ", ".join(c["case_id"] for c in CASE_INPUTS)

@@ -7,9 +7,11 @@ from pathlib import Path
 
 from scripts.analysis.build_research_v1_failure_pack_issue_2159 import (
     CASE_INPUTS,
+    InputArtifact,
     build_case_report,
     build_manifest,
     build_readme,
+    main,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -58,14 +60,13 @@ def test_manifest_has_required_fields(tmp_path: Path) -> None:
     input_artifacts = []
     for case in CASE_INPUTS:
         slice_path = REPO_ROOT / case["evidence_dir"] / case["slice_file"]
-        input_artifacts.append(
-            type("IA", (), {"name": f"trace_{case['case_id']}", "path": slice_path})()
-        )
+        input_artifacts.append(InputArtifact(name=f"trace_{case['case_id']}", path=slice_path))
     manifest = build_manifest(
         generated_at="2026-06-23T00:00:00Z",
         input_artifacts=input_artifacts,
         case_inputs=CASE_INPUTS,
         output_dir=tmp_path,
+        repo_root=REPO_ROOT,
     )
     assert manifest["schema_version"] == "research_v1_failure_pack_manifest.v1"
     assert manifest["paper_facing"] is False
@@ -74,6 +75,7 @@ def test_manifest_has_required_fields(tmp_path: Path) -> None:
     )
     assert isinstance(manifest["input_artifacts"], list)
     assert isinstance(manifest["figure_catalog"], list)
+    assert all(not artifact["path"].startswith("/") for artifact in manifest["input_artifacts"])
 
 
 def test_readme_includes_case_names() -> None:
@@ -96,13 +98,63 @@ def test_manifest_is_json_serializable(tmp_path: Path) -> None:
     input_artifacts = []
     for case in CASE_INPUTS:
         slice_path = REPO_ROOT / case["evidence_dir"] / case["slice_file"]
-        input_artifacts.append(
-            type("IA", (), {"name": f"trace_{case['case_id']}", "path": slice_path})()
-        )
+        input_artifacts.append(InputArtifact(name=f"trace_{case['case_id']}", path=slice_path))
     manifest = build_manifest(
         generated_at="2026-06-23T00:00:00Z",
         input_artifacts=input_artifacts,
         case_inputs=CASE_INPUTS,
         output_dir=tmp_path,
+        repo_root=REPO_ROOT,
     )
     json.dumps(manifest)  # should not raise
+
+
+def test_case_report_tolerates_null_optional_blocks(tmp_path: Path, monkeypatch) -> None:
+    """Explicit JSON nulls in optional trace blocks should not crash report generation."""
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    (evidence_dir / "slice.json").write_text(
+        json.dumps(
+            {
+                "planner_runs": None,
+                "trace_pairs": [
+                    {
+                        "seed": 1,
+                        "planner_key": "goal",
+                        "no_op": None,
+                        "perturbed": {"frame_range": None, "events": [None]},
+                    }
+                ],
+                "pair_summary": {"clearance_delta_rows": None},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    report = build_case_report(
+        {
+            "case_id": "null_blocks",
+            "claim_id": "test.claim",
+            "evidence_dir": "evidence",
+            "slice_file": "slice.json",
+            "report_title": "Null Blocks",
+            "scenario_id": "test_scenario",
+            "planners": ["goal"],
+            "seeds": [1],
+        }
+    )
+
+    assert "Planner goal, seed 1" in report
+    assert "No clearance deltas recorded" in report
+
+
+def test_main_excludes_checksums_file_from_checksum_manifest(tmp_path: Path) -> None:
+    """Rerunning the builder should not checksum the previous checksums file."""
+    output_dir = tmp_path / "pack"
+
+    main(["--output-dir", str(output_dir), "--generated-at", "2026-06-23T00:00:00Z"])
+    main(["--output-dir", str(output_dir), "--generated-at", "2026-06-23T00:00:00Z"])
+
+    checksums = (output_dir / "checksums.sha256").read_text(encoding="utf-8")
+    assert "checksums.sha256" not in checksums

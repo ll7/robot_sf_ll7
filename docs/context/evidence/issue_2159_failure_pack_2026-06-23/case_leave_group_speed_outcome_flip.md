@@ -17,15 +17,15 @@
 
 ## Per-Seed Detail
 
-**Seed 258**
+**Planner orca, seed 258**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 259**
+**Planner orca, seed 259**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 
-**Seed 260**
+**Planner orca, seed 260**
 - No_op frame range: [?, ?]
 - Perturbed frame range: [?, ?]
 

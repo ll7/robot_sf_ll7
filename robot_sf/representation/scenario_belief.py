@@ -265,6 +265,62 @@ class ProjectionDiff:
         }
 
 
+def compute_clear_tracking_metrics(
+    ground_truth: ScenarioBelief,
+    observed: ScenarioBelief,
+) -> dict[str, Any]:
+    """Compute CLEAR-style tracking diagnostics between oracle and observed beliefs.
+
+    The diagnostics use pedestrian entity IDs as the correspondence contract. A
+    ground-truth pedestrian is detected only when the observed belief contains
+    the same entity ID with ``VISIBLE`` state. The precision term is the mean
+    matched centroid error in meters, matching the MOTP intuition without
+    claiming calibrated detector fidelity.
+
+    Returns:
+        Deterministic diagnostic payload with MOTA and MOTP fields.
+    """
+    truth_agents = {agent.entity_id: agent for agent in ground_truth.agents}
+    observed_visible = {
+        agent.entity_id: agent
+        for agent in observed.agents
+        if agent.visibility_state is VisibilityState.VISIBLE
+    }
+    truth_ids = set(truth_agents)
+    observed_ids = set(observed_visible)
+    matched_ids = sorted(truth_ids & observed_ids)
+    missed = sorted(truth_ids - observed_ids)
+    false_positive = sorted(observed_ids - truth_ids)
+
+    centroid_errors = [
+        float(
+            np.linalg.norm(
+                observed_visible[entity_id].position.as_array()
+                - truth_agents[entity_id].position.as_array()
+            )
+        )
+        for entity_id in matched_ids
+    ]
+    denominator = len(truth_agents)
+    id_switches = 0
+    if denominator == 0:
+        mota = 1.0 if not false_positive else 0.0
+    else:
+        mota = 1.0 - (len(missed) + len(false_positive) + id_switches) / float(denominator)
+    return {
+        "schema_version": "clear-tracking-metrics.v1",
+        "enabled": True,
+        "ground_truth_count": denominator,
+        "detection_count": len(matched_ids),
+        "missed_detection_count": len(missed),
+        "false_positive_count": len(false_positive),
+        "id_switch_count": id_switches,
+        "mota": float(max(0.0, min(1.0, mota))),
+        "motp_m": float(np.mean(centroid_errors)) if centroid_errors else float("nan"),
+        "motp_match_count": len(centroid_errors),
+    }
+
+
 @dataclass(frozen=True)
 class ScenarioBelief:
     """Sensor-agnostic semantic scenario contract.
@@ -644,6 +700,7 @@ def scenario_belief_from_simulator_oracle(
         robot_index=robot_index,
         source=source,
         visibility_states=None,
+        apply_tracking_noise=False,
     )
 
 
@@ -681,6 +738,7 @@ def scenario_belief_from_visibility_limited_simulator(
         robot_index=robot_index,
         source=source,
         visibility_states=visibility_states,
+        apply_tracking_noise=True,
     )
 
 
@@ -692,6 +750,7 @@ def _scenario_belief_from_simulator(
     robot_index: int,
     source: BeliefSource,
     visibility_states: tuple[VisibilityState, ...] | None,
+    apply_tracking_noise: bool,
 ) -> ScenarioBelief:
     """Shared simulator-state adapter implementation.
 
@@ -712,6 +771,7 @@ def _scenario_belief_from_simulator(
 
     if visibility_states is None:
         visibility_states = (VisibilityState.VISIBLE,) * int(ped_positions.shape[0])
+    tracking_noise_std_m = _tracking_noise_std_m(env_config) if apply_tracking_noise else 0.0
 
     agents = tuple(
         _agent_belief(
@@ -721,6 +781,7 @@ def _scenario_belief_from_simulator(
             radius=ped_radius,
             source=source,
             visibility_state=visibility_states[idx],
+            tracking_noise_std_m=tracking_noise_std_m,
         )
         for idx, position in enumerate(ped_positions)
     )
@@ -775,6 +836,7 @@ def _agent_belief(
     radius: float,
     source: BeliefSource,
     visibility_state: VisibilityState,
+    tracking_noise_std_m: float = 0.0,
 ) -> EntityBelief:
     """Build one pedestrian belief, degrading uncertainty for non-visible agents.
 
@@ -783,7 +845,15 @@ def _agent_belief(
     """
     visible = visibility_state is VisibilityState.VISIBLE
     confidence = 0.98 if visible else 0.35
-    variance = 0.01 if visible else 1.0
+    position_noise = float(max(0.0, tracking_noise_std_m)) if visible else 0.0
+    variance = max(0.01, position_noise**2) if visible else 1.0
+    observed_position = np.asarray(position, dtype=np.float32)
+    if position_noise > 0.0:
+        direction = 1.0 if idx % 2 == 0 else -1.0
+        observed_position = observed_position + np.asarray(
+            [direction * position_noise, 0.0],
+            dtype=np.float32,
+        )
     missing_fields = () if visible else ("policy_position", "policy_velocity")
     tracking = (
         None
@@ -800,7 +870,7 @@ def _agent_belief(
     return EntityBelief(
         entity_id=f"ped_{idx:03d}",
         entity_type="pedestrian",
-        position=Estimate2D.point(position, confidence=confidence, variance=variance),
+        position=Estimate2D.point(observed_position, confidence=confidence, variance=variance),
         velocity=Estimate2D.point(
             velocity,
             confidence=confidence,
@@ -818,6 +888,18 @@ def _agent_belief(
         tracking=tracking,
         class_probabilities=(("pedestrian", confidence),),
     )
+
+
+def _tracking_noise_std_m(env_config: Any) -> float:
+    """Return non-negative synthetic tracking centroid noise from config."""
+    settings = getattr(env_config, "observation_visibility", None)
+    if settings is None:
+        return 0.0
+    try:
+        value = float(getattr(settings, "tracking_noise_std_m", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if np.isfinite(value) and value > 0.0 else 0.0
 
 
 def _visibility_states(

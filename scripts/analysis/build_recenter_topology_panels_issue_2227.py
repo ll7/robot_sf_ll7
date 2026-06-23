@@ -38,6 +38,7 @@ import argparse
 import csv
 import json
 import subprocess
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -428,7 +429,7 @@ def _run_arm(
     Returns:
         ArmResult: Captured trace path and activation/terminal diagnostics.
     """
-    config = dict(base_config)
+    config = deepcopy(base_config)
     config[spec.flag] = enabled
     record = _run_map_episode(
         scenario,

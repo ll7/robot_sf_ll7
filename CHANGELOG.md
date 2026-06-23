@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a bounded, same-seed forecast-risk closed-loop coupling gate (#2916): a deterministic risk
+  adapter [`robot_sf/benchmark/forecast_risk_adapter.py`](robot_sf/benchmark/forecast_risk_adapter.py)
+  mapping a `ForecastBatch.v1` to a bounded `[0,1]` per-step risk signal (fail-closed on
+  degraded/fallback/oracle batches), a config
+  [`configs/research/forecast_risk_coupling_issue_2916.yaml`](configs/research/forecast_risk_coupling_issue_2916.yaml)
+  with `no_forecast`/`cv_risk`/`semantic_risk`/`interaction_risk` rows pinned to identical
+  seed/scenario, and a fixture-driven runner
+  [`scripts/benchmark/run_forecast_risk_coupling_gate.py`](scripts/benchmark/run_forecast_risk_coupling_gate.py)
+  that scores collision/near-miss, route progress, stop/yield timing, false-positive stopping,
+  runtime, and SNQI per row and emits a `continue|revise|stop` verdict with the
+  false-positive-stopping vs safety-benefit trade-off explicit. On the bundled single-pedestrian
+  occluded-emergence fixture the gate returns `continue` (forecast risk removed the near-miss with 0
+  false-positive stops at a throughput cost). Evidence is `diagnostic_only`/`stress`, not
+  paper-grade, and promotes no learned predictor; the three forecast sources are indistinguishable on
+  this single fixture (caveat recorded). Tracked summary under
+  `docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23/` (#2916).
+* Added a bounded ScenarioBelief uncertainty diagnostic (#2546):
+  [`scripts/analysis/run_scenario_belief_uncertainty_diagnostic_issue_2546.py`](scripts/analysis/run_scenario_belief_uncertainty_diagnostic_issue_2546.py)
+  compares a fixed scenario across five belief conditions (oracle/deterministic, visibility-limited,
+  covariance-inflated, class-probability uncertainty, existence-confidence degradation), projecting
+  each through `project_scenario_belief_for_planner` for both a consuming planner (`stream_gap`) and
+  an unsupported one (`predictive_planner_v2`). The run finds a difference (not null): every
+  uncertain condition flips the consuming planner's single-step decision from WAIT to COMMIT versus
+  oracle by dropping the uncertain corridor agent (at the visibility-projection step or the opt-in
+  `stream_gap` uncertainty gate), while the unsupported planner fails closed
+  (`unsupported_uncertainty_planner`). The WAIT→COMMIT flip is explicitly flagged as the expected
+  consequence of dropping uncertain agents, **not** a safety improvement. Follow-up decision:
+  `continue` (a runtime uncertainty producer + end-to-end stress run is the next bounded step).
+  Evidence is `diagnostic_only`/`stress`, not paper-grade; tracked summary under
+  `docs/context/evidence/issue_2546_scenario_belief_uncertainty_2026-06-23/` (#2546).
+* Added the AMMV contrastive mechanism panel (partial #2227, AMV sub-target):
+  [`scripts/analysis/build_ammv_mechanism_panel_issue_2227.py`](scripts/analysis/build_ammv_mechanism_panel_issue_2227.py)
+  runs `SocialForcePlanner` twice on one fixed scenario (seed 42) toggling only `ammv_aware_enabled`
+  in `configs/baselines/social_force_ammv_aware.yaml`, exports both arms as schema-validated
+  `simulation_trace_export.v1` traces, and renders contrastive trajectory panels via
+  `generate_trajectory_panel_bundle`. Applies #2444's finding (PR #3451) that the AMMV term is a
+  genuine same-seed divergent pair: AMMV-off max force 0.0 vs AMMV-on 2.64, final-position
+  divergence 0.58 m. Evidence is `diagnostic_only`/`stress`, not paper-grade — a planner-level
+  mechanism difference, not a navigation-success or benchmark claim. Tracked panels + captions +
+  provenance under `docs/context/evidence/issue_2227_ammv_mechanism_panel_2026-06-23/`. The
+  static-recentering and topology-guided-recovery panel sub-targets of #2227 remain follow-up
+  (Refs #2227).
 * Completed #2227 mechanism panels with the static-recentering and topology-guided-recovery
   contrastive sub-targets:
   [`scripts/analysis/build_recenter_topology_panels_issue_2227.py`](scripts/analysis/build_recenter_topology_panels_issue_2227.py)

@@ -1,4 +1,4 @@
-# Issue #2227 — Static-Recenter and Topology-Guided Recovery Mechanism Panels
+# Issue #2227 Static-Recenter and Topology-Guided Recovery Mechanism Panels (2026-06-23)
 
 Contrastive mechanism panels for the two remaining #2227 sub-targets (the AMV/AMMV
 sub-target was delivered in a sibling PR). For each mechanism the planner is run

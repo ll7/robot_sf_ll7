@@ -342,6 +342,31 @@ def test_domain_approval_rejects_pending_or_placeholder_status() -> None:
     assert report.status == "pending_domain_approval"
 
 
+def test_domain_approval_placeholder_message_names_concrete_domain_values() -> None:
+    """Template option text should fail with a fix that avoids another body-check retry."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section="""## Domain-Aware Approval
+- Required for this PR: yes
+- Domains reviewed: evidence classification / experimental comparison / figure eligibility / benchmark interpretation / paper-facing claims / NA
+- Status: approved
+- Approver/review source or waiver: maintainer review
+- Validity checklist:
+  - Target claim/hypothesis: issue claim boundary stays diagnostic-only
+  - Comparator or split/evidence validity: existing targeted smoke proof only
+  - Fallback/degraded exclusions: fallback/degraded evidence remains excluded
+  - Claim boundary: no paper-facing benchmark claim
+  - Implementation integrity vs experimental validity: tests prove gate behavior, not result validity
+"""
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "missing_domain_approval_note"
+    assert "slash-separated template option text" in report.message
+    assert "comma-separated domains" in report.message
+
+
 def test_domain_approval_rejects_not_approved_status() -> None:
     """A negated approval phrase cannot satisfy the final-readiness gate."""
     report = analyze_domain_approval(

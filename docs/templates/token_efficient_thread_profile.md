@@ -158,6 +158,18 @@ Start every resumed or user-pivoted phase with a five-minute startup gate:
 - When usage is close to the stop guard, finish the active PR or blocker record,
   then hand off instead of opening a fresh batch.
 
+## Known Fallbacks
+
+Use this table before retrying failed workflow commands in a parent thread. The
+goal is to classify known tool or setup friction quickly, then rerun the exact
+bounded fallback once instead of rediscovering it through broad logs.
+
+| Symptom | Preferred fallback | Classification |
+| --- | --- | --- |
+| `rtk read --range ...` reports an unsupported command shape. | Use `rtk proxy sed -n '<start>,<end>p' <path>` for the same focused file slice. Keep the range bounded and record the failed shape in `route_cache` before retrying. | Tool invocation fallback, not file evidence. |
+| A fresh sibling worktree cannot collect focused benchmark tests because an optional dependency such as `torch` is unavailable. | Retry the same focused command through the shared environment wrapper, for example `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest <test-node>`. If the wrapper passes, report the direct command as a worktree setup or optional-dependency issue, not a code regression. | Environment/setup fallback; final PR proof still needs the validation tier named for the change. |
+| `scripts/dev/check_pr_followups.py` reports `missing_domain_approval_note` after the Domain-Aware Approval section was filled from template options. | Replace slash-separated option text with concrete comma-separated values, for example `evidence classification, experimental comparison`, or a concrete `NA` reason when approval is not required. Do not relax the approval contract. | PR-body contract repair. |
+
 ## Token-Spend Review
 
 Use this compact review before creating workflow-improvement PRs or continuing a

@@ -1,0 +1,32 @@
+{
+  "ammv_off": {
+    "first_robot_xy": [
+      0.0,
+      0.0
+    ],
+    "last_robot_xy": [
+      3.781481,
+      0.05708
+    ],
+    "max_ammv_force_magnitude": 0.0,
+    "mean_ammv_force_magnitude": 0.0,
+    "n_frames": 24,
+    "planner_id": "social_force_ammv_off",
+    "trace_id": "issue_2227_ammv_close_front_static_ped_ammv_off"
+  },
+  "ammv_on": {
+    "first_robot_xy": [
+      0.0,
+      0.0
+    ],
+    "last_robot_xy": [
+      3.226173,
+      0.234854
+    ],
+    "max_ammv_force_magnitude": 2.641802,
+    "mean_ammv_force_magnitude": 0.534835,
+    "n_frames": 24,
+    "planner_id": "social_force_ammv_on",
+    "trace_id": "issue_2227_ammv_close_front_static_ped_ammv_on"
+  }
+}

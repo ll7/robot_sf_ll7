@@ -78,10 +78,10 @@ which were removed via the same read-then-write (verify `CLOSED` before strippin
 stale labels reappeared in roughly 5 days, confirming that periodic manual scrubs do not hold.
 
 The guard `scripts/dev/closed_state_label_hygiene.py` is a detector only; no automatic fixer exists.
-[#3456](https://github.com/ll7/robot_sf_ll7/issues/3456) tracks the durable fix: a GitHub Action on
-`issues: closed` that strips live `state:*` labels at every close path (manual, duplicate/wontfix,
-PR-merge), reusing the guard's `LIVE_STATE_LABELS` as the single source of truth. Until that lands,
-expect to re-run the manual cleanup periodically.
+The durable fix is tracked in [Issue #3456](https://github.com/ll7/robot_sf_ll7/issues/3456): a
+GitHub Action on `issues: closed` that strips live `state:*` labels at every close path (manual,
+duplicate/wontfix, PR-merge), reusing the guard's `LIVE_STATE_LABELS` as the single source of
+truth. Until that lands, expect to re-run the manual cleanup periodically.
 
 ## Boundary
 

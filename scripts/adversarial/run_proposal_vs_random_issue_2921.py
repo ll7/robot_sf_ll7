@@ -393,6 +393,12 @@ def main() -> int:
     )
     held_out_status = provenance.get("held_out_evidence_status")
     held_out_evidence = held_out_status == "eligible_held_out_diagnostic"
+    if held_out_evidence:
+        comparison_interpretation = "independent_planner_execution_outcomes"
+    elif independent_evaluation.get("independent_outcomes_available"):
+        comparison_interpretation = "independent_outcomes_rejected_by_held_out_gate"
+    else:
+        comparison_interpretation = "plumbing_only_circular_archive_nearness_objective"
 
     report = {
         "schema_version": "adversarial_proposal_comparison.v1",
@@ -413,11 +419,7 @@ def main() -> int:
         "random_metrics": random_metrics,
         "proposal_metrics": proposal_metrics,
         "comparison": {
-            "interpretation": (
-                "independent_planner_execution_outcomes"
-                if held_out_evidence
-                else "plumbing_only_circular_archive_nearness_objective"
-            ),
+            "interpretation": comparison_interpretation,
             "mean_objective_improvement": round(
                 proposal_metrics["mean_objective"] - random_metrics["mean_objective"], 4
             ),

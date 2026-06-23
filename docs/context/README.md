@@ -715,6 +715,8 @@ knowledge, not every transient iteration detail.
   [issue_2953_qwen_robotnav_metric_audit.md](issue_2953_qwen_robotnav_metric_audit.md)
 * Issue #2468 Adversarial Scenario Generation Roadmap (2026-06-07):
   [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md)
+* Issue #3474 Seed-Overlap Policy For Held-Out Adversarial Evidence (2026-06-23):
+  [issue_3474_seed_overlap_policy.md](issue_3474_seed_overlap_policy.md)
 * Issue #2524 Adversarial Scenario Manifest Generation (2026-06-07):
   [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md)
 * Issue #2562 Adversarial Manifest Planner Smoke (2026-06-07):

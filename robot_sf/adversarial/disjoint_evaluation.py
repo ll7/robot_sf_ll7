@@ -158,9 +158,9 @@ def compute_overlap_provenance(
 
     Reports scenario-family, scenario-seed, and archive-id overlaps between the
     fit and eval sets. ``disjointness_checks_passed`` is ``True`` only when both
-    sides are non-empty and share no scenario family and no archive id. Seed
-    overlap is recorded for transparency but does not, by itself, fail the
-    disjointness check (the held-out unit is the scenario family).
+    sides are non-empty and share no scenario family, scenario seed, or archive
+    id. Seed overlap is invalid for this held-out-evidence gate unless a future
+    paired/dependent-inference design defines a separate contract.
 
     Returns:
         A JSON-safe provenance dict.
@@ -176,7 +176,19 @@ def compute_overlap_provenance(
         _distinct(fit_entries, "archive_id") & _distinct(eval_entries, "archive_id")
     )
 
-    disjoint = bool(fit_entries) and bool(eval_entries) and not family_overlap and not id_overlap
+    failure_reasons: list[str] = []
+    if not fit_entries:
+        failure_reasons.append("empty_fit")
+    if not eval_entries:
+        failure_reasons.append("empty_eval")
+    if family_overlap:
+        failure_reasons.append("scenario_family_overlap")
+    if seed_overlap:
+        failure_reasons.append("seed_overlap")
+    if id_overlap:
+        failure_reasons.append("archive_id_overlap")
+
+    disjoint = not failure_reasons
     return {
         "split_policy": "disjoint_scenario_family",
         "fit_size": len(fit_entries),
@@ -190,6 +202,8 @@ def compute_overlap_provenance(
         "archive_id_overlap": id_overlap,
         "archive_id_overlap_count": len(id_overlap),
         "disjointness_checks_passed": disjoint,
+        "disjointness_failure_reasons": failure_reasons,
+        "seed_overlap_invalidates_held_out_evidence": bool(seed_overlap),
     }
 
 

@@ -114,15 +114,7 @@ def load_manifest(manifest_path: Path = DEFAULT_MANIFEST_PATH) -> SddManifest:
     expected_files_raw = raw.get("expected_files") or []
     if not isinstance(expected_files_raw, list) or not expected_files_raw:
         raise SddStagingError("Manifest must declare a non-empty `expected_files` list.")
-    expected_files = tuple(
-        ExpectedFile(
-            pattern=str(entry["pattern"]),
-            kind=str(entry.get("kind", "file")),
-            description=str(entry.get("description", "")),
-            min_count=int(entry.get("min_count", 1)),
-        )
-        for entry in expected_files_raw
-    )
+    expected_files = _parse_expected_files(expected_files_raw)
 
     size_bytes = int(raw.get("expected_total_size_bytes", 0))
     if size_bytes <= 0:
@@ -152,6 +144,34 @@ def load_manifest(manifest_path: Path = DEFAULT_MANIFEST_PATH) -> SddManifest:
         ),
         local_availability_declared=str(raw.get("local_availability", "missing")),
     )
+
+
+def _parse_expected_files(expected_files_raw: list[Any]) -> tuple[ExpectedFile, ...]:
+    """Parse manifest expected-file entries with fail-closed error messages."""
+    expected_files: list[ExpectedFile] = []
+    for index, entry in enumerate(expected_files_raw):
+        if not isinstance(entry, dict):
+            raise SddStagingError(f"`expected_files[{index}]` must be a mapping.")
+        pattern = str(entry.get("pattern", "")).strip()
+        if not pattern:
+            raise SddStagingError(f"`expected_files[{index}].pattern` is required.")
+        try:
+            min_count = int(entry.get("min_count", 1))
+        except (TypeError, ValueError) as exc:
+            raise SddStagingError(
+                f"`expected_files[{index}].min_count` must be an integer."
+            ) from exc
+        if min_count <= 0:
+            raise SddStagingError(f"`expected_files[{index}].min_count` must be positive.")
+        expected_files.append(
+            ExpectedFile(
+                pattern=pattern,
+                kind=str(entry.get("kind", "file")),
+                description=str(entry.get("description", "")),
+                min_count=min_count,
+            )
+        )
+    return tuple(expected_files)
 
 
 def _resolve_staging_dir(staging_dir_raw: str, *, manifest_path: Path) -> Path:
@@ -333,16 +353,24 @@ def validate_staging(manifest: SddManifest, *, compute_checksum: bool = True) ->
     report["sample_files"] = checksum["sample_files"]
     report["checksum_algorithm"] = manifest.checksum_algorithm
 
-    if manifest.expected_tree_sha256 is not None:
-        report["expected_tree_sha256"] = manifest.expected_tree_sha256
-        report["checksum_match"] = checksum["tree_sha256"] == manifest.expected_tree_sha256
-        if not report["checksum_match"]:
-            report["action"] = (
-                "Staged files do not match the pinned `expected_tree_sha256` in the manifest. "
-                "Refusing to mark SDD as staged; treat as untrusted and re-acquire. Scenario-prior "
-                f"generation remains forced to `{MODE_PROXY}`."
-            )
-            return report
+    if manifest.expected_tree_sha256 is None:
+        report["local_availability"] = "present_unpinned_checksum"
+        report["action"] = (
+            "Expected SDD files are present and a tree checksum was computed, but the manifest does "
+            "not pin `expected_tree_sha256`. Refusing to mark SDD as dataset-backed until a trusted "
+            f"checksum is pinned. Scenario-prior generation remains forced to `{MODE_PROXY}`."
+        )
+        return report
+
+    report["expected_tree_sha256"] = manifest.expected_tree_sha256
+    report["checksum_match"] = checksum["tree_sha256"] == manifest.expected_tree_sha256
+    if not report["checksum_match"]:
+        report["action"] = (
+            "Staged files do not match the pinned `expected_tree_sha256` in the manifest. "
+            "Refusing to mark SDD as staged; treat as untrusted and re-acquire. Scenario-prior "
+            f"generation remains forced to `{MODE_PROXY}`."
+        )
+        return report
 
     report["ok"] = True
     report["local_availability"] = "staged"

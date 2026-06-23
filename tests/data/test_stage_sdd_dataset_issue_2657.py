@@ -148,6 +148,17 @@ def test_manifest_rejects_staging_dir_symlink(tmp_path: Path) -> None:
         stage.load_manifest(manifest_path)
 
 
+def test_manifest_parse_errors_are_sdd_staging_errors(tmp_path: Path) -> None:
+    """Malformed expected-file entries should not leak KeyError/TypeError tracebacks."""
+    manifest_path = _write_manifest(tmp_path, staging_dir=tmp_path / "sdd")
+    raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    raw["expected_files"] = [{"kind": "file"}]
+    manifest_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(stage.SddStagingError, match=r"expected_files\[0\]\.pattern"):
+        stage.load_manifest(manifest_path)
+
+
 # --- download confirmation gate --------------------------------------------------------------
 
 
@@ -222,7 +233,15 @@ def test_status_reports_staged_when_validated(tmp_path: Path) -> None:
     """A staged + valid annotation file flips availability to `staged` with a checksum."""
     staging_dir = tmp_path / "sdd"
     _stage_annotation(staging_dir)
-    manifest = stage.load_manifest(_write_manifest(tmp_path, staging_dir=staging_dir))
+    unpinned = stage.load_manifest(_write_manifest(tmp_path, staging_dir=staging_dir))
+    unpinned_report = stage.validate_staging(unpinned)
+    manifest = stage.load_manifest(
+        _write_manifest(
+            tmp_path,
+            staging_dir=staging_dir,
+            expected_tree_sha256=unpinned_report["tree_sha256"],
+        )
+    )
 
     report = stage.validate_staging(manifest)
 
@@ -231,6 +250,20 @@ def test_status_reports_staged_when_validated(tmp_path: Path) -> None:
     assert report["mode"] == stage.MODE_DATASET_BACKED
     assert report["tree_sha256"]
     assert report["matched_files"] == ["annotations.txt"]
+
+
+def test_unpinned_checksum_fails_closed_for_dataset_backed_mode(tmp_path: Path) -> None:
+    """Present files without a pinned trusted checksum do not become dataset-backed evidence."""
+    staging_dir = tmp_path / "sdd"
+    _stage_annotation(staging_dir)
+    manifest = stage.load_manifest(_write_manifest(tmp_path, staging_dir=staging_dir))
+
+    report = stage.validate_staging(manifest)
+
+    assert report["ok"] is False
+    assert report["local_availability"] == "present_unpinned_checksum"
+    assert report["mode"] == stage.MODE_PROXY
+    assert report["tree_sha256"]
 
 
 def test_checksum_mismatch_fails_closed(tmp_path: Path) -> None:
@@ -269,7 +302,13 @@ def test_mode_gate_unlocks_dataset_backed_when_staged(tmp_path: Path) -> None:
     """The mode gate unlocks dataset_backed_prior only with a validated staged copy."""
     staging_dir = tmp_path / "sdd"
     _stage_annotation(staging_dir)
-    manifest_path = _write_manifest(tmp_path, staging_dir=staging_dir)
+    unpinned = stage.load_manifest(_write_manifest(tmp_path, staging_dir=staging_dir))
+    unpinned_report = stage.validate_staging(unpinned)
+    manifest_path = _write_manifest(
+        tmp_path,
+        staging_dir=staging_dir,
+        expected_tree_sha256=unpinned_report["tree_sha256"],
+    )
 
     gate = stage.resolve_scenario_prior_mode(manifest_path=manifest_path)
 
@@ -282,7 +321,15 @@ def test_mode_gate_uses_cached_status_without_rehashing(monkeypatch, tmp_path: P
     """A valid staging-status cache avoids re-hashing the staged tree on import paths."""
     staging_dir = tmp_path / "sdd"
     _stage_annotation(staging_dir)
-    manifest = stage.load_manifest(_write_manifest(tmp_path, staging_dir=staging_dir))
+    unpinned = stage.load_manifest(_write_manifest(tmp_path, staging_dir=staging_dir))
+    unpinned_report = stage.validate_staging(unpinned)
+    manifest = stage.load_manifest(
+        _write_manifest(
+            tmp_path,
+            staging_dir=staging_dir,
+            expected_tree_sha256=unpinned_report["tree_sha256"],
+        )
+    )
     report = stage.validate_staging(manifest)
     stage._write_staging_status(manifest, report)
 
@@ -311,9 +358,11 @@ def test_repo_manifest_loads_and_defaults_to_missing() -> None:
     assert manifest.expected_total_size_bytes > 0
 
 
-def test_repo_default_run_reports_proxy_mode() -> None:
-    """Against the real repo manifest with no staged data, the gate is proxy/not-dataset-backed."""
-    gate = stage.resolve_scenario_prior_mode()
+def test_default_manifest_shape_reports_proxy_mode(tmp_path: Path) -> None:
+    """A missing staged copy reports proxy/not-dataset-backed without depending on repo output."""
+    manifest_path = _write_manifest(tmp_path, staging_dir=tmp_path / "sdd")
+
+    gate = stage.resolve_scenario_prior_mode(manifest_path=manifest_path)
 
     assert gate["mode"] == stage.MODE_PROXY
     assert gate["dataset_backed"] is False

@@ -276,6 +276,31 @@ Copilot, etc.) and the retrieval → planning → execution → verification dis
 ## Project Structure & Module Organization
 Core simulation code lives in `robot_sf/` with key subpackages: `gym_env` for Gymnasium bindings, `sim` for physics glue, `nav` for path planning, and `render` for playback tooling. Training and evaluation entry points sit in `scripts/`, while curated demos and notebooks live under `examples/`. Tests are split between `tests/` (unit and integration), `tests/pygame/` (GUI regressions), and the `fast-pysf/` subtree. Assets and checkpoints are versioned under `maps/svg_maps/` and `model/`; the canonical (git-ignored) artifact root for generated outputs is `output/` (legacy `results/` has been migrated there).
 
+## Canonical Owner Check (before adding a new module/script/config)
+
+Before creating a new module, script, config family, or asset registration for a concern, **find
+the existing canonical owner and extend it instead of duplicating it.** With multiple agents and
+machines working in parallel, the most common avoidable rework is two implementations of the same
+concern (e.g. a per-issue helper next to an existing subsystem that already owns it).
+
+- **Search first.** `grep`/`rg` the subsystem for the concept (e.g. `bootstrap`, `rank`, `staging`,
+  `evidence_contract`, `kendall`) and read the matches before writing new code. Statistics, staging,
+  provenance, evidence-contract, and rank/uncertainty concerns almost always already have an owner
+  in `robot_sf/benchmark/`, `robot_sf/research/`, `scripts/tools/`, or `scripts/validation/`.
+- **Extend, don't fork.** If an owner exists, add to it (a new function, a parameter, an asset spec
+  entry) rather than standing up a parallel `*_issue_<n>.py`. Reuse shared primitives
+  (`rank_metrics`, `seed_variance`, `snqi.bootstrap`, `manage_external_data` asset specs, the smoke
+  evidence builder, …) — do not re-implement them per issue.
+- **Per-issue scripts are for genuinely new orchestration**, not for re-deriving an existing
+  capability. A thin per-issue runner that composes canonical functions is fine; a second copy of a
+  canonical function is not.
+- **If you must introduce a new owner**, say so explicitly in the PR and name what it supersedes, so
+  the duplicate can be retired (cf. the SDD staging consolidation: a per-issue staging script was
+  later folded back into the canonical `manage_external_data.py`).
+
+This mirrors the existing note rule under *Knowledge Capture & Context Notes* ("prefer updating an
+existing canonical note"), applied to code and configs.
+
 ## Durable Artifacts & Worktree Output
 
 - Treat `output/` as temporary, worktree-local, and generally untracked. Do not assume files under `output/` exist in another checkout, worktree, or machine.

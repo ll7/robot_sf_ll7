@@ -312,6 +312,69 @@ def test_post_process_metrics_preserves_rollover_counters() -> None:
     assert metrics["rollover_event"] == metrics_mod.ROLLOVER_CRITICAL_EVENT
 
 
+def test_clear_tracking_metrics_are_disabled_by_default() -> None:
+    """CLEAR tracking columns should not appear unless metadata opts in."""
+    ep = _make_episode(T=5, K=1)
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    assert "clear_tracking_enabled" not in vals
+    assert "clear_mota" not in vals
+
+
+def test_clear_tracking_metrics_emit_from_episode_metadata() -> None:
+    """Opt-in CLEAR metadata should become flat campaign metric columns."""
+    ep = _make_episode(T=5, K=1)
+    ep.episode_metadata = {
+        "clear_tracking_uncertainty": {
+            "enabled": True,
+            "ground_truth_count": 2,
+            "detection_count": 1,
+            "missed_detection_count": 1,
+            "false_positive_count": 0,
+            "id_switch_count": 0,
+            "mota": 0.5,
+            "motp_m": 0.25,
+            "motp_match_count": 1,
+        }
+    }
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    assert vals["clear_tracking_enabled"] == 1.0
+    assert vals["clear_mota"] == pytest.approx(0.5)
+    assert vals["clear_motp_m"] == pytest.approx(0.25)
+    assert vals["clear_missed_detection_count"] == 1.0
+
+
+def test_post_process_metrics_adds_clear_tracking_block() -> None:
+    """Post-processing should preserve CLEAR diagnostics as a structured block."""
+    metrics = post_process_metrics(
+        {
+            "success": 1.0,
+            "collisions": 0.0,
+            "clear_tracking_enabled": 1.0,
+            "clear_ground_truth_count": 2.0,
+            "clear_detection_count": 1.0,
+            "clear_missed_detection_count": 1.0,
+            "clear_false_positive_count": 0.0,
+            "clear_id_switch_count": 0.0,
+            "clear_mota": 0.5,
+            "clear_motp_m": 0.25,
+            "clear_motp_match_count": 1.0,
+        },
+        snqi_weights=None,
+        snqi_baseline=None,
+    )
+
+    block = metrics["clear_tracking_uncertainty"]
+    assert block["schema_version"] == "clear-tracking-metrics.v1"
+    assert block["mota"] == 0.5
+    assert block["motp_m"] == 0.25
+    assert block["counts"]["missed_detections"] == 1.0
+    assert "not calibrated real-sensor evidence" in block["claim_boundary"]
+
+
 def test_success_failure_due_to_collision():
     """TODO docstring. Document this function."""
     T = 5

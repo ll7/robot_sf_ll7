@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,6 +13,7 @@ from robot_sf.gym_env.unified_config import ObservationVisibilitySettings, Robot
 from robot_sf.representation import (
     TrackedAgentMetadata,
     VisibilityState,
+    compute_clear_tracking_metrics,
     compute_projection_diff,
     scenario_belief_from_simulator_oracle,
     scenario_belief_from_visibility_limited_simulator,
@@ -286,6 +288,105 @@ def test_compute_projection_diff_detects_oracle_vs_partial_differences() -> None
     assert fov_agent.in_policy_partial is False
     assert fov_agent.confidence_oracle > fov_agent.confidence_partial
     assert "policy_position" in fov_agent.missing_fields_partial
+
+
+def test_clear_tracking_metrics_are_perfect_for_oracle_vs_oracle() -> None:
+    """Zero-noise oracle comparisons should report perfect CLEAR diagnostics."""
+    simulator = _simulator_fixture()
+    oracle = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=RobotSimulationConfig(),
+        max_pedestrians=4,
+    )
+
+    metrics = compute_clear_tracking_metrics(oracle, oracle)
+
+    assert metrics["schema_version"] == "clear-tracking-metrics.v1"
+    assert metrics["ground_truth_count"] == 2
+    assert metrics["detection_count"] == 2
+    assert metrics["missed_detection_count"] == 0
+    assert metrics["false_positive_count"] == 0
+    assert metrics["id_switch_count"] == 0
+    assert metrics["mota"] == pytest.approx(1.0)
+    assert metrics["motp_m"] == pytest.approx(0.0)
+
+
+def test_clear_tracking_metrics_penalize_visibility_limited_misses() -> None:
+    """Visibility-limited beliefs should expose missed detections through MOTA."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        fov_degrees=90.0,
+    )
+    simulator = _simulator_fixture()
+    oracle = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+    partial = scenario_belief_from_visibility_limited_simulator(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    metrics = compute_clear_tracking_metrics(oracle, partial)
+
+    assert metrics["ground_truth_count"] == 2
+    assert metrics["detection_count"] == 1
+    assert metrics["missed_detection_count"] == 1
+    assert metrics["false_positive_count"] == 0
+    assert metrics["mota"] == pytest.approx(0.5)
+    assert metrics["motp_m"] == pytest.approx(0.0)
+
+
+def test_clear_tracking_metrics_penalize_false_positive_without_truth() -> None:
+    """False positives should not look like perfect tracking when no truth agents exist."""
+    oracle = scenario_belief_from_simulator_oracle(
+        _simulator_fixture(),
+        env_config=RobotSimulationConfig(),
+        max_pedestrians=4,
+    )
+    ground_truth = replace(oracle, agents=())
+    observed = replace(oracle, agents=(oracle.agents[0],))
+
+    metrics = compute_clear_tracking_metrics(ground_truth, observed)
+
+    assert metrics["ground_truth_count"] == 0
+    assert metrics["false_positive_count"] == 1
+    assert metrics["mota"] == pytest.approx(0.0)
+    assert np.isnan(metrics["motp_m"])
+
+
+def test_clear_tracking_metrics_report_configured_centroid_noise() -> None:
+    """Configured synthetic tracking noise should surface as MOTP degradation."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        fov_degrees=360.0,
+        tracking_noise_std_m=0.25,
+    )
+    simulator = _simulator_fixture()
+    oracle = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+    degraded = scenario_belief_from_visibility_limited_simulator(
+        simulator,
+        env_config=env_config,
+        max_pedestrians=4,
+    )
+
+    metrics = compute_clear_tracking_metrics(oracle, degraded)
+
+    assert metrics["ground_truth_count"] == 2
+    assert metrics["detection_count"] == 2
+    assert metrics["missed_detection_count"] == 0
+    assert metrics["mota"] == pytest.approx(1.0)
+    assert metrics["motp_m"] == pytest.approx(0.25)
+    assert degraded.agents[0].position.covariance_xy[0][0] == pytest.approx(0.25**2)
+    assert env_config.observation_visibility.to_metadata()["tracking_noise_std_m"] == 0.25
 
 
 def test_compute_projection_diff_empty_agents() -> None:

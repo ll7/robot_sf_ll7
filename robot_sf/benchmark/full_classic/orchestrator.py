@@ -57,6 +57,7 @@ from .visuals import generate_visual_artifacts  # new visual artifact integratio
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
+CLEAR_TRACKING_METADATA_KEY = "clear_tracking_uncertainty"
 ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 
 # Import new visualization functions for real plots/videos from episode data
@@ -767,6 +768,10 @@ def _episode_metadata_for_metrics(scenario) -> dict[str, Any] | None:
     rollover_stability = metadata.get(ROLLOVER_STABILITY_METADATA_KEY)
     if isinstance(rollover_stability, dict) and bool(rollover_stability.get("enabled", False)):
         episode_metadata[ROLLOVER_STABILITY_METADATA_KEY] = dict(rollover_stability)
+
+    clear_tracking = metadata.get(CLEAR_TRACKING_METADATA_KEY)
+    if isinstance(clear_tracking, dict) and bool(clear_tracking.get("enabled", False)):
+        episode_metadata[CLEAR_TRACKING_METADATA_KEY] = dict(clear_tracking)
 
     if not episode_metadata:
         return None

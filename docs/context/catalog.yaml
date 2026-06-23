@@ -1594,6 +1594,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2790_trace_vs_live_replay/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2790_trace_vs_live_replay/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3201_observation_noise_live_smoke/summary.json
     status: evidence
     freshness: evidence

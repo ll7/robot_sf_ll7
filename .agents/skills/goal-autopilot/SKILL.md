@@ -59,6 +59,11 @@ In token-efficient mode:
   decide whether the previous goal action is still the current objective. If
   the newest request supersedes it, park the old batch with a compact handoff
   and cleanup status before editing or opening a new PR for the new request.
+- If the newest request is meta-workflow work, such as improving instructions
+  from this thread, stop treating the old ledger next action as active work.
+  Preserve its exact resumption point, create a fresh docs-or-workflow worktree
+  from `origin/main`, and limit the new PR to reusable guidance proven by the
+  observed thread failures or token leaks.
 - On continuation or after context compaction, rebuild state from the active
   ledger and compact PR/issue/worktree snapshots first. Reopen full skills,
   docs, raw CI output, or broad GitHub/worktree inventories only when the
@@ -100,6 +105,11 @@ In token-efficient mode:
   the watched branch.
 - Keep final GitHub mutation, publication, merge-readiness, benchmark, paper,
   and safety decisions local.
+- When the user makes SLURM capacity or training submission a high priority,
+  route the phase through `goal-slurm-experiment` for the single background
+  training lane or `slurm-campaign-submit` for explicit capacity-aware batches.
+  Do the private-ops submit-host, queue, duplicate, and health-check preflight
+  before assigning implementation workers or opening unrelated PR review work.
 
 The default user prompt can be short:
 

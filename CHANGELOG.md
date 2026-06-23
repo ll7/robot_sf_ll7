@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Clarified token-efficient goal-thread startup rules for workflow-improvement turns: agents now
+  explicitly park stale prior work after compaction or user pivots, scope meta-workflow requests to
+  fresh docs-or-workflow worktrees, and classify high-priority SLURM work through the appropriate
+  single-lane or capacity-aware submit workflow before burning parent-thread context.
 * Added legacy PPO snapshot parity checks (#3469):
   [`scripts/validation/check_legacy_ppo_snapshot_parity.py`](scripts/validation/check_legacy_ppo_snapshot_parity.py)
   inventories supported BR-06 PPO registry checkpoints, verifies durable GitHub-release pointers,

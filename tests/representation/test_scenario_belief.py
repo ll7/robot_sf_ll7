@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -337,6 +338,24 @@ def test_clear_tracking_metrics_penalize_visibility_limited_misses() -> None:
     assert metrics["false_positive_count"] == 0
     assert metrics["mota"] == pytest.approx(0.5)
     assert metrics["motp_m"] == pytest.approx(0.0)
+
+
+def test_clear_tracking_metrics_penalize_false_positive_without_truth() -> None:
+    """False positives should not look like perfect tracking when no truth agents exist."""
+    oracle = scenario_belief_from_simulator_oracle(
+        _simulator_fixture(),
+        env_config=RobotSimulationConfig(),
+        max_pedestrians=4,
+    )
+    ground_truth = replace(oracle, agents=())
+    observed = replace(oracle, agents=(oracle.agents[0],))
+
+    metrics = compute_clear_tracking_metrics(ground_truth, observed)
+
+    assert metrics["ground_truth_count"] == 0
+    assert metrics["false_positive_count"] == 1
+    assert metrics["mota"] == pytest.approx(0.0)
+    assert np.isnan(metrics["motp_m"])
 
 
 def test_clear_tracking_metrics_report_configured_centroid_noise() -> None:

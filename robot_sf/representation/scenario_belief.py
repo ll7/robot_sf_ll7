@@ -303,11 +303,10 @@ def compute_clear_tracking_metrics(
     ]
     denominator = len(truth_agents)
     id_switches = 0
-    mota = (
-        1.0
-        if denominator == 0
-        else 1.0 - (len(missed) + len(false_positive) + id_switches) / float(denominator)
-    )
+    if denominator == 0:
+        mota = 1.0 if not false_positive else 0.0
+    else:
+        mota = 1.0 - (len(missed) + len(false_positive) + id_switches) / float(denominator)
     return {
         "schema_version": "clear-tracking-metrics.v1",
         "enabled": True,

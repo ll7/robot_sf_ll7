@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a lightweight PR body-contract workflow (#3472):
+  [`.github/workflows/pr-body-contracts.yml`](.github/workflows/pr-body-contracts.yml)
+  now validates live pull-request bodies with
+  [`scripts/dev/check_pr_followups.py`](scripts/dev/check_pr_followups.py), requiring body input,
+  open linked follow-up issues for declared residual work, domain-aware approval for
+  evidence-validity-sensitive claims, and a human-written description for substantive
+  source/configuration changes. The checker now accepts a changed-file list and rejects empty or
+  bot-only substantive PR descriptions, with fixtures covering the #3414/#3415 empty-body pattern,
+  the #3416 CodeRabbit-only pattern, and the #3449/#3450 evidence-sensitive missing-contract
+  pattern (#3472).
 * Added the PPO curriculum-learning launch packet (#3068): a pre-launch spec
   ([`configs/training/ppo_curriculum_issue_3068_launch_packet.yaml`](configs/training/ppo_curriculum_issue_3068_launch_packet.yaml),
   schema `ppo-curriculum-launch-packet.v1`) defining a 4-stage density/complexity curriculum over

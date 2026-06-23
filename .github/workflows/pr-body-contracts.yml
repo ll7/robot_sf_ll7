@@ -1,0 +1,49 @@
+name: PR body contracts
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: pr-body-contracts-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-body-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Collect changed files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" \
+            --jq '.[].filename' > "$RUNNER_TEMP/pr_changed_files.txt"
+          echo "Changed files for PR #$PR_NUMBER:"
+          sed -n '1,120p' "$RUNNER_TEMP/pr_changed_files.txt"
+
+      - name: Validate PR body contracts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/dev/check_pr_followups.py \
+            --github-event-path "$GITHUB_EVENT_PATH" \
+            --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
+            --require-body \
+            --require-substantive-body \
+            --require-open-issues

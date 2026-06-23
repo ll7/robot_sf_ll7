@@ -55,3 +55,39 @@ paper_eval_s20:
   - 128
   - 129
   - 130
+
+# Issue #1554 paper-facing S30 extension. Extends the S20 set with ten more
+# contiguous seeds while preserving the frozen S3 `eval` seeds (111-113) and the
+# S10/S20 ordering. Used by the S20/S30 seed-budget launch packet; no S30 campaign
+# rows exist yet, so this set is a launch-only reference until the SLURM run lands.
+paper_eval_s30:
+  - 111
+  - 112
+  - 113
+  - 114
+  - 115
+  - 116
+  - 117
+  - 118
+  - 119
+  - 120
+  - 121
+  - 122
+  - 123
+  - 124
+  - 125
+  - 126
+  - 127
+  - 128
+  - 129
+  - 130
+  - 131
+  - 132
+  - 133
+  - 134
+  - 135
+  - 136
+  - 137
+  - 138
+  - 139
+  - 140

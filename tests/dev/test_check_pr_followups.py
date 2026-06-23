@@ -11,7 +11,11 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.dev import check_pr_followups
-from scripts.dev.check_pr_followups import analyze_body, analyze_domain_approval
+from scripts.dev.check_pr_followups import (
+    analyze_body,
+    analyze_body_quality,
+    analyze_domain_approval,
+)
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_pr_followups.py"
 
@@ -55,6 +59,20 @@ def _approved_domain_section(*, status: str = "approved", note: str = "maintaine
 """
 
 
+def _well_formed_support_body() -> str:
+    return """## Summary
+Adds a small workflow guard for PR body quality.
+
+## Research Result Guidance
+- Evidence tier: NA - workflow guard only
+- Result classification: NA - no research claim
+
+## Follow-Up Issues
+- Deferred work: none
+- Issues opened for follow-up: none
+"""
+
+
 def test_analyze_body_passes_when_no_deferred_work_is_declared() -> None:
     """Empty or none deferred-work values are accepted."""
     report = analyze_body(_body(deferred="none"), source="fixture")
@@ -62,6 +80,119 @@ def test_analyze_body_passes_when_no_deferred_work_is_declared() -> None:
     assert report.status == "ok"
     assert report.deferred_work == ""
     assert report.message == "No deferred work declared."
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        ("robot_sf/benchmark/camera_ready/_summaries.py",),
+        ("robot_sf/benchmark/camera_ready/_route_clearance.py",),
+    ],
+)
+def test_body_quality_rejects_empty_body_for_substantive_historical_prs(
+    files: tuple[str, ...],
+) -> None:
+    """PRs #3414/#3415 changed benchmark code with an empty description."""
+    report = analyze_body_quality(
+        "",
+        source="fixture",
+        changed_files=files,
+        require_substantive_body=True,
+    )
+
+    assert report.status == "empty_body"
+    assert report.substantive_files == files
+
+
+def test_body_quality_rejects_coderabbit_only_body_for_substantive_pr() -> None:
+    """PR #3416 used only generated CodeRabbit release notes for benchmark code."""
+    body = """
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Refactor**
+  * Reorganized internal benchmark reporting code to improve maintainability.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+"""
+
+    report = analyze_body_quality(
+        body,
+        source="fixture",
+        changed_files=("robot_sf/benchmark/camera_ready/_reporting.py",),
+        require_substantive_body=True,
+    )
+
+    assert report.status == "bot_only_body"
+
+
+def test_body_quality_strips_whole_generated_blocks_before_accepting_human_text() -> None:
+    """Generated release-note blocks should not mask whether human body text exists."""
+    body = """
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Refactor**
+  * Reorganized internal benchmark reporting code.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary
+Human-authored rationale for the workflow change.
+"""
+
+    report = analyze_body_quality(
+        body,
+        source="fixture",
+        changed_files=("scripts/dev/check_pr_followups.py",),
+        require_substantive_body=True,
+    )
+
+    assert report.status == "ok"
+
+
+def test_body_quality_allows_docs_only_empty_body() -> None:
+    """Documentation-only PRs do not need the substantive source/config body gate."""
+    report = analyze_body_quality(
+        "",
+        source="fixture",
+        changed_files=("docs/context/example.md",),
+        require_substantive_body=True,
+    )
+
+    assert report.status == "ok"
+    assert report.substantive_files == ()
+
+
+def test_body_quality_does_not_treat_path_lookalikes_as_template_only() -> None:
+    """Path exemptions require directory boundaries, not arbitrary string prefixes."""
+    report = analyze_body_quality(
+        "",
+        source="fixture",
+        changed_files=(".github/PULL_REQUEST_TEMPLATE_extra.py", "docs_extra/change.py"),
+        require_substantive_body=True,
+    )
+
+    assert report.status == "empty_body"
+    assert report.substantive_files == (
+        ".github/PULL_REQUEST_TEMPLATE_extra.py",
+        "docs_extra/change.py",
+    )
+
+
+def test_body_quality_accepts_human_body_for_substantive_changes() -> None:
+    """A human-authored body satisfies the source/configuration body gate."""
+    report = analyze_body_quality(
+        _well_formed_support_body(),
+        source="fixture",
+        changed_files=("scripts/dev/check_pr_followups.py",),
+        require_substantive_body=True,
+    )
+
+    assert report.status == "ok"
+    assert report.substantive_files == ("scripts/dev/check_pr_followups.py",)
 
 
 def test_domain_approval_not_required_for_na_or_docs_only_research_fields() -> None:
@@ -103,6 +234,42 @@ def test_domain_approval_required_for_non_na_research_fields() -> None:
     assert report.status == "missing_domain_approval"
     assert "Evidence tier: targeted smoke" in report.sensitive_terms
     assert "Result classification: blocker-resolution" in report.sensitive_terms
+
+
+@pytest.mark.parametrize(
+    ("pr_number", "body"),
+    [
+        (
+            3449,
+            """## Summary
+Closes #2916. Implements a bounded forecast-risk gate, evidence_tier: stress,
+claim_boundary: diagnostic_only, not paper-grade.
+
+## Validation
+Verdict: continue.
+""",
+        ),
+        (
+            3450,
+            """## Summary
+Closes #2546. A bounded diagnostic-only experiment testing ScenarioBelief uncertainty,
+evidence_tier: stress, claim_boundary: diagnostic_only, not paper-grade.
+
+## Validation
+Finding: continue.
+""",
+        ),
+    ],
+)
+def test_domain_approval_rejects_historical_evidence_sensitive_missing_contracts(
+    pr_number: int,
+    body: str,
+) -> None:
+    """PRs #3449/#3450 carried evidence-sensitive text without the structured approval section."""
+    del pr_number
+    report = analyze_domain_approval(body, source="fixture")
+
+    assert report.status == "missing_domain_approval"
 
 
 def test_domain_approval_accepts_approved_review_source() -> None:
@@ -449,6 +616,63 @@ def test_cli_fails_for_deferred_work_without_disposition(tmp_path: Path) -> None
 
     assert result.returncode == 2
     assert "status=missing_followup" in result.stderr
+
+
+def test_cli_rejects_empty_substantive_pr_body_from_event(tmp_path: Path) -> None:
+    """The live PR workflow can fail closed on empty substantive PR descriptions."""
+    event_path = tmp_path / "event.json"
+    files_path = tmp_path / "files.txt"
+    event_path.write_text(json.dumps({"pull_request": {"body": ""}}), encoding="utf-8")
+    files_path.write_text("robot_sf/benchmark/camera_ready/_summaries.py\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--github-event-path",
+            str(event_path),
+            "--changed-files-file",
+            str(files_path),
+            "--require-substantive-body",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "status=empty_body" in result.stderr
+
+
+def test_cli_accepts_well_formed_substantive_pr_body_with_changed_files(tmp_path: Path) -> None:
+    """Changed-file awareness does not block well-formed workflow PR bodies."""
+    event_path = tmp_path / "event.json"
+    files_path = tmp_path / "files.txt"
+    event_path.write_text(
+        json.dumps({"pull_request": {"body": _well_formed_support_body()}}),
+        encoding="utf-8",
+    )
+    files_path.write_text("scripts/dev/check_pr_followups.py\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--github-event-path",
+            str(event_path),
+            "--changed-files-file",
+            str(files_path),
+            "--require-substantive-body",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "status=ok" in result.stdout
 
 
 def test_cli_fails_for_sensitive_pr_without_domain_approval(tmp_path: Path) -> None:

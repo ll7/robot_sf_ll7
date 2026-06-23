@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Clarified token-efficient goal-thread startup rules for workflow-improvement turns: agents now
+  explicitly park stale prior work after compaction or user pivots, scope meta-workflow requests to
+  fresh docs-or-workflow worktrees, and classify high-priority SLURM work through the appropriate
+  single-lane or capacity-aware submit workflow before burning parent-thread context.
 * Documented how to obtain, place, and **share external datasets across git worktrees** in
   [`docs/external_data_setup.md`](docs/external_data_setup.md) (#1498): a per-asset obtain/place/
   validate quick-reference for `sdd`, `socnavbench-s3dis-eth`, and `socnavbench-control` (all

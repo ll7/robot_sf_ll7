@@ -79,6 +79,17 @@ At each phase boundary, review the active thread for token leaks before starting
 new work. Keep the audit to one compact paragraph or checklist, and patch the
 workflow only when the savings are reusable.
 
+Start every resumed or user-pivoted phase with a five-minute startup gate:
+
+- `newest_request`: quote or paraphrase the latest user request in one line.
+- `parked_work`: list any previous PR, worktree, dirty state, active delegate,
+  or running job that is being preserved instead of continued.
+- `next_mutation`: name the next branch, PR body edit, label, comment, merge,
+  job submission, or issue mutation before doing it.
+- `freshness_key`: record the PR/issue head SHA, branch base, queue timestamp,
+  usage snapshot, or submit-host proof that makes the next action safe.
+- `stop_or_continue`: explicitly choose continue, park, handoff, or stop.
+
 - Start from the current `resume_checkpoint`, `loaded_context_cache`, and
   `phase_audit_record`. Reread long skills, issue bodies, PR snapshots, or
   context notes only when their recorded freshness key changed.
@@ -105,6 +116,12 @@ workflow only when the savings are reusable.
 - For Slurm work, prove the owning worktree exists on the submit host before
   submitting. A local worktree preflight is not enough when the private submit
   wrapper reaches the cluster through SSH.
+- When SLURM is the user's current priority, classify it in the phase audit as
+  `single goal-slurm-experiment (gse) lane`, `capacity-aware batch`, `blocked`,
+  or `analysis-only`.
+  Read only the relevant private-ops submit instructions for the chosen route,
+  then record queue freshness, duplicate checks, submit-host worktree proof, and
+  immediate health-check plan before any `sbatch` or remote wrapper call.
 - Keep CI and validation loops bounded in the parent thread. Store full output
   in compact-validation artifacts and report only command, exit code, failing
   node IDs, artifact paths, and the next action.
@@ -156,6 +173,9 @@ long goal near a usage guard:
   prevents a repeated token leak and names the evidence that triggered it.
 - `parked_work`: prior worktrees, PRs, jobs, delegates, or claims intentionally
   left active because the newest request superseded the old next action.
+- `instruction_pr_scope`: exact instruction files to change, validation tier,
+  and why the change belongs in reusable guidance instead of one-off handoff
+  prose.
 
 ## Delegated Worker Artifact Contract
 

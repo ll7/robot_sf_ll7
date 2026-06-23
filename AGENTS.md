@@ -110,6 +110,23 @@ mutation. If the newest request changes the objective, park the previous batch w
 instead of silently continuing stale goal work. Close or explicitly preserve no-longer-needed
 subagents, and record the cleanup or preservation decision in the common Git-dir ledger.
 
+For meta-workflow requests such as "review this thread", "improve instructions", or "make this
+workflow more token efficient", treat the request as a new bounded docs-or-workflow task. Do not keep
+executing the prior goal ledger unless the user explicitly asks to resume it. Start from a fresh
+worktree on `origin/main`, summarize the parked batch by worktree, PR/issue, dirty status, active
+delegates, and next safe command, then scope the PR to reusable instruction changes. Review the
+last thread only for decision-level evidence: repeated broad reads, command failures, unclear
+instruction loops, stale-state drift, delegate lifecycle leaks, and missed route choices.
+
+When the user elevates SLURM work as a current priority, make it a first-class lane in the next
+phase audit instead of treating it as optional background work. Use `goal-slurm-experiment` for the
+single prioritized training lane and `slurm-campaign-submit` for explicit capacity-aware batches.
+Before any submission, read the private submit guidance from `~/git/robot_sf_ll7-private-ops` on the
+submit path, prove the owning worktree exists and is clean on the submit host, refresh live queue
+state, and record duplicate checks plus immediate health-check expectations. If those checks are
+not available, classify the candidate as blocked or analysis-only rather than burning Codex turns on
+speculative job setup.
+
 ## Shared Knowledge Graph
 
 This repository tracks an Understand-Anything graph under `.understand-anything/` as a shared

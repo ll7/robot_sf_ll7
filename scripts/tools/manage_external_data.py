@@ -565,6 +565,31 @@ def _parse_sdd_expected_files(expected_files_raw: list[Any]) -> tuple[SddExpecte
     return tuple(expected_files)
 
 
+def _manifest_text(raw: dict[str, Any], key: str, default: str = "") -> str:
+    """Return a stripped manifest string, treating explicit YAML null as missing."""
+    value = raw.get(key, default)
+    if value is None:
+        value = default
+    return str(value).strip()
+
+
+def _required_manifest_text(raw: dict[str, Any], key: str) -> str:
+    """Return a required manifest string or fail closed when it is absent/empty/null."""
+    value = _manifest_text(raw, key)
+    if not value:
+        raise ExternalDataError(f"Manifest is missing required `{key}`.")
+    return value
+
+
+def _optional_checksum_text(checksums: dict[str, Any], key: str) -> str | None:
+    """Return an optional checksum string, preserving null/empty as unpinned."""
+    value = checksums.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def load_sdd_staging_spec(manifest_path: Path | None = None) -> SddStagingSpec:
     """Load and validate the canonical SDD staging manifest."""
     path = manifest_path or _sdd_manifest_path()
@@ -574,9 +599,7 @@ def load_sdd_staging_spec(manifest_path: Path | None = None) -> SddStagingSpec:
     if not isinstance(raw, dict):
         raise ExternalDataError(f"Manifest is not a mapping: {path}")
 
-    staging_dir_raw = str(raw.get("staging_dir", "")).strip()
-    if not staging_dir_raw:
-        raise ExternalDataError("Manifest is missing required `staging_dir`.")
+    staging_dir_raw = _required_manifest_text(raw, "staging_dir")
     staging_dir = _resolve_sdd_staging_dir(staging_dir_raw, manifest_path=path)
 
     expected_files_raw = raw.get("expected_files") or []
@@ -589,28 +612,24 @@ def load_sdd_staging_spec(manifest_path: Path | None = None) -> SddStagingSpec:
         raise ExternalDataError("Manifest must declare a positive `expected_total_size_bytes`.")
 
     checksums = raw.get("checksums") or {}
-    download_url = raw.get("download_url")
+    download_url = _manifest_text(raw, "download_url")
 
     return SddStagingSpec(
-        asset_id=str(raw.get("asset_id", "sdd")),
-        title=str(raw.get("title", "Stanford Drone Dataset")),
-        version_tag=str(raw.get("version_tag", "unknown")),
-        source_url=str(raw.get("source_url", "")),
-        license=str(raw.get("license", "")),
-        license_url=str(raw.get("license_url", "")),
-        readme_pointer=str(raw.get("readme_pointer", "")),
+        asset_id=_manifest_text(raw, "asset_id", "sdd"),
+        title=_manifest_text(raw, "title", "Stanford Drone Dataset"),
+        version_tag=_manifest_text(raw, "version_tag", "unknown"),
+        source_url=_manifest_text(raw, "source_url"),
+        license=_manifest_text(raw, "license"),
+        license_url=_manifest_text(raw, "license_url"),
+        readme_pointer=_manifest_text(raw, "readme_pointer"),
         staging_dir=staging_dir,
-        download_url=str(download_url) if download_url else None,
-        access_note=str(raw.get("access_note", "")),
+        download_url=download_url or None,
+        access_note=_manifest_text(raw, "access_note"),
         expected_files=expected_files,
         expected_total_size_bytes=size_bytes,
-        checksum_algorithm=str(checksums.get("algorithm", "SHA-256")),
-        expected_tree_sha256=(
-            str(checksums["expected_tree_sha256"])
-            if checksums.get("expected_tree_sha256")
-            else None
-        ),
-        local_availability_declared=str(raw.get("local_availability", "missing")),
+        checksum_algorithm=_manifest_text(checksums, "algorithm", "SHA-256"),
+        expected_tree_sha256=_optional_checksum_text(checksums, "expected_tree_sha256"),
+        local_availability_declared=_manifest_text(raw, "local_availability", "missing"),
     )
 
 

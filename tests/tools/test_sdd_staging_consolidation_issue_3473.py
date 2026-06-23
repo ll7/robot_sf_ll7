@@ -208,3 +208,34 @@ def test_repo_sdd_manifest_loads_through_canonical_asset() -> None:
     assert spec.download_url is None
     assert spec.local_availability_declared == "missing"
     assert spec.expected_total_size_bytes > 0
+
+
+def test_manifest_null_staging_dir_fails_closed(tmp_path: Path) -> None:
+    """Explicit YAML null for the required staging dir must not become the string 'None'."""
+    manifest_path = _write_manifest(tmp_path, staging_dir=tmp_path / "sdd")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["staging_dir"] = None
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(canonical.ExternalDataError, match="missing required `staging_dir`"):
+        canonical.load_sdd_staging_spec(manifest_path)
+
+
+def test_manifest_null_optional_strings_remain_empty_or_unpinned(tmp_path: Path) -> None:
+    """Explicit YAML nulls for optional manifest fields should stay missing, not 'None'."""
+    manifest_path = _write_manifest(tmp_path, staging_dir=tmp_path / "sdd")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["source_url"] = None
+    manifest["download_url"] = None
+    manifest["local_availability"] = None
+    manifest["checksums"]["algorithm"] = None
+    manifest["checksums"]["expected_tree_sha256"] = None
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    spec = canonical.load_sdd_staging_spec(manifest_path)
+
+    assert spec.source_url == ""
+    assert spec.download_url is None
+    assert spec.local_availability_declared == "missing"
+    assert spec.checksum_algorithm == "SHA-256"
+    assert spec.expected_tree_sha256 is None

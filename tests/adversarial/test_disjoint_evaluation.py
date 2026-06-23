@@ -92,13 +92,15 @@ def test_disjoint_family_split_rejects_degenerate_fraction() -> None:
 
 
 def test_overlap_provenance_disjoint() -> None:
-    """Disjoint families with distinct archive ids pass the disjointness check."""
+    """Disjoint families, seeds, and archive ids pass the disjointness check."""
     fit = [_entry("A", "a0", 1), _entry("A", "a1", 2)]
     eval_ = [_entry("B", "b0", 3), _entry("B", "b1", 4)]
     prov = compute_overlap_provenance(fit, eval_)
     assert prov["disjointness_checks_passed"] is True
     assert prov["scenario_family_overlap"] == []
+    assert prov["seed_overlap"] == []
     assert prov["archive_id_overlap"] == []
+    assert prov["disjointness_failure_reasons"] == []
     assert prov["split_policy"] == "disjoint_scenario_family"
     assert prov["fit_size"] == 2
     assert prov["eval_size"] == 2
@@ -117,20 +119,23 @@ def test_overlap_provenance_detects_family_and_id_overlap() -> None:
     assert shared_id["archive_id_overlap"] == ["x"]
 
 
-def test_overlap_provenance_records_seed_overlap_without_failing() -> None:
-    """Seed overlap is recorded but does not by itself fail disjointness."""
+def test_overlap_provenance_seed_overlap_fails_held_out_disjointness() -> None:
+    """Seed overlap is recorded and fails the held-out disjointness gate."""
     fit = [_entry("A", "a0", 5)]
     eval_ = [_entry("B", "b0", 5)]  # shared seed 5, disjoint family/id
     prov = compute_overlap_provenance(fit, eval_)
     assert prov["seed_overlap"] == [5]
     assert prov["seed_overlap_count"] == 1
-    assert prov["disjointness_checks_passed"] is True
+    assert prov["disjointness_checks_passed"] is False
+    assert prov["disjointness_failure_reasons"] == ["seed_overlap"]
+    assert prov["seed_overlap_invalidates_held_out_evidence"] is True
 
 
 def test_overlap_provenance_empty_eval_not_disjoint() -> None:
     """An empty eval side cannot be a disjoint split."""
     prov = compute_overlap_provenance([_entry("A", "a0", 1)], [])
     assert prov["disjointness_checks_passed"] is False
+    assert prov["disjointness_failure_reasons"] == ["empty_eval"]
 
 
 def test_archive_sha256_is_deterministic_and_sensitive() -> None:

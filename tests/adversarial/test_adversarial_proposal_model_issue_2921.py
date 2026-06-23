@@ -320,6 +320,15 @@ def _two_family_archive() -> dict:
     return {"schema_version": "adversarial_failure_archive.v1", "entries": entries}
 
 
+def _two_family_archive_with_seed_overlap() -> dict:
+    """Build a two-family archive whose families share scenario seeds."""
+    archive = _two_family_archive()
+    for entry in archive["entries"]:
+        suffix = int(entry["archive_id"].rsplit("_", maxsplit=1)[1])
+        entry["candidate"]["scenario_seed"] = 100 + suffix
+    return archive
+
+
 def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -432,10 +441,84 @@ def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
     assert report["benchmark_evidence"] is False
     assert report["planner_performance_claim"] is False
     assert report["result_classification"] == "held_out_diagnostic_only"
+    assert report["comparison"]["interpretation"] == "independent_planner_execution_outcomes"
     assert report["archive_evaluation_provenance"]["held_out_evidence_status"] == (
         "eligible_held_out_diagnostic"
     )
     assert report["independent_outcome_evaluation"]["certification_available"] is True
+    assert report["independent_outcome_evaluation"]["null_tests_reject_null"] is True
+
+
+def test_real_archive_seed_overlap_cannot_be_held_out_evidence(tmp_path: Path, monkeypatch) -> None:
+    """Even independent outcomes cannot open the held-out gate with seed overlap."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    archive_path = tmp_path / "archive.json"
+    search_space_path = tmp_path / "search_space.yaml"
+    outcomes_path = tmp_path / "outcomes.json"
+    output_json = tmp_path / "report.json"
+    archive = _two_family_archive_with_seed_overlap()
+    archive_path.write_text(json.dumps(archive), encoding="utf-8")
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+
+    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
+
+    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
+    outcomes_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "adversarial_independent_outcomes.v1",
+                "source": "unit-test-fixture",
+                "artifact": "docs/context/evidence/unit-test.json",
+                "eval_archive_sha256": archive_sha256(split.eval_entries),
+                "outcome_source": "planner_execution",
+                "objective": "certified_failure_outcome",
+                "proposal_outcomes": [10.0, 10.0, 10.0, 10.0],
+                "random_outcomes": [0.0, 0.0, 0.0, 0.0],
+                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
+                "certification_statuses": ["passed"] * 8,
+                "row_statuses": ["success"] * 8,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--archive",
+            archive_path.as_posix(),
+            "--search-space",
+            search_space_path.as_posix(),
+            "--evaluation-outcomes",
+            outcomes_path.as_posix(),
+            "--budget",
+            "4",
+            "--seed",
+            "7",
+            "--null-test-permutations",
+            "200",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    provenance = report["archive_evaluation_provenance"]
+    assert report["held_out_evidence"] is False
+    assert report["result_classification"] == "plumbing_validation_only"
+    assert report["comparison"]["interpretation"] == (
+        "independent_outcomes_rejected_by_held_out_gate"
+    )
+    assert provenance["held_out_evidence_status"] == "not_available_no_disjoint_split"
+    assert provenance["disjointness_checks_passed"] is False
+    assert provenance["seed_overlap"] == [100, 101, 102]
+    assert provenance["seed_overlap_count"] == 3
+    assert provenance["disjointness_failure_reasons"] == ["seed_overlap"]
+    assert provenance["seed_overlap_invalidates_held_out_evidence"] is True
+    assert report["independent_outcome_evaluation"]["independent_outcomes_available"] is True
     assert report["independent_outcome_evaluation"]["null_tests_reject_null"] is True
 
 

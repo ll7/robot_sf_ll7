@@ -79,7 +79,7 @@ training_starting_points:
     configs/algos/ppo_v3_camera_ready.yaml: 6e7efd7bef68d4cdbac23bda7a0fa12d206229d5c0566c1e38f84cd9122a73c8
     configs/algos/guarded_ppo_relaxed_v2.yaml: 666eda5a47de6e452eba9b2f3cb15bda16fc97abcd7137434661a87ac9ff85d8
     configs/scenarios/classic_interactions_francis2023.yaml: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
-    configs/benchmarks/seed_sets_v1.yaml: 50cfb61a41b3e64a93cbd7d232c0eb38f656a87d69ab01ccf4cbdee8b4eecbac
+    configs/benchmarks/seed_sets_v1.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
 curriculum:
   # Density/complexity stages, expressed over real env knobs:
   #   - ped_density: scenario simulation_config.ped_density (peds per m^2)

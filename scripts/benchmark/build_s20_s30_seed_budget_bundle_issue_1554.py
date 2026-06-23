@@ -185,6 +185,14 @@ def _metric_value(row: dict[str, Any], metric: str) -> float | None:
     return None
 
 
+def _optional_seed_id(row: dict[str, Any]) -> int | None:
+    """Return an integer seed identifier when a row carries one."""
+    try:
+        return int(row.get("seed", -1))
+    except (TypeError, ValueError):
+        return None
+
+
 def classify_rows(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """Partition rows into valid vs fail-closed, with exact per-planner reasons.
 
@@ -204,10 +212,9 @@ def classify_rows(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         planner = _planner_key(row)
         if status in VALID_ROW_STATUSES:
             valid.append(row)
-            try:
-                seeds_by_planner.setdefault(planner, set()).add(int(row.get("seed", -1)))
-            except (TypeError, ValueError):
-                pass
+            seed_id = _optional_seed_id(row)
+            if seed_id is not None:
+                seeds_by_planner.setdefault(planner, set()).add(seed_id)
         else:
             fail_closed.append(row)
             entry = reasons.setdefault(
@@ -282,9 +289,8 @@ def _planner_seed_means(
         if not np.isfinite(numeric):
             continue
         planner = _planner_key(row)
-        try:
-            seed_val = int(row.get("seed", -1))
-        except (TypeError, ValueError):
+        seed_val = _optional_seed_id(row)
+        if seed_val is None:
             continue
         per_planner_seed_vals.setdefault(planner, {}).setdefault(seed_val, []).append(numeric)
 
@@ -336,7 +342,7 @@ def _seed_resampling_rank_flip(
     flips = 0
     for _ in range(samples):
         drawn = rng.integers(0, len(seed_universe), size=len(seed_universe))
-        sampled_seeds = [seed_universe[int(i)] for i in drawn]
+        sampled_seeds = [seed_universe[i] for i in drawn.tolist()]
         sample_means: dict[str, float] = {}
         for planner, sm in planner_seed_means.items():
             vals = [sm[s] for s in sampled_seeds if s in sm]

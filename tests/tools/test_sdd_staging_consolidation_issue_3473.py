@@ -111,6 +111,8 @@ def test_proxy_decision_identical_canonical_and_wrapper(tmp_path: Path) -> None:
     assert canonical_gate == wrapper_gate
     assert canonical_gate["mode"] == canonical.SDD_MODE_PROXY
     assert canonical_gate["dataset_backed"] is False
+    assert canonical_gate["availability"]["state"] == "missing"
+    assert canonical_gate["availability"]["proxy_only"] is True
 
 
 # --- dataset-backed decision parity ----------------------------------------------------------
@@ -134,6 +136,8 @@ def test_dataset_backed_decision_identical_canonical_and_wrapper(tmp_path: Path)
     assert canonical_gate == wrapper_gate
     assert canonical_gate["mode"] == canonical.SDD_MODE_DATASET_BACKED
     assert canonical_gate["dataset_backed"] is True
+    assert canonical_gate["availability"]["state"] == "dataset_backed"
+    assert canonical_gate["availability"]["validated"] is True
     assert canonical_gate["tree_sha256"]
 
 
@@ -150,6 +154,7 @@ def test_pinned_checksum_mismatch_fails_closed_in_canonical(tmp_path: Path) -> N
     assert report["ok"] is False
     assert report["checksum_match"] is False
     assert report["mode"] == canonical.SDD_MODE_PROXY
+    assert report["availability"]["state"] == "proxy_only"
 
 
 # --- no-auto-download safety preserved -------------------------------------------------------
@@ -208,6 +213,18 @@ def test_repo_sdd_manifest_loads_through_canonical_asset() -> None:
     assert spec.download_url is None
     assert spec.local_availability_declared == "missing"
     assert spec.expected_total_size_bytes > 0
+
+
+def test_repo_sdd_manifest_honors_external_data_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default SDD staging gate should read the shared worktree-portable root when set."""
+    shared_root = tmp_path / "robot_sf_external_data"
+    monkeypatch.setenv(canonical.EXTERNAL_DATA_ROOT_ENV, str(shared_root))
+
+    spec = canonical.load_sdd_staging_spec()
+
+    assert spec.staging_dir == shared_root.resolve() / "sdd"
 
 
 def test_manifest_null_staging_dir_fails_closed(tmp_path: Path) -> None:

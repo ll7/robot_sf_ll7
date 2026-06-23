@@ -12,16 +12,18 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST_DIR = REPO_ROOT / "output" / "external_data" / "manifests"
+EXTERNAL_DATA_ROOT_ENV = "ROBOT_SF_EXTERNAL_DATA_ROOT"
 
 # Canonical SDD staging manifest. This is the single editable provenance contract for the SDD
 # asset (issues #2657, #3473): maintainers pin `expected_tree_sha256` and tune the disk-check size
@@ -35,9 +37,54 @@ SDD_STAGING_STATUS_FILENAME = "sdd_staging_status.json"
 SDD_MODE_PROXY = "proxy_schema_smoke"
 SDD_MODE_DATASET_BACKED = "dataset_backed_prior"
 
+AVAILABILITY_MISSING = "missing"
+AVAILABILITY_PROXY_ONLY = "proxy_only"
+AVAILABILITY_STAGED = "staged"
+AVAILABILITY_VALIDATED = "validated"
+AVAILABILITY_DATASET_BACKED = "dataset_backed"
+AvailabilityState = Literal["missing", "proxy_only", "staged", "validated", "dataset_backed"]
+
 
 class ExternalDataError(RuntimeError):
     """Raised when external data cannot be safely staged or validated."""
+
+
+def _availability_record(
+    state: AvailabilityState,
+    *,
+    mode: str | None,
+    dataset_backed: bool = False,
+    validated: bool = False,
+    proxy_only: bool = False,
+) -> dict[str, Any]:
+    """Return the canonical availability/mode shape for external-data records."""
+    return {
+        "schema": "robot_sf_external_data_availability.v1",
+        "state": state,
+        "mode": mode,
+        "dataset_backed": dataset_backed,
+        "validated": validated,
+        "proxy_only": proxy_only,
+    }
+
+
+def _asset_availability_record(
+    asset: AssetSpec,
+    state: AvailabilityState,
+    *,
+    validated: bool = False,
+    dataset_backed: bool = False,
+) -> dict[str, Any]:
+    """Return the generic asset availability record while preserving proxy gates."""
+    proxy_only = asset.proxy_mode is not None and not dataset_backed
+    mode = asset.dataset_backed_mode if dataset_backed else asset.proxy_mode
+    return _availability_record(
+        state,
+        mode=mode,
+        dataset_backed=dataset_backed,
+        validated=validated,
+        proxy_only=proxy_only,
+    )
 
 
 @dataclass(frozen=True)
@@ -57,6 +104,7 @@ class AssetSpec:
     asset_id: str
     title: str
     expected_local_path: Path
+    shared_root_subpath: Path
     source_url: str
     source_note: str
     license_note: str
@@ -77,6 +125,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         asset_id="sdd",
         title="Stanford Drone Dataset annotations",
         expected_local_path=REPO_ROOT / "output" / "external_data" / "sdd",
+        shared_root_subpath=Path("sdd"),
         source_url="https://cvgl.stanford.edu/projects/uav_data/",
         source_note=(
             "Official Stanford Drone Dataset project page. Stage only files obtained under the "
@@ -106,6 +155,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         asset_id="socnavbench-s3dis-eth",
         title="SocNavBench/S3DIS ETH traversible assets",
         expected_local_path=REPO_ROOT / "third_party" / "socnavbench",
+        shared_root_subpath=Path("socnavbench"),
         source_url="https://github.com/CMU-TBD/SocNavBench",
         source_note=(
             "SocNavBench code and install docs point to the official curated asset package; "
@@ -137,6 +187,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         asset_id="socnavbench-control",
         title="SocNavBench control-pipeline assets",
         expected_local_path=REPO_ROOT / "third_party" / "socnavbench",
+        shared_root_subpath=Path("socnavbench"),
         source_url="https://github.com/CMU-TBD/SocNavBench",
         source_note=(
             "SocNavBench wayptnav_data assets used by the control/waypoint navigation pipeline."
@@ -162,6 +213,7 @@ ASSETS: tuple[AssetSpec, ...] = (
         asset_id="amv-calibration",
         title="AMV calibration source provenance",
         expected_local_path=REPO_ROOT / "output" / "external_data" / "amv_calibration",
+        shared_root_subpath=Path("amv_calibration"),
         source_url="https://github.com/ll7/robot_sf_ll7/issues/1585",
         source_note=(
             "Local-only accepted source bundle for AMV actuation calibration provenance. "
@@ -212,6 +264,27 @@ ASSETS: tuple[AssetSpec, ...] = (
         related_issues=(1585, 1559),
     ),
 )
+
+
+def external_data_root() -> Path | None:
+    """Return the configured shared external-data root, when one is set."""
+    raw_root = os.environ.get(EXTERNAL_DATA_ROOT_ENV)
+    if raw_root is None or not raw_root.strip():
+        return None
+    return Path(raw_root).expanduser().resolve()
+
+
+def resolve_asset_local_path(asset: AssetSpec, *, root: Path | None = None) -> Path:
+    """Return the effective local path for an asset, honoring the shared-data root."""
+    root = external_data_root() if root is None else root
+    if root is None:
+        return asset.expected_local_path
+    return root / asset.shared_root_subpath
+
+
+def resolve_asset_local_path_by_id(asset_id: str, *, root: Path | None = None) -> Path:
+    """Return the effective local path for a supported asset id."""
+    return resolve_asset_local_path(_get_asset(asset_id), root=root)
 
 
 def list_assets() -> tuple[AssetSpec, ...]:
@@ -316,12 +389,17 @@ def _tree_checksum(source_root: Path, matched_paths: list[Path]) -> dict[str, An
 def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, Any]:
     """Validate the local path for one external asset."""
     asset = _get_asset(asset_id)
-    root = (source_path or asset.expected_local_path).expanduser().resolve()
+    ext_root = external_data_root()
+    expected_local_path = resolve_asset_local_path(asset, root=ext_root)
+    root = (source_path or expected_local_path).expanduser().resolve()
     report: dict[str, Any] = {
         "asset_id": asset.asset_id,
         "title": asset.title,
         "source_path": str(root),
-        "expected_local_path": str(asset.expected_local_path),
+        "expected_local_path": str(expected_local_path),
+        "default_local_path": str(asset.expected_local_path),
+        "external_data_root_env": EXTERNAL_DATA_ROOT_ENV,
+        "external_data_root": str(ext_root) if ext_root else None,
         "source_url": asset.source_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,
@@ -337,6 +415,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
         ],
         "ok": False,
         "status": "missing",
+        "availability": _asset_availability_record(asset, AVAILABILITY_MISSING),
         "missing_required_paths": [],
         "matched_required_paths": [],
     }
@@ -369,6 +448,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
     ]
     if missing:
         report["status"] = "incomplete"
+        report["availability"] = _asset_availability_record(asset, AVAILABILITY_MISSING)
         report["action"] = (
             "Required files are missing. Re-check the official acquisition instructions and the "
             "expected local layout before staging."
@@ -377,6 +457,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
 
     report["ok"] = True
     report["status"] = "available"
+    report["availability"] = _asset_availability_record(asset, AVAILABILITY_STAGED)
     report["action"] = "Path satisfies the declared local staging contract."
     return report
 
@@ -408,13 +489,13 @@ def _ensure_repo_local_raw_paths_ignored(
 def stage_asset(
     asset_id: str,
     *,
-    source_path: Path,
+    source_path: Path | None = None,
     manifest_out: Path | None = None,
     repo_root: Path = REPO_ROOT,
 ) -> dict[str, Any]:
     """Validate source_path and write a compact provenance manifest."""
     asset = _get_asset(asset_id)
-    source_root = source_path.expanduser().resolve()
+    source_root = (source_path or resolve_asset_local_path(asset)).expanduser().resolve()
     report = check_asset(asset_id, source_path=source_root)
     if not report["ok"]:
         raise ExternalDataError(f"Cannot stage {asset_id}: {report['action']}")
@@ -431,6 +512,11 @@ def stage_asset(
         "license_note": asset.license_note,
         "access_note": asset.access_note,
         "local_path": str(source_root),
+        "availability": _asset_availability_record(
+            asset,
+            AVAILABILITY_VALIDATED,
+            validated=True,
+        ),
         "required_paths": report["required_paths"],
         "matched_required_paths": report["matched_required_paths"],
         "file_count": checksum["file_count"],
@@ -523,11 +609,19 @@ def _resolve_sdd_staging_dir(staging_dir_raw: str, *, manifest_path: Path) -> Pa
         raise ExternalDataError("Manifest staging_dir must not contain path traversal (`..`).")
 
     unresolved = staging_dir if staging_dir.is_absolute() else REPO_ROOT / staging_dir
+    ext_root = external_data_root()
+    if not staging_dir.is_absolute() and ext_root is not None:
+        sdd_asset = _get_asset("sdd")
+        repo_default = sdd_asset.expected_local_path.relative_to(REPO_ROOT)
+        if staging_dir == repo_default:
+            unresolved = ext_root / sdd_asset.shared_root_subpath
     if unresolved.is_symlink():
         raise ExternalDataError(f"Manifest staging_dir must not be a symlink: {unresolved}")
 
     resolved = unresolved.resolve(strict=False)
-    allowed_roots = (DEFAULT_STAGING_ROOT, manifest_path.resolve(strict=False).parent)
+    allowed_roots = [DEFAULT_STAGING_ROOT, manifest_path.resolve(strict=False).parent]
+    if ext_root is not None:
+        allowed_roots.append(ext_root)
     if not any(resolved == root or resolved.is_relative_to(root) for root in allowed_roots):
         allowed = ", ".join(str(root) for root in allowed_roots)
         raise ExternalDataError(
@@ -692,6 +786,11 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
         "ok": False,
         "local_availability": "missing",
         "mode": SDD_MODE_PROXY,
+        "availability": _availability_record(
+            AVAILABILITY_MISSING,
+            mode=SDD_MODE_PROXY,
+            proxy_only=True,
+        ),
     }
 
     matched_paths: list[Path] = []
@@ -722,6 +821,11 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
             "tree checksum omitted for plan/status speed; run `sdd-validate` for checksum proof"
         )
         report["local_availability"] = "present_unvalidated"
+        report["availability"] = _availability_record(
+            AVAILABILITY_STAGED,
+            mode=SDD_MODE_PROXY,
+            proxy_only=True,
+        )
         report["action"] = (
             "SDD expected files are present. Run `sdd-validate` to compute checksums before "
             f"treating the copy as `{SDD_MODE_DATASET_BACKED}` evidence."
@@ -737,6 +841,11 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
 
     if spec.expected_tree_sha256 is None:
         report["local_availability"] = "present_unpinned_checksum"
+        report["availability"] = _availability_record(
+            AVAILABILITY_PROXY_ONLY,
+            mode=SDD_MODE_PROXY,
+            proxy_only=True,
+        )
         report["action"] = (
             "Expected SDD files are present and a tree checksum was computed, but the manifest does "
             "not pin `expected_tree_sha256`. Refusing to mark SDD as dataset-backed until a trusted "
@@ -747,6 +856,11 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
     report["expected_tree_sha256"] = spec.expected_tree_sha256
     report["checksum_match"] = checksum["tree_sha256"] == spec.expected_tree_sha256
     if not report["checksum_match"]:
+        report["availability"] = _availability_record(
+            AVAILABILITY_PROXY_ONLY,
+            mode=SDD_MODE_PROXY,
+            proxy_only=True,
+        )
         report["action"] = (
             "Staged files do not match the pinned `expected_tree_sha256` in the manifest. "
             "Refusing to mark SDD as staged; treat as untrusted and re-acquire. Scenario-prior "
@@ -757,6 +871,12 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
     report["ok"] = True
     report["local_availability"] = "staged"
     report["mode"] = SDD_MODE_DATASET_BACKED
+    report["availability"] = _availability_record(
+        AVAILABILITY_DATASET_BACKED,
+        mode=SDD_MODE_DATASET_BACKED,
+        dataset_backed=True,
+        validated=True,
+    )
     report["action"] = (
         f"SDD is staged and validated. Scenario-prior generation may run in "
         f"`{SDD_MODE_DATASET_BACKED}` mode for dataset-backed input."
@@ -805,9 +925,18 @@ def _cached_sdd_staging_gate(spec: SddStagingSpec) -> dict[str, Any] | None:
     if not _current_sdd_tree_matches_cached_status(spec, status, matched_paths):
         return None
 
+    availability = status.get("availability")
+    if not isinstance(availability, dict) or "state" not in availability:
+        availability = _availability_record(
+            AVAILABILITY_DATASET_BACKED,
+            mode=SDD_MODE_DATASET_BACKED,
+            dataset_backed=True,
+            validated=True,
+        )
     return {
         "mode": SDD_MODE_DATASET_BACKED,
         "dataset_backed": True,
+        "availability": availability,
         "reason": f"SDD is staged and validated (cached via {SDD_STAGING_STATUS_FILENAME}).",
         "asset_id": spec.asset_id,
         "version_tag": spec.version_tag,
@@ -836,6 +965,7 @@ def resolve_sdd_scenario_prior_mode(
     return {
         "mode": SDD_MODE_DATASET_BACKED if dataset_backed else SDD_MODE_PROXY,
         "dataset_backed": dataset_backed,
+        "availability": report["availability"],
         "reason": report["action"],
         "asset_id": spec.asset_id,
         "version_tag": spec.version_tag,
@@ -886,6 +1016,7 @@ def build_sdd_plan(spec: SddStagingSpec) -> dict[str, Any]:
         "auto_download": False,
         "local_availability": validation["local_availability"],
         "scenario_prior_mode": validation["mode"],
+        "availability": validation["availability"],
         "validation": validation,
         "next_step": (
             "This is a PLAN ONLY; nothing was downloaded. To stage SDD you must (1) obtain it under "
@@ -912,6 +1043,7 @@ def write_sdd_staging_status(spec: SddStagingSpec, report: dict[str, Any]) -> Pa
         "total_size_bytes": report.get("total_size_bytes"),
         "sample_files": report.get("sample_files", []),
         "local_availability": report["local_availability"],
+        "availability": report["availability"],
         "validated_at_utc": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
     }
     status_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -979,10 +1111,15 @@ def _print_json(payload: Any) -> None:
 
 def _asset_summary(asset: AssetSpec, *, include_status: bool) -> dict[str, Any]:
     """Return one list/explain payload."""
+    ext_root = external_data_root()
+    expected_local_path = resolve_asset_local_path(asset, root=ext_root)
     payload: dict[str, Any] = {
         "asset_id": asset.asset_id,
         "title": asset.title,
-        "expected_local_path": str(asset.expected_local_path),
+        "expected_local_path": str(expected_local_path),
+        "default_local_path": str(asset.expected_local_path),
+        "external_data_root_env": EXTERNAL_DATA_ROOT_ENV,
+        "external_data_root": str(ext_root) if ext_root else None,
         "source_url": asset.source_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,
@@ -992,6 +1129,7 @@ def _asset_summary(asset: AssetSpec, *, include_status: bool) -> dict[str, Any]:
     if include_status:
         status = check_asset(asset.asset_id)
         payload["status"] = status["status"]
+        payload["availability"] = status["availability"]
         payload["ok"] = status["ok"]
         payload["action"] = status["action"]
         payload["missing_required_paths"] = status["missing_required_paths"]
@@ -1029,7 +1167,14 @@ def parse_args() -> argparse.Namespace:
 
     stage_parser = subparsers.add_parser("stage", help="Validate a local path and write manifest.")
     stage_parser.add_argument("asset_id")
-    stage_parser.add_argument("--source", type=Path, required=True)
+    stage_parser.add_argument(
+        "--source",
+        type=Path,
+        help=(
+            "Override local source path. Defaults to the resolved asset path, including "
+            f"{EXTERNAL_DATA_ROOT_ENV} when set."
+        ),
+    )
     stage_parser.add_argument("--manifest-out", type=Path)
 
     download_parser = subparsers.add_parser(

@@ -226,6 +226,9 @@ def test_status_reports_missing_when_absent(tmp_path: Path) -> None:
     assert report["ok"] is False
     assert report["local_availability"] == "missing"
     assert report["mode"] == stage.MODE_PROXY
+    assert report["availability"]["state"] == "missing"
+    assert report["availability"]["mode"] == stage.MODE_PROXY
+    assert report["availability"]["proxy_only"] is True
     assert report["missing_expected"]
 
 
@@ -248,6 +251,10 @@ def test_status_reports_staged_when_validated(tmp_path: Path) -> None:
     assert report["ok"] is True
     assert report["local_availability"] == "staged"
     assert report["mode"] == stage.MODE_DATASET_BACKED
+    assert report["availability"]["state"] == "dataset_backed"
+    assert report["availability"]["mode"] == stage.MODE_DATASET_BACKED
+    assert report["availability"]["dataset_backed"] is True
+    assert report["availability"]["validated"] is True
     assert report["tree_sha256"]
     assert report["matched_files"] == ["annotations.txt"]
 
@@ -263,6 +270,8 @@ def test_unpinned_checksum_fails_closed_for_dataset_backed_mode(tmp_path: Path) 
     assert report["ok"] is False
     assert report["local_availability"] == "present_unpinned_checksum"
     assert report["mode"] == stage.MODE_PROXY
+    assert report["availability"]["state"] == "proxy_only"
+    assert report["availability"]["mode"] == stage.MODE_PROXY
     assert report["tree_sha256"]
 
 
@@ -342,6 +351,7 @@ def test_mode_gate_uses_cached_status_without_rehashing(monkeypatch, tmp_path: P
 
     assert gate["mode"] == stage.MODE_DATASET_BACKED
     assert gate["dataset_backed"] is True
+    assert gate["availability"]["state"] == "dataset_backed"
     assert gate["tree_sha256"] == report["tree_sha256"]
 
 

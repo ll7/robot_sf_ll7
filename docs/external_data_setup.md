@@ -33,6 +33,14 @@ an aggregate tree checksum, and sample file hashes. Raw datasets, videos, pickle
 and private traces remain untracked; repo-local raw paths must be covered by `.gitignore` before a
 manifest can be written.
 
+For worktree-portable staging, set `ROBOT_SF_EXTERNAL_DATA_ROOT` to one machine-stable directory
+outside any checkout. When set, the assistant and downstream SDD/SocNavBench consumers resolve
+supported assets there instead of under the current worktree:
+
+```bash
+export ROBOT_SF_EXTERNAL_DATA_ROOT="$HOME/robot_sf_external_data"
+```
+
 ## Where to obtain and where to place each dataset
 
 All of these are **license/agreement-gated** — there is no scriptable direct download. Acquire each
@@ -59,46 +67,53 @@ For SocNavBench/ETH specifically, a successful `check` is what moves the `eth_fi
 
 ## Sharing external data across git worktrees
 
-The expected paths above (`output/external_data/<asset>`, `third_party/socnavbench`) resolve
-**relative to the current working tree**. Robot SF is frequently developed in
-[linked git worktrees](https://git-scm.com/docs/git-worktree), so data staged in one worktree is
-**not** visible from another — each worktree has its own `output/` and `third_party/`. Stage the
-data **once** at a machine-stable location outside any worktree, then expose it to every worktree.
+By default, the expected paths above (`output/external_data/<asset>`, `third_party/socnavbench`)
+resolve **relative to the current working tree**. Robot SF is frequently developed in
+[linked git worktrees](https://git-scm.com/docs/git-worktree), so data staged in one worktree is not
+visible from another unless you opt into a shared root or create links.
 
-Both options below target git-ignored paths, so nothing about the raw data is ever committed.
+### Recommended: one shared data root
 
-### Recommended today: symlink a shared location into each worktree
+Set `ROBOT_SF_EXTERNAL_DATA_ROOT` in your shell, `local.machine.md`, or job launcher environment and
+place each dataset under its shared subdirectory:
 
 ```bash
-# 1. Keep one physical copy outside the repo (any stable path you control):
-mkdir -p ~/robot_sf_external_data
-# ...place SDD under ~/robot_sf_external_data/sdd and SocNavBench under ~/robot_sf_external_data/socnavbench...
+export ROBOT_SF_EXTERNAL_DATA_ROOT="$HOME/robot_sf_external_data"
+mkdir -p "$ROBOT_SF_EXTERNAL_DATA_ROOT"
 
-# 2. In EACH worktree (and the main checkout), create ignored parent dirs and link the expected paths:
-mkdir -p output/external_data third_party
-ln -sfn ~/robot_sf_external_data/sdd        output/external_data/sdd
-ln -sfn ~/robot_sf_external_data/socnavbench third_party/socnavbench
+# ...place SDD under $ROBOT_SF_EXTERNAL_DATA_ROOT/sdd...
+# ...place SocNavBench under $ROBOT_SF_EXTERNAL_DATA_ROOT/socnavbench...
+
+uv run python scripts/tools/manage_external_data.py check sdd
+uv run python scripts/tools/manage_external_data.py check socnavbench-control
 ```
 
-`ln -sfn` is safe to re-run. The link lives at a `.gitignore`-covered path, so it is never tracked;
-the tool, the SDD importer, and the scenario-prior gate all then read the one shared copy. Re-create
-the two links after `git worktree add` (a future enhancement, below, removes this step).
+With that variable set, `list`, `explain`, `check`, `stage`, and `download` report the shared-root
+path. `stage` defaults to that path when `--source` is omitted. The SDD scenario-prior gate and the
+SocNavBench asset helper also consume the same resolved paths, so two worktrees pointed at the same
+root see one physical staged copy without per-worktree links.
 
-### Validate a shared copy without symlinks
+### Validate a one-off path
 
-`check`/`stage` accept `--source` with an absolute path, so you can validate a shared copy directly
-without linking it into the worktree:
+`check`/`stage` still accept `--source` with an absolute path when you need to validate a copy that
+is not under the shared root:
 
 ```bash
 uv run python scripts/tools/manage_external_data.py stage sdd --source ~/robot_sf_external_data/sdd
 ```
 
-Note: `--source` covers *validation and manifest writing*. Downstream consumers (the SDD importer,
-the scenario-prior gate, SocNavBench map conversion) still read the asset's expected repo-relative
-path, so use the symlink above when you need those to see a shared copy.
+`--source` affects only that validation/manifest command; downstream consumers use
+`ROBOT_SF_EXTERNAL_DATA_ROOT` or the default repo-relative path.
 
-### Planned: a single shared data root (no per-worktree symlinks)
+### Fallback: symlink a shared location into each worktree
 
-A follow-up will teach `manage_external_data.py` to honor a `ROBOT_SF_EXTERNAL_DATA_ROOT`
-environment variable so every worktree reads from one machine-level root automatically — removing
-the per-worktree symlink step entirely. Tracked on top of the staging-consolidation work (#3473).
+If you cannot set an environment variable for a given tool, expose the shared copy through
+git-ignored symlinks in each worktree:
+
+```bash
+mkdir -p output/external_data third_party
+ln -sfn ~/robot_sf_external_data/sdd        output/external_data/sdd
+ln -sfn ~/robot_sf_external_data/socnavbench third_party/socnavbench
+```
+
+`ln -sfn` is safe to re-run. The links live at `.gitignore`-covered paths, so they are never tracked.

@@ -543,9 +543,21 @@ def _parse_sdd_expected_files(expected_files_raw: list[Any]) -> tuple[SddExpecte
     for index, entry in enumerate(expected_files_raw):
         if not isinstance(entry, dict):
             raise ExternalDataError(f"`expected_files[{index}]` must be a mapping.")
-        pattern = str(entry.get("pattern", "")).strip()
+        pattern_value = entry.get("pattern", "")
+        pattern = "" if pattern_value is None else str(pattern_value).strip()
         if not pattern:
             raise ExternalDataError(f"`expected_files[{index}].pattern` is required.")
+        pattern_path = Path(pattern)
+        if pattern_path.is_absolute() or ".." in pattern_path.parts:
+            raise ExternalDataError(
+                f"`expected_files[{index}].pattern` must stay within staging_dir."
+            )
+        kind_value = entry.get("kind", "file")
+        kind = "file" if kind_value is None else str(kind_value).strip()
+        if kind not in {"file", "directory"}:
+            raise ExternalDataError(
+                f"`expected_files[{index}].kind` must be one of: file, directory."
+            )
         try:
             min_count = int(entry.get("min_count", 1))
         except (TypeError, ValueError) as exc:
@@ -557,8 +569,8 @@ def _parse_sdd_expected_files(expected_files_raw: list[Any]) -> tuple[SddExpecte
         expected_files.append(
             SddExpectedFile(
                 pattern=pattern,
-                kind=str(entry.get("kind", "file")),
-                description=str(entry.get("description", "")),
+                kind=kind,
+                description=str(entry.get("description") or ""),
                 min_count=min_count,
             )
         )
@@ -607,11 +619,20 @@ def load_sdd_staging_spec(manifest_path: Path | None = None) -> SddStagingSpec:
         raise ExternalDataError("Manifest must declare a non-empty `expected_files` list.")
     expected_files = _parse_sdd_expected_files(expected_files_raw)
 
-    size_bytes = int(raw.get("expected_total_size_bytes", 0))
+    try:
+        size_bytes = int(raw.get("expected_total_size_bytes", 0))
+    except (TypeError, ValueError) as exc:
+        raise ExternalDataError("Manifest `expected_total_size_bytes` must be an integer.") from exc
     if size_bytes <= 0:
         raise ExternalDataError("Manifest must declare a positive `expected_total_size_bytes`.")
 
-    checksums = raw.get("checksums") or {}
+    checksums_raw = raw.get("checksums")
+    if checksums_raw is None:
+        checksums: dict[str, Any] = {}
+    elif isinstance(checksums_raw, dict):
+        checksums = checksums_raw
+    else:
+        raise ExternalDataError("Manifest `checksums` must be a mapping when provided.")
     download_url = _manifest_text(raw, "download_url")
 
     return SddStagingSpec(
@@ -698,12 +719,12 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
 
     if not compute_checksum:
         report["checksum_skipped"] = (
-            "tree checksum omitted for plan/status speed; run `validate` for checksum proof"
+            "tree checksum omitted for plan/status speed; run `sdd-validate` for checksum proof"
         )
         report["local_availability"] = "present_unvalidated"
         report["action"] = (
-            "SDD expected files are present. Run `validate` to compute checksums before treating "
-            f"the copy as `{SDD_MODE_DATASET_BACKED}` evidence."
+            "SDD expected files are present. Run `sdd-validate` to compute checksums before "
+            f"treating the copy as `{SDD_MODE_DATASET_BACKED}` evidence."
         )
         return report
 
@@ -743,6 +764,21 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
     return report
 
 
+def _current_sdd_tree_matches_cached_status(
+    spec: SddStagingSpec,
+    status: dict[str, Any],
+    matched_paths: list[Path],
+) -> bool:
+    """Return True only when cached status still matches the current staged tree."""
+    cached_tree_sha256 = status.get("tree_sha256")
+    if not isinstance(cached_tree_sha256, str) or not cached_tree_sha256:
+        return False
+    if spec.expected_tree_sha256 is None or cached_tree_sha256 != spec.expected_tree_sha256:
+        return False
+    current_checksum = _tree_checksum(spec.staging_dir, matched_paths)
+    return current_checksum["tree_sha256"] == cached_tree_sha256
+
+
 def _cached_sdd_staging_gate(spec: SddStagingSpec) -> dict[str, Any] | None:
     """Return a dataset-backed gate from cached status when it is still structurally valid."""
     status_path = spec.staging_dir / SDD_STAGING_STATUS_FILENAME
@@ -759,9 +795,15 @@ def _cached_sdd_staging_gate(spec: SddStagingSpec) -> dict[str, Any] | None:
     if status.get("asset_id") != spec.asset_id or status.get("version_tag") != spec.version_tag:
         return None
 
+    matched_paths: list[Path] = []
     for expected in spec.expected_files:
-        if len(_match_sdd_expected(spec.staging_dir, expected)) < expected.min_count:
+        group_matches = _match_sdd_expected(spec.staging_dir, expected)
+        if len(group_matches) < expected.min_count:
             return None
+        matched_paths.extend(group_matches)
+
+    if not _current_sdd_tree_matches_cached_status(spec, status, matched_paths):
+        return None
 
     return {
         "mode": SDD_MODE_DATASET_BACKED,
@@ -769,7 +811,7 @@ def _cached_sdd_staging_gate(spec: SddStagingSpec) -> dict[str, Any] | None:
         "reason": f"SDD is staged and validated (cached via {SDD_STAGING_STATUS_FILENAME}).",
         "asset_id": spec.asset_id,
         "version_tag": spec.version_tag,
-        "tree_sha256": status.get("tree_sha256"),
+        "tree_sha256": status["tree_sha256"],
         "staging_dir": str(spec.staging_dir),
         "report": status,
     }
@@ -848,7 +890,8 @@ def build_sdd_plan(spec: SddStagingSpec) -> dict[str, Any]:
         "next_step": (
             "This is a PLAN ONLY; nothing was downloaded. To stage SDD you must (1) obtain it under "
             "its license per access_note, (2) configure a download URL or place files under the "
-            "staging_dir, and (3) re-run with `download --confirm-download` to explicitly confirm."
+            "staging_dir, and (3) re-run with `sdd-download --confirm-download` to explicitly "
+            "confirm."
         ),
     }
 

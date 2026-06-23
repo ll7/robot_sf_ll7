@@ -239,3 +239,86 @@ def test_manifest_null_optional_strings_remain_empty_or_unpinned(tmp_path: Path)
     assert spec.local_availability_declared == "missing"
     assert spec.checksum_algorithm == "SHA-256"
     assert spec.expected_tree_sha256 is None
+
+
+@pytest.mark.parametrize("pattern", ["../secret.txt", "/tmp/secret.txt"])
+def test_manifest_rejects_expected_file_patterns_outside_staging_dir(
+    tmp_path: Path, pattern: str
+) -> None:
+    """Expected-file globs must not escape the staging directory."""
+    manifest_path = _write_manifest(tmp_path, staging_dir=tmp_path / "sdd")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["expected_files"][0]["pattern"] = pattern
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(canonical.ExternalDataError, match="must stay within staging_dir"):
+        canonical.load_sdd_staging_spec(manifest_path)
+
+
+def test_manifest_rejects_invalid_expected_file_kind(tmp_path: Path) -> None:
+    """Expected-file kind should fail during manifest parsing, before glob matching."""
+    manifest_path = _write_manifest(tmp_path, staging_dir=tmp_path / "sdd")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["expected_files"][0]["kind"] = "symlink"
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(canonical.ExternalDataError, match="must be one of"):
+        canonical.load_sdd_staging_spec(manifest_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("expected_total_size_bytes", "not-an-int", "must be an integer"),
+        ("checksums", [], "must be a mapping"),
+    ],
+)
+def test_manifest_type_errors_raise_external_data_error(
+    tmp_path: Path, field: str, value: object, message: str
+) -> None:
+    """Manifest type errors should use the CLI's fail-closed ExternalDataError path."""
+    manifest_path = _write_manifest(tmp_path, staging_dir=tmp_path / "sdd")
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(canonical.ExternalDataError, match=message):
+        canonical.load_sdd_staging_spec(manifest_path)
+
+
+def test_plan_guidance_uses_registered_sdd_cli_command_names(tmp_path: Path) -> None:
+    """User guidance should name the actual sdd-* subcommands."""
+    staging_dir = tmp_path / "sdd"
+    _stage_annotation(staging_dir)
+    spec = canonical.load_sdd_staging_spec(_write_manifest(tmp_path, staging_dir=staging_dir))
+
+    plan = canonical.build_sdd_plan(spec)
+
+    assert "sdd-validate" in plan["validation"]["checksum_skipped"]
+    assert "sdd-validate" in plan["validation"]["action"]
+    assert "sdd-download --confirm-download" in plan["next_step"]
+
+
+def test_cached_sdd_gate_revalidates_current_tree_checksum(tmp_path: Path) -> None:
+    """A stale status file must not unlock dataset-backed mode after files change."""
+    staging_dir = tmp_path / "sdd"
+    _stage_annotation(staging_dir)
+    unpinned = canonical.load_sdd_staging_spec(_write_manifest(tmp_path, staging_dir=staging_dir))
+    unpinned_report = canonical.validate_sdd_staging(unpinned)
+    manifest_path = _write_manifest(
+        tmp_path,
+        staging_dir=staging_dir,
+        expected_tree_sha256=unpinned_report["tree_sha256"],
+    )
+    spec = canonical.load_sdd_staging_spec(manifest_path)
+    valid_report = canonical.validate_sdd_staging(spec)
+    canonical.write_sdd_staging_status(spec, valid_report)
+    (staging_dir / "annotations.txt").write_text(
+        "1 0 0 99 99 0 0 0 0 Pedestrian\n", encoding="utf-8"
+    )
+
+    gate = canonical.resolve_sdd_scenario_prior_mode(manifest_path=manifest_path)
+
+    assert gate["dataset_backed"] is False
+    assert gate["mode"] == canonical.SDD_MODE_PROXY
+    assert gate["report"]["checksum_match"] is False

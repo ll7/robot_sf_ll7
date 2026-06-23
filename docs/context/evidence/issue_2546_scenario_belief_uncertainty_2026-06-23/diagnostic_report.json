@@ -1,0 +1,1089 @@
+{
+  "any_behavior_difference": true,
+  "claim_boundary": "diagnostic_only",
+  "conditions": {
+    "class_probability": {
+      "condition": "class_probability",
+      "consuming_planner": {
+        "command_angular": 0.0,
+        "command_linear": 0.95,
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 2,
+          "planner_key": "stream_gap",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "compatible",
+          "uncertainty_consumed": true
+        },
+        "planner_key": "stream_gap",
+        "uncertainty_gate": {
+          "dropped_count": 1,
+          "dropped_reasons": [
+            {
+              "class_probability": 0.3,
+              "entity_id": "ped_000",
+              "existence_probability": 0.98,
+              "position_confidence": 0.98,
+              "position_variance": 0.01,
+              "reasons": [
+                "class_probability_below_threshold"
+              ],
+              "row_index": 0
+            }
+          ],
+          "enabled": true,
+          "input_count": 2,
+          "kept_count": 1,
+          "schema_version": "stream-gap-uncertainty-gate.v1",
+          "status": "applied",
+          "thresholds": {
+            "max_position_variance": 1.0,
+            "min_class_probability": 0.5,
+            "min_existence_probability": 0.5,
+            "min_position_confidence": 0.5
+          }
+        }
+      },
+      "failure_predicates": {
+        "angular_speed": 0.0,
+        "corridor_agent_in_projection": true,
+        "gate_dropped_corridor_agent": true,
+        "gate_dropped_count": 1,
+        "is_committing": true,
+        "is_waiting": false,
+        "linear_speed": 0.95
+      },
+      "policy_observation_summary": {
+        "first_pedestrian_position": [
+          1.5,
+          0.0
+        ],
+        "nonzero_pedestrian_rows": 2,
+        "pedestrian_count": 2.0,
+        "policy_keys": [
+          "goal",
+          "map",
+          "pedestrians",
+          "robot",
+          "sim"
+        ],
+        "robot_position": [
+          0.0,
+          0.0
+        ]
+      },
+      "uncertainty_report": {
+        "agents": [
+          {
+            "class_probabilities": {
+              "cyclist": 0.4,
+              "pedestrian": 0.3,
+              "unknown": 0.3
+            },
+            "entity_id": "ped_000",
+            "existence_probability": 0.98,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          },
+          {
+            "class_probabilities": {
+              "pedestrian": 0.98
+            },
+            "entity_id": "ped_001",
+            "existence_probability": 0.98,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          }
+        ],
+        "ego": {
+          "class_probabilities": {
+            "ego_robot": 1.0
+          },
+          "heading": 0.0,
+          "position_confidence": 1.0,
+          "position_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ],
+          "velocity_confidence": 1.0,
+          "velocity_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ]
+        },
+        "frame_id": "map",
+        "goals": [
+          {
+            "current_confidence": 1.0,
+            "current_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ],
+            "next_confidence": 1.0,
+            "next_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ]
+          }
+        ],
+        "schema_version": "scenario-belief.v1",
+        "sim_time_s": 0.0
+      },
+      "unsupported_planner": {
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 0,
+          "planner_key": "predictive_planner_v2",
+          "reason": "unsupported_uncertainty_planner",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "fail_closed",
+          "uncertainty_consumed": false
+        },
+        "fail_closed": true,
+        "planner_key": "predictive_planner_v2",
+        "uncertainty_consumed": false
+      }
+    },
+    "covariance_inflated": {
+      "condition": "covariance_inflated",
+      "consuming_planner": {
+        "command_angular": 0.0,
+        "command_linear": 0.95,
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 2,
+          "planner_key": "stream_gap",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "compatible",
+          "uncertainty_consumed": true
+        },
+        "planner_key": "stream_gap",
+        "uncertainty_gate": {
+          "dropped_count": 1,
+          "dropped_reasons": [
+            {
+              "class_probability": 0.98,
+              "entity_id": "ped_000",
+              "existence_probability": 0.98,
+              "position_confidence": 0.98,
+              "position_variance": 4.0,
+              "reasons": [
+                "position_variance_above_threshold"
+              ],
+              "row_index": 0
+            }
+          ],
+          "enabled": true,
+          "input_count": 2,
+          "kept_count": 1,
+          "schema_version": "stream-gap-uncertainty-gate.v1",
+          "status": "applied",
+          "thresholds": {
+            "max_position_variance": 1.0,
+            "min_class_probability": 0.5,
+            "min_existence_probability": 0.5,
+            "min_position_confidence": 0.5
+          }
+        }
+      },
+      "failure_predicates": {
+        "angular_speed": 0.0,
+        "corridor_agent_in_projection": true,
+        "gate_dropped_corridor_agent": true,
+        "gate_dropped_count": 1,
+        "is_committing": true,
+        "is_waiting": false,
+        "linear_speed": 0.95
+      },
+      "policy_observation_summary": {
+        "first_pedestrian_position": [
+          1.5,
+          0.0
+        ],
+        "nonzero_pedestrian_rows": 2,
+        "pedestrian_count": 2.0,
+        "policy_keys": [
+          "goal",
+          "map",
+          "pedestrians",
+          "robot",
+          "sim"
+        ],
+        "robot_position": [
+          0.0,
+          0.0
+        ]
+      },
+      "uncertainty_report": {
+        "agents": [
+          {
+            "class_probabilities": {
+              "pedestrian": 0.98
+            },
+            "entity_id": "ped_000",
+            "existence_probability": 0.98,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                4.0,
+                0.0
+              ],
+              [
+                0.0,
+                4.0
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          },
+          {
+            "class_probabilities": {
+              "pedestrian": 0.98
+            },
+            "entity_id": "ped_001",
+            "existence_probability": 0.98,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          }
+        ],
+        "ego": {
+          "class_probabilities": {
+            "ego_robot": 1.0
+          },
+          "heading": 0.0,
+          "position_confidence": 1.0,
+          "position_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ],
+          "velocity_confidence": 1.0,
+          "velocity_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ]
+        },
+        "frame_id": "map",
+        "goals": [
+          {
+            "current_confidence": 1.0,
+            "current_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ],
+            "next_confidence": 1.0,
+            "next_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ]
+          }
+        ],
+        "schema_version": "scenario-belief.v1",
+        "sim_time_s": 0.0
+      },
+      "unsupported_planner": {
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 0,
+          "planner_key": "predictive_planner_v2",
+          "reason": "unsupported_uncertainty_planner",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "fail_closed",
+          "uncertainty_consumed": false
+        },
+        "fail_closed": true,
+        "planner_key": "predictive_planner_v2",
+        "uncertainty_consumed": false
+      }
+    },
+    "existence_degraded": {
+      "condition": "existence_degraded",
+      "consuming_planner": {
+        "command_angular": 0.0,
+        "command_linear": 0.95,
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 2,
+          "planner_key": "stream_gap",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "compatible",
+          "uncertainty_consumed": true
+        },
+        "planner_key": "stream_gap",
+        "uncertainty_gate": {
+          "dropped_count": 1,
+          "dropped_reasons": [
+            {
+              "class_probability": 0.98,
+              "entity_id": "ped_000",
+              "existence_probability": 0.2,
+              "position_confidence": 0.98,
+              "position_variance": 0.01,
+              "reasons": [
+                "existence_probability_below_threshold"
+              ],
+              "row_index": 0
+            }
+          ],
+          "enabled": true,
+          "input_count": 2,
+          "kept_count": 1,
+          "schema_version": "stream-gap-uncertainty-gate.v1",
+          "status": "applied",
+          "thresholds": {
+            "max_position_variance": 1.0,
+            "min_class_probability": 0.5,
+            "min_existence_probability": 0.5,
+            "min_position_confidence": 0.5
+          }
+        }
+      },
+      "failure_predicates": {
+        "angular_speed": 0.0,
+        "corridor_agent_in_projection": true,
+        "gate_dropped_corridor_agent": true,
+        "gate_dropped_count": 1,
+        "is_committing": true,
+        "is_waiting": false,
+        "linear_speed": 0.95
+      },
+      "policy_observation_summary": {
+        "first_pedestrian_position": [
+          1.5,
+          0.0
+        ],
+        "nonzero_pedestrian_rows": 2,
+        "pedestrian_count": 2.0,
+        "policy_keys": [
+          "goal",
+          "map",
+          "pedestrians",
+          "robot",
+          "sim"
+        ],
+        "robot_position": [
+          0.0,
+          0.0
+        ]
+      },
+      "uncertainty_report": {
+        "agents": [
+          {
+            "class_probabilities": {
+              "pedestrian": 0.98
+            },
+            "entity_id": "ped_000",
+            "existence_probability": 0.2,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          },
+          {
+            "class_probabilities": {
+              "pedestrian": 0.98
+            },
+            "entity_id": "ped_001",
+            "existence_probability": 0.98,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          }
+        ],
+        "ego": {
+          "class_probabilities": {
+            "ego_robot": 1.0
+          },
+          "heading": 0.0,
+          "position_confidence": 1.0,
+          "position_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ],
+          "velocity_confidence": 1.0,
+          "velocity_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ]
+        },
+        "frame_id": "map",
+        "goals": [
+          {
+            "current_confidence": 1.0,
+            "current_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ],
+            "next_confidence": 1.0,
+            "next_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ]
+          }
+        ],
+        "schema_version": "scenario-belief.v1",
+        "sim_time_s": 0.0
+      },
+      "unsupported_planner": {
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 0,
+          "planner_key": "predictive_planner_v2",
+          "reason": "unsupported_uncertainty_planner",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "fail_closed",
+          "uncertainty_consumed": false
+        },
+        "fail_closed": true,
+        "planner_key": "predictive_planner_v2",
+        "uncertainty_consumed": false
+      }
+    },
+    "oracle": {
+      "condition": "oracle",
+      "consuming_planner": {
+        "command_angular": 0.0,
+        "command_linear": 0.0,
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 2,
+          "planner_key": "stream_gap",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "compatible",
+          "uncertainty_consumed": true
+        },
+        "planner_key": "stream_gap",
+        "uncertainty_gate": {
+          "dropped_count": 0,
+          "dropped_reasons": [],
+          "enabled": true,
+          "input_count": 2,
+          "kept_count": 2,
+          "schema_version": "stream-gap-uncertainty-gate.v1",
+          "status": "applied",
+          "thresholds": {
+            "max_position_variance": 1.0,
+            "min_class_probability": 0.5,
+            "min_existence_probability": 0.5,
+            "min_position_confidence": 0.5
+          }
+        }
+      },
+      "failure_predicates": {
+        "angular_speed": 0.0,
+        "corridor_agent_in_projection": true,
+        "gate_dropped_corridor_agent": false,
+        "gate_dropped_count": 0,
+        "is_committing": false,
+        "is_waiting": true,
+        "linear_speed": 0.0
+      },
+      "policy_observation_summary": {
+        "first_pedestrian_position": [
+          1.5,
+          0.0
+        ],
+        "nonzero_pedestrian_rows": 2,
+        "pedestrian_count": 2.0,
+        "policy_keys": [
+          "goal",
+          "map",
+          "pedestrians",
+          "robot",
+          "sim"
+        ],
+        "robot_position": [
+          0.0,
+          0.0
+        ]
+      },
+      "uncertainty_report": {
+        "agents": [
+          {
+            "class_probabilities": {
+              "pedestrian": 0.98
+            },
+            "entity_id": "ped_000",
+            "existence_probability": 0.98,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          },
+          {
+            "class_probabilities": {
+              "pedestrian": 0.98
+            },
+            "entity_id": "ped_001",
+            "existence_probability": 0.98,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          }
+        ],
+        "ego": {
+          "class_probabilities": {
+            "ego_robot": 1.0
+          },
+          "heading": 0.0,
+          "position_confidence": 1.0,
+          "position_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ],
+          "velocity_confidence": 1.0,
+          "velocity_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ]
+        },
+        "frame_id": "map",
+        "goals": [
+          {
+            "current_confidence": 1.0,
+            "current_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ],
+            "next_confidence": 1.0,
+            "next_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ]
+          }
+        ],
+        "schema_version": "scenario-belief.v1",
+        "sim_time_s": 0.0
+      },
+      "unsupported_planner": {
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 0,
+          "planner_key": "predictive_planner_v2",
+          "reason": "unsupported_uncertainty_planner",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "fail_closed",
+          "uncertainty_consumed": false
+        },
+        "fail_closed": true,
+        "planner_key": "predictive_planner_v2",
+        "uncertainty_consumed": false
+      }
+    },
+    "visibility_limited": {
+      "condition": "visibility_limited",
+      "consuming_planner": {
+        "command_angular": 0.0,
+        "command_linear": 0.95,
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 1,
+          "planner_key": "stream_gap",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "compatible",
+          "uncertainty_consumed": true
+        },
+        "planner_key": "stream_gap",
+        "uncertainty_gate": {
+          "dropped_count": 0,
+          "dropped_reasons": [],
+          "enabled": true,
+          "input_count": 1,
+          "kept_count": 1,
+          "schema_version": "stream-gap-uncertainty-gate.v1",
+          "status": "applied",
+          "thresholds": {
+            "max_position_variance": 1.0,
+            "min_class_probability": 0.5,
+            "min_existence_probability": 0.5,
+            "min_position_confidence": 0.5
+          }
+        }
+      },
+      "failure_predicates": {
+        "angular_speed": 0.0,
+        "corridor_agent_in_projection": true,
+        "gate_dropped_corridor_agent": false,
+        "gate_dropped_count": 0,
+        "is_committing": true,
+        "is_waiting": false,
+        "linear_speed": 0.95
+      },
+      "policy_observation_summary": {
+        "first_pedestrian_position": [
+          6.0,
+          5.0
+        ],
+        "nonzero_pedestrian_rows": 1,
+        "pedestrian_count": 1.0,
+        "policy_keys": [
+          "goal",
+          "map",
+          "pedestrians",
+          "robot",
+          "sim"
+        ],
+        "robot_position": [
+          0.0,
+          0.0
+        ]
+      },
+      "uncertainty_report": {
+        "agents": [
+          {
+            "class_probabilities": {
+              "pedestrian": 0.98
+            },
+            "entity_id": "ped_001",
+            "existence_probability": 0.98,
+            "position_confidence": 0.98,
+            "position_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "velocity_confidence": 0.98,
+            "velocity_covariance_xy": [
+              [
+                0.01,
+                0.0
+              ],
+              [
+                0.0,
+                0.01
+              ]
+            ],
+            "visibility_state": "visible"
+          }
+        ],
+        "ego": {
+          "class_probabilities": {
+            "ego_robot": 1.0
+          },
+          "heading": 0.0,
+          "position_confidence": 1.0,
+          "position_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ],
+          "velocity_confidence": 1.0,
+          "velocity_covariance_xy": [
+            [
+              1e-06,
+              0.0
+            ],
+            [
+              0.0,
+              1e-06
+            ]
+          ]
+        },
+        "frame_id": "map",
+        "goals": [
+          {
+            "current_confidence": 1.0,
+            "current_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ],
+            "next_confidence": 1.0,
+            "next_covariance_xy": [
+              [
+                1e-06,
+                0.0
+              ],
+              [
+                0.0,
+                1e-06
+              ]
+            ]
+          }
+        ],
+        "schema_version": "scenario-belief.v1",
+        "sim_time_s": 0.0
+      },
+      "unsupported_planner": {
+        "compatibility": {
+          "claim_boundary": "diagnostic_interface_smoke",
+          "consumed_agent_count": 0,
+          "planner_key": "predictive_planner_v2",
+          "reason": "unsupported_uncertainty_planner",
+          "schema_version": "scenario-belief-planner-projection.v1",
+          "status": "fail_closed",
+          "uncertainty_consumed": false
+        },
+        "fail_closed": true,
+        "planner_key": "predictive_planner_v2",
+        "uncertainty_consumed": false
+      }
+    }
+  },
+  "consuming_planner_key": "stream_gap",
+  "evidence_tier": "stress",
+  "follow_up_decision": {
+    "decision": "continue",
+    "rationale": "Uncertainty conditions changed at least one planner decision or failure predicate versus oracle while unsupported consumption failed closed. The representation carries decision-relevant uncertainty; a runtime producer + end-to-end stress run is the next bounded step. Diagnostic only."
+  },
+  "generated_at_utc": "2026-06-23T07:44:13.801824+00:00",
+  "git_head": "fedee58afe8c5834f4e6ccb1179cdc00a8354606",
+  "issue": 2546,
+  "limitations": [
+    "Synthetic fixed scenario set; not drawn from real sensor data.",
+    "No perception model and no trained policy are involved.",
+    "Planner behavior differences are diagnostic decision-shifts, not validated safety or performance improvements.",
+    "Failure predicates are derived from the planner command and uncertainty gate, not from an episode-level safety evaluation.",
+    "stream_gap is the only uncertainty-consuming planner; all other planner keys fail closed by design."
+  ],
+  "not_benchmark_evidence": true,
+  "paper_grade": false,
+  "planner_projection_schema": "scenario-belief-planner-projection.v1",
+  "predicate_diffs_vs_oracle": {
+    "class_probability": {
+      "gate_dropped_corridor_agent": {
+        "condition": true,
+        "oracle": false
+      },
+      "gate_dropped_count": {
+        "condition": 1,
+        "oracle": 0
+      },
+      "is_committing": {
+        "condition": true,
+        "oracle": false
+      },
+      "is_waiting": {
+        "condition": false,
+        "oracle": true
+      },
+      "linear_speed": {
+        "condition": 0.95,
+        "oracle": 0.0
+      }
+    },
+    "covariance_inflated": {
+      "gate_dropped_corridor_agent": {
+        "condition": true,
+        "oracle": false
+      },
+      "gate_dropped_count": {
+        "condition": 1,
+        "oracle": 0
+      },
+      "is_committing": {
+        "condition": true,
+        "oracle": false
+      },
+      "is_waiting": {
+        "condition": false,
+        "oracle": true
+      },
+      "linear_speed": {
+        "condition": 0.95,
+        "oracle": 0.0
+      }
+    },
+    "existence_degraded": {
+      "gate_dropped_corridor_agent": {
+        "condition": true,
+        "oracle": false
+      },
+      "gate_dropped_count": {
+        "condition": 1,
+        "oracle": 0
+      },
+      "is_committing": {
+        "condition": true,
+        "oracle": false
+      },
+      "is_waiting": {
+        "condition": false,
+        "oracle": true
+      },
+      "linear_speed": {
+        "condition": 0.95,
+        "oracle": 0.0
+      }
+    },
+    "visibility_limited": {
+      "is_committing": {
+        "condition": true,
+        "oracle": false
+      },
+      "is_waiting": {
+        "condition": false,
+        "oracle": true
+      },
+      "linear_speed": {
+        "condition": 0.95,
+        "oracle": 0.0
+      }
+    }
+  },
+  "schema_version": "scenario-belief-uncertainty-diagnostic.v1",
+  "seed": 2546,
+  "unsupported_fail_closed_ok": true,
+  "unsupported_planner_key": "predictive_planner_v2"
+}

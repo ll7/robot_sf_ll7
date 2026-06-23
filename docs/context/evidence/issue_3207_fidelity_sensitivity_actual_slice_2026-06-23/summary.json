@@ -1,0 +1,283 @@
+{
+  "aggregates": {
+    "baseline": {
+      "baseline_social_force": {
+        "collision_rate": 0.0,
+        "comfort_exposure_mean": 0.016666666666666666,
+        "mean_clearance": 10.418323799212295,
+        "min_clearance": 3.9049798564385725,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 1.0
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.08163202859171133,
+        "mean_clearance": 11.602001209088755,
+        "min_clearance": 7.159963181738188,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.5166666666666667
+      }
+    },
+    "clearance_radius__radius_0_30": {
+      "baseline_social_force": {
+        "collision_rate": 0.0,
+        "comfort_exposure_mean": 0.016666666666666666,
+        "mean_clearance": 10.518323799212297,
+        "min_clearance": 4.004979856438573,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 1.0
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.03401298097266372,
+        "mean_clearance": 12.46498696952163,
+        "min_clearance": 7.240994568974846,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.7166666666666667
+      }
+    },
+    "integration_timestep__dt_0_05": {
+      "baseline_social_force": {
+        "collision_rate": 0.0,
+        "comfort_exposure_mean": 0.00787037037037037,
+        "mean_clearance": 6.375575752501341,
+        "min_clearance": 1.6395592781106776,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 1.0
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.011644839267957936,
+        "mean_clearance": 9.28105548391971,
+        "min_clearance": 3.841663420214586,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.7138888888888889
+      }
+    },
+    "observation_noise__pose_heading_low": {
+      "baseline_social_force": {
+        "collision_rate": 0.0,
+        "comfort_exposure_mean": 0.016666666666666666,
+        "mean_clearance": 10.418988314829845,
+        "min_clearance": 3.905775465067604,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 1.0
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.07222077054844235,
+        "mean_clearance": 11.617095821080056,
+        "min_clearance": 7.170802262531839,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.5194444444444445
+      }
+    },
+    "social_force_speed_archetypes__mixed_balanced": {
+      "baseline_social_force": {
+        "collision_rate": 0.0,
+        "comfort_exposure_mean": 0.01759259259259259,
+        "mean_clearance": 9.471269207933092,
+        "min_clearance": 3.501684511590676,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 1.0
+      },
+      "goal_seek": {
+        "collision_rate": 1.0,
+        "comfort_exposure_mean": 0.08257115580314522,
+        "mean_clearance": 11.337917312667372,
+        "min_clearance": 6.198165855866628,
+        "near_miss_rate": 0.0,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.5222222222222223
+      }
+    }
+  },
+  "claim_boundary": "bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF episodes for a compact two-planner local fidelity-sensitivity slice. It measures internal sensitivity on this slice only; it is not simulator-realism, sim-to-real, paper-facing planner-ranking, or full #3207 acceptance evidence.",
+  "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
+  "date": "2026-06-23",
+  "git_head": "2ff5e07df",
+  "git_status_short_at_generation": [],
+  "git_worktree_dirty": false,
+  "issue": 3207,
+  "prior_smoke_boundary": "diagnostic_smoke_not_benchmark_evidence: summarizes a small local same-scenario fidelity sensitivity smoke. It can show wiring, metric drift, and rank-stability calculation behavior, but it does not establish planner ranking, simulator realism, sim-to-real validity, or paper-facing benchmark evidence.",
+  "rank_stability": {
+    "axes": [
+      {
+        "axis": "integration_timestep__dt_0_05",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.039391742810024846,
+          "mean_clearance": 0.29404454861621737,
+          "min_clearance": 0.5217941869109264,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.0986111111111111
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "social_force_speed_archetypes__mixed_balanced",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.00093252656867991,
+          "mean_clearance": 0.05683235290819255,
+          "min_clearance": 0.11880355788343683,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.002777777777777768
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "observation_noise__pose_heading_low",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.004705629021634489,
+          "mean_clearance": 0.0006824092773634022,
+          "min_clearance": 0.0008587939706655089,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.001388888888888884
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      },
+      {
+        "axis": "clearance_radius__radius_0_30",
+        "kendall_tau": null,
+        "metric_drift": {
+          "collision_rate": 0.0,
+          "comfort_exposure_mean": 0.023809523809523805,
+          "mean_clearance": 0.04199048244211515,
+          "min_clearance": 0.018462808885281498,
+          "near_miss_rate": 0.0,
+          "success_rate": 0.0,
+          "time_to_goal_norm": 0.09999999999999998
+        },
+        "rank_flips": null,
+        "rank_identifiability_reason": "primary_metric_zero_variance",
+        "rank_identifiable": false,
+        "ranking": [
+          "baseline_social_force",
+          "goal_seek"
+        ],
+        "top1_changed": null
+      }
+    ],
+    "flipping_axes": [],
+    "higher_is_better": true,
+    "nominal_ranking": [
+      "baseline_social_force",
+      "goal_seek"
+    ],
+    "non_identifiable_axes": [
+      "integration_timestep__dt_0_05",
+      "social_force_speed_archetypes__mixed_balanced",
+      "observation_noise__pose_heading_low",
+      "clearance_radius__radius_0_30"
+    ],
+    "primary_metric": "success_rate",
+    "rank_identifiability_reason": "primary_metric_zero_variance",
+    "rank_identifiable": false,
+    "rank_stable": null,
+    "schema_version": "fidelity_rank_stability.v2"
+  },
+  "raw_output_policy": "raw JSONL remains ignored under ignored_output/",
+  "raw_rows_path": "ignored_output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-23/episode_rows.jsonl",
+  "result_caveats": [
+    "ranking_stability_is_on_bounded_two_planner_slice_only",
+    "full_fixed_scope_planners_not_run",
+    "rank_non_identifiable_primary_metric_zero_variance",
+    "all_observed_success_rates_zero",
+    "some_observed_collision_rates_one"
+  ],
+  "scenario_set": "configs/scenarios/sets/paper_cross_kinematics_v1.yaml",
+  "schema_version": "issue_3207_fidelity_sensitivity_campaign_slice.v1",
+  "scope": {
+    "classification": "bounded_actual_slice",
+    "episode_count": 30,
+    "horizon": 120,
+    "not_full_fixed_scope_reason": "local torch/rvo2-independent slice uses two non-learned planners; full config fixed_scope planners remain future work",
+    "planners": [
+      "baseline_social_force",
+      "goal_seek"
+    ],
+    "scenario_count": 1,
+    "seeds": [
+      111,
+      112,
+      113
+    ]
+  },
+  "status": "actual_campaign_slice",
+  "study_id": "issue_3207_fidelity_sensitivity_v1",
+  "variants": [
+    {
+      "axis": "integration_timestep",
+      "baseline": false,
+      "runtime_binding": "sim_config.time_per_step_in_secs",
+      "source_key": "dt_0_05",
+      "variant": "integration_timestep__dt_0_05"
+    },
+    {
+      "axis": "integration_timestep",
+      "baseline": true,
+      "runtime_binding": "sim_config.time_per_step_in_secs",
+      "source_key": "dt_0_10_nominal",
+      "variant": "baseline"
+    },
+    {
+      "axis": "social_force_speed_archetypes",
+      "baseline": false,
+      "runtime_binding": "sim_config.archetype_composition",
+      "source_key": "mixed_balanced",
+      "variant": "social_force_speed_archetypes__mixed_balanced"
+    },
+    {
+      "axis": "observation_noise",
+      "baseline": false,
+      "runtime_binding": "planner_observation_noise",
+      "source_key": "pose_heading_low",
+      "variant": "observation_noise__pose_heading_low"
+    },
+    {
+      "axis": "clearance_radius",
+      "baseline": false,
+      "runtime_binding": "sim_config.ped_radius",
+      "source_key": "radius_0_30",
+      "variant": "clearance_radius__radius_0_30"
+    }
+  ]
+}

@@ -9,11 +9,25 @@ import tempfile
 import yaml
 
 from scripts.analysis.calibrate_scenario_priors_from_traces_issue_2726 import (
+    MODE_PROXY,
     assign_to_cluster,
     extract_features,
     generate_prior_cards,
     main,
+    resolve_staging_mode,
 )
+
+
+def test_trace_calibration_is_never_dataset_backed():
+    """Trace-cluster priors must surface a proxy_schema_smoke gate, never dataset-backed (#2657)."""
+    staging_mode = resolve_staging_mode()
+    assert staging_mode["mode"] == MODE_PROXY
+    assert staging_mode["dataset_backed"] is False
+
+    registry = generate_prior_cards({}, staging_mode)
+    assert registry["scenario_prior_mode"] == MODE_PROXY
+    assert registry["dataset_backed"] is False
+    assert registry["sdd_staging_gate"]["dataset_backed"] is False
 
 
 def test_extract_features_minimal():

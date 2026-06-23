@@ -15,6 +15,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import pathlib
 from typing import Any
@@ -25,12 +26,59 @@ import yaml
 # parent 1 is scripts/analysis, parent 2 is scripts, parent 3 is the repo root.
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
+# scenario-prior staging mode tags (Issue #2657). Kept in sync with the staging tool.
+MODE_PROXY = "proxy_schema_smoke"
+MODE_DATASET_BACKED = "dataset_backed_prior"
+SDD_STAGING_SCRIPT = REPO_ROOT / "scripts" / "data" / "stage_sdd_dataset_issue_2657.py"
+
 CLAIM_BOUNDARY = (
     "repository_trace_grounded_not_real_world_calibrated: this report and generated prior "
     "cards are derived entirely from deterministic simulation trace clusters. They do not "
     "claim real-world validity, representativeness, or generalizability to real-world pedestrian "
     "behavior. Refer to issues #3161 and #2918 for real-world staging and calibration requirements."
 )
+
+
+def resolve_staging_mode() -> dict[str, Any]:
+    """Resolve the scenario-prior staging mode from SDD staging state (Issue #2657).
+
+    A missing or unvalidated SDD copy forces ``proxy_schema_smoke``; only a staged-and-validated
+    SDD unlocks ``dataset_backed_prior``. This script consumes simulation traces (not SDD) and is
+    therefore always at most ``proxy_schema_smoke``, but it surfaces the gate explicitly so a
+    missing dataset can never be implied as dataset-backed evidence.
+    """
+    fallback = {
+        "mode": MODE_PROXY,
+        "dataset_backed": False,
+        "reason": (
+            "SDD staging gate unavailable; defaulting to proxy_schema_smoke. Trace-cluster priors "
+            "are never dataset-backed regardless of SDD state."
+        ),
+    }
+    if not SDD_STAGING_SCRIPT.is_file():
+        return fallback
+    try:
+        spec = importlib.util.spec_from_file_location("_sdd_staging_gate", SDD_STAGING_SCRIPT)
+        if spec is None or spec.loader is None:
+            return fallback
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        gate = module.resolve_scenario_prior_mode()
+    except Exception as exc:
+        fallback["reason"] = f"SDD staging gate error ({exc}); defaulting to proxy_schema_smoke."
+        return fallback
+    # Trace-cluster priors are never dataset-backed; clamp to proxy regardless of SDD availability.
+    sdd_backed = bool(gate.get("dataset_backed"))
+    return {
+        "mode": MODE_PROXY,
+        "dataset_backed": False,
+        "sdd_local_availability": "staged" if sdd_backed else "missing",
+        "sdd_staging_reason": gate.get("reason"),
+        "reason": (
+            "Trace-cluster priors are proxy_schema_smoke by construction (simulation traces, not "
+            "SDD). SDD staging state is surfaced for provenance only."
+        ),
+    }
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -368,8 +416,12 @@ def build_markdown_report(
     return "\n".join(lines) + "\n"
 
 
-def generate_prior_cards(clusters: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+def generate_prior_cards(
+    clusters: dict[str, list[dict[str, Any]]],
+    staging_mode: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Generate scenario prior registry cards based on parsed clusters."""
+    staging_mode = staging_mode or resolve_staging_mode()
     cards = []
     for cluster_id, traces in sorted(clusters.items()):
         parts = cluster_id.split("_")
@@ -440,6 +492,9 @@ def generate_prior_cards(clusters: dict[str, list[dict[str, Any]]]) -> dict[str,
         "issue": 2726,
         "status": "partial_initial_registry",
         "benchmark_evidence": False,
+        "scenario_prior_mode": staging_mode["mode"],
+        "dataset_backed": staging_mode["dataset_backed"],
+        "sdd_staging_gate": staging_mode,
         "claim_boundary": CLAIM_BOUNDARY,
         "cards": cards,
     }
@@ -486,8 +541,12 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Traces grouped into {len(clusters)} clusters.")
 
-    # 4. Generate YAML registry cards
-    registry = generate_prior_cards(clusters)
+    # 4. Resolve SDD staging mode gate (Issue #2657) and generate YAML registry cards
+    staging_mode = resolve_staging_mode()
+    print(
+        f"scenario_prior_mode: {staging_mode['mode']} (dataset_backed={staging_mode['dataset_backed']})"
+    )
+    registry = generate_prior_cards(clusters, staging_mode)
 
     # 5. Build reports
     md_report = build_markdown_report(clusters, len(results))
@@ -508,6 +567,9 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": "scenario-prior-calibration-report.v1",
         "claim_boundary": CLAIM_BOUNDARY,
         "evidence_status": "repository_trace_derived_proposal",
+        "scenario_prior_mode": staging_mode["mode"],
+        "dataset_backed": staging_mode["dataset_backed"],
+        "sdd_staging_gate": staging_mode,
         "trace_count": len(results),
         "cluster_count": len(clusters),
         "total_processed": len(results),

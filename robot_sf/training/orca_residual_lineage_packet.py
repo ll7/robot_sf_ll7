@@ -33,6 +33,29 @@ _REQUIRED_DIAGNOSTICS = (
     "guard_veto_rate",
     "fallback_degraded_status",
 )
+# Public alias: the canonical ORCA-residual diagnostics contract. The
+# pre-submit conformance check (scripts/validation/preflight_evidence_contract.py)
+# imports this so the required-field list has a single source of truth.
+REQUIRED_ORCA_RESIDUAL_DIAGNOSTICS = _REQUIRED_DIAGNOSTICS
+
+# The four fields the smoke-evidence stage must emit non-null
+# (scripts/validation/run_policy_search_candidate.py::_attach_orca_residual_smoke_evidence).
+# Three derive directly from _REQUIRED_DIAGNOSTICS; ``artifact_pointer_status`` is the
+# smoke-stage pointer field. Kept here (the contract owner) so neither the smoke builder
+# nor the preflight check redefines the list.
+_SMOKE_DERIVED_DIAGNOSTIC_FIELDS = (
+    "residual_clipping_rate",
+    "guard_veto_rate",
+    "fallback_degraded_status",
+)
+assert set(_SMOKE_DERIVED_DIAGNOSTIC_FIELDS).issubset(_REQUIRED_DIAGNOSTICS), (
+    "smoke-evidence required fields must be a subset of the diagnostics contract"
+)
+REQUIRED_ORCA_RESIDUAL_SMOKE_FIELDS = (
+    *_SMOKE_DERIVED_DIAGNOSTIC_FIELDS,
+    "artifact_pointer_status",
+)
+
 _REQUIRED_COMPARISONS = ("orca", "ppo_leader", "orca_residual_guarded_ppo_v0")
 _REQUIRED_OUTPUTS = (
     "residual_dataset_manifest",
@@ -448,6 +471,8 @@ def _sha256_matches(pointer: str, expected: str, repo_root: Path) -> bool:
 
 
 __all__ = [
+    "REQUIRED_ORCA_RESIDUAL_DIAGNOSTICS",
+    "REQUIRED_ORCA_RESIDUAL_SMOKE_FIELDS",
     "OrcaResidualLineagePacketError",
     "load_launch_packet",
     "validate_launch_packet",

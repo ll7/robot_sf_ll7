@@ -645,6 +645,39 @@ def test_cli_rejects_empty_substantive_pr_body_from_event(tmp_path: Path) -> Non
     assert "status=empty_body" in result.stderr
 
 
+def test_cli_event_body_overrides_inherited_pr_ready_body_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit event bodies should not be masked by PR readiness environment variables."""
+    inherited_body = tmp_path / "inherited.md"
+    event_path = tmp_path / "event.json"
+    files_path = tmp_path / "files.txt"
+    inherited_body.write_text(_well_formed_support_body(), encoding="utf-8")
+    event_path.write_text(json.dumps({"pull_request": {"body": ""}}), encoding="utf-8")
+    files_path.write_text("robot_sf/benchmark/camera_ready/_summaries.py\n", encoding="utf-8")
+    monkeypatch.setenv("PR_READY_PR_BODY_FILE", str(inherited_body))
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--github-event-path",
+            str(event_path),
+            "--changed-files-file",
+            str(files_path),
+            "--require-substantive-body",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "status=empty_body" in result.stderr
+    assert str(event_path) in result.stderr
+
+
 def test_cli_accepts_well_formed_substantive_pr_body_with_changed_files(tmp_path: Path) -> None:
     """Changed-file awareness does not block well-formed workflow PR bodies."""
     event_path = tmp_path / "event.json"

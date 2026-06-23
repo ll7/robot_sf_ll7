@@ -57,6 +57,8 @@ from .visuals import generate_visual_artifacts  # new visual artifact integratio
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
+ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
+
 # Import new visualization functions for real plots/videos from episode data
 try:
     from robot_sf.benchmark.visualization import (
@@ -752,15 +754,23 @@ def _episode_metadata_for_metrics(scenario) -> dict[str, Any] | None:
     """Build optional episode metadata consumed by metric helpers.
 
     Returns:
-        ``{"signal_state": ...}`` for signalized scenarios, otherwise ``None``.
+        Metric-facing episode metadata for signalized or opt-in instrumentation scenarios.
     """
     raw = getattr(scenario, "raw", {})
     metadata = raw.get("metadata", {}) if isinstance(raw, dict) else {}
+    episode_metadata: dict[str, Any] = {}
     signal_state = metadata.get("signal_state") if isinstance(metadata, dict) else None
     metric_signal_state = _signal_contract_state_for_metrics(signal_state)
-    if metric_signal_state is None:
+    if metric_signal_state is not None:
+        episode_metadata["signal_state"] = metric_signal_state
+
+    rollover_stability = metadata.get(ROLLOVER_STABILITY_METADATA_KEY)
+    if isinstance(rollover_stability, dict) and bool(rollover_stability.get("enabled", False)):
+        episode_metadata[ROLLOVER_STABILITY_METADATA_KEY] = dict(rollover_stability)
+
+    if not episode_metadata:
         return None
-    return {"signal_state": metric_signal_state}
+    return episode_metadata
 
 
 def _init_env_for_job(job, cfg, horizon: int, *, episode_id: str, scenario):

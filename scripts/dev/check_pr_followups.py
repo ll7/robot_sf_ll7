@@ -684,15 +684,26 @@ def _read_event_body(path: Path) -> str | None:
 
 
 def _load_body(args: argparse.Namespace) -> tuple[str | None, str]:
-    body_file = args.body_file or os.environ.get("PR_READY_PR_BODY_FILE")
+    if args.body_file:
+        path = args.body_file
+        return path.read_text(encoding="utf-8"), str(path)
+
+    event_path = args.github_event_path
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event_path and (args.github_event_path or event_name == "pull_request"):
+        path = Path(event_path)
+        body = _read_event_body(path)
+        if body is not None:
+            return body, str(path)
+
+    body_file = os.environ.get("PR_READY_PR_BODY_FILE")
     if body_file:
         path = Path(body_file)
         return path.read_text(encoding="utf-8"), str(path)
 
-    event_path = args.github_event_path or os.environ.get("GITHUB_EVENT_PATH")
-    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
-    if event_path and (args.github_event_path or event_name == "pull_request"):
-        path = Path(event_path)
+    env_event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if env_event_path and event_name == "pull_request":
+        path = Path(env_event_path)
         body = _read_event_body(path)
         if body is not None:
             return body, str(path)

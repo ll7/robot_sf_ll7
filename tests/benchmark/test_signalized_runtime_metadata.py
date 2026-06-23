@@ -5,10 +5,17 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from robot_sf.benchmark.full_classic.orchestrator import (
     _compute_episode_metrics,
     _episode_metadata_for_metrics,
+)
+from robot_sf.benchmark.metrics import (
+    ROLLOVER_CRITICAL_EVENT,
+    EpisodeData,
+    compute_all_metrics,
+    evaluate_stability_margin,
 )
 
 
@@ -22,6 +29,87 @@ def _scenario_with_signal_state(signal_state: dict) -> SimpleNamespace:
         },
         map_path="",
     )
+
+
+def _scenario_with_rollover_stability(config: dict) -> SimpleNamespace:
+    """Return a minimal scenario descriptor with TWV rollover instrumentation metadata."""
+    return SimpleNamespace(raw={"metadata": {"rollover_stability": config}}, map_path="")
+
+
+def _rollover_episode(*, steps: int = 4) -> EpisodeData:
+    """Return a minimal no-pedestrian episode for rollover metric tests."""
+    return EpisodeData(
+        robot_pos=np.zeros((steps, 2), dtype=float),
+        robot_vel=np.zeros((steps, 2), dtype=float),
+        robot_acc=np.zeros((steps, 2), dtype=float),
+        peds_pos=np.zeros((steps, 0, 2), dtype=float),
+        ped_forces=np.zeros((steps, 0, 2), dtype=float),
+        goal=np.array([1.0, 0.0], dtype=float),
+        dt=1.0,
+        reached_goal_step=None,
+    )
+
+
+def test_rollover_stability_margin_handles_invalid_inputs() -> None:
+    """Invalid TWV geometry should fail closed, while invalid samples return NaN."""
+    assert np.isnan(evaluate_stability_margin(float("nan"), 1.0))
+    with pytest.raises(ValueError, match="t_w"):
+        evaluate_stability_margin(1.0, 1.0, t_w=0.0)
+
+
+def test_rollover_metrics_emit_critical_event_from_explicit_yaw_rate() -> None:
+    """Enabled TWV metadata should produce campaign-table rollover counters."""
+    episode = _rollover_episode()
+    episode.robot_vel[:, 0] = 2.0
+    episode.episode_metadata = {"rollover_stability": {"enabled": True, "yaw_rate": 3.0}}
+
+    metrics = compute_all_metrics(episode, horizon=10, shortest_path_len=0.0)
+
+    assert metrics["rollover_critical"] == 1.0
+    assert metrics["rollover_critical_count"] == 4.0
+    assert metrics["rollover_event"] == ROLLOVER_CRITICAL_EVENT
+
+
+def test_rollover_metrics_can_estimate_yaw_rate_from_velocity_heading() -> None:
+    """Absent explicit yaw rate, velocity heading changes should still feed the proxy."""
+    episode = _rollover_episode(steps=3)
+    episode.robot_vel[:] = np.array([[2.0, 0.0], [0.0, 2.0], [0.0, 2.0]], dtype=float)
+    episode.episode_metadata = {"rollover_stability": {"enabled": True}}
+
+    metrics = compute_all_metrics(episode, horizon=10, shortest_path_len=0.0)
+
+    assert metrics["rollover_lateral_accel_abs_max"] == pytest.approx(np.pi)
+    assert metrics["rollover_critical_count"] >= 1
+
+
+def test_rollover_metrics_report_empty_enabled_episode() -> None:
+    """Enabled instrumentation should return explicit empty counters for empty trajectories."""
+    episode = _rollover_episode(steps=0)
+    episode.episode_metadata = {"rollover_stability": {"enabled": True, "yaw_rate": 3.0}}
+
+    metrics = compute_all_metrics(episode, horizon=10, shortest_path_len=0.0)
+
+    assert metrics["rollover_stability_enabled"] == 1.0
+    assert metrics["rollover_critical_count"] == 0.0
+    assert np.isnan(metrics["rollover_min_stability_margin"])
+
+
+def test_runtime_metadata_carries_enabled_rollover_stability_config() -> None:
+    """Full-classic metrics should receive opt-in TWV rollover instrumentation metadata."""
+    config = {"enabled": True, "yaw_rate": 3.0, "t_w": 0.8}
+
+    metadata = _episode_metadata_for_metrics(_scenario_with_rollover_stability(config))
+
+    assert metadata == {"rollover_stability": config}
+
+
+def test_runtime_metadata_omits_disabled_rollover_stability_config() -> None:
+    """Default-disabled TWV rollover metadata should not alter benchmark metrics."""
+    metadata = _episode_metadata_for_metrics(
+        _scenario_with_rollover_stability({"enabled": False, "yaw_rate": 3.0})
+    )
+
+    assert metadata is None
 
 
 def test_runtime_signal_metadata_keeps_proxy_rows_excluded() -> None:

@@ -17,6 +17,7 @@ from robot_sf.benchmark.metrics import (
     collision_count,
     collisions,
     compute_all_metrics,
+    evaluate_stability_margin,
     human_collisions,
     post_process_metrics,
     snqi,
@@ -243,6 +244,72 @@ def test_success_only_time_to_goal_metrics_drop_on_failure() -> None:
     assert "time_to_goal_norm_success_only" not in metrics
     assert metrics["time_to_goal_ideal_ratio_valid"] is False
     assert "time_to_goal_ideal_ratio" not in metrics
+
+
+def test_evaluate_stability_margin_flags_rollover_threshold() -> None:
+    """TWV stability margin should clamp to zero at the critical lateral acceleration."""
+    critical_yaw_rate = 9.81 * (0.8 / (2.0 * 0.6)) * (0.5 / 1.2)
+
+    assert evaluate_stability_margin(1.0, 0.0) == pytest.approx(1.0)
+    assert evaluate_stability_margin(1.0, critical_yaw_rate) == pytest.approx(0.0)
+    assert evaluate_stability_margin(1.0, critical_yaw_rate * 2.0) == pytest.approx(0.0)
+
+
+def test_rollover_metrics_are_disabled_by_default() -> None:
+    """Default metric output should not affect existing evidence surfaces."""
+    ep = _make_episode(T=4, K=0)
+    ep.robot_vel[:, 0] = 1.0
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    assert "rollover_critical_count" not in vals
+    assert "rollover_min_stability_margin" not in vals
+
+
+def test_rollover_metrics_emit_critical_event_when_enabled() -> None:
+    """Opt-in TWV instrumentation should expose critical events beside counters."""
+    ep = _make_episode(T=4, K=0)
+    ep.robot_vel[:, 0] = 2.0
+    ep.episode_metadata = {
+        "rollover_stability": {
+            "enabled": True,
+            "yaw_rate": 3.0,
+            "t_w": 0.8,
+            "L": 1.2,
+            "h_c": 0.6,
+            "a": 0.5,
+        }
+    }
+
+    vals = compute_all_metrics(ep, horizon=10)
+
+    assert vals["rollover_stability_enabled"] == 1.0
+    assert vals["rollover_critical"] == 1.0
+    assert vals["rollover_critical_count"] == 4.0
+    assert vals["rollover_critical_fraction"] == pytest.approx(1.0)
+    assert vals["rollover_min_stability_margin"] == pytest.approx(0.0)
+    assert vals["rollover_lateral_accel_abs_max"] == pytest.approx(6.0)
+    assert vals["rollover_event"] == metrics_mod.ROLLOVER_CRITICAL_EVENT
+
+
+def test_post_process_metrics_preserves_rollover_counters() -> None:
+    """Campaign-table rows should keep rollover counters and boolean flags."""
+    raw = {
+        "success": 1.0,
+        "rollover_stability_enabled": 1.0,
+        "rollover_critical": 1.0,
+        "rollover_critical_count": 2.0,
+        "rollover_min_stability_margin": 0.0,
+        "rollover_event": metrics_mod.ROLLOVER_CRITICAL_EVENT,
+    }
+
+    metrics = post_process_metrics(raw, snqi_weights=None, snqi_baseline=None)
+
+    assert metrics["rollover_stability_enabled"] is True
+    assert metrics["rollover_critical"] is True
+    assert metrics["rollover_critical_count"] == 2
+    assert metrics["rollover_min_stability_margin"] == 0.0
+    assert metrics["rollover_event"] == metrics_mod.ROLLOVER_CRITICAL_EVENT
 
 
 def test_success_failure_due_to_collision():

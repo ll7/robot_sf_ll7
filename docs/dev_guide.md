@@ -361,6 +361,12 @@ payload also includes `monitor.local_stop_reason: "max_wall_seconds"`. Monitor s
 evidence only; reassess the current PR head SHA and normal readiness proof before labeling or
 merging.
 
+When CI polling repeats similar JSON in the parent thread, switch to status-change summaries and
+write the full monitor payload to the active ledger or a common-Git-dir artifact. For in-progress
+run debugging, inspect job metadata first; fetch direct job-log excerpts only for the failing or
+suspect step, and avoid `gh run view --log` dumps until the run is complete enough for that command
+to return useful output.
+
 For routine goal-autopilot orientation, prefer the compact state snapshot helper before broad parent
 thread reads:
 
@@ -530,6 +536,8 @@ starting another delegated batch:
 - largest parent-thread outputs since the previous audit, such as broad
   multi-directory `rg` results, full skill rereads, raw validation output, raw
   GitHub JSON, or verbose delegate final messages;
+- failed command patterns, confusing helper contracts, repeated monitor noise,
+  and unclear instructions that caused retries or semantic drift;
 - cache hits and misses for loaded skills, issue or PR snapshots, route quota
   facts, CI monitor commands, and validation artifacts;
 - accepted, rejected, rerouted, and skipped delegates, with the reason the route
@@ -541,6 +549,11 @@ starting another delegated batch:
 Keep the row in the active ledger or a common-Git-dir self-review note. Promote
 it into durable docs only when the same leak repeats, the leak was expensive, or
 the user explicitly asks for workflow improvements.
+
+For implementation-thread reviews over a recent time window, do not reopen the full transcript in
+the parent thread. Generate a bounded session-summary artifact that records the time window, record
+counts, largest output records, broad commands, failed commands, and unclear-instruction themes; use
+that artifact plus existing self-review notes as the evidence base for any workflow patch.
 
 For historical route audits, add `--dashboard` and pass multiple routed-worker
 manifest files. Dashboard mode emits `route_efficiency_dashboard.v1` JSON or
@@ -1405,6 +1418,9 @@ All figures must be **reproducible from code** and directly **integratable into 
 - Tests: `uv run pytest tests`
 - Lint: `uv run ruff check .` and `uv run ruff format --check .`
 - The pipeline mirrors the local quality gates. Ensure green locally first.
+- After merging fresh `origin/main`, or after CI reports a formatting failure outside the files you
+  intentionally touched, run the repo-wide lightweight lint/format gate that CI uses. A changed-file
+  format check can be stale when the shared baseline moved.
 
 CI mapping to local tasks and CLI:
 - `fast-feedback` job → `scripts/dev/ci_driver.sh lint typecheck test`

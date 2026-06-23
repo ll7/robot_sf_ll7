@@ -12,13 +12,28 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST_DIR = REPO_ROOT / "output" / "external_data" / "manifests"
+
+# Canonical SDD staging manifest. This is the single editable provenance contract for the SDD
+# asset (issues #2657, #3473): maintainers pin `expected_tree_sha256` and tune the disk-check size
+# here, while all behavior lives in this module (the former scripts/data wrapper just delegates).
+DEFAULT_SDD_STAGING_MANIFEST = REPO_ROOT / "configs" / "data" / "sdd_staging_manifest.yaml"
+DEFAULT_STAGING_ROOT = (REPO_ROOT / "output").resolve()
+SDD_STAGING_STATUS_FILENAME = "sdd_staging_status.json"
+
+# Scenario-prior mode tags surfaced to scenario-prior generation. These names are part of the
+# public gate contract consumed by scripts/analysis/calibrate_scenario_priors_from_traces_*.
+SDD_MODE_PROXY = "proxy_schema_smoke"
+SDD_MODE_DATASET_BACKED = "dataset_backed_prior"
 
 
 class ExternalDataError(RuntimeError):
@@ -49,6 +64,12 @@ class AssetSpec:
     required_paths: tuple[RequiredPath, ...]
     related_issues: tuple[int, ...]
     auto_download_allowed: bool = False
+    # Optional pointer to a checksum/availability staging manifest. When set, this asset carries a
+    # pinned-checksum policy and proxy-vs-dataset-backed availability states (see the SDD asset).
+    staging_manifest_path: Path | None = None
+    # Availability/proxy-vs-dataset-backed gate mode tags for assets that gate downstream evidence.
+    proxy_mode: str | None = None
+    dataset_backed_mode: str | None = None
 
 
 ASSETS: tuple[AssetSpec, ...] = (
@@ -73,7 +94,13 @@ ASSETS: tuple[AssetSpec, ...] = (
                 description="Original SDD annotation text file.",
             ),
         ),
-        related_issues=(1497, 1126),
+        related_issues=(2657, 1497, 1126, 3161, 3473),
+        # Single source of truth for the SDD checksum/availability policy (issues #2657, #3473):
+        # the staging manifest pins `expected_tree_sha256` and the disk-check size, while the
+        # availability states + scenario-prior gate live in this module.
+        staging_manifest_path=DEFAULT_SDD_STAGING_MANIFEST,
+        proxy_mode=SDD_MODE_PROXY,
+        dataset_backed_mode=SDD_MODE_DATASET_BACKED,
     ),
     AssetSpec(
         asset_id="socnavbench-s3dis-eth",
@@ -438,6 +465,451 @@ def download_asset(asset_id: str) -> None:
     raise ExternalDataError(f"No downloader is implemented for {asset.asset_id}.")
 
 
+# --------------------------------------------------------------------------------------------
+# Canonical SDD staging subsystem (consolidated from scripts/data/stage_sdd_dataset_issue_2657.py
+# for issue #3473). This module is the single source of truth for the SDD checksum policy, the
+# proxy-vs-dataset-backed availability gate, and the no-auto-download safety contract from #2657.
+# --------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SddExpectedFile:
+    """One expected-file pattern declared by the SDD staging manifest."""
+
+    pattern: str
+    kind: str
+    description: str
+    min_count: int = 1
+
+
+@dataclass(frozen=True)
+class SddStagingSpec:
+    """Parsed SDD staging manifest contract (checksum policy + availability gate)."""
+
+    asset_id: str
+    title: str
+    version_tag: str
+    source_url: str
+    license: str
+    license_url: str
+    readme_pointer: str
+    staging_dir: Path
+    download_url: str | None
+    access_note: str
+    expected_files: tuple[SddExpectedFile, ...]
+    expected_total_size_bytes: int
+    checksum_algorithm: str
+    expected_tree_sha256: str | None
+    local_availability_declared: str
+
+    @property
+    def expected_total_size_mib(self) -> float:
+        """Expected footprint in MiB for human-readable reporting."""
+        return self.expected_total_size_bytes / (1024 * 1024)
+
+
+def _sdd_manifest_path(spec: AssetSpec | None = None) -> Path:
+    """Resolve the canonical SDD staging manifest path from the asset registry."""
+    asset = spec or _get_asset("sdd")
+    if asset.staging_manifest_path is None:
+        raise ExternalDataError(f"Asset '{asset.asset_id}' declares no staging manifest path.")
+    return asset.staging_manifest_path
+
+
+def _resolve_sdd_staging_dir(staging_dir_raw: str, *, manifest_path: Path) -> Path:
+    """Resolve a manifest staging dir while rejecting unsafe path escapes."""
+    staging_dir = Path(staging_dir_raw).expanduser()
+    if ".." in staging_dir.parts:
+        raise ExternalDataError("Manifest staging_dir must not contain path traversal (`..`).")
+
+    unresolved = staging_dir if staging_dir.is_absolute() else REPO_ROOT / staging_dir
+    if unresolved.is_symlink():
+        raise ExternalDataError(f"Manifest staging_dir must not be a symlink: {unresolved}")
+
+    resolved = unresolved.resolve(strict=False)
+    allowed_roots = (DEFAULT_STAGING_ROOT, manifest_path.resolve(strict=False).parent)
+    if not any(resolved == root or resolved.is_relative_to(root) for root in allowed_roots):
+        allowed = ", ".join(str(root) for root in allowed_roots)
+        raise ExternalDataError(
+            f"Manifest staging_dir resolves outside allowed roots: {resolved}. "
+            f"Allowed roots: {allowed}."
+        )
+    return resolved
+
+
+def _parse_sdd_expected_files(expected_files_raw: list[Any]) -> tuple[SddExpectedFile, ...]:
+    """Parse manifest expected-file entries with fail-closed error messages."""
+    expected_files: list[SddExpectedFile] = []
+    for index, entry in enumerate(expected_files_raw):
+        if not isinstance(entry, dict):
+            raise ExternalDataError(f"`expected_files[{index}]` must be a mapping.")
+        pattern = str(entry.get("pattern", "")).strip()
+        if not pattern:
+            raise ExternalDataError(f"`expected_files[{index}].pattern` is required.")
+        try:
+            min_count = int(entry.get("min_count", 1))
+        except (TypeError, ValueError) as exc:
+            raise ExternalDataError(
+                f"`expected_files[{index}].min_count` must be an integer."
+            ) from exc
+        if min_count <= 0:
+            raise ExternalDataError(f"`expected_files[{index}].min_count` must be positive.")
+        expected_files.append(
+            SddExpectedFile(
+                pattern=pattern,
+                kind=str(entry.get("kind", "file")),
+                description=str(entry.get("description", "")),
+                min_count=min_count,
+            )
+        )
+    return tuple(expected_files)
+
+
+def load_sdd_staging_spec(manifest_path: Path | None = None) -> SddStagingSpec:
+    """Load and validate the canonical SDD staging manifest."""
+    path = manifest_path or _sdd_manifest_path()
+    if not path.is_file():
+        raise ExternalDataError(f"Staging manifest not found: {path}")
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ExternalDataError(f"Manifest is not a mapping: {path}")
+
+    staging_dir_raw = str(raw.get("staging_dir", "")).strip()
+    if not staging_dir_raw:
+        raise ExternalDataError("Manifest is missing required `staging_dir`.")
+    staging_dir = _resolve_sdd_staging_dir(staging_dir_raw, manifest_path=path)
+
+    expected_files_raw = raw.get("expected_files") or []
+    if not isinstance(expected_files_raw, list) or not expected_files_raw:
+        raise ExternalDataError("Manifest must declare a non-empty `expected_files` list.")
+    expected_files = _parse_sdd_expected_files(expected_files_raw)
+
+    size_bytes = int(raw.get("expected_total_size_bytes", 0))
+    if size_bytes <= 0:
+        raise ExternalDataError("Manifest must declare a positive `expected_total_size_bytes`.")
+
+    checksums = raw.get("checksums") or {}
+    download_url = raw.get("download_url")
+
+    return SddStagingSpec(
+        asset_id=str(raw.get("asset_id", "sdd")),
+        title=str(raw.get("title", "Stanford Drone Dataset")),
+        version_tag=str(raw.get("version_tag", "unknown")),
+        source_url=str(raw.get("source_url", "")),
+        license=str(raw.get("license", "")),
+        license_url=str(raw.get("license_url", "")),
+        readme_pointer=str(raw.get("readme_pointer", "")),
+        staging_dir=staging_dir,
+        download_url=str(download_url) if download_url else None,
+        access_note=str(raw.get("access_note", "")),
+        expected_files=expected_files,
+        expected_total_size_bytes=size_bytes,
+        checksum_algorithm=str(checksums.get("algorithm", "SHA-256")),
+        expected_tree_sha256=(
+            str(checksums["expected_tree_sha256"])
+            if checksums.get("expected_tree_sha256")
+            else None
+        ),
+        local_availability_declared=str(raw.get("local_availability", "missing")),
+    )
+
+
+def _match_sdd_expected(staging_dir: Path, expected: SddExpectedFile) -> list[Path]:
+    """Return files under staging_dir matching one expected-file pattern."""
+    if not staging_dir.exists():
+        return []
+    matches = sorted(staging_dir.glob(expected.pattern))
+    if expected.kind == "file":
+        return [path for path in matches if path.is_file()]
+    if expected.kind == "directory":
+        return [path for path in matches if path.is_dir()]
+    raise ExternalDataError(f"Unsupported expected-file kind: {expected.kind}")
+
+
+def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True) -> dict[str, Any]:
+    """Validate the locally-staged SDD copy against the manifest contract.
+
+    ``ok`` is True only when every expected-file group meets its minimum count AND the staged tree
+    matches the pinned ``expected_tree_sha256``; ``local_availability`` is ``staged`` only then.
+    """
+    staging_dir = spec.staging_dir
+    report: dict[str, Any] = {
+        "asset_id": spec.asset_id,
+        "version_tag": spec.version_tag,
+        "staging_dir": str(staging_dir),
+        "staging_dir_exists": staging_dir.exists(),
+        "expected_files": [
+            {
+                "pattern": expected.pattern,
+                "kind": expected.kind,
+                "description": expected.description,
+                "min_count": expected.min_count,
+            }
+            for expected in spec.expected_files
+        ],
+        "matched_files": [],
+        "missing_expected": [],
+        "ok": False,
+        "local_availability": "missing",
+        "mode": SDD_MODE_PROXY,
+    }
+
+    matched_paths: list[Path] = []
+    for expected in spec.expected_files:
+        group_matches = _match_sdd_expected(staging_dir, expected)
+        if len(group_matches) < expected.min_count:
+            report["missing_expected"].append(
+                f"{expected.pattern} (need >= {expected.min_count}, found {len(group_matches)})"
+            )
+            continue
+        matched_paths.extend(group_matches)
+
+    if matched_paths and staging_dir.exists():
+        report["matched_files"] = [
+            path.relative_to(staging_dir).as_posix() for path in sorted(matched_paths)
+        ]
+
+    if report["missing_expected"]:
+        report["action"] = (
+            "SDD is not staged or is incomplete. Follow the manifest access_note to acquire SDD "
+            "under its license, then re-run validation. Until then, scenario-prior generation is "
+            f"forced to `{SDD_MODE_PROXY}`."
+        )
+        return report
+
+    if not compute_checksum:
+        report["checksum_skipped"] = (
+            "tree checksum omitted for plan/status speed; run `validate` for checksum proof"
+        )
+        report["local_availability"] = "present_unvalidated"
+        report["action"] = (
+            "SDD expected files are present. Run `validate` to compute checksums before treating "
+            f"the copy as `{SDD_MODE_DATASET_BACKED}` evidence."
+        )
+        return report
+
+    checksum = _tree_checksum(staging_dir, matched_paths)
+    report["file_count"] = checksum["file_count"]
+    report["total_size_bytes"] = checksum["total_size_bytes"]
+    report["tree_sha256"] = checksum["tree_sha256"]
+    report["sample_files"] = checksum["sample_files"]
+    report["checksum_algorithm"] = spec.checksum_algorithm
+
+    if spec.expected_tree_sha256 is None:
+        report["local_availability"] = "present_unpinned_checksum"
+        report["action"] = (
+            "Expected SDD files are present and a tree checksum was computed, but the manifest does "
+            "not pin `expected_tree_sha256`. Refusing to mark SDD as dataset-backed until a trusted "
+            f"checksum is pinned. Scenario-prior generation remains forced to `{SDD_MODE_PROXY}`."
+        )
+        return report
+
+    report["expected_tree_sha256"] = spec.expected_tree_sha256
+    report["checksum_match"] = checksum["tree_sha256"] == spec.expected_tree_sha256
+    if not report["checksum_match"]:
+        report["action"] = (
+            "Staged files do not match the pinned `expected_tree_sha256` in the manifest. "
+            "Refusing to mark SDD as staged; treat as untrusted and re-acquire. Scenario-prior "
+            f"generation remains forced to `{SDD_MODE_PROXY}`."
+        )
+        return report
+
+    report["ok"] = True
+    report["local_availability"] = "staged"
+    report["mode"] = SDD_MODE_DATASET_BACKED
+    report["action"] = (
+        f"SDD is staged and validated. Scenario-prior generation may run in "
+        f"`{SDD_MODE_DATASET_BACKED}` mode for dataset-backed input."
+    )
+    return report
+
+
+def _cached_sdd_staging_gate(spec: SddStagingSpec) -> dict[str, Any] | None:
+    """Return a dataset-backed gate from cached status when it is still structurally valid."""
+    status_path = spec.staging_dir / SDD_STAGING_STATUS_FILENAME
+    if not status_path.is_file():
+        return None
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(status, dict):
+        return None
+    if status.get("local_availability") != "staged":
+        return None
+    if status.get("asset_id") != spec.asset_id or status.get("version_tag") != spec.version_tag:
+        return None
+
+    for expected in spec.expected_files:
+        if len(_match_sdd_expected(spec.staging_dir, expected)) < expected.min_count:
+            return None
+
+    return {
+        "mode": SDD_MODE_DATASET_BACKED,
+        "dataset_backed": True,
+        "reason": f"SDD is staged and validated (cached via {SDD_STAGING_STATUS_FILENAME}).",
+        "asset_id": spec.asset_id,
+        "version_tag": spec.version_tag,
+        "tree_sha256": status.get("tree_sha256"),
+        "staging_dir": str(spec.staging_dir),
+        "report": status,
+    }
+
+
+def resolve_sdd_scenario_prior_mode(
+    spec: SddStagingSpec | None = None,
+    *,
+    manifest_path: Path | None = None,
+) -> dict[str, Any]:
+    """Resolve the scenario-prior generation mode from canonical SDD staging state.
+
+    This is the gate scenario-prior generation consumes. A missing or unvalidated SDD copy forces
+    ``proxy_schema_smoke``; only a staged-and-validated copy unlocks ``dataset_backed_prior``.
+    """
+    spec = spec or load_sdd_staging_spec(manifest_path)
+    if cached_gate := _cached_sdd_staging_gate(spec):
+        return cached_gate
+
+    report = validate_sdd_staging(spec)
+    dataset_backed = bool(report["ok"])
+    return {
+        "mode": SDD_MODE_DATASET_BACKED if dataset_backed else SDD_MODE_PROXY,
+        "dataset_backed": dataset_backed,
+        "reason": report["action"],
+        "asset_id": spec.asset_id,
+        "version_tag": spec.version_tag,
+        "tree_sha256": report.get("tree_sha256"),
+        "staging_dir": str(spec.staging_dir),
+        "report": report,
+    }
+
+
+def check_sdd_disk_space(spec: SddStagingSpec) -> dict[str, Any]:
+    """Check free disk space at the staging location against the expected dataset size."""
+    probe = spec.staging_dir
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    usage = shutil.disk_usage(probe)
+    required = spec.expected_total_size_bytes
+    sufficient = usage.free >= required
+    return {
+        "probe_path": str(probe),
+        "required_bytes": required,
+        "required_mib": round(required / (1024 * 1024), 1),
+        "available_bytes": usage.free,
+        "available_mib": round(usage.free / (1024 * 1024), 1),
+        "sufficient": sufficient,
+    }
+
+
+def build_sdd_plan(spec: SddStagingSpec) -> dict[str, Any]:
+    """Build the plan/report payload for a default (non-downloading) invocation."""
+    validation = validate_sdd_staging(spec, compute_checksum=False)
+    disk = check_sdd_disk_space(spec)
+    return {
+        "schema": "sdd_staging_plan.v1",
+        "asset_id": spec.asset_id,
+        "title": spec.title,
+        "version_tag": spec.version_tag,
+        "source_url": spec.source_url,
+        "license": spec.license,
+        "license_url": spec.license_url,
+        "readme_pointer": spec.readme_pointer,
+        "staging_dir": str(spec.staging_dir),
+        "download_url": spec.download_url,
+        "access_note": spec.access_note,
+        "expected_total_size_bytes": spec.expected_total_size_bytes,
+        "expected_total_size_mib": round(spec.expected_total_size_mib, 1),
+        "disk_check": disk,
+        "would_download": False,
+        "auto_download": False,
+        "local_availability": validation["local_availability"],
+        "scenario_prior_mode": validation["mode"],
+        "validation": validation,
+        "next_step": (
+            "This is a PLAN ONLY; nothing was downloaded. To stage SDD you must (1) obtain it under "
+            "its license per access_note, (2) configure a download URL or place files under the "
+            "staging_dir, and (3) re-run with `download --confirm-download` to explicitly confirm."
+        ),
+    }
+
+
+def write_sdd_staging_status(spec: SddStagingSpec, report: dict[str, Any]) -> Path:
+    """Write a staging-status manifest into the staging dir after validation."""
+    spec.staging_dir.mkdir(parents=True, exist_ok=True)
+    status_path = spec.staging_dir / SDD_STAGING_STATUS_FILENAME
+    payload = {
+        "schema": "sdd_staging_status.v1",
+        "asset_id": spec.asset_id,
+        "version_tag": spec.version_tag,
+        "source_url": spec.source_url,
+        "license": spec.license,
+        "checksum_algorithm": spec.checksum_algorithm,
+        "tree_sha256": report.get("tree_sha256"),
+        "file_count": report.get("file_count"),
+        "total_size_bytes": report.get("total_size_bytes"),
+        "sample_files": report.get("sample_files", []),
+        "local_availability": report["local_availability"],
+        "validated_at_utc": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
+    }
+    status_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return status_path
+
+
+def confirm_sdd_download(*, confirm_download: bool, yes: bool) -> bool:
+    """Return True only when the user has explicitly confirmed a network download.
+
+    Requires the ``--confirm-download`` flag AND an interactive y/N (or ``--yes`` for
+    non-interactive confirmation). Default behavior never confirms.
+    """
+    if not confirm_download:
+        return False
+    if yes:
+        return True
+    try:
+        answer = input(
+            "About to download the Stanford Drone Dataset to a git-ignored folder. "
+            "This consumes disk and network. Proceed? [y/N]: "
+        )
+    except EOFError:
+        return False
+    return answer.strip().lower() in {"y", "yes"}
+
+
+def run_sdd_download(spec: SddStagingSpec, *, confirm_download: bool, yes: bool) -> dict[str, Any]:
+    """Run the guarded SDD download path. Fails closed at every safety gate."""
+    if not confirm_sdd_download(confirm_download=confirm_download, yes=yes):
+        raise ExternalDataError(
+            "Download not confirmed. This tool never auto-downloads: pass `--confirm-download` and "
+            "answer the y/N prompt (or add `--yes` for non-interactive confirmation). A default run "
+            "only plans and reports."
+        )
+
+    disk = check_sdd_disk_space(spec)
+    if not disk["sufficient"]:
+        raise ExternalDataError(
+            "Insufficient disk space at "
+            f"{disk['probe_path']}: required {disk['required_mib']} MiB, "
+            f"available {disk['available_mib']} MiB. Refusing to download (fail closed)."
+        )
+
+    if not spec.download_url:
+        raise ExternalDataError(
+            "No download URL is configured for SDD. SDD is license-gated and the repository encodes "
+            "no approved direct download URL. Obtain it from the official project page "
+            f"({spec.source_url}) under its license, place the annotation files under "
+            f"{spec.staging_dir}, then run validation. {spec.access_note}"
+        )
+
+    # A real network fetch would happen here using spec.download_url. It is intentionally NOT
+    # implemented because SDD is license-gated and no approved URL is encoded; reaching this point
+    # requires a maintainer to add a URL to the manifest first.
+    raise ExternalDataError(
+        "Confirmed and disk-checked, but no downloader is wired for the configured URL. A "
+        "maintainer must implement the fetch for the license-approved URL before this path runs."
+    )
+
+
 def _print_json(payload: Any) -> None:
     """Print a stable JSON payload."""
     print(json.dumps(payload, indent=2, sort_keys=True))
@@ -502,6 +974,35 @@ def parse_args() -> argparse.Namespace:
         "download", help="Download only approved direct assets."
     )
     download_parser.add_argument("asset_id")
+
+    # Canonical SDD staging subsystem (issues #2657, #3473). These commands own the no-auto-download
+    # safety contract and the proxy-vs-dataset-backed scenario-prior gate.
+    sdd_plan = subparsers.add_parser(
+        "sdd-plan", help="Plan/report only for SDD staging (default; never downloads)."
+    )
+    sdd_plan.add_argument("--manifest", type=Path, default=None)
+
+    sdd_status = subparsers.add_parser(
+        "sdd-status", help="Report SDD local availability/checksums WITHOUT downloading."
+    )
+    sdd_status.add_argument("--manifest", type=Path, default=None)
+
+    sdd_validate = subparsers.add_parser(
+        "sdd-validate", help="Validate the locally-staged SDD copy and write its status file."
+    )
+    sdd_validate.add_argument("--manifest", type=Path, default=None)
+
+    sdd_mode = subparsers.add_parser(
+        "sdd-mode", help="Print the SDD scenario-prior mode gate (proxy vs dataset-backed)."
+    )
+    sdd_mode.add_argument("--manifest", type=Path, default=None)
+
+    sdd_download = subparsers.add_parser(
+        "sdd-download", help="Guarded SDD staging: requires explicit confirmation; fails closed."
+    )
+    sdd_download.add_argument("--manifest", type=Path, default=None)
+    sdd_download.add_argument("--confirm-download", action="store_true")
+    sdd_download.add_argument("--yes", action="store_true")
 
     return parser.parse_args()
 
@@ -584,6 +1085,47 @@ def _handle_download(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_sdd_plan(args: argparse.Namespace) -> int:
+    """Handle the sdd-plan subcommand."""
+    spec = load_sdd_staging_spec(args.manifest)
+    _print_json(build_sdd_plan(spec))
+    return 0
+
+
+def _handle_sdd_status(args: argparse.Namespace) -> int:
+    """Handle the sdd-status subcommand."""
+    spec = load_sdd_staging_spec(args.manifest)
+    report = validate_sdd_staging(spec)
+    _print_json(report)
+    return 0 if report["ok"] else 2
+
+
+def _handle_sdd_validate(args: argparse.Namespace) -> int:
+    """Handle the sdd-validate subcommand."""
+    spec = load_sdd_staging_spec(args.manifest)
+    report = validate_sdd_staging(spec)
+    if report["ok"]:
+        write_sdd_staging_status(spec, report)
+    _print_json(report)
+    return 0 if report["ok"] else 2
+
+
+def _handle_sdd_mode(args: argparse.Namespace) -> int:
+    """Handle the sdd-mode subcommand."""
+    spec = load_sdd_staging_spec(args.manifest)
+    gate = resolve_sdd_scenario_prior_mode(spec)
+    _print_json(gate)
+    return 0 if gate["dataset_backed"] else 2
+
+
+def _handle_sdd_download(args: argparse.Namespace) -> int:
+    """Handle the sdd-download subcommand."""
+    spec = load_sdd_staging_spec(args.manifest)
+    report = run_sdd_download(spec, confirm_download=args.confirm_download, yes=args.yes)
+    _print_json(report)
+    return 0 if report.get("ok") else 2
+
+
 def _handle_error(exc: ExternalDataError, *, as_json: bool) -> int:
     """Print one user-facing CLI error."""
     if as_json:
@@ -602,6 +1144,11 @@ def main() -> int:
         "check": _handle_check,
         "stage": _handle_stage,
         "download": _handle_download,
+        "sdd-plan": _handle_sdd_plan,
+        "sdd-status": _handle_sdd_status,
+        "sdd-validate": _handle_sdd_validate,
+        "sdd-mode": _handle_sdd_mode,
+        "sdd-download": _handle_sdd_download,
     }
     try:
         return handlers[args.command](args)

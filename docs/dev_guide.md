@@ -191,6 +191,12 @@ The helper runs from `git rev-parse --show-toplevel`, prepends that root to `PYT
 local feedback when dependencies are already current. It should fail if the shared virtualenv is
 missing instead of silently installing into the wrong checkout.
 
+If a fresh linked worktree fails to collect a focused test because an optional dependency such as
+`torch` is not installed in that worktree, rerun the same focused command through
+`scripts/dev/run_worktree_shared_venv.sh -- uv run pytest <test-node>`. A pass through the wrapper
+classifies the direct failure as setup or optional-dependency friction for that worktree, not as a
+code regression; record both commands in the PR or handoff.
+
 Use a normal worktree-local `uv sync --all-extras` and
 `PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh` for final PR proof,
 dependency changes, generated lockfile validation, or any run where environment isolation matters.

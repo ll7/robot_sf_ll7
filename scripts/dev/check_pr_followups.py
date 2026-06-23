@@ -560,7 +560,9 @@ def analyze_domain_approval(body: str, *, source: str) -> DomainApprovalReport:
             checklist_errors=checklist_errors,
             message=(
                 "Domain-aware approval requires reviewed domains, a non-empty status, "
-                "and an approver/review source or waiver reason."
+                "and an approver/review source or waiver reason. Replace slash-separated "
+                "template option text with concrete comma-separated domains, or a concrete "
+                "NA reason when approval is not required."
             ),
         )
     if checklist_errors:

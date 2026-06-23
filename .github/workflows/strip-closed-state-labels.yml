@@ -1,0 +1,83 @@
+name: Strip closed state labels
+
+# Closed issues should not keep live routing labels (state:ready / state:running /
+# state:blocked) — they pollute queue reads. This Action runs at the single choke point of
+# issue closure (manual, duplicate/wontfix, or PR-merge all emit `issues: closed`) and removes
+# only the documented live state labels from the just-closed issue. It is a no-op when none are
+# present. The periodic detector (scripts/dev/closed_state_label_hygiene.py) remains the backstop.
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: strip-state-labels-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  strip-state-labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Remove live state labels from the closed issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+
+          # Single source of truth: derive the live state-label set from the detector module
+          # (scripts/dev/closed_state_label_hygiene.py::LIVE_STATE_LABELS) so this Action and the
+          # CLI never drift. No second hard-coded label list lives here.
+          mapfile -t LIVE_LABELS < <(
+            python -c 'import sys; sys.path.insert(0, "scripts/dev"); import closed_state_label_hygiene as h; print("\n".join(h.LIVE_STATE_LABELS))'
+          )
+          echo "Live state labels: ${LIVE_LABELS[*]}"
+
+          # Read-then-write (defense-in-depth): the trigger already implies the issue is closed,
+          # but re-confirm CLOSED and non-PR via the API before any write.
+          issue_state=$(
+            gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json state,isPullRequest \
+              --jq '[.state, (.isPullRequest | tostring)] | @tsv'
+          )
+          read -r state is_pull_request <<<"$issue_state"
+          echo "Issue #$ISSUE_NUMBER state: $state isPullRequest: $is_pull_request"
+          if [ "$state" != "CLOSED" ]; then
+            echo "Issue #$ISSUE_NUMBER is not CLOSED ($state); skipping (no-op)."
+            exit 0
+          fi
+          if [ "$is_pull_request" = "true" ]; then
+            echo "Issue #$ISSUE_NUMBER is a pull request; skipping (no-op)."
+            exit 0
+          fi
+
+          # Fetch the issue's current labels once, then remove only the live state labels that are
+          # actually present. Guarding on presence keeps the step a no-op when nothing is stale.
+          mapfile -t CURRENT_LABELS < <(
+            gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name'
+          )
+
+          removed=0
+          for label in "${LIVE_LABELS[@]}"; do
+            for present in "${CURRENT_LABELS[@]:-}"; do
+              if [ "$label" = "$present" ]; then
+                echo "Removing stale label '$label' from issue #$ISSUE_NUMBER"
+                gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "$label"
+                removed=$((removed + 1))
+                break
+              fi
+            done
+          done
+
+          if [ "$removed" -eq 0 ]; then
+            echo "No live state labels present on issue #$ISSUE_NUMBER; nothing to do."
+          else
+            echo "Removed $removed live state label(s) from issue #$ISSUE_NUMBER."
+          fi

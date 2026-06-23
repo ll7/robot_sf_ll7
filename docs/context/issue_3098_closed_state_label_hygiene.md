@@ -88,3 +88,39 @@ truth. Until that lands, expect to re-run the manual cleanup periodically.
 This note records routing-hygiene evidence only. It is not benchmark evidence, research evidence,
 or a change to issue taxonomy semantics. Future cleanup should continue to treat live `state:*`
 labels on closed issues as stale queue metadata unless a specific issue documents an exception.
+
+## Durable Automation Follow-up (Issue #3456)
+
+The manual cleanups above were one-shot reconciliations: #3098 removed stale state labels from 134
+closed issues, and a 2026-06-23 follow-up removed them from a further 66. Because issues keep closing
+through many paths, stale labels re-accumulate, so issue [#3456](https://github.com/ll7/robot_sf_ll7/issues/3456)
+adds automation so closed issues are de-labeled at the moment of closure instead of in periodic
+sweeps.
+
+### GitHub Action: `.github/workflows/strip-closed-state-labels.yml`
+
+- Trigger: `on: issues: types: [closed]`. The `issues.closed` event is the single choke point that
+  covers every close path — manual close, duplicate/wontfix, and PR-merge auto-close.
+- Permissions: `issues: write` only (least privilege), using the default `GITHUB_TOKEN`.
+- Read-then-write: the job re-confirms the issue is `CLOSED` (and not a pull request) via
+  `gh issue view` before any removal, as defense-in-depth even though the trigger implies closure.
+- Removal is guarded by label presence: it fetches the issue's current labels and removes only the
+  live `state:*` labels that are actually present, so it is a no-op when none are stale and never
+  fails the job for a missing label. Only the documented live state set is touched — no other label.
+- Single source of truth: the live label set is read at runtime from
+  `scripts/dev/closed_state_label_hygiene.py::LIVE_STATE_LABELS`; the workflow hard-codes no second
+  copy of the label list.
+
+### Detector `--fix` mode
+
+`scripts/dev/closed_state_label_hygiene.py` now accepts `--fix`. Default (no flag) behavior is
+unchanged: a read-only audit with the same exit codes. With `--fix` the detector strips the live
+`state:*` labels (reusing `LIVE_STATE_LABELS`) from each closed issue it found, re-confirming every
+issue is `CLOSED` before writing (read-then-write), and reports a per-issue `fix_actions` log. This
+provides a manual/backfill path for sweeps; the Action handles steady-state closure events.
+
+### Backstop
+
+The periodic read-only detector remains the CI/backstop check: it still flags any closed issue that
+slips through (for example, a closure event that predates the Action, or a label re-added later), so
+the automation and the audit reinforce each other rather than replace one another.

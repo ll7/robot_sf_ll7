@@ -145,6 +145,115 @@ def collect_stale_issues(
     return stale
 
 
+def build_view_command(*, repo: str, number: int) -> list[str]:
+    """Build the read-only GitHub CLI command that confirms one issue's state."""
+    return [
+        "gh",
+        "issue",
+        "view",
+        str(number),
+        "--repo",
+        repo,
+        "--json",
+        "number,state,isPullRequest",
+    ]
+
+
+def build_remove_label_command(*, repo: str, number: int, label: str) -> list[str]:
+    """Build the GitHub CLI command that removes one label from one issue."""
+    return [
+        "gh",
+        "issue",
+        "edit",
+        str(number),
+        "--repo",
+        repo,
+        "--remove-label",
+        label,
+    ]
+
+
+def _run_gh_command(command: list[str]) -> str:
+    """Run a GitHub CLI command and return stdout, mapping failures to RuntimeError."""
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError("GitHub CLI 'gh' was not found; install gh or add it to PATH.") from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        details = f": {stderr}" if stderr else ""
+        raise RuntimeError(f"GitHub CLI command failed ({' '.join(command)}){details}") from exc
+    return result.stdout or ""
+
+
+def confirm_issue_closed(*, repo: str, number: int) -> bool:
+    """Read-then-write guard: confirm an issue is CLOSED and not a pull request.
+
+    Returns:
+        True only when GitHub reports the issue as a closed (non-PR) issue.
+    """
+    stdout = _run_gh_command(build_view_command(repo=repo, number=number))
+    try:
+        payload = json.loads(stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Failed to parse GitHub CLI JSON output for issue {number}: {exc.msg}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Expected a JSON object from gh issue view for issue {number}")
+    if payload.get("isPullRequest") is True:
+        return False
+    return str(payload.get("state", "")).lower() == "closed"
+
+
+def fix_stale_issues(
+    *,
+    repo: str,
+    stale_issues: list[StaleIssue],
+    watched_labels: tuple[str, ...] = LIVE_STATE_LABELS,
+    confirm_closed: Any = confirm_issue_closed,
+    remove_label: Any = None,
+) -> list[dict[str, Any]]:
+    """Strip live state labels from confirmed-closed issues (read-then-write).
+
+    For each stale issue this re-confirms the issue is CLOSED before removing any label, and only
+    removes labels in ``watched_labels`` (the single source of truth ``LIVE_STATE_LABELS``). Missing
+    labels are tolerated by gh as a no-op. Returns a per-issue action log.
+    """
+    watched = set(watched_labels)
+
+    def _default_remove(number: int, label: str) -> None:
+        _run_gh_command(build_remove_label_command(repo=repo, number=number, label=label))
+
+    remove = remove_label or _default_remove
+
+    actions: list[dict[str, Any]] = []
+    for issue in stale_issues:
+        labels_to_remove = sorted(set(issue.stale_labels) & watched)
+        if not labels_to_remove:
+            continue
+        if not confirm_closed(repo=repo, number=issue.number):
+            actions.append(
+                {
+                    "number": issue.number,
+                    "skipped": True,
+                    "reason": "not_closed",
+                    "removed_labels": [],
+                }
+            )
+            continue
+        for label in labels_to_remove:
+            remove(issue.number, label)
+        actions.append(
+            {
+                "number": issue.number,
+                "skipped": False,
+                "removed_labels": labels_to_remove,
+            }
+        )
+    return actions
+
+
 def build_report(
     *,
     repo: str,
@@ -200,6 +309,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=1000,
         help="Maximum search results to fetch per label.",
     )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help=(
+            "Strip live state labels from the closed issues found. Each issue is re-confirmed "
+            "CLOSED before any label is removed (read-then-write). Without this flag the command "
+            "stays read-only."
+        ),
+    )
     return parser
 
 
@@ -221,12 +339,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         stale_issues = collect_stale_issues(rows_by_label, watched_labels=labels)
         report = build_report(repo=args.repo, checked_labels=labels, stale_issues=stale_issues)
+        if args.fix:
+            fix_actions = fix_stale_issues(
+                repo=args.repo,
+                stale_issues=stale_issues,
+                watched_labels=labels,
+            )
+            report["read_only"] = False
+            report["fix_applied"] = True
+            report["fix_actions"] = fix_actions
+            report["ok"] = True
     except (OSError, RuntimeError, ValueError) as exc:
         _dump_json(
             {
                 "schema": "closed_state_label_hygiene.v1",
                 "ok": False,
-                "read_only": True,
+                "read_only": not args.fix,
                 "project_writes": False,
                 "repo": args.repo,
                 "checked_labels": list(labels),

@@ -208,6 +208,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the ORCA-residual BC smoke evidence contract (#1475): the per-decision `action_adaptation`
+  payload from `GuardedPPOAdapter` now always carries a truthful `residual_clipped` signal — on the
+  direct pass-through, guard-fallback, and default branches no bounded residual is applied, so
+  `residual_clipped: False` is emitted (a real signal, not fabricated). This lets the smoke
+  finalizer populate `residual_clipping_rate` (and, with the existing `shield_stats`,
+  `guard_veto_rate`, `fallback_degraded_status`, `artifact_pointer_status`) instead of failing
+  closed on `missing_required_smoke_evidence` — which is what blocked the #1475 SLURM smoke rerun
+  (job 12913). Contract-completeness only: it does not make the BC lane succeed (the run may still
+  be `timeout_low_progress`/`success_rate=0.0` per #2445), and no fail-closed gate is weakened
+  (a genuinely degraded run still classifies degraded). (#1475)
+
 * Fixed `scripts/tools/issue_template_audit.py` so it recognizes the repo's own YAML issue
   forms (`epic`/`execution-run`/`test-debt`/`blocked-external-artifact`) and agent-authored
   bodies instead of only the markdown templates. The audit previously matched a single strict

@@ -325,6 +325,59 @@ def test_guarded_ppo_residual_mode_keeps_safer_orca_prior() -> None:
     assert adaptation["adapted_action"] == [0.5, -0.1]
 
 
+def test_guarded_ppo_rejected_residual_does_not_leak_into_prior_safe_metadata() -> None:
+    """Rejected residual metadata should not describe a later prior-safe selection."""
+    guard = GuardedPPOAdapter(
+        config=build_guarded_ppo_config(
+            {
+                "prior_residual_mode": True,
+                "prior_residual_max_linear_delta": 0.0,
+                "prior_residual_max_angular_delta": 0.0,
+                "prior_near_field_only": False,
+            }
+        ),
+        fallback_adapter=_FallbackAdapter((0.0, 0.0)),
+        prior_adapter=_PriorAdapter((0.5, -0.1)),
+    )
+    evaluations = iter(
+        [
+            {
+                "safe": False,
+                "progress": 0.5,
+                "min_ped_clear": 0.2,
+                "first_ped_clear": 0.2,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 0.4,
+            },
+            {
+                "safe": True,
+                "progress": 0.48,
+                "min_ped_clear": 0.9,
+                "first_ped_clear": 0.9,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 1.4,
+            },
+            {
+                "safe": True,
+                "progress": 0.48,
+                "min_ped_clear": 0.9,
+                "first_ped_clear": 0.9,
+                "min_obs_clear": float("inf"),
+                "min_ttc": 1.4,
+            },
+        ]
+    )
+    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+
+    decision = guard.choose_command_decision(_obs(), (0.8, -0.5))
+
+    assert decision.decision_label == "prior_safe"
+    assert decision.filtered_action == (0.5, -0.1)
+    adaptation = decision.fallback_controller_state["action_adaptation"]
+    assert adaptation["mode"] == "guard_selected_command"
+    assert adaptation["adapted_action"] == [0.5, -0.1]
+
+
 def test_guarded_ppo_residual_mode_falls_through_when_not_safe() -> None:
     """Unsafe residual proposals should fall through to prior or fallback safety handling."""
     guard = GuardedPPOAdapter(

@@ -22,7 +22,7 @@ import numpy as np
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
-from robot_sf.models.registry import get_registry_entry, load_registry, resolve_model_path
+from robot_sf.models.registry import load_registry, resolve_model_path
 
 SUPPORTED_LEGACY_PPO_MODEL_IDS = (
     "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
@@ -177,7 +177,6 @@ def run_model_step_smoke(
 ) -> SmokeReport:
     """Load a PPO checkpoint and execute one current Gymnasium robot-env step."""
 
-    get_registry_entry(model_id, registry_path)
     model_path = resolve_model_path(
         model_id,
         registry_path=registry_path,
@@ -197,7 +196,9 @@ def run_model_step_smoke(
         step_obs, reward, terminated, truncated, info = env.step(action)
         if not env.observation_space.contains(step_obs):
             raise ValueError("Step observation is outside current env observation_space")
-        if not isinstance(terminated, bool) or not isinstance(truncated, bool):
+        if not isinstance(terminated, (bool, np.bool_)) or not isinstance(
+            truncated, (bool, np.bool_)
+        ):
             raise TypeError("Gymnasium step must return bool terminated/truncated flags")
         if not isinstance(info, Mapping):
             raise TypeError("Gymnasium step info must be a mapping")

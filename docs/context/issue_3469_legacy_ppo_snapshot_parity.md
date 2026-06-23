@@ -1,4 +1,4 @@
-# Issue 3469: Legacy PPO Snapshot Parity
+# Issue #3469 Legacy PPO Snapshot Parity
 
 Issue: [#3469](https://github.com/ll7/robot_sf_ll7/issues/3469)
 

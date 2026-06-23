@@ -133,7 +133,13 @@ def test_run_model_step_smoke_uses_factory_model_prediction_and_gymnasium_step(
 
         def step(self, action):
             assert self.action_space.contains(action)
-            return np.array([0.1, 0.5], dtype=np.float32), 1.25, False, False, {"ok": True}
+            return (
+                np.array([0.1, 0.5], dtype=np.float32),
+                1.25,
+                np.bool_(False),
+                np.bool_(False),
+                {"ok": True},
+            )
 
         def close(self):
             pass

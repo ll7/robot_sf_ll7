@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -196,21 +197,9 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
-def _figure_ineligibility_reasons(
-    *,
-    denominator: int,
-    evidence_state: str,
-    evidence_exclusion: str,
-    provenance: FailurePackProvenance,
-) -> list[str]:
-    """Return fail-closed reasons that make a failure-pack row diagnostic-only."""
+def _run_provenance_ineligibility_reasons(provenance: FailurePackProvenance) -> list[str]:
+    """Return ineligibility reasons based strictly on run-level provenance."""
     checks = [
-        (denominator <= 0, "signal_metrics_denominator<=0"),
-        (evidence_state != "planner_observable", f"signal_metrics_evidence.state={evidence_state}"),
-        (
-            bool(evidence_exclusion),
-            f"signal_metrics_evidence.exclusion_reason={evidence_exclusion}",
-        ),
         (
             provenance.trace_source_kind not in _DURABLE_SOURCE_KINDS,
             f"trace_source_kind={provenance.trace_source_kind}",
@@ -236,6 +225,41 @@ def _figure_ineligibility_reasons(
         ),
     ]
     return [reason for failed, reason in checks if failed]
+
+
+def _case_ineligibility_reasons(
+    *,
+    denominator: int,
+    evidence_state: str,
+    evidence_exclusion: str,
+) -> list[str]:
+    """Return ineligibility reasons based strictly on case-level metrics."""
+    checks = [
+        (denominator <= 0, "signal_metrics_denominator<=0"),
+        (evidence_state != "planner_observable", f"signal_metrics_evidence.state={evidence_state}"),
+        (
+            bool(evidence_exclusion),
+            f"signal_metrics_evidence.exclusion_reason={evidence_exclusion}",
+        ),
+    ]
+    return [reason for failed, reason in checks if failed]
+
+
+def _figure_ineligibility_reasons(
+    *,
+    denominator: int,
+    evidence_state: str,
+    evidence_exclusion: str,
+    provenance: FailurePackProvenance,
+) -> list[str]:
+    """Return fail-closed reasons that make a failure-pack row diagnostic-only."""
+    case_reasons = _case_ineligibility_reasons(
+        denominator=denominator,
+        evidence_state=evidence_state,
+        evidence_exclusion=evidence_exclusion,
+    )
+    run_reasons = _run_provenance_ineligibility_reasons(provenance)
+    return case_reasons + run_reasons
 
 
 def _diagnostic_claim_wording(reasons: list[str]) -> str:
@@ -368,19 +392,31 @@ def build_failure_pack(
             }
         )
 
+    run_reasons = _run_provenance_ineligibility_reasons(provenance)
+    run_level_eligible = len(run_reasons) == 0
+
     if not cases:
+        top_figure_eligible = run_level_eligible
+        top_diagnostic_only = not top_figure_eligible
         return {
             "schema_version": "signalized_crossing_failure_pack.v1",
             "negative_control": True,
             "status": "insufficiently_adversarial",
             "message": "The fixture is insufficiently adversarial; no real failures were detected.",
+            "diagnostic_only": top_diagnostic_only,
+            "figure_eligible": top_figure_eligible,
             "cases": [],
         }
+
+    top_figure_eligible = run_level_eligible and all(case["figure_eligible"] for case in cases)
+    top_diagnostic_only = not top_figure_eligible
 
     return {
         "schema_version": "signalized_crossing_failure_pack.v1",
         "negative_control": False,
         "status": "failures_present",
+        "diagnostic_only": top_diagnostic_only,
+        "figure_eligible": top_figure_eligible,
         "cases": cases,
     }
 
@@ -425,6 +461,148 @@ def load_trace_with_fallback(path: Path) -> SimulationTraceExport:
             units=raw["units"],
             frames=frames,
         )
+
+
+def _find_eligibility_flags(data: Any) -> list[tuple[str, Any]]:
+    """Recursively find all occurrences of figure_eligible or diagnostic_only in data."""
+    found = []
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if k in ("figure_eligible", "diagnostic_only"):
+                found.append((k, v))
+            else:
+                found.extend(_find_eligibility_flags(v))
+    elif isinstance(data, list):
+        for item in data:
+            found.extend(_find_eligibility_flags(item))
+    return found
+
+
+def _scan_json_file(
+    json_file: Path,
+    readme_path: Path,
+    matched_keyword: str,
+    path_name: str,
+    disagreements: list[dict[str, Any]],
+) -> None:
+    """Scan a single JSON file for eligibility disagreements."""
+    try:
+        data = json.loads(json_file.read_text(encoding="utf-8"))
+    except Exception:
+        # Malformed JSON or read error; skip
+        return
+
+    flags = _find_eligibility_flags(data)
+    conflicts = []
+    for k, v in flags:
+        if k == "figure_eligible" and v is True:
+            conflicts.append((k, v))
+        elif k == "diagnostic_only" and v is False:
+            conflicts.append((k, v))
+
+    if conflicts:
+        try:
+            rel_readme = readme_path.relative_to(_REPO_ROOT).as_posix()
+        except ValueError:
+            rel_readme = readme_path.as_posix()
+        try:
+            rel_json = json_file.relative_to(_REPO_ROOT).as_posix()
+        except ValueError:
+            rel_json = json_file.as_posix()
+
+        disagreements.append(
+            {
+                "dir": path_name,
+                "readme": rel_readme,
+                "json": rel_json,
+                "matched_keyword": matched_keyword,
+                "conflicts": conflicts,
+            }
+        )
+
+
+def _scan_single_directory(
+    path: Path,
+    keywords_pattern: re.Pattern,
+    disagreements: list[dict[str, Any]],
+) -> None:
+    """Scan a single directory for eligibility disagreements between README and JSON."""
+    readme_path = path / "README.md"
+    if not readme_path.is_file():
+        return
+
+    # Find all JSON files directly under the directory
+    json_files = sorted(path.glob("*.json"))
+    if not json_files:
+        return
+
+    try:
+        readme_text = readme_path.read_text(encoding="utf-8")
+    except Exception as e:
+        print(f"Error reading {readme_path}: {e}")
+        return
+
+    keyword_match = keywords_pattern.search(readme_text)
+    if not keyword_match:
+        return
+
+    matched_keyword = keyword_match.group(0)
+
+    for json_file in json_files:
+        _scan_json_file(
+            json_file=json_file,
+            readme_path=readme_path,
+            matched_keyword=matched_keyword,
+            path_name=path.name,
+            disagreements=disagreements,
+        )
+
+
+def run_evidence_scan(evidence_dir: Path | None = None) -> int:
+    """Scan docs/context/evidence/ for prose vs machine-readable eligibility disagreements.
+
+    Returns:
+        0 if no disagreements are found, 1 otherwise.
+    """
+    if evidence_dir is None:
+        evidence_dir = _REPO_ROOT / "docs/context/evidence"
+    if not evidence_dir.is_dir():
+        print(f"Evidence directory {evidence_dir} does not exist.")
+        return 1
+
+    ineligibility_keywords = [
+        "smoke",
+        "synthetic",
+        "fixture",
+        "stale",
+        "unknown",
+        "fallback",
+        "degraded",
+        "proxy",
+        "unavailable",
+    ]
+    # Match whole words case-insensitively
+    keywords_pattern = re.compile(r"\b(" + "|".join(ineligibility_keywords) + r")\b", re.IGNORECASE)
+
+    disagreements = []
+
+    for readme_path in sorted(evidence_dir.rglob("README.md")):
+        _scan_single_directory(readme_path.parent, keywords_pattern, disagreements)
+
+    if disagreements:
+        print("PROSE VS MACHINE-READABLE ELIGIBILITY DISAGREEMENTS FOUND:")
+        for diag in disagreements:
+            print(f"\n- Directory: {diag['dir']}")
+            print(f"  Prose: {diag['readme']} (matched '{diag['matched_keyword']}')")
+            print(f"  JSON: {diag['json']}")
+            for k, v in diag["conflicts"]:
+                print(f"    Disagreement: {k} is set to {v}")
+        return 1
+
+    print(
+        "No prose vs machine-readable eligibility disagreements found under docs/context/evidence/."
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -517,8 +695,16 @@ def main(argv: list[str] | None = None) -> int:
         default=0.0,
         help="Minimum near-misses to flag a failure.",
     )
+    parser.add_argument(
+        "--scan-evidence",
+        action="store_true",
+        help="Scan docs/context/evidence/ for prose vs machine-readable eligibility disagreements.",
+    )
 
     args = parser.parse_args(argv)
+
+    if args.scan_evidence:
+        return run_evidence_scan()
 
     loaded_traces = []
     trace_input_paths = {}

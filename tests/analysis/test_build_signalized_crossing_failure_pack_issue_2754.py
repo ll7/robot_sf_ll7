@@ -569,3 +569,178 @@ def test_proxy_unavailable_rows_downgraded(tmp_path: Path) -> None:
     assert case["figure_eligible"] is False
     assert "diagnostic-only" in case["allowed_claim_wording"]
     assert "ineligible" in case["allowed_claim_wording"]
+
+
+def test_top_level_fields_presence(tmp_path: Path) -> None:
+    """Proves that top-level diagnostic_only and figure_eligible fields are added to the JSON."""
+    trace_path, record_path = _write_failure_inputs(tmp_path)
+    output_path = tmp_path / "result.json"
+
+    # 1. Failures present, eligible run parameters
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            *_eligible_runtime_args(),
+        ]
+    )
+    assert exit_code == 0
+    result = json.loads(output_path.read_text())
+    assert result["negative_control"] is False
+    assert result["diagnostic_only"] is False
+    assert result["figure_eligible"] is True
+
+    # 2. Failures present, but ineligible (smoke tier)
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            "--evidence-tier",
+            "smoke",
+        ]
+    )
+    assert exit_code == 0
+    result = json.loads(output_path.read_text())
+    assert result["negative_control"] is False
+    assert result["diagnostic_only"] is True
+    assert result["figure_eligible"] is False
+
+    # 3. Negative control, run-level eligible
+    # Write a record that is a success (no failures)
+    record = {
+        "episode_id": "success_ep",
+        "scenario_id": "success_scen",
+        "metrics": {"collisions": 0.0, "comfort_exposure": 0.0, "near_misses": 0},
+    }
+    record_path.write_text(json.dumps(record) + "\n")
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            *_eligible_runtime_args(),
+        ]
+    )
+    assert exit_code == 0
+    result = json.loads(output_path.read_text())
+    assert result["negative_control"] is True
+    assert result["diagnostic_only"] is False
+    assert result["figure_eligible"] is True
+
+    # 4. Negative control, run-level ineligible
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            "--evidence-tier",
+            "smoke",
+        ]
+    )
+    assert exit_code == 0
+    result = json.loads(output_path.read_text())
+    assert result["negative_control"] is True
+    assert result["diagnostic_only"] is True
+    assert result["figure_eligible"] is False
+
+
+@pytest.mark.parametrize("status", ["stale", "unknown"])
+def test_artifact_status_stale_and_unknown(tmp_path: Path, status: str) -> None:
+    """Explicitly verify that artifact_status=stale and artifact_status=unknown fail figure eligibility."""
+    trace_path, record_path = _write_failure_inputs(tmp_path)
+    output_path = tmp_path / "result.json"
+
+    args = _eligible_runtime_args()
+    # Replace default allowed/current status with custom ones
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            *args,
+            "--artifact-status",
+            status,
+        ]
+    )
+    assert exit_code == 0
+    result = json.loads(output_path.read_text())
+    assert result["diagnostic_only"] is True
+    assert result["figure_eligible"] is False
+    case = result["cases"][0]
+    assert case["diagnostic_only"] is True
+    assert case["figure_eligible"] is False
+    assert f"artifact_status={status}" in case["figure_ineligibility_reasons"]
+
+
+def test_scanner_finds_disagreements(tmp_path: Path) -> None:
+    """Verify that run_evidence_scan detects prose and machine-readable eligibility disagreements."""
+    from scripts.analysis.build_signalized_crossing_failure_pack_issue_2754 import run_evidence_scan
+
+    # Create dummy evidence directory structure
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+
+    # 1. Clean subdir: prose contains 'smoke', JSON correctly has figure_eligible: False
+    clean_dir = evidence_dir / "clean_smoke"
+    clean_dir.mkdir()
+    (clean_dir / "README.md").write_text("This records smoke test results.")
+    (clean_dir / "summary.json").write_text(
+        json.dumps({"figure_eligible": False, "diagnostic_only": True})
+    )
+
+    # 2. Conflicting subdir: prose contains 'synthetic', JSON has figure_eligible: True
+    conflict_dir = evidence_dir / "conflict_synthetic"
+    conflict_dir.mkdir()
+    (conflict_dir / "README.md").write_text("This records synthetic traces.")
+    (conflict_dir / "summary.json").write_text(
+        json.dumps({"cases": [{"figure_eligible": True, "diagnostic_only": False}]})
+    )
+
+    # 3. Another conflicting subdir: prose contains 'fixture', JSON has diagnostic_only: False
+    conflict_dir2 = evidence_dir / "conflict_fixture"
+    conflict_dir2.mkdir()
+    (conflict_dir2 / "README.md").write_text("This contains fixture only records.")
+    (conflict_dir2 / "summary.json").write_text(json.dumps({"diagnostic_only": False}))
+
+    # Run scan
+    exit_code = run_evidence_scan(evidence_dir)
+    assert exit_code == 1
+
+    # Check output/clean state when conflict dirs are removed
+    import shutil
+
+    shutil.rmtree(conflict_dir)
+    shutil.rmtree(conflict_dir2)
+
+    exit_code_clean = run_evidence_scan(evidence_dir)
+    assert exit_code_clean == 0
+
+
+def test_scanner_finds_nested_disagreements(tmp_path: Path) -> None:
+    """Evidence scans recurse into nested artifact directories."""
+    from scripts.analysis.build_signalized_crossing_failure_pack_issue_2754 import run_evidence_scan
+
+    evidence_dir = tmp_path / "evidence"
+    nested_dir = evidence_dir / "parent" / "nested_smoke"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "README.md").write_text("Nested smoke evidence.")
+    (nested_dir / "summary.json").write_text(json.dumps({"figure_eligible": True}))
+
+    assert run_evidence_scan(evidence_dir) == 1

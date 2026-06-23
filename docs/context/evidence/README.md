@@ -98,6 +98,12 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3254_predictive_crossing_conflict_13042_2026-06-23/`: analysis-only
+  negative result for the schema-fixed Issue #3254 predictive crossing-conflict
+  rerun. Training completed on a non-degenerate `predictive_ego_v1` dataset, but
+  final evaluation failed the success-rate gate (`0.08696 < 0.3`), so the run is
+  not benchmark-strength or paper-facing evidence and should not be blindly
+  resubmitted.
 - `issue_3342_nearfield_turn_budget_2026-06-21/`: diagnostic-local S20 follow-up
   for the Issue #3215 near-field turn-budget signal. It compares `baseline`,
   `nearfield_turn`, and `nf_speedcap_only` across clean and observation-noise

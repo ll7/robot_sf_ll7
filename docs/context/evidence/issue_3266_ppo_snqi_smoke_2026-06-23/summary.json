@@ -1,0 +1,78 @@
+{
+  "schema_version": "issue_3266_ppo_snqi_smoke_summary.v1",
+  "issue": 3266,
+  "title": "PPO/SNQI scenario-horizon smoke rerun",
+  "date": "2026-06-23",
+  "evidence_status": "valid_blocker_resolution_smoke",
+  "claim_boundary": "Smallest post-repair scenario-horizon smoke slice only; not paper-facing Results evidence or full scenario-horizon promotion.",
+  "source_commit": "2ff5e07dfa654c0262580a841c9dc3e34dcc5508",
+  "source_config": "configs/benchmarks/issue_3266_scenario_horizon_ppo_snqi_smoke.yaml",
+  "campaign_id": "issue3266_ppo_snqi_smoke_live",
+  "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "scenario_matrix_hash": "a82bc0a993f7",
+  "scenario_candidates": [
+    "francis2023_blind_corner"
+  ],
+  "seed": 219,
+  "command": "rtk scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/run_compact_validation.py --timeout-seconds 1800 -- scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_3266_scenario_horizon_ppo_snqi_smoke.yaml --output-root output/benchmarks/issue_3266 --campaign-id issue3266_ppo_snqi_smoke_live --mode run --skip-publication-bundle --log-level WARNING",
+  "compact_validation_summary": "/home/luttkule/git/robot_sf_ll7/.git/codex-agent-runs/active/compact-validation/validation-20260623T064534Z-415099.summary.json",
+  "campaign": {
+    "status": "benchmark_success",
+    "campaign_execution_status": "completed",
+    "evidence_status": "valid",
+    "benchmark_success": true,
+    "total_runs": 2,
+    "successful_runs": 2,
+    "non_success_runs": 0,
+    "unexpected_failed_runs": 0,
+    "row_status_summary": {
+      "successful_evidence_rows": 2,
+      "accepted_unavailable_rows": 0,
+      "unexpected_failed_rows": 0,
+      "fallback_or_degraded_rows": 0
+    }
+  },
+  "planner_rows": [
+    {
+      "planner_key": "goal",
+      "planner_group": "core",
+      "execution_mode": "native",
+      "readiness_status": "native",
+      "benchmark_success": true,
+      "status": "ok",
+      "episodes": 1,
+      "success_mean": 0.0,
+      "total_collision_count_mean": 1.0,
+      "snqi_mean": -0.29,
+      "learned_policy_contract_status": "not_applicable"
+    },
+    {
+      "planner_key": "ppo",
+      "planner_group": "experimental",
+      "execution_mode": "native",
+      "readiness_status": "native",
+      "benchmark_success": true,
+      "status": "ok",
+      "episodes": 1,
+      "success_mean": 1.0,
+      "total_collision_count_mean": 0.0,
+      "snqi_mean": -0.1105,
+      "learned_policy_contract_status": "pass"
+    }
+  ],
+  "snqi_contract": {
+    "contract_enabled": true,
+    "contract_status": "pass",
+    "rank_alignment_spearman": 0.9999999999999998,
+    "outcome_separation": 0.25465732578901573,
+    "dominant_component": "near_penalty",
+    "positioning_recommendation": "downgrade_to_appendix_or_implementation_aid",
+    "positioning_claim_scope": "benchmark aggregate, not a universal ground-truth utility",
+    "caveat": "Degenerate metrics on this one-scenario slice cannot be used as independent validation signals: comfort_exposure, force_exceed_events."
+  },
+  "interpretation": {
+    "resolved": "PPO runs natively on the scenario-horizon smoke path, passes the learned-policy contract, and contributes a benchmark-success row with no fallback/degraded status.",
+    "not_resolved": "This smoke does not promote a full paper-facing scenario-horizon Results claim.",
+    "next_step": "Run and promote a broader paper-facing scenario-horizon campaign before citing PPO/SNQI as Results evidence."
+  }
+}

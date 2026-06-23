@@ -64,6 +64,12 @@ FORECAST_HORIZONS_S = (0.5, 1.0)
 
 # Minimal feature schema required by ForecastBatch.v1 provenance.
 _FEATURE_SCHEMA = {"position": "xy_m", "velocity": "xy_m_s"}
+_EXPECTED_ROW_RISK_SOURCES = {
+    "no_forecast": "none",
+    "cv_risk": "constant_velocity",
+    "semantic_risk": "semantic_cv",
+    "interaction_risk": "interaction_aware_cv",
+}
 
 
 def _git_head() -> str:
@@ -96,6 +102,25 @@ def _load_fixture(path: pathlib.Path) -> dict[str, Any]:
         return json.load(handle)
 
 
+def _finite_xy(value: Any) -> np.ndarray | None:
+    """Return a finite xy vector, or None when the payload is malformed."""
+    try:
+        vector = np.asarray(value, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if vector.shape != (2,) or not np.all(np.isfinite(vector)):
+        return None
+    return vector
+
+
+def _repo_relative_or_absolute(path: pathlib.Path) -> str:
+    """Return a repo-relative path when possible, otherwise an absolute/path string."""
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def _ped_state_from_frame(frame: dict[str, Any]) -> PedestrianState | None:
     """Build a PedestrianState from the first observed pedestrian in a frame.
 
@@ -109,6 +134,11 @@ def _ped_state_from_frame(frame: dict[str, Any]) -> PedestrianState | None:
     if not observed:
         return None
     payload = dict(observed[0])
+    if _finite_xy(payload.get("position")) is None:
+        return None
+    velocity = payload.get("velocity")
+    if velocity is not None and _finite_xy(velocity) is None:
+        return None
     payload.setdefault("id", 0)
     return PedestrianState.from_trace(payload)
 
@@ -218,6 +248,7 @@ class _RowState:
     risk_available_steps: int = 0
     risk_unavailable_in_conflict: int = 0
     conflict_steps: int = 0
+    risk_unavailable_this_step: bool = False
 
 
 def _gate_action_for_step(
@@ -236,10 +267,12 @@ def _gate_action_for_step(
         ``"stop"``, ``"yield"``, or ``"go"``.
     """
     risk_source = row["risk_source"]
+    state.risk_unavailable_this_step = False
     if risk_source == "none":
         return "go"
     ped_state = _ped_state_from_frame(frame)
     if ped_state is None:
+        state.risk_unavailable_this_step = True
         return "go"
     gate_cfg = cfg["risk_gate"]
     batch = _build_forecast_batch(
@@ -253,6 +286,7 @@ def _gate_action_for_step(
         batch, robot_pos, influence_radius_m=float(gate_cfg["influence_radius_m"])
     )
     if not signal.available:
+        state.risk_unavailable_this_step = True
         return "go"
     state.risk_available_steps += 1
     return _gate_decision(
@@ -290,7 +324,9 @@ def _score_outcome_step(
     peds = frame.get("pedestrians") or []
     if not peds:
         return
-    ped_pos = np.asarray(peds[0]["position"], dtype=float)
+    ped_pos = _finite_xy(peds[0].get("position"))
+    if ped_pos is None:
+        raise ValueError("ground-truth pedestrian position must be a finite xy vector")
     distance = float(np.linalg.norm(state.robot_pos - ped_pos))
     state.min_distance_m = min(state.min_distance_m, distance)
     if distance <= COLLISION_DISTANCE_M:
@@ -305,7 +341,7 @@ def _score_outcome_step(
             state.true_positive_stops += 1
         else:
             state.false_positive_stops += 1
-    if in_conflict and risk_source != "none" and _ped_state_from_frame(frame) is None:
+    if in_conflict and risk_source != "none" and state.risk_unavailable_this_step:
         state.risk_unavailable_in_conflict += 1
 
 
@@ -670,8 +706,23 @@ def _verify_seed_identity(cfg: dict[str, Any]) -> None:
     fixture = cfg.get("fixture", {})
     if "seed" not in fixture or "scenario_id" not in fixture:
         raise ValueError("config fixture must pin a single shared seed and scenario_id")
-    if not cfg.get("rows"):
+    rows = cfg.get("rows")
+    if not rows:
         raise ValueError("config must declare rows")
+    observed: dict[str, str] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("config rows must be mappings")
+        name = str(row.get("name", "")).strip()
+        risk_source = str(row.get("risk_source", "")).strip()
+        if name in observed:
+            raise ValueError(f"duplicate config row: {name}")
+        observed[name] = risk_source
+    if observed != _EXPECTED_ROW_RISK_SOURCES:
+        raise ValueError(
+            "config must declare exactly the four forecast-risk rows with expected risk_source "
+            f"mapping: {_EXPECTED_ROW_RISK_SOURCES}"
+        )
 
 
 def run(config_path: pathlib.Path, output_dir: pathlib.Path) -> dict[str, Any]:
@@ -696,13 +747,11 @@ def run(config_path: pathlib.Path, output_dir: pathlib.Path) -> dict[str, Any]:
         "generated_at_utc": datetime.datetime.now(datetime.UTC).isoformat(),
         "command": (
             "uv run python scripts/benchmark/run_forecast_risk_coupling_gate.py "
-            f"--config {config_path.relative_to(REPO_ROOT)} "
-            f"--output-dir {output_dir.relative_to(REPO_ROOT) if output_dir.is_relative_to(REPO_ROOT) else output_dir}"
+            f"--config {_repo_relative_or_absolute(config_path)} "
+            f"--output-dir {_repo_relative_or_absolute(output_dir)}"
         ),
         "repo_head": _git_head(),
-        "config_path": str(config_path.relative_to(REPO_ROOT))
-        if config_path.is_relative_to(REPO_ROOT)
-        else str(config_path),
+        "config_path": _repo_relative_or_absolute(config_path),
     }
 
     report = build_report(results, verdict, cfg, repro)

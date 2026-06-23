@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import shutil
 import sys
 
 import numpy as np
@@ -305,13 +306,96 @@ def test_seed_identity_enforced_by_config():
     module = _load_runner()
     good = {
         "fixture": {"seed": 111, "scenario_id": "s", "trace_path": "x", "dt_s": 0.1},
-        "rows": [{"name": "no_forecast", "risk_source": "none"}],
+        "rows": [
+            {"name": "no_forecast", "risk_source": "none"},
+            {"name": "cv_risk", "risk_source": "constant_velocity"},
+            {"name": "semantic_risk", "risk_source": "semantic_cv"},
+            {"name": "interaction_risk", "risk_source": "interaction_aware_cv"},
+        ],
     }
     module._verify_seed_identity(good)  # does not raise
 
     bad = {"fixture": {"scenario_id": "s"}, "rows": [{"name": "a", "risk_source": "none"}]}
     with pytest.raises(ValueError, match="seed"):
         module._verify_seed_identity(bad)
+
+
+def test_seed_identity_requires_four_row_matrix():
+    """Config validation should fail before evaluation when any required row is absent."""
+    module = _load_runner()
+    bad = {
+        "fixture": {"seed": 111, "scenario_id": "s", "trace_path": "x", "dt_s": 0.1},
+        "rows": [
+            {"name": "no_forecast", "risk_source": "none"},
+            {"name": "cv_risk", "risk_source": "constant_velocity"},
+        ],
+    }
+
+    with pytest.raises(ValueError, match="exactly the four forecast-risk rows"):
+        module._verify_seed_identity(bad)
+
+
+def test_observed_pedestrian_non_finite_position_is_unavailable():
+    """Malformed observed positions should make forecast risk unavailable, not crash."""
+    module = _load_runner()
+    frame = {"observed_pedestrians": [{"id": 1, "position": [float("nan"), 0.0]}]}
+
+    assert module._ped_state_from_frame(frame) is None
+
+
+def test_ground_truth_non_finite_position_fails_clearly():
+    """Outcome scoring should reject non-finite ground-truth pedestrian positions."""
+    module = _load_runner()
+    state = module._RowState(robot_pos=np.array([0.0, 0.0], dtype=float))
+    frame = {"pedestrians": [{"position": [float("inf"), 0.0]}]}
+
+    with pytest.raises(ValueError, match="finite xy vector"):
+        module._score_outcome_step(
+            frame,
+            action="go",
+            risk_source="constant_velocity",
+            conflict_distance_m=1.5,
+            state=state,
+        )
+
+
+def test_unavailable_signal_in_conflict_fails_closed():
+    """Unavailable forecast signals during a conflict window should block the row."""
+    module = _load_runner()
+    state = module._RowState(robot_pos=np.array([0.0, 0.0], dtype=float))
+    state.risk_unavailable_this_step = True
+    frame = {"pedestrians": [{"position": [0.5, 0.0]}]}
+
+    module._score_outcome_step(
+        frame,
+        action="go",
+        risk_source="constant_velocity",
+        conflict_distance_m=1.5,
+        state=state,
+    )
+
+    assert state.risk_unavailable_in_conflict == 1
+    classification, reason = module._classify_row(
+        risk_source="constant_velocity",
+        conflict_steps=1,
+        risk_available_steps=0,
+        risk_unavailable_in_conflict=1,
+    )
+    assert classification == "blocked"
+    assert "fail-closed" in reason
+
+
+def test_run_accepts_absolute_config_outside_repo(tmp_path: pathlib.Path):
+    """Repro command formatting should not crash for config paths outside the repo."""
+    module = _load_runner()
+    source_config = REPO_ROOT / "configs/research/forecast_risk_coupling_issue_2916.yaml"
+    config_path = tmp_path / "forecast_risk_coupling_issue_2916.yaml"
+    shutil.copy(source_config, config_path)
+
+    report = module.run(config_path, tmp_path / "out")
+
+    assert report["reproducibility"]["config_path"] == str(config_path)
+    assert f"--config {config_path}" in report["reproducibility"]["command"]
 
 
 def test_runner_rows_share_seed_and_scenario(tmp_path):

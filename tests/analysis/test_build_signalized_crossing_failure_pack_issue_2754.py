@@ -731,3 +731,16 @@ def test_scanner_finds_disagreements(tmp_path: Path) -> None:
 
     exit_code_clean = run_evidence_scan(evidence_dir)
     assert exit_code_clean == 0
+
+
+def test_scanner_finds_nested_disagreements(tmp_path: Path) -> None:
+    """Evidence scans recurse into nested artifact directories."""
+    from scripts.analysis.build_signalized_crossing_failure_pack_issue_2754 import run_evidence_scan
+
+    evidence_dir = tmp_path / "evidence"
+    nested_dir = evidence_dir / "parent" / "nested_smoke"
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "README.md").write_text("Nested smoke evidence.")
+    (nested_dir / "summary.json").write_text(json.dumps({"figure_eligible": True}))
+
+    assert run_evidence_scan(evidence_dir) == 1

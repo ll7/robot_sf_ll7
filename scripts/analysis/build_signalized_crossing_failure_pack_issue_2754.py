@@ -586,9 +586,8 @@ def run_evidence_scan(evidence_dir: Path | None = None) -> int:
 
     disagreements = []
 
-    for path in sorted(evidence_dir.iterdir()):
-        if path.is_dir():
-            _scan_single_directory(path, keywords_pattern, disagreements)
+    for readme_path in sorted(evidence_dir.rglob("README.md")):
+        _scan_single_directory(readme_path.parent, keywords_pattern, disagreements)
 
     if disagreements:
         print("PROSE VS MACHINE-READABLE ELIGIBILITY DISAGREEMENTS FOUND:")

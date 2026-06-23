@@ -13,10 +13,11 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 LIVE_STATE_LABELS = ("state:ready", "state:running", "state:blocked")
-JSON_FIELDS = "number,title,url,state,isPullRequest,labels"
+JSON_FIELDS = "number,title,url,state,labels"
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,18 @@ def _label_names(raw_labels: object) -> set[str]:
         elif isinstance(label, dict) and isinstance(label.get("name"), str):
             names.add(label["name"])
     return names
+
+
+def _is_pull_request_url(raw_url: object) -> bool:
+    """Return True for GitHub pull-request URLs returned by issue search/view commands."""
+    if not isinstance(raw_url, str):
+        return False
+
+    path_parts = [part for part in urlsplit(raw_url).path.split("/") if part]
+    if len(path_parts) != 4:
+        return False
+    owner, repo, resource, number = path_parts
+    return bool(owner and repo and resource == "pull" and number.isdecimal())
 
 
 def build_search_command(*, repo: str, label: str, limit: int) -> list[str]:
@@ -111,7 +124,7 @@ def collect_stale_issues(
 
     for search_label, rows in rows_by_label.items():
         for row in rows:
-            if row.get("isPullRequest") is True:
+            if _is_pull_request_url(row.get("url")):
                 continue
             if str(row.get("state", "")).lower() != "closed":
                 continue
@@ -155,7 +168,7 @@ def build_view_command(*, repo: str, number: int) -> list[str]:
         "--repo",
         repo,
         "--json",
-        "number,state,isPullRequest",
+        "number,state,url",
     ]
 
 
@@ -201,7 +214,7 @@ def confirm_issue_closed(*, repo: str, number: int) -> bool:
         ) from exc
     if not isinstance(payload, dict):
         raise ValueError(f"Expected a JSON object from gh issue view for issue {number}")
-    if payload.get("isPullRequest") is True:
+    if _is_pull_request_url(payload.get("url")):
         return False
     return str(payload.get("state", "")).lower() == "closed"
 

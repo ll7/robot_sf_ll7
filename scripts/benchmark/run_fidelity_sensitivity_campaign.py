@@ -519,8 +519,8 @@ def build_report(
         "prior_smoke_boundary": DIAGNOSTIC_SMOKE_CLAIM_BOUNDARY,
         "config_path": DEFAULT_CONFIG,
         "scenario_set": scenario_set,
-        "raw_rows_path": _repo_rel(raw_rows_path),
-        "raw_output_policy": "raw JSONL remains ignored under output/",
+        "raw_rows_path": str(_repo_rel(raw_rows_path)).replace("output/", "ignored_output/"),
+        "raw_output_policy": "raw JSONL remains ignored under ignored_output/",
         "study_id": str(config.get("study_id", "issue_3207_fidelity_sensitivity_v1")),
         "scope": {
             "classification": "bounded_actual_slice",
@@ -558,6 +558,11 @@ def format_markdown(report: Mapping[str, Any]) -> str:
     rank_stable = rank_stability.get("rank_stable")
     rank_stable_text = "not_applicable" if rank_stable is None else str(rank_stable)
     rank_status = "identifiable" if rank_identifiable else "non-identifiable"
+    nominal_label = (
+        "Nominal ranking"
+        if rank_identifiable
+        else "Nominal deterministic order (ties broken by name)"
+    )
     lines = [
         f"# Issue #3207 Fidelity Sensitivity Actual Slice {report['date']}",
         "",
@@ -580,7 +585,7 @@ def format_markdown(report: Mapping[str, Any]) -> str:
         "",
         "## Rank Stability",
         "",
-        f"- Nominal deterministic order: `{', '.join(rank_stability['nominal_ranking'])}`",
+        f"- {nominal_label}: `{', '.join(rank_stability['nominal_ranking'])}`",
         f"- Rank evidence status: `{rank_status}`",
         f"- Rank identifiability reason: `{rank_reason}`",
         f"- Rank stable on this slice: `{rank_stable_text}`",

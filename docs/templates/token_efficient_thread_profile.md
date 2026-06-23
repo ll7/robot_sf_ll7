@@ -129,6 +129,9 @@ Start every resumed or user-pivoted phase with a five-minute startup gate:
   repeated JSON payloads would be noisy. If a workflow is still running, prefer
   job metadata and filtered direct job-log excerpts over `gh run view --log`
   dumps that can fail or flood the parent context.
+- If the parent thread must poll CI directly, use one-shot snapshots or redirect
+  multi-attempt JSON streams to a private artifact. Repeated unchanged
+  `pending` payloads should update the ledger, not the parent transcript.
 - If GitHub CI runs repo-wide lint/format gates after a branch merges fresh
   `origin/main`, run the matching repo-wide lightweight gate locally when a
   focused changed-file check would miss unrelated-but-current format drift.
@@ -148,6 +151,10 @@ Start every resumed or user-pivoted phase with a five-minute startup gate:
   long-running worker processes when the tooling supports it. Close obsolete
   app subagents, record any preserved workers or worktrees, and do not leave
   cleanup implicit behind a PR link.
+- For worktree cleanup, classify ignored `output/` contents by top-level
+  directory, count, and durable-evidence category before expanding paths. Full
+  ignored-output listings belong in private artifacts unless a specific path is
+  being preserved, promoted, or explained.
 - When usage is close to the stop guard, finish the active PR or blocker record,
   then hand off instead of opening a fresh batch.
 

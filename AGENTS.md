@@ -211,9 +211,11 @@ or abandoned exploration. Once a worktree is no longer needed for active validat
 artifact recovery, or handoff, either remove it safely or record why it must be preserved.
 
 Before removing or pruning worktrees, enumerate them with `git worktree list --porcelain` from the
-main checkout. For each candidate, inspect `git -C <path> status --short --branch`; when generated
-outputs may matter, also inspect ignored output paths such as
-`[ -d "<path>/output" ] && git -C <path> status --ignored --short -uall output`.
+main checkout. For each candidate, inspect `git -C <path> status --short --branch`. When generated
+outputs may matter, classify ignored output with counts and top-level paths first; do not print a
+full `git status --ignored --short -uall output` listing into the parent thread. If the count-first
+view shows potentially durable files, redirect the full ignored-output listing to a private
+artifact and paste only the relevant path excerpts.
 For token-sensitive autonomous cleanup or repositories with many linked worktrees, start with the
 compact hygiene helper instead of printing the full worktree inventory in the parent thread:
 `uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --json`. Add `--filter
@@ -229,6 +231,9 @@ that needs manual inspection.
 - Inspect large ignored directories such as `output/` before removal. Classify them as disposable,
   ignored cache, tracked manifest/evidence, durable-required, or handoff-needed; never treat
   worktree-local `output/` contents as durable artifact storage.
+- For routine validation leftovers such as `output/coverage/`, `output/validation/pr_ready/`, and
+  hydrated model caches, record only the category and count unless a file is being promoted or used
+  as durable evidence.
 - Prefer `git worktree remove <path>` for clean worktrees and `git worktree prune` only after
   verifying stale administrative entries no longer point at useful local state.
 
@@ -394,10 +399,11 @@ resolving lint or test failures locally before requesting review.
 - Do not wait until PR creation to pick up `main` branch improvements on long-lived branches.
   Merge the latest `origin/main` into the current branch at the start of active work, and repeat
   that sync before PR creation so validation covers the newest shared baseline.
-- Before creating a PR, inspect newly created `output/*` files, including ignored paths via
-  `[ -d output ] && git status --ignored --short -uall output`. Decide whether each output is
-  disposable, should remain ignored, should be represented by a tracked manifest or registry entry,
-  or must be uploaded to a durable artifact store before the branch is handed off.
+- Before creating a PR, inspect newly created `output/*` files with a compact count-first view of
+  ignored paths. Decide whether each output class is disposable, should remain ignored, should be
+  represented by a tracked manifest or registry entry, or must be uploaded to a durable artifact
+  store before the branch is handed off. Keep full ignored-output listings in private artifacts
+  unless the PR depends on a specific path excerpt.
 - Fill the PR template's `Downstream Propagation` section for evidence-producing PRs. Check whether
   the parent issue, claim map or benchmark report, leaderboard or artifact catalog, registry or
   config index, context index or memory note, and deferred follow-up issue need updates. For
@@ -444,6 +450,9 @@ resolving lint or test failures locally before requesting review.
   `uv run python scripts/dev/autopilot_state_snapshot.py --include-worktrees` or another compact
   helper so generated `.venv`, `.opencode`, `node_modules`, and `output` trees are summarized
   instead of dumped into agent context.
+- For repeated PR CI polling in the parent thread, prefer single snapshots or redirect multi-poll
+  JSON streams to a private artifact. Report only status deltas, terminal state, failed check names,
+  and the exact head SHA; repeated unchanged pending payloads should stay out of the parent thread.
 Prefer GitHub MCP / GitHub app tools for interactive repository interactions such as viewing,
 commenting on, and triaging issues and PRs. Keep the GitHub CLI (`gh`) for scripted batch
 operations, auth debugging, and fallback when MCP coverage is insufficient.

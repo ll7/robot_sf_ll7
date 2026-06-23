@@ -97,8 +97,9 @@ batch: reuse recorded usage and route-cache facts, check issue/PR freshness befo
 prefer filtered worktree/status snapshots, bound CI polling output, and hand off instead of starting
 new work when usage is close to the stop guard. The audit must also identify the largest
 parent-thread outputs since the previous phase, including broad searches, full skill or doc rereads,
-raw validation logs, and verbose delegate notifications. Convert repeated leaks into a compact
-ledger field, route-cache entry, or worker prompt constraint before the next batch.
+raw validation logs, verbose delegate notifications, failed command families, repeated monitor
+noise, and unclear instructions that caused retries. Convert repeated leaks into a compact ledger
+field, route-cache entry, worker prompt constraint, or docs patch before the next batch.
 
 ## Shared Knowledge Graph
 

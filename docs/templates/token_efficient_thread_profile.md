@@ -81,6 +81,11 @@ workflow only when the savings are reusable.
   discovery (`rg --files | rg <focused-pattern>`), `rg -l`, and bounded
   `sed -n` ranges; redirect broad `rg -n` or multi-directory searches to a
   private artifact and report only paths plus the decision-relevant excerpt.
+- For implementation-thread audits, summarize the last relevant time window
+  into a common-Git-dir artifact first. Report only record counts, top output
+  offenders, failed command families, unclear-instruction themes, and the
+  artifact path; do not replay raw session JSONL or old transcript chunks in
+  the parent thread.
 - Use filtered status helpers for local state:
   `uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --filter <branch> --json`
   for branch cleanup, and raw `git worktree list --porcelain` only when the
@@ -88,6 +93,13 @@ workflow only when the savings are reusable.
 - Keep CI and validation loops bounded in the parent thread. Store full output
   in compact-validation artifacts and report only command, exit code, failing
   node IDs, artifact paths, and the next action.
+- For CI polling, surface only status changes and terminal conclusions when
+  repeated JSON payloads would be noisy. If a workflow is still running, prefer
+  job metadata and filtered direct job-log excerpts over `gh run view --log`
+  dumps that can fail or flood the parent context.
+- If GitHub CI runs repo-wide lint/format gates after a branch merges fresh
+  `origin/main`, run the matching repo-wide lightweight gate locally when a
+  focused changed-file check would miss unrelated-but-current format drift.
 - Check `route_cache` before spawning a delegate. If a model or helper is
   quota-blocked, reuse the recorded reset time and route directly to the next
   eligible worker.
@@ -112,6 +124,9 @@ long goal near a usage guard:
   whether the stop guard is close.
 - `largest_parent_outputs`: broad commands, full skill reads, raw logs, or
   verbose delegate messages that entered the parent thread.
+- `failed_command_patterns`: repeated helper failures, confusing command
+  contracts, CI log endpoints that fail while runs are pending, or unclear
+  instruction wording that caused retries.
 - `delegation_economics`: delegates accepted, rejected, rerouted, or skipped,
   plus whether reviewing them was cheaper than direct Codex work.
 - `cache_hits`: skills, docs, snapshots, issue state, route facts, and usage

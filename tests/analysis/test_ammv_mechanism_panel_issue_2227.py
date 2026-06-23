@@ -2,46 +2,11 @@
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
-
-import pytest
 
 from robot_sf.analysis_workbench.simulation_trace_export import (
     load_simulation_trace_export,
 )
-
-_SCRIPT_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "scripts"
-    / "analysis"
-    / "build_ammv_mechanism_panel_issue_2227.py"
-)
-
-
-def _load_module():
-    """Import the script module by path."""
-    spec = importlib.util.spec_from_file_location(
-        "build_ammv_mechanism_panel_issue_2227", _SCRIPT_PATH
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture(scope="module")
-def panel_module():
-    """Load the panel builder module once per test module."""
-    return _load_module()
-
-
-@pytest.fixture(scope="module")
-def panel_run(panel_module, tmp_path_factory):
-    """Run the full panel build once and return (summary, output_dir)."""
-    output_dir = tmp_path_factory.mktemp("ammv_panel")
-    summary = panel_module.run(output_dir)
-    return summary, output_dir
 
 
 def test_both_traces_validate_against_schema(panel_run):

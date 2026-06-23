@@ -262,3 +262,137 @@ def test_strict_mode_promotes_warnings_to_nonzero_exit(tmp_path: Path) -> None:
 
     assert checker._summary(findings, strict=False)["exit_code"] == 0
     assert checker._summary(findings, strict=True)["exit_code"] == 1
+
+
+def test_last_touch_mocked(monkeypatch) -> None:
+    """Test that _last_touch handles deterministic dates when mocked."""
+
+    def mock_run(cmd, cwd):
+        if "log" in cmd:
+            return "2026-06-01T12:00:00+00:00"
+        return ""
+
+    monkeypatch.setattr(checker, "_run", mock_run)
+
+    dt = checker._last_touch(Path("/fake/repo"), Path("docs/context/some_note.md"))
+    assert dt == datetime(2026, 6, 1, 12, 0, 0, tzinfo=UTC)
+
+
+def test_stale_current_dated_checks_other_markdown_files(tmp_path: Path, monkeypatch) -> None:
+    """If a dated current entry is old, we check other markdown files for inbound references."""
+
+    repo = _repo(tmp_path)
+
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/old_note.md",
+                "status": "current",
+                "freshness": "dated",
+            }
+        ],
+    )
+    _write(repo, "docs/context/old_note.md", "# Old Note\n")
+    _write(repo, "docs/context/referencing_note.md", "Check out [old](old_note.md)\n")
+    _commit(repo, "referencing note commit", iso_date="2025-06-01T00:00:00+00:00")
+
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def mock_last_touch(repo_path, path):
+        if path.name == "old_note.md":
+            return datetime(2025, 6, 1, tzinfo=UTC)  # 214 days ago
+        return now
+
+    monkeypatch.setattr(checker, "_last_touch", mock_last_touch)
+
+    def mock_run(cmd, cwd):
+        if "ls-files" in cmd:
+            return "docs/context/old_note.md\ndocs/context/referencing_note.md"
+        raise RuntimeError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(checker, "_run", mock_run)
+
+    findings = checker.check_freshness(
+        repo_root=repo,
+        max_age_days=180,
+        now=now,
+    )
+    assert [f for f in findings if f.rule == "stale_current_dated"] == []
+
+
+def test_superseded_replacement_does_not_exist_is_error(tmp_path: Path) -> None:
+    """Superseded entries must point to an existing replacement file in the repo."""
+
+    repo = _repo(tmp_path)
+
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/superseded_note.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/nonexistent.md",
+            }
+        ],
+    )
+
+    findings = checker.check_freshness(repo_root=repo)
+    assert len(findings) == 1
+    assert findings[0].rule == "superseded_replacement"
+    assert "does not exist in repository" in findings[0].message
+
+
+def test_superseded_replacement_exists_no_error(tmp_path: Path) -> None:
+    """Superseded entries with an existing replacement file do not raise errors."""
+
+    repo = _repo(tmp_path)
+
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/superseded_note.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/replacement_note.md",
+            }
+        ],
+    )
+    _write(repo, "docs/context/replacement_note.md", "# Replacement\n")
+    _write(repo, "docs/context/superseded_note.md", "# Superseded\n")
+    _commit(repo, "added superseded and replacement", iso_date="2026-01-02T00:00:00+00:00")
+
+    findings = checker.check_freshness(repo_root=repo)
+    assert [f for f in findings if f.rule == "superseded_replacement"] == []
+
+
+def test_orphan_context_note_not_in_catalog_replacement(tmp_path: Path, monkeypatch) -> None:
+    """If a note is present in catalog.yaml as a replacement, it is not considered an orphan under Rule C."""
+
+    repo = _repo(tmp_path)
+
+    _write_catalog(
+        repo,
+        [
+            {
+                "path": "docs/context/some_note.md",
+                "status": "superseded",
+                "freshness": "dated",
+                "replacement": "docs/context/replacement_note.md",
+            }
+        ],
+    )
+    _write(repo, "docs/context/replacement_note.md", "# Replacement\n")
+    _commit(repo, "commit replacement", iso_date="2026-01-02T00:00:00+00:00")
+
+    def mock_run(cmd, cwd):
+        if "ls-files" in cmd:
+            return "docs/context/replacement_note.md"
+        return ""
+
+    monkeypatch.setattr(checker, "_run", mock_run)
+
+    findings = checker.check_freshness(repo_root=repo)
+    assert [f for f in findings if f.rule == "orphan_context_note"] == []

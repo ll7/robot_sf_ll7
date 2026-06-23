@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -121,17 +122,17 @@ def _index_references(index_path: Path, *, context_dir: Path) -> set[Path]:
 
 
 def _tracked_context_notes(repo_root: Path, context_dir: Path) -> set[Path]:
-    """Return tracked Markdown context notes, excluding evidence and archive trees."""
+    """Return tracked Markdown context notes directly under context_dir, excluding INDEX.md and README.md."""
 
     output = _run(["git", "ls-files", "--", context_dir.as_posix()], cwd=repo_root)
-    evidence_dir = context_dir / "evidence"
-    archive_dir = context_dir / "archive"
     notes: set[Path] = set()
     for line in output.splitlines():
         path = Path(line.strip())
         if path.suffix != ".md":
             continue
-        if evidence_dir in path.parents or archive_dir in path.parents:
+        if path.parent != context_dir:
+            continue
+        if path.name in ("INDEX.md", "README.md"):
             continue
         notes.add(path)
     return notes
@@ -147,9 +148,9 @@ def _last_touch(repo_root: Path, path: Path) -> datetime | None:
 
 
 def _superseded_replacement_findings(
-    entries: list[dict[str, Any]], *, catalog_path: Path
+    entries: list[dict[str, Any]], *, catalog_path: Path, repo_root: Path
 ) -> list[Finding]:
-    """Return hard errors for superseded entries without replacement metadata."""
+    """Return hard errors for superseded entries without valid replacement metadata in the repo."""
 
     findings: list[Finding] = []
     for index, entry in enumerate(entries):
@@ -159,39 +160,110 @@ def _superseded_replacement_findings(
             continue
         freshness = entry.get("freshness")
         replacement = _safe_repo_path(entry.get("replacement"))
-        if replacement is not None:
-            continue
+
         entry_path = (
             path.as_posix() if path is not None else f"{catalog_path.as_posix()}:entries[{index}]"
         )
-        findings.append(
-            Finding(
-                rule="superseded_replacement",
-                severity="error",
-                path=entry_path,
-                message="superseded catalog entry must name a replacement",
-                status=str(status),
-                freshness=str(freshness) if freshness is not None else None,
+
+        if replacement is None:
+            findings.append(
+                Finding(
+                    rule="superseded_replacement",
+                    severity="error",
+                    path=entry_path,
+                    message="superseded catalog entry must name a replacement",
+                    status=str(status),
+                    freshness=str(freshness) if freshness is not None else None,
+                )
             )
-        )
+        elif not (repo_root / replacement).exists():
+            findings.append(
+                Finding(
+                    rule="superseded_replacement",
+                    severity="error",
+                    path=entry_path,
+                    message=f"superseded replacement file does not exist in repository: {replacement.as_posix()}",
+                    status=str(status),
+                    freshness=str(freshness) if freshness is not None else None,
+                    replacement=replacement.as_posix(),
+                )
+            )
     return findings
 
 
-def _catalog_paths(entries: list[dict[str, Any]]) -> set[Path]:
-    """Return safe catalog path values from entries."""
+def _catalog_paths_and_replacements(entries: list[dict[str, Any]]) -> set[Path]:
+    """Return safe catalog path and replacement values from entries."""
 
-    return {path for entry in entries if (path := _safe_repo_path(entry.get("path"))) is not None}
+    paths = set()
+    for entry in entries:
+        if (p := _safe_repo_path(entry.get("path"))) is not None:
+            paths.add(p)
+        if (r := _safe_repo_path(entry.get("replacement"))) is not None:
+            paths.add(r)
+    return paths
+
+
+def _is_listed_elsewhere_in_catalog(
+    path: Path, current_entry: dict[str, Any], entries: list[dict[str, Any]]
+) -> bool:
+    """Return whether the path is listed in catalog.yaml in another context."""
+
+    for entry in entries:
+        if entry is current_entry:
+            continue
+        if _safe_repo_path(entry.get("path")) == path:
+            return True
+        if _safe_repo_path(entry.get("replacement")) == path:
+            return True
+    if _safe_repo_path(current_entry.get("replacement")) == path:
+        return True
+    return False
+
+
+def _has_inbound_markdown_reference(
+    note_path: Path,
+    repo_root: Path,
+    context_dir: Path,
+) -> bool:
+    """Return whether any tracked markdown file under context_dir (other than note_path) references note_path."""
+
+    output = _run(["git", "ls-files", "--", context_dir.as_posix()], cwd=repo_root)
+    for line in output.splitlines():
+        source_path = Path(line.strip())
+        if source_path.suffix != ".md":
+            continue
+        if source_path == note_path:
+            continue
+        full_source_path = repo_root / source_path
+        if not full_source_path.is_file():
+            continue
+        try:
+            content = full_source_path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+
+        targets = _markdown_targets(content)
+        for target in targets:
+            target_path = Path(target)
+            if target_path.parts[:2] == ("docs", "context"):
+                resolved = target_path
+            else:
+                resolved = Path(os.path.normpath(source_path.parent / target_path))
+
+            if resolved == note_path:
+                return True
+    return False
 
 
 def _stale_current_dated_findings(
     entries: list[dict[str, Any]],
     *,
     repo_root: Path,
-    index_references: set[Path],
+    context_dir: Path,
     max_age_days: int,
     now: datetime,
 ) -> list[Finding]:
-    """Return warnings for old current+dated notes outside the active index."""
+    """Return warnings for old current+dated notes with no inbound references."""
 
     findings: list[Finding] = []
     for entry in entries:
@@ -204,34 +276,40 @@ def _stale_current_dated_findings(
         if touched_at is None:
             continue
         age_days = int((now - touched_at).days)
-        if age_days <= max_age_days or path in index_references:
+        if age_days <= max_age_days:
             continue
-        findings.append(
-            Finding(
-                rule="stale_current_dated",
-                severity="warning",
-                path=path.as_posix(),
-                message=f"current dated context note is older than {max_age_days} days",
-                status="current",
-                freshness="dated",
-                last_touched_at=touched_at.isoformat(),
-                age_days=age_days,
+
+        # Check inbound references
+        has_md_ref = _has_inbound_markdown_reference(path, repo_root, context_dir)
+        has_catalog_ref = _is_listed_elsewhere_in_catalog(path, entry, entries)
+
+        if not (has_md_ref or has_catalog_ref):
+            findings.append(
+                Finding(
+                    rule="stale_current_dated",
+                    severity="warning",
+                    path=path.as_posix(),
+                    message=f"current dated context note is older than {max_age_days} days and has no inbound references",
+                    status="current",
+                    freshness="dated",
+                    last_touched_at=touched_at.isoformat(),
+                    age_days=age_days,
+                )
             )
-        )
     return findings
 
 
 def _orphan_context_note_findings(
     *,
     tracked_notes: set[Path],
-    catalog_paths: set[Path],
+    catalog_paths_and_replacements: set[Path],
     index_references: set[Path],
 ) -> list[Finding]:
     """Return warnings for tracked notes absent from catalog and index."""
 
     findings: list[Finding] = []
     for path in sorted(tracked_notes):
-        if path in catalog_paths or path in index_references:
+        if path in catalog_paths_and_replacements or path in index_references:
             continue
         findings.append(
             Finding(
@@ -260,20 +338,24 @@ def check_freshness(
     entries = _catalog_entries(catalog_full_path)
 
     indexed_paths = _index_references(repo_root / index_path, context_dir=context_dir)
-    findings = _superseded_replacement_findings(entries, catalog_path=catalog_path)
+    findings = _superseded_replacement_findings(
+        entries, catalog_path=catalog_path, repo_root=repo_root
+    )
     findings.extend(
         _stale_current_dated_findings(
             entries,
             repo_root=repo_root,
-            index_references=indexed_paths,
+            context_dir=context_dir,
             max_age_days=max_age_days,
             now=now,
         )
     )
+
+    catalog_paths_and_reps = _catalog_paths_and_replacements(entries)
     findings.extend(
         _orphan_context_note_findings(
             tracked_notes=_tracked_context_notes(repo_root, context_dir),
-            catalog_paths=_catalog_paths(entries),
+            catalog_paths_and_replacements=catalog_paths_and_reps,
             index_references=indexed_paths,
         )
     )

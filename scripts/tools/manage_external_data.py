@@ -229,17 +229,17 @@ def external_data_root() -> Path | None:
     return Path(raw_root).expanduser().resolve()
 
 
-def resolve_asset_local_path(asset: AssetSpec) -> Path:
+def resolve_asset_local_path(asset: AssetSpec, *, root: Path | None = None) -> Path:
     """Return the effective local path for an asset, honoring the shared-data root."""
-    root = external_data_root()
+    root = external_data_root() if root is None else root
     if root is None:
         return asset.expected_local_path
     return root / asset.shared_root_subpath
 
 
-def resolve_asset_local_path_by_id(asset_id: str) -> Path:
+def resolve_asset_local_path_by_id(asset_id: str, *, root: Path | None = None) -> Path:
     """Return the effective local path for a supported asset id."""
-    return resolve_asset_local_path(_get_asset(asset_id))
+    return resolve_asset_local_path(_get_asset(asset_id), root=root)
 
 
 def list_assets() -> tuple[AssetSpec, ...]:
@@ -344,7 +344,8 @@ def _tree_checksum(source_root: Path, matched_paths: list[Path]) -> dict[str, An
 def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, Any]:
     """Validate the local path for one external asset."""
     asset = _get_asset(asset_id)
-    expected_local_path = resolve_asset_local_path(asset)
+    ext_root = external_data_root()
+    expected_local_path = resolve_asset_local_path(asset, root=ext_root)
     root = (source_path or expected_local_path).expanduser().resolve()
     report: dict[str, Any] = {
         "asset_id": asset.asset_id,
@@ -353,7 +354,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
         "expected_local_path": str(expected_local_path),
         "default_local_path": str(asset.expected_local_path),
         "external_data_root_env": EXTERNAL_DATA_ROOT_ENV,
-        "external_data_root": str(external_data_root()) if external_data_root() else None,
+        "external_data_root": str(ext_root) if ext_root else None,
         "source_url": asset.source_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,
@@ -555,18 +556,19 @@ def _resolve_sdd_staging_dir(staging_dir_raw: str, *, manifest_path: Path) -> Pa
         raise ExternalDataError("Manifest staging_dir must not contain path traversal (`..`).")
 
     unresolved = staging_dir if staging_dir.is_absolute() else REPO_ROOT / staging_dir
-    if not staging_dir.is_absolute() and external_data_root() is not None:
+    ext_root = external_data_root()
+    if not staging_dir.is_absolute() and ext_root is not None:
         sdd_asset = _get_asset("sdd")
         repo_default = sdd_asset.expected_local_path.relative_to(REPO_ROOT)
         if staging_dir == repo_default:
-            unresolved = external_data_root() / sdd_asset.shared_root_subpath
+            unresolved = ext_root / sdd_asset.shared_root_subpath
     if unresolved.is_symlink():
         raise ExternalDataError(f"Manifest staging_dir must not be a symlink: {unresolved}")
 
     resolved = unresolved.resolve(strict=False)
     allowed_roots = [DEFAULT_STAGING_ROOT, manifest_path.resolve(strict=False).parent]
-    if external_data_root() is not None:
-        allowed_roots.append(external_data_root())
+    if ext_root is not None:
+        allowed_roots.append(ext_root)
     if not any(resolved == root or resolved.is_relative_to(root) for root in allowed_roots):
         allowed = ", ".join(str(root) for root in allowed_roots)
         raise ExternalDataError(
@@ -1018,14 +1020,15 @@ def _print_json(payload: Any) -> None:
 
 def _asset_summary(asset: AssetSpec, *, include_status: bool) -> dict[str, Any]:
     """Return one list/explain payload."""
-    expected_local_path = resolve_asset_local_path(asset)
+    ext_root = external_data_root()
+    expected_local_path = resolve_asset_local_path(asset, root=ext_root)
     payload: dict[str, Any] = {
         "asset_id": asset.asset_id,
         "title": asset.title,
         "expected_local_path": str(expected_local_path),
         "default_local_path": str(asset.expected_local_path),
         "external_data_root_env": EXTERNAL_DATA_ROOT_ENV,
-        "external_data_root": str(external_data_root()) if external_data_root() else None,
+        "external_data_root": str(ext_root) if ext_root else None,
         "source_url": asset.source_url,
         "license_note": asset.license_note,
         "access_note": asset.access_note,

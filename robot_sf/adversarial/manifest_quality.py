@@ -734,7 +734,7 @@ def _summarize_planner_run_from_aggregates(
         near_miss_yield = _safe_rate(near_miss_count, episodes)
 
     low_progress_count_value = _count_like_sum(
-        _metric_stat(metrics, "low_progress", "sum") if isinstance(metrics, dict) else None,
+        _metric_stat(metrics, "low_progress", "sum"),
         episodes,
     )
     low_progress_yield_val = None

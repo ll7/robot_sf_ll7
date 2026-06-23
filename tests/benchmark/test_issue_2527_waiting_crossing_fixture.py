@@ -313,6 +313,35 @@ def test_metric_metadata_omits_disabled_rollover_stability_config() -> None:
     assert metric_metadata is None
 
 
+def test_metric_metadata_carries_enabled_clear_tracking_config() -> None:
+    """Map-runner episode metadata should carry opt-in CLEAR tracking instrumentation."""
+    config = {
+        "enabled": True,
+        "ground_truth_count": 2,
+        "detection_count": 1,
+        "missed_detection_count": 1,
+        "false_positive_count": 0,
+        "id_switch_count": 0,
+        "mota": 0.5,
+        "motp_m": 0.25,
+        "motp_match_count": 1,
+    }
+    scenario = {"metadata": {"clear_tracking_uncertainty": config}}
+
+    metric_metadata = _episode_metadata_for_signal_metrics(scenario)
+
+    assert metric_metadata == {"clear_tracking_uncertainty": config}
+
+
+def test_metric_metadata_omits_disabled_clear_tracking_config() -> None:
+    """Disabled CLEAR tracking instrumentation must leave default metric rows unchanged."""
+    scenario = {"metadata": {"clear_tracking_uncertainty": {"enabled": False, "mota": 0.5}}}
+
+    metric_metadata = _episode_metadata_for_signal_metrics(scenario)
+
+    assert metric_metadata is None
+
+
 def test_observable_signal_state_metric_metadata_carries_required_fields() -> None:
     """Metric metadata should include only explicit observable benchmark signal fields."""
     signal_state = {

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added an AMMV mechanism-divergence classification diagnostic (#2444):
+  [`scripts/analysis/run_ammv_divergence_classification_issue_2444.py`](scripts/analysis/run_ammv_divergence_classification_issue_2444.py)
+  runs direct `SocialForcePlanner` mechanism probes (bypassing the differential-drive benchmark
+  adapter that produced #2434's zero-delta result) with an **AMMV-isolated control** — the same
+  AMMV-aware config with `ammv_aware_enabled` toggled off, so the paired delta reflects only the
+  AMMV term. Result: `nonzero_divergence_found` — the AMMV term activates (~2.64 N) and changes the
+  same-seed trajectory (robot-state delta 0.21–0.78 m) under isolation, so #2434's zero result is an
+  adapter-mode artifact, not a globally inactive mechanism. Includes a zero-divergence guard so
+  identical (#2434-style) pairs cannot be reused as behavioral evidence in #2159/#2227 panels.
+  `scripts/tools/run_ammv_social_force_pair_diagnostic.py::_run_mechanism_probe` gained a
+  backward-compatible `default_config` parameter to support the isolated control. Evidence is
+  `diagnostic_only`/`stress`, not paper-grade; tracked under
+  `docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/` (#2444).
+
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
   language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)

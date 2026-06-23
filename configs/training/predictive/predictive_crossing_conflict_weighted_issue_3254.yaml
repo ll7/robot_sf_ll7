@@ -4,6 +4,8 @@
 # #3214 weighting spec, but it does not publish a retrained checkpoint, benchmark
 # result, or predictive model-improvement claim.
 
+model_family: predictive_ego_v1
+
 experiment:
   run_id: predictive_crossing_conflict_weighted_issue_3254
 
@@ -44,6 +46,7 @@ mixing:
 
 training:
   model_id: predictive_crossing_conflict_weighted_issue_3254_xl_ego
+  model_family: predictive_ego_v1
   epochs: 400
   batch_size: 128
   lr: 0.0002

@@ -456,7 +456,9 @@ def test_issue_3254_config_targets_crossing_conflict_weighting_spec() -> None:
     assert "shuffle_seed" not in mixing
     assert cfg["base_collection"]["ego_conditioning"] is True
     assert cfg["hardcase_collection"]["ego_conditioning"] is True
+    assert cfg["model_family"] == PREDICTIVE_EGO_FEATURE_SCHEMA
     assert cfg["training"]["model_id"] == "predictive_crossing_conflict_weighted_issue_3254_xl_ego"
+    assert cfg["training"]["model_family"] == PREDICTIVE_EGO_FEATURE_SCHEMA
     assert "prepare-only" in cfg["claim_boundary"].lower()
 
 

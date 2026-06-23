@@ -1,0 +1,446 @@
+{
+  "schema_version": "sensor_noise_robustness_slice.v1",
+  "issue": 3067,
+  "claim_boundary": "Diagnostic, trace-derived observation-robustness slice. NOT a real-sensor certification and NOT a sim-to-real transfer claim. Perturbations are non-calibrated benchmark robustness noise on observed actor state. Robustness is interpreted separately from nominal performance.",
+  "evidence_tier": "smoke",
+  "paper_grade": false,
+  "overall_classification": {
+    "label": "diagnostic",
+    "rationale": "Perturbations changed the observed state the policy would consume (non-null clean-vs-perturbed deltas). Diagnostic-only: trace-derived, single fixture, single seed; not a benchmark, certification, or sim-to-real claim."
+  },
+  "allowed_overall_classifications": [
+    "benchmark",
+    "diagnostic",
+    "blocked",
+    "non-claim"
+  ],
+  "allowed_row_statuses": [
+    "ok",
+    "degraded",
+    "invalid",
+    "not-available"
+  ],
+  "reproducibility": {
+    "issue": 3067,
+    "generated_at_utc": "2026-06-23T10:24:25.931522+00:00",
+    "command": "uv run python scripts/benchmark/run_sensor_noise_robustness_slice_issue_3067.py --output-dir output/issue_3067_sensor_noise/run",
+    "repo_head": "cbec866b",
+    "seed": 3067
+  },
+  "fixture": {
+    "trace_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/dense_pedestrian_stress_episode_0000.json",
+    "scenario_id": "dense_pedestrian_stress",
+    "seed": 2765,
+    "planner_id": "hybrid_rule_v0_minimal",
+    "episode_id": "dense_pedestrian_stress_ep0000",
+    "frame_count": 20,
+    "pedestrian_count": 3
+  },
+  "matrix_families": [
+    "clean",
+    "noisy",
+    "partial"
+  ],
+  "rows": [
+    {
+      "row": "clean",
+      "family": "clean",
+      "observation_level": {
+        "key": "oracle_full_state",
+        "display_name": "Oracle full state",
+        "perception_assumption": "privileged_sim_state",
+        "active_observation_mode": null,
+        "compatible_observation_modes": [
+          "goal_state",
+          "socnav_state",
+          "headed_socnav_state",
+          "gst_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "pedestrians"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "none",
+        "interpretation": "benchmark_metadata_not_sensor_certification"
+      },
+      "description": "No perturbation; same-seed clean reference observation.",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "delay_steps": 0,
+        "noise_profile": "none",
+        "is_noop": true,
+        "seed": null
+      },
+      "perturbation_metadata": {
+        "metadata_complete": true,
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "frames_with_observation_signal": 20,
+        "total_frames": 20,
+        "ground_truth_observed_actor_observations": 60,
+        "observation_quality": {
+          "schema_version": "observation_quality.v1",
+          "fields": {
+            "visibility": [
+              "trace_fixture_observed_pedestrians"
+            ],
+            "occlusion": [
+              "fixture_declared_visibility_boundary"
+            ],
+            "latency_s": 0.0,
+            "dropout_probability": 0.0,
+            "range_limit_m": null,
+            "angular_noise_std_rad": 0.0,
+            "false_negative_rate": 0.0,
+            "false_positive_rate": 0.0,
+            "notes": "Diagnostic simulator observation-quality metadata only; non-calibrated benchmark robustness noise, not a hardware sensor model."
+          }
+        }
+      },
+      "metrics": {
+        "min_observed_distance_m": 0.1562,
+        "observation_continuity": 1.0,
+        "near_field_exposure_frames": 20,
+        "perturbation_runtime_s": 0.000357,
+        "total_observed_actor_observations": 60
+      },
+      "status": "ok",
+      "status_reason": "Row produced a usable perturbed observation stream."
+    },
+    {
+      "row": "noisy_low",
+      "family": "noisy",
+      "observation_level": {
+        "key": "tracked_agents_with_noise",
+        "display_name": "Noisy tracked agents",
+        "perception_assumption": "tracked_agents_with_synthetic_noise",
+        "active_observation_mode": null,
+        "compatible_observation_modes": [
+          "socnav_state",
+          "headed_socnav_state",
+          "gst_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "tracked_agents"
+        ],
+        "noise_policy": "benchmark_observation_noise",
+        "occlusion_policy": "none",
+        "interpretation": "synthetic_noise_robustness_not_real_sensor_calibration"
+      },
+      "description": "Bounded Gaussian position noise std=0.10 m, bound=0.20 m.",
+      "spec": {
+        "position_noise_std_m": 0.1,
+        "position_noise_bound_m": 0.2,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false,
+        "seed": 3067
+      },
+      "perturbation_metadata": {
+        "metadata_complete": true,
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "frames_with_observation_signal": 20,
+        "total_frames": 20,
+        "ground_truth_observed_actor_observations": 60,
+        "observation_quality": {
+          "schema_version": "observation_quality.v1",
+          "fields": {
+            "visibility": [
+              "trace_fixture_observed_pedestrians"
+            ],
+            "occlusion": [
+              "fixture_declared_visibility_boundary"
+            ],
+            "latency_s": 0.0,
+            "dropout_probability": 0.0,
+            "range_limit_m": null,
+            "angular_noise_std_rad": 0.0,
+            "false_negative_rate": 0.0,
+            "false_positive_rate": 0.0,
+            "notes": "Diagnostic simulator observation-quality metadata only; non-calibrated benchmark robustness noise, not a hardware sensor model."
+          }
+        }
+      },
+      "metrics": {
+        "min_observed_distance_m": 0.1617,
+        "observation_continuity": 1.0,
+        "near_field_exposure_frames": 20,
+        "perturbation_runtime_s": 0.000811,
+        "total_observed_actor_observations": 60
+      },
+      "status": "ok",
+      "status_reason": "Row produced a usable perturbed observation stream."
+    },
+    {
+      "row": "noisy_medium",
+      "family": "noisy",
+      "observation_level": {
+        "key": "tracked_agents_with_noise",
+        "display_name": "Noisy tracked agents",
+        "perception_assumption": "tracked_agents_with_synthetic_noise",
+        "active_observation_mode": null,
+        "compatible_observation_modes": [
+          "socnav_state",
+          "headed_socnav_state",
+          "gst_human_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "tracked_agents"
+        ],
+        "noise_policy": "benchmark_observation_noise",
+        "occlusion_policy": "none",
+        "interpretation": "synthetic_noise_robustness_not_real_sensor_calibration"
+      },
+      "description": "Bounded Gaussian position noise std=0.30 m, bound=0.60 m.",
+      "spec": {
+        "position_noise_std_m": 0.3,
+        "position_noise_bound_m": 0.6,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": false,
+        "delay_steps": 0,
+        "noise_profile": "bounded_gaussian",
+        "is_noop": false,
+        "seed": 3067
+      },
+      "perturbation_metadata": {
+        "metadata_complete": true,
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 0,
+        "frames_with_observation_signal": 20,
+        "total_frames": 20,
+        "ground_truth_observed_actor_observations": 60,
+        "observation_quality": {
+          "schema_version": "observation_quality.v1",
+          "fields": {
+            "visibility": [
+              "trace_fixture_observed_pedestrians"
+            ],
+            "occlusion": [
+              "fixture_declared_visibility_boundary"
+            ],
+            "latency_s": 0.0,
+            "dropout_probability": 0.0,
+            "range_limit_m": null,
+            "angular_noise_std_rad": 0.0,
+            "false_negative_rate": 0.0,
+            "false_positive_rate": 0.0,
+            "notes": "Diagnostic simulator observation-quality metadata only; non-calibrated benchmark robustness noise, not a hardware sensor model."
+          }
+        }
+      },
+      "metrics": {
+        "min_observed_distance_m": 0.2054,
+        "observation_continuity": 1.0,
+        "near_field_exposure_frames": 20,
+        "perturbation_runtime_s": 0.000713,
+        "total_observed_actor_observations": 60
+      },
+      "status": "ok",
+      "status_reason": "Row produced a usable perturbed observation stream."
+    },
+    {
+      "row": "partial_occlusion",
+      "family": "partial",
+      "observation_level": {
+        "key": "occluded_partial_state",
+        "display_name": "Occluded partial state",
+        "perception_assumption": "partial_state_with_occlusion",
+        "active_observation_mode": null,
+        "compatible_observation_modes": [
+          "socnav_state",
+          "sensor_fusion_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "visible_agents"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "scenario_visibility_or_sensor_mask",
+        "interpretation": "occlusion_metadata_not_sim_to_real_validity"
+      },
+      "description": "Occlude the nearest crossing actor (ped_a); others visible.",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.0,
+        "has_occlusion_mask": true,
+        "delay_steps": 0,
+        "noise_profile": "occlusion_mask",
+        "is_noop": false,
+        "seed": null
+      },
+      "perturbation_metadata": {
+        "metadata_complete": true,
+        "missed_actor_observations_total": 0,
+        "occluded_actor_observations_total": 20,
+        "frames_with_observation_signal": 20,
+        "total_frames": 20,
+        "ground_truth_observed_actor_observations": 60,
+        "observation_quality": {
+          "schema_version": "observation_quality.v1",
+          "fields": {
+            "visibility": [
+              "trace_fixture_observed_pedestrians"
+            ],
+            "occlusion": [
+              "explicit_occlusion_mask"
+            ],
+            "latency_s": 0.0,
+            "dropout_probability": 0.0,
+            "range_limit_m": null,
+            "angular_noise_std_rad": 0.0,
+            "false_negative_rate": 0.0,
+            "false_positive_rate": 0.0,
+            "notes": "Diagnostic simulator observation-quality metadata only; non-calibrated benchmark robustness noise, not a hardware sensor model."
+          }
+        }
+      },
+      "metrics": {
+        "min_observed_distance_m": 0.3774,
+        "observation_continuity": 1.0,
+        "near_field_exposure_frames": 20,
+        "perturbation_runtime_s": 0.000679,
+        "total_observed_actor_observations": 40
+      },
+      "status": "ok",
+      "status_reason": "Row produced a usable perturbed observation stream."
+    },
+    {
+      "row": "partial_missed_detection",
+      "family": "partial",
+      "observation_level": {
+        "key": "occluded_partial_state",
+        "display_name": "Occluded partial state",
+        "perception_assumption": "partial_state_with_occlusion",
+        "active_observation_mode": null,
+        "compatible_observation_modes": [
+          "socnav_state",
+          "sensor_fusion_state"
+        ],
+        "required_inputs": [
+          "robot_state",
+          "goal",
+          "visible_agents"
+        ],
+        "noise_policy": "none",
+        "occlusion_policy": "scenario_visibility_or_sensor_mask",
+        "interpretation": "occlusion_metadata_not_sim_to_real_validity"
+      },
+      "description": "50% per-actor missed-detection probability (same seed).",
+      "spec": {
+        "position_noise_std_m": 0.0,
+        "position_noise_bound_m": 0.0,
+        "missed_detection_probability": 0.5,
+        "has_occlusion_mask": false,
+        "delay_steps": 0,
+        "noise_profile": "missed_detection",
+        "is_noop": false,
+        "seed": 3067
+      },
+      "perturbation_metadata": {
+        "metadata_complete": true,
+        "missed_actor_observations_total": 36,
+        "occluded_actor_observations_total": 0,
+        "frames_with_observation_signal": 17,
+        "total_frames": 20,
+        "ground_truth_observed_actor_observations": 60,
+        "observation_quality": {
+          "schema_version": "observation_quality.v1",
+          "fields": {
+            "visibility": [
+              "trace_fixture_observed_pedestrians"
+            ],
+            "occlusion": [
+              "fixture_declared_visibility_boundary"
+            ],
+            "latency_s": 0.0,
+            "dropout_probability": 0.5,
+            "range_limit_m": null,
+            "angular_noise_std_rad": 0.0,
+            "false_negative_rate": 0.5,
+            "false_positive_rate": 0.0,
+            "notes": "Diagnostic simulator observation-quality metadata only; non-calibrated benchmark robustness noise, not a hardware sensor model."
+          }
+        }
+      },
+      "metrics": {
+        "min_observed_distance_m": 0.3027,
+        "observation_continuity": 0.85,
+        "near_field_exposure_frames": 15,
+        "perturbation_runtime_s": 0.000719,
+        "total_observed_actor_observations": 24
+      },
+      "status": "ok",
+      "status_reason": "Row produced a usable perturbed observation stream."
+    }
+  ],
+  "clean_vs_perturbed_deltas": {
+    "available": true,
+    "reference_row": "clean",
+    "any_perturbed_metric_moved": true,
+    "rows": {
+      "noisy_low": {
+        "status": "ok",
+        "counts_as_success": true,
+        "deltas": {
+          "min_observed_distance_m": 0.0055,
+          "observation_continuity": 0.0,
+          "near_field_exposure_frames": 0.0,
+          "total_observed_actor_observations": 0.0,
+          "perturbation_runtime_s": 0.000454
+        },
+        "moved_a_metric": true
+      },
+      "noisy_medium": {
+        "status": "ok",
+        "counts_as_success": true,
+        "deltas": {
+          "min_observed_distance_m": 0.0492,
+          "observation_continuity": 0.0,
+          "near_field_exposure_frames": 0.0,
+          "total_observed_actor_observations": 0.0,
+          "perturbation_runtime_s": 0.000356
+        },
+        "moved_a_metric": true
+      },
+      "partial_occlusion": {
+        "status": "ok",
+        "counts_as_success": true,
+        "deltas": {
+          "min_observed_distance_m": 0.2212,
+          "observation_continuity": 0.0,
+          "near_field_exposure_frames": 0.0,
+          "total_observed_actor_observations": -20.0,
+          "perturbation_runtime_s": 0.000322
+        },
+        "moved_a_metric": true
+      },
+      "partial_missed_detection": {
+        "status": "ok",
+        "counts_as_success": true,
+        "deltas": {
+          "min_observed_distance_m": 0.1465,
+          "observation_continuity": -0.15,
+          "near_field_exposure_frames": -5.0,
+          "total_observed_actor_observations": -36.0,
+          "perturbation_runtime_s": 0.000362
+        },
+        "moved_a_metric": true
+      }
+    }
+  },
+  "nominal_vs_robustness_note": "Nominal performance = stored-trace policy behavior on the clean observation. Robustness = how the observed state the policy consumes changes under perturbation. These are reported separately and must not be conflated."
+}

@@ -41,7 +41,10 @@ should delegate to existing repo-local skills for concrete work:
 Spark subagents may be used only for bounded side tasks such as locating files, summarizing a small
 area, inspecting command output, or performing narrow mechanical edits with clear file ownership.
 The main agent remains responsible for planning, integration, validation, GitHub writes, and final
-judgment.
+judgment. For the issue implementation phase (e.g., under goal-issue-implementation), the main agent
+may spawn a full sub-agent inside a fresh linked worktree to execute the end-to-end implementation
+and validation tasks, while the parent remains responsible for selection, queue audits, artifact
+verification, PR opening, and teardown.
 
 ## Research-Result Mode
 

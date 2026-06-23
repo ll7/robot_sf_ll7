@@ -391,25 +391,35 @@ Route remaining issues by their blocker:
    claim ref, machine/thread, planned branch, and stale-claim cleanup condition.
 5. Use detached latest-main checkouts only for read-only discovery, duplicate checks, and GitHub
    issue creation or update work. Before editing docs or code, running PR validation, pushing, or
-   publishing, create or switch to a branch/worktree so the proof bundle has a durable branch
-   context.
+   publishing, always run the implementation task inside a linked git worktree so the execution/validation
+   remains fully isolated.
 6. Create or update the active delegation ledger described in
    `.agents/skills/goal-autopilot/SKILL.md` with the claim ref/status, issue, branch/worktree,
    owned files or modules, route/run IDs, validation plan, cleanup status, and next action. Update
-   it after every delegated worker start/completion/failure, before any CI wait or compaction-prone
+   it after every delegated worker/sub-agent start/completion/failure, before any CI wait or compaction-prone
    pause, and after PR creation and claim release. Record route success separately from task
    success.
-6. Create/checkout the isolated implementation branch. For non-trivial local changes, prefer a
-   linked worktree and follow `AGENTS.md` "Fresh Worktree Bootstrap" for location, naming,
-   machine-context symlink, environment setup, and early `origin/main` freshness.
-7. Implement only in-scope behavior and required tests/docs.
-8. Validate using the narrowest meaningful level first, then expand.
-9. If validation fails and failure is fixable, adjust and rerun; otherwise record blocker.
-10. Prepare proof and branch handoff via `gh-pr-opener`.
-11. Open PR, release the transient claim with
-    `uv run python scripts/dev/issue_claim.py release <issue-number>` once the PR visibly covers the
-    issue, then report and move to next queue item. If the run abandons the issue before PR opening,
-    release the claim only after recording the blocker or handoff.
+7. Set up the linked git worktree for the selected issue.
+   - Follow `AGENTS.md` "Fresh Worktree Bootstrap" for location, naming, machine-context symlink, and early `origin/main` freshness.
+   - Run the bootstrap commands inside the worktree (e.g. `uv sync --all-extras`, activate virtualenv).
+8. Delegate the actual implementation to a sub-agent.
+   - Define a specialized sub-agent (e.g., inheriting the parent's tools and system prompt) with the workspace configured to share or inherit the worktree directory.
+   - Invoke the sub-agent and pass the issue details, the target worktree path, and the validation requirements.
+   - The sub-agent must perform planning, execution, and local validation (lint/format/tests) strictly inside that worktree.
+   - The sub-agent must generate the required worker artifacts: `result.json`, `RESULT.md`, `diffstat.txt`, and `validation.json` under the artifact directory, and notify the orchestrator when finished.
+9. Parent monitors and audits the sub-agent's work:
+   - Check the sub-agent's status and wait for it to complete.
+   - Once complete, inspect `result.json`, `RESULT.md`, `diffstat.txt`, and run targeted local verification before accepting.
+   - If validation or proof is insufficient, instruct the sub-agent to repair it, or mark the issue blocked.
+10. Commit/push the completed changes from the worktree and prepare the PR handoff using `gh-pr-opener`.
+11. Open the PR and release the transient claim with:
+    ```bash
+    uv run python scripts/dev/issue_claim.py release <issue-number>
+    ```
+    Ensure the PR visibly covers the issue before releasing the claim.
+12. Tear down the worktree:
+    - Follow `AGENTS.md` "Worktree Teardown And Preservation" to clean up the linked worktree and prune references.
+    - Move to the next queue item.
 
 Never run unrelated refactors or paper-facing claims in this loop.
 

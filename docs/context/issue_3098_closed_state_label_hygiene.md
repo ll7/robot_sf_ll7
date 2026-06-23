@@ -70,6 +70,19 @@ Representative issues were checked after cleanup:
 - #2259: closed issue that previously had `state:ready`; no live state label remains.
 - #2382: closed issue that previously had `state:running`; no live state label remains.
 
+## Recurrence and Automation Follow-up
+
+The 2026-06-18 cleanup was not durable: a fresh run on 2026-06-23 found 66 closed issues that had
+re-accumulated live `state:*` labels (`state:ready`: 52, `state:running`: 13, `state:blocked`: 1),
+which were removed via the same read-then-write (verify `CLOSED` before stripping) process. About 66
+stale labels reappeared in roughly 5 days, confirming that periodic manual scrubs do not hold.
+
+The guard `scripts/dev/closed_state_label_hygiene.py` is a detector only; no automatic fixer exists.
+[#3456](https://github.com/ll7/robot_sf_ll7/issues/3456) tracks the durable fix: a GitHub Action on
+`issues: closed` that strips live `state:*` labels at every close path (manual, duplicate/wontfix,
+PR-merge), reusing the guard's `LIVE_STATE_LABELS` as the single source of truth. Until that lands,
+expect to re-run the manual cleanup periodically.
+
 ## Boundary
 
 This note records routing-hygiene evidence only. It is not benchmark evidence, research evidence,

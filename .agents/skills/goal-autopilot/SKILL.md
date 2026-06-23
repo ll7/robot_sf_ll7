@@ -254,10 +254,11 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
    ```
 
    For longer delegated monitor waits, add `--emit-progress-json-every <seconds>` so the worker
-   returns compact progress evidence instead of silent polling. Do not leave
-   long JSON poll streams in the parent thread when no decision changes; store
-   verbose progress in the ledger or private artifacts and surface only check
-   counts, failures, stale-head state, and terminal status.
+   returns compact progress evidence instead of silent polling. Do not run
+   multi-attempt JSON polling directly into the parent thread when no decision
+   changes; either use `--once`, route the wait to a monitor worker, or redirect
+   the stream to a private artifact. Surface only check counts, status deltas,
+   failures, stale-head state, terminal status, and the expected head SHA.
 
 3. Continue with non-conflicting work on the main thread: review other PRs, merge already-green
    `merge-ready` PRs, or run bounded discovery. Do not mutate the waiting PR branch or resolve its

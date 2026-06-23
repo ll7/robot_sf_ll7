@@ -16,8 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scripts.tools.manage_external_data import resolve_asset_local_path_by_id
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SOCNAV_ROOT = REPO_ROOT / "third_party" / "socnavbench"
+DEFAULT_SOCNAV_ROOT = resolve_asset_local_path_by_id("socnavbench-control")
 DEFAULT_SOURCE_ROOT = REPO_ROOT / "output" / "SocNavBench"
 
 

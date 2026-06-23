@@ -23,7 +23,8 @@ SAFETY CONTRACT (unchanged; enforced in the canonical module):
   closed when free space is insufficient.
 * A staged tree is validated against the pinned ``expected_tree_sha256`` before being marked
   ``staged``; a mismatch refuses to mark SDD as dataset-backed.
-* Raw data is staged into a **git-ignored** subfolder (``output/external_data/sdd`` by default).
+* Raw data is staged into a **git-ignored** subfolder (``output/external_data/sdd`` by default), or
+  into ``$ROBOT_SF_EXTERNAL_DATA_ROOT/sdd`` when that shared root is configured.
 
 Usage::
 

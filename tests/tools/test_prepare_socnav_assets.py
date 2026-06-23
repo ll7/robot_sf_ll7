@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING
 
+import pytest
+
+from scripts.tools import manage_external_data, prepare_socnav_assets
 from scripts.tools.prepare_socnav_assets import copy_available_assets, evaluate_assets
 
 if TYPE_CHECKING:
@@ -27,6 +31,20 @@ def test_evaluate_assets_reports_missing_required_for_schematic(tmp_path: Path) 
     assert "sbpd_dataset" in missing
     assert "sbpd_traversibles" in missing
     assert "surreal_meshes" not in missing
+
+
+def test_default_socnav_root_honors_external_data_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No-flag SocNav asset validation should use the shared external data root."""
+    shared_root = tmp_path / "robot_sf_external_data"
+    monkeypatch.setenv(manage_external_data.EXTERNAL_DATA_ROOT_ENV, str(shared_root))
+
+    reloaded = importlib.reload(prepare_socnav_assets)
+
+    assert reloaded.DEFAULT_SOCNAV_ROOT == shared_root.resolve() / "socnavbench"
+    monkeypatch.delenv(manage_external_data.EXTERNAL_DATA_ROOT_ENV)
+    importlib.reload(prepare_socnav_assets)
 
 
 def test_copy_available_assets_stages_from_source_root(tmp_path: Path) -> None:

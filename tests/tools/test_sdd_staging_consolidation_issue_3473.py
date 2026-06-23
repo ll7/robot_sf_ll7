@@ -210,6 +210,18 @@ def test_repo_sdd_manifest_loads_through_canonical_asset() -> None:
     assert spec.expected_total_size_bytes > 0
 
 
+def test_repo_sdd_manifest_honors_external_data_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default SDD staging gate should read the shared worktree-portable root when set."""
+    shared_root = tmp_path / "robot_sf_external_data"
+    monkeypatch.setenv(canonical.EXTERNAL_DATA_ROOT_ENV, str(shared_root))
+
+    spec = canonical.load_sdd_staging_spec()
+
+    assert spec.staging_dir == shared_root.resolve() / "sdd"
+
+
 def test_manifest_null_staging_dir_fails_closed(tmp_path: Path) -> None:
     """Explicit YAML null for the required staging dir must not become the string 'None'."""
     manifest_path = _write_manifest(tmp_path, staging_dir=tmp_path / "sdd")

@@ -77,7 +77,9 @@ def build_lineage_check(trace_data: dict[str, Any], live_data: dict[str, Any]) -
     }
 
 
-def build_verdict(lineage_satisfied: bool, prefilter_trustworthy: bool, rows: list[dict[str, Any]]) -> str:
+def build_verdict(
+    lineage_satisfied: bool, prefilter_trustworthy: bool, rows: list[dict[str, Any]]
+) -> str:
     """Return a concise verdict for the trace/live comparison."""
     if not lineage_satisfied:
         return "Trace/live replay lineage check failed; comparison is diagnostic-only."

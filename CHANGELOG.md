@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added the headline planner-comparison CI + rank-stability report harness (#3216): [`scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py`](scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py) reports per-cell confidence intervals (bootstrap/per-seed) and a Kendall-τ / rank-flip stability statistic across seed resamples for the 7×7 planner×scenario headline grid, REUSING the canonical owners (`seed_variance`, `fidelity_rank_stability.rank_planners`/`kendall_tau`, `canonical_table_export`) rather than reinventing the statistics. Fail-closed (degraded/fallback/not_available cells never count as success) and it **never self-certifies paper-grade**: insufficient seed budget returns `diagnostic`/`blocked_until_run` pending the S20/S30 SLURM run (via #1554) and claim-card review. Ships the SLURM run as a launch packet (real referenced configs + sha256). Coordinates with #1554 (per-seed bundle) and #3078 (package A) without duplication. The paper-grade run remains SLURM (Refs #3216).
+
 * Clarified token-efficient goal-thread startup rules for workflow-improvement turns: agents now
   explicitly park stale prior work after compaction or user pivots, scope meta-workflow requests to
   fresh docs-or-workflow worktrees, and classify high-priority SLURM work through the appropriate

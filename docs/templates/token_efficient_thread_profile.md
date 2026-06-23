@@ -184,6 +184,36 @@ long goal near a usage guard:
   and why the change belongs in reusable guidance instead of one-off handoff
   prose.
 
+## Meta-Workflow Instruction PR Gate
+
+Use this gate when the newest user request asks to improve instructions,
+review Codex token spending, audit the last implementation thread, or make the
+workflow more reliable. Treat the prior goal loop as parked unless the user
+explicitly asks to resume it.
+
+- Start from the `Token-Spend Review` fields above and choose three to ten
+  reusable improvements. Each improvement should name the observed leak or
+  failure it prevents, such as raw worktree fleet output, full skill rereads,
+  stale-goal continuation after a user pivot, helper-path confusion, unbounded
+  CI polling, missing delegate cleanup, or PR-body contract retries.
+- Make those improvements acceptance criteria before editing. If the current
+  instruction surface already covers one, do not duplicate it; either tighten
+  the existing wording with the new evidence or leave it out of scope.
+- Create a fresh docs-or-workflow worktree from `origin/main`. Record parked
+  PRs, jobs, dirty worktrees, and active delegates in the ledger, then keep the
+  new branch limited to instruction changes.
+- Use compact evidence first. For thread history, write summaries to a
+  common-Git-dir artifact; for worktrees, use filtered snapshot helpers; for
+  skills, reuse the loaded-context cache and reread only the directly edited
+  instruction file.
+- Validate with the cheapest official path for the changed surface. Docs-only
+  changes need diff inspection and referenced-path checks; skill changes also
+  need the relevant skill/schema/sync check when available. Full PR readiness
+  is reserved for executable or evidence-sensitive changes.
+- The PR body should list the token leaks addressed, files changed, validation
+  run, parked work, and any instruction gaps intentionally left for a later
+  issue.
+
 ## Delegated Worker Artifact Contract
 
 Each delegated implementation or review worker should return a compact artifact

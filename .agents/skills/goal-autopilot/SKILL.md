@@ -195,7 +195,10 @@ Before each phase, run a delegation checkpoint:
 - Before spawning a Spark sidecar, check the active ledger or most recent route
   snapshot for a Spark quota reset/usage-limit marker. If Spark is unavailable,
   record the reset time and route directly to the next eligible cheap worker
-  instead of discovering the quota limit by failed spawn.
+  instead of discovering the quota limit by failed spawn. If a spawn still
+  returns a usage-limit error, close the app-agent handle immediately, add the
+  reset time to the route cache, and continue locally or with the next eligible
+  route rather than retrying Spark.
 - If no helper is used, record `delegation_skipped: <reason>` with one of: `tiny`,
   `critical-path-blocker`, `route-unavailable`, `sensitive-context`, `pure-synthesis`, or
   `local-publication-step`.
@@ -497,6 +500,10 @@ one of:
 
 Spark prompts must require compact output: files inspected, exact evidence, uncertainty, and
 recommended next prompt.
+
+When Spark is rate-limited, treat the failed spawn as a routing signal, not as
+task evidence. Close the app-agent handle when one was allocated, cache the
+reset timestamp in the active ledger, and skip Spark for the rest of the phase.
 
 Do not route Spark to:
 

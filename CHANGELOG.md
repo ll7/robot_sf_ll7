@@ -21,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   availability claim is tabulated as verified/unverified with its source; `evidence_tier: idea`,
   exploratory only — no integration, no weights downloaded. Indexed in
   [`docs/context/INDEX.md`](docs/context/INDEX.md) (#2952).
+* Added a bounded sensor-noise / partial-observability robustness slice (#3067):
+  [`scripts/benchmark/run_sensor_noise_robustness_slice_issue_3067.py`](scripts/benchmark/run_sensor_noise_robustness_slice_issue_3067.py)
+  runs a same-seed clean / noisy / partial-observation comparison on a pedestrian-dominated fixture,
+  reusing the observation-noise/perturbation wrappers, and reports clean-vs-perturbed deltas
+  (min observed distance, observation continuity, near-field exposure, observation count) per row
+  with fail-closed status — and the overall classification kept separate from nominal performance.
+  Result: `diagnostic` (non-null — perturbations measurably change the observed state the policy
+  would consume; partial observation drops actor observations/continuity/near-field), trace-derived,
+  single fixture/seed. Diagnostic-only/smoke, not paper-grade; explicitly NOT a real-sensor
+  certification or sim-to-real claim. Tracked summary under
+  `docs/context/evidence/issue_3067_sensor_noise_robustness_2026-06-23/`. Unblocked once #3062 merged
+  (#3067).
 
 * Added a bounded, same-seed forecast-risk closed-loop coupling gate (#2916): a deterministic risk
   adapter [`robot_sf/benchmark/forecast_risk_adapter.py`](robot_sf/benchmark/forecast_risk_adapter.py)

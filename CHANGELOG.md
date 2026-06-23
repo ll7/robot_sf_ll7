@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read-only detector remains the periodic CI/backstop while the event-driven Action removes the root
   cause of recurring manual scrubs (134 stale labels on 2026-06-18, ~66 more in 5 days). Documented
   in [`docs/context/issue_3098_closed_state_label_hygiene.md`](docs/context/issue_3098_closed_state_label_hygiene.md) (#3456).
+* Added the Qwen-RobotNav feasibility assessment (#2952):
+  [`docs/context/issue_2952_qwen_robotnav_assessment.md`](docs/context/issue_2952_qwen_robotnav_assessment.md)
+  audits availability (weights/code/license/size/hardware) and compares Qwen-RobotNav's
+  observation/action/tool interface against the real Robot SF local-navigation surfaces
+  (`robot_sf/nav/`, `robot_sf/gym_env/`, differential-drive `step()` contract). Decision:
+  **`blocked_asset_tracking`** — the report is real (arXiv 2606.18112) and on-target, but public
+  weights, a concrete code repo, and a usable license are all **unverified** (with one source
+  conflict explicitly flagged), and the interface gaps are large (camera-history obs vs LiDAR+ego;
+  8-waypoint output vs single `(v, ω)`; agentic two-tier vs stateless numeric `step`). Every
+  availability claim is tabulated as verified/unverified with its source; `evidence_tier: idea`,
+  exploratory only — no integration, no weights downloaded. Indexed in
+  [`docs/context/INDEX.md`](docs/context/INDEX.md) (#2952).
 * Added a bounded sensor-noise / partial-observability robustness slice (#3067):
   [`scripts/benchmark/run_sensor_noise_robustness_slice_issue_3067.py`](scripts/benchmark/run_sensor_noise_robustness_slice_issue_3067.py)
   runs a same-seed clean / noisy / partial-observation comparison on a pedestrian-dominated fixture,
@@ -112,7 +124,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   #2752 "no useful topology alternative" diagnosis). Together with the AMV/AMMV panel sub-target this
   completes #2227. Tracked panels + captions + provenance under
   `docs/context/evidence/issue_2227_recenter_topology_panels_2026-06-23/` (#2227).
-
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain
   language, and made "understandable" a first-class maintainer value. [`maintainer_values.md`](docs/maintainer_values.md#clarity)

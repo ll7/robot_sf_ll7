@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a CPU-only pre-submit evidence-contract preflight (#1475): [`scripts/validation/preflight_evidence_contract.py`](scripts/validation/preflight_evidence_contract.py) checks that the current public commit will emit a named evidence contract's required fields BEFORE a SLURM job is submitted, so a job is never run only to fail closed on missing-field bookkeeping (the #1475 / job 12913 GPU-hour waste). It composes the canonical contract definition (a public alias `REQUIRED_ORCA_RESIDUAL_SMOKE_FIELDS` exported from `robot_sf/training/orca_residual_lineage_packet.py`, identity-asserted in a test so there is no second source of truth) and the production `_attach_orca_residual_smoke_evidence` builder, evaluated against a representative `GuardedPPOAdapter` row that mirrors the real on-main shape. Exit 0 = conforms (safe to submit), non-zero = block (names the missing fields). Seeded with the `orca_residual_smoke` contract; adding another is a one-entry registry change. The private-ops sbatch wrapper should call it before `sbatch` (doc: `docs/context/preflight_evidence_contract.md`). Refs #1475.
+
 * Clarified token-efficient goal-thread startup rules for workflow-improvement turns: agents now
   explicitly park stale prior work after compaction or user pivots, scope meta-workflow requests to
   fresh docs-or-workflow worktrees, and classify high-priority SLURM work through the appropriate

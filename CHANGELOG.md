@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and provides an opt-in hydrated-checkpoint one-step Gymnasium smoke path. Focused tests cover the
   inventory, fail-closed durable-pointer checks, unsupported local snapshots, JSON CLI output, and a
   mocked model/factory step smoke (#3469).
+* Added a lightweight PR body-contract workflow (#3472):
+  [`.github/workflows/pr-body-contracts.yml`](.github/workflows/pr-body-contracts.yml)
+  now validates live pull-request bodies with
+  [`scripts/dev/check_pr_followups.py`](scripts/dev/check_pr_followups.py), requiring body input,
+  open linked follow-up issues for declared residual work, domain-aware approval for
+  evidence-validity-sensitive claims, and a human-written description for substantive
+  source/configuration changes. The checker now accepts a changed-file list and rejects empty or
+  bot-only substantive PR descriptions, with fixtures covering the #3414/#3415 empty-body pattern,
+  the #3416 CodeRabbit-only pattern, and the #3449/#3450 evidence-sensitive missing-contract
+  pattern (#3472).
 * Added a bounded robot-influence-on-pedestrian-flow v0 slice (#3066):
   [`scripts/benchmark/run_robot_influence_flow_slice_issue_3066.py`](scripts/benchmark/run_robot_influence_flow_slice_issue_3066.py)
   runs a small same-seed campaign (reusing `robot_sf.benchmark.runner.run_batch`) comparing two

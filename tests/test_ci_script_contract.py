@@ -40,6 +40,7 @@ RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
 RUN_XDIST_RACE_VALIDATION = ROOT / "scripts" / "dev" / "run_xdist_race_validation.sh"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
+PR_BODY_CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "pr-body-contracts.yml"
 RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
 CHECK_RUNTIME_REQUIREMENTS = ROOT / "scripts" / "dev" / "check_runtime_requirements.sh"
 CHECK_CARLA_RUNTIME = ROOT / "scripts" / "dev" / "check_carla_runtime.sh"
@@ -308,6 +309,24 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "recording interim PR readiness from a dirty non-ignored worktree" in script_text
     assert "--require-clean-tree" in script_text
     assert "pr_ready_freshness.py" in script_text
+
+
+def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
+    """The live PR workflow should enforce body, follow-up, and domain-review contracts."""
+    workflow_text = PR_BODY_CONTRACTS_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "pull_request:" in workflow_text
+    assert "gh api --paginate" in workflow_text
+    assert "pr_changed_files.txt" in workflow_text
+    assert "scripts/dev/check_pr_followups.py" in workflow_text
+    for flag in (
+        "--github-event-path",
+        "--changed-files-file",
+        "--require-body",
+        "--require-substantive-body",
+        "--require-open-issues",
+    ):
+        assert flag in workflow_text
 
 
 def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: Path) -> None:

@@ -103,6 +103,13 @@ field, route-cache entry, worker prompt constraint, or docs patch before the nex
 For Slurm-backed phases, also record the private-queue freshness check, the submit-host worktree
 proof, and any model-route quota failures so resumes do not rediscover the same blockers.
 
+When a long thread resumes after compaction, interruption, or a new user message, run a one-screen
+current-request guard before continuing the previous ledger action. Confirm the newest user request,
+active goal or PR/issue, current worktree, active delegates, dirty worktrees, and next remote-visible
+mutation. If the newest request changes the objective, park the previous batch with a compact handoff
+instead of silently continuing stale goal work. Close or explicitly preserve no-longer-needed
+subagents, and record the cleanup or preservation decision in the common Git-dir ledger.
+
 ## Shared Knowledge Graph
 
 This repository tracks an Understand-Anything graph under `.understand-anything/` as a shared

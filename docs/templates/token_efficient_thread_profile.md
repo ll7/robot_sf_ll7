@@ -16,6 +16,7 @@ changes.
 - worktree: [absolute or repo-relative worktree path and branch]
 - context_budget: [compact snapshots first; raw logs only by artifact path]
 - resume_checkpoint: [active ledger path plus loaded skills/docs, current PR/issue/head SHA, and next stale-state trigger]
+- current_request_guard: [newest user request, whether it supersedes the active ledger action, and parked-work state]
 - loaded_context_cache: [skills/docs/snapshots already read this phase, plus the condition that requires rereading]
 - route_cache: [unavailable routes and reset times, known-good worker lane, and current CI monitor command]
 - delegation_artifacts: [RESULT.md, changed files, diffstat, validation, blockers, mutations]
@@ -43,6 +44,11 @@ changes.
 - `resume_checkpoint` should be the first thing refreshed after compaction or
   automatic continuation. If it is fresh, do not reread full skills, broad
   issue queues, or full worktree inventories before the next mutation.
+- `current_request_guard` prevents stale-goal continuation after compaction or
+  user pivots. Before taking the next action, compare the newest user request
+  with the active ledger action. If they differ, write a compact parked-work
+  handoff with dirty worktrees, active delegates, PR/issue state, and cleanup
+  status, then execute the newest request.
 - `loaded_context_cache` prevents compaction recovery from becoming another
   broad-read pass. Record each long skill, issue body, PR snapshot, and context
   note already loaded in the current phase, then reread only when the branch,
@@ -76,6 +82,9 @@ workflow only when the savings are reusable.
 - Start from the current `resume_checkpoint`, `loaded_context_cache`, and
   `phase_audit_record`. Reread long skills, issue bodies, PR snapshots, or
   context notes only when their recorded freshness key changed.
+- Re-anchor on the newest user request before continuing a prior goal ledger.
+  If the request changed, pause the old batch with a parked-work note instead
+  of mixing objectives in the same implementation branch or PR body.
 - Run one usage check per phase, record the reset window, and reuse it until a
   cooldown, direct user request, or new phase makes it stale.
 - Refresh the issue or PR head SHA before implementation and before review
@@ -118,6 +127,10 @@ workflow only when the savings are reusable.
 - After every accepted, rejected, or rerouted delegate, append a one-paragraph
   self-review note when the route created reusable evidence about output size,
   artifact quality, quota pressure, or validation cost.
+- Before final handoff or a user-requested pivot, list active app subagents and
+  long-running worker processes when the tooling supports it. Close obsolete
+  app subagents, record any preserved workers or worktrees, and do not leave
+  cleanup implicit behind a PR link.
 - When usage is close to the stop guard, finish the active PR or blocker record,
   then hand off instead of opening a fresh batch.
 
@@ -141,6 +154,8 @@ long goal near a usage guard:
   fields, route-cache entries, or worker prompt constraints.
 - `next_savings`: three to ten concrete changes, each phrased as a rule that
   prevents a repeated token leak and names the evidence that triggered it.
+- `parked_work`: prior worktrees, PRs, jobs, delegates, or claims intentionally
+  left active because the newest request superseded the old next action.
 
 ## Delegated Worker Artifact Contract
 

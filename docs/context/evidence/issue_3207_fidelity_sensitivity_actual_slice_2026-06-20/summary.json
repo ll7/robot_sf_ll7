@@ -184,7 +184,7 @@
   "claim_boundary": "bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF episodes for a compact two-planner local fidelity-sensitivity slice. It measures internal sensitivity on this slice only; it is not simulator-realism, sim-to-real, paper-facing planner-ranking, or full #3207 acceptance evidence.",
   "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
   "date": "2026-06-20",
-  "git_head": "518ad79c9",
+  "git_head": "8418edf42",
   "git_status_short_at_generation": [],
   "git_worktree_dirty": false,
   "issue": 3207,
@@ -382,8 +382,8 @@
     "rank_stable": null,
     "schema_version": "fidelity_rank_stability.v2"
   },
-  "raw_output_policy": "raw JSONL remains ignored under output/",
-  "raw_rows_path": "output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-20/episode_rows.jsonl",
+  "raw_output_policy": "raw JSONL remains ignored under ignored_output/",
+  "raw_rows_path": "ignored_output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-20/episode_rows.jsonl",
   "result_caveats": [
     "ranking_stability_is_on_bounded_two_planner_slice_only",
     "full_fixed_scope_planners_not_run",

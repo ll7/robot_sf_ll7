@@ -2,9 +2,9 @@
 
 - Status: `actual_campaign_slice`
 - Evidence classification: `bounded_actual_slice`
-- Git head: `518ad79c9`
+- Git head: `8418edf42`
 - Git worktree dirty at generation: `False`
-- Raw rows: `output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-20/episode_rows.jsonl`
+- Raw rows: `ignored_output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-20/episode_rows.jsonl`
 - Claim boundary: bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF episodes for a compact two-planner local fidelity-sensitivity slice. It measures internal sensitivity on this slice only; it is not simulator-realism, sim-to-real, paper-facing planner-ranking, or full #3207 acceptance evidence.
 
 ## Scope
@@ -19,7 +19,7 @@
 
 ## Rank Stability
 
-- Nominal deterministic order: `baseline_social_force, goal_seek`
+- Nominal deterministic order (ties broken by name): `baseline_social_force, goal_seek`
 - Rank evidence status: `non-identifiable`
 - Rank identifiability reason: `primary_metric_zero_variance`
 - Rank stable on this slice: `not_applicable`

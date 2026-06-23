@@ -4,6 +4,14 @@ This note makes SDD scenario-prior staging reproducible and connects staging sta
 scenario-prior generation, so dataset-backed claims cannot be implied without dataset-backed
 input. It follows [`docs/templates/external_data_audit.md`](../templates/external_data_audit.md).
 
+> **Consolidated under Issue #3473.** The SDD staging behavior now lives in the canonical
+> external-data subsystem `scripts/tools/manage_external_data.py` (the `sdd` `AssetSpec` references
+> the manifest `configs/data/sdd_staging_manifest.yaml`; canonical functions are
+> `load_sdd_staging_spec`, `validate_sdd_staging`, `resolve_sdd_scenario_prior_mode`,
+> `run_sdd_download`, with CLI `sdd-plan|sdd-status|sdd-validate|sdd-mode|sdd-download`).
+> `scripts/data/stage_sdd_dataset_issue_2657.py` is preserved as a thin wrapper that delegates to
+> the canonical subsystem, so the commands below still work unchanged.
+
 ## Summary
 
 - Dataset or asset name: Stanford Drone Dataset (SDD) annotations
@@ -75,7 +83,9 @@ Acquisition steps (user action, outside this tooling):
 - `dataset_backed_prior` — SDD staged **and** validated (expected files present and, if pinned,
   checksum match).
 
-The gate is exposed by `resolve_scenario_prior_mode()` in the staging tool and consumed by
+The gate is exposed by `resolve_sdd_scenario_prior_mode()` in the canonical subsystem
+`scripts/tools/manage_external_data.py` (still reachable as `resolve_scenario_prior_mode()` via the
+thin `scripts/data/stage_sdd_dataset_issue_2657.py` wrapper) and consumed by
 scenario-prior generation (`scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py`
 surfaces `scenario_prior_mode` / `dataset_backed` / `sdd_staging_gate` in its registry YAML and
 `report.json`). A missing or unvalidated SDD copy forces `proxy_schema_smoke`; only a

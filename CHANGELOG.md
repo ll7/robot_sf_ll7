@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   copy at a machine-stable location and symlinking it into each worktree's git-ignored expected
   path, the `--source` validation option, and the planned `ROBOT_SF_EXTERNAL_DATA_ROOT` shared-root
   follow-up. Docs-only; actual licensed acquisition remains a manual user step (#1498).
+* Added legacy PPO snapshot parity checks (#3469):
+  [`scripts/validation/check_legacy_ppo_snapshot_parity.py`](scripts/validation/check_legacy_ppo_snapshot_parity.py)
+  inventories supported BR-06 PPO registry checkpoints, verifies durable GitHub-release pointers,
+  explicitly classifies root-local debug `.zip` snapshots as unsupported for durable compatibility,
+  and provides an opt-in hydrated-checkpoint one-step Gymnasium smoke path. Focused tests cover the
+  inventory, fail-closed durable-pointer checks, unsupported local snapshots, JSON CLI output, and a
+  mocked model/factory step smoke (#3469).
 * Added a lightweight PR body-contract workflow (#3472):
   [`.github/workflows/pr-body-contracts.yml`](.github/workflows/pr-body-contracts.yml)
   now validates live pull-request bodies with
@@ -235,6 +242,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Consolidated SDD staging into the canonical external-data subsystem (#3473): the SDD asset
+  checksum policy, proxy-vs-dataset-backed availability gate, pinned-`expected_tree_sha256`
+  validation, disk-space fail-closed check, and no-auto-download safety contract (originally added
+  for #2657) now live in
+  [`scripts/tools/manage_external_data.py`](scripts/tools/manage_external_data.py) (new
+  `load_sdd_staging_spec`/`validate_sdd_staging`/`resolve_sdd_scenario_prior_mode`/`run_sdd_download`
+  functions and `sdd-plan|sdd-status|sdd-validate|sdd-mode|sdd-download` CLI commands). The `sdd`
+  `AssetSpec` now references the single staging manifest
+  ([`configs/data/sdd_staging_manifest.yaml`](configs/data/sdd_staging_manifest.yaml)) and carries
+  the availability/mode states, removing the previous two-sources-of-truth split.
+  [`scripts/data/stage_sdd_dataset_issue_2657.py`](scripts/data/stage_sdd_dataset_issue_2657.py) is
+  reduced to a thin compatibility wrapper that delegates to the canonical subsystem while preserving
+  its CLI/exit surface, and scenario-prior gating
+  ([`scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py`](scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py))
+  now consumes the canonical gate. Behavior preserved: the proxy-vs-dataset-backed gate stays
+  fail-closed and downloads still require explicit `--confirm-download` + y/N (or `--yes`). Migration
+  tests in
+  [`tests/tools/test_sdd_staging_consolidation_issue_3473.py`](tests/tools/test_sdd_staging_consolidation_issue_3473.py)
+  prove the proxy and dataset-backed decisions are identical through the canonical and wrapper paths
+  (#3473).
 * Refined the `goal-pr-review` skill (`.agents/skills/goal-pr-review/SKILL.md`) for clarity and
   determinism: added a mapping table that bridges `scripts/dev/pr_loop_policy.py` classifications
   (`pending_ci`, `failed_ci`, `missing_artifacts`, `stale_worktree`, `ready_to_merge`, `no_action`)

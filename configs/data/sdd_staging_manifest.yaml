@@ -1,8 +1,10 @@
-# Stanford Drone Dataset (SDD) staging manifest -- Issue #2657
+# Stanford Drone Dataset (SDD) staging manifest -- Issues #2657, #3473
 #
-# This manifest is the reproducible provenance contract for staging the Stanford Drone Dataset
-# locally so that scenario-prior generation can run in `dataset_backed_prior` mode. It is consumed
-# by scripts/data/stage_sdd_dataset_issue_2657.py.
+# This manifest is the single editable provenance contract for staging the Stanford Drone Dataset
+# locally so that scenario-prior generation can run in `dataset_backed_prior` mode. As of #3473 the
+# canonical owner is the external-data subsystem `scripts/tools/manage_external_data.py` (the `sdd`
+# AssetSpec references this manifest and the staging behavior lives there). The legacy entry point
+# `scripts/data/stage_sdd_dataset_issue_2657.py` is preserved as a thin wrapper that delegates here.
 #
 # SAFETY CONTRACT (enforced by the staging script):
 #   * The script NEVER auto-downloads. A default run only PLANS/REPORTS and exits.
@@ -77,3 +79,4 @@ related_issues:
   - 1497
   - 1126
   - 3161
+  - 3473

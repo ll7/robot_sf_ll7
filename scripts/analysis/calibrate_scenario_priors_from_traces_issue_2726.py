@@ -26,10 +26,11 @@ import yaml
 # parent 1 is scripts/analysis, parent 2 is scripts, parent 3 is the repo root.
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
-# scenario-prior staging mode tags (Issue #2657). Kept in sync with the staging tool.
+# scenario-prior staging mode tags (Issue #2657). Kept in sync with the canonical staging tool.
 MODE_PROXY = "proxy_schema_smoke"
 MODE_DATASET_BACKED = "dataset_backed_prior"
-SDD_STAGING_SCRIPT = REPO_ROOT / "scripts" / "data" / "stage_sdd_dataset_issue_2657.py"
+# Canonical external-data subsystem (issue #3473): the SDD scenario-prior gate lives here now.
+CANONICAL_EXTERNAL_DATA_SCRIPT = REPO_ROOT / "scripts" / "tools" / "manage_external_data.py"
 
 CLAIM_BOUNDARY = (
     "repository_trace_grounded_not_real_world_calibrated: this report and generated prior "
@@ -55,15 +56,17 @@ def resolve_staging_mode() -> dict[str, Any]:
             "are never dataset-backed regardless of SDD state."
         ),
     }
-    if not SDD_STAGING_SCRIPT.is_file():
+    if not CANONICAL_EXTERNAL_DATA_SCRIPT.is_file():
         return fallback
     try:
-        spec = importlib.util.spec_from_file_location("_sdd_staging_gate", SDD_STAGING_SCRIPT)
+        spec = importlib.util.spec_from_file_location(
+            "_sdd_staging_gate", CANONICAL_EXTERNAL_DATA_SCRIPT
+        )
         if spec is None or spec.loader is None:
             return fallback
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        gate = module.resolve_scenario_prior_mode()
+        gate = module.resolve_sdd_scenario_prior_mode()
     except Exception as exc:
         fallback["reason"] = f"SDD staging gate error ({exc}); defaulting to proxy_schema_smoke."
         return fallback

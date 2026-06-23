@@ -51,6 +51,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provenance under `docs/context/evidence/issue_2227_ammv_mechanism_panel_2026-06-23/`. The
   static-recentering and topology-guided-recovery panel sub-targets of #2227 remain follow-up
   (Refs #2227).
+* Completed #2227 mechanism panels with the static-recentering and topology-guided-recovery
+  contrastive sub-targets:
+  [`scripts/analysis/build_recenter_topology_panels_issue_2227.py`](scripts/analysis/build_recenter_topology_panels_issue_2227.py)
+  runs each mechanism's planner twice on one fixed activation-capable scenario, toggling ONLY the
+  mechanism flag (`static_recenter_enabled`; `topology_command_enabled`), exports schema-valid
+  `simulation_trace_export.v1` traces, and renders contrastive trajectory panels with per-step
+  activation diagnostics and command-source. Findings (real, diagnostic-only/stress): static
+  recentering activates (recenter term positive from step 7) and the on-arm reaches the goal where
+  the off-arm fails; the topology command activates but the on-arm *degrades* the outcome versus the
+  off-arm — reported honestly as a single-row degradation, not a benefit (consistent with the prior
+  #2752 "no useful topology alternative" diagnosis). Together with the AMV/AMMV panel sub-target this
+  completes #2227. Tracked panels + captions + provenance under
+  `docs/context/evidence/issue_2227_recenter_topology_panels_2026-06-23/` (#2227).
 
 * Added a canonical [`docs/glossary.md`](docs/glossary.md) defining the project's acronyms and
   domain terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and run modes) in plain

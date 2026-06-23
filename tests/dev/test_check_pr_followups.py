@@ -127,6 +127,32 @@ def test_body_quality_rejects_coderabbit_only_body_for_substantive_pr() -> None:
     assert report.status == "bot_only_body"
 
 
+def test_body_quality_strips_whole_generated_blocks_before_accepting_human_text() -> None:
+    """Generated release-note blocks should not mask whether human body text exists."""
+    body = """
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Refactor**
+  * Reorganized internal benchmark reporting code.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary
+Human-authored rationale for the workflow change.
+"""
+
+    report = analyze_body_quality(
+        body,
+        source="fixture",
+        changed_files=("scripts/dev/check_pr_followups.py",),
+        require_substantive_body=True,
+    )
+
+    assert report.status == "ok"
+
+
 def test_body_quality_allows_docs_only_empty_body() -> None:
     """Documentation-only PRs do not need the substantive source/config body gate."""
     report = analyze_body_quality(
@@ -138,6 +164,22 @@ def test_body_quality_allows_docs_only_empty_body() -> None:
 
     assert report.status == "ok"
     assert report.substantive_files == ()
+
+
+def test_body_quality_does_not_treat_path_lookalikes_as_template_only() -> None:
+    """Path exemptions require directory boundaries, not arbitrary string prefixes."""
+    report = analyze_body_quality(
+        "",
+        source="fixture",
+        changed_files=(".github/PULL_REQUEST_TEMPLATE_extra.py", "docs_extra/change.py"),
+        require_substantive_body=True,
+    )
+
+    assert report.status == "empty_body"
+    assert report.substantive_files == (
+        ".github/PULL_REQUEST_TEMPLATE_extra.py",
+        "docs_extra/change.py",
+    )
 
 
 def test_body_quality_accepts_human_body_for_substantive_changes() -> None:

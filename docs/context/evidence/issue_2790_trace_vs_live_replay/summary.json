@@ -2,10 +2,32 @@
   "schema_version": "compare_trace_vs_live_replay.v1",
   "issue": 2790,
   "evidence_grade": "analysis_only",
-  "verdict": "Trace-derived diagnostics failed to predict live replay outcomes correctly (delay_only was a false positive).",
+  "verdict": "Trace-derived diagnostics failed to predict live replay outcomes correctly (false positives: delay_only).",
   "prefilter_trustworthy": false,
   "recommended_action": "demote_to_debugging_only",
   "decision_rule": "If trace-derived diagnostics predict live replay ranking correctly, keep them as a cheap prefilter. If they do not, demote trace-derived artifacts to debugging-only evidence.",
+  "lineage_check": {
+    "satisfied": true,
+    "checks": {
+      "trace_fixture_present": true,
+      "live_fixture_contract_satisfied": true,
+      "scenario_matches": true,
+      "seed_matches": true
+    },
+    "trace_fixture": {
+      "scenario_id": "issue_2756_occluded_emergence",
+      "seed": 111,
+      "planner_id": "hybrid_rule_v0_minimal",
+      "episode_id": "issue_2756_occluded_emergence_ep0000"
+    },
+    "live_fixture_contract": {
+      "required_scenario": "issue_2756_occluded_emergence",
+      "required_seed": 111,
+      "required_source_issue": 2756,
+      "scenario_matrix": "configs/scenarios/sets/issue_3323_occluded_emergence_near_field_live_replay.yaml",
+      "blocker": null
+    }
+  },
   "trace_metadata": {
     "issue": 2755,
     "schema_version": "observation_noise_envelope.v1",

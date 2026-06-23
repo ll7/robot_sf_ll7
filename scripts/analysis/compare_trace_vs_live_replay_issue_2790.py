@@ -43,6 +43,65 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
         return json.load(fh)
 
 
+def build_lineage_check(trace_data: dict[str, Any], live_data: dict[str, Any]) -> dict[str, Any]:
+    """Return the shared scenario/seed lineage check required by issue #2790."""
+    trace_fixture = trace_data.get("fixture") or {}
+    live_contract = live_data.get("fixture_contract") or {}
+    trace_scenario = trace_fixture.get("scenario_id")
+    live_scenario = live_contract.get("required_scenario")
+    trace_seed = trace_fixture.get("seed")
+    live_seed = live_contract.get("required_seed")
+
+    checks = {
+        "trace_fixture_present": bool(trace_fixture),
+        "live_fixture_contract_satisfied": live_contract.get("satisfied") is True,
+        "scenario_matches": bool(trace_scenario) and trace_scenario == live_scenario,
+        "seed_matches": trace_seed is not None and trace_seed == live_seed,
+    }
+    return {
+        "satisfied": all(checks.values()),
+        "checks": checks,
+        "trace_fixture": {
+            "scenario_id": trace_scenario,
+            "seed": trace_seed,
+            "planner_id": trace_fixture.get("planner_id"),
+            "episode_id": trace_fixture.get("episode_id"),
+        },
+        "live_fixture_contract": {
+            "required_scenario": live_scenario,
+            "required_seed": live_seed,
+            "required_source_issue": live_contract.get("required_source_issue"),
+            "scenario_matrix": live_contract.get("scenario_matrix"),
+            "blocker": live_contract.get("blocker"),
+        },
+    }
+
+
+def build_verdict(lineage_satisfied: bool, prefilter_trustworthy: bool, rows: list[dict[str, Any]]) -> str:
+    """Return a concise verdict for the trace/live comparison."""
+    if not lineage_satisfied:
+        return "Trace/live replay lineage check failed; comparison is diagnostic-only."
+    if prefilter_trustworthy:
+        return "Trace-derived diagnostics correctly predicted all live replay outcomes."
+
+    false_positive_conditions = [
+        row["condition"] for row in rows if row["comparison_label"] == "false_positive"
+    ]
+    false_negative_conditions = [
+        row["condition"] for row in rows if row["comparison_label"] == "false_negative"
+    ]
+    mismatch_parts = []
+    if false_positive_conditions:
+        mismatch_parts.append(f"false positives: {', '.join(false_positive_conditions)}")
+    if false_negative_conditions:
+        mismatch_parts.append(f"false negatives: {', '.join(false_negative_conditions)}")
+    mismatch_text = "; ".join(mismatch_parts) or "one or more mismatches"
+    return (
+        "Trace-derived diagnostics failed to predict live replay outcomes correctly "
+        f"({mismatch_text})."
+    )
+
+
 def build_comparison_report(
     trace_data: dict[str, Any],
     live_data: dict[str, Any],
@@ -129,14 +188,14 @@ def build_comparison_report(
             }
         )
 
+    lineage_check = build_lineage_check(trace_data, live_data)
+    if not lineage_check["satisfied"]:
+        all_matched = False
+
     # Trustworthiness Verdict
     # Trace-derived diagnostics predict live replay correctly only if all matched
     prefilter_trustworthy = all_matched
-    verdict = (
-        "Trace-derived diagnostics correctly predicted all live replay outcomes."
-        if prefilter_trustworthy
-        else "Trace-derived diagnostics failed to predict live replay outcomes correctly (delay_only was a false positive)."
-    )
+    verdict = build_verdict(lineage_check["satisfied"], prefilter_trustworthy, comparison_rows)
 
     recommended_action = (
         "keep_as_cheap_prefilter" if prefilter_trustworthy else "demote_to_debugging_only"
@@ -154,6 +213,7 @@ def build_comparison_report(
             "them as a cheap prefilter. If they do not, demote trace-derived "
             "artifacts to debugging-only evidence."
         ),
+        "lineage_check": lineage_check,
         "trace_metadata": {
             "issue": trace_data.get("issue"),
             "schema_version": trace_data.get("schema_version"),
@@ -182,6 +242,7 @@ def render_markdown_report(report: dict[str, Any]) -> str:
         "## Decision Rule Context",
         "",
         f"- *Decision Rule*: {report['decision_rule']}",
+        f"- *Lineage Check Satisfied*: `{report['lineage_check']['satisfied']}`",
         "- *Action Outcome*: Since trace-derived delay sensitivity did not reproduce in the live replay "
         "DWA wrapper run (resulting in a `false_positive` for `delay_only`), the trace-derived envelope "
         "artifacts are demoted to debugging-only evidence and must not be used as a cheap prefilter.",

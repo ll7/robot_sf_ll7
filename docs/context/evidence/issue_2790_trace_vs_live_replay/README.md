@@ -4,11 +4,12 @@
 - **Evidence Grade**: `analysis_only`
 - **Prefilter Trustworthy**: `False`
 - **Recommended Action**: `demote_to_debugging_only`
-- **Decision Verdict**: Trace-derived diagnostics failed to predict live replay outcomes correctly (delay_only was a false positive).
+- **Decision Verdict**: Trace-derived diagnostics failed to predict live replay outcomes correctly (false positives: delay_only).
 
 ## Decision Rule Context
 
 - *Decision Rule*: If trace-derived diagnostics predict live replay ranking correctly, keep them as a cheap prefilter. If they do not, demote trace-derived artifacts to debugging-only evidence.
+- *Lineage Check Satisfied*: `True`
 - *Action Outcome*: Since trace-derived delay sensitivity did not reproduce in the live replay DWA wrapper run (resulting in a `false_positive` for `delay_only`), the trace-derived envelope artifacts are demoted to debugging-only evidence and must not be used as a cheap prefilter.
 
 ## Comparison Table

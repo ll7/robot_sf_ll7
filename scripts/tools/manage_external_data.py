@@ -17,7 +17,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -37,9 +37,54 @@ SDD_STAGING_STATUS_FILENAME = "sdd_staging_status.json"
 SDD_MODE_PROXY = "proxy_schema_smoke"
 SDD_MODE_DATASET_BACKED = "dataset_backed_prior"
 
+AVAILABILITY_MISSING = "missing"
+AVAILABILITY_PROXY_ONLY = "proxy_only"
+AVAILABILITY_STAGED = "staged"
+AVAILABILITY_VALIDATED = "validated"
+AVAILABILITY_DATASET_BACKED = "dataset_backed"
+AvailabilityState = Literal["missing", "proxy_only", "staged", "validated", "dataset_backed"]
+
 
 class ExternalDataError(RuntimeError):
     """Raised when external data cannot be safely staged or validated."""
+
+
+def _availability_record(
+    state: AvailabilityState,
+    *,
+    mode: str | None,
+    dataset_backed: bool = False,
+    validated: bool = False,
+    proxy_only: bool = False,
+) -> dict[str, Any]:
+    """Return the canonical availability/mode shape for external-data records."""
+    return {
+        "schema": "robot_sf_external_data_availability.v1",
+        "state": state,
+        "mode": mode,
+        "dataset_backed": dataset_backed,
+        "validated": validated,
+        "proxy_only": proxy_only,
+    }
+
+
+def _asset_availability_record(
+    asset: AssetSpec,
+    state: AvailabilityState,
+    *,
+    validated: bool = False,
+    dataset_backed: bool = False,
+) -> dict[str, Any]:
+    """Return the generic asset availability record while preserving proxy gates."""
+    proxy_only = asset.proxy_mode is not None and not dataset_backed
+    mode = asset.dataset_backed_mode if dataset_backed else asset.proxy_mode
+    return _availability_record(
+        state,
+        mode=mode,
+        dataset_backed=dataset_backed,
+        validated=validated,
+        proxy_only=proxy_only,
+    )
 
 
 @dataclass(frozen=True)
@@ -370,6 +415,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
         ],
         "ok": False,
         "status": "missing",
+        "availability": _asset_availability_record(asset, AVAILABILITY_MISSING),
         "missing_required_paths": [],
         "matched_required_paths": [],
     }
@@ -402,6 +448,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
     ]
     if missing:
         report["status"] = "incomplete"
+        report["availability"] = _asset_availability_record(asset, AVAILABILITY_MISSING)
         report["action"] = (
             "Required files are missing. Re-check the official acquisition instructions and the "
             "expected local layout before staging."
@@ -410,6 +457,7 @@ def check_asset(asset_id: str, *, source_path: Path | None = None) -> dict[str, 
 
     report["ok"] = True
     report["status"] = "available"
+    report["availability"] = _asset_availability_record(asset, AVAILABILITY_STAGED)
     report["action"] = "Path satisfies the declared local staging contract."
     return report
 
@@ -464,6 +512,11 @@ def stage_asset(
         "license_note": asset.license_note,
         "access_note": asset.access_note,
         "local_path": str(source_root),
+        "availability": _asset_availability_record(
+            asset,
+            AVAILABILITY_VALIDATED,
+            validated=True,
+        ),
         "required_paths": report["required_paths"],
         "matched_required_paths": report["matched_required_paths"],
         "file_count": checksum["file_count"],
@@ -733,6 +786,11 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
         "ok": False,
         "local_availability": "missing",
         "mode": SDD_MODE_PROXY,
+        "availability": _availability_record(
+            AVAILABILITY_MISSING,
+            mode=SDD_MODE_PROXY,
+            proxy_only=True,
+        ),
     }
 
     matched_paths: list[Path] = []
@@ -763,6 +821,11 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
             "tree checksum omitted for plan/status speed; run `sdd-validate` for checksum proof"
         )
         report["local_availability"] = "present_unvalidated"
+        report["availability"] = _availability_record(
+            AVAILABILITY_STAGED,
+            mode=SDD_MODE_PROXY,
+            proxy_only=True,
+        )
         report["action"] = (
             "SDD expected files are present. Run `sdd-validate` to compute checksums before "
             f"treating the copy as `{SDD_MODE_DATASET_BACKED}` evidence."
@@ -778,6 +841,11 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
 
     if spec.expected_tree_sha256 is None:
         report["local_availability"] = "present_unpinned_checksum"
+        report["availability"] = _availability_record(
+            AVAILABILITY_PROXY_ONLY,
+            mode=SDD_MODE_PROXY,
+            proxy_only=True,
+        )
         report["action"] = (
             "Expected SDD files are present and a tree checksum was computed, but the manifest does "
             "not pin `expected_tree_sha256`. Refusing to mark SDD as dataset-backed until a trusted "
@@ -788,6 +856,11 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
     report["expected_tree_sha256"] = spec.expected_tree_sha256
     report["checksum_match"] = checksum["tree_sha256"] == spec.expected_tree_sha256
     if not report["checksum_match"]:
+        report["availability"] = _availability_record(
+            AVAILABILITY_PROXY_ONLY,
+            mode=SDD_MODE_PROXY,
+            proxy_only=True,
+        )
         report["action"] = (
             "Staged files do not match the pinned `expected_tree_sha256` in the manifest. "
             "Refusing to mark SDD as staged; treat as untrusted and re-acquire. Scenario-prior "
@@ -798,6 +871,12 @@ def validate_sdd_staging(spec: SddStagingSpec, *, compute_checksum: bool = True)
     report["ok"] = True
     report["local_availability"] = "staged"
     report["mode"] = SDD_MODE_DATASET_BACKED
+    report["availability"] = _availability_record(
+        AVAILABILITY_DATASET_BACKED,
+        mode=SDD_MODE_DATASET_BACKED,
+        dataset_backed=True,
+        validated=True,
+    )
     report["action"] = (
         f"SDD is staged and validated. Scenario-prior generation may run in "
         f"`{SDD_MODE_DATASET_BACKED}` mode for dataset-backed input."
@@ -846,9 +925,18 @@ def _cached_sdd_staging_gate(spec: SddStagingSpec) -> dict[str, Any] | None:
     if not _current_sdd_tree_matches_cached_status(spec, status, matched_paths):
         return None
 
+    availability = status.get("availability")
+    if not isinstance(availability, dict) or "state" not in availability:
+        availability = _availability_record(
+            AVAILABILITY_DATASET_BACKED,
+            mode=SDD_MODE_DATASET_BACKED,
+            dataset_backed=True,
+            validated=True,
+        )
     return {
         "mode": SDD_MODE_DATASET_BACKED,
         "dataset_backed": True,
+        "availability": availability,
         "reason": f"SDD is staged and validated (cached via {SDD_STAGING_STATUS_FILENAME}).",
         "asset_id": spec.asset_id,
         "version_tag": spec.version_tag,
@@ -877,6 +965,7 @@ def resolve_sdd_scenario_prior_mode(
     return {
         "mode": SDD_MODE_DATASET_BACKED if dataset_backed else SDD_MODE_PROXY,
         "dataset_backed": dataset_backed,
+        "availability": report["availability"],
         "reason": report["action"],
         "asset_id": spec.asset_id,
         "version_tag": spec.version_tag,
@@ -927,6 +1016,7 @@ def build_sdd_plan(spec: SddStagingSpec) -> dict[str, Any]:
         "auto_download": False,
         "local_availability": validation["local_availability"],
         "scenario_prior_mode": validation["mode"],
+        "availability": validation["availability"],
         "validation": validation,
         "next_step": (
             "This is a PLAN ONLY; nothing was downloaded. To stage SDD you must (1) obtain it under "
@@ -953,6 +1043,7 @@ def write_sdd_staging_status(spec: SddStagingSpec, report: dict[str, Any]) -> Pa
         "total_size_bytes": report.get("total_size_bytes"),
         "sample_files": report.get("sample_files", []),
         "local_availability": report["local_availability"],
+        "availability": report["availability"],
         "validated_at_utc": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
     }
     status_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -1038,6 +1129,7 @@ def _asset_summary(asset: AssetSpec, *, include_status: bool) -> dict[str, Any]:
     if include_status:
         status = check_asset(asset.asset_id)
         payload["status"] = status["status"]
+        payload["availability"] = status["availability"]
         payload["ok"] = status["ok"]
         payload["action"] = status["action"]
         payload["missing_required_paths"] = status["missing_required_paths"]

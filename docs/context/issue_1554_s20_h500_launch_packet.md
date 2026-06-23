@@ -1,4 +1,4 @@
-# Issue #1554 S20 h500 Launch Packet
+# Issue #1554 S20 H500 Launch Packet 2026-06-23
 
 This launch packet makes issue #1554 concrete enough for Slurm routing without
 turning it into an open-ended benchmark rerun. It targets the paper-facing

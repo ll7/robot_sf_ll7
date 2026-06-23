@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   real-world or sim-to-real claim. Tracked summary under
   `docs/context/evidence/issue_3066_robot_influence_flow_2026-06-23/`. Unblocked once #3062 merged
   (#3066).
+* Added the PPO curriculum-learning launch packet (#3068): a pre-launch spec
+  ([`configs/training/ppo_curriculum_issue_3068_launch_packet.yaml`](configs/training/ppo_curriculum_issue_3068_launch_packet.yaml),
+  schema `ppo-curriculum-launch-packet.v1`) defining a 4-stage density/complexity curriculum over
+  real env knobs, a matched fixed-difficulty PPO baseline comparator, seeds, run budget, stop rule,
+  metrics, expected artifacts, validation command, and durable-artifact policy — with the three
+  competing explanations (extra-budget vs curriculum; train-curve vs final benchmark; insufficient
+  provenance) encoded as discriminating checks. All referenced configs exist with verified sha256
+  checksums; the context doc
+  [`docs/context/issue_3068_ppo_curriculum_launch_packet.md`](docs/context/issue_3068_ppo_curriculum_launch_packet.md)
+  records the no-claim boundary and flags the per-stage scheduler wiring as a downstream
+  prerequisite. Authoring-only and `evidence:proposal` — no training-result or benchmark claim; the
+  long training run remains a separate SLURM issue (#3068).
 * Automated stale state-label cleanup at issue closure (#3456): a new GitHub Action
   [`.github/workflows/strip-closed-state-labels.yml`](.github/workflows/strip-closed-state-labels.yml)
   triggers on `issues: closed` and strips any live `state:*` label (`state:ready`/`state:running`/

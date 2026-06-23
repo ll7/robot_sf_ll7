@@ -1,0 +1,97 @@
+# Calibrated AMV actuation profile skeleton (issue #1586)
+#
+# This is a PLACEHOLDER config — calibrated numeric values require an
+# accepted external source from #1585 (provenance) / #2000 (real trace).
+# Do NOT use numeric values from this skeleton as hardware-calibrated evidence.
+#
+# Once a source is accepted, replace the placeholder values below with
+# the provenance-backed values and update the provenance metadata.
+
+name: issue_1586_calibrated_actuation_profile_skeleton_v0
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+
+amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+scenario_candidates:
+  - classic_overtaking_medium
+
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+synthetic_actuation_profile:
+  name: amv-actuation-calibrated-placeholder-v0
+  profile_version: v0
+  claim_scope: hardware-calibrated
+  claim_boundary: calibrated-amv-actuation
+  max_linear_accel_m_s2: 1.5
+  max_linear_decel_m_s2: 2.0
+  max_yaw_rate_rad_s: 0.9
+  max_angular_accel_rad_s2: 2.5
+  latency_mode: one-step-delay
+  update_mode: 5hz-hold
+  provenance:
+    source_id: "pending-#1585"
+    source_uri: "https://github.com/ll7/robot_sf_ll7/issues/1585"
+    source_type: "external-trace-collection-pending"
+    profile_version: "v0-placeholder"
+    measurement_date: "pending"
+    supported_actuation_fields:
+      - max_linear_accel_m_s2
+      - max_linear_decel_m_s2
+      - max_yaw_rate_rad_s
+      - max_angular_accel_rad_s2
+      - latency_mode
+      - update_mode
+    units:
+      max_linear_accel_m_s2: "m/s^2"
+      max_linear_decel_m_s2: "m/s^2"
+      max_yaw_rate_rad_s: "rad/s"
+      max_angular_accel_rad_s2: "rad/s^2"
+    claim_boundary: "calibrated-placeholder-not-for-benchmark-use"
+
+workers: 1
+horizon: 100
+dt: 0.1
+record_forces: true
+resume: true
+stop_on_failure: false
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: issue-1586-calibrated-actuation-skeleton
+
+planners:
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback

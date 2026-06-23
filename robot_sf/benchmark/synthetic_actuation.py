@@ -12,6 +12,8 @@ from typing import Any
 
 SYNTHETIC_ACTUATION_CLAIM_SCOPE = "synthetic-only"
 SYNTHETIC_ACTUATION_CLAIM_BOUNDARY = "diagnostic-only"
+CALIBRATED_ACTUATION_CLAIM_SCOPE = "hardware-calibrated"
+CALIBRATED_ACTUATION_CLAIM_BOUNDARY = "calibrated-amv-actuation"
 SYNTHETIC_ACTUATION_VARIABILITY_SCHEMA_VERSION = "synthetic-actuation-variability-distribution.v1"
 SYNTHETIC_ACTUATION_VARIABILITY_SAMPLE_SCHEMA_VERSION = "synthetic-actuation-variability-sample.v1"
 CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS = (
@@ -70,6 +72,7 @@ class SyntheticActuationProfile:
     claim_boundary: str = SYNTHETIC_ACTUATION_CLAIM_BOUNDARY
     variability_distribution: Mapping[str, Any] | None = None
     variability_sample: Mapping[str, Any] | None = None
+    provenance: Mapping[str, Any] | None = None
 
     def to_metadata(self) -> dict[str, Any]:
         """Return a JSON-safe metadata payload."""
@@ -89,6 +92,8 @@ class SyntheticActuationProfile:
             payload["variability_distribution"] = _json_safe_mapping(self.variability_distribution)
         if self.variability_sample is not None:
             payload["variability_sample"] = _json_safe_mapping(self.variability_sample)
+        if self.provenance is not None:
+            payload["provenance"] = _json_safe_mapping(self.provenance)
         return payload
 
 
@@ -187,6 +192,23 @@ def _validate_calibrated_actuation_provenance(
         )
 
 
+def _reject_synthetic_calibrated_conflation(
+    payload: Mapping[str, Any],
+    *,
+    label: str,
+) -> None:
+    """Reject profiles that mix synthetic-only claim_scope with calibrated-looking markers."""
+    claim_scope = str(payload.get("claim_scope", "")).strip()
+    if claim_scope == SYNTHETIC_ACTUATION_CLAIM_SCOPE and _looks_calibrated_actuation_profile(
+        payload
+    ):
+        raise ValueError(
+            f"{label} has claim_scope='{SYNTHETIC_ACTUATION_CLAIM_SCOPE}' but contains "
+            "calibrated-looking markers. A calibrated-actuation profile must use "
+            f"claim_scope='{CALIBRATED_ACTUATION_CLAIM_SCOPE}' and provide provenance metadata."
+        )
+
+
 def validate_actuation_profile_claim_boundary(
     payload: Mapping[str, Any],
     *,
@@ -200,6 +222,9 @@ def validate_actuation_profile_claim_boundary(
     """
     if not isinstance(payload, Mapping):
         raise TypeError(f"{label} must be a mapping when provided")
+
+    _reject_synthetic_calibrated_conflation(payload, label=label)
+
     if _looks_calibrated_actuation_profile(payload):
         _validate_calibrated_actuation_provenance(payload, label=label)
         return
@@ -496,6 +521,9 @@ def validate_synthetic_actuation_profile(profile: SyntheticActuationProfile) -> 
     if sample is not None and not isinstance(sample, Mapping):
         raise ValueError("synthetic_actuation_profile.variability_sample must be a mapping")
     profile_metadata = profile.to_metadata()
+
+    _reject_synthetic_calibrated_conflation(profile_metadata, label="synthetic_actuation_profile")
+
     if _looks_calibrated_actuation_profile(profile_metadata):
         _validate_calibrated_actuation_provenance(
             profile_metadata,

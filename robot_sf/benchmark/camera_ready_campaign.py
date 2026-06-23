@@ -166,6 +166,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
 )
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
 from robot_sf.benchmark.synthetic_actuation import (
+    SYNTHETIC_ACTUATION_CLAIM_SCOPE,
     SyntheticActuationProfile,
     validate_actuation_profile_claim_boundary,
     validate_synthetic_actuation_profile,
@@ -433,7 +434,8 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
                 "scenario_amv_overrides entries must include at least one AMV taxonomy dimension"
             )
     if cfg.synthetic_actuation_profile is not None:
-        validate_synthetic_actuation_profile(cfg.synthetic_actuation_profile)
+        if cfg.synthetic_actuation_profile.claim_scope == SYNTHETIC_ACTUATION_CLAIM_SCOPE:
+            validate_synthetic_actuation_profile(cfg.synthetic_actuation_profile)
         if cfg.paper_facing:
             raise ValueError("synthetic_actuation_profile requires paper_facing=false")
         normalized_kinematics = tuple(str(value).strip().lower() for value in cfg.kinematics_matrix)
@@ -721,12 +723,6 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
         raise TypeError("synthetic_actuation_profile must be a mapping when provided")
     if synthetic_actuation_raw is not None:
         validate_actuation_profile_claim_boundary(synthetic_actuation_raw)
-        raw_claim_scope = (
-            str(synthetic_actuation_raw.get("claim_scope", "synthetic-only")).strip()
-            or "synthetic-only"
-        )
-        if raw_claim_scope != "synthetic-only":
-            raise ValueError("synthetic_actuation_profile.claim_scope must be 'synthetic-only'")
     latency_stress_raw = payload.get("latency_stress_profile")
     kinematics_matrix = _normalize_kinematics_matrix(
         payload.get("kinematics_matrix", ["differential_drive"])
@@ -822,6 +818,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
                 variability_sample=_optional_synthetic_actuation_profile_mapping(
                     synthetic_actuation_raw,
                     "variability_sample",
+                ),
+                provenance=_optional_synthetic_actuation_profile_mapping(
+                    synthetic_actuation_raw,
+                    "provenance",
                 ),
             )
             if synthetic_actuation_raw is not None

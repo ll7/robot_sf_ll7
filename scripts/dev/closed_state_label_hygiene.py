@@ -13,6 +13,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 LIVE_STATE_LABELS = ("state:ready", "state:running", "state:blocked")
@@ -56,7 +57,14 @@ def _label_names(raw_labels: object) -> set[str]:
 
 def _is_pull_request_url(raw_url: object) -> bool:
     """Return True for GitHub pull-request URLs returned by issue search/view commands."""
-    return isinstance(raw_url, str) and "/pull/" in raw_url
+    if not isinstance(raw_url, str):
+        return False
+
+    path_parts = [part for part in urlsplit(raw_url).path.split("/") if part]
+    if len(path_parts) != 4:
+        return False
+    owner, repo, resource, number = path_parts
+    return bool(owner and repo and resource == "pull" and number.isdecimal())
 
 
 def build_search_command(*, repo: str, label: str, limit: int) -> list[str]:

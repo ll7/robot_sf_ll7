@@ -63,6 +63,22 @@ def test_collect_stale_issues_ignores_pull_request_rows() -> None:
     assert closed_state_label_hygiene.collect_stale_issues(rows_by_label) == []
 
 
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://github.com/ll7/robot_sf_ll7/pull/12", True),
+        ("https://github.com/ll7/robot_sf_ll7/issues/12?next=/pull/12", False),
+        ("https://github.com/ll7/robot_sf_ll7/issues/pull", False),
+        ("https://github.com/ll7/robot_sf_ll7/pull/not-a-number", False),
+        ("https://github.com/ll7/robot_sf_ll7/pulls/12", False),
+        (None, False),
+    ],
+)
+def test_is_pull_request_url_requires_canonical_pull_path(url: object, expected: bool) -> None:
+    """PR detection should not treat arbitrary '/pull/' substrings as pull requests."""
+    assert closed_state_label_hygiene._is_pull_request_url(url) is expected
+
+
 def test_build_report_emits_machine_readable_failure_summary() -> None:
     """Reports should expose a stable failure summary when stale labels exist."""
     stale = [

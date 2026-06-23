@@ -379,6 +379,11 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             "mode": "direct_policy_command",
             "raw_policy_action": [float(ppo_command[0]), float(ppo_command[1])],
             "adapted_action": [float(ppo_command[0]), float(ppo_command[1])],
+            # No bounded residual was applied on a direct pass-through, so the
+            # residual was genuinely not clipped this decision. Emitting the key
+            # keeps the per-decision residual-clip signal present even when no
+            # learned checkpoint surfaces aggregate residual_clipping_stats.
+            "residual_clipped": False,
             "hard_guard_authoritative": True,
         }
         robot_pos, _heading, goal, ped_pos, _ped_vel = self._extract_state(observation)
@@ -559,6 +564,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         )
         action_adaptation = self._last_action_adaptation or {
             "mode": "unknown",
+            "residual_clipped": False,
             "hard_guard_authoritative": True,
         }
         selected_matches_ppo = np.isclose(float(ppo_command[0]), float(filtered_command[0])) and (
@@ -576,6 +582,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 "mode": "guard_selected_command",
                 "raw_policy_action": [float(ppo_command[0]), float(ppo_command[1])],
                 "adapted_action": [float(filtered_command[0]), float(filtered_command[1])],
+                # The guard selected a fallback/prior command rather than a
+                # bounded residual, so no residual clipping occurred this step.
+                "residual_clipped": False,
                 "hard_guard_authoritative": True,
             }
         return ShieldDecision(

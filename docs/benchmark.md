@@ -35,6 +35,33 @@ These outputs are a local demo only. They are not durable benchmark evidence and
 for paper-facing or promotion claims unless promoted separately with the repository's normal
 artifact provenance and validation process.
 
+## Tracking-Uncertainty Metrics
+
+Robot SF has a bounded CLEAR Multi-Object Tracking (CLEAR MOT) diagnostic layer for
+perception-gap evaluation. ScenarioBelief adapters can compare an oracle belief with a
+visibility-limited or tracking-noise belief and emit Multiple Object Tracking Accuracy (MOTA) and
+Multiple Object Tracking Precision (MOTP). MOTA counts missed detections, false positives, and ID
+switches against the ground-truth detection count. MOTP reports mean matched localization error in
+meters.
+
+Tracking uncertainty remains disabled by default. Scenarios opt into synthetic planner-facing
+visibility and centroid-offset stress through `observation_visibility.tracking_noise_std_m`; use
+`0.0` for exact zero-noise reproduction. Benchmark planner-input vector noise continues to use the
+existing `observation_noise` profile path in `robot_sf.benchmark.observation_noise`.
+
+When a noise or perception-limited evaluation records CLEAR metrics, store them under the existing
+`metrics.clear_tracking_uncertainty` block with `enabled`, `mota`, `motp_m`, and `counts` fields.
+The aggregate/reporting path flattens that block into columns such as `clear_mota`,
+`clear_motp_m`, `clear_missed_detection_count`, and `clear_false_positive_count`. These values are
+diagnostic unless backed by an explicit perception-gap campaign and provenance.
+
+Validation protocol:
+
+```bash
+uv run pytest tests/representation/test_scenario_belief.py \
+  tests/test_metrics.py tests/test_aggregate.py
+```
+
 ## Mechanism-Aware Diagnostic Reproduction
 
 For a bounded one-command reproduction of a mechanism-aware diagnostic case, run:

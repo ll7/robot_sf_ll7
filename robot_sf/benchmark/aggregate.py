@@ -446,6 +446,32 @@ def _flatten_social_mini_game_block(base: dict[str, Any], social_mini_game: Any)
             base[prefix] = row.get("value")
 
 
+def _flatten_clear_tracking_block(base: dict[str, Any], clear_tracking: Any) -> None:
+    """Flatten schema-backed CLEAR tracking diagnostics into aggregate/report columns."""
+    if not isinstance(clear_tracking, dict):
+        return
+    if "enabled" in clear_tracking:
+        base["clear_tracking_enabled"] = clear_tracking.get("enabled")
+    if "mota" in clear_tracking:
+        base["clear_mota"] = clear_tracking.get("mota")
+    if "motp_m" in clear_tracking:
+        base["clear_motp_m"] = clear_tracking.get("motp_m")
+    counts = clear_tracking.get("counts") or {}
+    if not isinstance(counts, dict):
+        return
+    count_fields = {
+        "ground_truth": "clear_ground_truth_count",
+        "detections": "clear_detection_count",
+        "missed_detections": "clear_missed_detection_count",
+        "false_positives": "clear_false_positive_count",
+        "id_switches": "clear_id_switch_count",
+        "motp_matches": "clear_motp_match_count",
+    }
+    for source_key, target_key in count_fields.items():
+        if source_key in counts:
+            base[target_key] = counts.get(source_key)
+
+
 def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     """Flatten metrics dict into a flat per-episode row.
 
@@ -464,6 +490,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     social_acceptability = metrics.pop("social_acceptability", {}) or {}
     human_interaction_proxy = metrics.pop("human_interaction_proxy", {}) or {}
     social_mini_game = metrics.pop("social_mini_game", {}) or {}
+    clear_tracking = metrics.pop("clear_tracking_uncertainty", {}) or {}
     inter_robot = metrics.pop("inter_robot", {}) or {}
     # Flatten known force quantiles
     for qk in ("q50", "q90", "q95"):
@@ -475,6 +502,7 @@ def flatten_metrics(rec: dict[str, Any]) -> dict[str, Any]:
     _flatten_social_acceptability_block(base, social_acceptability)
     _flatten_human_interaction_proxy_block(base, human_interaction_proxy)
     _flatten_social_mini_game_block(base, social_mini_game)
+    _flatten_clear_tracking_block(base, clear_tracking)
     if isinstance(inter_robot, dict):
         for key, value in inter_robot.items():
             base[str(key)] = value

@@ -4,7 +4,9 @@
 # This config is paper-facing for preflight/comparability/SNQI contracts and is
 # the current long-horizon benchmark collection. Publication bundle export stays
 # disabled because the 2026-05-06 candidate-augmented local full run completed
-# but has SNQI contract status=fail under warn enforcement.
+# but has SNQI contract status=fail under warn enforcement. Issue #3266 keeps
+# the recovered PR #3263 payload diagnostic-only until a post-PPO-repair rerun
+# produces valid PPO execution plus an explicit SNQI contract interpretation.
 
 name: paper_experiment_matrix_v1_scenario_horizons_h500
 paper_facing: true

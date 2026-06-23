@@ -369,7 +369,7 @@ class PPOPlanner:
     ) -> dict[str, Any]:
         """Return dict observations plus any missing predictive feature payload."""
 
-        source_obs = dict(obs)
+        source_obs = self._flatten_nested_observation(obs)
         if self._predictive_foresight is not None:
             missing_predictive = [
                 key for key in spaces if key.startswith("predictive_") and key not in source_obs
@@ -380,6 +380,23 @@ class PPOPlanner:
                     {key: value for key, value in payload.items() if key in missing_predictive}
                 )
         return source_obs
+
+    @staticmethod
+    def _flatten_nested_observation(obs: dict[str, Any]) -> dict[str, Any]:
+        """Return observation values with nested SocNav leaves promoted to flat keys."""
+
+        flattened: dict[str, Any] = dict(obs)
+
+        def _flatten_recursive(payload: dict[str, Any], prefix: str = "") -> None:
+            for key, value in payload.items():
+                full_key = f"{prefix}_{key}" if prefix else str(key)
+                if isinstance(value, dict):
+                    _flatten_recursive(value, full_key)
+                elif full_key not in flattened:
+                    flattened[full_key] = value
+
+        _flatten_recursive(obs)
+        return flattened
 
     def _align_model_obs_dict(
         self,
@@ -394,13 +411,18 @@ class PPOPlanner:
 
         converted: dict[str, np.ndarray] = {}
         missing: list[str] = []
+        aliases: dict[str, tuple[str, ...]] = {
+            "robot_speed": ("robot_velocity_xy",),
+            "robot_velocity_xy": ("robot_speed",),
+        }
         for key, sub_space in spaces.items():
-            if key not in source_obs:
+            source = self._resolve_dict_observation_source(source_obs, str(key), aliases)
+            if source is None:
                 missing.append(str(key))
                 continue
             target_shape = getattr(sub_space, "shape", None)
             target_dtype = getattr(sub_space, "dtype", None)
-            arr = np.asarray(source_obs[key], dtype=target_dtype)
+            arr = np.asarray(source, dtype=target_dtype)
             if target_shape is not None and tuple(arr.shape) != tuple(target_shape):
                 target_size = int(np.prod(target_shape))
                 if int(arr.size) != target_size:
@@ -414,6 +436,26 @@ class PPOPlanner:
             missing_preview = ", ".join(missing[:6])
             raise ValueError(f"Missing required dict observation keys: {missing_preview}")
         return converted
+
+    @staticmethod
+    def _resolve_dict_observation_source(
+        obs: dict[str, Any],
+        key: str,
+        aliases: dict[str, tuple[str, ...]],
+    ) -> Any | None:
+        """Resolve a model observation field from direct keys or known aliases.
+
+        Returns:
+            The resolved observation value, or None when the key is unavailable.
+        """
+
+        source = obs.get(key)
+        if source is not None:
+            return source
+        for alias in aliases.get(key, ()):
+            if alias in obs:
+                return obs[alias]
+        return None
 
     def _validate_runtime_observation_space(self) -> None:
         """Fail closed when a flat checkpoint cannot match runtime observations."""

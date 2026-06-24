@@ -1,0 +1,57 @@
+name: Security Baseline
+
+on:
+  pull_request:
+    paths:
+      - "**/*.py"
+      - "pyproject.toml"
+      - "SECURITY.md"
+      - "docs/security_triage.md"
+      - ".github/workflows/security-baseline.yml"
+  schedule:
+    - cron: "17 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff-security-advisory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run Ruff security rules advisory baseline
+        id: ruff_security
+        continue-on-error: true
+        run: |
+          mkdir -p output/security
+          uv run ruff check --config 'lint.ignore=[]' --select S . 2>&1 | tee output/security/ruff-security.log
+
+      - name: Summarize Ruff security baseline
+        if: always()
+        run: |
+          if [ -f output/security/ruff-security.log ]; then
+            printf 'Ruff security advisory exit: %s\n' "${{ steps.ruff_security.outcome }}"
+            printf 'Finding lines: '
+            grep -c '^error\[S' output/security/ruff-security.log || true
+          fi
+
+      - name: Upload Ruff security baseline log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ruff-security-baseline
+          path: output/security/ruff-security.log
+          if-no-files-found: warn

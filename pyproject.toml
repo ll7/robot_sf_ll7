@@ -256,7 +256,9 @@ ignore = [
     # Research/scientific computing patterns that are acceptable
     "PLR0911",  # Too many return statements
     "PLR2004",  # Magic value comparison
-    "S",        # Bandit security issues (too noisy for research code)
+    # Legacy Ruff security baseline: keep normal lint non-blocking while
+    # .github/workflows/security-baseline.yml exposes Bandit findings for ratcheting.
+    "S",
     "PGH003",   # Use specific rule codes when ignoring instead of categories
     "DTZ005",   # datetime.datetime.now() called without a 'tz' argument
     "ERA001",   # Found commented-out code

@@ -1,0 +1,38 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - "uv.lock"
+      - "fast-pysf/pyproject.toml"
+      - "fast-pysf/uv.lock"
+      - "third_party/python-rvo2/requirements.txt"
+      - ".github/dependabot.yml"
+      - ".github/workflows/dependency-review.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@56339e523c0409420f6c2c9a2f4292bbb3c07dd3 # v4.7.4
+        with:
+          fail-on-severity: critical
+          comment-summary-in-pr: false

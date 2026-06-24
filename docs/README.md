@@ -103,6 +103,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
 * **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
+* **[Security Triage Guidance](./security_triage.md)** - Vulnerability reporting, dependency scanning, static-analysis triage, and accepted-risk handling for research code
 * **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for SDD, SocNavBench, and AMV calibration-source assets
 * **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
 * **[Agent Workflow Entrypoints And Large-File Navigation](./ai/agent_workflow_entrypoints.md)** - Correct `uv run` command patterns, validation entrypoints, model registry path, and targeted large-file reading guidance for agents

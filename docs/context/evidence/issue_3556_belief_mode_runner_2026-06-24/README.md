@@ -1,4 +1,4 @@
-# Issue #3556 — ScenarioBelief drop-vs-retain wired into the real benchmark runner
+# Issue #3556 ScenarioBelief Drop-vs-Retain Benchmark Runner Evidence (2026-06-24)
 
 **Status:** integration + mechanism landed and tested. The evidence-producing **campaign run** is the
 next step (run-gated only by compute, not by missing capability).

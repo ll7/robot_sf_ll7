@@ -406,7 +406,12 @@ were cancelled or failed.
     parser.add_argument(
         "pr_number",
         nargs="?",
-        help="GitHub PR number (default: detect from current branch)",
+        help="GitHub PR number; alternatively pass --pr <number> (default: detect from current branch)",
+    )
+    parser.add_argument(
+        "--pr",
+        dest="pr_number_option",
+        help="GitHub PR number alias for workflows that prefer named arguments",
     )
     parser.add_argument(
         "--json",
@@ -447,9 +452,15 @@ were cancelled or failed.
         ),
     )
     args = parser.parse_args(argv)
+    if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
+        parser.error(
+            "conflicting PR numbers: pass either positional <pr-number> or --pr <number>, "
+            "or pass the same value to both"
+        )
+    pr_number = args.pr_number_option or args.pr_number
 
     try:
-        pr = _resolve_pr_number(args.pr_number)
+        pr = _resolve_pr_number(pr_number)
         attempts = max(1, args.poll_attempts)
         data = _poll_ci_status(
             pr,

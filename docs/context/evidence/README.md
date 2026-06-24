@@ -477,6 +477,10 @@ Policy caveats:
 - `issue_3544_signalized_failure_pack_real/`: live-execution signalized failure-pack negative
   control. Uses real trace exports and runtime metrics from the signalized smoke matrix; detected no
   failure cases, so the pack is analysis-only and figure-ineligible.
+- `issue_3546_signalized_failure_predicate_contract/`: contract-validation evidence that
+  planner-observable `signal_red_phase_violations` and
+  `signal_stop_line_crossings_under_red` intentionally count as signalized failure-pack
+  predicates. Not a live positive benchmark result.
 - `issue_2752_topology_reselection_mechanism/`: analysis-only mechanism diagnosis of three hard
   slices from Issue #2751 runtime evidence. All hard slices remained `horizon_exhausted`;
   `bottleneck_transfer` and `doorway_transfer` classified as `no_useful_topology_alternative`

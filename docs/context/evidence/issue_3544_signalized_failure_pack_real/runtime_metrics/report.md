@@ -17,5 +17,7 @@ Summary:
 - Fail-closed excluded rows: 2.
 - Runtime evidence is planner-observable for the two denominator rows.
 
-The red required-stop row has `crossed_red=true`, but the current issue #2754 failure-pack builder
-does not classify that signal metric as a failure-pack case.
+The red required-stop row has `crossed_red=true`. The issue #3544 builder run did not classify that
+signal metric as a failure-pack case; issue #3546 updates the builder contract so future reruns can
+classify planner-observable red-phase and stop-line signal metrics as signalized failure-pack
+predicates.

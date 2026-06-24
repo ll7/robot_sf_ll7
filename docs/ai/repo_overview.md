@@ -35,6 +35,7 @@ Then branch by task type:
 - planner family support: `docs/benchmark_planner_family_coverage.md`
 - training/eval workflow: `docs/AGENT_INDEX.md`, `docs/training/`
 - end-to-end AI workflow: `docs/ai/ai-workflow.md`
+- command entrypoints and targeted large-file reads: `docs/ai/agent_workflow_entrypoints.md`
 - prediction/forecast research lane routing: `docs/ai/prediction_lane.md`
 - issue execution history and handoff knowledge base: `docs/context/`
 - context note workflow: `docs/context/README.md`

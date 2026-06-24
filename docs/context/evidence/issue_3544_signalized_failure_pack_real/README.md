@@ -4,8 +4,8 @@ Evidence status: analysis-only real-run negative control.
 
 This directory records a local simulator-backed signalized-crossing run and the issue #2754
 failure-pack builder result. The run used real episode metric rows plus schema-valid trace exports
-generated from embedded simulation-step traces, but the builder found no failure-pack cases under
-its current failure predicate.
+generated from embedded simulation-step traces. The builder version used for issue #3544 found no
+failure-pack cases under the pre-#3546 failure predicate.
 
 ## Result
 
@@ -127,7 +127,6 @@ bb751dc888dfc9dd8a848598b28b7e9b5a069734c3659e937eb781d2d5acd00d  output/benchma
 
 ## Follow-Up
 
-A positive failure-pack case needs either a more adversarial signalized scenario or an explicit
-issue #2754 contract update that decides whether signal-specific metrics such as
-`signal_red_phase_violations` should be failure-pack predicates. Until then, this directory should
-remain negative-control evidence.
+A positive live failure-pack case still needs either a more adversarial signalized scenario or a
+rerun of this trace evidence under the post-#3546 builder contract. This directory remains the
+original issue #3544 negative-control evidence record.

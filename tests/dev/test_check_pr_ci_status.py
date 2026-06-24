@@ -117,6 +117,48 @@ def test_main_with_explicit_pr_and_failure_exit(
     assert "abc123" in captured.out
 
 
+def test_main_accepts_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
+    """--pr should work as a named alias for the positional PR number."""
+    mock_data = json.dumps(
+        {
+            "number": 42,
+            "title": "flag PR",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "flag-pr",
+            "headRefOid": "abc123",
+            "statusCheckRollup": [
+                {"conclusion": "success", "status": "completed", "name": "lint"},
+            ],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["--pr", "42"])
+
+    assert rc == 0
+    mock_run.assert_called_once()
+    gh_args = mock_run.call_args.args[0]
+    assert gh_args[:3] == ["gh", "pr", "view"]
+    assert gh_args[3] == "42"
+    assert "PR #42" in capsys.readouterr().out
+
+
+def test_main_rejects_conflicting_positional_and_pr_flag(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Conflicting PR inputs should fail before invoking gh."""
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        with pytest.raises(SystemExit) as excinfo:
+            main(["41", "--pr", "42"])
+
+    assert excinfo.value.code == 2
+    mock_run.assert_not_called()
+    assert "conflicting PR numbers" in capsys.readouterr().err
+
+
 def test_main_with_startup_failure_exit(capsys: pytest.CaptureFixture) -> None:
     """GitHub startup_failure conclusions should be treated as failed CI."""
     mock_data = json.dumps(
@@ -817,6 +859,7 @@ def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
     )
     assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
     assert "run_worktree_shared_venv.sh" in result.stdout
+    assert "--pr" in result.stdout
     assert "--expected-head-sha" in result.stdout
     assert "--max-wall-seconds" in result.stdout
 

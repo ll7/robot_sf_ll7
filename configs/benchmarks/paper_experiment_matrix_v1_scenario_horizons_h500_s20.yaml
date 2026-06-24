@@ -63,57 +63,51 @@ release_tag: "{release_tag}"
 doi: 10.5281/zenodo.<record-id>
 paper_interpretation_profile: issue-1554-s20-scenario-horizons-h500
 
+# PPO is pinned to a CPU-forced config for the long S20 matrix. Job 13044 showed
+# repeated CUDA model loads can exhaust A30 memory before the PPO row completes.
 planners:
-  - key: prediction_planner
-    algo: prediction_planner
-    planner_group: experimental
-    algo_config: configs/algos/prediction_planner_camera_ready.yaml
-    benchmark_profile: experimental
-
-  - key: goal
-    algo: goal
-    planner_group: core
-    benchmark_profile: baseline-safe
-
-  - key: social_force
-    algo: social_force
-    planner_group: core
-    benchmark_profile: baseline-safe
-
-  - key: orca
-    algo: orca
-    planner_group: core
-    benchmark_profile: baseline-safe
-    socnav_missing_prereq_policy: fallback
-
-  - key: ppo
-    algo: ppo
-    planner_group: experimental
-    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
-    benchmark_profile: experimental
-    adapter_impact_eval: true
-    workers: 1
-
-  - key: socnav_sampling
-    algo: socnav_sampling
-    planner_group: experimental
-    benchmark_profile: experimental
-    socnav_missing_prereq_policy: fail-fast
-
-  - key: sacadrl
-    algo: sacadrl
-    planner_group: experimental
-    benchmark_profile: experimental
-    socnav_missing_prereq_policy: fallback
-
-  - key: scenario_adaptive_hybrid_orca_v1
-    algo: hybrid_rule_local_planner
-    planner_group: experimental
-    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
-    benchmark_profile: experimental
-
-  - key: hybrid_rule_v3_fast_progress_static_escape
-    algo: hybrid_rule_local_planner
-    planner_group: experimental
-    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
-    benchmark_profile: experimental
+- key: prediction_planner
+  algo: prediction_planner
+  planner_group: experimental
+  algo_config: configs/algos/prediction_planner_camera_ready.yaml
+  benchmark_profile: experimental
+- key: goal
+  algo: goal
+  planner_group: core
+  benchmark_profile: baseline-safe
+- key: social_force
+  algo: social_force
+  planner_group: core
+  benchmark_profile: baseline-safe
+- key: orca
+  algo: orca
+  planner_group: core
+  benchmark_profile: baseline-safe
+  socnav_missing_prereq_policy: fallback
+- key: ppo
+  algo: ppo
+  planner_group: experimental
+  algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+  benchmark_profile: experimental
+  adapter_impact_eval: true
+  workers: 1
+- key: socnav_sampling
+  algo: socnav_sampling
+  planner_group: experimental
+  benchmark_profile: experimental
+  socnav_missing_prereq_policy: fail-fast
+- key: sacadrl
+  algo: sacadrl
+  planner_group: experimental
+  benchmark_profile: experimental
+  socnav_missing_prereq_policy: fallback
+- key: scenario_adaptive_hybrid_orca_v1
+  algo: hybrid_rule_local_planner
+  planner_group: experimental
+  algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+  benchmark_profile: experimental
+- key: hybrid_rule_v3_fast_progress_static_escape
+  algo: hybrid_rule_local_planner
+  planner_group: experimental
+  algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+  benchmark_profile: experimental

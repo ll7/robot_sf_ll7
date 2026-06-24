@@ -1994,7 +1994,7 @@ def test_paper_extended_seed_configs_preserve_v1_matrix_contract() -> None:
 
 
 def test_issue_1554_h500_s20_config_preserves_h500_matrix_contract() -> None:
-    """Issue #1554 S20 config should change only the h500 seed schedule."""
+    """Issue #1554 S20 config preserves h500 matrix except PPO CPU safety."""
     base_cfg = load_campaign_config(
         Path("configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml")
     )
@@ -2010,7 +2010,29 @@ def test_issue_1554_h500_s20_config_preserves_h500_matrix_contract() -> None:
     assert s20_cfg.kinematics_matrix == base_cfg.kinematics_matrix == ("differential_drive",)
     assert s20_cfg.seed_policy.mode == "seed-set"
     assert s20_cfg.seed_policy.seed_set == "paper_eval_s20"
-    assert s20_cfg.planners == base_cfg.planners
+
+    base_planners = {planner.key: planner for planner in base_cfg.planners}
+    s20_planners = {planner.key: planner for planner in s20_cfg.planners}
+    assert set(s20_planners) == set(base_planners)
+    for key, planner in s20_planners.items():
+        if key == "ppo":
+            continue
+        assert planner == base_planners[key]
+
+    assert s20_planners["ppo"].workers_override == base_planners["ppo"].workers_override == 1
+    assert s20_planners["ppo"].algo == base_planners["ppo"].algo == "ppo"
+    assert (
+        s20_planners["ppo"].algo_config_path
+        == Path("configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml").resolve()
+    )
+    ppo_cfg = yaml.safe_load(s20_planners["ppo"].algo_config_path.read_text(encoding="utf-8"))
+    assert (
+        ppo_cfg["model_id"]
+        == "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+    )
+    assert ppo_cfg["device"] == "cpu"
+    assert ppo_cfg["predictive_foresight_device"] == "cpu"
+    assert ppo_cfg["fallback_to_goal"] is False
     assert _resolved_seed_inventory(_load_campaign_scenarios(s20_cfg)) == list(range(111, 131))
 
 

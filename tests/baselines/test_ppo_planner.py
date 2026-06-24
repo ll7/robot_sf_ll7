@@ -433,6 +433,26 @@ def test_issue_791_portable_baseline_uses_registry_and_auto_device(monkeypatch, 
     assert planner._model["path"] == str(resolved_model)
 
 
+def test_issue_791_cpu_baseline_forces_cpu_inference(monkeypatch, tmp_path):
+    """The issue-1554 CPU-safe baseline must not load PPO or foresight on CUDA."""
+    config_path = Path("configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml")
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    resolved_model = tmp_path / "model.zip"
+    resolved_model.write_text("checkpoint", encoding="utf-8")
+
+    monkeypatch.setattr("robot_sf.baselines.ppo.resolve_model_path", lambda _model_id: resolved_model)
+    monkeypatch.setattr(
+        "robot_sf.baselines.ppo.PPO",
+        SimpleNamespace(load=lambda path, **kwargs: {"path": path, **kwargs}),
+    )
+
+    planner = PPOPlanner(config)
+
+    assert config["device"] == "cpu"
+    assert config["predictive_foresight_device"] == "cpu"
+    assert planner._model["device"] == "cpu"
+
+
 def test_load_model_resolution_failure_falls_back(monkeypatch):
     """Registry resolution failures should trigger fallback_to_goal when enabled."""
     monkeypatch.setattr(

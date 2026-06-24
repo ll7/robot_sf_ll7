@@ -52,7 +52,7 @@ dev = [
     "mypy>=1.0.0",
 ]
 gpu = [
-    "torch[cuda]>=2.5.1",
+    "torch[cuda]>=2.12.1",
 ]
 training = [
     "stable-baselines3>=2.4.0",

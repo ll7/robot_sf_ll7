@@ -92,8 +92,8 @@ def test_run_command_reports_timeout_without_traceback(monkeypatch) -> None:
     assert result.stderr == "Command timed out after 3.5s"
 
 
-def test_check_carla_runtime_ports_defaults_to_all_interfaces(monkeypatch) -> None:
-    """The preflight check should match Docker's all-interface port binding behavior."""
+def test_check_carla_runtime_ports_defaults_to_loopback(monkeypatch) -> None:
+    """The preflight check should avoid binding all network interfaces by default."""
     from robot_sf_carla_bridge import docker_runtime
 
     bind_calls: list[tuple[str, int]] = []
@@ -114,7 +114,7 @@ def test_check_carla_runtime_ports_defaults_to_all_interfaces(monkeypatch) -> No
     monkeypatch.setattr(docker_runtime.socket, "socket", lambda *args, **kwargs: FakeSocket())
 
     assert docker_runtime.check_carla_runtime_ports((2000,)) == []
-    assert bind_calls == [("", 2000)]
+    assert bind_calls == [(docker_runtime.CARLA_DEFAULT_HOST, 2000)]
 
 
 def test_preflight_reports_not_available_when_docker_daemon_is_unreachable() -> None:

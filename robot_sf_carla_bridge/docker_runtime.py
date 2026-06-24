@@ -132,16 +132,17 @@ def build_carla_server_container_command(
 def check_carla_runtime_ports(
     ports: tuple[int, ...] = CARLA_PORTS,
     *,
-    host: str = CARLA_DEFAULT_HOST,
+    host: str | None = None,
 ) -> list[int]:
     """Return CARLA host ports that cannot be bound before container startup."""
 
+    bind_host = CARLA_DEFAULT_HOST if host is None else host
     unavailable: list[int] = []
     for port in ports:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
-                sock.bind((host, port))
+                sock.bind((bind_host, port))
             except OSError:
                 unavailable.append(port)
     return unavailable

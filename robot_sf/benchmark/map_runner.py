@@ -1090,7 +1090,7 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
         return _build_adapter_policy(
             algo_key=algo_key,
-            algo_config=algo_config,
+            algo_config=stream_gap_config,
             meta=meta,
             adapter=adapter,
             adapter_name="StreamGapPlannerAdapter",

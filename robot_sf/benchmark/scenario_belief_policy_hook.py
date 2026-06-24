@@ -21,6 +21,7 @@ every deterministic agent — the conservative default), never silently dropping
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
@@ -211,10 +212,10 @@ def augment_observation_with_belief(
         return obs
 
     # Merge only the uncertainty sidecar; keep the runner's real positions/velocities/count.
-    new_peds = dict(peds)
+    new_peds = deepcopy(peds)
     new_peds["uncertainty"] = rows
     new_peds["uncertainty_compatibility"] = proj_peds.get("uncertainty_compatibility")
-    new_obs = dict(obs)
+    new_obs = deepcopy(obs)
     new_obs["pedestrians"] = new_peds
     return new_obs
 

@@ -744,3 +744,117 @@ def test_scanner_finds_nested_disagreements(tmp_path: Path) -> None:
     (nested_dir / "summary.json").write_text(json.dumps({"figure_eligible": True}))
 
     assert run_evidence_scan(evidence_dir) == 1
+
+
+def test_signal_red_phase_violation_can_define_failure_case(tmp_path: Path) -> None:
+    """Signal-specific red violations are an explicit failure-pack predicate."""
+    trace_data = _make_dummy_trace("signal_fail_ep", "signal_fail_scen")
+    trace_path = tmp_path / "signal_trace.json"
+    trace_path.write_text(json.dumps(trace_data))
+    record = {
+        "episode_id": "signal_fail_ep",
+        "scenario_id": "signal_fail_scen",
+        "seed": 123,
+        "metrics": {
+            "collisions": 0.0,
+            "comfort_exposure": 0.0,
+            "near_misses": 0,
+            "signal_red_phase_violations": 1,
+            "signal_stop_line_crossings_under_red": 1,
+            "signal_metrics_denominator": 1,
+            "signal_metrics_evidence": {
+                "state": "planner_observable",
+                "exclusion_reason": "",
+            },
+        },
+        "scenario_params": {
+            "metadata": {
+                "signal_state": {
+                    "timeline": [{"state": "red", "duration": 5.0}],
+                    "stop_line": [[1.0, 1.0], [1.0, -1.0]],
+                }
+            }
+        },
+    }
+    record_path = tmp_path / "episodes.jsonl"
+    record_path.write_text(json.dumps(record) + "\n")
+    output_path = tmp_path / "result.json"
+
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            *_eligible_runtime_args(),
+        ]
+    )
+
+    assert exit_code == 0
+    result = json.loads(output_path.read_text())
+    assert result["negative_control"] is False
+    assert result["status"] == "failures_present"
+    assert len(result["cases"]) == 1
+    case = result["cases"][0]
+    assert case["signal_failure_predicates"] == [
+        "signal_red_phase_violations",
+        "signal_stop_line_crossings_under_red",
+    ]
+    assert case["metric_row"]["signal_red_phase_violations"] == 1
+    assert case["metric_row"]["collisions"] == 0.0
+    assert case["figure_eligible"] is True
+
+
+def test_signal_failure_predicate_requires_positive_signal_metrics(tmp_path: Path) -> None:
+    """Zero or malformed signal-specific metrics do not create false positive cases."""
+    trace_data = _make_dummy_trace("signal_nonfail_ep", "signal_nonfail_scen")
+    trace_path = tmp_path / "signal_trace.json"
+    trace_path.write_text(json.dumps(trace_data))
+    record = {
+        "episode_id": "signal_nonfail_ep",
+        "scenario_id": "signal_nonfail_scen",
+        "seed": 123,
+        "metrics": {
+            "collisions": 0.0,
+            "comfort_exposure": 0.0,
+            "near_misses": 0,
+            "signal_red_phase_violations": "not-a-number",
+            "signal_stop_line_crossings_under_red": 0,
+            "signal_metrics_denominator": 1,
+            "signal_metrics_evidence": {
+                "state": "planner_observable",
+                "exclusion_reason": "",
+            },
+        },
+        "scenario_params": {
+            "metadata": {
+                "signal_state": {
+                    "timeline": [{"state": "red", "duration": 5.0}],
+                    "stop_line": [[1.0, 1.0], [1.0, -1.0]],
+                }
+            }
+        },
+    }
+    record_path = tmp_path / "episodes.jsonl"
+    record_path.write_text(json.dumps(record) + "\n")
+    output_path = tmp_path / "result.json"
+
+    exit_code = main(
+        [
+            "--traces",
+            str(trace_path),
+            "--episodes-jsonl",
+            str(record_path),
+            "--output-json",
+            str(output_path),
+            *_eligible_runtime_args(),
+        ]
+    )
+
+    assert exit_code == 0
+    result = json.loads(output_path.read_text())
+    assert result["negative_control"] is True
+    assert result["status"] == "insufficiently_adversarial"
+    assert result["cases"] == []

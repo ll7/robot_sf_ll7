@@ -335,6 +335,8 @@ knowledge, not every transient iteration detail.
   [issue_2275_predictive_v2_fate.md](issue_2275_predictive_v2_fate.md)
 * Issue #2411 predictive-v2 child classification:
   [issue_2411_predictive_v2_child_classification.md](issue_2411_predictive_v2_child_classification.md)
+* Issue #3254 predictive crossing-conflict negative result:
+  [issue_3254_predictive_crossing_conflict_negative_result.md](issue_3254_predictive_crossing_conflict_negative_result.md)
 * Issue #2468 Adversarial Scenario Generation Roadmap:
   [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md)
 * Issue #2470 RL Adversarial Pedestrian Policy Scope:
@@ -1644,3 +1646,7 @@ why a change was made rather than a full issue execution transcript.
 * [Issue #2411 Predictive-v2 Child Classification](issue_2411_predictive_v2_child_classification.md)
   classifies stale predictive-v2 child issues after the stop-old-expansion decision so blocked
   proposal work is not treated as benchmark-ready execution.
+
+* [Issue #3254 Predictive Crossing-Conflict Negative Result](issue_3254_predictive_crossing_conflict_negative_result.md)
+  preserves the schema-fixed crossing-conflict predictive retraining outcome: training completed,
+  but final evaluation failed the success-rate gate, so the run is not planner promotion evidence.

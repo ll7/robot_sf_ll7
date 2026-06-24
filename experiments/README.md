@@ -19,6 +19,18 @@ Each record must state:
 - `paper_relevance`
 - `status`
 
+## Run-Ready Launch-Packet Manifest
+
+`experiments/run_ready_manifest.yaml` is generated from launch packets under `configs/`:
+
+```bash
+uv run python scripts/dev/build_run_ready_manifest.py --output experiments/run_ready_manifest.yaml
+```
+
+The manifest is a preflight and discovery surface for queue tooling. `ready: true` only means the
+packet passed local path, checksum, seed-budget, command, and claim-boundary checks; it does not
+assert benchmark results, paper evidence, or permission to submit a job.
+
 ## Experiment Record v2
 
 `experiment-record.v2` is the authoritative research-control-plane schema for new sprint studies.

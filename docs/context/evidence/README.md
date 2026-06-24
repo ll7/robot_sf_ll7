@@ -120,6 +120,12 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3254_predictive_crossing_conflict_13042_2026-06-23/`: analysis-only
+  negative result for the schema-fixed Issue #3254 predictive crossing-conflict
+  rerun. Training completed on a non-degenerate `predictive_ego_v1` dataset, but
+  final evaluation failed the success-rate gate (`0.08696 < 0.3`), so the run is
+  not benchmark-strength or paper-facing evidence and should not be blindly
+  resubmitted.
 - `issue_3342_nearfield_turn_budget_2026-06-21/`: diagnostic-local S20 follow-up
   for the Issue #3215 near-field turn-budget signal. It compares `baseline`,
   `nearfield_turn`, and `nf_speedcap_only` across clean and observation-noise
@@ -474,6 +480,13 @@ Policy caveats:
   denominator and exclusion semantics. Includes `red_required_stop`, `green_proceed`,
   `unavailable_no_claim`, and `proxy_only_denominator_excluded` rows; proves runtime denominator
   plumbing, not traffic-light realism, forced-waiting reasoning, or planner-ranking performance.
+- `issue_3544_signalized_failure_pack_real/`: live-execution signalized failure-pack negative
+  control. Uses real trace exports and runtime metrics from the signalized smoke matrix; detected no
+  failure cases, so the pack is analysis-only and figure-ineligible.
+- `issue_3546_signalized_failure_predicate_contract/`: contract-validation evidence that
+  planner-observable `signal_red_phase_violations` and
+  `signal_stop_line_crossings_under_red` intentionally count as signalized failure-pack
+  predicates. Not a live positive benchmark result.
 - `issue_2752_topology_reselection_mechanism/`: analysis-only mechanism diagnosis of three hard
   slices from Issue #2751 runtime evidence. All hard slices remained `horizon_exhausted`;
   `bottleneck_transfer` and `doorway_transfer` classified as `no_useful_topology_alternative`

@@ -440,7 +440,9 @@ def test_issue_791_cpu_baseline_forces_cpu_inference(monkeypatch, tmp_path):
     resolved_model = tmp_path / "model.zip"
     resolved_model.write_text("checkpoint", encoding="utf-8")
 
-    monkeypatch.setattr("robot_sf.baselines.ppo.resolve_model_path", lambda _model_id: resolved_model)
+    monkeypatch.setattr(
+        "robot_sf.baselines.ppo.resolve_model_path", lambda _model_id: resolved_model
+    )
     monkeypatch.setattr(
         "robot_sf.baselines.ppo.PPO",
         SimpleNamespace(load=lambda path, **kwargs: {"path": path, **kwargs}),

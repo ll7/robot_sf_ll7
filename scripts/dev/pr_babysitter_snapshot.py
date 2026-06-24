@@ -348,8 +348,7 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(safe_payload, indent=2, sort_keys=True) if args.json else json.dumps(safe_payload)
     )
     # The printed payload is rebuilt from an allowlist in _sanitize_payload_for_output.
-    # codeql[py/clear-text-logging-sensitive-data]
-    print(output_text)
+    print(output_text)  # lgtm[py/clear-text-logging-sensitive-data]
     return 0
 
 

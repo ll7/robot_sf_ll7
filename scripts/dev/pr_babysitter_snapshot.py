@@ -344,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.retry_state_file and args.record_retry_recommendation:
         save_retry_state(args.retry_state_file, retry_state)
     safe_payload = _sanitize_payload_for_output(payload)
+    # The printed payload is rebuilt from an allowlist in _sanitize_payload_for_output.
+    # codeql[py/clear-text-logging-sensitive-data]
     print(
         json.dumps(safe_payload, indent=2, sort_keys=True)
         if args.json

@@ -300,8 +300,14 @@ class StreamGapPlannerAdapter:
         goal_next = np.asarray(goal.get("next", [0.0, 0.0]), dtype=float).reshape(-1)[:2]
         goal_current = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)[:2]
         goal_pos = goal_next if goal_next.size == 2 else np.zeros(2, dtype=float)
-        if goal_pos.size != 2 or np.linalg.norm(goal_pos - robot_pos) <= 1e-6:
+        if (
+            goal_pos.size != 2
+            or not np.all(np.isfinite(goal_pos))
+            or np.linalg.norm(goal_pos - robot_pos) <= 1e-6
+        ):
             goal_pos = goal_current if goal_current.size == 2 else np.zeros(2, dtype=float)
+        if not np.all(np.isfinite(goal_pos)):
+            goal_pos = np.zeros(2, dtype=float)
 
         ped_pos = self._as_xy(pedestrians.get("positions"))
         ped_vel = self._as_xy(pedestrians.get("velocities"))

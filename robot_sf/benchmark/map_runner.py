@@ -1084,7 +1084,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
                 fov_degrees=float(algo_config.get("belief_fov_degrees", DEFAULT_FOV_DEGREES)),
                 max_range_m=algo_config.get("belief_max_range_m", DEFAULT_MAX_RANGE_M),
                 ped_radius=float(algo_config.get("belief_ped_radius", DEFAULT_PED_RADIUS)),
-                max_pedestrians=int(algo_config.get("belief_max_pedestrians", DEFAULT_MAX_PEDESTRIANS)),
+                max_pedestrians=int(
+                    algo_config.get("belief_max_pedestrians", DEFAULT_MAX_PEDESTRIANS)
+                ),
             )
         return _build_adapter_policy(
             algo_key=algo_key,

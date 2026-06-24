@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import shlex
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -246,7 +247,7 @@ def _queue_hint(payload: dict[str, Any], *, issue: int | None, kind: str) -> dic
     """Return conservative private-ops queue hint for a launch packet."""
 
     explicit = payload.get("queue_hint")
-    hint: dict[str, Any] = dict(explicit) if isinstance(explicit, dict) else {}
+    hint: dict[str, Any] = deepcopy(explicit) if isinstance(explicit, dict) else {}
     boundary = payload.get("execution_boundary") or payload.get("claim_gate") or {}
     submit_ready = bool(
         isinstance(boundary, dict) and boundary.get("submit_slurm_from_this_issue") is True

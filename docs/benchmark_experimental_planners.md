@@ -18,6 +18,38 @@ This metadata is a compatibility guard only. It makes mismatched observation/act
 fail before benchmark execution, but it is not performance evidence and must not be cited as proof
 that a planner is baseline-ready, paper-facing, or high quality.
 
+## Policy-Search Candidate Configs
+
+Policy-search candidate planner configs live under
+`configs/policy_search/candidates/`. This is the first place to look for candidate variants such as
+`hybrid_rule_v3_static_margin0.yaml`, `hybrid_rule_v3_static_margin0_waypoint2.yaml`,
+`hybrid_rule_v3_fast_progress.yaml`, and `hybrid_rule_v3_fast_progress_static_escape.yaml`.
+
+`configs/algos/` is the benchmark-facing algorithm-config directory. It can contain promoted,
+compatibility, or direct benchmark wrappers, and some entries intentionally point back to candidate
+configs. Do not assume a candidate exists under `configs/algos/` just because a similarly named
+policy-search file exists under `configs/policy_search/candidates/`.
+
+Preferred local entrypoints:
+
+```bash
+uv run python scripts/validation/run_policy_search_candidate.py \
+  --candidate hybrid_rule_v3_fast_progress \
+  --stage smoke
+```
+
+```bash
+uv run python scripts/validation/run_policy_search_step_diagnostics.py \
+  --candidate hybrid_rule_v3_static_margin0 \
+  --stage smoke
+```
+
+The runners resolve candidate names through `docs/context/policy_search/candidate_registry.yaml`,
+whose entries point back to the candidate config files. Use the candidate runner for compact
+candidate smoke/evaluation loops. Use the step-diagnostics runner when debugging why a candidate
+action, clearance, progress, or recovery decision changed. Both commands load repository
+dependencies through `uv run python`, so they avoid accidental system-Python import failures.
+
 ## Testing-only planners
 
 The following planners are currently treated as testing-only and fail closed by default:

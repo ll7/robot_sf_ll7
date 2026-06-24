@@ -127,7 +127,10 @@ Use it for three things only:
 
 - Retrieval index: `docs/context/policy_search/INDEX.md`
 - Candidate lifecycle summary: `docs/context/policy_search/candidate_registry_summary.md`
+- Candidate config home: `configs/policy_search/candidates/`
+- Benchmark-facing algorithm configs: `configs/algos/`
 - Candidate runner: `uv run python scripts/validation/run_policy_search_candidate.py`
+- Candidate step diagnostics: `uv run python scripts/validation/run_policy_search_step_diagnostics.py`
 - Candidate/learned-policy registry validator:
   `uv run python scripts/validation/validate_policy_search_registry.py`
 - Candidate portfolio overview: `uv run python scripts/tools/summarize_policy_search_portfolio.py`
@@ -137,6 +140,24 @@ Use it for three things only:
 - Pareto plot: `uv run python scripts/tools/plot_policy_search_pareto_front.py`
 - Promotion decision: `uv run python scripts/tools/promote_policy_search_candidate.py`
 - SLURM candidate sweep: `scripts/dev/sbatch_policy_search_sweep.sh --stage full_matrix --all-implemented`
+
+Candidate names are resolved through `docs/context/policy_search/candidate_registry.yaml`; registry
+entries point to files under `configs/policy_search/candidates/`. For example:
+
+```bash
+uv run python scripts/validation/run_policy_search_candidate.py \
+  --candidate hybrid_rule_v3_fast_progress \
+  --stage smoke
+```
+
+```bash
+uv run python scripts/validation/run_policy_search_step_diagnostics.py \
+  --candidate hybrid_rule_v3_static_margin0 \
+  --stage smoke
+```
+
+Use `configs/algos/` for benchmark-facing algorithm configs and wrappers. Do not assume a
+policy-search candidate lives there just because a similarly named benchmark config exists.
 
 ## Learned-Policy Intake
 

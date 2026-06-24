@@ -17,6 +17,38 @@ from scripts.dev.snapshot_pr_queue import DEFAULT_REPO, snapshot_prs
 
 SCHEMA_VERSION = "pr_babysitter_snapshot.v1"
 DEFAULT_RETRY_BUDGET = 1
+PR_STATES = {"OPEN": "OPEN", "MERGED": "MERGED", "CLOSED": "CLOSED"}
+MERGEABLE_STATES = {
+    "MERGEABLE": "MERGEABLE",
+    "CONFLICTING": "CONFLICTING",
+    "UNKNOWN": "UNKNOWN",
+}
+RECOMMENDATION_ACTIONS = {
+    "review_for_merge_ready": "review_for_merge_ready",
+    "process_review_comment": "process_review_comment",
+    "diagnose_ci_failure": "diagnose_ci_failure",
+    "wait_ci": "wait_ci",
+    "stop_pr_closed": "stop_pr_closed",
+    "stop_stale_head": "stop_stale_head",
+    "stop_user_help_required": "stop_user_help_required",
+}
+AFTER_DIAGNOSIS_ACTIONS = {
+    "retry_failed_checks": "retry_failed_checks",
+    "stop_retry_budget_exhausted": "stop_retry_budget_exhausted",
+}
+
+
+def _int_or_zero(value: Any) -> int:
+    """Return a non-sensitive integer summary value."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _literal_from(value: Any, allowed: dict[str, str], default: str = "") -> str:
+    """Return an allowlisted literal, never the original arbitrary value."""
+    return allowed.get(value, default) if isinstance(value, str) else default
 
 
 def _state_key(pr: dict[str, Any]) -> str:
@@ -303,27 +335,33 @@ def _sanitize_payload_for_output(payload: dict[str, Any]) -> dict[str, Any]:
 
         prs.append(
             {
-                "number": pr.get("number"),
-                "state": pr.get("state", ""),
-                "mergeable": pr.get("mergeable", ""),
+                "number": _int_or_zero(pr.get("number")),
+                "state": _literal_from(pr.get("state"), PR_STATES),
+                "mergeable": _literal_from(pr.get("mergeable"), MERGEABLE_STATES),
                 "recommendation": {
-                    "action": recommendation.get("action", "wait"),
-                    "after_diagnosis_action": recommendation.get("after_diagnosis_action"),
+                    "action": _literal_from(
+                        recommendation.get("action"), RECOMMENDATION_ACTIONS, default="wait"
+                    ),
+                    "after_diagnosis_action": _literal_from(
+                        recommendation.get("after_diagnosis_action"), AFTER_DIAGNOSIS_ACTIONS
+                    ),
                     "retry_budget": {
-                        "budget": retry_budget.get("budget", 0),
-                        "retry_recommendations": retry_budget.get("retry_recommendations", 0),
-                        "remaining": retry_budget.get("remaining", 0),
-                        "exhausted": retry_budget.get("exhausted", False),
+                        "budget": _int_or_zero(retry_budget.get("budget")),
+                        "retry_recommendations": _int_or_zero(
+                            retry_budget.get("retry_recommendations")
+                        ),
+                        "remaining": _int_or_zero(retry_budget.get("remaining")),
+                        "exhausted": bool(retry_budget.get("exhausted")),
                     },
                 },
             }
         )
 
     return {
-        "schema": payload.get("schema"),
-        "repo": payload.get("repo"),
-        "source_schema": payload.get("source_schema"),
-        "route_evidence_only": payload.get("route_evidence_only", True),
+        "schema": SCHEMA_VERSION,
+        "repo": DEFAULT_REPO,
+        "source_schema": "pr_queue_snapshot.v1",
+        "route_evidence_only": True,
         "prs": prs,
     }
 
@@ -347,8 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     output_text = (
         json.dumps(safe_payload, indent=2, sort_keys=True) if args.json else json.dumps(safe_payload)
     )
-    # The printed payload is rebuilt from an allowlist in _sanitize_payload_for_output.
-    print(output_text)  # lgtm[py/clear-text-logging-sensitive-data]
+    print(output_text)
     return 0
 
 

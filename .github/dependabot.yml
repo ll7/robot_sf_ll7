@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "06:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "uv"
+    directory: "/fast-pysf"
+    schedule:
+      interval: "monthly"
+      day: "tuesday"
+      time: "06:30"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "07:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"

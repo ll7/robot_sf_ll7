@@ -171,6 +171,36 @@ def test_build_previews_skips_done_and_rounds_scores() -> None:
     assert previews[0].new_score == round(previews[0].new_score, 4)
 
 
+def test_build_previews_only_empty_skips_already_scored_items() -> None:
+    """only_empty assesses unscored issues and never touches an existing priority.
+
+    This is the autopilot auto-fill contract: fill empty priorities cheaply, but leave human-set or
+    previously-computed scores alone so the loop does not churn the project board.
+    """
+
+    items = [
+        _item(1, improvement=5, **{lower_first_key(EFFORT_FIELD): 8}),
+        _item(
+            2,
+            improvement=5,
+            **{lower_first_key(EFFORT_FIELD): 8, lower_first_key(PRIORITY_SCORE_FIELD): 1.23},
+        ),
+    ]
+    kwargs = {
+        "alpha": DEFAULT_ALPHA,
+        "round_digits": 4,
+        "issue_number": None,
+        "skip_statuses": set(),
+    }
+
+    only_empty = build_previews(items, only_empty=True, **kwargs)
+    assert [p.issue_number for p in only_empty] == [1]
+
+    # Without the flag, both items (including the already-scored one) are previewed.
+    both = build_previews(items, **kwargs)
+    assert {p.issue_number for p in both} == {1, 2}
+
+
 def test_sync_scores_ensures_fields_and_writes_updates() -> None:
     """Verify sync can create missing fields and update the derived score.
 

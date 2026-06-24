@@ -94,6 +94,7 @@ class SyncOptions:
     issue_number: int | None
     dry_run: bool
     skip_statuses: set[str]
+    only_empty: bool = False
 
 
 def clamp(value: float, *, lower: float, upper: float | None = None) -> float:
@@ -400,8 +401,14 @@ def build_previews(
     round_digits: int,
     issue_number: int | None,
     skip_statuses: set[str],
+    only_empty: bool = False,
 ) -> list[SyncPreview]:
-    """Compute score updates for the eligible project items."""
+    """Compute score updates for the eligible project items.
+
+    When ``only_empty`` is set, items that already have a ``Priority Score`` are skipped, so the
+    auto-fill loop only assesses never-scored issues and never churns existing (often human-set)
+    priorities.
+    """
 
     previews: list[SyncPreview] = []
     for item in items:
@@ -420,6 +427,10 @@ def build_previews(
         if issue_number is not None and number != issue_number:
             continue
 
+        old_score = _coerce_float(field_value(item, PRIORITY_SCORE_FIELD))
+        if only_empty and old_score is not None:
+            continue
+
         inputs = normalize_inputs(item)
         score = round(compute_priority_score(inputs, alpha=alpha), round_digits)
         previews.append(
@@ -427,7 +438,7 @@ def build_previews(
                 issue_number=number,
                 title=str(content["title"]),
                 status=status,
-                old_score=_coerce_float(field_value(item, PRIORITY_SCORE_FIELD)),
+                old_score=old_score,
                 new_score=score,
                 inputs=inputs,
             )
@@ -492,6 +503,7 @@ def sync_scores(
         round_digits=options.round_digits,
         issue_number=options.issue_number,
         skip_statuses=options.skip_statuses,
+        only_empty=options.only_empty,
     )
     items_by_issue: dict[int, dict[str, Any]] = {}
     for item in items:
@@ -573,6 +585,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=["Done"],
         help="Project status values to skip. Repeatable. Default: Done.",
     )
+    sync.add_argument(
+        "--only-empty",
+        action="store_true",
+        help=(
+            "Only assess issues whose Priority Score is currently empty; never re-score or "
+            "overwrite an existing priority. Used by the autopilot auto-fill loop to stay cheap "
+            "and avoid churning human-set priorities."
+        ),
+    )
     return parser
 
 
@@ -595,6 +616,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             issue_number=args.issue_number,
             dry_run=args.dry_run,
             skip_statuses=set(args.skip_status),
+            only_empty=args.only_empty,
         ),
     )
 

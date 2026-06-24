@@ -56,7 +56,14 @@ def _as_xy(value: Any) -> np.ndarray:
     Returns:
         np.ndarray: An ``(n, 2)`` float32 array, empty when the value is not 2-D xy data.
     """
-    arr = np.asarray(value, dtype=np.float32) if value is not None else np.zeros((0, 2), np.float32)
+    try:
+        arr = (
+            np.asarray(value, dtype=np.float32)
+            if value is not None
+            else np.zeros((0, 2), np.float32)
+        )
+    except (TypeError, ValueError):
+        return np.zeros((0, 2), dtype=np.float32)
     if arr.ndim == 1 and arr.size >= 2:
         arr = arr.reshape(1, -1)[:, :2]
     if arr.ndim != 2 or arr.shape[1] < 2:

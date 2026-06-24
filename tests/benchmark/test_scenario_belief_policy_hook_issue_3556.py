@@ -99,6 +99,20 @@ def test_augment_tolerates_empty_robot_and_goal_fields():
     assert len(aug["pedestrians"]["uncertainty"]) == 1
 
 
+def test_augment_fails_closed_on_malformed_pedestrian_arrays():
+    """Malformed pedestrian arrays should omit the sidecar instead of crashing."""
+
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": 0.0},
+        "goal": {"current": [1.0, 0.0]},
+        "pedestrians": {"positions": ["bad"], "velocities": ["bad"], "count": [1]},
+    }
+
+    aug = augment_observation_with_belief(obs, mode="uncertain_dropped")
+
+    assert "uncertainty" not in aug["pedestrians"]
+
+
 def test_adapter_delegates_non_plan_attributes():
     """The wrapper delegates reset/diagnostics-style attributes to the inner adapter."""
     inner = StreamGapPlannerAdapter(StreamGapPlannerConfig())

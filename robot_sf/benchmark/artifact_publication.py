@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mimetypes
 import shutil
 import tarfile
 from collections import defaultdict
@@ -25,6 +26,7 @@ from robot_sf.common.artifact_paths import get_repository_root
 
 PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v2"
 EVIDENCE_BUNDLE_SCHEMA_VERSION = "evidence_bundle.v1"
+EVIDENCE_MIRROR_MANIFEST_SCHEMA_VERSION = "evidence_bundle_mirror.v1"
 MANUSCRIPT_ARTIFACT_BUNDLE_SCHEMA_VERSION = "dissertation_artifact_bundle.v1"
 SIZE_REPORT_SCHEMA_VERSION = "benchmark-artifact-size-report.v1"
 _VIDEO_SUFFIXES = {".mp4", ".gif", ".webm", ".mov"}
@@ -77,6 +79,7 @@ class EvidenceBundleResult:
     checksums_path: Path
     file_count: int
     total_bytes: int
+    mirror_manifest_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -465,6 +468,97 @@ def _resolve_evidence_files(source_root: Path, files: list[Path]) -> list[Path]:
     return sorted(set(resolved), key=lambda value: value.as_posix())
 
 
+def _guess_mime_type(path: Path) -> str:
+    """Return a stable MIME/type hint for an evidence payload path."""
+    guessed, _ = mimetypes.guess_type(path.as_posix())
+    return guessed or "application/octet-stream"
+
+
+def _join_remote_uri(base_uri: str, relative_path: str) -> str:
+    """Join a mirror base URI and POSIX relative path without recording credentials.
+
+    Returns:
+        Joined remote URI string.
+    """
+    return f"{base_uri.rstrip('/')}/{relative_path.lstrip('/')}"
+
+
+def _write_evidence_mirror_manifest(
+    *,
+    bundle_dir: Path,
+    bundle_name: str,
+    payload_root: Path,
+    entries: list[PublicationFileEntry],
+    dry_run_base_uri: str | None,
+    local_dir: Path | None,
+    overwrite: bool,
+) -> Path | None:
+    """Write optional mirror manifest for evidence bundle payloads.
+
+    The dry-run URI mode records where payloads would be mirrored without touching any remote
+    service. The local backend is a credential-free concrete backend used for tests and local
+    staging; cloud backends can consume the same manifest shape later.
+
+    Returns:
+        Path to the mirror manifest when mirroring is enabled, otherwise ``None``.
+    """
+    if dry_run_base_uri and local_dir is not None:
+        raise ValueError("Choose only one evidence mirror backend")
+    if not dry_run_base_uri and local_dir is None:
+        return None
+
+    backend = "dry_run_uri" if dry_run_base_uri else "local_file"
+    mode = "dry_run" if dry_run_base_uri else "upload"
+    mirror_root: Path | None = None
+    if local_dir is not None:
+        mirror_root = local_dir.resolve()
+        if mirror_root.exists() and not mirror_root.is_dir():
+            raise ValueError(f"Evidence mirror local_dir is not a directory: {mirror_root}")
+        mirror_root.mkdir(parents=True, exist_ok=True)
+
+    assets: list[dict[str, Any]] = []
+    for entry in entries:
+        payload_rel = Path("payload") / entry.path
+        payload_path = payload_root / entry.path
+        if mirror_root is not None:
+            mirror_path = mirror_root / bundle_name / payload_rel
+            if mirror_path.exists() and not overwrite:
+                raise FileExistsError(f"Evidence mirror target already exists: {mirror_path}")
+            mirror_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(payload_path, mirror_path)
+            remote_uri = mirror_path.resolve().as_uri()
+            upload_status = "uploaded"
+        else:
+            remote_uri = _join_remote_uri(str(dry_run_base_uri), payload_rel.as_posix())
+            upload_status = "dry_run"
+        assets.append(
+            {
+                "path": entry.path,
+                "source_path": payload_rel.as_posix(),
+                "size_bytes": entry.size_bytes,
+                "sha256": entry.sha256,
+                "kind": entry.kind,
+                "mime_type": _guess_mime_type(Path(entry.path)),
+                "remote_uri": remote_uri,
+                "upload_status": upload_status,
+            }
+        )
+
+    manifest = {
+        "schema_version": EVIDENCE_MIRROR_MANIFEST_SCHEMA_VERSION,
+        "evidence_bundle_schema_version": EVIDENCE_BUNDLE_SCHEMA_VERSION,
+        "created_at_utc": _utc_now_iso(),
+        "bundle_name": bundle_name,
+        "backend": backend,
+        "mode": mode,
+        "credentials": "not_recorded",
+        "assets": assets,
+    }
+    manifest_path = bundle_dir / "mirror_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return manifest_path
+
+
 def _validate_non_empty(value: str, field: str, artifact_id: str) -> str:
     """Validate a required string field from an artifact spec.
 
@@ -689,7 +783,7 @@ def export_dissertation_artifact_bundle(
     )
 
 
-def export_evidence_bundle(
+def export_evidence_bundle(  # noqa: PLR0913
     source_root: Path,
     out_dir: Path,
     *,
@@ -699,6 +793,8 @@ def export_evidence_bundle(
     commit: str,
     claim_boundary: str,
     overwrite: bool = False,
+    mirror_dry_run_base_uri: str | None = None,
+    mirror_local_dir: Path | None = None,
 ) -> EvidenceBundleResult:
     """Export a compact reproducible evidence bundle.
 
@@ -781,6 +877,15 @@ def export_evidence_bundle(
     }
     manifest_path = bundle_dir / "evidence_bundle_manifest.json"
     manifest_path.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
+    mirror_manifest_path = _write_evidence_mirror_manifest(
+        bundle_dir=bundle_dir,
+        bundle_name=target_name,
+        payload_root=payload_root,
+        entries=entries,
+        dry_run_base_uri=mirror_dry_run_base_uri,
+        local_dir=mirror_local_dir,
+        overwrite=overwrite,
+    )
 
     return EvidenceBundleResult(
         bundle_dir=bundle_dir,
@@ -788,6 +893,7 @@ def export_evidence_bundle(
         checksums_path=checksums_path,
         file_count=len(entries),
         total_bytes=total_bytes,
+        mirror_manifest_path=mirror_manifest_path,
     )
 
 

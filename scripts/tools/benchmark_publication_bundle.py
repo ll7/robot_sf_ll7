@@ -227,6 +227,24 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow replacing an existing evidence bundle directory with the same name.",
     )
+    evidence.add_argument(
+        "--mirror-dry-run-base-uri",
+        type=str,
+        default=None,
+        help=(
+            "Optional URI prefix for a dry-run remote asset mirror manifest. "
+            "No upload is attempted and credentials must not be embedded in the URI."
+        ),
+    )
+    evidence.add_argument(
+        "--mirror-local-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional credential-free local filesystem mirror backend. Payload files are copied "
+            "under this directory and recorded as file:// URIs."
+        ),
+    )
 
     dissertation = subparsers.add_parser(
         "dissertation-bundle",
@@ -416,6 +434,8 @@ def _run_evidence_bundle(args: argparse.Namespace) -> int:
         commit=str(args.commit),
         claim_boundary=str(args.claim_boundary),
         overwrite=bool(args.overwrite),
+        mirror_dry_run_base_uri=args.mirror_dry_run_base_uri,
+        mirror_local_dir=args.mirror_local_dir,
     )
     payload = {
         "bundle_dir": str(result.bundle_dir),
@@ -424,6 +444,8 @@ def _run_evidence_bundle(args: argparse.Namespace) -> int:
         "file_count": result.file_count,
         "total_bytes": result.total_bytes,
     }
+    if result.mirror_manifest_path is not None:
+        payload["mirror_manifest_path"] = str(result.mirror_manifest_path)
     print(json.dumps(payload, indent=2))
     return 0
 

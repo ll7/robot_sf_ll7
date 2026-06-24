@@ -66,6 +66,28 @@ Each bundle writes:
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
 
+For large artifacts that should remain outside git, the same command supports opt-in mirror
+metadata:
+
+```bash
+uv run python scripts/tools/benchmark_publication_bundle.py evidence-bundle \
+  --source-root docs/context/evidence/<source-or-fixture> \
+  --out-dir docs/context/evidence \
+  --bundle-name <issue-or-claim-bundle> \
+  --file summary.json \
+  --command "<canonical reproduction validation command>" \
+  --commit <git-commit> \
+  --claim-boundary diagnostic_only_not_benchmark_evidence \
+  --mirror-dry-run-base-uri s3://example-bucket/evidence
+```
+
+`--mirror-dry-run-base-uri` writes `mirror_manifest.json` with deterministic remote URI targets,
+sizes, SHA-256 checksums, MIME hints, and `upload_status: dry_run` without contacting a remote
+service. `--mirror-local-dir <path>` is a credential-free local backend for tests and staging; it
+copies the selected payload files and records `file://` URIs with `upload_status: uploaded`.
+Mirroring is off by default, credentials must not appear in manifests or logs, and mirror metadata
+does not upgrade a diagnostic bundle into benchmark-strength or paper-facing evidence.
+
 ## Claim Readiness Check
 
 Before promoting compact evidence into a stronger claim, run the claim-readiness guardrail against

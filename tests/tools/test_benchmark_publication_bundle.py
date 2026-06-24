@@ -330,6 +330,132 @@ def test_evidence_bundle_command_creates_manifest_and_checksums(tmp_path: Path, 
     assert "metric_table.csv" in checksums
 
 
+def test_evidence_bundle_command_writes_dry_run_mirror_manifest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Dry-run mirroring should record deterministic remote asset pointers without upload."""
+    source_root = tmp_path / "evidence_source"
+    _make_evidence_source(source_root)
+    out_dir = tmp_path / "bundles"
+
+    exit_code = benchmark_publication_bundle.main(
+        [
+            "evidence-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            "issue_3468_dry_run",
+            "--file",
+            "summary.json",
+            "--command",
+            "uv run python scripts/example.py --config tracked.yaml",
+            "--commit",
+            "abc123",
+            "--claim-boundary",
+            "diagnostic_only_not_benchmark_evidence",
+            "--mirror-dry-run-base-uri",
+            "s3://example-bucket/evidence",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    mirror_manifest_path = Path(payload["mirror_manifest_path"])
+    mirror_manifest = json.loads(mirror_manifest_path.read_text(encoding="utf-8"))
+    asset = mirror_manifest["assets"][0]
+
+    assert mirror_manifest["schema_version"] == "evidence_bundle_mirror.v1"
+    assert mirror_manifest["backend"] == "dry_run_uri"
+    assert mirror_manifest["mode"] == "dry_run"
+    assert mirror_manifest["credentials"] == "not_recorded"
+    assert asset["path"] == "summary.json"
+    assert asset["source_path"] == "payload/summary.json"
+    assert asset["size_bytes"] == len('{"result_classification":"diagnostic-only"}\n')
+    assert asset["kind"] == "aggregates"
+    assert asset["mime_type"] == "application/json"
+    assert asset["remote_uri"] == "s3://example-bucket/evidence/payload/summary.json"
+    assert asset["upload_status"] == "dry_run"
+
+
+def test_evidence_bundle_command_copies_local_mirror_backend(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Local mirror backend provides credential-free upload-path coverage."""
+    source_root = tmp_path / "evidence_source"
+    _make_evidence_source(source_root)
+    out_dir = tmp_path / "bundles"
+    mirror_dir = tmp_path / "mirror"
+
+    exit_code = benchmark_publication_bundle.main(
+        [
+            "evidence-bundle",
+            "--source-root",
+            str(source_root),
+            "--out-dir",
+            str(out_dir),
+            "--bundle-name",
+            "issue_3468_local",
+            "--file",
+            "metric_table.csv",
+            "--command",
+            "uv run python scripts/example.py --config tracked.yaml",
+            "--commit",
+            "abc123",
+            "--claim-boundary",
+            "diagnostic_only_not_benchmark_evidence",
+            "--mirror-local-dir",
+            str(mirror_dir),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    payload = json.loads(captured.out)
+    mirrored_file = mirror_dir / "issue_3468_local" / "payload" / "metric_table.csv"
+    assert mirrored_file.read_text(encoding="utf-8") == "metric,value\nsuccess_rate,0.5\n"
+    mirror_manifest = json.loads(Path(payload["mirror_manifest_path"]).read_text(encoding="utf-8"))
+    asset = mirror_manifest["assets"][0]
+    assert asset["upload_status"] == "uploaded"
+    assert asset["remote_uri"] == mirrored_file.resolve().as_uri()
+    assert asset["mime_type"] == "text/csv"
+
+
+def test_evidence_bundle_command_fails_closed_for_invalid_mirror_local_dir(
+    tmp_path: Path,
+) -> None:
+    """Invalid local mirror targets should fail closed with an actionable error."""
+    source_root = tmp_path / "evidence_source"
+    _make_evidence_source(source_root)
+    invalid_mirror = tmp_path / "mirror-is-file"
+    invalid_mirror.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="local_dir is not a directory"):
+        benchmark_publication_bundle.main(
+            [
+                "evidence-bundle",
+                "--source-root",
+                str(source_root),
+                "--out-dir",
+                str(tmp_path / "bundles"),
+                "--bundle-name",
+                "issue_3468_invalid",
+                "--file",
+                "summary.json",
+                "--command",
+                "uv run python scripts/example.py --config tracked.yaml",
+                "--commit",
+                "abc123",
+                "--claim-boundary",
+                "diagnostic_only_not_benchmark_evidence",
+                "--mirror-local-dir",
+                str(invalid_mirror),
+            ]
+        )
+
+
 def test_evidence_bundle_command_fails_closed_for_missing_file(tmp_path: Path) -> None:
     """Evidence bundles should fail before writing manifests when a requested file is missing."""
     source_root = tmp_path / "evidence_source"

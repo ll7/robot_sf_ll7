@@ -81,7 +81,7 @@ def scale_svg_file(input_path: str, output_path: str, scale_factor: float = 0.1)
     )
 
     # Remove the old comment if present and add new one
-    content = re.sub(r"<!--.*?-->\s*", "", content, count=1)
+    content = re.sub(r"<!--[\s\S]*?-->\s*", "", content, count=1)
     content = content.replace(
         "<?xml version='1.0' encoding='UTF-8'?>\n",
         f'<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n{comment}',

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **`stream_gap` was blind in the real benchmark runner** (found while promoting the #3556 belief-mode safety contrast to `map_runner`). `StreamGapPlannerAdapter._extract_state` read the nested SOCNAV observation (`obs["robot"]`, `obs["pedestrians"]`) but `map_runner` feeds a flat observation (`robot_position`, `pedestrians_positions`, `goal_current`), so the planner extracted `robot=[0,0]`, `n_peds=0` and drove blind every episode. `_extract_state` now accepts both the nested and flat observation formats (backward-compatible; the ScenarioBelief harness and 24 existing tests still pass), and `robot_sf/benchmark/scenario_belief_policy_hook.py` reads the flat observation and writes the uncertainty sidecar to `pedestrians_uncertainty` where the fixed extractor reads it. After the fix the planner engages pedestrians and the belief modes differentiate in the real runner.
+
+### Added
+
+* Added the #3556 belief-mode safety campaign harness: [`scripts/benchmark/run_belief_mode_safety_campaign_issue_3556.py`](scripts/benchmark/run_belief_mode_safety_campaign_issue_3556.py) runs the `oracle` / `uncertain_retained` / `uncertain_dropped` contrast through the **real** `map_runner.run_map_batch` on a crossing scenario family + seed matrix and classifies the episode-level safety result (`revise` / `retention_dominates` / `inconclusive` / `inconclusive_oracle_unsafe`). Current result on `classic_crossing_subset` is **`inconclusive`**: the gate now acts (the dropped mode differs on worst-case clearance), but the oracle baseline collides every episode so there is no near-safe headroom to attribute a collision effect — the remaining #3556 gap is a near-safe crossing family. Evidence + reproduction: `docs/context/evidence/issue_3556_belief_mode_real_runner_2026-06-24/`.
+
 ### Added
 
 * Audited the headline 7-planner benchmark comparison for the silent-blind-planner failure mode found in #3556 (`stream_gap` read nested observations while `map_runner` feeds flat ones, so it saw nothing yet emitted collision "results"). **Result: the headline comparison is clean** — its classical planners share `socnav_occupancy._socnav_fields`, which handles both nested and flat observations; `stream_gap` was a standalone exception (not in the headline) and is already fixed (#3567). Added a regression guard `tests/benchmark/test_planner_observation_contract.py` pinning that the shared extractor returns a non-degenerate view of the flat benchmark observation (sees the robot pose and real pedestrian count, not the `[0,0]`/empty blind default) and stays backward-compatible. Audit write-up: `docs/context/evidence/issue_3556_planner_obs_audit_2026-06-24/`.

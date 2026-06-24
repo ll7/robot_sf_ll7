@@ -1,0 +1,60 @@
+{
+  "by_mode": {
+    "oracle": {
+      "collision_rate": 1.0,
+      "episodes": 16,
+      "mean_min_clearance": 2.0834,
+      "success_rate": 0.0,
+      "total_collisions": 16,
+      "total_near_misses": 3,
+      "worst_min_clearance": -0.1123
+    },
+    "uncertain_dropped": {
+      "collision_rate": 1.0,
+      "episodes": 16,
+      "mean_min_clearance": 2.0911,
+      "success_rate": 0.0,
+      "total_collisions": 16,
+      "total_near_misses": 3,
+      "worst_min_clearance": -0.0782
+    },
+    "uncertain_retained": {
+      "collision_rate": 1.0,
+      "episodes": 16,
+      "mean_min_clearance": 2.0834,
+      "success_rate": 0.0,
+      "total_collisions": 16,
+      "total_near_misses": 3,
+      "worst_min_clearance": -0.1123
+    }
+  },
+  "claim_boundary": "Real benchmark-runner evidence on a bounded crossing family; FOV uncertainty source is not a calibrated perception model; not paper-grade until the predeclared matrix is run at seed-sufficiency budget with claim-card review.",
+  "decision": {
+    "collision_rate_delta_dropped_minus_retained": 0.0,
+    "decision": "inconclusive",
+    "near_miss_delta_dropped_minus_retained": 0,
+    "reason": "no measurable safety difference at this matrix"
+  },
+  "evidence_tier": "nominal_benchmark",
+  "fov_degrees": 70.0,
+  "generated_at_utc": "2026-06-24T14:43:37.378889+00:00",
+  "issue": 3556,
+  "metric_note": "real benchmark near_misses + collisions + min_clearance (no scripted unsafe-commit)",
+  "runner": "robot_sf.benchmark.map_runner.run_map_batch",
+  "scenario_names": [
+    "classic_crossing_low",
+    "classic_crossing_high"
+  ],
+  "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
+  "schema_version": "belief-mode-safety-campaign.v1",
+  "seeds": [
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108
+  ]
+}

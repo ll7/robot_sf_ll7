@@ -1,0 +1,9 @@
+{
+  "schema_version": "signalized_crossing_failure_pack.v1",
+  "negative_control": true,
+  "status": "insufficiently_adversarial",
+  "message": "The fixture is insufficiently adversarial; no real failures were detected.",
+  "diagnostic_only": true,
+  "figure_eligible": false,
+  "cases": []
+}

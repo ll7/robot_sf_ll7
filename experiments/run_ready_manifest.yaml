@@ -1,0 +1,490 @@
+schema_version: run-ready-launch-packet-manifest.v1
+packet_glob: configs/**/*launch_packet*.yaml
+packet_count: 7
+ready_count: 1
+entries:
+- issue: 3216
+  packet_path: configs/benchmarks/headline_ci_rank_stability_issue_3216_launch_packet.yaml
+  schema_version: issue_3216_headline_ci_rank_stability_launch_packet.v1
+  kind: benchmark
+  ready: false
+  reasons:
+  - 'placeholder values remain: report_command, expected_artifacts[0].path, expected_artifacts[1].path,
+    expected_artifacts[2].path'
+  configs:
+  - field: runnable_config.config
+    path: configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml
+    exists: true
+    sha256: 3bf75ebb05cc5523c33271e956b21b14749fc427fc9d986438c83d09eee8b75c
+    sha256_matches: true
+  - field: runnable_config.scenario_matrix
+    path: configs/scenarios/classic_interactions_francis2023.yaml
+    exists: true
+    sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+    sha256_matches: true
+  - field: runnable_config.horizon_schedule
+    path: configs/policy_search/scenario_horizons_h500.yaml
+    exists: true
+    sha256: 4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce
+    sha256_matches: true
+  - field: runnable_config.seed_sets
+    path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+    sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+    sha256_matches: true
+  - field: runnable_config.planner_matrix
+    path: configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml
+    exists: true
+    sha256: 43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7
+    sha256_matches: true
+  - field: campaign_command.token[3]
+    path: scripts/tools/run_camera_ready_benchmark.py
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: campaign_command.token[6]
+    path: configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: report_command.token[3]
+    path: scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py
+    exists: true
+    sha256: null
+    sha256_matches: null
+  seed_budget:
+    primary:
+      tier: S20
+      seed_set: paper_eval_s20
+      status: available
+    optional:
+      tier: S30
+      seed_set: paper_eval_s30
+      status: available_for_launch
+      note: 'Issue #1554 added the predeclared paper_eval_s30 seed schedule. No S30
+        campaign rows exist yet, so S30 remains launch-only until the SLURM run produces
+        durable rows. Do NOT synthesize ad hoc seeds at submit time.'
+  command: "uv run python scripts/tools/run_camera_ready_benchmark.py \\\n  --config\
+    \ configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml\
+    \ \\\n  --campaign-id issue3216_s20_headline_ci"
+  claim_gate:
+    target_claim: The paper-facing 7x7 headline planner comparison is stable enough
+      to support planner-ranking or safety-delta language after per-cell confidence
+      intervals and bootstrap rank-stability analysis.
+    no_claim_until_run: true
+    why_s10_s3_insufficient: S10/S3 cannot support manuscript-relied planner rankings;
+      per-cell CIs and bootstrap rank-stability require the predeclared S20 (and ideally
+      S30) seed budget before any ranking/safety-delta claim is promoted beyond diagnostic.
+- issue: 1554
+  packet_path: configs/benchmarks/s20_s30_seed_budget_issue_1554_launch_packet.yaml
+  schema_version: s20-s30-seed-budget-launch-packet.v1
+  kind: benchmark
+  ready: false
+  reasons:
+  - 'placeholder values remain: generating_commit, durable_storage_plan.promote_to_evidence'
+  configs:
+  - field: campaign_config.checksums.configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml
+    path: configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml
+    exists: true
+    sha256: 63314360ebcc146e93ed59ee3a528d7834a5ac1d22d6f0269cbb3b2cd8fd53a9
+    sha256_matches: true
+  - field: campaign_config.checksums.configs/scenarios/classic_interactions_francis2023.yaml
+    path: configs/scenarios/classic_interactions_francis2023.yaml
+    exists: true
+    sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+    sha256_matches: true
+  - field: campaign_config.checksums.configs/policy_search/scenario_horizons_h500.yaml
+    path: configs/policy_search/scenario_horizons_h500.yaml
+    exists: true
+    sha256: 4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce
+    sha256_matches: true
+  - field: campaign_config.checksums.configs/benchmarks/alyassi_comparability_map_v1.yaml
+    path: configs/benchmarks/alyassi_comparability_map_v1.yaml
+    exists: true
+    sha256: 22fc166ea438aa30da79c4888e270eee4afba8f1b9611080a3d51f4bb2cf200d
+    sha256_matches: true
+  - field: campaign_config.checksums.configs/benchmarks/snqi_weights_camera_ready_v3.json
+    path: configs/benchmarks/snqi_weights_camera_ready_v3.json
+    exists: true
+    sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
+    sha256_matches: true
+  - field: campaign_config.checksums.configs/benchmarks/snqi_baseline_camera_ready_v3.json
+    path: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+    exists: true
+    sha256: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
+    sha256_matches: true
+  - field: seed_policy.checksums.configs/benchmarks/seed_sets_v1.yaml
+    path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+    sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+    sha256_matches: true
+  - field: campaign_config.base_config
+    path: configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: campaign_config.scenario_matrix
+    path: configs/scenarios/classic_interactions_francis2023.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: seed_policy.seed_sets_path
+    path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: slurm_command_shape.token[15]
+    path: scripts/tools/run_camera_ready_benchmark.py
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: slurm_command_shape.token[17]
+    path: configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: validation_command.token[3]
+    path: scripts/benchmark/build_s20_s30_seed_budget_bundle_issue_1554.py
+    exists: true
+    sha256: null
+    sha256_matches: null
+  seed_budget:
+    mode: seed-set
+    seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+    primary_seed_set: paper_eval_s20
+    escalation_seed_set: paper_eval_s30
+    escalate_to_s30_when: 'Run the bundle tool on the S20 result store; if seed_resampling_rank_flip
+      reports rank_flip_observed for a primary metric, or a primary delta is below
+      the issue #1545 effect-size threshold, escalate to paper_eval_s30.
+
+      '
+    checksums:
+      configs/benchmarks/seed_sets_v1.yaml: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+  command: uv run python scripts/benchmark/build_s20_s30_seed_budget_bundle_issue_1554.py
+    --rows output/campaign_result_store/s20_s30_h500_social_navigation --output-dir
+    output/issue_1554_s20_s30
+  claim_gate:
+    target_claim: 'On the h500 social-navigation surface, the per-planner safety/quality
+      ordering observed at S10 is stable under a paper-facing S20 (and, if rankings
+      still flip, S30) seed budget, with bootstrap per-seed uncertainty small enough
+      to support the declared primary deltas.
+
+      '
+    status: to_be_confirmed_by_maintainer
+    required_metric_surface:
+    - success
+    - collisions
+    - near_misses
+    - time_to_goal_norm
+    descriptive_only_metrics:
+    - min_clearance
+    - min_distance
+    - mean_clearance
+    - raw_timeout_or_unfinished_rate
+    - low_progress_rate
+    planner_rows_to_confirm:
+    - goal
+    - social_force
+    - orca
+    - ppo
+    - prediction_planner
+    - socnav_sampling
+    - sacadrl
+    seed_tier: s20_then_s30_if_rankflip
+    why_s10_insufficient: 'Issue #1545 records material aggregate seed instability
+      across the 10 fixed S10 seeds (e.g. success range across planner-level seed
+      means median 0.1875, max 0.2917) and SNQI contract status fail on the S10 h500
+      surface, so close paper-facing comparisons need a larger seed budget. To be
+      confirmed by maintainer before any paper claim.
+
+      '
+- issue: 1395
+  packet_path: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
+  schema_version: learned-risk-launch-packet.v1
+  kind: training
+  ready: false
+  reasons:
+  - missing launch/validation command
+  configs:
+  - field: trace_input_contract.checksums.docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/trace_contract_fixture.jsonl
+    path: docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/trace_contract_fixture.jsonl
+    exists: true
+    sha256: 178b90c90f6a089bd9fd1d2d7bacc6289c65f8ce3cbde8383f39503a88dff168
+    sha256_matches: true
+  - field: baseline_comparison.checksums.docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/baseline_summary_stub.json
+    path: docs/context/evidence/issue_1395_learned_risk_launch_packet_2026-05-24/baseline_summary_stub.json
+    exists: true
+    sha256: 1b8598dced652de2983d8919e29e22e9b48905049e30ee5340d381e8e8dc89f2
+    sha256_matches: true
+  - field: baseline_comparison.candidate_config
+    path: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: execution_boundary.slurm_command_shape.token[14]
+    path: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  seed_budget: null
+  command: null
+  claim_gate:
+    full_training_in_this_issue: false
+    submit_slurm_from_this_issue: false
+    local_preflight_command: 'uv run python scripts/validation/validate_learned_risk_launch_packet.py
+      --config configs/training/learned_risk_model_issue_1395_launch_packet.yaml --json
+
+      '
+    slurm_command_shape: 'Submit a dedicated follow-up issue after this packet lands.
+      The future command must use configs/training/learned_risk_model_issue_1395_launch_packet.yaml,
+      materialized trace artifact URIs, and candidate diagnostics that expose learned_risk_score,
+      hard_guard_decision, and auxiliary_cost_weight.
+
+      '
+- issue: 1615
+  packet_path: configs/training/lidar/lidar_learned_policy_launch_packet_issue_1615.yaml
+  schema_version: lidar-learned-policy-launch-packet.v1
+  kind: training
+  ready: false
+  reasons:
+  - missing launch/validation command
+  - missing claim gate or execution boundary
+  configs:
+  - field: candidate_baselines[0].base_config
+    path: configs/training/ppo/feature_extractor_sweep_base.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: candidate_baselines[1].base_config
+    path: configs/training/ppo/feature_extractor_sweep_base.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: candidate_baselines[2].base_config
+    path: configs/training/ppo/feature_extractor_sweep_base.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: candidate_baselines[3].base_config
+    path: configs/training/rllib_dreamerv3/drive_state_rays.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  seed_budget: null
+  command: null
+  claim_gate: null
+- issue: 3068
+  packet_path: configs/training/ppo_curriculum_issue_3068_launch_packet.yaml
+  schema_version: ppo-curriculum-launch-packet.v1
+  kind: training
+  ready: true
+  reasons: []
+  configs:
+  - field: training_starting_points.checksums.configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    exists: true
+    sha256: a374a624eb38402e5e4e2612f92440c0f80ff1eb0554a34f33dd36c16920a426
+    sha256_matches: true
+  - field: training_starting_points.checksums.configs/algos/ppo_v3_camera_ready.yaml
+    path: configs/algos/ppo_v3_camera_ready.yaml
+    exists: true
+    sha256: 6e7efd7bef68d4cdbac23bda7a0fa12d206229d5c0566c1e38f84cd9122a73c8
+    sha256_matches: true
+  - field: training_starting_points.checksums.configs/algos/guarded_ppo_relaxed_v2.yaml
+    path: configs/algos/guarded_ppo_relaxed_v2.yaml
+    exists: true
+    sha256: 666eda5a47de6e452eba9b2f3cb15bda16fc97abcd7137434661a87ac9ff85d8
+    sha256_matches: true
+  - field: training_starting_points.checksums.configs/scenarios/classic_interactions_francis2023.yaml
+    path: configs/scenarios/classic_interactions_francis2023.yaml
+    exists: true
+    sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+    sha256_matches: true
+  - field: training_starting_points.checksums.configs/benchmarks/seed_sets_v1.yaml
+    path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+    sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+    sha256_matches: true
+  - field: training_starting_points.base_ppo_training_config
+    path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: training_starting_points.ppo_algo_config
+    path: configs/algos/ppo_v3_camera_ready.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: training_starting_points.guarded_algo_config
+    path: configs/algos/guarded_ppo_relaxed_v2.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: training_starting_points.scenario_config
+    path: configs/scenarios/classic_interactions_francis2023.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: training_starting_points.seed_manifest
+    path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: baseline_comparator.base_ppo_training_config
+    path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: execution_boundary.slurm_command_shape.token[14]
+    path: configs/training/ppo_curriculum_issue_3068_launch_packet.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  seed_budget:
+    training:
+    - 123
+    - 231
+    - 777
+    - 992
+    - 1337
+    randomize_seeds: true
+    evaluation:
+      manifest: configs/benchmarks/seed_sets_v1.yaml
+      dev:
+      - 101
+      - 102
+      - 103
+      eval:
+      - 111
+      - 112
+      - 113
+    note: 'Training seeds match the base config. Evaluation uses the frozen dev/eval
+      seeds from the manifest. Training and evaluation seed roles are kept distinct;
+      eval seeds are excluded from training-curve readouts.
+
+      '
+  command: uv run python -c "import yaml; d=yaml.safe_load(open('configs/training/ppo_curriculum_issue_3068_launch_packet.yaml'));
+    assert d['no_training_result_claim'] is True; print('valid', d['campaign_id'])"
+  claim_gate:
+    full_training_in_this_issue: false
+    submit_slurm_from_this_issue: false
+    local_preflight_command: 'uv run pytest tests/training/test_ppo_curriculum_launch_packet_issue_3068.py
+      -q
+
+      '
+    slurm_command_shape: 'Submit a dedicated follow-up issue after this packet lands.
+      The future command must use configs/training/ppo_curriculum_issue_3068_launch_packet.yaml,
+      run both the curriculum and fixed-difficulty baseline arms with matched total_timesteps
+      and seeds, and report both the training-curve AND final-benchmark metrics before
+      any curriculum claim.
+
+      '
+- issue: 1397
+  packet_path: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+  schema_version: oracle-imitation-launch-packet.v1
+  kind: training
+  ready: false
+  reasons:
+  - missing claim gate or execution boundary
+  configs:
+  - field: checksums.docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/dry_run_dataset_stub.json
+    path: docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/dry_run_dataset_stub.json
+    exists: true
+    sha256: eb5ef938d15725ff29a013a196216d093dd549ae58ae805e642c98441777529f
+    sha256_matches: true
+  - field: source_candidate_config
+    path: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: slurm_command_shape.token[0]
+    path: scripts/dev/sbatch_oracle_imitation_traces_issue1470.sh
+    exists: true
+    sha256: null
+    sha256_matches: null
+  seed_budget: null
+  command: 'scripts/dev/sbatch_oracle_imitation_traces_issue1470.sh --dry-run --no-status
+    prepares the issue #1470 train-split source-candidate trace collection job. This
+    trace job is executable Slurm work, but it is not the final imitation NPZ dataset;
+    downstream imitation training still requires durable dataset materialization and
+    concrete artifact aliases after the trace run completes.'
+  claim_gate: null
+- issue: 1396
+  packet_path: configs/training/shielded_ppo_issue_1396_launch_packet.yaml
+  schema_version: shielded-ppo-repair-launch-packet.v1
+  kind: training
+  ready: false
+  reasons:
+  - missing launch/validation command
+  configs:
+  - field: training_starting_points.checksums.configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    exists: true
+    sha256: a374a624eb38402e5e4e2612f92440c0f80ff1eb0554a34f33dd36c16920a426
+    sha256_matches: true
+  - field: training_starting_points.checksums.configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+    path: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+    exists: true
+    sha256: 69030a865be80be5e3ba98db447551c3707f966de8ac5f216e66044d9ea50735
+    sha256_matches: true
+  - field: comparison_references.ppo_baseline.checksums.docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json
+    path: docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json
+    exists: true
+    sha256: 2eabbf7d6fbc5a22071a2aef2c8ebdbb1113a8d58090709dc46c45761876871f
+    sha256_matches: true
+  - field: comparison_references.risk_guarded_ppo_v1.checksums.docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json
+    path: docs/context/evidence/issue_1396_shielded_ppo_launch_packet_2026-05-24/comparison_freeze_stub.json
+    exists: true
+    sha256: 2eabbf7d6fbc5a22071a2aef2c8ebdbb1113a8d58090709dc46c45761876871f
+    sha256_matches: true
+  - field: training_starting_points.base_ppo_training_config
+    path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: training_starting_points.guarded_candidate_config
+    path: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: training_starting_points.guarded_algo_config
+    path: configs/algos/guarded_ppo_relaxed_v2.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: runtime_guard.evaluation_candidate_config
+    path: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: comparison_references.ppo_baseline.config
+    path: configs/policy_search/candidates/ppo_issue791_best_v1.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: comparison_references.risk_guarded_ppo_v1.config
+    path: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  - field: execution_boundary.slurm_command_shape.token[14]
+    path: configs/training/shielded_ppo_issue_1396_launch_packet.yaml
+    exists: true
+    sha256: null
+    sha256_matches: null
+  seed_budget: null
+  command: null
+  claim_gate:
+    full_training_in_this_issue: false
+    submit_slurm_from_this_issue: false
+    local_preflight_command: 'uv run python scripts/validation/validate_shielded_ppo_launch_packet.py
+      --config configs/training/shielded_ppo_issue_1396_launch_packet.yaml --json
+
+      '
+    slurm_command_shape: 'Submit a dedicated follow-up issue after this packet lands.
+      The future command must use configs/training/shielded_ppo_issue_1396_launch_packet.yaml,
+      keep the runtime guard active, and report guard_veto_count, guard_fallback_count,
+      raw_ppo_action, guarded_action, and fallback_action_source before any stress/full-matrix
+      escalation.
+
+      '

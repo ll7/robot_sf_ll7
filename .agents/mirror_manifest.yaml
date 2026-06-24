@@ -1,0 +1,30 @@
+version: 1
+symlink_mirrors:
+  - path: .claude/skills
+    target: ../.agents/skills
+    description: Claude-compatible repo-local workflow skills.
+  - path: .codex/skills
+    target: ../.agents/skills
+    description: Codex-compatible repo-local workflow skills.
+  - path: .opencode/skills
+    target: ../.agents/skills
+    description: OpenCode-compatible repo-local workflow skills.
+  - path: .codex/prompts
+    target: ../.agents/prompts/codex
+    description: Codex prompt files.
+  - path: .github/prompts
+    target: ../.agents/prompts/github
+    description: GitHub prompt wrappers.
+  - path: .github/agents
+    target: ../.agents/agents/github
+    description: GitHub agent definitions.
+  - path: .gemini/commands
+    target: ../.agents/commands/gemini
+    description: Gemini command definitions.
+pointer_files:
+  - path: .cursorrules
+    must_reference: AGENTS.md
+    description: Cursor instruction pointer.
+  - path: .github/copilot-instructions.md
+    must_reference: AGENTS.md
+    description: GitHub Copilot instruction pointer.

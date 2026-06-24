@@ -15,6 +15,8 @@ Tool-specific directories should point here when their formats allow it.
 
 `AGENTS.md` remains the top-level instruction source for repository rules, and
 `docs/maintainer_values.md` is the compact source for current values and hard contracts.
+Use `docs/ai/agent_workflow_entrypoints.md` for correct `uv run` command entrypoints,
+model registry lookup, and targeted large-file navigation.
 Tool-specific instruction files, such as `.github/copilot-instructions.md` and `.cursorrules`,
 should be thin pointers to those sources plus only the tool-specific details that cannot live there.
 

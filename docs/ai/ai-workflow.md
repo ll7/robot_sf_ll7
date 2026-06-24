@@ -24,6 +24,7 @@ Read these first when working in this workflow:
 - [docs/dev_guide.md](../dev_guide.md)
 - [docs/README.md](../README.md)
 - [docs/ai/repo_overview.md](repo_overview.md)
+- [docs/ai/agent_workflow_entrypoints.md](agent_workflow_entrypoints.md)
 - [docs/context/README.md](../context/README.md)
 - [docs/context/issue_713_batch_first_issue_workflow.md](../context/issue_713_batch_first_issue_workflow.md)
 - [docs/context/issue_728_coding_agents_compatibility.md](../context/issue_728_coding_agents_compatibility.md)

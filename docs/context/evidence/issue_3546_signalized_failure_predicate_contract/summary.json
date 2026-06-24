@@ -1,0 +1,33 @@
+{
+  "schema_version": "signalized_failure_predicate_contract.v1",
+  "issue": 3546,
+  "status": "contract_updated",
+  "evidence_status": "contract_validation",
+  "benchmark_result_evidence": false,
+  "figure_eligible": false,
+  "trace_source_kind": "fixture",
+  "metric_source_kind": "fixture",
+  "execution_performed": false,
+  "failure_predicates_added": [
+    {
+      "metric": "signal_red_phase_violations",
+      "threshold": 1.0
+    },
+    {
+      "metric": "signal_stop_line_crossings_under_red",
+      "threshold": 1.0
+    }
+  ],
+  "fail_closed_preserved_for": [
+    "signal_metrics_denominator<=0",
+    "signal_metrics_evidence.state!=planner_observable",
+    "signal_metrics_evidence.exclusion_reason",
+    "synthetic_or_fixture_source_kind",
+    "fallback_or_degraded",
+    "stale_or_unknown_artifact_status"
+  ],
+  "validation": [
+    "uv run pytest tests/analysis/test_build_signalized_crossing_failure_pack_issue_2754.py -q"
+  ],
+  "claim_boundary": "Builder-contract validation only; not a live positive signalized failure-pack, planner-ranking comparison, traffic-light realism claim, or paper-facing figure."
+}

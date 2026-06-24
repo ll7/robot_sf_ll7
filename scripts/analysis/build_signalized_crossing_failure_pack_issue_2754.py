@@ -86,6 +86,17 @@ class FailurePackProvenance:
     claim_matrix_status: str
 
 
+@dataclass(frozen=True)
+class FailurePredicateThresholds:
+    """Thresholds for generic and signal-specific failure-pack predicates."""
+
+    collision: float = 1.0
+    comfort: float = 0.2
+    near_miss: float = 0.0
+    signal_red_phase_violation: float = 1.0
+    signal_stop_line_crossing: float = 1.0
+
+
 def _sanitize(val: Any) -> Any:
     """Recursively sanitize a value to make it JSON-serializable.
 
@@ -151,6 +162,29 @@ def find_failure_step(trace: SimulationTraceExport) -> int:
                 min_dist = dist
                 closest_step = frame.step
     return closest_step
+
+
+def signal_specific_failure_predicates(
+    rec: dict[str, Any],
+    *,
+    red_phase_violation_threshold: float = 1.0,
+    stop_line_crossing_threshold: float = 1.0,
+) -> list[str]:
+    """Return signal-specific metric predicates that intentionally define a failure-pack case."""
+    metrics = rec.get("metrics") or {}
+
+    def _metric(name: str) -> float:
+        try:
+            return float(metrics.get(name, 0.0) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    predicates: list[str] = []
+    if _metric("signal_red_phase_violations") >= float(red_phase_violation_threshold):
+        predicates.append("signal_red_phase_violations")
+    if _metric("signal_stop_line_crossings_under_red") >= float(stop_line_crossing_threshold):
+        predicates.append("signal_stop_line_crossings_under_red")
+    return predicates
 
 
 def get_signal_phase_at_step(
@@ -275,9 +309,7 @@ def build_failure_pack(
     traces: list[SimulationTraceExport],
     records: list[dict[str, Any]],
     allowed_claim_wording: str,
-    collision_threshold: float,
-    comfort_threshold: float,
-    near_miss_threshold: float,
+    thresholds: FailurePredicateThresholds,
     provenance: FailurePackProvenance,
     trace_input_paths: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -299,11 +331,19 @@ def build_failure_pack(
             continue
 
         metrics = matched_rec.get("metrics") or {}
-        if not is_failure(
+        signal_failure_predicates = signal_specific_failure_predicates(
             matched_rec,
-            collision_threshold=collision_threshold,
-            comfort_threshold=comfort_threshold,
-            near_miss_threshold=near_miss_threshold,
+            red_phase_violation_threshold=thresholds.signal_red_phase_violation,
+            stop_line_crossing_threshold=thresholds.signal_stop_line_crossing,
+        )
+        if (
+            not is_failure(
+                matched_rec,
+                collision_threshold=thresholds.collision,
+                comfort_threshold=thresholds.comfort,
+                near_miss_threshold=thresholds.near_miss,
+            )
+            and not signal_failure_predicates
         ):
             continue
 
@@ -375,6 +415,7 @@ def build_failure_pack(
                 "robot_state": robot_state,
                 "pedestrian_state": ped_state,
                 "metric_row": metrics,
+                "signal_failure_predicates": signal_failure_predicates,
                 "denominator_status": denominator_status,
                 "stale_current_status": provenance.artifact_status,
                 "artifact_status": provenance.artifact_status,
@@ -696,6 +737,19 @@ def main(argv: list[str] | None = None) -> int:
         help="Minimum near-misses to flag a failure.",
     )
     parser.add_argument(
+        "--signal-red-phase-violation-threshold",
+        type=float,
+        default=1.0,
+        help="Minimum signal red-phase violations flag signal-specific failure.",
+    )
+    parser.add_argument(
+        "--signal-stop-line-crossing-threshold",
+        type=float,
+        default=1.0,
+        help="Minimum stop-line crossings under red flag signal-specific failure.",
+    )
+
+    parser.add_argument(
         "--scan-evidence",
         action="store_true",
         help="Scan docs/context/evidence/ for prose vs machine-readable eligibility disagreements.",
@@ -725,9 +779,13 @@ def main(argv: list[str] | None = None) -> int:
         traces=loaded_traces,
         records=loaded_records,
         allowed_claim_wording=args.allowed_claim_wording,
-        collision_threshold=args.collision_threshold,
-        comfort_threshold=args.comfort_threshold,
-        near_miss_threshold=args.near_miss_threshold,
+        thresholds=FailurePredicateThresholds(
+            collision=args.collision_threshold,
+            comfort=args.comfort_threshold,
+            near_miss=args.near_miss_threshold,
+            signal_red_phase_violation=args.signal_red_phase_violation_threshold,
+            signal_stop_line_crossing=args.signal_stop_line_crossing_threshold,
+        ),
         provenance=FailurePackProvenance(
             trace_source_kind=args.trace_source_kind,
             metric_source_kind=args.metric_source_kind,

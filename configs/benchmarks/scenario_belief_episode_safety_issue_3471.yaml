@@ -1,0 +1,38 @@
+# Issue #3471 — episode-level ScenarioBelief uncertainty -> planner-safety experiment.
+#
+# Predeclared scenario family + seed matrix for the bounded follow-up to PR #3450. A controlled
+# single-crossing scenario is rolled over time with the real stream_gap planner under three belief
+# modes (oracle / uncertain_retained / uncertain_dropped). See
+# scripts/validation/run_scenario_belief_episode_safety_issue_3471.py.
+#
+# Claim boundary: diagnostic-tier, controlled-scenario evidence. NOT the full benchmark environment,
+# NOT paper-grade; no trained policy, perception model, or traffic-realism claim. The result is the
+# RELATIVE contrast between retaining vs dropping uncertain agents, not an absolute safety rate.
+
+schema_version: scenario-belief-episode-safety-config.v1
+issue: 3471
+evidence_tier: diagnostic
+
+belief_modes:
+  - oracle               # certain belief, planner reacts to every agent (baseline)
+  - uncertain_retained   # corridor agent existence-degraded, planner gate OFF -> keeps it (conservative)
+  - uncertain_dropped    # same degraded belief, planner gate ON -> drops it (hypothesis: less safe)
+
+# 12-seed matrix; seed perturbs the crosser's start phase and speed. Seed count is justified as a
+# bounded diagnostic matrix, not a paper-grade seed-sufficiency budget (see evidence note).
+seeds: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112]
+
+params:
+  max_steps: 120
+  dt: 0.1
+  start_x: 2.0
+  path_y: 5.0
+  goal_x: 9.0
+  corridor_x: 5.0
+  robot_radius: 0.4
+  ped_radius: 0.3
+  near_miss_margin: 0.6
+  ped_cross_speed: 0.7
+
+# Geometry note: positions are in positive map coordinates because
+# ScenarioBelief.to_socnav_struct clips pedestrian positions to the non-negative map frame.

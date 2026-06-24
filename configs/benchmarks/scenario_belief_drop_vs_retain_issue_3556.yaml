@@ -1,0 +1,85 @@
+# Issue #3556 — ScenarioBelief drop-vs-retain safety contrast through the REAL benchmark runner.
+#
+# Purpose: promote the #3471 (PR #3553) controlled-scenario finding ("dropping uncertain agents is
+# less safe than retaining them") into nominal benchmark evidence by running the same
+# oracle / uncertain_retained / uncertain_dropped contrast through robot_sf.benchmark.map_runner with
+# the real stream_gap planner + ScenarioBelief uncertainty gate (wired via
+# robot_sf/benchmark/scenario_belief_policy_hook.py).
+#
+# This is a LAUNCH PACKET for the campaign run, not a self-certifying result. The three modes differ
+# ONLY in the `belief_mode` knob below; everything else is identical so the contrast is attributable
+# to dropping vs retaining out-of-field-of-view agents.
+#
+# Honesty boundary: the uncertainty source here is a configurable field-of-view / range rule applied
+# to the benchmark observation (out-of-FOV agents are marked uncertain). It is NOT a calibrated
+# perception model. No paper-grade or trained-policy claim is made until the campaign runs on a
+# predeclared scenario family + seed matrix and the result is classified on the evidence ladder.
+
+schema_version: scenario-belief-drop-vs-retain-launch-packet.v1
+issue: 3556
+evidence_status: proposal
+no_benchmark_result_claim: true
+follows:
+  - issue: 3471  # controlled-scenario diagnostic + metrics harness (PR #3553)
+  - issue: 3553  # the PR that landed #3471
+
+claim_gate:
+  target_claim: >-
+    In the real benchmark runner, dropping out-of-field-of-view (uncertain) agents from the
+    stream_gap planner raises unsafe commitment / collisions relative to conservative retention,
+    with an oracle baseline that is near-safe.
+  no_claim_until_run: true
+
+# The three runner algo configs. Identical except for `belief_mode` (and the FOV uncertainty source).
+# The mode owns the planner uncertainty gate: gate ON only for uncertain_dropped.
+belief_modes:
+  oracle:
+    algo: stream_gap
+    belief_mode: oracle
+    belief_fov_degrees: 120.0
+  uncertain_retained:
+    algo: stream_gap
+    belief_mode: uncertain_retained
+    belief_fov_degrees: 120.0
+  uncertain_dropped:
+    algo: stream_gap
+    belief_mode: uncertain_dropped
+    belief_fov_degrees: 120.0
+
+belief_uncertainty_source:
+  kind: field_of_view
+  fov_degrees: 120.0
+  max_range_m: null
+  note: >-
+    Agents outside the robot's forward FOV cone are marked low-existence in the ScenarioBelief; the
+    planner gate drops them only in uncertain_dropped. A calibrated perception/occlusion model is the
+    natural successor uncertainty source (see follow-ups).
+
+# Predeclared scenario family + seed matrix to attach at campaign authoring time. The crossing /
+# occlusion-bearing families are the discriminating ones (an out-of-FOV agent must be able to be
+# unsafe-to-ignore). Fill with the canonical scenario set + seed_sets_v1 tier before submit.
+scenario_family: configs/scenarios/classic_interactions_francis2023.yaml
+seed_set: paper_eval_s20   # via #1554; predeclared, run-gated
+
+metric_surface:
+  # Episode-level safety metrics (mirrors the #3471 harness): collisions, near misses, minimum
+  # separation, unsafe COMMIT, first-yield timing, progress, runtime.
+  primary:
+    - success
+    - collisions
+    - near_misses
+    - min_separation
+
+decision_outcomes:
+  - revise_default_gating_unsafe
+  - retention_dominates
+  - not_distinguishable_at_matrix
+  - inconclusive_oracle_baseline_unsafe
+  - blocked_missing_durable_artifacts
+
+validation:
+  - "Run the three belief_mode variants through the canonical map-runner campaign on the predeclared
+    scenario family + seed matrix."
+  - "Confirm the oracle baseline is near-safe; if not, classify inconclusive (the #3471 caveat)."
+  - "Justify the seed count via scripts/tools/analyze_seed_sufficiency.py."
+  - "Classify the bundle on the evidence ladder; fallback/degraded rows never count as success."

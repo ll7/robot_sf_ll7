@@ -776,3 +776,58 @@ def test_cli_require_body_fails_closed_without_pr_body_source(monkeypatch) -> No
 
     assert result.returncode == 2
     assert "status=missing_body" in result.stdout
+
+
+def test_domain_approval_ignores_negated_evidence_marker() -> None:
+    """A negated boundary statement ('makes no paper-facing claim') must not require approval."""
+    body = "## Summary\nThis change is advisory metadata and makes no paper-facing claim.\n"
+    report = analyze_domain_approval(body, source="fixture")
+    assert report.status == "ok"
+    assert report.sensitive_terms == ()
+
+
+def test_domain_approval_triggers_on_affirmative_evidence_marker() -> None:
+    """An affirmative evidence marker still requires a Domain-Aware Approval section."""
+    body = "## Summary\nThis PR establishes a paper-facing claim about planner ranking.\n"
+    report = analyze_domain_approval(body, source="fixture")
+    assert report.status == "missing_domain_approval"
+    assert any("paper-facing claim" in term for term in report.sensitive_terms)
+
+
+def test_analyze_body_ok_without_section_when_no_residual_scope() -> None:
+    """A self-contained PR with no residual scope does not need a Follow-Up Issues section."""
+    body = "## Summary\nA self-contained change with tests.\n\n## What Changed\n- Added a helper.\n"
+    report = analyze_body(body, source="fixture")
+    assert report.status == "ok"
+
+
+def test_analyze_body_requires_section_when_closing_with_residual_scope() -> None:
+    """Closing an issue while declaring residual scope still requires the Follow-Up section."""
+    body = "## Summary\nCloses #5. There is remaining work tracked for a later change.\n"
+    report = analyze_body(body, source="fixture")
+    assert report.status == "residual_scope_without_followup"
+
+
+def test_cli_advisory_downgrades_failure_to_warning(tmp_path: Path) -> None:
+    """--advisory turns a contract violation into a warning annotation and exit 0."""
+    body_path = tmp_path / "body.md"
+    body_path.write_text(_body(deferred="Open the remaining benchmark issues."), encoding="utf-8")
+
+    blocking = subprocess.run(
+        [sys.executable, str(SCRIPT), "--body-file", str(body_path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert blocking.returncode == 2
+
+    advisory = subprocess.run(
+        [sys.executable, str(SCRIPT), "--body-file", str(body_path), "--advisory"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert advisory.returncode == 0
+    assert "::warning" in advisory.stdout

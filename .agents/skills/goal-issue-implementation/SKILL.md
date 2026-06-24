@@ -172,7 +172,15 @@ Default order:
 4. explicitly requested
 5. other eligible open issues
 
-Prioritize by:
+The Project #5 order this reads is leverage-aware: `goal-autopilot`'s `prioritize` phase auto-fills
+**empty** priorities via `gh-issue-priority-assessor` (`--only-empty`) before this phase runs, so
+research leverage (claim-boundary/hypothesis → `Improvement`; headline-companion/unblocks →
+`Unlock Factor`; local-vs-gated → `Success Probability`) is already encoded in the score. When
+running this skill standalone (no autopilot) and an eligible candidate has an **empty** priority,
+auto-fill it first with the same `--only-empty` pass so ranking is not driven by unscored gaps; never
+overwrite an existing priority to win a tie.
+
+Prioritize by (tie-breakers within the leverage-scored order):
 - clearer contract,
 - lower validation cost,
 - smaller diff,

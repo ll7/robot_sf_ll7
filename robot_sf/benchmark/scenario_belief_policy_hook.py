@@ -142,9 +142,31 @@ def simulator_from_observation(obs: dict[str, Any], *, ped_radius: float) -> Sim
     Returns:
         SimpleNamespace: A simulator-like object exposing ped/robot/goal state for belief construction.
     """
-    robot = obs.get("robot") if isinstance(obs.get("robot"), dict) else {}
-    goal = obs.get("goal") if isinstance(obs.get("goal"), dict) else {}
-    peds = obs.get("pedestrians") if isinstance(obs.get("pedestrians"), dict) else {}
+    # Accept the nested SOCNAV observation and the flat benchmark-runner observation alike.
+    robot = (
+        obs.get("robot")
+        if isinstance(obs.get("robot"), dict)
+        else {
+            "position": obs.get("robot_position", [0.0, 0.0]),
+            "heading": obs.get("robot_heading", [0.0]),
+        }
+    )
+    goal = (
+        obs.get("goal")
+        if isinstance(obs.get("goal"), dict)
+        else {
+            "current": obs.get("goal_current", [0.0, 0.0]),
+            "next": obs.get("goal_next", [0.0, 0.0]),
+        }
+    )
+    peds = (
+        obs.get("pedestrians")
+        if isinstance(obs.get("pedestrians"), dict)
+        else {
+            "positions": obs.get("pedestrians_positions"),
+            "velocities": obs.get("pedestrians_velocities"),
+        }
+    )
 
     robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32).reshape(-1)
     if robot_pos.size < 2:
@@ -201,8 +223,11 @@ def augment_observation_with_belief(
     """
     if mode not in BELIEF_MODES:
         return obs
-    peds = obs.get("pedestrians")
-    if not isinstance(peds, dict) or _as_xy(peds.get("positions")).shape[0] == 0:
+    # Nested SOCNAV observation (obs["pedestrians"]["positions"]) or flat benchmark observation
+    # (obs["pedestrians_positions"]). The sidecar must be written where stream_gap reads it for each.
+    nested = isinstance(obs.get("pedestrians"), dict)
+    positions = obs["pedestrians"].get("positions") if nested else obs.get("pedestrians_positions")
+    if _as_xy(positions).shape[0] == 0:
         return obs
 
     try:
@@ -230,11 +255,14 @@ def augment_observation_with_belief(
         return obs
 
     # Merge only the uncertainty sidecar; keep the runner's real positions/velocities/count.
-    new_peds = deepcopy(peds)
-    new_peds["uncertainty"] = rows
-    new_peds["uncertainty_compatibility"] = proj_peds.get("uncertainty_compatibility")
     new_obs = deepcopy(obs)
-    new_obs["pedestrians"] = new_peds
+    compatibility = proj_peds.get("uncertainty_compatibility")
+    if nested:
+        new_obs["pedestrians"]["uncertainty"] = rows
+        new_obs["pedestrians"]["uncertainty_compatibility"] = compatibility
+    else:
+        new_obs["pedestrians_uncertainty"] = rows
+        new_obs["pedestrians_uncertainty_compatibility"] = compatibility
     return new_obs
 
 

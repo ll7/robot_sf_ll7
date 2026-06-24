@@ -284,12 +284,35 @@ class StreamGapPlannerAdapter:
             tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray]: Robot
             position, heading, goal position, pedestrian positions, and velocities.
         """
-        robot = observation.get("robot") if isinstance(observation.get("robot"), dict) else {}
-        goal = observation.get("goal") if isinstance(observation.get("goal"), dict) else {}
+        # Accept both the nested SOCNAV observation (robot/goal/pedestrians dicts, used by the
+        # ScenarioBelief harness and unit tests) and the flat benchmark-runner observation
+        # (robot_position / goal_current / pedestrians_positions ... keys). Without the flat
+        # fallback the planner sees an empty observation in map_runner and drives blind.
+        robot = (
+            observation.get("robot")
+            if isinstance(observation.get("robot"), dict)
+            else {
+                "position": observation.get("robot_position", [0.0, 0.0]),
+                "heading": observation.get("robot_heading", [0.0]),
+            }
+        )
+        goal = (
+            observation.get("goal")
+            if isinstance(observation.get("goal"), dict)
+            else {
+                "current": observation.get("goal_current", [0.0, 0.0]),
+                "next": observation.get("goal_next", [0.0, 0.0]),
+            }
+        )
         pedestrians = (
             observation.get("pedestrians")
             if isinstance(observation.get("pedestrians"), dict)
-            else {}
+            else {
+                "positions": observation.get("pedestrians_positions"),
+                "velocities": observation.get("pedestrians_velocities"),
+                "count": observation.get("pedestrians_count"),
+                "uncertainty": observation.get("pedestrians_uncertainty"),
+            }
         )
 
         robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float).reshape(-1)[:2]

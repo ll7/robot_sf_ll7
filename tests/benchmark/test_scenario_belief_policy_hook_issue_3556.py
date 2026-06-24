@@ -138,3 +138,42 @@ def test_map_runner_wires_belief_mode_adapter():
     plain_policy, _ = _build_policy("stream_gap", {})
     assert isinstance(plain_policy._planner_adapter, StreamGapPlannerAdapter)
     assert not isinstance(plain_policy._planner_adapter, BeliefModeStreamGapAdapter)
+
+
+def _flat_obs() -> dict[str, Any]:
+    """A flat benchmark-runner observation (the real map_runner format)."""
+    return {
+        "robot_position": [5.0, 5.0],
+        "robot_heading": 0.0,
+        "goal_current": [12.0, 5.0],
+        "goal_next": [12.0, 5.0],
+        "pedestrians_positions": [[7.0, 5.4], [3.0, 5.0]],
+        "pedestrians_velocities": [[0.0, -0.4], [0.0, 0.0]],
+        "pedestrians_count": [2],
+    }
+
+
+def test_stream_gap_extract_state_reads_flat_benchmark_observation():
+    """stream_gap must consume the flat map_runner observation, not just nested SOCNAV.
+
+    Regression for the #3556 finding that stream_gap was blind in the real benchmark runner
+    (it extracted robot=[0,0], n_peds=0 from the flat observation).
+    """
+    adapter = StreamGapPlannerAdapter(StreamGapPlannerConfig())
+    robot_pos, _heading, goal_pos, ped_pos, _ped_vel = adapter._extract_state(_flat_obs())
+    assert list(robot_pos) == [5.0, 5.0]
+    assert list(goal_pos) == [12.0, 5.0]
+    assert ped_pos.shape[0] == 2
+
+
+def test_augment_flat_observation_writes_flat_sidecar_and_gate_drops():
+    """On a flat observation the sidecar goes to pedestrians_uncertainty and the gate can drop."""
+    aug = augment_observation_with_belief(_flat_obs(), mode="uncertain_dropped", fov_degrees=120.0)
+    rows = aug.get("pedestrians_uncertainty")
+    assert isinstance(rows, list) and len(rows) == 2
+    ex = [round(float(r.get("existence_probability", 1.0)), 2) for r in rows]
+    assert min(ex) < 0.5 < max(ex)  # the behind agent degraded, aligned 1:1 with the flat positions
+
+    inner = StreamGapPlannerAdapter(StreamGapPlannerConfig(uncertainty_gating_enabled=True))
+    BeliefModeStreamGapAdapter(inner, mode="uncertain_dropped", fov_degrees=120.0).plan(_flat_obs())
+    assert int(inner.last_uncertainty_gate.get("dropped_count", 0)) == 1

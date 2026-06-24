@@ -474,6 +474,9 @@ Policy caveats:
   denominator and exclusion semantics. Includes `red_required_stop`, `green_proceed`,
   `unavailable_no_claim`, and `proxy_only_denominator_excluded` rows; proves runtime denominator
   plumbing, not traffic-light realism, forced-waiting reasoning, or planner-ranking performance.
+- `issue_3544_signalized_failure_pack_real/`: live-execution signalized failure-pack negative
+  control. Uses real trace exports and runtime metrics from the signalized smoke matrix; detected no
+  failure cases, so the pack is analysis-only and figure-ineligible.
 - `issue_2752_topology_reselection_mechanism/`: analysis-only mechanism diagnosis of three hard
   slices from Issue #2751 runtime evidence. All hard slices remained `horizon_exhausted`;
   `bottleneck_transfer` and `doorway_transfer` classified as `no_useful_topology_alternative`

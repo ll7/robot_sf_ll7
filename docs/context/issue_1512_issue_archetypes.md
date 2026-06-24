@@ -30,6 +30,19 @@ Every issue should declare exactly one `archetype` from this set:
 | `refactor` | Restructuring existing code without changing intended behavior |
 | `data` | Acquiring, staging, ingesting, or making reproducible a dataset/trace/artifact input (often paired with `blocked` evidence when the source is external) |
 
+### `blocked-asset` Guardrail-Only Trackers
+
+Do not create a standalone `blocked-asset` issue when the proposed payload is only a
+guardrail, reminder, or "track pasted follow-up anyway" note already enforced by an
+existing parent issue's `state:blocked` or `evidence:blocked` status. Record the reminder
+on the parent issue instead, for example as a comment, label, or status note.
+
+Standalone `blocked-asset` issues remain valid when they carry unique technical state such
+as paths, checksums, missing-file specifics, asset identifiers, or per-step unblock
+conditions.
+
+Closed guardrail-only tracker examples: #2416, #2417, #2413, and #2414.
+
 ### Deprecated archetype spellings
 
 These are accepted on read and treated as their canonical value; prefer the canonical form for new

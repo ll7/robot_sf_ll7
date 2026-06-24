@@ -38,13 +38,20 @@ execution.
    `docs/context/issue_1512_issue_archetypes.md`. Include the archetype metadata block in
    the issue body. Use only the canonical values from that note. When the archetype is unclear,
    default to `archetype: workflow` with `evidence_tier: idea` and note the assumption.
-5. Create issue:
+5. Before creating standalone `blocked-asset` issues, check whether proposed payload
+   is only a guardrail, reminder, or "track pasted follow-up anyway" note already
+   enforced by existing parent issue `state:blocked` or `evidence:blocked` status.
+   If so, do not create new issue; record reminder on parent as comment, label,
+   or status update instead. Still create legitimate `blocked-asset` issues when
+   they carry unique technical state such as paths, checksums, missing-file
+   specifics, asset identifiers, or per-step unblock conditions.
+6. Create issue:
    - use GitHub MCP / GitHub app tools when available; use `gh` for deterministic fallback
    - `gh issue create --title "<title>" --body-file <body.md> --template <template> --label "<labels>"`
    - prefer existing labels; avoid inventing taxonomy
    - prefer GitHub MCP / GitHub app tools for interactive issue creation when available; keep `gh`
      for scripted or fallback paths
-6. Project routing:
+7. Project routing:
    - use `gh project item-add` when the CLI route is the active Project #5 write path
    - use `gh project item-edit` for explicit field updates when the CLI route is active
    - add issue to Project #5 and update only expected fields (`Priority`, `Expected Duration in Hours`,

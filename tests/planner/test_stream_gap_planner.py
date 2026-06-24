@@ -122,6 +122,18 @@ def test_stream_gap_uses_current_goal_when_projected_next_goal_absent() -> None:
     np.testing.assert_allclose(goal_pos, [4.0, 0.0])
 
 
+def test_stream_gap_uses_current_goal_when_projected_next_goal_malformed() -> None:
+    """Malformed next-goal arrays must not collapse stream_gap's target to origin."""
+
+    planner = StreamGapPlannerAdapter(StreamGapPlannerConfig())
+    observation = _obs(robot=(1.0, 1.0), goal=(4.0, 0.0))
+    observation["goal"]["next"] = np.asarray([9.0], dtype=float)
+
+    _robot_pos, _heading, goal_pos, _ped_pos, _ped_vel = planner._extract_state(observation)
+
+    np.testing.assert_allclose(goal_pos, [4.0, 0.0])
+
+
 def test_stream_gap_commits_in_open_space() -> None:
     """Planner should commit when no pedestrian blocks the corridor."""
     planner = StreamGapPlannerAdapter(StreamGapPlannerConfig(commit_speed=0.9))

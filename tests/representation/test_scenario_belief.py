@@ -72,6 +72,32 @@ def test_oracle_projection_preserves_valid_next_goal() -> None:
     np.testing.assert_allclose(observation["goal"]["next"], [6.0, 1.0])
 
 
+@pytest.mark.parametrize(
+    "next_goal",
+    [
+        np.array([np.nan, 1.0], dtype=np.float32),
+        np.array([6.0], dtype=np.float32),
+    ],
+)
+def test_oracle_projection_uses_current_goal_when_next_goal_invalid(
+    next_goal: np.ndarray,
+) -> None:
+    """Invalid simulator next-goals should fall back to current goal with no confidence."""
+
+    simulator = _simulator_fixture()
+    simulator.next_goal_pos = [next_goal]
+
+    belief = scenario_belief_from_simulator_oracle(
+        simulator,
+        env_config=RobotSimulationConfig(),
+        max_pedestrians=4,
+    )
+    observation = belief.to_socnav_struct()
+
+    assert belief.goals[0].next.confidence == 0.0
+    np.testing.assert_allclose(observation["goal"]["next"], observation["goal"]["current"])
+
+
 def test_oracle_and_partial_adapters_share_schema_and_projection_keys() -> None:
     """Different input paths should keep the same belief and policy-observation contracts."""
     env_config = RobotSimulationConfig()

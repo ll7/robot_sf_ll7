@@ -792,8 +792,14 @@ def _scenario_belief_from_simulator(
 
     goal = np.asarray(simulator.goal_pos[robot_index], dtype=np.float32)
     next_goal = simulator.next_goal_pos[robot_index]
-    next_goal_arr = goal if next_goal is None else np.asarray(next_goal)
-    next_goal_confidence = 0.0 if next_goal is None else 1.0
+    next_goal_candidate = None if next_goal is None else np.asarray(next_goal, dtype=np.float32)
+    next_goal_valid = (
+        next_goal_candidate is not None
+        and next_goal_candidate.reshape(-1).size == 2
+        and np.all(np.isfinite(next_goal_candidate))
+    )
+    next_goal_arr = next_goal_candidate if next_goal_valid else goal
+    next_goal_confidence = 1.0 if next_goal_valid else 0.0
 
     return ScenarioBelief(
         frame_id="map",

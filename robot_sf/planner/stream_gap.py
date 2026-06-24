@@ -297,14 +297,15 @@ class StreamGapPlannerAdapter:
             robot_pos = np.zeros(2, dtype=float)
         heading = float(np.asarray(robot.get("heading", [0.0]), dtype=float).reshape(-1)[0])
 
-        goal_next = np.asarray(goal.get("next", [0.0, 0.0]), dtype=float).reshape(-1)[:2]
-        goal_current = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)[:2]
-        goal_pos = goal_next if goal_next.size == 2 else np.zeros(2, dtype=float)
+        goal_next = np.asarray(goal.get("next", [0.0, 0.0]), dtype=float).reshape(-1)
+        goal_current = np.asarray(goal.get("current", [0.0, 0.0]), dtype=float).reshape(-1)
         if (
-            goal_pos.size != 2
-            or not np.all(np.isfinite(goal_pos))
-            or np.linalg.norm(goal_pos - robot_pos) <= 1e-6
+            goal_next.size == 2
+            and np.all(np.isfinite(goal_next))
+            and np.linalg.norm(goal_next - robot_pos) > 1e-6
         ):
+            goal_pos = goal_next
+        else:
             goal_pos = goal_current if goal_current.size == 2 else np.zeros(2, dtype=float)
         if not np.all(np.isfinite(goal_pos)):
             goal_pos = np.zeros(2, dtype=float)

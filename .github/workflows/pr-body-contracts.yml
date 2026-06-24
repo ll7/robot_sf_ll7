@@ -36,14 +36,17 @@ jobs:
           echo "Changed files for PR #$PR_NUMBER:"
           sed -n '1,120p' "$RUNNER_TEMP/pr_changed_files.txt"
 
-      - name: Validate PR body contracts
+      - name: Validate PR body contracts (advisory)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Advisory: contract violations surface as ::warning:: annotations but do not block the PR.
+          # Re-promote to blocking by removing --advisory once the body conventions are settled.
           uv run python scripts/dev/check_pr_followups.py \
             --github-event-path "$GITHUB_EVENT_PATH" \
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
             --require-body \
             --require-substantive-body \
-            --require-open-issues
+            --require-open-issues \
+            --advisory

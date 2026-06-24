@@ -75,6 +75,13 @@ entries:
     why_s10_s3_insufficient: S10/S3 cannot support manuscript-relied planner rankings;
       per-cell CIs and bootstrap rank-stability require the predeclared S20 (and ideally
       S30) seed budget before any ranking/safety-delta claim is promoted beyond diagnostic.
+  queue_hint:
+    public_issue: ll7/robot_sf_ll7#3216
+    review_required: true
+    submit_ready: false
+    state: proposed
+    job_class: policy_search_sweep
+    source: public_launch_packet_preflight
 - issue: 1554
   packet_path: configs/benchmarks/s20_s30_seed_budget_issue_1554_launch_packet.yaml
   schema_version: s20-s30-seed-budget-launch-packet.v1
@@ -198,6 +205,13 @@ entries:
       confirmed by maintainer before any paper claim.
 
       '
+  queue_hint:
+    public_issue: ll7/robot_sf_ll7#1554
+    review_required: true
+    submit_ready: false
+    state: proposed
+    job_class: policy_search_sweep
+    source: public_launch_packet_preflight
 - issue: 1395
   packet_path: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
   schema_version: learned-risk-launch-packet.v1
@@ -241,6 +255,13 @@ entries:
       hard_guard_decision, and auxiliary_cost_weight.
 
       '
+  queue_hint:
+    public_issue: ll7/robot_sf_ll7#1395
+    review_required: true
+    submit_ready: false
+    state: proposed
+    job_class: robot_sf_gpu_training_small
+    source: public_launch_packet_preflight
 - issue: 1615
   packet_path: configs/training/lidar/lidar_learned_policy_launch_packet_issue_1615.yaml
   schema_version: lidar-learned-policy-launch-packet.v1
@@ -273,6 +294,13 @@ entries:
   seed_budget: null
   command: null
   claim_gate: null
+  queue_hint:
+    public_issue: ll7/robot_sf_ll7#1615
+    review_required: true
+    submit_ready: false
+    state: proposed
+    job_class: robot_sf_gpu_training_small
+    source: public_launch_packet_preflight
 - issue: 3068
   packet_path: configs/training/ppo_curriculum_issue_3068_launch_packet.yaml
   schema_version: ppo-curriculum-launch-packet.v1
@@ -379,6 +407,13 @@ entries:
       any curriculum claim.
 
       '
+  queue_hint:
+    public_issue: ll7/robot_sf_ll7#3068
+    review_required: true
+    submit_ready: false
+    state: proposed
+    job_class: robot_sf_gpu_training_small
+    source: public_launch_packet_preflight
 - issue: 1397
   packet_path: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
   schema_version: oracle-imitation-launch-packet.v1
@@ -409,6 +444,13 @@ entries:
     downstream imitation training still requires durable dataset materialization and
     concrete artifact aliases after the trace run completes.'
   claim_gate: null
+  queue_hint:
+    public_issue: ll7/robot_sf_ll7#1397
+    review_required: true
+    submit_ready: false
+    state: proposed
+    job_class: robot_sf_gpu_training_small
+    source: public_launch_packet_preflight
 - issue: 1396
   packet_path: configs/training/shielded_ppo_issue_1396_launch_packet.yaml
   schema_version: shielded-ppo-repair-launch-packet.v1
@@ -488,3 +530,10 @@ entries:
       escalation.
 
       '
+  queue_hint:
+    public_issue: ll7/robot_sf_ll7#1396
+    review_required: true
+    submit_ready: false
+    state: proposed
+    job_class: robot_sf_gpu_training_small
+    source: public_launch_packet_preflight

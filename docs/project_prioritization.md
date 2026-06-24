@@ -145,6 +145,50 @@ Use coarse buckets rather than false precision:
 Prefer the best honest estimate over exact arithmetic. The field is a planning
 input, not a promise.
 
+## Research-Leverage Interpretation
+
+"Highest leverage for the research program" is not a separate dimension — it is how the existing
+four scored fields should be *read* for a dissertation-facing benchmark repo. Encode leverage through
+these fields rather than inventing a new one:
+
+- **`Improvement`** — elevate work that moves a claim boundary, closes or revises a hypothesis,
+  records a durable negative result, or synthesizes accumulated diagnostics into citable evidence.
+  Deflate docs cleanup, and deflate yet-another diagnostic extension under an already-expanded
+  research parent (prefer a synthesis pass instead).
+- **`Unlock Factor`** — elevate a *companion to a headline result* (e.g. a robustness/transfer slice
+  that the most-cited comparison depends on) and work that unblocks a durable downstream experiment
+  or several child issues. This is where portfolio/dependency leverage lives.
+- **`Success Probability`** — fold in two repo realities. (1) **Local-implementable vs gated:** an
+  issue whose conclusive result needs a SLURM/GPU run or external data has a *lower near-term
+  achievable success in the autonomous local loop*; reflect that here and note the gate, rather than
+  inflating the score of work the loop cannot finish. (2) Ordinary integration risk, as before.
+- **`Time Criticality`** — reserve high values for deadline-linked or actively blocking work
+  (e.g. `paper-critical` labelled issues feeding a near-term manuscript).
+
+### Verify-before-scoring gate
+
+Before assigning any score, confirm the issue still represents open work: check for a covering or
+merged PR and for tooling that already landed under a different issue. If the work is already done or
+superseded, route it to closure (clarifier / `issue-audit`) instead of scoring it. An "already
+implemented but still open" issue must not receive a high priority that sends the loop to
+re-implement it. (This is the recurring trap where `Ready`-labelled issues were already merged.)
+
+## Auto-Fill Mode (empty priorities only)
+
+Autonomous loops keep the board scored without churning human judgement by assessing **only issues
+whose `Priority Score` is currently empty**. Existing (often human-set) priorities are never
+recomputed or overwritten in auto mode — this keeps each cycle cheap and the board stable.
+
+```bash
+uv run python scripts/tools/project_priority_score.py sync \
+  --owner ll7 --project-number 5 --ensure-fields --only-empty \
+  --summary-file output/project_priority_score/autofill_summary.json
+```
+
+`--only-empty` skips any item that already has a `Priority Score`, so the loop fills gaps (newly
+created or never-assessed issues) without re-ranking the rest. Use `--dry-run` first to preview the
+empty set. Re-scoring an existing priority remains a deliberate, explicitly-requested action.
+
 ## Plausibility Checks
 
 Use the issue body and linked context to sanity-check the proposed values before

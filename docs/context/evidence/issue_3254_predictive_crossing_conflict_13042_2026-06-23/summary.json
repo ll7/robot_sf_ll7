@@ -1,0 +1,76 @@
+{
+  "schema": "issue_3254_predictive_crossing_conflict_13042.v1",
+  "issue": 3254,
+  "slurm_job_id": "13042",
+  "result_classification": "negative_result",
+  "claim_boundary": "negative_training_result_not_benchmark_promotion",
+  "paper_facing": false,
+  "benchmark_promotion": false,
+  "run_id": "issue3254_predictive_crossing_conflict_schemafix_20260623T1645",
+  "public_commit": "6abc24058117d685246cd331fb466ba2d1674373",
+  "public_pr": 3499,
+  "source_artifact_class": "local_ignored_slurm_run_directory",
+  "source_artifact_policy": "large checkpoint, raw JSONL rows, and full local summaries are intentionally not mirrored into git",
+  "training": {
+    "training_family": "prediction_planner",
+    "model_family": "predictive_ego_v1",
+    "feature_schema": "predictive_ego_v1",
+    "dataset_samples": 40446,
+    "active_agent_ratio": 0.244868665933609,
+    "active_target_ratio": 0.24180088937282562,
+    "dataset_is_degenerate": false,
+    "dataset_fail_reasons": [],
+    "dataset_warnings": [],
+    "wandb_run_id": "3tu3tmee",
+    "best_epoch": 100,
+    "best_val_loss": 0.005804876953334315,
+    "best_val_ade": 0.04837434081127867,
+    "best_val_fde": 0.09734708175528795,
+    "training_quality_gate_pass": true
+  },
+  "evaluation": {
+    "episodes": 69,
+    "success_rate": 0.08695652173913043,
+    "collision_rate": 0.2463768115942029,
+    "mean_min_distance": 2.2868699710907556,
+    "mean_avg_speed": 1.3082129999775478,
+    "min_success_rate_gate": 0.3,
+    "min_distance_gate": 0.25,
+    "pass_success_rate": false,
+    "pass_min_distance": true,
+    "pass_all": false,
+    "failed_episodes": 63,
+    "status_counts": {
+      "failure": 46,
+      "collision": 17
+    },
+    "termination_reason_counts": {
+      "max_steps": 46,
+      "collision": 17
+    }
+  },
+  "stage_status": {
+    "campaign_ok": true,
+    "hard_seed_diagnostics_ok": true,
+    "evaluation_ok": false,
+    "promotion_ok": false,
+    "all_ok": false
+  },
+  "campaign": {
+    "num_candidates": 4,
+    "best_variant": "progress_biased_dense_lattice"
+  },
+  "source_checksums": {
+    "final_performance_summary.json": "fe5cb85032ced0bb3911561c96364e9f1e0591cbf64b4950589ec1643eee1626",
+    "training/training_summary.json": "0c8dcca63db882c31d1f7ee1b4421ae9aa98fceecc90b5d1e3ce7440b0d8bd72",
+    "eval/final_eval_summary.json": "0d99ee75dbea8c80a12a5f4b4836a987d31dd85d46e239a3c8153959072c78ec",
+    "campaign/campaign_summary.json": "d03ab66a0028db7f17c7896e196a2507927d87f4ac303e15746fcc86867bc5ef",
+    "diagnostics/hard_seed_diagnostics_summary.json": "73f26d9455dc090894fcd7e78dcf57b521c877e0f10cb4b0080d798dbcdd12f4",
+    "datasets/predictive_rollouts_mixed.npz.manifest.json": "1bf7f123e4ed41ef961612a980825e918327949e03a741f62ecf073cbc0ef039"
+  },
+  "decision": {
+    "do_not_blind_resubmit": true,
+    "next_step": "public planner-tuning analysis or negative-result synthesis before any rerun",
+    "reason": "schema-fixed training completed, but the final evaluation success rate stayed far below the promotion gate"
+  }
+}

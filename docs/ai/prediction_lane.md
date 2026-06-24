@@ -95,6 +95,17 @@ Follow this order unless a later issue has an explicitly narrower diagnostic pur
 | Issue #2847 | closed | Transferability stress matrix | Should run after observation tier, metrics, and fixture/split surfaces are usable. |
 | Issue #2848 | closed | This routing doc | Keep this map current when lane gates or issue states change materially. |
 
+## Recent Predictive Planner Training Result
+
+Issue #3254 produced a schema-fixed crossing-conflict predictive retraining run in job `13042`.
+The run completed training on a non-degenerate `predictive_ego_v1` mixed dataset, but final
+closed-loop evaluation failed the success-rate gate (`0.08696 < 0.3`). Treat this as a negative
+analysis-only result, not a planner promotion or paper-facing claim. The compact evidence bundle is
+tracked at
+`docs/context/evidence/issue_3254_predictive_crossing_conflict_13042_2026-06-23/`, with the
+decision note in
+`docs/context/issue_3254_predictive_crossing_conflict_negative_result.md`.
+
 ## Gate Conditions
 
 Do not start learned predictor training or heavy-model evaluation unless all of these are true:

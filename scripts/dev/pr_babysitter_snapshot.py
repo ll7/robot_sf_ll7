@@ -310,9 +310,10 @@ def _sanitize_payload_for_output(payload: dict[str, Any]) -> dict[str, Any]:
                     "action": recommendation.get("action", "wait"),
                     "after_diagnosis_action": recommendation.get("after_diagnosis_action"),
                     "retry_budget": {
-                        "allowed": retry_budget.get("allowed", 0),
-                        "used": retry_budget.get("used", 0),
+                        "budget": retry_budget.get("budget", 0),
+                        "retry_recommendations": retry_budget.get("retry_recommendations", 0),
                         "remaining": retry_budget.get("remaining", 0),
+                        "exhausted": retry_budget.get("exhausted", False),
                     },
                 },
             }

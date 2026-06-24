@@ -6,6 +6,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 from scripts.dev.pr_babysitter_snapshot import (
+    _sanitize_payload_for_output,
     build_babysitter_snapshot,
     classify_pr_action,
     load_retry_state,
@@ -135,6 +136,52 @@ def test_retry_budget_exhaustion_stops_retry_recommendation() -> None:
     assert recommendation["action"] == "diagnose_ci_failure"
     assert recommendation["after_diagnosis_action"] == "stop_retry_budget_exhausted"
     assert recommendation["retry_budget"]["exhausted"] is True
+
+
+def test_sanitized_output_preserves_retry_budget_shape_without_raw_details() -> None:
+    """CLI output summary keeps retry accounting but omits verbose check detail."""
+    payload = {
+        "schema": "pr_babysitter_snapshot.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "source_schema": "pr_queue_snapshot.v1",
+        "route_evidence_only": True,
+        "prs": [
+            {
+                "number": 2999,
+                "state": "OPEN",
+                "mergeable": "MERGEABLE",
+                "checks": {
+                    "failed": [
+                        {
+                            "name": "CodeQL",
+                            "details_url": "https://example.invalid/redacted-detail",
+                        }
+                    ]
+                },
+                "recommendation": {
+                    "action": "diagnose_ci_failure",
+                    "after_diagnosis_action": "retry_failed_checks",
+                    "retry_budget": {
+                        "key": "2999:abc123",
+                        "budget": 2,
+                        "retry_recommendations": 1,
+                        "remaining": 1,
+                        "exhausted": False,
+                    },
+                },
+            }
+        ],
+    }
+
+    safe_payload = _sanitize_payload_for_output(payload)
+
+    assert "checks" not in safe_payload["prs"][0]
+    assert safe_payload["prs"][0]["recommendation"]["retry_budget"] == {
+        "budget": 2,
+        "retry_recommendations": 1,
+        "remaining": 1,
+        "exhausted": False,
+    }
 
 
 def test_closed_pr_stops_babysitting() -> None:

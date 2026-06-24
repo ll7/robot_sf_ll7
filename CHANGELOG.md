@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Audited the headline 7-planner benchmark comparison for the silent-blind-planner failure mode found in #3556 (`stream_gap` read nested observations while `map_runner` feeds flat ones, so it saw nothing yet emitted collision "results"). **Result: the headline comparison is clean** — its classical planners share `socnav_occupancy._socnav_fields`, which handles both nested and flat observations; `stream_gap` was a standalone exception (not in the headline) and is already fixed (#3567). Added a regression guard `tests/benchmark/test_planner_observation_contract.py` pinning that the shared extractor returns a non-degenerate view of the flat benchmark observation (sees the robot pose and real pedestrian count, not the `[0,0]`/empty blind default) and stays backward-compatible. Audit write-up: `docs/context/evidence/issue_3556_planner_obs_audit_2026-06-24/`.
 ### Changed
 
 * Made the `pr-body-contracts` CI check **advisory** and fixed two false-positive sources in `scripts/dev/check_pr_followups.py`. (1) The domain-approval trigger is now **negation-aware**: a body that honestly *describes* an evidence boundary ("makes no paper-facing claim") no longer trips the gate meant for bodies that *make* such a claim. (2) The **Follow-Up Issues section is optional** — it is only required when a PR closes an issue while declaring residual scope, so self-contained PRs no longer need a boilerplate "Follow-Up Issues: none" section. (3) New `--advisory` flag (used by `.github/workflows/pr-body-contracts.yml`) reports violations as GitHub `::warning::` annotations and exits 0 instead of blocking the PR; re-promote to blocking by dropping the flag once body conventions settle. Covered by 5 new tests (48 total).

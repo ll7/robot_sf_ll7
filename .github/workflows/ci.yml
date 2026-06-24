@@ -50,7 +50,7 @@ jobs:
         uses: ./.github/actions/setup-ci-python
 
       - name: Cache test results
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: .pytest_cache
           key: pytest-${{ runner.os }}-${{ hashFiles('**/*.py') }}
@@ -72,7 +72,7 @@ jobs:
 
       - name: Restore coverage baseline
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: output/coverage/.coverage-baseline.json
           key: coverage-baseline-${{ github.ref_name }}
@@ -103,7 +103,7 @@ jobs:
 
       - name: Save coverage baseline (main branch only)
         if: github.ref == 'refs/heads/main' && success()
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: output/coverage/.coverage-baseline.json
           key: coverage-baseline-${{ github.ref_name }}-${{ github.sha }}

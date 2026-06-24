@@ -28,7 +28,7 @@ jobs:
 
       - name: Cache uv sync package payloads
         id: cache-uv
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
             ${{ runner.temp }}/setup-uv-cache/archive-v0
@@ -76,7 +76,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Restore trend history cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: output/benchmarks/perf/trend/history
           key: perf-trend-history-${{ github.ref_name }}-${{ github.run_id }}

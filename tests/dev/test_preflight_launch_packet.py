@@ -8,13 +8,28 @@ from pathlib import Path  # noqa: TC003
 
 import yaml
 
-from scripts.dev.preflight_launch_packet import main, preflight_launch_packet
+from scripts.dev.preflight_launch_packet import _queue_hint, main, preflight_launch_packet
 
 
 def _sha256(path: Path) -> str:
     """Return SHA-256 for fixture file."""
 
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_queue_hint_deepcopies_explicit_nested_metadata() -> None:
+    """Explicit nested queue hints must not alias the launch-packet payload."""
+    payload = {
+        "queue_hint": {
+            "metadata": {"priority": "low"},
+        }
+    }
+
+    hint = _queue_hint(payload, issue=7, kind="benchmark")
+    hint["metadata"]["priority"] = "high"
+
+    assert payload["queue_hint"]["metadata"]["priority"] == "low"
+    assert hint["public_issue"] == "ll7/robot_sf_ll7#7"
 
 
 def test_preflight_launch_packet_accepts_checked_paths(tmp_path: Path) -> None:
@@ -52,6 +67,9 @@ def test_preflight_launch_packet_accepts_checked_paths(tmp_path: Path) -> None:
     assert report["ready"] is True
     assert report["issue"] == 999
     assert report["kind"] == "benchmark"
+    assert report["queue_hint"]["public_issue"] == "ll7/robot_sf_ll7#999"
+    assert report["queue_hint"]["job_class"] == "policy_search_sweep"
+    assert report["queue_hint"]["submit_ready"] is False
     assert report["reasons"] == []
     assert any(item["sha256_matches"] is True for item in report["configs"])
 

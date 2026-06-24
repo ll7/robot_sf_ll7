@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Made the `pr-body-contracts` CI check **advisory** and fixed two false-positive sources in `scripts/dev/check_pr_followups.py`. (1) The domain-approval trigger is now **negation-aware**: a body that honestly *describes* an evidence boundary ("makes no paper-facing claim") no longer trips the gate meant for bodies that *make* such a claim. (2) The **Follow-Up Issues section is optional** — it is only required when a PR closes an issue while declaring residual scope, so self-contained PRs no longer need a boilerplate "Follow-Up Issues: none" section. (3) New `--advisory` flag (used by `.github/workflows/pr-body-contracts.yml`) reports violations as GitHub `::warning::` annotations and exits 0 instead of blocking the PR; re-promote to blocking by dropping the flag once body conventions settle. Covered by 5 new tests (48 total).
+
 ### Added
 
 * Added a CPU-only pre-submit evidence-contract preflight (#1475): [`scripts/validation/preflight_evidence_contract.py`](scripts/validation/preflight_evidence_contract.py) checks that the current public commit will emit a named evidence contract's required fields BEFORE a SLURM job is submitted, so a job is never run only to fail closed on missing-field bookkeeping (the #1475 / job 12913 GPU-hour waste). It composes the canonical contract definition (a public alias `REQUIRED_ORCA_RESIDUAL_SMOKE_FIELDS` exported from `robot_sf/training/orca_residual_lineage_packet.py`, identity-asserted in a test so there is no second source of truth) and the production `_attach_orca_residual_smoke_evidence` builder, evaluated against a representative `GuardedPPOAdapter` row that mirrors the real on-main shape. Exit 0 = conforms (safe to submit), non-zero = block (names the missing fields). Seeded with the `orca_residual_smoke` contract; adding another is a one-entry registry change. The private-ops sbatch wrapper should call it before `sbatch` (doc: `docs/context/preflight_evidence_contract.md`). Refs #1475.

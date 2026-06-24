@@ -185,10 +185,17 @@ Do not ask for extra confirmation after this preflight.
 
 Each cycle iteration follows a fixed phase order:
 
-1. `implement` — delegate to `goal-issue-implementation` for one issue.
-2. `review` — delegate to `goal-pr-review` for all merge-eligible PRs.
-3. `merge` — delegate to `gh-pr-merger` for all `merge-ready` PRs.
-4. `discover` — delegate to `goal-issue-discovery` for bounded discovery.
+1. `prioritize` — auto-fill **empty** Project #5 priorities so the queue the `implement` phase reads
+   reflects research leverage. Delegate to `gh-issue-priority-assessor` in **auto mode**
+   (`--only-empty`): score only issues whose `Priority Score` is currently empty (newly created or
+   never-assessed) and **never recompute or overwrite an existing priority**. This stays cheap
+   (skips the already-scored majority) and applies the verify-before-scoring gate so already-merged
+   issues are routed to closure, not scored. A failure here is non-fatal: log it and proceed with the
+   existing ordering.
+2. `implement` — delegate to `goal-issue-implementation` for one issue.
+3. `review` — delegate to `goal-pr-review` for all merge-eligible PRs.
+4. `merge` — delegate to `gh-pr-merger` for all `merge-ready` PRs.
+5. `discover` — delegate to `goal-issue-discovery` for bounded discovery.
 
 Before each phase, run a delegation checkpoint:
 

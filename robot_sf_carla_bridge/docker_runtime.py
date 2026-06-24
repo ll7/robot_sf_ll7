@@ -132,7 +132,7 @@ def build_carla_server_container_command(
 def check_carla_runtime_ports(
     ports: tuple[int, ...] = CARLA_PORTS,
     *,
-    host: str = "",
+    host: str = CARLA_DEFAULT_HOST,
 ) -> list[int]:
     """Return CARLA host ports that cannot be bound before container startup."""
 

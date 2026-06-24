@@ -1,0 +1,204 @@
+schema_version: run-ready-launch-packet-manifest.v1
+preflight_schema_version: run-ready-launch-packet-preflight.v1
+generated_from_commit: 42f6944d9cd90aecf48d7055a70c2cf765423757
+packet_glob: configs/**/*launch_packet*.yaml
+summary:
+  total: 7
+  ready: 5
+  drift_guarded: 1
+packets:
+- issue: 1395
+  packet_path: configs/training/learned_risk_model_issue_1395_launch_packet.yaml
+  schema_version: learned-risk-launch-packet.v1
+  kind: training
+  ready: true
+  drift_guarded: false
+  reasons: []
+  sha_pairs: []
+  config_paths:
+  - path: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+    exists: true
+  seed_budget_present: true
+  seed_set: null
+  seed_count: null
+  command_keys:
+  - slurm_command_shape
+  claim_gate_keys:
+  - execution_boundary
+- issue: 1396
+  packet_path: configs/training/shielded_ppo_issue_1396_launch_packet.yaml
+  schema_version: shielded-ppo-repair-launch-packet.v1
+  kind: training
+  ready: true
+  drift_guarded: false
+  reasons: []
+  sha_pairs: []
+  config_paths:
+  - path: configs/algos/guarded_ppo_relaxed_v2.yaml
+    exists: true
+  - path: configs/policy_search/candidates/ppo_issue791_best_v1.yaml
+    exists: true
+  - path: configs/policy_search/candidates/risk_guarded_ppo_v1.yaml
+    exists: true
+  - path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    exists: true
+  seed_budget_present: true
+  seed_set: null
+  seed_count: null
+  command_keys:
+  - slurm_command_shape
+  claim_gate_keys:
+  - execution_boundary
+- issue: 1397
+  packet_path: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+  schema_version: oracle-imitation-launch-packet.v1
+  kind: training
+  ready: false
+  drift_guarded: false
+  reasons:
+  - no claim/evidence boundary declared
+  sha_pairs: []
+  config_paths:
+  - path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+  - path: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+    exists: true
+  - path: configs/policy_search/nominal_sanity_matrix.yaml
+    exists: true
+  seed_budget_present: true
+  seed_set: paper_eval_s20
+  seed_count: 20
+  command_keys:
+  - slurm_command_shape
+  claim_gate_keys: []
+- issue: 1554
+  packet_path: configs/benchmarks/s20_s30_seed_budget_issue_1554_launch_packet.yaml
+  schema_version: s20-s30-seed-budget-launch-packet.v1
+  kind: benchmark
+  ready: true
+  drift_guarded: false
+  reasons: []
+  sha_pairs: []
+  config_paths:
+  - path: configs/benchmarks/alyassi_comparability_map_v1.yaml
+    exists: true
+  - path: configs/benchmarks/issue_1454_s10_scenario_horizons_h500_candidates.yaml
+    exists: true
+  - path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+  - path: configs/policy_search/scenario_horizons_h500.yaml
+    exists: true
+  - path: configs/scenarios/classic_interactions_francis2023.yaml
+    exists: true
+  seed_budget_present: true
+  seed_set: paper_eval_s20
+  seed_count: 20
+  command_keys:
+  - slurm_command_shape
+  - validation_command
+  claim_gate_keys:
+  - claim_map_gate
+  - evidence_status
+  - execution_boundary
+  - no_claim_statement
+- issue: 1615
+  packet_path: configs/training/lidar/lidar_learned_policy_launch_packet_issue_1615.yaml
+  schema_version: lidar-learned-policy-launch-packet.v1
+  kind: training
+  ready: false
+  drift_guarded: false
+  reasons:
+  - no runnable command/payload key present
+  - no claim/evidence boundary declared
+  sha_pairs: []
+  config_paths:
+  - path: configs/training/lidar/lidar_perception_adapter_eligibility_issue_1615.yaml
+    exists: true
+  - path: configs/training/lidar/lidar_ppo_mlp_eligibility_issue_1615.yaml
+    exists: true
+  - path: configs/training/ppo/feature_extractor_sweep_base.yaml
+    exists: true
+  - path: configs/training/rllib_dreamerv3/drive_state_rays.yaml
+    exists: true
+  seed_budget_present: false
+  seed_set: null
+  seed_count: null
+  command_keys: []
+  claim_gate_keys: []
+- issue: 3068
+  packet_path: configs/training/ppo_curriculum_issue_3068_launch_packet.yaml
+  schema_version: ppo-curriculum-launch-packet.v1
+  kind: training
+  ready: true
+  drift_guarded: false
+  reasons: []
+  sha_pairs: []
+  config_paths:
+  - path: configs/algos/guarded_ppo_relaxed_v2.yaml
+    exists: true
+  - path: configs/algos/ppo_v3_camera_ready.yaml
+    exists: true
+  - path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+  - path: configs/scenarios/classic_interactions_francis2023.yaml
+    exists: true
+  - path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    exists: true
+  seed_budget_present: true
+  seed_set: null
+  seed_count: null
+  command_keys:
+  - slurm_command_shape
+  - validation_command
+  claim_gate_keys:
+  - evidence_status
+  - execution_boundary
+  - no_claim_statement
+- issue: 3216
+  packet_path: configs/benchmarks/headline_ci_rank_stability_issue_3216_launch_packet.yaml
+  schema_version: issue_3216_headline_ci_rank_stability_launch_packet.v1
+  kind: benchmark
+  ready: true
+  drift_guarded: true
+  reasons: []
+  sha_pairs:
+  - path: configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml
+    expected_sha256: 3bf75ebb05cc5523c33271e956b21b14749fc427fc9d986438c83d09eee8b75c
+    actual_sha256: 3bf75ebb05cc5523c33271e956b21b14749fc427fc9d986438c83d09eee8b75c
+    ok: true
+  - path: configs/scenarios/classic_interactions_francis2023.yaml
+    expected_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+    actual_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+    ok: true
+  - path: configs/policy_search/scenario_horizons_h500.yaml
+    expected_sha256: 4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce
+    actual_sha256: 4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce
+    ok: true
+  - path: configs/benchmarks/seed_sets_v1.yaml
+    expected_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+    actual_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+    ok: true
+  - path: configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml
+    expected_sha256: 43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7
+    actual_sha256: 43eec70a34366239d18e2b5e3cb92f8deb5031990acb8ae1f7981b3aa3fed2f7
+    ok: true
+  config_paths:
+  - path: configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml
+    exists: true
+  - path: configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml
+    exists: true
+  - path: configs/benchmarks/seed_sets_v1.yaml
+    exists: true
+  - path: configs/policy_search/scenario_horizons_h500.yaml
+    exists: true
+  - path: configs/scenarios/classic_interactions_francis2023.yaml
+    exists: true
+  seed_budget_present: true
+  seed_set: paper_eval_s20
+  seed_count: 20
+  command_keys:
+  - campaign_command
+  - report_command
+  claim_gate_keys:
+  - claim_gate
+  - no_claim_until_run

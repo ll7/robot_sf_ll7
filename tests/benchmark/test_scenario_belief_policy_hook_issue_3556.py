@@ -81,6 +81,24 @@ def test_augment_fails_closed_on_empty_or_unknown():
     ).get("pedestrians", {})
 
 
+def test_augment_tolerates_empty_robot_and_goal_fields():
+    """Malformed robot or goal vectors should not crash belief sidecar projection."""
+
+    obs = {
+        "robot": {"position": [], "heading": []},
+        "goal": {"current": []},
+        "pedestrians": {
+            "positions": [[1.0, 0.0]],
+            "velocities": [[0.0, 0.0]],
+            "count": [1],
+        },
+    }
+
+    aug = augment_observation_with_belief(obs, mode="uncertain_dropped")
+
+    assert len(aug["pedestrians"]["uncertainty"]) == 1
+
+
 def test_adapter_delegates_non_plan_attributes():
     """The wrapper delegates reset/diagnostics-style attributes to the inner adapter."""
     inner = StreamGapPlannerAdapter(StreamGapPlannerConfig())

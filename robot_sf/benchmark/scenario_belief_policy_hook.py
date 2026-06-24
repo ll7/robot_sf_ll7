@@ -139,11 +139,22 @@ def simulator_from_observation(obs: dict[str, Any], *, ped_radius: float) -> Sim
     goal = obs.get("goal") if isinstance(obs.get("goal"), dict) else {}
     peds = obs.get("pedestrians") if isinstance(obs.get("pedestrians"), dict) else {}
 
-    robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32).reshape(-1)[:2]
-    heading = float(np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)[0])
+    robot_pos = np.asarray(robot.get("position", [0.0, 0.0]), dtype=np.float32).reshape(-1)
+    if robot_pos.size < 2:
+        robot_pos = np.zeros(2, dtype=np.float32)
+    else:
+        robot_pos = robot_pos[:2]
+
+    heading_arr = np.asarray(robot.get("heading", [0.0]), dtype=np.float32).reshape(-1)
+    heading = float(heading_arr[0]) if heading_arr.size else 0.0
+
     goal_cur = np.asarray(
         goal.get("current", goal.get("next", [0.0, 0.0])), dtype=np.float32
-    ).reshape(-1)[:2]
+    ).reshape(-1)
+    if goal_cur.size < 2:
+        goal_cur = np.zeros(2, dtype=np.float32)
+    else:
+        goal_cur = goal_cur[:2]
 
     ped_pos = _as_xy(peds.get("positions"))
     ped_vel = _as_xy(peds.get("velocities"))

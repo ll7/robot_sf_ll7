@@ -242,6 +242,29 @@ def _seed_budget(payload: dict[str, Any]) -> Any:
     return None
 
 
+def _queue_hint(payload: dict[str, Any], *, issue: int | None, kind: str) -> dict[str, Any]:
+    """Return conservative private-ops queue hint for a launch packet."""
+
+    explicit = payload.get("queue_hint")
+    hint: dict[str, Any] = dict(explicit) if isinstance(explicit, dict) else {}
+    boundary = payload.get("execution_boundary") or payload.get("claim_gate") or {}
+    submit_ready = bool(
+        isinstance(boundary, dict) and boundary.get("submit_slurm_from_this_issue") is True
+    )
+    hint.setdefault("public_issue", f"ll7/robot_sf_ll7#{issue}" if issue is not None else "")
+    hint.setdefault("review_required", True)
+    hint.setdefault("submit_ready", submit_ready)
+    hint.setdefault("state", "ready" if submit_ready else "proposed")
+    if kind == "benchmark":
+        hint.setdefault("job_class", "policy_search_sweep")
+    elif kind == "training":
+        hint.setdefault("job_class", "robot_sf_gpu_training_small")
+    else:
+        hint.setdefault("job_class", "")
+    hint.setdefault("source", "public_launch_packet_preflight")
+    return hint
+
+
 def preflight_launch_packet(  # noqa: C901
     packet_path: Path, *, repo_root: Path | None = None
 ) -> dict[str, Any]:
@@ -309,13 +332,14 @@ def preflight_launch_packet(  # noqa: C901
     if placeholders:
         reasons.append(f"placeholder values remain: {', '.join(placeholders[:8])}")
 
+    kind = _packet_kind(packet_path)
     ready = not reasons
     return {
         "schema_version": SCHEMA_VERSION,
         "packet_path": str(packet_rel),
         "packet_schema_version": schema,
         "issue": issue,
-        "kind": _packet_kind(packet_path),
+        "kind": kind,
         "ready": ready,
         "reasons": reasons,
         "configs": [asdict(check) for check in path_checks],
@@ -324,6 +348,7 @@ def preflight_launch_packet(  # noqa: C901
         "claim_gate": payload.get("claim_gate")
         or payload.get("claim_map_gate")
         or payload.get("execution_boundary"),
+        "queue_hint": _queue_hint(payload, issue=issue, kind=kind),
     }
 
 

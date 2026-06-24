@@ -40,6 +40,7 @@ def _manifest_entry(report: dict[str, Any]) -> dict[str, Any]:
         "seed_budget": report.get("seed_budget"),
         "command": report.get("command"),
         "claim_gate": report.get("claim_gate"),
+        "queue_hint": report.get("queue_hint"),
     }
 
 

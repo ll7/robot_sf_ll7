@@ -52,6 +52,9 @@ def test_preflight_launch_packet_accepts_checked_paths(tmp_path: Path) -> None:
     assert report["ready"] is True
     assert report["issue"] == 999
     assert report["kind"] == "benchmark"
+    assert report["queue_hint"]["public_issue"] == "ll7/robot_sf_ll7#999"
+    assert report["queue_hint"]["job_class"] == "policy_search_sweep"
+    assert report["queue_hint"]["submit_ready"] is False
     assert report["reasons"] == []
     assert any(item["sha256_matches"] is True for item in report["configs"])
 

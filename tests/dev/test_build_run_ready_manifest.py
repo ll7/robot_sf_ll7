@@ -47,6 +47,9 @@ def test_build_run_ready_manifest_summarizes_packets(tmp_path: Path) -> None:
     by_issue = {entry["issue"]: entry for entry in manifest["entries"]}
     assert by_issue[1]["ready"] is True
     assert by_issue[1]["kind"] == "benchmark"
+    assert by_issue[1]["queue_hint"]["public_issue"] == "ll7/robot_sf_ll7#1"
+    assert by_issue[1]["queue_hint"]["job_class"] == "policy_search_sweep"
+    assert by_issue[1]["queue_hint"]["state"] == "proposed"
     assert by_issue[2]["ready"] is False
     assert by_issue[2]["kind"] == "training"
 

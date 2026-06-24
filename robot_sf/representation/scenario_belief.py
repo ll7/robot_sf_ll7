@@ -392,7 +392,11 @@ class ScenarioBelief:
         robot_pos = self._clip_position(self.ego.position.as_array())
         goal = self.goals[0] if self.goals else _empty_goal(self.source_summary)
         current_goal = self._clip_position(goal.current.as_array())
-        next_goal = self._clip_position(goal.next.as_array())
+        next_goal = (
+            self._clip_position(goal.next.as_array())
+            if goal.next.confidence > 0.0
+            else current_goal
+        )
 
         ordered_agents = sorted(
             visible_agents,
@@ -788,7 +792,14 @@ def _scenario_belief_from_simulator(
 
     goal = np.asarray(simulator.goal_pos[robot_index], dtype=np.float32)
     next_goal = simulator.next_goal_pos[robot_index]
-    next_goal_arr = np.zeros(2, dtype=np.float32) if next_goal is None else np.asarray(next_goal)
+    next_goal_candidate = None if next_goal is None else np.asarray(next_goal, dtype=np.float32)
+    next_goal_valid = (
+        next_goal_candidate is not None
+        and next_goal_candidate.reshape(-1).size == 2
+        and np.all(np.isfinite(next_goal_candidate))
+    )
+    next_goal_arr = next_goal_candidate if next_goal_valid else goal
+    next_goal_confidence = 1.0 if next_goal_valid else 0.0
 
     return ScenarioBelief(
         frame_id="map",
@@ -817,7 +828,11 @@ def _scenario_belief_from_simulator(
         goals=(
             GoalBelief(
                 current=Estimate2D.point(goal, confidence=1.0, variance=1e-6),
-                next=Estimate2D.point(next_goal_arr, confidence=1.0, variance=1e-6),
+                next=Estimate2D.point(
+                    next_goal_arr,
+                    confidence=next_goal_confidence,
+                    variance=1e-6,
+                ),
                 source=source,
             ),
         ),

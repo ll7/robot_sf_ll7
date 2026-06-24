@@ -167,6 +167,14 @@ from robot_sf.benchmark.observation_noise import (
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
+from robot_sf.benchmark.scenario_belief_policy_hook import (
+    BELIEF_MODES,
+    DEFAULT_FOV_DEGREES,
+    DEFAULT_MAX_PEDESTRIANS,
+    DEFAULT_MAX_RANGE_M,
+    DEFAULT_PED_RADIUS,
+    BeliefModeStreamGapAdapter,
+)
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.utils import (
@@ -1058,15 +1066,37 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         )
 
     if algo_key == "stream_gap":
-        adapter = StreamGapPlannerAdapter(config=build_stream_gap_config(algo_config))
+        belief_mode = str(algo_config.get("belief_mode") or "").strip().lower() or None
+        stream_gap_config = algo_config
+        limitations: str | None = None
+        if belief_mode in BELIEF_MODES:
+            # The mode owns the uncertainty gate; gate ON only for the dropping mode.
+            stream_gap_config = {
+                **algo_config,
+                "uncertainty_gating_enabled": BELIEF_MODES[belief_mode]["gate"],
+            }
+            limitations = f"scenario_belief_mode={belief_mode}_diagnostic"
+        adapter: Any = StreamGapPlannerAdapter(config=build_stream_gap_config(stream_gap_config))
+        if belief_mode in BELIEF_MODES:
+            adapter = BeliefModeStreamGapAdapter(
+                adapter,
+                mode=belief_mode,
+                fov_degrees=float(algo_config.get("belief_fov_degrees", DEFAULT_FOV_DEGREES)),
+                max_range_m=algo_config.get("belief_max_range_m", DEFAULT_MAX_RANGE_M),
+                ped_radius=float(algo_config.get("belief_ped_radius", DEFAULT_PED_RADIUS)),
+                max_pedestrians=int(
+                    algo_config.get("belief_max_pedestrians", DEFAULT_MAX_PEDESTRIANS)
+                ),
+            )
         return _build_adapter_policy(
             algo_key=algo_key,
-            algo_config=algo_config,
+            algo_config=stream_gap_config,
             meta=meta,
             adapter=adapter,
             adapter_name="StreamGapPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
+            limitations=limitations,
         )
 
     if algo_key == "gap_prediction":

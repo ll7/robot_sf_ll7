@@ -288,6 +288,45 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _sanitize_payload_for_output(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a log-safe snapshot payload with sensitive detail removed."""
+    prs: list[dict[str, Any]] = []
+    for pr in payload.get("prs", []):
+        if not isinstance(pr, dict):
+            continue
+        recommendation = pr.get("recommendation", {})
+        if not isinstance(recommendation, dict):
+            recommendation = {}
+        retry_budget = recommendation.get("retry_budget", {})
+        if not isinstance(retry_budget, dict):
+            retry_budget = {}
+
+        prs.append(
+            {
+                "number": pr.get("number"),
+                "state": pr.get("state", ""),
+                "mergeable": pr.get("mergeable", ""),
+                "recommendation": {
+                    "action": recommendation.get("action", "wait"),
+                    "after_diagnosis_action": recommendation.get("after_diagnosis_action"),
+                    "retry_budget": {
+                        "allowed": retry_budget.get("allowed", 0),
+                        "used": retry_budget.get("used", 0),
+                        "remaining": retry_budget.get("remaining", 0),
+                    },
+                },
+            }
+        )
+
+    return {
+        "schema": payload.get("schema"),
+        "repo": payload.get("repo"),
+        "source_schema": payload.get("source_schema"),
+        "route_evidence_only": payload.get("route_evidence_only", True),
+        "prs": prs,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
@@ -303,7 +342,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.retry_state_file and args.record_retry_recommendation:
         save_retry_state(args.retry_state_file, retry_state)
-    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
+    safe_payload = _sanitize_payload_for_output(payload)
+    print(
+        json.dumps(safe_payload, indent=2, sort_keys=True)
+        if args.json
+        else json.dumps(safe_payload)
+    )
     return 0
 
 

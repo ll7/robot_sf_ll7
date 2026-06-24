@@ -73,6 +73,10 @@ FREEFORM_DOMAIN_TRIGGER_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+# A trigger phrase is ignored when it is negated in prose (e.g. "makes no paper-facing claim"),
+# because describing the absence of a claim is the opposite of making one. Without this, honestly
+# stating an evidence boundary in a PR body would (perversely) require domain approval.
+_NEGATED_TRIGGER_RE = re.compile(r"\b(no|not|without|never|non)\b[\s\w-]{0,24}$", re.IGNORECASE)
 BOT_ONLY_MARKERS = (
     "auto-generated comment: release notes by coderabbit.ai",
     "auto-generated comment: summarize by coderabbit.ai",
@@ -339,6 +343,7 @@ def _domain_approval_triggers(body: str) -> tuple[str, ...]:
         return tuple(
             f"free-form evidence marker: {match.group(1)}"
             for match in FREEFORM_DOMAIN_TRIGGER_RE.finditer(body)
+            if not _NEGATED_TRIGGER_RE.search(body[: match.start()])
         )
     triggers: list[str] = []
     for label in ("Evidence tier", "Result classification"):
@@ -397,17 +402,34 @@ def analyze_body(body: str, *, source: str, require_open_issues: bool = False) -
     linked_issues = _linked_issues(f"{section}\n{issue_value}")
     issue_state_errors = _verify_open_issues(linked_issues) if require_open_issues else ()
 
+    residual_closure = _has_closing_keyword(body) and _has_residual_scope_outside_followups(body)
     if not section:
+        # The section is only required when there is residual scope to track (the PR closes an issue
+        # yet declares out-of-scope follow-up work). A self-contained PR with no deferred work does
+        # not need to carry a boilerplate "Follow-Up Issues: none" section.
+        if residual_closure and not _has_explicit_maintainer_waiver(body, ""):
+            return FollowupReport(
+                status="residual_scope_without_followup",
+                source=source,
+                deferred_work="",
+                linked_issues=(),
+                explicit_no_issue_reason="",
+                issue_state_errors=(),
+                message=(
+                    "PR closes an issue while declaring residual scope but has no Follow-Up Issues "
+                    "section; add the section with a linked open follow-up issue or a maintainer "
+                    "waiver."
+                ),
+            )
         return FollowupReport(
-            status="missing_section",
+            status="ok",
             source=source,
             deferred_work="",
             linked_issues=(),
             explicit_no_issue_reason="",
             issue_state_errors=(),
-            message="Follow-Up Issues section not found.",
+            message="No Follow-Up Issues section required (no residual scope declared).",
         )
-    residual_closure = _has_closing_keyword(body) and _has_residual_scope_outside_followups(body)
     if _is_empty_or_placeholder(deferred):
         if (
             residual_closure
@@ -779,12 +801,46 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fail empty or bot-only PR bodies when changed files include source/configuration.",
     )
+    parser.add_argument(
+        "--advisory",
+        action="store_true",
+        help=(
+            "Advisory mode: report contract violations as warnings and exit 0 instead of failing. "
+            "Findings still surface as GitHub Actions ::warning:: annotations on the PR."
+        ),
+    )
     return parser
+
+
+def _emit_advisory_warning(message: str) -> None:
+    """Emit a GitHub Actions warning annotation so advisory findings still surface on the PR."""
+    print(f"::warning title=PR body contract (advisory)::{message}")
+
+
+def _resolve_exit(failing_messages: list[str], *, advisory: bool) -> int:
+    """Emit advisory warnings as needed and return the process exit code.
+
+    Returns:
+        int: 0 when there are no failures or when advisory mode downgrades them; 2 otherwise.
+    """
+    if not failing_messages:
+        return 0
+    if advisory:
+        for message in failing_messages:
+            _emit_advisory_warning(message)
+        return 0
+    return 2
 
 
 def main(argv: list[str] | None = None) -> int:
     """Run the PR follow-up check CLI."""
     args = _build_parser().parse_args(argv)
+    advisory = args.advisory or os.environ.get("PR_READY_ADVISORY", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     body, source = _load_body(args)
     if body is None:
         report = FollowupReport(
@@ -803,7 +859,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(report.__dict__, sort_keys=True))
         else:
             print(_format_report(report))
-        return 2 if args.require_body else 0
+        if args.require_body and report.status == "missing_body":
+            if advisory:
+                _emit_advisory_warning(report.message)
+                return 0
+            return 2
+        return 0
 
     require_open = args.require_open_issues or os.environ.get(
         "PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES", ""
@@ -862,15 +923,16 @@ def main(argv: list[str] | None = None) -> int:
             else sys.stdout
         )
         print(_format_body_quality_report(body_quality_report), file=quality_stream)
-    return (
-        2
-        if (
-            report.status in failing_statuses
-            or domain_report.status in domain_failing_statuses
-            or body_quality_report.status in body_quality_failing_statuses
+    failing_messages = [
+        rep.message
+        for rep, statuses in (
+            (report, failing_statuses),
+            (domain_report, domain_failing_statuses),
+            (body_quality_report, body_quality_failing_statuses),
         )
-        else 0
-    )
+        if rep.status in statuses
+    ]
+    return _resolve_exit(failing_messages, advisory=advisory)
 
 
 if __name__ == "__main__":

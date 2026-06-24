@@ -43,6 +43,7 @@ DEFAULT_FOV = 120.0
 NEAR_MISS_NOTE = (
     "real benchmark near_misses + collisions + min_clearance (no scripted unsafe-commit)"
 )
+NEAR_SAFE_ORACLE_COLLISION_RATE = 0.25
 
 
 def load_campaign_scenarios(set_path: Path, seeds: list[int]) -> list[dict[str, Any]]:
@@ -177,6 +178,67 @@ def classify_decision(by_mode: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def classify_screened_decision(by_mode: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Classify contrast while exposing #3556 scenario-screening gates.
+
+    The campaign must not interpret a dropped-vs-retained contrast unless the
+    oracle baseline is near-safe and the dropped mode differs from retention.
+    """
+    oracle = by_mode.get("oracle", {})
+    retained = by_mode.get("uncertain_retained", {})
+    dropped = by_mode.get("uncertain_dropped", {})
+    if not (oracle.get("episodes") and retained.get("episodes") and dropped.get("episodes")):
+        return {
+            "decision": "blocked",
+            "reason": "one or more modes produced no episodes",
+            "screening_status": "missing_episodes",
+            "oracle_near_safe": False,
+            "mode_is_discriminating": False,
+        }
+
+    coll_delta = dropped["collision_rate"] - retained["collision_rate"]
+    nm_delta = dropped["total_near_misses"] - retained["total_near_misses"]
+    worse = coll_delta > 0 or nm_delta > 0
+    oracle_collision_rate = float(oracle["collision_rate"])
+    oracle_unsafe = oracle_collision_rate > NEAR_SAFE_ORACLE_COLLISION_RATE
+
+    if oracle_unsafe:
+        decision = "inconclusive_oracle_unsafe"
+        reason = (
+            "oracle baseline is itself unsafe "
+            f"(collision_rate {oracle_collision_rate}); effect not cleanly attributable"
+        )
+        screening_status = "oracle_unsafe"
+    elif worse:
+        decision = "revise"
+        reason = (
+            f"dropping uncertain agents raised collisions ({retained['collision_rate']}->"
+            f"{dropped['collision_rate']}) and/or near-misses (+{nm_delta}) vs retention, "
+            f"with a near-safe oracle ({oracle_collision_rate}); revise/block dropping default"
+        )
+        screening_status = "near_safe_discriminating"
+    elif coll_delta == 0 and nm_delta == 0:
+        decision = "inconclusive"
+        reason = "no measurable safety difference at this matrix"
+        screening_status = "near_safe_nondiscriminating"
+    else:
+        decision = "retention_dominates"
+        reason = "dropping did not increase unsafe outcomes here"
+        screening_status = "near_safe_nonworsening"
+
+    return {
+        "decision": decision,
+        "reason": reason,
+        "screening_status": screening_status,
+        "oracle_collision_rate": round(oracle_collision_rate, 4),
+        "oracle_near_safe": not oracle_unsafe,
+        "oracle_near_safe_threshold": NEAR_SAFE_ORACLE_COLLISION_RATE,
+        "mode_is_discriminating": worse,
+        "collision_rate_delta_dropped_minus_retained": round(coll_delta, 4),
+        "near_miss_delta_dropped_minus_retained": nm_delta,
+    }
+
+
 def run_campaign(
     set_path: Path,
     seeds: list[int],
@@ -218,7 +280,7 @@ def run_campaign(
         "fov_degrees": fov_degrees,
         "metric_note": NEAR_MISS_NOTE,
         "by_mode": by_mode,
-        "decision": classify_decision(by_mode),
+        "decision": classify_screened_decision(by_mode),
     }
 
 

@@ -1,4 +1,4 @@
-# Issue #3558 — `stream_gap` uncertainty-gate threshold calibration sweep
+# Issue 3558 Stream-Gap Uncertainty-Gate Threshold Calibration Sweep (2026-06-25)
 
 **Status:** the deferred threshold sweep is built and run; it feeds the merged
 `calibrate_stream_gap_gate` decision layer. Diagnostic-tier result: a **safe operating region
@@ -54,5 +54,5 @@ uv run python scripts/validation/run_stream_gap_gate_threshold_sweep_issue_3558.
   --output-json output/issue_3558_gate_threshold_sweep.json
 ```
 
-Tests: `tests/validation/test_run_stream_gap_gate_threshold_sweep_issue_3558.py` (and the unchanged
-#3471 harness tests, which still pass with the additive `gate_thresholds` parameter).
+Tests: `tests/validation/test_run_stream_gap_gate_threshold_sweep_issue_3558.py` (and the
+unchanged issue-3471 harness tests, which still pass with the additive `gate_thresholds` parameter).

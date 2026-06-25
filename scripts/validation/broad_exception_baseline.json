@@ -7,7 +7,6 @@
       "robot_sf/benchmark/camera_ready_campaign.py": 3,
       "robot_sf/benchmark/cli.py": 47,
       "robot_sf/benchmark/doctor.py": 1,
-      "robot_sf/benchmark/failure_extractor.py": 2,
       "robot_sf/benchmark/figure_qa.py": 2,
       "robot_sf/benchmark/freeze_manifest.py": 1,
       "robot_sf/benchmark/full_classic/orchestrator.py": 11,
@@ -124,7 +123,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 285
+    "total": 283
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -625,24 +624,6 @@
     },
     {
       "col_offset": 4,
-      "context": "_metric",
-      "fingerprint": "bf8688976ab60cac",
-      "handler": "Exception",
-      "lineno": 33,
-      "path": "robot_sf/benchmark/failure_extractor.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 12,
-      "context": "is_failure",
-      "fingerprint": "e02f5a0c6261599d",
-      "handler": "Exception",
-      "lineno": 68,
-      "path": "robot_sf/benchmark/failure_extractor.py",
-      "source": "except Exception:"
-    },
-    {
-      "col_offset": 4,
       "context": "_check_image_content",
       "fingerprint": "c007497d97e35eac",
       "handler": "Exception",
@@ -979,7 +960,7 @@
       "context": "_preflight_policy",
       "fingerprint": "9d6addfc4094f787",
       "handler": "Exception",
-      "lineno": 674,
+      "lineno": 682,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as exc:"
     },
@@ -988,7 +969,7 @@
       "context": "_preflight_policy",
       "fingerprint": "3f6860893c2f6ced",
       "handler": "Exception",
-      "lineno": 704,
+      "lineno": 712,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as fallback_exc:"
     },
@@ -1384,7 +1365,7 @@
       "context": "_scan_json_file",
       "fingerprint": "9b8a4af46905cca8",
       "handler": "Exception",
-      "lineno": 491,
+      "lineno": 532,
       "path": "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py",
       "source": "except Exception:"
     },
@@ -1393,7 +1374,7 @@
       "context": "_scan_single_directory",
       "fingerprint": "b9636cf3e1bafb9d",
       "handler": "Exception",
-      "lineno": 541,
+      "lineno": 582,
       "path": "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py",
       "source": "except Exception as e:"
     },

@@ -30,7 +30,10 @@ def _metric(rec: dict[str, Any], name: str, default: float = 0.0) -> float:
     v = m.get(name, default)
     try:
         return float(v)
-    except Exception:
+    except (TypeError, ValueError):
+        # JSON metric values are scalars/containers; only non-numeric coercion
+        # raises here. Narrow the catch so unrelated programming errors are not
+        # swallowed and silently misclassify the episode.
         return float(default)
 
 
@@ -65,7 +68,9 @@ def is_failure(
             try:
                 if float(m["snqi"]) < float(snqi_below):
                     return True
-            except Exception:
+            except (TypeError, ValueError):
+                # A non-numeric snqi value cannot be compared; treat as
+                # "criterion not met" rather than swallowing other errors.
                 pass
     return False
 

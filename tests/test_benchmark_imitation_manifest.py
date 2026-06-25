@@ -199,6 +199,47 @@ def test_path_to_manifest_fails_closed_for_absolute_paths_outside_repo() -> None
         imitation_manifest._path_to_manifest(outside_path)
 
 
+def test_training_run_manifest_preserves_completed_run_with_cross_worktree_config(
+    metrics_summary: dict[str, MetricAggregate],
+) -> None:
+    """A completed run is preserved even when an eval/config path lives in a sibling worktree.
+
+    Reproduces the cross-worktree failure mode (jobs 13024/12949/12950): training finished, but
+    ``evaluation_scenario_config`` resolved under a different git worktree — outside both the
+    artefact and repository roots — so the strict serializer raised and the whole manifest write
+    aborted, discarding the run. The lenient serializer must instead persist the manifest, record
+    the foreign path's basename (no host-directory leak), and keep all other fields intact.
+    """
+    foreign_config = Path(
+        "/home/user/git/robot_sf_ll7.worktrees/sibling-branch/configs/scenarios/sets/eval_v1.yaml"
+    )
+    episode_log = get_imitation_report_dir() / "ppo_imitation" / "episodes.jsonl"
+    artifact = TrainingRunArtifact(
+        run_id="run_cross_worktree",
+        run_type=TrainingRunType.BEHAVIOURAL_CLONING,
+        input_artefacts=("policy:ppo_expert_v1",),
+        seeds=(509,),
+        metrics=metrics_summary,
+        episode_log_path=episode_log,
+        wall_clock_hours=16.2,
+        status=TrainingRunStatus.COMPLETED,
+        evaluation_scenario_config=foreign_config,
+        scenario_coverage={"scenario_a": 1},
+        notes=["training complete"],
+    )
+
+    output_path = imitation_manifest.write_training_run_manifest(artifact)
+    with output_path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    # Run is preserved, foreign path degraded to a portable basename with no host directory.
+    assert payload["run_id"] == "run_cross_worktree"
+    assert payload["evaluation_scenario_config"] == "eval_v1.yaml"
+    assert "/home/user/" not in json.dumps(payload)
+    assert payload["status"] == TrainingRunStatus.COMPLETED.value
+    assert payload["episode_log_path"].startswith("benchmarks/ppo_imitation/")
+
+
 @pytest.mark.parametrize(
     "manifest_path",
     [None, Path("custom/output/expert.json")],

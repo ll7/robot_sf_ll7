@@ -65,6 +65,37 @@ def _path_to_manifest(path: Path) -> str:
             ) from None
 
 
+def _path_to_manifest_lenient(path: Path, *, field: str) -> str:
+    """Serialise ``path`` portably, degrading to the basename for foreign paths.
+
+    Unlike :func:`_path_to_manifest`, this never raises when ``path`` resolves outside the
+    artefact and repository roots. That situation is legitimate when a run executes from one
+    git worktree but references a config or evaluation artefact materialised under a sibling
+    worktree: the strict helper would raise and abort the manifest write *after* training has
+    already completed, discarding the entire run's evidence.
+
+    Instead, foreign absolute paths degrade to their basename — portable and free of any
+    host-specific directory leakage — and the loss of the full path is logged so it remains
+    traceable.
+
+    Returns:
+        Portable path string, or the basename when the path is outside the allowed roots.
+    """
+
+    try:
+        return _path_to_manifest(path)
+    except ValueError:
+        basename = Path(path).name
+        logger.warning(
+            "Manifest field '{}' path {} is outside allowed roots; recording basename '{}' "
+            "to preserve the completed run's evidence.",
+            field,
+            path,
+            basename,
+        )
+        return basename
+
+
 def _serialize_metric(metric: MetricAggregate) -> dict[str, Any]:
     """Serialize a metric aggregate into a JSON-friendly dict.
 
@@ -174,22 +205,26 @@ def serialize_training_run(artifact: TrainingRunArtifact) -> dict[str, Any]:
         "metrics": _serialize_metrics_map(artifact.metrics),
         "episode_log_path": _path_to_manifest(artifact.episode_log_path),
         "eval_timeline_path": (
-            _path_to_manifest(artifact.eval_timeline_path)
+            _path_to_manifest_lenient(artifact.eval_timeline_path, field="eval_timeline_path")
             if artifact.eval_timeline_path is not None
             else None
         ),
         "eval_per_scenario_path": (
-            _path_to_manifest(artifact.eval_per_scenario_path)
+            _path_to_manifest_lenient(
+                artifact.eval_per_scenario_path, field="eval_per_scenario_path"
+            )
             if artifact.eval_per_scenario_path is not None
             else None
         ),
         "perf_summary_path": (
-            _path_to_manifest(artifact.perf_summary_path)
+            _path_to_manifest_lenient(artifact.perf_summary_path, field="perf_summary_path")
             if artifact.perf_summary_path is not None
             else None
         ),
         "evaluation_scenario_config": (
-            _path_to_manifest(artifact.evaluation_scenario_config)
+            _path_to_manifest_lenient(
+                artifact.evaluation_scenario_config, field="evaluation_scenario_config"
+            )
             if artifact.evaluation_scenario_config is not None
             else None
         ),

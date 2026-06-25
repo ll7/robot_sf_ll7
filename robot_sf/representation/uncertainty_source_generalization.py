@@ -16,10 +16,17 @@ builders); this layer is pure and side-effect free, mirroring the accepted decis
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
 UNCERTAINTY_SOURCE_GENERALIZATION_SCHEMA = "uncertainty_source_generalization.v1"
+
+_CONTRAST_METRIC_FIELDS = (
+    "retained_unsafe_commit_rate",
+    "dropped_unsafe_commit_rate",
+    "min_separation_delta_m",
+)
 
 REPRODUCES = "reproduces_unsafe_dropping"
 NO_EFFECT = "no_unsafe_dropping_effect"
@@ -67,6 +74,12 @@ def classify_source(contrast: SourceContrast, thresholds: EffectThresholds | Non
     Returns:
         str: ``reproduces_unsafe_dropping`` / ``no_unsafe_dropping_effect`` / ``inconclusive``.
     """
+    for field in _CONTRAST_METRIC_FIELDS:
+        value = getattr(contrast, field)
+        if not math.isfinite(value):
+            raise ValueError(
+                f"contrast.{field} for source {contrast.source!r} must be finite, got {value}"
+            )
     thresholds = thresholds or EffectThresholds()
     unsafe_delta = contrast.dropped_unsafe_commit_rate - contrast.retained_unsafe_commit_rate
     sep_delta = contrast.min_separation_delta_m
@@ -127,9 +140,9 @@ def assess_source_generalization(
         "evidence_kind": "diagnostic_proxy",
         "n_sources": len(contrasts),
         "per_source": per_source,
-        "reproducing_sources": sorted(row["source"] for row in reproduces),
+        "reproducing_sources": sorted({row["source"] for row in reproduces}),
         "inconclusive_sources": sorted(
-            row["source"] for row in per_source if row["verdict"] == INCONCLUSIVE
+            {row["source"] for row in per_source if row["verdict"] == INCONCLUSIVE}
         ),
         "generalization": generalization,
     }

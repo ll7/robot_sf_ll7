@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.benchmark.heterogeneous_population_metrics import (
@@ -84,3 +86,27 @@ def test_effect_is_flagged_confounded_without_mean_matching() -> None:
 
     assert report["validity"] == "confounded_by_mean_shift"
     assert report["isolated_from_mean_shift"] is False
+
+
+# --- non-finite (NaN/Inf) inputs must fail closed -----------------------------
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_cvar_rejects_non_finite_values(bad: float) -> None:
+    """A NaN/Inf observation must raise, not let the tail-mean evaluate to NaN."""
+    with pytest.raises(ValueError, match="finite"):
+        cvar([1.0, 2.0, bad], 0.5, higher_is_safer=True)
+
+
+def test_per_archetype_rejects_non_finite_value() -> None:
+    """A non-finite per-pedestrian value must raise and name the archetype."""
+    observations = [PedestrianMetric("static", 0.2), PedestrianMetric("static", math.nan)]
+    with pytest.raises(ValueError, match="static"):
+        per_archetype_metrics(observations)
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf])
+def test_mean_matched_effect_rejects_non_finite_mean(bad: float) -> None:
+    """A non-finite population mean must fail closed rather than propagate."""
+    with pytest.raises(ValueError, match="finite"):
+        mean_matched_heterogeneity_effect(bad, 0.62, homogeneous_is_mean_matched=True)

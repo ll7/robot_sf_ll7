@@ -274,3 +274,56 @@ def test_occlusion_predicate_rejects_bad_inputs() -> None:
         occlusion_near_miss_predicate(
             np.ones(4), np.ones(3, dtype=bool), np.ones(4), np.ones(4), dt=_DT
         )
+
+
+# --- non-finite (NaN/Inf) inputs must fail closed -----------------------------
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_oscillatory_rejects_non_finite_signal(bad: float) -> None:
+    """A NaN/Inf in any float signal must raise, not NaN-poison ``np.unwrap``."""
+    traj = _straight_trajectory()
+    headings = np.asarray(traj["headings"], dtype=float).copy()
+    headings[2] = bad
+    with pytest.raises(ValueError, match="headings"):
+        oscillatory_control_predicate(
+            positions=traj["positions"],
+            headings=headings,
+            linear_velocities=traj["linear_velocities"],
+            dt=_DT,
+        )
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf])
+def test_late_evasive_rejects_non_finite_signal(bad: float) -> None:
+    """A NaN/Inf hazard distance must raise rather than silently not-flag."""
+    distances = _HAZARD_DISTANCES.copy()
+    distances[3] = bad
+    with pytest.raises(ValueError, match="hazard_distances"):
+        late_evasive_predicate(distances, _HAZARD_VISIBLE, np.ones(6), dt=_DT)
+
+
+def test_occlusion_rejects_non_finite_signal() -> None:
+    """A NaN distance must raise instead of letting ``argmin`` mis-locate the near miss."""
+    from robot_sf.benchmark.safety_predicates import occlusion_near_miss_predicate
+
+    distances = np.array([5.0, np.nan, 3.0, 0.3])
+    with pytest.raises(ValueError, match="hazard_distances"):
+        occlusion_near_miss_predicate(
+            distances, np.ones(4, dtype=bool), np.full(4, 0.9), np.ones(4), dt=_DT
+        )
+
+
+def test_occlusion_rejects_non_finite_predicted_separation() -> None:
+    """A non-finite predicted-separation passthrough must also fail closed."""
+    from robot_sf.benchmark.safety_predicates import occlusion_near_miss_predicate
+
+    with pytest.raises(ValueError, match="predicted_minimum_separation_m"):
+        occlusion_near_miss_predicate(
+            np.array([2.0, 1.0]),
+            np.array([True, True]),
+            np.array([0.9, 0.9]),
+            np.array([1.0, 1.0]),
+            dt=_DT,
+            predicted_minimum_separation_m=np.inf,
+        )

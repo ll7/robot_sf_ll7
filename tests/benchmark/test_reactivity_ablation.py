@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.benchmark.reactivity_ablation import (
@@ -107,3 +109,21 @@ def test_empty_input_is_rejected() -> None:
     """An empty ablation cannot be summarized."""
     with pytest.raises(ValueError):
         assess_reactivity_ablation([])
+
+
+# --- non-finite (NaN/Inf) inputs must fail closed -----------------------------
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_reactivity_delta_rejects_non_finite_metric(bad: float) -> None:
+    """A non-finite paired metric must raise, not propagate NaN into the deltas."""
+    with pytest.raises(ValueError, match="reactive_collision_rate"):
+        reactivity_delta(_contrast("p", reactive_coll=bad, replay_coll=0.05))
+
+
+def test_assess_propagates_non_finite_guard() -> None:
+    """The aggregate entry point must propagate the per-planner fail-closed guard."""
+    with pytest.raises(ValueError, match="replay_min_separation_m"):
+        assess_reactivity_ablation(
+            [_contrast("A", reactive_coll=0.20, replay_coll=0.05, replay_sep=math.inf)]
+        )

@@ -77,6 +77,22 @@ def test_survivorship_delta_exposes_conditioning_bias() -> None:
     assert report["n_safe_success"] == 2
 
 
+def test_survivorship_sample_sizes_exclude_non_numeric_values() -> None:
+    """A non-numeric metric value must be dropped from both the mean and the sample count."""
+    episodes = [
+        {"comfort": 1.0, "safe_success": True},
+        {"comfort": "n/a", "safe_success": True},  # unparseable -> excluded everywhere
+        {"comfort": 0.0, "safe_success": False},
+    ]
+    report = survivorship_aware_metric(episodes, "comfort")
+
+    # The non-numeric value is excluded from the mean, so it must not inflate n_all/n_safe_success.
+    assert report["n_all"] == 2
+    assert report["n_safe_success"] == 1
+    assert report["unconditional_mean"] == pytest.approx(0.5)
+    assert report["conditioned_on_safe_success_mean"] == pytest.approx(1.0)
+
+
 def test_planner_summary_is_versioned_and_complete() -> None:
     """The planner summary must expose admissibility, collision UCB, and survivorship."""
     episodes = [

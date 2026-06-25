@@ -115,12 +115,17 @@ def survivorship_aware_metric(
         ``survivorship_delta`` (conditioned − unconditional), and the two sample sizes.
     """
     all_values = [
-        _as_float(e[metric_key], default=None) for e in episodes if e.get(metric_key) is not None
+        v
+        for e in episodes
+        if e.get(metric_key) is not None
+        and (v := _as_float(e[metric_key], default=None)) is not None
     ]
     safe_values = [
-        _as_float(e[metric_key], default=None)
+        v
         for e in episodes
-        if e.get(metric_key) is not None and bool(e.get(safe_key, False))
+        if e.get(metric_key) is not None
+        and bool(e.get(safe_key, False))
+        and (v := _as_float(e[metric_key], default=None)) is not None
     ]
     unconditional = _mean(all_values)
     conditioned = _mean(safe_values)

@@ -126,7 +126,7 @@ body:
     attributes:
       label: Validation command
       description: Provide the canonical command or explain why this is docs-only.
-      placeholder: rtk uv run --active ...
+      placeholder: uv run --active ...
     validations:
       required: true
   - type: textarea

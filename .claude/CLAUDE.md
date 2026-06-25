@@ -36,8 +36,8 @@ When using a specific tool or agent, read these first:
 - **Local machine config**: optional `local.machine.md` at the repository root when present
 - **Disk artifacts**: All generated output must go to git-ignored `output/` directory; small,
   durable evidence may be promoted to `docs/context/evidence/`
-- **Token optimization**: prefix shell commands with `rtk` when following this repository's agent
-  guidance.
+- **Shell commands**: use ordinary repository commands directly unless current maintainer
+  direction names a specific wrapper.
 
 ## Quick Start for Claude Code Tasks
 

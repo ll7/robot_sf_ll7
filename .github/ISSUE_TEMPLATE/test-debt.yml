@@ -64,7 +64,7 @@ body:
     attributes:
       label: Targeted validation
       description: Name the test command that proves the change.
-      placeholder: rtk uv run --active pytest ...
+      placeholder: uv run --active pytest ...
     validations:
       required: true
   - type: textarea

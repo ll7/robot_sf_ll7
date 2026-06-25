@@ -162,7 +162,7 @@ def _extract_commands(summary: dict[str, Any], cli_commands: list[str]) -> list[
 
 def _has_exact_command(commands: list[str]) -> bool:
     vague_markers = ("see readme", "see docs", "n/a", "unknown", "not recorded")
-    command_prefixes = ("uv ", "python ", "rtk ", "bash ", "scripts/", "./scripts/")
+    command_prefixes = ("uv ", "python ", "bash ", "scripts/", "./scripts/")
     for command in commands:
         normalized = command.strip().lower()
         if not normalized or any(marker in normalized for marker in vague_markers):

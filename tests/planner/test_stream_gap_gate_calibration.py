@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.planner.stream_gap_gate_calibration import (
@@ -91,3 +93,29 @@ def test_calibration_rejects_empty_sweep() -> None:
     """An empty sweep cannot be calibrated."""
     with pytest.raises(ValueError):
         calibrate_stream_gap_gate([], _BASELINE)
+
+
+# --- non-finite (NaN/Inf) inputs must fail closed -----------------------------
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_classify_rejects_non_finite_setting(bad: float) -> None:
+    """A non-finite safety aggregate must raise, not silently classify ``less_safe``."""
+    setting = _setting("s", unsafe=bad, collision=0.02, sep=0.50)
+    with pytest.raises(ValueError, match="setting.unsafe_commit_rate"):
+        classify_setting_safety(setting, _BASELINE)
+
+
+def test_classify_rejects_non_finite_baseline() -> None:
+    """A non-finite baseline aggregate must also fail closed."""
+    bad_baseline = _setting("base", unsafe=0.10, collision=math.nan, sep=0.50)
+    setting = _setting("s", unsafe=0.10, collision=0.02, sep=0.50)
+    with pytest.raises(ValueError, match="baseline.collision_rate"):
+        classify_setting_safety(setting, bad_baseline)
+
+
+def test_calibration_rejects_non_finite_setting() -> None:
+    """The calibration entry point must propagate the fail-closed guard."""
+    settings = [_setting("s", unsafe=0.10, collision=0.02, sep=math.inf)]
+    with pytest.raises(ValueError, match="min_separation_m"):
+        calibrate_stream_gap_gate(settings, _BASELINE)

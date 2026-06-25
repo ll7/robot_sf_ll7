@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.representation.uncertainty_source_generalization import (
@@ -102,3 +104,34 @@ def test_empty_input_is_rejected() -> None:
     """An empty set of source contrasts cannot be assessed."""
     with pytest.raises(ValueError):
         assess_source_generalization([])
+
+
+# --- non-finite (NaN/Inf) inputs must fail closed -----------------------------
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+def test_classify_source_rejects_non_finite_metric(bad: float) -> None:
+    """A non-finite contrast metric must raise, not silently evaluate ``inconclusive``."""
+    with pytest.raises(ValueError, match="existence"):
+        classify_source(_contrast("existence", bad, 0.25, -0.20))
+
+
+def test_assess_propagates_non_finite_guard() -> None:
+    """The aggregate entry point must propagate the per-source fail-closed guard."""
+    with pytest.raises(ValueError, match="min_separation_delta_m"):
+        assess_source_generalization([_contrast("occlusion", 0.10, 0.25, math.nan)])
+
+
+def test_reproducing_and_inconclusive_sources_are_deduped() -> None:
+    """Repeated source names must be de-duplicated in the reported source lists."""
+    report = assess_source_generalization(
+        [
+            _contrast("existence", 0.10, 0.25, -0.20),  # reproduces
+            _contrast("existence", 0.12, 0.30, -0.25),  # reproduces (same source name)
+            _contrast("covariance", 0.10, 0.105, 0.0),  # inconclusive
+            _contrast("covariance", 0.20, 0.205, 0.0),  # inconclusive (same source name)
+        ]
+    )
+
+    assert report["reproducing_sources"] == ["existence"]
+    assert report["inconclusive_sources"] == ["covariance"]

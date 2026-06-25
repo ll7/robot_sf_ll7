@@ -14,10 +14,13 @@ this layer is pure and side-effect free, mirroring the failure-cause classifier 
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
 STREAM_GAP_CALIBRATION_SCHEMA = "stream_gap_gate_calibration.v1"
+
+_SETTING_METRIC_FIELDS = ("unsafe_commit_rate", "collision_rate", "min_separation_m")
 
 AT_LEAST_AS_SAFE = "at_least_as_safe"
 LESS_SAFE = "less_safe"
@@ -50,6 +53,23 @@ class SafetyTolerance:
     min_separation_abs: float = 0.0
 
 
+def _require_finite_setting(result: GateSettingResult, label: str) -> None:
+    """Fail closed on a non-finite (NaN/Inf) safety aggregate.
+
+    A degraded sweep point or baseline can carry NaN/Inf; the ``<=`` / ``>=`` safety
+    comparisons then evaluate ``False`` and the setting is silently classified
+    ``less_safe`` (or, for the baseline, lets settings pass) without flagging the
+    bad input. Raising names the offending field so the caller drops the trace.
+
+    Raises:
+        ValueError: If any safety aggregate of ``result`` is not finite.
+    """
+    for field in _SETTING_METRIC_FIELDS:
+        value = getattr(result, field)
+        if not math.isfinite(value):
+            raise ValueError(f"{label}.{field} must be finite, got {value}")
+
+
 def classify_setting_safety(
     setting: GateSettingResult,
     baseline: GateSettingResult,
@@ -63,6 +83,8 @@ def classify_setting_safety(
     Returns:
         str: ``at_least_as_safe`` or ``less_safe``.
     """
+    _require_finite_setting(setting, "setting")
+    _require_finite_setting(baseline, "baseline")
     tolerance = tolerance or SafetyTolerance()
     safe = (
         setting.unsafe_commit_rate <= baseline.unsafe_commit_rate + tolerance.unsafe_commit_abs

@@ -31,6 +31,20 @@ if TYPE_CHECKING:
 HETEROGENEOUS_POPULATION_METRICS_SCHEMA = "heterogeneous_population_metrics.v1"
 
 
+def _require_finite(name: str, value: float) -> None:
+    """Fail closed on a non-finite (NaN/Inf) metric value.
+
+    A degraded trace can leak NaN/Inf, after which ``min``/``max`` for the worst
+    stratum and ``np.mean`` for the CVaR evaluate inconsistently by element order
+    (fail-open). Raising names the offending field so the caller drops the input.
+
+    Raises:
+        ValueError: If ``value`` is not finite.
+    """
+    if not math.isfinite(value):
+        raise ValueError(f"{name} must be finite, got {value}")
+
+
 @dataclass(frozen=True, slots=True)
 class PedestrianMetric:
     """One per-pedestrian metric observation tagged with its archetype.
@@ -57,7 +71,10 @@ def cvar(values: Sequence[float], alpha: float, *, higher_is_safer: bool) -> flo
         raise ValueError("values must be non-empty")
     if not (0.0 < alpha <= 1.0):
         raise ValueError("alpha must be in (0, 1]")
-    arr = np.sort(np.asarray(values, dtype=np.float64))  # ascending
+    arr = np.asarray(values, dtype=np.float64)
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("values must contain only finite values")
+    arr = np.sort(arr)  # ascending
     k = max(1, math.ceil(alpha * arr.size))
     tail = arr[:k] if higher_is_safer else arr[-k:]
     return float(np.mean(tail))
@@ -78,7 +95,9 @@ def per_archetype_metrics(
         raise ValueError("at least one observation is required")
     grouped: dict[str, list[float]] = {}
     for observation in observations:
-        grouped.setdefault(observation.archetype, []).append(float(observation.value))
+        value = float(observation.value)
+        _require_finite(f"observation value for archetype {observation.archetype!r}", value)
+        grouped.setdefault(observation.archetype, []).append(value)
 
     per_archetype: dict[str, Any] = {}
     for archetype in sorted(grouped):
@@ -120,6 +139,8 @@ def mean_matched_heterogeneity_effect(
     Returns:
         dict[str, Any]: Versioned report with the isolated effect and a validity flag.
     """
+    _require_finite("homogeneous_mean", float(homogeneous_mean))
+    _require_finite("heterogeneous_mean", float(heterogeneous_mean))
     effect = float(heterogeneous_mean) - float(homogeneous_mean)
     return {
         "schema_version": HETEROGENEOUS_POPULATION_METRICS_SCHEMA,

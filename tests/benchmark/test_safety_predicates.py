@@ -6,7 +6,9 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark.safety_predicates import (
+    LATE_EVASIVE_PREDICATE_SCHEMA,
     OSCILLATORY_PREDICATE_SCHEMA,
+    late_evasive_predicate,
     oscillatory_control_predicate,
 )
 
@@ -111,3 +113,75 @@ def test_single_step_is_rejected() -> None:
             linear_velocities=np.array([0.0]),
             dt=_DT,
         )
+
+
+# --- late-evasive reaction predicate -----------------------------------------
+
+_HAZARD_DISTANCES = np.array([5.0, 4.0, 3.0, 2.0, 1.0, 0.5])
+_HAZARD_VISIBLE = np.array([False, True, True, True, True, True])
+
+
+def test_late_evasive_when_no_clearance_action_taken() -> None:
+    """Hazard visible but constant speed (no deceleration) ⇒ late evasive."""
+    result = late_evasive_predicate(_HAZARD_DISTANCES, _HAZARD_VISIBLE, np.ones(6), dt=_DT)
+
+    assert result["late_evasive"] is True
+    fields = result["fields"]
+    assert fields["first_hazard_visible_step"] == 1
+    assert fields["first_clearance_restoring_action_step"] is None
+    assert fields["minimum_distance_m"] == pytest.approx(0.5)
+
+
+def test_prompt_deceleration_is_not_late() -> None:
+    """A prompt deceleration right after visibility is not late."""
+    speeds = np.array([1.0, 1.0, 0.5, 0.2, 0.1, 0.0])
+    result = late_evasive_predicate(_HAZARD_DISTANCES, _HAZARD_VISIBLE, speeds, dt=_DT)
+
+    assert result["late_evasive"] is False
+    assert result["fields"]["first_clearance_restoring_action_step"] == 2
+    assert result["fields"]["response_latency_s"] == pytest.approx(0.1)
+
+
+def test_latency_threshold_can_flag_a_borderline_reaction() -> None:
+    """A reaction within default latency becomes late under a stricter threshold."""
+    speeds = np.array([1.0, 1.0, 0.5, 0.2, 0.1, 0.0])
+    result = late_evasive_predicate(
+        _HAZARD_DISTANCES, _HAZARD_VISIBLE, speeds, dt=_DT, max_response_latency_s=0.05
+    )
+
+    assert result["late_evasive"] is True
+
+
+def test_no_visible_hazard_is_not_late_evasive() -> None:
+    """With no hazard ever visible, the predicate must not fire."""
+    result = late_evasive_predicate(_HAZARD_DISTANCES, np.zeros(6, dtype=bool), np.ones(6), dt=_DT)
+
+    assert result["late_evasive"] is False
+    assert result["fields"]["first_hazard_visible_step"] is None
+
+
+def test_required_deceleration_uses_visibility_state() -> None:
+    """Required deceleration must be v^2/(2 d) at first visibility."""
+    result = late_evasive_predicate(_HAZARD_DISTANCES, _HAZARD_VISIBLE, np.full(6, 2.0), dt=_DT)
+
+    # At step 1: v=2.0, d=4.0 -> 4/(2*4) = 0.5
+    assert result["fields"]["required_deceleration_m_s2"] == pytest.approx(0.5)
+
+
+def test_late_evasive_record_is_schema_tagged() -> None:
+    """The late-evasive record must carry its versioned schema and diagnostic label."""
+    result = late_evasive_predicate(_HAZARD_DISTANCES, _HAZARD_VISIBLE, np.ones(6), dt=_DT)
+
+    assert result["schema_version"] == LATE_EVASIVE_PREDICATE_SCHEMA
+    assert result["predicate"] == "late_evasive"
+    assert result["evidence_kind"] == "diagnostic_proxy"
+
+
+def test_late_evasive_rejects_bad_inputs() -> None:
+    """Bad dt, mismatched lengths, and single-step inputs must fail closed."""
+    with pytest.raises(ValueError):
+        late_evasive_predicate(_HAZARD_DISTANCES, _HAZARD_VISIBLE, np.ones(6), dt=0.0)
+    with pytest.raises(ValueError):
+        late_evasive_predicate(_HAZARD_DISTANCES, _HAZARD_VISIBLE, np.ones(3), dt=_DT)
+    with pytest.raises(ValueError):
+        late_evasive_predicate(np.array([1.0]), np.array([True]), np.array([1.0]), dt=_DT)

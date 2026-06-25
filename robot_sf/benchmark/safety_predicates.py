@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 OSCILLATORY_PREDICATE_SCHEMA = "safety_predicate.oscillatory_control.v1"
+LATE_EVASIVE_PREDICATE_SCHEMA = "safety_predicate.late_evasive.v1"
 
 
 def _sign_changes(values: NDArray[np.float64]) -> int:
@@ -131,4 +132,110 @@ def oscillatory_control_predicate(
     }
 
 
-__all__ = ["OSCILLATORY_PREDICATE_SCHEMA", "oscillatory_control_predicate"]
+def _first_true_index(flags: NDArray[np.bool_]) -> int | None:
+    """Return the index of the first ``True`` flag, or ``None`` when there is none."""
+    hits = np.flatnonzero(flags)
+    return int(hits[0]) if hits.size else None
+
+
+def late_evasive_predicate(
+    hazard_distances: NDArray[np.floating] | object,
+    hazard_visible: NDArray[np.bool_] | object,
+    speeds: NDArray[np.floating] | object,
+    *,
+    dt: float,
+    conflict_radius_m: float = 2.0,
+    decel_threshold_m_s2: float = 0.5,
+    max_response_latency_s: float = 1.0,
+) -> dict[str, Any]:
+    """Produce the late-evasive-reaction predicate fields for one episode.
+
+    A late evasive reaction is a clearance-restoring action (here: the first significant
+    deceleration) that comes too long after the hazard first becomes visible, or only
+    after the robot has already entered the conflict zone.
+
+    Args:
+        hazard_distances: ``(N,)`` distance to the nearest hazard per step (m).
+        hazard_visible: ``(N,)`` boolean — whether the hazard is visible per step.
+        speeds: ``(N,)`` robot speed per step (m/s).
+        dt: Per-step timestep (s, > 0).
+        conflict_radius_m: Distance defining conflict-zone entry.
+        decel_threshold_m_s2: Deceleration magnitude that counts as an evasive action.
+        max_response_latency_s: Latency above which a reaction is "late".
+
+    Returns:
+        dict[str, Any]: Versioned record with the motivated fields and the diagnostic
+        ``late_evasive`` boolean.
+    """
+    if not (dt > 0.0):
+        raise ValueError(f"dt must be > 0, got {dt!r}")
+    dist = np.asarray(hazard_distances, dtype=np.float64).reshape(-1)
+    visible = np.asarray(hazard_visible, dtype=bool).reshape(-1)
+    speed = np.asarray(speeds, dtype=np.float64).reshape(-1)
+    n = dist.shape[0]
+    if not (visible.shape[0] == n == speed.shape[0]):
+        raise ValueError("hazard_distances, hazard_visible, and speeds must share length N")
+    if n < 2:
+        raise ValueError("at least two steps are required")
+
+    first_visible = _first_true_index(visible)
+    conflict_entry = _first_true_index(dist <= conflict_radius_m)
+    minimum_distance = float(np.min(dist))
+
+    # Clearance-restoring action: first step whose deceleration exceeds the threshold,
+    # at or after the hazard becomes visible.
+    decel = -np.diff(speed) / dt  # positive when slowing down; index i is step i->i+1
+    action_step: int | None = None
+    if first_visible is not None:
+        candidates = np.flatnonzero(decel >= decel_threshold_m_s2)
+        candidates = candidates[candidates >= first_visible]
+        action_step = int(candidates[0]) + 1 if candidates.size else None
+
+    response_latency_s: float | None = None
+    if first_visible is not None and action_step is not None:
+        response_latency_s = float((action_step - first_visible) * dt)
+
+    # Required deceleration to stop within the visible distance, at first visibility.
+    required_deceleration_m_s2 = 0.0
+    if first_visible is not None:
+        v0 = speed[first_visible]
+        d0 = max(dist[first_visible], 1e-9)
+        required_deceleration_m_s2 = float(v0 * v0 / (2.0 * d0))
+
+    late_evasive = bool(
+        first_visible is not None
+        and (
+            action_step is None
+            or (response_latency_s is not None and response_latency_s > max_response_latency_s)
+            or (conflict_entry is not None and action_step > conflict_entry)
+        )
+    )
+
+    return {
+        "schema_version": LATE_EVASIVE_PREDICATE_SCHEMA,
+        "predicate": "late_evasive",
+        "evidence_kind": "diagnostic_proxy",
+        "late_evasive": late_evasive,
+        "fields": {
+            "first_hazard_visible_step": first_visible,
+            "conflict_zone_entry_step": conflict_entry,
+            "first_clearance_restoring_action_step": action_step,
+            "minimum_distance_m": minimum_distance,
+            "required_deceleration_m_s2": required_deceleration_m_s2,
+            "response_latency_s": response_latency_s,
+            "n_steps": n,
+        },
+        "thresholds": {
+            "conflict_radius_m": conflict_radius_m,
+            "decel_threshold_m_s2": decel_threshold_m_s2,
+            "max_response_latency_s": max_response_latency_s,
+        },
+    }
+
+
+__all__ = [
+    "LATE_EVASIVE_PREDICATE_SCHEMA",
+    "OSCILLATORY_PREDICATE_SCHEMA",
+    "late_evasive_predicate",
+    "oscillatory_control_predicate",
+]

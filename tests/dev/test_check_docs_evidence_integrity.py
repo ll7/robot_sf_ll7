@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from scripts.dev.check_docs_evidence_integrity import check_files
+from scripts.dev.check_docs_evidence_integrity import check_files, main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -87,3 +87,24 @@ def test_link_with_anchor_fragment_resolves_to_file(tmp_path: Path) -> None:
     (tmp_path / "note.md").write_text("[sec](./target.md#section)\n", encoding="utf-8")
 
     assert check_files(["note.md"], root=tmp_path) == []
+
+
+def test_warn_only_mode_does_not_fail_on_problems(tmp_path: Path, capsys, monkeypatch) -> None:
+    """Advisory mode must exit 0 and emit GitHub warning annotations, not block."""
+    monkeypatch.setattr("scripts.dev.check_docs_evidence_integrity._repo_root", lambda: tmp_path)
+    (tmp_path / "broken.json").write_text("{not valid}", encoding="utf-8")
+
+    exit_code = main(["--files", "broken.json", "--warn-only"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "::warning::" in out
+    assert "invalid JSON" in out
+
+
+def test_blocking_mode_fails_on_problems(tmp_path: Path, monkeypatch) -> None:
+    """Without --warn-only the same problem must fail closed (exit 1)."""
+    monkeypatch.setattr("scripts.dev.check_docs_evidence_integrity._repo_root", lambda: tmp_path)
+    (tmp_path / "broken.json").write_text("{not valid}", encoding="utf-8")
+
+    assert main(["--files", "broken.json"]) == 1

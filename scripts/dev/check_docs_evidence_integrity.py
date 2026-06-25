@@ -139,7 +139,23 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Explicit repo-relative files to check, bypassing git diff (mainly for tests).",
     )
+    parser.add_argument(
+        "--warn-only",
+        action="store_true",
+        help=(
+            "Advisory mode: emit findings as non-blocking GitHub warning annotations "
+            "and always exit 0. This is the first-rollout default for CI so the check "
+            "surfaces problems without blocking unrelated docs fixes."
+        ),
+    )
     return parser
+
+
+def _emit_warnings(problems: list[str]) -> None:
+    """Emit findings as GitHub Actions warning annotations (non-blocking)."""
+    for problem in problems:
+        # `::warning::` annotations surface in the PR/run UI but do not fail the job.
+        sys.stdout.write(f"::warning::docs/evidence integrity: {problem}\n")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -151,12 +167,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("docs/evidence integrity: no changed docs/evidence files to check.")
         return 0
     problems = check_files(files, root=root)
-    if problems:
-        sys.stderr.write("docs/evidence integrity check failed:\n")
-        sys.stderr.write("\n".join(f"  {problem}" for problem in problems) + "\n")
-        return 1
-    print(f"docs/evidence integrity: {len(files)} changed file(s) passed.")
-    return 0
+    if not problems:
+        print(f"docs/evidence integrity: {len(files)} changed file(s) passed.")
+        return 0
+    if args.warn_only:
+        _emit_warnings(problems)
+        print(
+            f"docs/evidence integrity: {len(problems)} advisory finding(s) "
+            "(warning-only, not blocking)."
+        )
+        return 0
+    sys.stderr.write("docs/evidence integrity check failed:\n")
+    sys.stderr.write("\n".join(f"  {problem}" for problem in problems) + "\n")
+    return 1
 
 
 if __name__ == "__main__":

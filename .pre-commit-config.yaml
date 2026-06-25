@@ -16,3 +16,9 @@ repos:
         language: system
         files: \.schema\.v[0-9]+\.json$
         pass_filenames: true
+      - id: check-config-abs-paths
+        name: Check Configs For Absolute Home-Dir Paths
+        entry: uv run python hooks/check_config_abs_paths.py
+        language: system
+        files: ^configs/.*\.(ya?ml|json|toml|cfg|ini)$
+        pass_filenames: true

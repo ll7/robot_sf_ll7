@@ -200,7 +200,7 @@ queue_hint:
   source: issue_3068_launch_packet
   job_class: robot_sf_gpu_training_small
   route_id: imech192:a30
-  script: /home/luttkule/git/robot_sf_ll7-private-ops/auxme/SLURM/issue_791_reward_curriculum.sl
+  script: /home/luttkule/git/robot_sf_ll7-private-ops/auxme/SLURM/issue_791_reward_curriculum.sl  # allow-abs-path: private-ops SLURM routing target (lives outside this repo)
   config: configs/training/ppo/ablations/expert_ppo_issue_3068_curriculum_full_surface_scout_12m_env22.yaml
   campaign: 2026-06-issue3068-ppo-curriculum
   cpus: 20

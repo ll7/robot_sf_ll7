@@ -20,6 +20,7 @@ Thresholds are predeclared modeling choices, diagnostic until durable evidence.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -108,8 +109,14 @@ def apply_safety_wrapper(
         return _record(config, context, original, corrected, INTERVENTION_HARD_STOP)
 
     near_pedestrian = context.min_pedestrian_distance_m <= config.pedestrian_caution_radius_m
-    if near_pedestrian and float(linear_velocity) > config.capped_speed_m_s:
-        corrected = (config.capped_speed_m_s, float(angular_velocity))
+    # Cap on speed magnitude so a reversing robot (negative linear velocity, supported by
+    # both drive models via allow_backwards) is also limited near pedestrians; the cap keeps
+    # the original direction of travel.
+    if near_pedestrian and abs(float(linear_velocity)) > config.capped_speed_m_s:
+        corrected = (
+            math.copysign(config.capped_speed_m_s, linear_velocity),
+            float(angular_velocity),
+        )
         return _record(config, context, original, corrected, INTERVENTION_SPEED_CAP)
 
     return _record(config, context, original, original, INTERVENTION_NONE)

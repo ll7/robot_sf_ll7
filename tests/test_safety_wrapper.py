@@ -48,6 +48,16 @@ def test_speed_cap_near_pedestrians() -> None:
     assert result["corrected_angular_velocity"] == 0.1  # turning preserved
 
 
+def test_speed_cap_on_reversing_robot_near_pedestrians() -> None:
+    """A robot reversing faster than the cap must be limited in magnitude, sign preserved."""
+    context = SafetyContext(min_pedestrian_distance_m=1.0, min_clearance_m=5.0)
+    result = apply_safety_wrapper(-2.0, 0.1, context, _ENABLED)
+
+    assert result["intervention"] == INTERVENTION_SPEED_CAP
+    assert result["corrected_linear_velocity"] == -_ENABLED.capped_speed_m_s  # still reversing
+    assert result["corrected_angular_velocity"] == 0.1  # turning preserved
+
+
 def test_no_speed_cap_when_already_slow_near_pedestrians() -> None:
     """A speed already below the cap must not be modified."""
     context = SafetyContext(min_pedestrian_distance_m=1.0, min_clearance_m=5.0)

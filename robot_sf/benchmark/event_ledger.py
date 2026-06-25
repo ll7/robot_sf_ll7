@@ -117,9 +117,15 @@ def _predicate_event(
     predicate_key: str,
     event_key: str,
 ) -> tuple[bool, str | None]:
-    """Return a predicate event boolean and source path when present."""
+    """Return a predicate event boolean and source path when present.
+
+    Returns ``(False, None)`` when the predicate record is missing or does not carry
+    ``event_key``. Reporting ``None`` (rather than a source path that points at an absent
+    field) keeps the reconciliation source honest as ``missing`` and lets the affected
+    surrogate event fall back to its metric-derived value instead of a defaulted ``False``.
+    """
     payload = predicates.get(predicate_key)
-    if not isinstance(payload, Mapping):
+    if not isinstance(payload, Mapping) or event_key not in payload:
         return False, None
     return _bool_at(payload, event_key), f"safety_predicates.{predicate_key}.{event_key}"
 

@@ -96,6 +96,22 @@ def test_build_event_ledger_preserves_safety_predicate_records() -> None:
     assert surrogate_events["occlusion_near_miss_predicate"] == {"occlusion_near_miss": False}
 
 
+def test_build_event_ledger_predicate_without_event_key_falls_back_to_metric() -> None:
+    """A predicate record lacking its event key must not claim a source or override the metric."""
+    record = _record(collision_event=False, collisions=0.0)
+    record["metrics"]["oscillation_count"] = 3.0  # metric-derived oscillation is present and True
+    # Predicate record exists but omits the "oscillation" key (e.g. partial/forward-compat record).
+    record["safety_predicates"] = {"oscillatory_control_predicate": {"schema_version": "x"}}
+
+    ledger = build_event_ledger(record)
+
+    # Falls back to the metric-derived value instead of a defaulted False...
+    assert ledger["surrogate_events"]["oscillation"] is True
+    # ...and the reconciliation source stays honest (metric), not a path to the absent field.
+    assert ledger["metric_definitions"]["oscillation"]["source"] == "metrics.oscillation_count"
+    assert ledger["reconciliation"]["audit_result"] == "pass"
+
+
 def test_build_event_ledger_parses_string_booleans_without_truthiness_leaks() -> None:
     """String booleans from JSON-adjacent records should not rely on Python truthiness."""
     record = _record(collision_event=False, collisions=0.0)

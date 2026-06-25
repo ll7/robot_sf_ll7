@@ -63,7 +63,7 @@ def test_no_training_result_claim(packet: dict[str, object]) -> None:
     assert packet["evidence_status"] == "proposal"
     assert "no_claim_statement" in packet
     assert packet["execution_boundary"]["full_training_in_this_issue"] is False
-    assert packet["execution_boundary"]["submit_slurm_from_this_issue"] is False
+    assert packet["execution_boundary"]["submit_slurm_from_this_issue"] is True
 
 
 def test_referenced_configs_exist_and_checksums_match(packet: dict[str, object]) -> None:
@@ -192,3 +192,20 @@ def test_context_doc_links_packet() -> None:
     text = _DOC_PATH.read_text(encoding="utf-8")
     assert "configs/training/ppo_curriculum_issue_3068_launch_packet.yaml" in text
     assert "No training-result" in text or "no training-result" in text
+
+
+def test_queue_hint_points_to_launchable_issue_3068_scout(packet: dict[str, object]) -> None:
+    """Ready queue hint must reference a real #3068 PPO training config."""
+    hint = packet["queue_hint"]
+    config_path = _REPO_ROOT / hint["config"]
+    assert hint["public_issue"] == "ll7/robot_sf_ll7#3068"
+    assert hint["submit_ready"] is True
+    assert hint["job_class"] == "robot_sf_gpu_training_small"
+    assert config_path.is_file()
+
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert config["policy_id"] == "ppo_expert_issue_3068_curriculum_full_surface_scout_12m_env22"
+    assert config["scenario_config"].endswith("ppo_all_available_training_v1_h500_schedule.yaml")
+    assert config["total_timesteps"] == 12000000
+    assert config["tracking"]["wandb"]["enabled"] is True
+    assert "issue-3068" in config["tracking"]["wandb"]["tags"]

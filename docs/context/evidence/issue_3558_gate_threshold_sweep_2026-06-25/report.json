@@ -1,0 +1,159 @@
+{
+  "active_gate_axis": "uncertainty_min_existence_probability",
+  "baseline_conservative_retention": {
+    "collision_rate": 0.4167,
+    "min_separation_m": -0.1694,
+    "unsafe_commit_rate": 0.8333
+  },
+  "calibration": {
+    "baseline": {
+      "collision_rate": 0.4167,
+      "min_separation_m": -0.1694,
+      "unsafe_commit_rate": 0.8333
+    },
+    "conclusion": "safe_region_exists",
+    "evidence_kind": "diagnostic_proxy",
+    "n_settings": 5,
+    "recommended_setting": {
+      "classification": "at_least_as_safe",
+      "collision_rate": 0.4167,
+      "min_separation_m": -0.1694,
+      "thresholds": {
+        "uncertainty_max_position_variance": 1.0,
+        "uncertainty_min_class_probability": 0.5,
+        "uncertainty_min_existence_probability": 0.1,
+        "uncertainty_min_position_confidence": 0.5
+      },
+      "unsafe_commit_rate": 0.8333
+    },
+    "safe_region": [
+      {
+        "classification": "at_least_as_safe",
+        "collision_rate": 0.4167,
+        "min_separation_m": -0.1694,
+        "thresholds": {
+          "uncertainty_max_position_variance": 1.0,
+          "uncertainty_min_class_probability": 0.5,
+          "uncertainty_min_existence_probability": 0.1,
+          "uncertainty_min_position_confidence": 0.5
+        },
+        "unsafe_commit_rate": 0.8333
+      },
+      {
+        "classification": "at_least_as_safe",
+        "collision_rate": 0.4167,
+        "min_separation_m": -0.1694,
+        "thresholds": {
+          "uncertainty_max_position_variance": 1.0,
+          "uncertainty_min_class_probability": 0.5,
+          "uncertainty_min_existence_probability": 0.2,
+          "uncertainty_min_position_confidence": 0.5
+        },
+        "unsafe_commit_rate": 0.8333
+      }
+    ],
+    "schema_version": "stream_gap_gate_calibration.v1",
+    "settings": [
+      {
+        "classification": "at_least_as_safe",
+        "collision_rate": 0.4167,
+        "min_separation_m": -0.1694,
+        "thresholds": {
+          "uncertainty_max_position_variance": 1.0,
+          "uncertainty_min_class_probability": 0.5,
+          "uncertainty_min_existence_probability": 0.1,
+          "uncertainty_min_position_confidence": 0.5
+        },
+        "unsafe_commit_rate": 0.8333
+      },
+      {
+        "classification": "at_least_as_safe",
+        "collision_rate": 0.4167,
+        "min_separation_m": -0.1694,
+        "thresholds": {
+          "uncertainty_max_position_variance": 1.0,
+          "uncertainty_min_class_probability": 0.5,
+          "uncertainty_min_existence_probability": 0.2,
+          "uncertainty_min_position_confidence": 0.5
+        },
+        "unsafe_commit_rate": 0.8333
+      },
+      {
+        "classification": "less_safe",
+        "collision_rate": 0.9167,
+        "min_separation_m": -0.6212,
+        "thresholds": {
+          "uncertainty_max_position_variance": 1.0,
+          "uncertainty_min_class_probability": 0.5,
+          "uncertainty_min_existence_probability": 0.3,
+          "uncertainty_min_position_confidence": 0.5
+        },
+        "unsafe_commit_rate": 1.0
+      },
+      {
+        "classification": "less_safe",
+        "collision_rate": 0.9167,
+        "min_separation_m": -0.6212,
+        "thresholds": {
+          "uncertainty_max_position_variance": 1.0,
+          "uncertainty_min_class_probability": 0.5,
+          "uncertainty_min_existence_probability": 0.5,
+          "uncertainty_min_position_confidence": 0.5
+        },
+        "unsafe_commit_rate": 1.0
+      },
+      {
+        "classification": "less_safe",
+        "collision_rate": 0.9167,
+        "min_separation_m": -0.6212,
+        "thresholds": {
+          "uncertainty_max_position_variance": 1.0,
+          "uncertainty_min_class_probability": 0.5,
+          "uncertainty_min_existence_probability": 0.7,
+          "uncertainty_min_position_confidence": 0.5
+        },
+        "unsafe_commit_rate": 1.0
+      }
+    ]
+  },
+  "claim_boundary": "Bounded existence-probability gate-threshold sweep on the #3471 controlled crossing scenario with the real stream_gap planner + ScenarioBelief gate. Only the existence axis is exercised (the scenario degrades existence alone); not the full benchmark environment, not paper-grade, no trained-policy or traffic-realism claim. Does not change the production default.",
+  "degraded_existence": 0.2,
+  "evidence_tier": "diagnostic",
+  "existence_grid": [
+    0.1,
+    0.2,
+    0.3,
+    0.5,
+    0.7
+  ],
+  "generated_at_utc": "2026-06-25T11:30:40.575119+00:00",
+  "issue": 3558,
+  "params": {
+    "corridor_x": 5.0,
+    "dt": 0.1,
+    "goal_x": 9.0,
+    "max_steps": 120,
+    "near_miss_margin": 0.6,
+    "path_y": 5.0,
+    "ped_cross_speed": 0.7,
+    "ped_radius": 0.3,
+    "robot_radius": 0.4,
+    "start_x": 2.0
+  },
+  "schema_version": "stream-gap-gate-threshold-sweep.v1",
+  "seed_count": 12,
+  "seeds": [
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112
+  ]
+}

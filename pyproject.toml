@@ -256,9 +256,26 @@ ignore = [
     # Research/scientific computing patterns that are acceptable
     "PLR0911",  # Too many return statements
     "PLR2004",  # Magic value comparison
-    # Legacy Ruff security baseline: keep normal lint non-blocking while
-    # .github/workflows/security-baseline.yml exposes Bandit findings for ratcheting.
-    "S",
+    # Explicit Ruff security (Bandit) baseline (issue #3477): instead of suppressing the
+    # whole `S` category, list only the codes currently present in the tree, so any *new*
+    # category of security finding (e.g. exec/eval, yaml.load, jinja autoescape, request
+    # without timeout) is now enforced. The codes below are the ratchet-down backlog;
+    # .github/workflows/security-baseline.yml continues to expose full Bandit findings.
+    "S101",   # assert (pervasive in tests/research)
+    "S105",   # possible hardcoded password string (audit: mostly false positives)
+    "S108",   # hardcoded temp-file path
+    "S110",   # try-except-pass (also tracked by the broad-exception ratchet)
+    "S112",   # try-except-continue
+    "S202",   # tarfile unsafe members
+    "S301",   # pickle usage (trusted local artifacts)
+    "S310",   # url open audit
+    "S311",   # non-cryptographic random (research RNG)
+    "S314",   # xml ElementTree usage
+    "S324",   # insecure hash (non-security fingerprints)
+    "S602",   # subprocess Popen with shell=True
+    "S603",   # subprocess without shell=True
+    "S607",   # start-process with partial path
+    "S608",   # hardcoded SQL expression
     "PGH003",   # Use specific rule codes when ignoring instead of categories
     "DTZ005",   # datetime.datetime.now() called without a 'tz' argument
     "ERA001",   # Found commented-out code

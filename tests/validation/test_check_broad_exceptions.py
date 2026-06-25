@@ -160,3 +160,19 @@ def test_broad_exception_ratchet_fails_on_unapproved_replacement(tmp_path: Path)
     assert "Broad exception count increased" not in result.stderr
     assert "Unapproved broad exception handlers were added:" in result.stderr
     assert "scripts/demo/tool.py:4: except Exception:" in result.stderr
+
+
+def test_ratchet_is_wired_into_ci_lint_phase() -> None:
+    """The CI lint phase must invoke the ratchet so it is actually enforced (issue #3478)."""
+    ci_driver = (ROOT / "scripts" / "dev" / "ci_driver.sh").read_text(encoding="utf-8")
+    assert "check_broad_exceptions.py" in ci_driver, (
+        "broad-exception ratchet is not invoked by ci_driver.sh; the guard would be dead"
+    )
+
+
+def test_ratchet_is_wired_into_pr_ready_check() -> None:
+    """The local PR-readiness gate must also invoke the ratchet (issue #3478)."""
+    pr_ready = (ROOT / "scripts" / "dev" / "pr_ready_check.sh").read_text(encoding="utf-8")
+    assert "check_broad_exceptions.py" in pr_ready, (
+        "broad-exception ratchet is not invoked by pr_ready_check.sh; local enforcement is missing"
+    )

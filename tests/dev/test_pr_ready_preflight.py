@@ -94,6 +94,14 @@ def _make_fake_scripts(repo: Path) -> None:
         else:
             stub.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
             stub.chmod(0o755)
+    # pr_ready_check.sh also invokes scripts/validation/check_broad_exceptions.py,
+    # which lives outside scripts/dev/; stub it so the preflight lane reaches the
+    # post-preflight scripts without a missing-file error.
+    validation_dir = repo / "scripts" / "validation"
+    validation_dir.mkdir(parents=True, exist_ok=True)
+    (validation_dir / "check_broad_exceptions.py").write_text(
+        "import sys\nsys.exit(0)\n", encoding="utf-8"
+    )
 
 
 def _write_lane_logging_stub(repo: Path) -> Path:

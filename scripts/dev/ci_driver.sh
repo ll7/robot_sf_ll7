@@ -8,7 +8,7 @@ Usage: scripts/dev/ci_driver.sh [--list-phases] <phase> [<phase> ...]
 Run one or more canonical CI validation phases.
 
 Phases:
-  lint             Ruff lint + format check
+  lint             Ruff lint + format check + broad-exception ratchet
   typecheck        Ty type check (advisory; reports findings but exits zero)
   test             Main pytest suite, excluding example smoke tests
   examples-smoke   Example script smoke tests
@@ -222,6 +222,9 @@ run_phase() {
     lint)
       uv run ruff check .
       uv run ruff format --check .
+      # Ratchet: fail if broad (Exception/BaseException/bare) catches increase on
+      # benchmark/script surfaces beyond the approved baseline (issue #3478).
+      uv run python scripts/validation/check_broad_exceptions.py
       ;;
     typecheck)
       echo "Running ty in advisory mode (--exit-zero); findings are reported but do not fail this phase."

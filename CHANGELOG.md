@@ -38,6 +38,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one pass; an intentional mismatch can be annotated with `# allow-provenance-mismatch: <reason>`.
   Hook: [`hooks/check_config_provenance.py`](hooks/check_config_provenance.py); tests:
   [`tests/integration/test_check_config_provenance.py`](tests/integration/test_check_config_provenance.py) (#3606).
+* Ran the deferred #3573 **reactive-vs-replay pedestrian-reactivity ablation** through the real
+  runner. Added the open-loop replay (non-reactive) pedestrian mode as a scenario-driven toggle:
+  `build_env_config` reads `peds_have_robot_repulsion` and sets `sim_config.prf_config.is_active`
+  (backward-compatible; default reactive). New campaign
+  [`scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py`](scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py)
+  runs each planner under reactive vs replay over identical scenarios + seeds (common random numbers)
+  via `map_runner.run_map_batch` and feeds the per-planner contrast into the merged
+  `assess_reactivity_ablation` quantifier. Diagnostic-tier result on `classic_crossing_subset`
+  (goal + orca, 4 seeds, horizon 150): disabling reactivity raised collisions (orca 0.125 → 0.50,
+  goal 0.50 → 0.625) and cut separation — reactive (yielding) pedestrians flatter planners. Evidence +
+  caveats (sign convention, horizon-sensitivity, small N):
+  `docs/context/evidence/issue_3573_reactivity_ablation_2026-06-25/` (#3573).
 * Classified the ORCA-residual progress-probe lane decision (#2445):
   [`scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py`](scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py)
   reads the existing v1 bounded smoke result (SLURM job 12913) and applies the #2408/PR #2420 stop

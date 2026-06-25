@@ -120,6 +120,13 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3484_feasibility_diagnostics/`: reserved location for small dry-run
+  manifests and follow-up summaries for universally-failing scenario-family
+  feasibility diagnostics. Outputs from
+  `scripts/tools/build_feasibility_diagnostic_manifest.py` are diagnostic planning
+  artifacts only: rows start as `not_run` / `needs_evidence`, do not run planners,
+  do not certify route clearance, and are not benchmark, safety, paper, or
+  dissertation evidence.
 - `issue_3254_predictive_crossing_conflict_13042_2026-06-23/`: analysis-only
   negative result for the schema-fixed Issue #3254 predictive crossing-conflict
   rerun. Training completed on a non-degenerate `predictive_ego_v1` dataset, but

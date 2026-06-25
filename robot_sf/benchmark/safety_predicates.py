@@ -5,11 +5,11 @@ rates until in-sim *producers* emit auditable fields. This module implements tho
 producers as pure, versioned functions over a per-step trajectory, so the fields are
 reproducible and fixture-backed instead of simulation-only assumptions.
 
-This increment provides the **oscillatory local-control** predicate. Its boolean output
+This module provides three trace-level predicates: **oscillatory local-control**,
+**late-evasive**, and **occlusion-triggered-near-miss**. The oscillatory boolean output
 populates the existing ``SurrogateEvents.oscillation`` ledger slot; the detailed field
-record is intended for the ledger ``surrogate_events`` block. The late-evasive and
-occlusion-triggered-near-miss producers, and live emission wiring, are deliberate
-follow-ups.
+records are intended for the ledger ``surrogate_events`` block. Live emission wiring into
+the in-sim runners is a deliberate follow-up.
 
 .. note::
 

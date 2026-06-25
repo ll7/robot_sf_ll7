@@ -21,7 +21,11 @@ admissibility.
 
 from __future__ import annotations
 
+import argparse
+import json
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from scipy.stats import beta
@@ -285,13 +289,102 @@ def build_constraints_first_report(
     return report
 
 
+def group_episodes_by_planner(
+    records: Sequence[Mapping[str, Any]], *, planner_key: str = "planner"
+) -> dict[str, list[dict[str, Any]]]:
+    """Group flat episode records into per-planner lists by ``planner_key``.
+
+    Returns:
+        dict[str, list[dict[str, Any]]]: Planner name → its episode records.
+    """
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        planner = record.get(planner_key)
+        if planner is None:
+            raise ValueError(f"episode record is missing planner key {planner_key!r}")
+        grouped.setdefault(str(planner), []).append(dict(record))
+    return grouped
+
+
+def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Load a JSONL file of episode records.
+
+    Returns:
+        list[dict[str, Any]]: One dict per non-empty JSONL line.
+    """
+    records: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        record = json.loads(stripped)
+        if not isinstance(record, dict):
+            raise ValueError(f"{path}: each JSONL line must be a JSON object")
+        records.append(record)
+    return records
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the constraints-first report CLI parser.
+
+    Returns:
+        argparse.ArgumentParser: The configured parser.
+    """
+    parser = argparse.ArgumentParser(description="Build a constraints-first scoring report.")
+    parser.add_argument("--episodes", type=Path, required=True, help="Episode JSONL input.")
+    parser.add_argument("--planner-key", default="planner", help="Record field naming the planner.")
+    parser.add_argument(
+        "--compensatory",
+        type=Path,
+        default=None,
+        help="Optional JSON mapping planner -> compensatory composite score.",
+    )
+    parser.add_argument("--output", type=Path, default=None, help="Report JSON output path.")
+    parser.add_argument("--confidence", type=float, default=0.95, help="Confidence for the UCB.")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Apply the constraints-first report to an existing episode JSONL file.
+
+    Returns:
+        int: ``0`` on success, ``2`` on a load/validation error.
+    """
+    args = _build_parser().parse_args(sys.argv[1:] if argv is None else argv)
+    try:
+        records = _load_jsonl(args.episodes)
+        planner_episodes = group_episodes_by_planner(records, planner_key=args.planner_key)
+        compensatory = None
+        if args.compensatory is not None:
+            compensatory = json.loads(args.compensatory.read_text(encoding="utf-8"))
+        report = build_constraints_first_report(
+            planner_episodes, compensatory_scores=compensatory, confidence=args.confidence
+        )
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 2
+    rendered = json.dumps(report, indent=2, sort_keys=True)
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered + "\n", encoding="utf-8")
+    else:
+        sys.stdout.write(rendered + "\n")
+    return 0
+
+
 __all__ = [
     "CONSTRAINTS_FIRST_SCHEMA",
     "AdmissibilityGates",
     "build_constraints_first_report",
     "collision_upper_confidence_bound",
     "constraints_first_planner_summary",
+    "group_episodes_by_planner",
     "is_episode_admissible",
+    "main",
     "ranking_inversion",
     "survivorship_aware_metric",
 ]
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI guard
+    raise SystemExit(main())

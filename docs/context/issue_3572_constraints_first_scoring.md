@@ -34,16 +34,24 @@ default. This layer does **not** touch the simulator or the metric producers.
   the ranking-inversion block, using each planner's admissible rate as the constraints-first
   ranking score.
 
+## CLI
+
+`python -m robot_sf.benchmark.constraints_first_scoring --episodes <episodes.jsonl>
+[--planner-key planner] [--compensatory <scores.json>] [--output <report.json>]` groups a
+flat episode JSONL by planner and writes the constraints-first report (per-planner summaries
+plus, with `--compensatory`, the ranking-inversion block). It reads already-collected records
+and fails closed (exit 2) on load/validation errors.
+
 ## Scope boundary
 
 Pure and side-effect free — no change to the simulator, metric producers, or default
-benchmark reporting. The report consumes already-collected episode records; wiring it into
-the benchmark **CLI** (reading a campaign's episode JSONL and writing the report artifact)
-is a deliberate follow-up.
+benchmark reporting; the CLI only **reads** an existing episode JSONL. Emitting this report
+automatically as part of a campaign run (rather than as a post-hoc command) is the only
+remaining follow-up.
 
 ## Tests
 
-`tests/benchmark/test_constraints_first_scoring.py` (19 tests): rule-of-three at k=0, UCB
+`tests/benchmark/test_constraints_first_scoring.py` (21 tests): rule-of-three at k=0, UCB
 monotonicity and validation, each admissibility gate, the survivorship delta, the planner
 summary contract, ranking-inversion detection / no-inversion / mismatched-set handling, and
 the end-to-end report builder (per-planner summaries + ranking inversion vs a composite).

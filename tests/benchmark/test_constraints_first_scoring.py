@@ -184,3 +184,55 @@ def test_report_rejects_empty_input() -> None:
 
     with pytest.raises(ValueError):
         build_constraints_first_report({})
+
+
+# --- CLI ----------------------------------------------------------------------
+
+
+def test_cli_writes_report_from_jsonl(tmp_path) -> None:
+    """The CLI must group a flat episode JSONL by planner and write the report."""
+    import json
+
+    from robot_sf.benchmark.constraints_first_scoring import main
+
+    episodes = tmp_path / "episodes.jsonl"
+    lines = [
+        {"planner": "A", "collisions": 0, "comfort": 0.8, "efficiency": 0.7, "safe_success": True},
+        {"planner": "B", "collisions": 1, "comfort": 1.0, "efficiency": 1.0, "safe_success": False},
+        {"planner": "B", "collisions": 0, "comfort": 0.9, "efficiency": 0.9, "safe_success": True},
+    ]
+    episodes.write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
+    compensatory = tmp_path / "comp.json"
+    compensatory.write_text(json.dumps({"A": 0.78, "B": 0.95}), encoding="utf-8")
+    out = tmp_path / "report.json"
+
+    code = main(
+        [
+            "--episodes",
+            str(episodes),
+            "--compensatory",
+            str(compensatory),
+            "--output",
+            str(out),
+        ]
+    )
+
+    assert code == 0
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert set(report["per_planner"]) == {"A", "B"}
+    assert report["ranking_inversion"]["any_inversion"] is True
+
+
+def test_cli_reports_missing_planner_key_without_traceback(tmp_path, capsys) -> None:
+    """A record missing the planner key must fail closed with exit code 2."""
+    import json
+
+    from robot_sf.benchmark.constraints_first_scoring import main
+
+    episodes = tmp_path / "episodes.jsonl"
+    episodes.write_text(json.dumps({"collisions": 0}) + "\n", encoding="utf-8")
+
+    code = main(["--episodes", str(episodes)])
+
+    assert code == 2
+    assert "planner" in capsys.readouterr().err

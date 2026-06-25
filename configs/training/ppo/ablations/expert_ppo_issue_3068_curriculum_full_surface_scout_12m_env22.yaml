@@ -1,7 +1,8 @@
-# Issue-1024 h500 schedule retrain.
+# Issue-3068 PPO curriculum full-surface scout (h500 schedule).
 # Clones the promoted issue-791 large-capacity PPO leader recipe, changes only
-# the scenario surface and 12M budget, and keeps the env22 / 24-CPU allocation
-# pairing used by the Auxme issue-791 wrappers.
+# the scenario surface and 12M budget, and reuses the env22 / Auxme issue-791
+# reward-curriculum wrapper. The authoritative SLURM allocation for this run
+# lives in the launch packet queue_hint (submitted at 20 CPUs on the a30 route).
 policy_id: ppo_expert_issue_3068_curriculum_full_surface_scout_12m_env22
 scenario_config: ../../../scenarios/sets/ppo_all_available_training_v1_h500_schedule.yaml
 num_envs: 22

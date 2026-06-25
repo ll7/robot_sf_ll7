@@ -690,6 +690,7 @@ class ClassicGlobalPlanner:
         self._width_cells = math.ceil(self.map_def.width * self.config.cells_per_meter)
         self._height_cells = math.ceil(self.map_def.height * self.config.cells_per_meter)
         self._grid: Grid | None = None
+        self._base_grids: dict[int | None, Grid] = {}
         self._last_path_world: list[tuple[float, float]] | None = None
         self._last_path_grid: list[tuple[int, int]] | None = None
         self._last_path_info: dict | None = None
@@ -737,6 +738,21 @@ class ClassicGlobalPlanner:
             inflation=inflate_radius_cells,
         )
         return grid
+
+    def _base_grid_for(self, inflate_radius_cells: int | None) -> Grid:
+        """Return a cached obstacle grid for the given inflation radius.
+
+        The rasterized grid depends only on the static map and the inflation
+        radius, so it is built once per radius and reused across plan() calls
+        instead of re-rasterizing the map on every call. Callers that mutate the
+        grid (e.g. writing START/GOAL cells) must copy it first; see
+        ``_run_single_plan``.
+        """
+        cached = self._base_grids.get(inflate_radius_cells)
+        if cached is None:
+            cached = self._build_grid(inflate_radius_cells)
+            self._base_grids[inflate_radius_cells] = cached
+        return cached
 
     def _world_to_grid(self, world_x: float, world_y: float) -> tuple[int, int]:
         """Convert world coordinates to grid indices.
@@ -922,7 +938,9 @@ class ClassicGlobalPlanner:
             algo: Normalized algorithm name.
             inflation: Inflation radius in cells for this attempt.
         """
-        grid = self._build_grid(inflation)
+        # Reuse a cached base grid for this inflation radius and copy it so the
+        # per-call START/GOAL mutations below never leak into the cache.
+        grid = copy.deepcopy(self._base_grid_for(inflation))
         self._validate_grid_point("start", *start_grid, grid=grid)
         self._validate_grid_point("goal", *goal_grid, grid=grid)
         grid.type_map[start_grid[0]][start_grid[1]] = TYPES.START

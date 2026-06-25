@@ -24,14 +24,18 @@ holonomic models — can be surfaced as a per-step signal.
 
 | symbol | field | default (m) | meaning |
 | --- | --- | --- | --- |
-| `t_w` | `track_width_m` | 0.50 | lateral wheel track |
-| `h_c` | `cog_height_m` | 0.40 | centre-of-gravity height |
-| `a` | `front_axle_to_cog_m` | 0.30 | front axle → CoG |
-| `L` | `wheelbase_m` | 0.60 | wheelbase |
+| `t_w` | `track_width_m` | 0.80 | lateral wheel track |
+| `h_c` | `cog_height_m` | 0.60 | centre-of-gravity height |
+| `a` | `front_axle_to_cog_m` | 0.50 | front axle → CoG |
+| `L` | `wheelbase_m` | 1.20 | wheelbase |
 | `g` | `gravity_m_s2` | 9.81 | gravity |
 
-These defaults exist only so the proxy is exercisable; they carry **no hardware
-authority**. For the defaults, `a_y,crit ≈ 3.07 m/s²`.
+These defaults are **aligned with the benchmark-surface source of truth**
+`robot_sf.benchmark.metrics.evaluate_stability_margin` (the reviewer-supplied TWV proxy
+`t_w=0.8`, `L=1.2`, `h_c=0.6`, `a=0.5`) so the runtime diagnostic and the benchmark column
+`rollover_min_stability_margin` cannot diverge (issue #3587); a parametrized test cross-checks
+that the two produce identical margins. They carry **no hardware authority**. For the defaults,
+`a_y,crit ≈ 2.73 m/s²`.
 
 ## Scope boundary
 

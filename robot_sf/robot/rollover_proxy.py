@@ -45,6 +45,12 @@ class RolloverProxyParams:
     three-wheeled platform purely so the proxy is exercisable; they carry no hardware
     authority.
 
+    The default geometry is **aligned with the benchmark-surface source of truth**
+    ``robot_sf.benchmark.metrics.evaluate_stability_margin`` (the reviewer-supplied TWV proxy:
+    ``t_w=0.8``, ``L=1.2``, ``h_c=0.6``, ``a=0.5``) so the runtime diagnostic and the benchmark
+    column ``rollover_min_stability_margin`` cannot diverge (issue #3587). The closed form here is
+    identical to that function; ``test_rollover_proxy`` cross-checks numerical agreement.
+
     Attributes:
         track_width_m: Lateral wheel track ``t_w`` (m).
         cog_height_m: Centre-of-gravity height ``h_c`` (m).
@@ -54,10 +60,10 @@ class RolloverProxyParams:
         schema_version: Stable schema tag for reproducibility.
     """
 
-    track_width_m: float = 0.50
-    cog_height_m: float = 0.40
-    front_axle_to_cog_m: float = 0.30
-    wheelbase_m: float = 0.60
+    track_width_m: float = 0.80
+    cog_height_m: float = 0.60
+    front_axle_to_cog_m: float = 0.50
+    wheelbase_m: float = 1.20
     gravity_m_s2: float = GRAVITY_M_S2
     schema_version: str = PROXY_SCHEMA_VERSION
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from robot_sf.benchmark.metrics import evaluate_stability_margin
 from robot_sf.robot.rollover_proxy import (
     PROXY_SCHEMA_VERSION,
     RolloverProxyParams,
@@ -14,8 +15,9 @@ from robot_sf.robot.rollover_proxy import (
     stability_margin,
 )
 
-# a_y,crit = g * (t_w / (2 h_c)) * (a / L) for the documented default proxy geometry.
-_DEFAULT_CRIT = 9.81 * (0.50 / (2 * 0.40)) * (0.30 / 0.60)
+# a_y,crit = g * (t_w / (2 h_c)) * (a / L) for the default proxy geometry, aligned with the
+# benchmark-surface source of truth metrics.evaluate_stability_margin (t_w=0.8, L=1.2, h_c=0.6, a=0.5).
+_DEFAULT_CRIT = 9.81 * (0.80 / (2 * 0.60)) * (0.50 / 1.20)
 
 
 def test_critical_lateral_acceleration_matches_closed_form() -> None:
@@ -30,7 +32,7 @@ def test_lateral_acceleration_is_v_times_omega() -> None:
 
 def test_feasible_command_stays_stable() -> None:
     """A low-speed, low-yaw command must stay well within the proxy threshold."""
-    margin = stability_margin(0.5, 0.5)  # a_y = 0.25 << a_y,crit ~ 3.07
+    margin = stability_margin(0.5, 0.5)  # a_y = 0.25 << a_y,crit ~ 2.73
 
     assert margin == pytest.approx(1.0 - 0.25 / _DEFAULT_CRIT)
     assert not is_rollover_critical(margin)
@@ -38,7 +40,7 @@ def test_feasible_command_stays_stable() -> None:
 
 def test_over_yaw_command_trips_rollover_critical() -> None:
     """An over-yaw command exceeding the critical accel must trip ROLLOVER_CRITICAL."""
-    margin = stability_margin(2.0, 2.0)  # a_y = 4.0 > a_y,crit ~ 3.07
+    margin = stability_margin(2.0, 2.0)  # a_y = 4.0 > a_y,crit ~ 2.73
 
     assert margin == 0.0
     assert is_rollover_critical(margin)
@@ -98,3 +100,28 @@ def test_telemetry_is_schema_tagged_and_labels_non_hardware() -> None:
     assert record["stability_margin"] == 0.0
     assert record["lateral_acceleration"] == pytest.approx(4.0)
     assert record["critical_lateral_acceleration"] == pytest.approx(_DEFAULT_CRIT)
+
+
+@pytest.mark.parametrize(
+    ("v", "omega"),
+    [(0.0, 0.0), (0.5, 0.5), (1.0, 1.5), (2.0, 2.0), (3.0, 1.0), (1.0, -2.0)],
+)
+def test_proxy_agrees_with_benchmark_surface_source_of_truth(v: float, omega: float) -> None:
+    """The runtime proxy must match metrics.evaluate_stability_margin (issue #3587).
+
+    Both implement the same closed form; with the default geometry now aligned to the
+    benchmark-surface values, the two must produce identical stability margins so the runtime
+    diagnostic and the benchmark column cannot diverge.
+    """
+    params = RolloverProxyParams()
+    proxy_margin = stability_margin(v, omega, params)
+    benchmark_margin = evaluate_stability_margin(
+        v,
+        omega,
+        t_w=params.track_width_m,
+        L=params.wheelbase_m,
+        h_c=params.cog_height_m,
+        a=params.front_axle_to_cog_m,
+    )
+
+    assert proxy_margin == pytest.approx(benchmark_margin)

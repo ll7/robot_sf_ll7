@@ -88,6 +88,11 @@ from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.planner_command_contract import (
     validate_planner_contract as _validate_planner_contract,
 )
+from robot_sf.benchmark.safety_predicates import (
+    late_evasive_predicate,
+    occlusion_near_miss_predicate,
+    oscillatory_control_predicate,
+)
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationController,
     not_available_saturation_metrics,
@@ -114,6 +119,73 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 PolicyBuilder = Callable[..., tuple[Any, dict[str, Any]]]
+
+
+def _nearest_hazard_distances(
+    robot_pos_arr: np.ndarray,
+    ped_pos_arr: np.ndarray,
+) -> np.ndarray:
+    """Return nearest pedestrian distance per episode step."""
+    step_count = int(robot_pos_arr.shape[0])
+    if step_count == 0:
+        return np.asarray([], dtype=float)
+    if ped_pos_arr.ndim < 3 or ped_pos_arr.shape[1] == 0:
+        return np.full(step_count, 1.0e9, dtype=float)
+    peds = ped_pos_arr[:step_count]
+    robot = robot_pos_arr[:step_count, np.newaxis, :]
+    return np.min(np.linalg.norm(peds - robot, axis=2), axis=1)
+
+
+def _safety_predicates_for_episode(
+    *,
+    robot_pos_arr: np.ndarray,
+    robot_vel_arr: np.ndarray,
+    robot_headings: list[float],
+    ped_pos_arr: np.ndarray,
+    dt: float,
+) -> dict[str, dict[str, Any]]:
+    """Build diagnostic safety predicate records for a completed episode.
+
+    Returns:
+        Mapping of ledger predicate keys to versioned predicate records.
+    """
+    step_count = min(len(robot_headings), int(robot_pos_arr.shape[0]))
+    if step_count < 2 or not dt > 0.0:
+        return {}
+
+    positions = np.asarray(robot_pos_arr[:step_count], dtype=float)
+    headings = np.asarray(robot_headings[:step_count], dtype=float)
+    velocities = np.asarray(robot_vel_arr[:step_count], dtype=float)
+    speeds = np.linalg.norm(velocities, axis=1) if velocities.size else np.zeros(step_count)
+    hazard_distances = _nearest_hazard_distances(positions, ped_pos_arr)[:step_count]
+
+    # Map-runner currently has simulator full-state traces, not per-step occlusion labels.
+    # Treat actors as visible with full track confidence and let the predicate emit false
+    # unless future visibility evidence shows an occluded actor emerging near a miss.
+    hazard_visible = np.ones(step_count, dtype=bool)
+    track_confidence = np.ones(step_count, dtype=float)
+
+    return {
+        "oscillatory_control_predicate": oscillatory_control_predicate(
+            positions,
+            headings,
+            speeds,
+            dt=dt,
+        ),
+        "late_evasive_predicate": late_evasive_predicate(
+            hazard_distances,
+            hazard_visible,
+            speeds,
+            dt=dt,
+        ),
+        "occlusion_near_miss_predicate": occlusion_near_miss_predicate(
+            hazard_distances,
+            hazard_visible,
+            track_confidence,
+            speeds,
+            dt=dt,
+        ),
+    }
 
 
 def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
@@ -309,6 +381,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         previous_trace_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
         previous_trace_ped_pos: np.ndarray | None = None
         previous_trace_heading = _observation_heading(obs)
+        robot_headings: list[float] = []
         for step_idx in range(horizon_val):
             policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
             merge_observation_noise_stats(noise_stats, step_noise_stats)
@@ -375,6 +448,8 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             ped_positions.append(peds)
             if record_forces:
                 ped_forces.append(forces_arr)
+            heading = _observation_heading(obs, default=previous_trace_heading)
+            robot_headings.append(float(heading))
             if record_simulation_step_trace:
                 dt_seconds = float(config.sim_config.time_per_step_in_secs)
                 robot_velocity = (
@@ -382,7 +457,6 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     if dt_seconds > 0.0
                     else np.zeros(2, dtype=float)
                 )
-                heading = _observation_heading(obs, default=previous_trace_heading)
                 planner_payload: dict[str, Any] = {
                     "event": "step",
                     "selected_action": _command_action_payload(policy_command),
@@ -561,6 +635,13 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         _stack_ped_positions(ped_forces, fill_value=np.nan)
         if record_forces
         else np.zeros_like(ped_pos_arr, dtype=float)
+    )
+    safety_predicates = _safety_predicates_for_episode(
+        robot_pos_arr=robot_pos_arr,
+        robot_vel_arr=robot_vel_arr,
+        robot_headings=robot_headings,
+        ped_pos_arr=ped_pos_arr,
+        dt=float(config.sim_config.time_per_step_in_secs),
     )
 
     obstacles = (
@@ -772,6 +853,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "seed": seed,
         "scenario_params": scenario_params,
         "metrics": metrics,
+        "safety_predicates": safety_predicates,
         "algorithm_metadata": algo_meta,
         "observation_noise": noise_spec,
         "observation_noise_hash": observation_noise_hash(noise_spec),

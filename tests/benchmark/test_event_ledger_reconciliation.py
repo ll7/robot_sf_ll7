@@ -14,6 +14,8 @@ _EXPECTED_FIELDS = {
     "clearance_breach",
     "ttc_breach",
     "oscillation",
+    "late_evasive",
+    "occlusion_near_miss",
 }
 
 
@@ -47,6 +49,15 @@ def test_table_has_one_row_per_reported_field() -> None:
         assert row["kind"] in {"exact_or_sampled", "derived"}
         assert row["producer"]
         assert isinstance(row["representative_consumers"], list)
+    rows_by_field = {row["field"]: row for row in table["rows"]}
+    assert rows_by_field["late_evasive"]["representative_consumers"] == [
+        "safety_predicates",
+        "aggregate",
+    ]
+    assert rows_by_field["occlusion_near_miss"]["representative_consumers"] == [
+        "safety_predicates",
+        "aggregate",
+    ]
 
 
 def test_collision_count_is_exact_or_sampled_with_a_producer() -> None:

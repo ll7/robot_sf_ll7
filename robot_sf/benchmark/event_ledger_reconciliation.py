@@ -28,6 +28,8 @@ _REPRESENTATIVE_CONSUMERS: dict[str, tuple[str, ...]] = {
     "clearance_breach": ("aggregate", "hybrid_evidence_matrix"),
     "ttc_breach": ("aggregate",),
     "oscillation": ("safety_predicates", "aggregate"),
+    "late_evasive": ("safety_predicates", "aggregate"),
+    "occlusion_near_miss": ("safety_predicates", "aggregate"),
 }
 
 

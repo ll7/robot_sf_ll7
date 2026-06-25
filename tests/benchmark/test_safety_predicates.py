@@ -185,3 +185,92 @@ def test_late_evasive_rejects_bad_inputs() -> None:
         late_evasive_predicate(_HAZARD_DISTANCES, _HAZARD_VISIBLE, np.ones(3), dt=_DT)
     with pytest.raises(ValueError):
         late_evasive_predicate(np.array([1.0]), np.array([True]), np.array([1.0]), dt=_DT)
+
+
+# --- occlusion-triggered near-miss predicate ---------------------------------
+
+
+def test_occlusion_near_miss_fires_on_emerging_actor() -> None:
+    """A previously-occluded actor that emerges into a near miss must be flagged."""
+    from robot_sf.benchmark.safety_predicates import occlusion_near_miss_predicate
+
+    distances = np.array([5.0, 4.0, 3.0, 0.3, 1.0, 2.0])
+    visible = np.array([False, False, True, True, True, True])
+    confidence = np.array([0.0, 0.0, 0.6, 0.9, 0.9, 0.9])
+    speeds = np.array([1.0, 1.0, 1.0, 0.4, 0.2, 0.1])
+
+    result = occlusion_near_miss_predicate(distances, visible, confidence, speeds, dt=_DT)
+
+    assert result["occlusion_near_miss"] is True
+    fields = result["fields"]
+    assert fields["emergence_step"] == 2
+    assert fields["first_detection_step"] == 2
+    assert fields["near_miss"] is True
+    assert fields["min_separation_step"] == 3
+    assert fields["actual_minimum_separation_m"] == pytest.approx(0.3)
+
+
+def test_always_visible_actor_is_not_occlusion_triggered() -> None:
+    """The same near miss without any occlusion must not be occlusion-triggered."""
+    from robot_sf.benchmark.safety_predicates import occlusion_near_miss_predicate
+
+    distances = np.array([5.0, 4.0, 3.0, 0.3, 1.0, 2.0])
+    visible = np.ones(6, dtype=bool)
+    confidence = np.full(6, 0.9)
+    speeds = np.ones(6)
+
+    result = occlusion_near_miss_predicate(distances, visible, confidence, speeds, dt=_DT)
+
+    assert result["occlusion_near_miss"] is False
+    assert result["fields"]["emergence_step"] is None
+    assert result["fields"]["was_occluded_before_min"] is False
+
+
+def test_emerging_actor_without_near_miss_is_not_flagged() -> None:
+    """An emerging actor that never breaches the near-miss radius is not flagged."""
+    from robot_sf.benchmark.safety_predicates import occlusion_near_miss_predicate
+
+    distances = np.array([5.0, 4.0, 3.0, 2.0, 1.5, 1.2])  # min 1.2 > 0.5
+    visible = np.array([False, False, True, True, True, True])
+    confidence = np.array([0.0, 0.0, 0.7, 0.9, 0.9, 0.9])
+    speeds = np.ones(6)
+
+    result = occlusion_near_miss_predicate(distances, visible, confidence, speeds, dt=_DT)
+
+    assert result["occlusion_near_miss"] is False
+    assert result["fields"]["near_miss"] is False
+
+
+def test_occlusion_predicted_separation_passthrough_and_schema() -> None:
+    """Predicted min separation is echoed and the record carries its schema tag."""
+    from robot_sf.benchmark.safety_predicates import (
+        OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
+        occlusion_near_miss_predicate,
+    )
+
+    result = occlusion_near_miss_predicate(
+        np.array([2.0, 1.0]),
+        np.array([True, True]),
+        np.array([0.9, 0.9]),
+        np.array([1.0, 1.0]),
+        dt=_DT,
+        predicted_minimum_separation_m=3.0,
+    )
+
+    assert result["schema_version"] == OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA
+    assert result["predicate"] == "occlusion_near_miss"
+    assert result["fields"]["predicted_minimum_separation_m"] == pytest.approx(3.0)
+
+
+def test_occlusion_predicate_rejects_bad_inputs() -> None:
+    """Bad dt and mismatched signal lengths must fail closed."""
+    from robot_sf.benchmark.safety_predicates import occlusion_near_miss_predicate
+
+    with pytest.raises(ValueError):
+        occlusion_near_miss_predicate(
+            np.ones(4), np.ones(4, dtype=bool), np.ones(4), np.ones(4), dt=0.0
+        )
+    with pytest.raises(ValueError):
+        occlusion_near_miss_predicate(
+            np.ones(4), np.ones(3, dtype=bool), np.ones(4), np.ones(4), dt=_DT
+        )

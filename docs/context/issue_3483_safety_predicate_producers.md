@@ -1,4 +1,4 @@
-# Issue #3483 — Trace-level safety-predicate producers (oscillatory + late-evasive)
+# Issue #3483 — Trace-level safety-predicate producers (all three)
 
 **Status:** diagnostic / proxy. **Evidence grade:** idea-level; predicate definitions are
 versioned modeling choices, labeled diagnostic until real-world label validation
@@ -11,10 +11,11 @@ fields are emitted and validated.
 safety predicates the thesis motivates, so their fields become reproducible and
 fixture-backed instead of simulation-only assumptions.
 
-This increment implements two of the three predicates: **oscillatory local-control** and
-**late-evasive reaction**. The oscillatory boolean is compatible with the existing
-`SurrogateEvents.oscillation` slot in `robot_sf/benchmark/event_ledger.py`; both detailed
-field records are intended for the ledger `surrogate_events` block.
+This implements all three motivated predicates: **oscillatory local-control**,
+**late-evasive reaction**, and **occlusion-triggered near miss**. The oscillatory boolean
+is compatible with the existing `SurrogateEvents.oscillation` slot in
+`robot_sf/benchmark/event_ledger.py`; all detailed field records are intended for the
+ledger `surrogate_events` block.
 
 ## Producer 1 — `safety_predicate.oscillatory_control.v1`
 
@@ -39,13 +40,22 @@ action is the first deceleration past `decel_threshold_m_s2` at/after the hazard
 visible. Diagnostic classification: `late_evasive` when the hazard is visible and the
 reaction is absent, slower than `max_response_latency_s`, or only after conflict-zone entry.
 
+## Producer 3 — `safety_predicate.occlusion_near_miss.v1`
+
+`occlusion_near_miss_predicate(hazard_distances, visible, track_confidence, speeds, *, dt,
+params=…)` emits `was_occluded_before_min`, `emergence_step`, `first_detection_step`,
+`first_response_step`, `min_separation_step`, `actual_minimum_separation_m`,
+`predicted_minimum_separation_m`, `near_miss`, `n_steps`. Diagnostic classification:
+`occlusion_near_miss` fires when a near miss occurs, the actor was occluded before the
+closest approach, and it later emerged (occluded→visible) — the failure family where the
+separation buffer is too thin to absorb a late detection. Thresholds live in
+`OcclusionNearMissParams`.
+
 ## Scope boundary
 
-Pure and side-effect free — changes no runtime/benchmark behavior. Deferred follow-ups:
-
-- the **occlusion-triggered-near-miss** producer;
-- wiring live emission into `build_event_ledger` / the stepping loop (needs per-step
-  visibility, track-confidence, and command-source signals verified as exposed).
+Pure and side-effect free — changes no runtime/benchmark behavior. Deferred follow-up:
+wiring live emission into `build_event_ledger` / the stepping loop (needs per-step
+visibility, track-confidence, and command-source signals verified as exposed).
 
 ## Tests
 

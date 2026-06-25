@@ -21,6 +21,7 @@ follow-ups.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
 
 OSCILLATORY_PREDICATE_SCHEMA = "safety_predicate.oscillatory_control.v1"
 LATE_EVASIVE_PREDICATE_SCHEMA = "safety_predicate.late_evasive.v1"
+OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA = "safety_predicate.occlusion_near_miss.v1"
 
 
 def _sign_changes(values: NDArray[np.float64]) -> int:
@@ -233,9 +235,121 @@ def late_evasive_predicate(
     }
 
 
+def _emergence_step(visible: NDArray[np.bool_]) -> int | None:
+    """Return the first occluded->visible transition index, or ``None``."""
+    for i in range(1, visible.shape[0]):
+        if visible[i] and not visible[i - 1]:
+            return i
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class OcclusionNearMissParams:
+    """Tunable thresholds for the occlusion-near-miss predicate.
+
+    Attributes:
+        near_miss_radius_m: Minimum-separation threshold defining a near miss.
+        detection_confidence_threshold: Track confidence counting as a detection.
+        decel_threshold_m_s2: Deceleration magnitude counting as a first response.
+    """
+
+    near_miss_radius_m: float = 0.5
+    detection_confidence_threshold: float = 0.5
+    decel_threshold_m_s2: float = 0.5
+
+
+def occlusion_near_miss_predicate(
+    hazard_distances: NDArray[np.floating] | object,
+    visible: NDArray[np.bool_] | object,
+    track_confidence: NDArray[np.floating] | object,
+    speeds: NDArray[np.floating] | object,
+    *,
+    dt: float,
+    params: OcclusionNearMissParams | None = None,
+    predicted_minimum_separation_m: float | None = None,
+) -> dict[str, Any]:
+    """Produce the occlusion-triggered-near-miss predicate fields for one episode.
+
+    The predicate fires when a previously **occluded** actor emerges and a near miss
+    follows — the failure family where the planner's separation buffer is too thin to
+    absorb a late detection.
+
+    Args:
+        hazard_distances: ``(N,)`` distance to the actor per step (m).
+        visible: ``(N,)`` boolean line-of-sight visibility per step.
+        track_confidence: ``(N,)`` track-existence confidence per step in ``[0, 1]``.
+        speeds: ``(N,)`` robot speed per step (m/s).
+        dt: Per-step timestep (s, > 0).
+        params: Tunable thresholds; defaults to :class:`OcclusionNearMissParams`.
+        predicted_minimum_separation_m: Optional predicted min separation under occlusion.
+
+    Returns:
+        dict[str, Any]: Versioned record with the motivated fields and the diagnostic
+        ``occlusion_near_miss`` boolean.
+    """
+    if not (dt > 0.0):
+        raise ValueError(f"dt must be > 0, got {dt!r}")
+    params = params or OcclusionNearMissParams()
+    dist = np.asarray(hazard_distances, dtype=np.float64).reshape(-1)
+    vis = np.asarray(visible, dtype=bool).reshape(-1)
+    conf = np.asarray(track_confidence, dtype=np.float64).reshape(-1)
+    speed = np.asarray(speeds, dtype=np.float64).reshape(-1)
+    n = dist.shape[0]
+    if not (vis.shape[0] == n == conf.shape[0] == speed.shape[0]):
+        raise ValueError("all per-step signals must share length N")
+    if n < 2:
+        raise ValueError("at least two steps are required")
+
+    min_sep_step = int(np.argmin(dist))
+    actual_minimum_separation = float(dist[min_sep_step])
+    near_miss = actual_minimum_separation <= params.near_miss_radius_m
+
+    # The actor was occluded at some point up to (and including) the closest approach.
+    was_occluded_before_min = bool(np.any(~vis[: min_sep_step + 1]))
+    emergence_step = _emergence_step(vis)
+
+    detected = np.flatnonzero(conf >= params.detection_confidence_threshold)
+    first_detection_step = int(detected[0]) if detected.size else None
+
+    decel = -np.diff(speed) / dt
+    first_response_step: int | None = None
+    if first_detection_step is not None:
+        candidates = np.flatnonzero(decel >= params.decel_threshold_m_s2)
+        candidates = candidates[candidates >= first_detection_step]
+        first_response_step = int(candidates[0]) + 1 if candidates.size else None
+
+    occlusion_near_miss = bool(near_miss and was_occluded_before_min and emergence_step is not None)
+
+    return {
+        "schema_version": OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
+        "predicate": "occlusion_near_miss",
+        "evidence_kind": "diagnostic_proxy",
+        "occlusion_near_miss": occlusion_near_miss,
+        "fields": {
+            "was_occluded_before_min": was_occluded_before_min,
+            "emergence_step": emergence_step,
+            "first_detection_step": first_detection_step,
+            "first_response_step": first_response_step,
+            "min_separation_step": min_sep_step,
+            "actual_minimum_separation_m": actual_minimum_separation,
+            "predicted_minimum_separation_m": predicted_minimum_separation_m,
+            "near_miss": near_miss,
+            "n_steps": n,
+        },
+        "thresholds": {
+            "near_miss_radius_m": params.near_miss_radius_m,
+            "detection_confidence_threshold": params.detection_confidence_threshold,
+            "decel_threshold_m_s2": params.decel_threshold_m_s2,
+        },
+    }
+
+
 __all__ = [
     "LATE_EVASIVE_PREDICATE_SCHEMA",
+    "OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA",
     "OSCILLATORY_PREDICATE_SCHEMA",
+    "OcclusionNearMissParams",
     "late_evasive_predicate",
+    "occlusion_near_miss_predicate",
     "oscillatory_control_predicate",
 ]

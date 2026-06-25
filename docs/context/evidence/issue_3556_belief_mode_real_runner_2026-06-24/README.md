@@ -1,7 +1,7 @@
 # Issue #3556 — ScenarioBelief drop-vs-retain through the REAL benchmark runner
 
 **Status:** campaign harness built + a real `stream_gap` bug fixed; the safety contrast is
-**`inconclusive`** on the crossing family because the oracle baseline is not near-safe.
+**`inconclusive_oracle_unsafe`** on the crossing family because the oracle baseline is not near-safe.
 
 ## Claim boundary (read first)
 
@@ -35,22 +35,22 @@ it stopped wandering) and the modes **differentiate**: `uncertain_dropped` shows
 worst-case clearance than `oracle`/`uncertain_retained`, confirming the gate now drops out-of-FOV
 agents in the real runner.
 
-## Result (8 seeds x 2 crossing scenarios, FOV 70°)
+## Result (12 seeds x 2 crossing scenarios, FOV 120°)
 
 | Mode | collision rate | near misses | worst min clearance | success |
 | --- | --- | --- | --- | --- |
-| `oracle` | 1.0 | 3 | -0.1123 | 0.0 |
-| `uncertain_retained` | 1.0 | 3 | -0.1123 | 0.0 |
-| `uncertain_dropped` | 1.0 | **-0.0782** | 0.0 | 0.0 |
+| `oracle` | 1.0 | 3 | -0.3487 | 0.0 |
+| `uncertain_retained` | 1.0 | 3 | -0.3487 | 0.0 |
+| `uncertain_dropped` | 1.0 | 3 | -0.3137 | 0.0 |
 
-**Decision: `inconclusive`** — the gate now acts (dropped differs on clearance), but with a
-collide-every-episode oracle there is no safe headroom to attribute a collision/near-miss effect.
+**Decision: `inconclusive_oracle_unsafe`** — the gate now acts (dropped differs on clearance),
+but the oracle baseline collides every episode (`oracle_near_safe: false`), so this contrast cannot
+attribute collision or near-miss effects to dropping uncertain agents.
 
 ## Reproduce
 
 ```bash
 uv run --with torch python scripts/benchmark/run_belief_mode_safety_campaign_issue_3556.py \
-  --seeds 101 102 103 104 105 106 107 108 --fov-degrees 70 \
   --out-dir output/issue_3556_belief_mode_campaign \
   --report-json docs/context/evidence/issue_3556_belief_mode_real_runner_2026-06-24/report.json
 ```

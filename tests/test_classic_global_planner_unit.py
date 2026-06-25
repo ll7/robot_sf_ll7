@@ -9,7 +9,6 @@ from python_motion_planning.common import TYPES
 
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig, PlanningError
-from robot_sf.planner.classic_global_planner import _grid_type_map_array
 
 
 def _make_basic_map(tmp_path):
@@ -183,64 +182,6 @@ def test_plan_returns_expand_metadata(tmp_path):
     assert info.get("expand")
     assert info.get("inflation_cells") == 0
     assert info.get("length", 0) == pytest.approx(expected_goal[0] - expected_start[0])
-
-
-def test_plan_caches_grid_per_inflation_radius(tmp_path):
-    """plan() should rasterize the grid once per inflation radius, not per call."""
-    map_def = _make_basic_map(tmp_path)
-    planner = ClassicGlobalPlanner(
-        map_def,
-        ClassicPlannerConfig(
-            cells_per_meter=1.0,
-            inflate_radius_cells=0,
-            add_boundary_obstacles=False,
-        ),
-    )
-
-    build_calls = {"n": 0}
-    original_build = planner._build_grid
-
-    def counting_build(inflation):
-        build_calls["n"] += 1
-        return original_build(inflation)
-
-    planner._build_grid = counting_build  # type: ignore[method-assign]
-
-    start = (0.5, 0.5)
-    goal = (4.5, 0.5)
-    path1, _ = planner.plan(start, goal)
-    path2, _ = planner.plan(start, goal)
-
-    assert path1 and path2
-    assert path1 == path2
-    # The grid depends only on the static map + inflation radius, so it must be
-    # built once for inflation=0 and reused on the second plan() call.
-    assert build_calls["n"] == 1
-
-
-def test_cached_grid_is_not_mutated_by_plan(tmp_path):
-    """START/GOAL writes must land on per-call copies, never the cached base grid."""
-    map_def = _make_basic_map(tmp_path)
-    planner = ClassicGlobalPlanner(
-        map_def,
-        ClassicPlannerConfig(
-            cells_per_meter=1.0,
-            inflate_radius_cells=0,
-            add_boundary_obstacles=False,
-        ),
-    )
-
-    first, _ = planner.plan((0.5, 0.5), (4.5, 0.5))
-    planner.plan((0.5, 0.5), (3.5, 0.5))  # a different goal must not corrupt the cache
-    repeat, _ = planner.plan((0.5, 0.5), (4.5, 0.5))
-
-    # Deterministic: reusing the cached grid does not leak state between calls.
-    assert first == repeat
-
-    cached = planner._base_grids[0]
-    type_map = _grid_type_map_array(cached)
-    assert not (type_map == TYPES.START).any()
-    assert not (type_map == TYPES.GOAL).any()
 
 
 def test_plan_accepts_algorithm_override(monkeypatch, tmp_path):

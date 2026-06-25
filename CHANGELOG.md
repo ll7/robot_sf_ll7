@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a pre-commit lint that fails when a file under `configs/**` contains an absolute
+  home-dir path (`/home/`, `/Users/`, `/root/`), which is non-portable for other contributors
+  and automated runners. Intentional absolute paths (e.g. private-ops SLURM routing targets
+  that live outside this repo) are exempted by annotating the line with `# allow-abs-path: <reason>`.
+  Hook: [`hooks/check_config_abs_paths.py`](hooks/check_config_abs_paths.py); tests:
+  [`tests/integration/test_check_config_abs_paths.py`](tests/integration/test_check_config_abs_paths.py) (#3605).
 * Classified the ORCA-residual progress-probe lane decision (#2445):
   [`scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py`](scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py)
   reads the existing v1 bounded smoke result (SLURM job 12913) and applies the #2408/PR #2420 stop

@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that live outside this repo) are exempted by annotating the line with `# allow-abs-path: <reason>`.
   Hook: [`hooks/check_config_abs_paths.py`](hooks/check_config_abs_paths.py); tests:
   [`tests/integration/test_check_config_abs_paths.py`](tests/integration/test_check_config_abs_paths.py) (#3605).
+* Ran the deferred #3558 **`stream_gap` gate-threshold calibration sweep**:
+  [`scripts/validation/run_stream_gap_gate_threshold_sweep_issue_3558.py`](scripts/validation/run_stream_gap_gate_threshold_sweep_issue_3558.py)
+  reuses the #3471 episode harness (now accepting optional per-run gate-threshold overrides;
+  backward-compatible, existing #3471 tests still pass) to roll the `uncertain_dropped` mode across a
+  grid of `uncertainty_min_existence_probability` thresholds and feeds the per-setting safety
+  aggregates + conservative-retention baseline into the merged `calibrate_stream_gap_gate` decision
+  layer. Diagnostic-tier result on the controlled crossing scenario: a **safe region exists** only at
+  thresholds permissive enough (≤ the degraded existence 0.2) to *retain* the corridor agent — every
+  setting that actually drops it (≥0.3, including the **0.5 production default**) is `less_safe`,
+  confirming the #3471 finding that the default gate is unsafe. The sweep exercises only the existence
+  axis (the scenario degrades existence alone) and does not change the production default (#3558).
 * Classified the ORCA-residual progress-probe lane decision (#2445):
   [`scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py`](scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py)
   reads the existing v1 bounded smoke result (SLURM job 12913) and applies the #2408/PR #2420 stop

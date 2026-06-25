@@ -55,6 +55,14 @@ MODES: dict[str, dict[str, bool]] = {
 #: Existence confidence assigned to the degraded corridor agent (below the 0.5 gate threshold).
 _DEGRADED_EXISTENCE = 0.2
 
+#: The four stream_gap uncertainty-gate thresholds the #3558 sweep is allowed to override.
+GATE_THRESHOLD_FIELDS = (
+    "uncertainty_min_existence_probability",
+    "uncertainty_min_position_confidence",
+    "uncertainty_min_class_probability",
+    "uncertainty_max_position_variance",
+)
+
 
 @dataclass
 class EpisodeParams:
@@ -159,9 +167,21 @@ def build_belief_for_mode(state: ScenarioState, mode: str, params: EpisodeParams
     return replace(belief, agents=tuple(agents))
 
 
-def _planner_config(mode: str) -> StreamGapPlannerConfig:
-    """Return a stream_gap config with uncertainty gating set per ``mode``."""
-    return StreamGapPlannerConfig(uncertainty_gating_enabled=MODES[mode]["gate"])
+def _planner_config(
+    mode: str, gate_thresholds: dict[str, float] | None = None
+) -> StreamGapPlannerConfig:
+    """Return a stream_gap config with uncertainty gating set per ``mode``.
+
+    ``gate_thresholds`` optionally overrides one or more of the four uncertainty-gate
+    thresholds (``GATE_THRESHOLD_FIELDS``) so the #3558 calibration sweep can probe
+    whether any threshold setting makes dropping at least as safe as conservative
+    retention. Unknown keys fail closed rather than being silently ignored.
+    """
+    overrides = dict(gate_thresholds or {})
+    unknown = set(overrides) - set(GATE_THRESHOLD_FIELDS)
+    if unknown:
+        raise ValueError(f"unknown gate threshold override(s): {sorted(unknown)}")
+    return StreamGapPlannerConfig(uncertainty_gating_enabled=MODES[mode]["gate"], **overrides)
 
 
 def _advance(
@@ -194,12 +214,21 @@ def _is_commit(speed: float) -> bool:
     return abs(speed - StreamGapPlannerConfig.commit_speed) < 1e-6
 
 
-def run_episode(mode: str, seed: int, params: EpisodeParams) -> dict[str, Any]:
-    """Roll one controlled episode under ``mode`` and return episode-level safety metrics."""
+def run_episode(
+    mode: str,
+    seed: int,
+    params: EpisodeParams,
+    gate_thresholds: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """Roll one controlled episode under ``mode`` and return episode-level safety metrics.
+
+    ``gate_thresholds`` optionally overrides the uncertainty-gate thresholds (only meaningful
+    when the mode enables gating); see :func:`_planner_config`.
+    """
     if mode not in MODES:
         raise ValueError(f"unknown mode: {mode}")
     state = build_initial_state(seed, params)
-    planner = StreamGapPlannerAdapter(_planner_config(mode))
+    planner = StreamGapPlannerAdapter(_planner_config(mode, gate_thresholds))
 
     start = time.perf_counter()
     initial_goal_dist = float(np.linalg.norm(state.goal - state.robot_pos))

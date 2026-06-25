@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Classified the ORCA-residual progress-probe lane decision (#2445):
+  [`scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py`](scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py)
+  reads the existing v1 bounded smoke result (SLURM job 12913) and applies the #2408/PR #2420 stop
+  rule deterministically. Decision: **`stop`** the current residual-BC lane shape — the v1 smoke
+  reproduces the v0 failure pattern (`success_rate=0.0` + `timeout_low_progress`) and is itself
+  `failed_closed` with all four required smoke-evidence fields null, either of which forbids
+  continuation/nominal escalation. Reopening requires a named objective/dataset redesign. The
+  classifier fails closed (missing/invalid artifact or absent required fields → `stop` naming the
+  gap). Analysis-only over failed-closed evidence — not readiness evidence; decision doc
+  [`docs/context/issue_2445_orca_residual_progress_probe_decision.md`](docs/context/issue_2445_orca_residual_progress_probe_decision.md)
+  with a #1358/#1475 handoff note (#2445).
 * Added the #3556 belief-mode safety campaign harness: [`scripts/benchmark/run_belief_mode_safety_campaign_issue_3556.py`](scripts/benchmark/run_belief_mode_safety_campaign_issue_3556.py) runs the `oracle` / `uncertain_retained` / `uncertain_dropped` contrast through the **real** `map_runner.run_map_batch` on a crossing scenario family + seed matrix and classifies the episode-level safety result (`revise` / `retention_dominates` / `inconclusive` / `inconclusive_oracle_unsafe`). Current result on `classic_crossing_subset` is **`inconclusive`**: the gate now acts (the dropped mode differs on worst-case clearance), but the oracle baseline collides every episode so there is no near-safe headroom to attribute a collision effect — the remaining #3556 gap is a near-safe crossing family. Evidence + reproduction: `docs/context/evidence/issue_3556_belief_mode_real_runner_2026-06-24/`.
 
 ### Added

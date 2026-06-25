@@ -16,9 +16,10 @@ builders); this layer is pure and side-effect free, mirroring the accepted decis
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Any
+
+from robot_sf.benchmark.finite_checks import require_finite_fields
 
 UNCERTAINTY_SOURCE_GENERALIZATION_SCHEMA = "uncertainty_source_generalization.v1"
 
@@ -74,12 +75,9 @@ def classify_source(contrast: SourceContrast, thresholds: EffectThresholds | Non
     Returns:
         str: ``reproduces_unsafe_dropping`` / ``no_unsafe_dropping_effect`` / ``inconclusive``.
     """
-    for field in _CONTRAST_METRIC_FIELDS:
-        value = getattr(contrast, field)
-        if not math.isfinite(value):
-            raise ValueError(
-                f"contrast.{field} for source {contrast.source!r} must be finite, got {value}"
-            )
+    require_finite_fields(
+        f"contrast for source {contrast.source!r}", contrast, _CONTRAST_METRIC_FIELDS
+    )
     thresholds = thresholds or EffectThresholds()
     unsafe_delta = contrast.dropped_unsafe_commit_rate - contrast.retained_unsafe_commit_rate
     sep_delta = contrast.min_separation_delta_m

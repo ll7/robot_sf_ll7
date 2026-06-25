@@ -28,6 +28,8 @@ class SurrogateEvents:
     clearance_breach: bool = False
     ttc_breach: bool = False
     oscillation: bool = False
+    late_evasive: bool = False
+    occlusion_near_miss: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +106,24 @@ def _metric_value(metrics: Mapping[str, Any], *keys: str) -> tuple[float | None,
     return None, None
 
 
+def _safety_predicate_records(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Return safety predicate records from an episode record."""
+    predicates = record.get("safety_predicates")
+    return dict(predicates) if isinstance(predicates, Mapping) else {}
+
+
+def _predicate_event(
+    predicates: Mapping[str, Any],
+    predicate_key: str,
+    event_key: str,
+) -> tuple[bool, str | None]:
+    """Return a predicate event boolean and source path when present."""
+    payload = predicates.get(predicate_key)
+    if not isinstance(payload, Mapping):
+        return False, None
+    return _bool_at(payload, event_key), f"safety_predicates.{predicate_key}.{event_key}"
+
+
 def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
     """Build an ``EpisodeEventLedger.v1`` payload from an episode record.
 
@@ -131,6 +151,24 @@ def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
         "oscillation_count",
         "heading_rate_sign_changes",
     )
+    safety_predicates = _safety_predicate_records(record)
+    predicate_oscillation, predicate_oscillation_source = _predicate_event(
+        safety_predicates,
+        "oscillatory_control_predicate",
+        "oscillation",
+    )
+    late_evasive, late_evasive_source = _predicate_event(
+        safety_predicates,
+        "late_evasive_predicate",
+        "late_evasive",
+    )
+    occlusion_near_miss, occlusion_near_miss_source = _predicate_event(
+        safety_predicates,
+        "occlusion_near_miss_predicate",
+        "occlusion_near_miss",
+    )
+    if predicate_oscillation_source is not None:
+        oscillation_source = predicate_oscillation_source
 
     metric_definitions = {
         "collision_count": {
@@ -153,6 +191,14 @@ def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
             "kind": "derived",
             "source": oscillation_source or "missing",
         },
+        "late_evasive": {
+            "kind": "derived",
+            "source": late_evasive_source or "missing",
+        },
+        "occlusion_near_miss": {
+            "kind": "derived",
+            "source": occlusion_near_miss_source or "missing",
+        },
     }
     exact = ExactEvents(
         collision=_bool_at(outcome, "collision_event") or termination_reason == "collision",
@@ -165,7 +211,11 @@ def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
         near_miss=near_miss_value is not None and near_miss_value > 0.0,
         clearance_breach=min_clearance is not None and min_clearance <= 0.0,
         ttc_breach=ttc_value is not None and ttc_value > 0.0,
-        oscillation=oscillation_value is not None and oscillation_value > 0.0,
+        oscillation=predicate_oscillation
+        if predicate_oscillation_source is not None
+        else oscillation_value is not None and oscillation_value > 0.0,
+        late_evasive=late_evasive,
+        occlusion_near_miss=occlusion_near_miss,
     )
     reconciliation = {
         "collision_metric_value": collision_value,
@@ -187,6 +237,8 @@ def build_event_ledger(record: Mapping[str, Any]) -> dict[str, Any]:
         provenance={"source": "episode_record"},
     )
     payload = ledger.to_dict()
+    if safety_predicates:
+        payload["surrogate_events"].update(safety_predicates)
     payload["reconciliation"]["audit_result"] = (
         "pass" if not reconcile_event_ledger(payload) else "fail"
     )
@@ -231,6 +283,8 @@ def reconcile_event_ledger(ledger: Mapping[str, Any]) -> list[str]:
             "clearance_breach",
             "ttc_breach",
             "oscillation",
+            "late_evasive",
+            "occlusion_near_miss",
         )
         if not isinstance(metric_definitions.get(name), Mapping)
         or not metric_definitions[name].get("kind")

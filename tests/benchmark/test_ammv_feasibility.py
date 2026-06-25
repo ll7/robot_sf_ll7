@@ -89,6 +89,16 @@ def test_length_mismatch_and_empty_are_rejected() -> None:
         evaluate_command_feasibility(np.array([]), np.array([]))
 
 
+def test_non_finite_commands_fail_closed() -> None:
+    """NaN/Inf commands must raise rather than be silently reported feasible."""
+    with pytest.raises(ValueError):
+        evaluate_command_feasibility(np.array([1.0, np.nan]), np.array([0.1, 0.1]))
+    with pytest.raises(ValueError):
+        evaluate_command_feasibility(np.array([1.0, np.inf]), np.array([0.1, 0.1]))
+    with pytest.raises(ValueError):
+        evaluate_command_feasibility(np.array([1.0, 1.0]), np.array([0.1, np.nan]))
+
+
 def test_invalid_params_rejected() -> None:
     """Non-physical proxy params must fail closed."""
     with pytest.raises(ValueError):

@@ -111,6 +111,11 @@ def evaluate_command_feasibility(
         raise ValueError("velocities and turn_rates must share length N")
     if v.shape[0] == 0:
         raise ValueError("at least one command is required")
+    # Fail closed on non-finite commands: NaN would make the tip-over check (``m <= 0.0``)
+    # and ``min(margins)`` silently pass/hide the bad step, and +inf would clear the
+    # curvature check, so a degraded command must never be reported as feasible.
+    if not (np.isfinite(v).all() and np.isfinite(omega).all()):
+        raise ValueError("velocities and turn_rates must be finite (no NaN/Inf)")
 
     margins = [
         _stability_margin(float(vi), float(wi), params) for vi, wi in zip(v, omega, strict=True)

@@ -22,3 +22,9 @@ repos:
         language: system
         files: ^configs/.*\.(ya?ml|json|toml|cfg|ini)$
         pass_filenames: true
+      - id: check-config-provenance
+        name: Check Training Config Issue Provenance
+        entry: uv run python hooks/check_config_provenance.py
+        language: system
+        files: ^configs/training/.*\.ya?ml$
+        pass_filenames: true

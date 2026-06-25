@@ -30,6 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   setting that actually drops it (≥0.3, including the **0.5 production default**) is `less_safe`,
   confirming the #3471 finding that the default gate is unsafe. The sweep exercises only the existence
   axis (the scenario degrades existence alone) and does not change the production default (#3558).
+* Added a pre-commit lint that catches issue-provenance mismatches in cloned training configs:
+  when a config under `configs/training/**` has identity fields (`policy_id` / tracking `group` /
+  `tags` / `campaign_id`) that agree on a single issue number, its leading header comment must not
+  name a *different* issue (the #3570 pattern, where a header read "Issue-1024" while every identity
+  field targeted issue-3068). Headers that also cite a source/leader issue alongside the canonical
+  one pass; an intentional mismatch can be annotated with `# allow-provenance-mismatch: <reason>`.
+  Hook: [`hooks/check_config_provenance.py`](hooks/check_config_provenance.py); tests:
+  [`tests/integration/test_check_config_provenance.py`](tests/integration/test_check_config_provenance.py) (#3606).
 * Classified the ORCA-residual progress-probe lane decision (#2445):
   [`scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py`](scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py)
   reads the existing v1 bounded smoke result (SLURM job 12913) and applies the #2408/PR #2420 stop

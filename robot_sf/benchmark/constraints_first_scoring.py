@@ -233,9 +233,62 @@ def _mean(values: Sequence[float | None]) -> float | None:
     return sum(present) / len(present) if present else None
 
 
+def build_constraints_first_report(
+    planner_episodes: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    compensatory_scores: Mapping[str, float] | None = None,
+    gates: AdmissibilityGates | None = None,
+    comfort_key: str = "comfort",
+    efficiency_key: str = "efficiency",
+    collision_key: str = "collisions",
+    safe_key: str = "safe_success",
+    confidence: float = 0.95,
+) -> dict[str, Any]:
+    """Build the end-to-end constraints-first report over per-planner episode records.
+
+    For each planner this emits the constraints-first summary (admissibility, collision UCB,
+    survivorship-aware comfort/efficiency). When ``compensatory_scores`` is supplied, it also
+    emits the ranking-inversion diagnostic using the **admissible rate** as the
+    constraints-first ranking score — the empirical contrast between the soft composite and
+    the constraints-first order.
+
+    Returns:
+        dict[str, Any]: Versioned report with ``per_planner`` summaries and an optional
+        ``ranking_inversion`` block.
+    """
+    if not planner_episodes:
+        raise ValueError("at least one planner is required")
+    per_planner = {
+        planner: constraints_first_planner_summary(
+            episodes,
+            gates=gates,
+            comfort_key=comfort_key,
+            efficiency_key=efficiency_key,
+            collision_key=collision_key,
+            safe_key=safe_key,
+            confidence=confidence,
+        )
+        for planner, episodes in planner_episodes.items()
+    }
+    report: dict[str, Any] = {
+        "schema_version": CONSTRAINTS_FIRST_SCHEMA,
+        "evidence_kind": "diagnostic_proxy",
+        "per_planner": per_planner,
+    }
+    if compensatory_scores is not None:
+        constraints_first_scores = {
+            planner: summary["admissible_rate"] for planner, summary in per_planner.items()
+        }
+        report["ranking_inversion"] = ranking_inversion(
+            compensatory_scores, constraints_first_scores
+        )
+    return report
+
+
 __all__ = [
     "CONSTRAINTS_FIRST_SCHEMA",
     "AdmissibilityGates",
+    "build_constraints_first_report",
     "collision_upper_confidence_bound",
     "constraints_first_planner_summary",
     "is_episode_admissible",

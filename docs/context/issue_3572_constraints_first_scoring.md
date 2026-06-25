@@ -29,17 +29,24 @@ default. This layer does **not** touch the simulator or the metric producers.
   constraints-first order, and the planners whose rank changes (the empirical justification
   for non-compensatory evaluation).
 
+- **`build_constraints_first_report`** — end-to-end report over per-planner episode records:
+  a constraints-first summary per planner plus (when a compensatory composite is supplied)
+  the ranking-inversion block, using each planner's admissible rate as the constraints-first
+  ranking score.
+
 ## Scope boundary
 
 Pure and side-effect free — no change to the simulator, metric producers, or default
-benchmark reporting. Wiring these primitives into the benchmark report/CLI (and emitting a
-ranking-inversion table per campaign) is a deliberate follow-up.
+benchmark reporting. The report consumes already-collected episode records; wiring it into
+the benchmark **CLI** (reading a campaign's episode JSONL and writing the report artifact)
+is a deliberate follow-up.
 
 ## Tests
 
-`tests/benchmark/test_constraints_first_scoring.py` (16 tests): rule-of-three at k=0, UCB
+`tests/benchmark/test_constraints_first_scoring.py` (19 tests): rule-of-three at k=0, UCB
 monotonicity and validation, each admissibility gate, the survivorship delta, the planner
-summary contract, and ranking-inversion detection / no-inversion / mismatched-set handling.
+summary contract, ranking-inversion detection / no-inversion / mismatched-set handling, and
+the end-to-end report builder (per-planner summaries + ranking inversion vs a composite).
 
 ## References
 

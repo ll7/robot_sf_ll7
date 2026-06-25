@@ -126,3 +126,61 @@ def test_ranking_inversion_requires_same_planner_set() -> None:
     """Mismatched planner sets must fail closed."""
     with pytest.raises(ValueError):
         ranking_inversion({"A": 1.0}, {"B": 1.0})
+
+
+# --- end-to-end report builder -----------------------------------------------
+
+
+def _planner_episodes() -> dict[str, list[dict[str, object]]]:
+    """Two planners: A is admissible-heavy, B looks good but collides often."""
+    return {
+        "A": [
+            {"collisions": 0, "comfort": 0.8, "efficiency": 0.7, "safe_success": True},
+            {"collisions": 0, "comfort": 0.9, "efficiency": 0.6, "safe_success": True},
+        ],
+        "B": [
+            {"collisions": 1, "comfort": 1.0, "efficiency": 1.0, "safe_success": False},
+            {"collisions": 0, "comfort": 0.9, "efficiency": 0.9, "safe_success": True},
+        ],
+    }
+
+
+def test_report_builds_per_planner_summaries() -> None:
+    """The report must include a constraints-first summary for every planner."""
+    from robot_sf.benchmark.constraints_first_scoring import (
+        CONSTRAINTS_FIRST_SCHEMA,
+        build_constraints_first_report,
+    )
+
+    report = build_constraints_first_report(_planner_episodes())
+
+    assert report["schema_version"] == CONSTRAINTS_FIRST_SCHEMA
+    assert set(report["per_planner"]) == {"A", "B"}
+    assert report["per_planner"]["A"]["admissible_rate"] == pytest.approx(1.0)
+    assert report["per_planner"]["B"]["admissible_rate"] == pytest.approx(0.5)
+    assert "ranking_inversion" not in report
+
+
+def test_report_surfaces_ranking_inversion_against_composite() -> None:
+    """When B leads the soft composite but fails the gate, the report must flag inversion."""
+    from robot_sf.benchmark.constraints_first_scoring import build_constraints_first_report
+
+    # Compensatory composite ranks B above A (B's comfort/efficiency are higher).
+    report = build_constraints_first_report(
+        _planner_episodes(), compensatory_scores={"A": 0.78, "B": 0.95}
+    )
+
+    inversion = report["ranking_inversion"]
+    assert inversion["any_inversion"] is True
+    # Constraints-first ranks A (admissible_rate 1.0) above B (0.5).
+    assert inversion["per_planner"]["A"]["constraints_first_rank"] == 1
+    assert inversion["per_planner"]["B"]["constraints_first_rank"] == 2
+    assert inversion["per_planner"]["B"]["compensatory_rank"] == 1
+
+
+def test_report_rejects_empty_input() -> None:
+    """A report with no planners cannot be built."""
+    from robot_sf.benchmark.constraints_first_scoring import build_constraints_first_report
+
+    with pytest.raises(ValueError):
+        build_constraints_first_report({})

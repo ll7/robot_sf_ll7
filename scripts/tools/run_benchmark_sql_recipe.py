@@ -15,6 +15,7 @@ import duckdb
 import yaml
 
 RECIPE_SCHEMA_VERSION = "benchmark_sql_recipes.v1"
+RECIPE_INVENTORY_SCHEMA = "benchmark_sql_recipe_inventory.v1"
 DEFAULT_RECIPE_ROOT = Path(__file__).with_name("benchmark_sql_recipes")
 TABLE_FILENAMES = {
     "episodes": "episodes.parquet",
@@ -95,6 +96,40 @@ def load_recipe_manifest(recipe_root: Path = DEFAULT_RECIPE_ROOT) -> RecipeManif
     return RecipeManifest(schema_version=schema_version, recipes=recipes)
 
 
+def inventory_recipes(recipe_root: Path = DEFAULT_RECIPE_ROOT) -> dict[str, Any]:
+    """Return a machine-readable inventory of recipe entry points and their schema contract.
+
+    This makes the versioned recipe/schema contract discoverable and auditable without
+    executing any SQL, so schema drift can be reviewed against the declared inputs and
+    outputs of every recipe.
+
+    Returns:
+        dict[str, Any]: Inventory payload tagged with ``RECIPE_INVENTORY_SCHEMA``.
+    """
+
+    manifest = load_recipe_manifest(recipe_root)
+    return {
+        "schema": RECIPE_INVENTORY_SCHEMA,
+        "recipe_schema_version": manifest.schema_version,
+        "recipe_root": recipe_root.as_posix(),
+        "recipe_count": len(manifest.recipes),
+        "recipes": [
+            {
+                "recipe_id": recipe.recipe_id,
+                "title": recipe.title,
+                "sql_file": recipe.sql_file.as_posix(),
+                "required_tables": list(recipe.required_tables),
+                "required_columns": {
+                    table: list(columns) for table, columns in recipe.required_columns.items()
+                },
+                "output_columns": list(recipe.output_columns),
+                "caveats": list(recipe.caveats),
+            }
+            for recipe in manifest.recipes
+        ],
+    }
+
+
 def run_recipe(
     recipe_id: str,
     *,
@@ -144,12 +179,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Build the recipe runner argument parser."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--recipe", required=True, help="Stable recipe ID to run.")
+    parser.add_argument(
+        "--recipe",
+        default=None,
+        help="Stable recipe ID to run. Required unless --list is given.",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        dest="list_recipes",
+        help="Inventory available recipes and their schema contract as JSON, then exit.",
+    )
     parser.add_argument(
         "--export-dir",
         type=Path,
-        required=True,
-        help="Directory containing benchmark Parquet export tables.",
+        default=None,
+        help="Directory containing benchmark Parquet export tables. Required unless --list.",
     )
     parser.add_argument("--output-csv", type=Path, default=None, help="Optional CSV output path.")
     parser.add_argument(
@@ -172,6 +217,17 @@ def main(argv: list[str] | None = None) -> int:
     """Run one SQL recipe and return a shell-friendly exit code."""
 
     args = build_arg_parser().parse_args(argv)
+    if args.list_recipes:
+        try:
+            inventory = inventory_recipes(args.recipe_root)
+        except RecipeValidationError as exc:
+            sys.stderr.write(f"{exc}\n")
+            return 2
+        sys.stdout.write(json.dumps(inventory, indent=2, sort_keys=True) + "\n")
+        return 0
+    if args.recipe is None or args.export_dir is None:
+        sys.stderr.write("--recipe and --export-dir are required unless --list is given\n")
+        return 2
     try:
         result = run_recipe(
             args.recipe,

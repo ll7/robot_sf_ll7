@@ -11,7 +11,9 @@ import pytest
 
 from robot_sf.benchmark.parquet_export import export_episodes_jsonl_to_parquet
 from scripts.tools.run_benchmark_sql_recipe import (
+    RECIPE_INVENTORY_SCHEMA,
     RecipeValidationError,
+    inventory_recipes,
     load_recipe_manifest,
     main,
     run_recipe,
@@ -363,3 +365,43 @@ def test_markdown_float_cells_use_compact_fixed_precision(tmp_path: Path) -> Non
     )
 
     assert "0.5000" in md_path.read_text(encoding="utf-8")
+
+
+def test_inventory_recipes_exposes_full_schema_contract() -> None:
+    """The inventory must expose every recipe's declared schema contract (issue #3467)."""
+    manifest = load_recipe_manifest()
+    inventory = inventory_recipes()
+
+    assert inventory["schema"] == RECIPE_INVENTORY_SCHEMA
+    assert inventory["recipe_schema_version"] == manifest.schema_version
+    assert inventory["recipe_count"] == len(manifest.recipes)
+
+    inventoried = {entry["recipe_id"]: entry for entry in inventory["recipes"]}
+    assert inventoried.keys() == {recipe.recipe_id for recipe in manifest.recipes}
+    for recipe in manifest.recipes:
+        entry = inventoried[recipe.recipe_id]
+        assert entry["title"] == recipe.title
+        assert entry["required_tables"] == list(recipe.required_tables)
+        assert entry["output_columns"] == list(recipe.output_columns)
+        assert entry["required_columns"] == {
+            table: list(columns) for table, columns in recipe.required_columns.items()
+        }
+
+
+def test_cli_list_emits_recipe_inventory_json(capsys) -> None:
+    """`--list` must emit a parseable inventory and skip execution (no --export-dir needed)."""
+    exit_code = main(["--list"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema"] == RECIPE_INVENTORY_SCHEMA
+    assert payload["recipe_count"] == len(payload["recipes"])
+    assert any(entry["recipe_id"] == "planner_outcome_summary" for entry in payload["recipes"])
+
+
+def test_cli_requires_recipe_or_list(capsys) -> None:
+    """Omitting both --recipe and --list must fail closed with an actionable message."""
+    exit_code = main([])
+
+    assert exit_code == 2
+    assert "--recipe and --export-dir are required" in capsys.readouterr().err

@@ -21,12 +21,13 @@ the in-sim runners is a deliberate follow-up.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+from robot_sf.benchmark.finite_checks import require_finite_array, require_finite_scalar
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -34,21 +35,6 @@ if TYPE_CHECKING:
 OSCILLATORY_PREDICATE_SCHEMA = "safety_predicate.oscillatory_control.v1"
 LATE_EVASIVE_PREDICATE_SCHEMA = "safety_predicate.late_evasive.v1"
 OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA = "safety_predicate.occlusion_near_miss.v1"
-
-
-def _require_finite_array(name: str, arr: NDArray[np.float64]) -> None:
-    """Fail closed when a per-step signal carries a non-finite (NaN/Inf) value.
-
-    A degraded/fallback trace can leak NaN/Inf into the float signals; ``np.unwrap``,
-    ``np.diff``, and the ``min``/``argmin`` comparisons then poison or silently
-    mis-evaluate the diagnostic booleans (fail-open). Raising names the offending
-    field so the caller drops the trace instead of trusting a not-flagged result.
-
-    Raises:
-        ValueError: If ``arr`` contains any non-finite value.
-    """
-    if not np.all(np.isfinite(arr)):
-        raise ValueError(f"{name} must contain only finite values")
 
 
 def _sign_changes(values: NDArray[np.float64]) -> int:
@@ -101,9 +87,9 @@ def oscillatory_control_predicate(
         raise ValueError("command_sources must have length N when provided")
     if n < 2:
         raise ValueError("at least two steps are required")
-    _require_finite_array("positions", pos)
-    _require_finite_array("headings", head)
-    _require_finite_array("linear_velocities", vel)
+    require_finite_array("positions", pos)
+    require_finite_array("headings", head)
+    require_finite_array("linear_velocities", vel)
 
     heading_rate = np.diff(np.unwrap(head)) / dt
     heading_rate_sign_changes = _sign_changes(heading_rate)
@@ -198,8 +184,8 @@ def late_evasive_predicate(
         raise ValueError("hazard_distances, hazard_visible, and speeds must share length N")
     if n < 2:
         raise ValueError("at least two steps are required")
-    _require_finite_array("hazard_distances", dist)
-    _require_finite_array("speeds", speed)
+    require_finite_array("hazard_distances", dist)
+    require_finite_array("speeds", speed)
 
     first_visible = _first_true_index(visible)
     conflict_entry = _first_true_index(dist <= conflict_radius_m)
@@ -320,14 +306,12 @@ def occlusion_near_miss_predicate(
         raise ValueError("all per-step signals must share length N")
     if n < 2:
         raise ValueError("at least two steps are required")
-    _require_finite_array("hazard_distances", dist)
-    _require_finite_array("track_confidence", conf)
-    _require_finite_array("speeds", speed)
-    if predicted_minimum_separation_m is not None and not math.isfinite(
-        predicted_minimum_separation_m
-    ):
-        raise ValueError(
-            f"predicted_minimum_separation_m must be finite, got {predicted_minimum_separation_m}"
+    require_finite_array("hazard_distances", dist)
+    require_finite_array("track_confidence", conf)
+    require_finite_array("speeds", speed)
+    if predicted_minimum_separation_m is not None:
+        predicted_minimum_separation_m = require_finite_scalar(
+            "predicted_minimum_separation_m", predicted_minimum_separation_m
         )
 
     min_sep_step = int(np.argmin(dist))

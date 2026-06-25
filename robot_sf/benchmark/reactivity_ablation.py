@@ -16,9 +16,10 @@ pure and side-effect free, mirroring the accepted decision layers in
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Any
+
+from robot_sf.benchmark.finite_checks import require_finite_fields
 
 REACTIVITY_ABLATION_SCHEMA = "reactivity_ablation.v1"
 
@@ -65,12 +66,9 @@ def reactivity_delta(contrast: ReactivityContrast) -> dict[str, Any]:
     Returns:
         dict[str, Any]: Per-metric deltas and a ``replay_flatters`` flag.
     """
-    for field in _CONTRAST_METRIC_FIELDS:
-        value = getattr(contrast, field)
-        if not math.isfinite(value):
-            raise ValueError(
-                f"contrast.{field} for planner {contrast.planner!r} must be finite, got {value}"
-            )
+    require_finite_fields(
+        f"contrast for planner {contrast.planner!r}", contrast, _CONTRAST_METRIC_FIELDS
+    )
     collision_delta = contrast.reactive_collision_rate - contrast.replay_collision_rate
     near_miss_delta = contrast.reactive_near_miss_rate - contrast.replay_near_miss_rate
     separation_delta = contrast.reactive_min_separation_m - contrast.replay_min_separation_m

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import tan
 from types import SimpleNamespace
 
 import numpy as np
@@ -11,6 +12,7 @@ from robot_sf.benchmark.metrics import evaluate_stability_margin
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
 from robot_sf.robot.rollover_proxy import (
     PROXY_SCHEMA_VERSION,
     RolloverProxyParams,
@@ -133,6 +135,19 @@ def test_proxy_agrees_with_benchmark_surface_source_of_truth(v: float, omega: fl
     assert proxy_margin == pytest.approx(benchmark_margin)
 
 
+def test_bicycle_drive_exposes_executed_yaw_rate_for_rollover_proxy() -> None:
+    """Bicycle ``current_speed`` heading stays separate from executed yaw rate."""
+    robot = BicycleDriveRobot(
+        BicycleDriveSettings(wheelbase=2.0, max_accel=4.0, max_velocity=5.0, max_steer=1.0)
+    )
+
+    robot.apply_action((2.0, 0.5), 1.0)
+
+    expected_yaw_rate = robot.current_speed[0] * tan(0.5) / robot.config.wheelbase
+    assert robot.current_speed[1] == pytest.approx(robot.pose[1])
+    assert robot.current_yaw_rate == pytest.approx(expected_yaw_rate)
+
+
 class _StepRobot:
     """Minimal robot double exposing executed ``current_speed``."""
 
@@ -142,6 +157,14 @@ class _StepRobot:
     def parse_action(self, action: np.ndarray) -> tuple[float, float]:
         """Return action as differential-drive ``(v, omega)`` command."""
         return (float(action[0]), float(action[1]))
+
+
+class _BicycleStepRobot(_StepRobot):
+    """Robot double exposing bicycle-drive ``current_speed`` plus yaw rate."""
+
+    def __init__(self) -> None:
+        self.current_speed = (0.0, 0.0)
+        self.current_yaw_rate = 0.0
 
 
 class _StepSimulator:
@@ -155,6 +178,20 @@ class _StepSimulator:
     def step_once(self, actions: list[tuple[float, float]]) -> None:
         """Record the executed command as the robot's current speed."""
         self.robots[0].current_speed = actions[0]
+
+
+class _BicycleStepSimulator(_StepSimulator):
+    """Simulator double whose robot reports heading separately from yaw rate."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.robots = [_BicycleStepRobot()]
+
+    def step_once(self, actions: list[tuple[float, float]]) -> None:
+        """Record bicycle-style speed plus explicit executed yaw rate."""
+        linear_velocity, yaw_rate = actions[0]
+        self.robots[0].current_speed = (linear_velocity, 0.1)
+        self.robots[0].current_yaw_rate = yaw_rate
 
 
 class _StepState:
@@ -190,6 +227,7 @@ def _make_step_env(
     rollover_enabled: bool = True,
     penalty: float = -4.0,
     env_config: object | None = None,
+    simulator: _StepSimulator | None = None,
 ) -> RobotEnv:
     env = RobotEnv.__new__(RobotEnv)
     env.env_config = env_config or EnvSettings(
@@ -198,7 +236,7 @@ def _make_step_env(
     )
     env.config = env.env_config
     env.debug_without_robot_movement = False
-    env.simulator = _StepSimulator()
+    env.simulator = simulator or _StepSimulator()
     env.state = _StepState()
     env.occupancy_grid = None
     env._asymmetric_critic_enabled = False
@@ -223,6 +261,20 @@ def test_runtime_rollover_proxy_keeps_feasible_command_nonterminal() -> None:
     assert info["rollover_critical"] is False
     assert info["rollover_proxy"]["stability_margin"] > 0.0
     assert "termination_reason" not in info
+
+
+def test_runtime_rollover_proxy_uses_explicit_bicycle_yaw_rate() -> None:
+    """Bicycle drive ``current_speed`` heading must not be treated as yaw rate."""
+    env = _make_step_env(penalty=-4.0, simulator=_BicycleStepSimulator())
+
+    _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(-3.0)
+    assert terminated is True
+    assert truncated is False
+    assert info["termination_reason"] == "ROLLOVER_CRITICAL"
+    assert info["rollover_proxy"]["yaw_rate"] == pytest.approx(2.0)
+    assert info["rollover_proxy"]["rollover_critical"] is True
 
 
 def test_runtime_rollover_proxy_over_yaw_trips_terminal_penalty() -> None:

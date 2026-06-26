@@ -86,9 +86,9 @@ def test_planner_action_adapter_differential_conversion():
     action = adapter.from_velocity_command((0.6, -0.4))
 
     assert action.shape == (2,)
-    # Linear delta respects current speed; angular delta should clip to bounds
+    # Deltas respect current speed; no bound clipping is needed for this command.
     assert action[0] == pytest.approx(0.3)
-    assert action[1] == pytest.approx(robot.action_space.low[1])
+    assert action[1] == pytest.approx(-0.5)
     assert np.all(action <= robot.action_space.high)
     assert np.all(action >= robot.action_space.low)
     assert adapter.last_kinematics_diagnostics is not None

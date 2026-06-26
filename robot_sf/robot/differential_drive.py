@@ -32,6 +32,10 @@ class DifferentialDriveSettings:
     interaxis_length: float = 0.3
     # Whether backwards motion is allowed (enables negative linear speed)
     allow_backwards: bool = False
+    # Maximum linear velocity delta accepted as an action
+    max_linear_accel: float = 1.0
+    # Maximum angular velocity delta accepted as an action
+    max_angular_accel: float = 1.0
 
     def __post_init__(self):
         """
@@ -48,6 +52,10 @@ class DifferentialDriveSettings:
         if self.max_linear_speed <= 0 or self.max_angular_speed <= 0:
             raise ValueError(
                 "Robot's max. linear and angular speeds must be positive and non-zero!",
+            )
+        if self.max_linear_accel <= 0 or self.max_angular_accel <= 0:
+            raise ValueError(
+                "Robot's max. linear and angular accelerations must be positive and non-zero!",
             )
         if self.interaxis_length <= 0:
             raise ValueError("Robot's interaxis length must be positive and non-zero!")
@@ -107,10 +115,16 @@ class DifferentialDriveMotion:
             action: The action to apply on the velocity (dV, dTheta).
 
         Returns:
-            PolarVec2D: The new velocity clipped by configured maximum speeds.
+            PolarVec2D: The new velocity clipped by configured delta and speed limits.
         """
-        dot_x = velocity[0] + action[0]
-        dot_orient = velocity[1] + action[1]
+        linear_delta = clip_scalar(
+            action[0], -self.config.max_linear_accel, self.config.max_linear_accel
+        )
+        angular_delta = clip_scalar(
+            action[1], -self.config.max_angular_accel, self.config.max_angular_accel
+        )
+        dot_x = velocity[0] + linear_delta
+        dot_orient = velocity[1] + angular_delta
         dot_x = clip_scalar(dot_x, self.config.min_linear_speed, self.config.max_linear_speed)
         angular_max = self.config.max_angular_speed
         dot_orient = clip_scalar(dot_orient, -angular_max, angular_max)
@@ -252,15 +266,15 @@ class DifferentialDriveRobot:
 
         Returns:
             Box: An instance of gymnasium.spaces.Box representing the continuous
-                 action space where each action is a vector containing
-                 linear and angular speeds.
+            action space where each action is a vector containing
+            linear and angular velocity deltas.
         """
         high = np.array(
-            [self.config.max_linear_speed, self.config.max_angular_speed],
+            [self.config.max_linear_accel, self.config.max_angular_accel],
             dtype=np.float32,
         )
         low = np.array(
-            [self.config.min_linear_speed, -self.config.max_angular_speed],
+            [-self.config.max_linear_accel, -self.config.max_angular_accel],
             dtype=np.float32,
         )
         return spaces.Box(low=low, high=high, dtype=np.float32)

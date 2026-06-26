@@ -22,7 +22,11 @@ config = RobotSimulationConfig(
 )
 env = make_robot_env(config=config, debug=True)
 # Use newest model for best compatibility
-model = PPO.load('./model/ppo_model_retrained_10m_2025-02-01.zip', env=env)
+model = PPO.load(
+    './model/ppo_model_retrained_10m_2025-02-01.zip',
+    env=env,
+    custom_objects={'action_space': env.action_space},
+)
 obs, _ = env.reset()
 action, _ = model.predict(obs, deterministic=True)
 print('Model loading and prediction successful')

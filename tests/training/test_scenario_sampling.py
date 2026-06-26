@@ -127,6 +127,8 @@ def test_scenario_switching_env_handles_bounds_mismatch() -> None:
     env.reset()
     env.reset()
     assert set(env.scenario_coverage) == {"A", "B"}
+    np.testing.assert_array_equal(env.observation_space.low, np.array([-1.0, -1.0]))
+    np.testing.assert_array_equal(env.observation_space.high, np.array([1.0, 1.0]))
 
     bad_scenarios = [
         {"name": "C", "low": [0.0, 0.0], "high": [1.0, 1.0]},

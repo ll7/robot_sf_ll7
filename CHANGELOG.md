@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed collision **undercounting** in `summarize_collision_metrics` (#3627): the aggregator read the
+  sampled `metrics.collisions` value even when it was a finite `0.0`, only falling back to the exact
+  `outcome.collision_event` flag when the metric key was entirely absent — so an episode whose exact
+  environment collision fired but whose sampled metric missed the contact was silently aggregated as
+  **zero** collisions (a validation-integrity hole independent of the per-episode write-time and
+  `EpisodeEventLedger.v1` guards, since this aggregator also reads resumed/loaded JSONL records).
+  `_episode_collision_value` now fails closed: when the exact collision flag fired and the sampled
+  value is `<= 0`, the count is floored to `1` (sourced as `episode.outcome.collision_event`). No
+  inflation — no-collision episodes stay `0` and a larger sampled count is never reduced.
+* Fixed a `scripts/dev/check_skills.py` false-positive path validation (#3623): backticked prose
+  placeholders such as `SLURM/data-gated` (in a SKILL.md) were validated as repo paths and failed the
+  preflight, because `SLURM/` is a real top-level dir. The broken-path check now only flags a
+  non-resolving token when it *looks like* a path (has a file extension or nests ≥2 segments below its
+  prefix), so single-segment extension-less placeholders are treated as prose — while genuinely broken
+  path references (e.g. `docs/does_not_exist.md`, `SLURM/missing/template.sl`) are still caught. The
+  offending SKILL.md was left untouched; the fix is in the validator.
+* Added a **fail-closed route-clearance guard** to the camera-ready benchmark (#3628). The
+  originally-reported `0.0 m` centerline clearances in `classic_merging_*` / `classic_station_platform_*`
+  were already re-routed to positive margins on `main` (now +0.56 m and +2.5 m), but the preflight
+  only emitted *informational* warnings, so a route with a **negative** margin (centerline-to-obstacle
+  distance < robot radius = guaranteed collision) would still run silently. `prepare_campaign_preflight`
+  / `run_campaign` now raise `RouteClearanceError` on any `min_clearance_margin_m < 0` (certification
+  cannot excuse hard geometric infeasibility; tangent/positive-narrow geometry stays a warning), so
+  both `--mode preflight` and `--mode run` fail closed. Also corrected the stale
+  `route_clearance_certifications_v1.yaml` entries for the 3 repaired scenarios (`negative clearance` →
+  `repaired_geometry`). User-facing: the benchmark can no longer silently run a geometrically-impossible
+  route.
 * **`stream_gap` was blind in the real benchmark runner** (found while promoting the #3556 belief-mode safety contrast to `map_runner`). `StreamGapPlannerAdapter._extract_state` read the nested SOCNAV observation (`obs["robot"]`, `obs["pedestrians"]`) but `map_runner` feeds a flat observation (`robot_position`, `pedestrians_positions`, `goal_current`), so the planner extracted `robot=[0,0]`, `n_peds=0` and drove blind every episode. `_extract_state` now accepts both the nested and flat observation formats (backward-compatible; the ScenarioBelief harness and 24 existing tests still pass), and `robot_sf/benchmark/scenario_belief_policy_hook.py` reads the flat observation and writes the uncertainty sidecar to `pedestrians_uncertainty` where the fixed extractor reads it. After the fix the planner engages pedestrians and the belief modes differentiate in the real runner.
 
 ### Added
@@ -20,6 +47,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the issue's reproduction specifically targets. The headless path was verified already pygame-free, so
   this is a test-only guard (a negative probe with an injected `import pygame` flips it red, confirming
   it is not vacuous).
+* Added a **fail-closed planner observation-view integrity guard** in the benchmark runner (#3634,
+  the runtime guard deferred from #3568). New `robot_sf/benchmark/map_runner_view_integrity.py`
+  (`evaluate_effective_view_integrity` + `DegeneratePlannerViewError`, reason `degenerate_planner_view`)
+  is checked on the first step in `map_runner_episode.py`: when the observation handed to the planner
+  contains pedestrians (`observation_ped_count > 0`) but the planner's own extractor returns zero — and
+  the planner is not pedestrian-blind-by-design (per its `observation_spec.inputs`) — the runner raises
+  **before any metrics are recorded**, instead of silently emitting collision "results" from a blind
+  planner (the `stream_gap` failure class fixed in #3567). Ground truth is the *observation's own*
+  pedestrian count, so visibility-masked/occluded or genuinely-empty scenarios do not false-trip. The
+  passing diagnostic is stored at `record["integrity"]["effective_view"]`. 20 guard tests + 145
+  regression + 13 end-to-end episode tests pass.
 * Began the #3463 corrective engineering for the topology near-parity selector lane (diagnostic-tier,
   no benchmark claim). `TopologyGuidedLocalPolicyConfig` gains two current-behavior-preserving knobs:
   `primary_route_progress_gate_use_monotone_accounting` (default `False`) hardens primary-route

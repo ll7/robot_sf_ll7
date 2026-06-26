@@ -56,6 +56,8 @@ CRITICAL_DUPLICATE_PATTERNS = (
     "fallback/degraded should be treated as a caveat",
 )
 BACKTICK_TOKEN_PATTERN = re.compile(r"`([a-z][a-z0-9-]+)`")
+# A trailing ``.ext`` (1-8 alphanumerics) marks a reference as a concrete file path.
+EXTENSION_PATTERN = re.compile(r"\.[A-Za-z0-9]{1,8}$")
 ARTIFACT_FIRST_SKILLS = {"goal-autopilot", "goal-issue-implementation", "goal-pr-review"}
 ARTIFACT_FIRST_REQUIRED_FILES = ("result.json", "RESULT.md", "diffstat.txt", "validation.json")
 ARTIFACT_FIRST_REQUIRED_PHRASES = (
@@ -167,6 +169,21 @@ def _is_generic_reference(reference: str) -> bool:
     return reference in GENERIC_REFERENCE_PREFIXES
 
 
+def _looks_like_path(reference: str) -> bool:
+    """Return true when REFERENCE has the shape of a concrete repo path.
+
+    A reference looks path-like when it carries a file extension (``foo/bar.md``)
+    or nests at least two segments below its top-level prefix (``foo/bar/baz``).
+    Single-segment, extension-less tokens such as ``SLURM/data-gated`` are prose
+    placeholders, not file references, so they are excluded to avoid false
+    positives while genuine broken paths (which keep an extension or extra depth)
+    are still validated.
+    """
+    if EXTENSION_PATTERN.search(reference):
+        return True
+    return reference.count("/") >= 2
+
+
 def _find_broken_paths(path: Path, text: str) -> list[str]:
     """Return repo-relative path references from PATH_PATTERN that do not exist."""
     broken_paths: list[str] = []
@@ -174,8 +191,12 @@ def _find_broken_paths(path: Path, text: str) -> list[str]:
         reference = _reference_path(match)
         if _is_generic_reference(reference):
             continue
-        if not (REPO_ROOT / reference).exists():
-            broken_paths.append(f"{path.relative_to(REPO_ROOT)} -> {reference}")
+        if (REPO_ROOT / reference).exists():
+            continue
+        if not _looks_like_path(reference):
+            # Non-resolving, non-path-shaped tokens are prose placeholders.
+            continue
+        broken_paths.append(f"{path.relative_to(REPO_ROOT)} -> {reference}")
     return broken_paths
 
 

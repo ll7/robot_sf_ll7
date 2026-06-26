@@ -74,6 +74,10 @@ from robot_sf.benchmark.map_runner_trace import (
     _single_pedestrian_vru_metadata,
     _trace_pedestrians,
 )
+from robot_sf.benchmark.map_runner_view_integrity import (
+    DegeneratePlannerViewError,
+    evaluate_effective_view_integrity,
+)
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.observation_noise import (
     apply_observation_noise,
@@ -385,10 +389,25 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         previous_trace_ped_pos: np.ndarray | None = None
         previous_trace_heading = _observation_heading(obs)
         robot_headings: list[float] = []
+        view_integrity: dict[str, Any] | None = None
         for step_idx in range(horizon_val):
             policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
             merge_observation_noise_stats(noise_stats, step_noise_stats)
             policy_command = policy_fn(policy_obs)
+            if view_integrity is None:
+                # Runtime fail-closed guard (#3634): probe the planner's effective observation view
+                # once. The extractor signature is deterministic across steps, so a single probe
+                # detects a silent-blind planner before any benchmark metrics are recorded. Fail
+                # closed per docs/context/issue_691_benchmark_fallback_policy.md instead of emitting
+                # results produced by a planner that drives blind to the pedestrians it was shown.
+                integrity = evaluate_effective_view_integrity(
+                    policy_fn=policy_fn,
+                    observation=policy_obs,
+                    algo_meta=algo_meta,
+                )
+                view_integrity = integrity.to_metadata()
+                if integrity.degraded:
+                    raise DegeneratePlannerViewError(integrity)
             actuation_step = None
             planner_step_decision = None
             if record_planner_decision_trace and callable(planner_stats):
@@ -881,7 +900,10 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "timing": timing,
         "termination_reason": termination_reason,
         "outcome": outcome,
-        "integrity": {"contradictions": contradictions},
+        "integrity": {
+            "contradictions": contradictions,
+            "effective_view": view_integrity,
+        },
     }
     record.update(static_deadlock_fields)
     if benchmark_track is not None:

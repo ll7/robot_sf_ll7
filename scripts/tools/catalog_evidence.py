@@ -97,6 +97,7 @@ _AREA_RULES: tuple[tuple[str, str], ...] = (
     ("imitation", "learned_policy"),
     ("oracle", "learned_policy"),
     ("lidar_ppo", "learned_policy"),
+    ("selector_orca", "learned_policy"),
     # Predictive / forecast planner evidence.
     ("predictive", "predictive_planner"),
     ("forecast", "predictive_planner"),
@@ -104,6 +105,9 @@ _AREA_RULES: tuple[tuple[str, str], ...] = (
     ("coupling_gate", "predictive_planner"),
     # Infrastructure areas.
     ("root_layout", "root_layout"),
+    ("local_artifact", "evidence_policy"),
+    ("artifact_retirement", "evidence_policy"),
+    ("release_evidence_gate", "evidence_policy"),
     ("slurm", "slurm"),
     ("policy_search", "policy_search"),
     # Benchmark-evidence family (broad scenario/seed/metric diagnostics).  Kept
@@ -130,6 +134,7 @@ _AREA_RULES: tuple[tuple[str, str], ...] = (
     ("ablation", "benchmark_evidence"),
     ("horizon", "benchmark_evidence"),
     ("density", "benchmark_evidence"),
+    ("dense_pedestrian", "benchmark_evidence"),
     ("solvability", "benchmark_evidence"),
     ("mechanism", "benchmark_evidence"),
     ("replay", "benchmark_evidence"),
@@ -138,6 +143,34 @@ _AREA_RULES: tuple[tuple[str, str], ...] = (
     ("sweep", "benchmark_evidence"),
     ("smoke", "benchmark_evidence"),
     ("pilot", "benchmark_evidence"),
+    ("route_offset", "benchmark_evidence"),
+    ("corridor_trace", "benchmark_evidence"),
+    ("ped_timing", "benchmark_evidence"),
+    ("leave_group_speed", "benchmark_evidence"),
+    ("hazard_odd", "benchmark_evidence"),
+    ("failure_pack", "benchmark_evidence"),
+    ("ammv", "benchmark_evidence"),
+    ("one_factor", "benchmark_evidence"),
+    ("component_synthesis", "benchmark_evidence"),
+    ("hot_path", "benchmark_evidence"),
+    ("criticality", "benchmark_evidence"),
+    ("failure_synthesis", "benchmark_evidence"),
+    ("trace_case", "benchmark_evidence"),
+    ("panel_candidate", "benchmark_evidence"),
+    ("learned_risk", "benchmark_evidence"),
+    ("reward_curriculum", "benchmark_evidence"),
+    ("observation_noise", "benchmark_evidence"),
+    ("counterfactual_pair", "benchmark_evidence"),
+    ("robot_influence", "benchmark_evidence"),
+    ("sensor_noise", "benchmark_evidence"),
+    ("fast_pysf", "benchmark_evidence"),
+    ("first_use", "adversarial_search"),
+    ("external_prior", "benchmark_evidence"),
+    ("pedestrian_archetype", "benchmark_evidence"),
+    ("hardcase", "benchmark_evidence"),
+    ("actor_injection", "benchmark_evidence"),
+    ("belief_mode", "benchmark_evidence"),
+    ("planner_obs", "benchmark_evidence"),
 )
 
 # Representative-file selection order for a bundle directory.  Exact basenames
@@ -295,13 +328,16 @@ def build_proposal(repo_root: Path, *, catalog_path: Path = _CONTEXT_CATALOG) ->
         members = members_by_bundle.get(bundle_key, [])
         representative = _representative_member(members, repo_root)
         if representative is None:
-            review.append(
-                ReviewItem(
-                    bundle=bundle,
-                    reason="no checker-clean evidence file to reference (output/ or local paths)",
+            if (repo_root / bundle_key).is_dir():
+                representative = bundle_key
+            else:
+                review.append(
+                    ReviewItem(
+                        bundle=bundle,
+                        reason="no checker-clean evidence file to reference (output/ or local paths)",
+                    )
                 )
-            )
-            continue
+                continue
 
         proposed.append(
             ProposedEntry(

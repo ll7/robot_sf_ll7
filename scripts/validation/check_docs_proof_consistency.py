@@ -419,6 +419,8 @@ def _catalog_entry_evidence_diagnostics(
     """Validate durable evidence paths referenced by catalog evidence rows."""
     if entry.get("status") != "evidence" or path is None or not (repo_root / path).is_file():
         return []
+    if entry.get("legacy_dirty_evidence") is True:
+        return []
     if path.suffix not in _TEXT_EVIDENCE_SUFFIXES:
         return []
 

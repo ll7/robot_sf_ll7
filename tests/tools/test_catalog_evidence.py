@@ -98,6 +98,7 @@ def _build_sample_repo(tmp_path: Path) -> Path:
         f"{_EVIDENCE}/issue_504_seed_dirty_2026-01-01/summary.json",
         '{"checkpoint": "output/tmp/model.pt"}\n',
     )
+    _write(repo, f"{_EVIDENCE}/issue_506_seed_dirty_summary.json", '{"output": "output/tmp"}\n')
     # Already covered bundle -> must NOT be re-proposed.
     _write(repo, f"{_EVIDENCE}/issue_505_already_seed_2026-01-01/summary.json", '{"ok": 1}\n')
 
@@ -198,10 +199,12 @@ def test_build_proposal_classifies_and_routes(tmp_path: Path) -> None:
     ambiguous = f"{_EVIDENCE}/issue_503_zzz_unknown_topic_2026-01-01"
     assert ambiguous in review_bundles
     assert "area" in review_bundles[ambiguous]
-    # Dirty evidence routed to review (fail-closed), despite a matching area keyword.
+    # Dirty evidence directories use a bundle-directory row; standalone files still fail closed.
     dirty = f"{_EVIDENCE}/issue_504_seed_dirty_2026-01-01"
-    assert dirty in review_bundles
-    assert "clean" in review_bundles[dirty]
+    assert dirty in proposed_paths
+    dirty_standalone = f"{_EVIDENCE}/issue_506_seed_dirty_summary.json"
+    assert dirty_standalone in review_bundles
+    assert "clean" in review_bundles[dirty_standalone]
 
 
 def test_build_proposal_uses_custom_catalog_path(tmp_path: Path) -> None:

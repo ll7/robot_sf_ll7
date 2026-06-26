@@ -550,6 +550,34 @@ entries:
     assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
 
 
+def test_context_catalog_accepts_explicit_legacy_dirty_evidence(tmp_path: Path) -> None:
+    """Legacy evidence entries can be cataloged without weakening the default guard."""
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+    evidence = repo_root / "docs/context/evidence/legacy_report.json"
+    evidence.write_text('{"source": "output/local/report.json"}\n', encoding="utf-8")
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        """
+version: 1
+entries:
+- path: docs/context/evidence/legacy_report.json
+  status: evidence
+  freshness: evidence
+  legacy_dirty_evidence: true
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == []
+
+
 def test_context_catalog_skips_binary_evidence_scan(tmp_path: Path) -> None:
     """Binary evidence entries should not crash text-only provenance checks."""
     repo_root = tmp_path

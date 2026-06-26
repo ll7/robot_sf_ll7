@@ -196,6 +196,14 @@ if [[ "$pr_ready_final" == "1" ]]; then
   followup_args+=(--require-body)
 fi
 uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"
+perf_args=(--base-ref "$BASE_REF")
+if [[ "$pr_ready_final" == "1" ]]; then
+  perf_args+=(--require-body)
+else
+  # Interim runs only advise: a WIP perf branch may not yet carry its evidence section.
+  perf_args+=(--advisory)
+fi
+uv run python "$SCRIPT_DIR/check_perf_evidence.py" "${perf_args[@]}"
 uv run python "$SCRIPT_DIR/check_fast_results_claim_map.py"
 "$SCRIPT_DIR/ruff_fix_format.sh"
 printf 'Running core readiness lane.\n' >&2

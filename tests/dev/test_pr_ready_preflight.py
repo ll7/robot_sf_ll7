@@ -14,6 +14,7 @@ SCRIPTS_DEV = REPO_ROOT / "scripts" / "dev"
 
 _POST_PREFLIGHT_SCRIPTS = [
     "check_pr_followups.py",
+    "check_perf_evidence.py",
     "check_fast_results_claim_map.py",
     "ruff_fix_format.sh",
     "run_tests_parallel.sh",

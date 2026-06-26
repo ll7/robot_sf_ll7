@@ -94,6 +94,19 @@ helpers that do not interpret research evidence should state `NA - support helpe
 - Evidence that the change works here:
 - Benchmarks or smoke tests, if applicable:
 
+## Performance Evidence
+Required for `perf`-typed changes (conventional-commit `perf(...)`); delete this section
+otherwise. Enforced by `scripts/dev/check_perf_evidence.py` so a claimed speed-up is
+substantiated on the real entry point (see the #3611 → #3613 wrong-layer revert). Use concrete
+values, not `NA`. The cache field is required only when the change claims caching/reuse.
+
+- Baseline runtime: `<time>` on `<representative slice + seeds>`
+- Changed runtime: `<time>` on the same slice + seeds
+- Representative command: `<command that reproduces the measurement>`
+- Hot-path call count or profile anchor: `<profile/counter on the real campaign entry point>`
+- Cache-hit or reuse counter: `<hits/misses or reuse count, or NA when no caching is claimed>`
+- Rollback or failure criterion: `<observable regression that triggers a revert>`
+
 ## Risks / Rollout
 - Compatibility risks:
 - Failure modes:

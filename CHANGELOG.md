@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the HEIGHT planner adapter's lidar raycasting **ignoring dynamic pedestrians** (#3629).
+  `CrowdNavHeightAdapter._raycast_obstacles` intersected each ray only against cached static obstacle
+  segments, so the HEIGHT policy's lidar channel was blind to moving pedestrians (they were used for the
+  human spatial-edge tensor but never fed into the raycast). Rays are now also intersected against
+  pedestrian discs (reusing `circle_line_intersection_distance` from `robot_sf/sensor/range_sensor.py`,
+  the same primitive the live env's range sensor uses); the nearest of {static, pedestrian, sensor
+  range} wins per ray, and the disc radius is read from the observation when present (default 0.3 m).
+  Backward-compatible: an empty pedestrian set reproduces the previous static-only behavior exactly.
 * Fixed collision **undercounting** in `summarize_collision_metrics` (#3627): the aggregator read the
   sampled `metrics.collisions` value even when it was a finite `0.0`, only falling back to the exact
   `outcome.collision_event` flag when the metric key was entirely absent — so an episode whose exact
@@ -47,6 +55,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the issue's reproduction specifically targets. The headless path was verified already pygame-free, so
   this is a test-only guard (a negative probe with an injected `import pygame` flips it red, confirming
   it is not vacuous).
+* Added a **performance-PR evidence contract** that fails PR readiness when a `perf`-typed
+  conventional-commit change (the #3611 → #3613 failure mode: a `perf(planner): cache ...` whose
+  claimed speed-up targeted the wrong layer and had to be reverted) lacks a `## Performance
+  Evidence` PR-body section with concrete before/after runtime, a representative command, a
+  rollback criterion, and — when caching is claimed — a cache-hit/reuse counter. The trigger is the
+  local `perf(...)` commit subject (no GitHub label needed), so it runs identically in
+  `pr_ready_check.sh` (fail-closed in final mode, advisory in interim) and CI. Check:
+  [`scripts/dev/check_perf_evidence.py`](scripts/dev/check_perf_evidence.py); template section in
+  [`.github/PULL_REQUEST_TEMPLATE/pr_default.md`](.github/PULL_REQUEST_TEMPLATE/pr_default.md);
+  tests: [`tests/dev/test_check_perf_evidence.py`](tests/dev/test_check_perf_evidence.py).
 * Added a **fail-closed planner observation-view integrity guard** in the benchmark runner (#3634,
   the runtime guard deferred from #3568). New `robot_sf/benchmark/map_runner_view_integrity.py`
   (`evaluate_effective_view_integrity` + `DegeneratePlannerViewError`, reason `degenerate_planner_view`)

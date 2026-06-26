@@ -1,0 +1,102 @@
+# Issue #3637 — Paper-grade reactivity-vs-replay rank study LAUNCH PACKET
+#
+# Purpose: make the seed-sufficient reactivity-vs-replay ablation (split from #3573) concrete
+# enough to preflight-check BEFORE any compute is spent. The #3573 diagnostic landed (quantifier
+# #3594, paired runs + open-loop-replay mode #3612) on a small matrix (2 scenarios, goal + orca,
+# 4 seeds). #3637 carries the paper-grade extension: the same ablation across >= 3 planners at a
+# seed budget sufficient for rank stability, with the replay limitation stated explicitly.
+#
+# This is a LAUNCH PACKET + preflight contract, NOT a runnable campaign config and NOT a result.
+# The paper-grade run itself is out of scope here (no benchmark run, no Slurm/GPU submission, no
+# rank-stability interpretation, no paper/dissertation claim edits).
+#
+# Preflight it with the canonical pure checker (CPU-only, no compute):
+#   uv run python scripts/benchmark/preflight_reactivity_replay_rank_study_issue_3637.py \
+#     --packet configs/benchmarks/reactivity_replay_rank_study_issue_3637_launch_packet.yaml
+#
+# Honesty boundary: NO paper-facing reactivity-rank claim may be made until this run executes at
+# the declared seed budget AND the post-run seed-sufficiency gate
+# (scripts/tools/seed_sufficiency_gate.py) plus claim-card review classify the bundle. The preflight
+# only confirms the PLAN is well-formed and honestly labeled; it does not prove sufficiency.
+
+schema_version: reactivity_replay_rank_study_preflight.v1
+issue: 3637
+
+# >= 3 planners (Definition of Done). Canonical non-learning baselines from
+# robot_sf/benchmark/algorithm_readiness.py; the diagnostic used goal + orca, social_force is the
+# third. Planner identity is a run-design choice the maintainer may revise; the preflight only
+# enforces the >= 3 count and that the arms/seeds are well-formed.
+planners:
+  - goal
+  - orca
+  - social_force
+
+scenario_set: configs/scenarios/sets/classic_crossing_subset.yaml
+scenario_set_sha256: a5baf5cd4b6aebd333a30f76e319646dd3f3451406db1678ef55d5ea3b972db6
+
+# Horizon long enough for the robot to reach the crossing; below ~150 the contrast is near-null on
+# this family (#3573). Matches the campaign-runner default.
+horizon: 300
+
+# Paired seed budget: BOTH the reactive and replay arms run this identical seed set (common random
+# numbers), the property that makes the per-planner contrast attributable to reactivity. 20 seeds
+# aligns with the S20 rank-stability schedule used elsewhere. This is a precondition floor, not a
+# sufficiency proof — actual sufficiency is decided post-run by the seed-sufficiency gate.
+seeds:
+  - 101
+  - 102
+  - 103
+  - 104
+  - 105
+  - 106
+  - 107
+  - 108
+  - 109
+  - 110
+  - 111
+  - 112
+  - 113
+  - 114
+  - 115
+  - 116
+  - 117
+  - 118
+  - 119
+  - 120
+
+replay:
+  # MUST be false: "replay" here is a live social-force sim with the robot->pedestrian force
+  # disabled (peds_have_robot_repulsion=false), NOT pre-recorded trajectory playback.
+  is_trajectory_playback: false
+  # Defaults to robot_sf.benchmark.reactivity_ablation.REPLAY_LIMITATION when omitted; stated here
+  # so the limitation travels with the packet artifact.
+  limitation: >-
+    'replay' = robot->pedestrian social-force term disabled in a live social-force sim
+    (peds_have_robot_repulsion=false); NOT pre-recorded trajectory playback. Pedestrians still
+    follow social-force dynamics among themselves but do not yield to the robot, so disabling
+    reactivity tends to reveal intrusion hazard rather than hide it.
+
+# Preconditions enforced by the preflight checker (overrides of the module defaults if present).
+min_planners: 3
+min_seeds: 20
+
+# After preflight passes, the run + post-run analysis (OUT OF SCOPE for #3637 implementation slice):
+run_command: |
+  # Paired reactive-vs-replay campaign across the declared planners + seeds (real runner).
+  uv run python scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py \
+    --scenario-set configs/scenarios/sets/classic_crossing_subset.yaml \
+    --planners goal orca social_force \
+    --seeds 101 102 103 104 105 106 107 108 109 110 \
+            111 112 113 114 115 116 117 118 119 120 \
+    --horizon 300 \
+    --report-json output/issue_3637_reactivity_rank_study/report.json
+
+post_run_gate: |
+  # Sufficiency is decided here, NOT by this packet. Rank-flip / CI half-width drive the decision.
+  uv run python scripts/tools/seed_sufficiency_gate.py --input-json <frozen_gate_input.json>
+
+validation:
+  - "Re-verify scenario_set_sha256 before launch (drift guard): sha256sum the scenario set."
+  - "Preflight must report status=ready before any compute is spent."
+  - "No paper-facing reactivity-rank claim until the post-run seed-sufficiency gate + claim-card
+    review classify the bundle; 'replay' is force-off, not trajectory playback."

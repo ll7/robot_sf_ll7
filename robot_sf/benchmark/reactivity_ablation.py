@@ -23,6 +23,28 @@ from robot_sf.benchmark.finite_checks import require_finite_fields
 
 REACTIVITY_ABLATION_SCHEMA = "reactivity_ablation.v1"
 
+#: The two paired pedestrian-reactivity conditions (arm tags). ``reactive`` keeps
+#: ``peds_have_robot_repulsion=True`` (pedestrians yield to the robot); ``replay`` disables that
+#: robot->pedestrian force. Common random numbers (identical scenarios + seeds) make the per-planner
+#: contrast attributable to reactivity.
+REACTIVITY_ARMS: tuple[str, str] = ("reactive", "replay")
+
+#: Whether the ``replay`` arm is pre-recorded trajectory playback. It is **not**: this benchmark's
+#: "replay" is a live social-force sim with the robot->pedestrian force disabled (see
+#: :data:`REPLAY_LIMITATION`). Kept as an exported flag so artifacts and preflight checkers assert it.
+REPLAY_IS_TRAJECTORY_PLAYBACK = False
+
+#: Canonical operationalization limitation for the reactivity-vs-replay ablation. Any artifact,
+#: preflight manifest, or paper-facing claim built on this ablation must state this explicitly so the
+#: "replay" framing is not over-read as grounded trajectory playback (#3573 diagnostic / #3637
+#: paper-grade extension).
+REPLAY_LIMITATION = (
+    "'replay' = robot->pedestrian social-force term disabled in a live social-force sim "
+    "(peds_have_robot_repulsion=false); NOT pre-recorded trajectory playback. Pedestrians still "
+    "follow social-force dynamics among themselves but do not yield to the robot, so disabling "
+    "reactivity tends to reveal intrusion hazard rather than hide it."
+)
+
 _CONTRAST_METRIC_FIELDS = (
     "reactive_collision_rate",
     "replay_collision_rate",
@@ -128,6 +150,9 @@ def assess_reactivity_ablation(contrasts: list[ReactivityContrast]) -> dict[str,
 
 __all__ = [
     "REACTIVITY_ABLATION_SCHEMA",
+    "REACTIVITY_ARMS",
+    "REPLAY_IS_TRAJECTORY_PLAYBACK",
+    "REPLAY_LIMITATION",
     "ReactivityContrast",
     "assess_reactivity_ablation",
     "reactivity_delta",

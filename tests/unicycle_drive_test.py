@@ -1,6 +1,6 @@
 """TODO docstring. Document this module."""
 
-from math import pi
+from math import isclose, pi
 
 from robot_sf.ped_ego.unicycle_drive import (
     UnicycleAction,
@@ -145,6 +145,26 @@ def test_unicycle_over_limit_negative_steering_clipped():
     motion.move(state, (0.0, -100.0), 1.0)
     pos_after, _ = state.pose
     assert pos_after[0] > 0.0
+
+
+def test_unicycle_turn_command_is_direct_angular_velocity():
+    """Unicycle turn command updates heading as omega, not v * tan(steer)."""
+    motion = UnicycleMotion(UnicycleDriveSettings(max_steer=1.0))
+    state = UnicycleDriveState(((0.0, 0.0), 0.0), 2.0)
+
+    motion.move(state, (0.0, 0.5), 1.0)
+
+    assert isclose(state.pose[1], 0.5)
+
+
+def test_unicycle_turn_command_clips_direct_angular_velocity():
+    """Unicycle turn command clipping applies to omega before integration."""
+    motion = UnicycleMotion(UnicycleDriveSettings(max_steer=0.3))
+    state = UnicycleDriveState(((0.0, 0.0), 0.0), 2.0)
+
+    motion.move(state, (0.0, 10.0), 1.0)
+
+    assert isclose(state.pose[1], 0.3)
 
 
 def test_default_unicycle_state_can_move():

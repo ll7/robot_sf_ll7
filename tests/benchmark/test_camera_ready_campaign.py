@@ -4642,9 +4642,12 @@ def test_prepare_campaign_preflight_emits_route_clearance_warnings(
     )
 
     # Force a deterministic low-clearance condition independent of map geometry.
+    # Positive-but-sub-threshold margin: center distance 1.0 with robot radius 0.8 -> +0.2 m
+    # (below the 0.5 m warn threshold so a warning is still emitted, but above the 0.0 m
+    # fail-closed bound so it does not trip RouteClearanceError; see issue #3628).
     fake_map_def = SimpleNamespace(
-        robot_routes=[SimpleNamespace(waypoints=[(0.0, 0.0), (1.0, 0.0)])],
-        obstacles=[SimpleNamespace(vertices=[(1.0, -0.1), (2.0, -0.1), (2.0, 0.1), (1.0, 0.1)])],
+        robot_routes=[SimpleNamespace(waypoints=[(-1.0, 0.0), (0.0, 0.0)])],
+        obstacles=[SimpleNamespace(vertices=[(1.0, -1.0), (2.0, -1.0), (2.0, 1.0), (1.0, 1.0)])],
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.camera_ready_campaign.convert_map",
@@ -4800,9 +4803,12 @@ def test_prepare_campaign_preflight_attaches_route_clearance_certifications(
         encoding="utf-8",
     )
 
+    # Positive-but-sub-threshold margin: center distance 1.0 with robot radius 0.8 -> +0.2 m
+    # (below the 0.5 m warn threshold so a warning is still emitted, but above the 0.0 m
+    # fail-closed bound so it does not trip RouteClearanceError; see issue #3628).
     fake_map_def = SimpleNamespace(
-        robot_routes=[SimpleNamespace(waypoints=[(0.0, 0.0), (1.0, 0.0)])],
-        obstacles=[SimpleNamespace(vertices=[(1.0, -0.1), (2.0, -0.1), (2.0, 0.1), (1.0, 0.1)])],
+        robot_routes=[SimpleNamespace(waypoints=[(-1.0, 0.0), (0.0, 0.0)])],
+        obstacles=[SimpleNamespace(vertices=[(1.0, -1.0), (2.0, -1.0), (2.0, 1.0), (1.0, 1.0)])],
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.camera_ready_campaign.convert_map",

@@ -175,6 +175,33 @@ def test_control_trace_extraction_rejects_non_finite_metric_value() -> None:
         pedestrian_metric_observations_from_control_trace(trace, "speed_m_s")
 
 
+def test_control_trace_extraction_rejects_null_archetype() -> None:
+    """An explicit null archetype fails closed instead of grouping under 'None'."""
+
+    trace = _control_trace()
+    trace["pedestrians"][0]["archetype"] = None
+
+    with pytest.raises(ValueError, match="archetype must be non-empty"):
+        pedestrian_metric_observations_from_control_trace(trace, "speed_m_s")
+
+
+def test_control_trace_extraction_rejects_null_metric_value() -> None:
+    """A null trace metric value fails closed with a descriptive error, not float(None)."""
+
+    trace = _control_trace()
+    trace["pedestrians"][0]["steps"][1]["speed_m_s"] = None
+
+    with pytest.raises(ValueError, match="must not be null"):
+        pedestrian_metric_observations_from_control_trace(trace, "speed_m_s")
+
+
+def test_control_trace_extraction_rejects_non_mapping_trace() -> None:
+    """A non-mapping control trace fails closed instead of raising a bare AttributeError."""
+
+    with pytest.raises(ValueError, match="control_trace must be a mapping"):
+        pedestrian_metric_observations_from_control_trace([], "speed_m_s")  # type: ignore[arg-type]
+
+
 def test_mean_matched_effect_is_isolated_when_baseline_is_mean_matched() -> None:
     """A mean-matched homogeneous baseline yields an isolated heterogeneity effect."""
     report = mean_matched_heterogeneity_effect(0.50, 0.62, homogeneous_is_mean_matched=True)

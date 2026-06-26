@@ -157,6 +157,8 @@ def pedestrian_metric_observations_from_control_trace(
 
 
 def _control_trace_pedestrians(control_trace: Mapping[str, Any]) -> Sequence[Any]:
+    if not isinstance(control_trace, Mapping):
+        raise ValueError("control_trace must be a mapping")
     pedestrians = control_trace.get("pedestrians")
     if not isinstance(pedestrians, Sequence) or isinstance(pedestrians, str):
         raise ValueError("control_trace.pedestrians must be a sequence")
@@ -168,7 +170,11 @@ def _control_trace_pedestrians(control_trace: Mapping[str, Any]) -> Sequence[Any
 def _control_trace_archetype(pedestrian: Any, pedestrian_index: int) -> str:
     if not isinstance(pedestrian, Mapping):
         raise ValueError(f"control_trace.pedestrians[{pedestrian_index}] must be a mapping")
-    archetype = str(pedestrian.get("archetype", "")).strip()
+    archetype_value = pedestrian.get("archetype")
+    # Guard against an explicit ``archetype: null`` payload: ``str(None)`` would
+    # coerce to the truthy string ``"None"`` and silently group pedestrians under
+    # a fake archetype, defeating the fail-closed contract of this helper.
+    archetype = str(archetype_value).strip() if archetype_value is not None else ""
     if not archetype:
         raise ValueError(
             f"control_trace.pedestrians[{pedestrian_index}].archetype must be non-empty"
@@ -197,7 +203,15 @@ def _control_trace_metric_values(
                 "control_trace.pedestrians"
                 f"[{pedestrian_index}].steps[{step_index}] missing {metric_key!r}"
             )
-        values.append(float(step[metric_key]))
+        raw_value = step[metric_key]
+        # A null trace value would raise a bare ``TypeError`` from ``float(None)``;
+        # raise a descriptive ``ValueError`` instead so the offending field is named.
+        if raw_value is None:
+            raise ValueError(
+                "control_trace.pedestrians"
+                f"[{pedestrian_index}].steps[{step_index}].{metric_key} must not be null"
+            )
+        values.append(float(raw_value))
 
     return require_finite_array(
         f"control_trace.pedestrians[{pedestrian_index}].steps.{metric_key}",

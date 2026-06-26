@@ -238,7 +238,9 @@ def _catalog_validation_problems(payload: object, *, root: Path) -> list[str]:  
             if path in seen:
                 problems.append(f"{_CATALOG_PATH}: {entry_path}.path duplicates {path}")
             seen.add(path)
-            if not (root / path).is_file():
+            # Evidence bundles may be registered either as a single file or as a
+            # directory, so accept both rather than requiring a regular file.
+            if not (root / path).exists():
                 problems.append(f"{_CATALOG_PATH}: {entry_path}.path does not exist: {path}")
 
         status = raw_entry.get("status")
@@ -381,7 +383,9 @@ def _evidence_registration_problems(files: Iterable[Path], *, root: Path) -> lis
         rel = _repo_rel(path, root=root)
         if rel == _CATALOG_PATH:
             continue
-        if rel not in registered:
+        # A file is registered if its exact path is listed, or if an ancestor
+        # directory is registered as an evidence bundle.
+        if rel not in registered and not any(parent in registered for parent in rel.parents):
             problems.append(f"{rel}: evidence file is not registered in {_CATALOG_PATH}")
         problems.extend(_checksum_problems_for_changed_file(path, root=root))
 

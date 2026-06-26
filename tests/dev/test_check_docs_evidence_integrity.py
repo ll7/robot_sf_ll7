@@ -173,6 +173,31 @@ def test_catalog_change_validates_registered_paths(tmp_path: Path) -> None:
     assert any("does not exist" in problem for problem in problems)
 
 
+def test_catalog_directory_entry_is_accepted(tmp_path: Path) -> None:
+    """An evidence bundle registered as a directory must not be flagged missing."""
+    bundle = tmp_path / "docs/context/evidence/issue_999_bundle"
+    bundle.mkdir(parents=True)
+    (bundle / "summary.json").write_text('{"status": "ok"}\n', encoding="utf-8")
+    _write_catalog(tmp_path, [bundle.relative_to(tmp_path).as_posix()])
+
+    problems = check_files(["docs/context/catalog.yaml"], root=tmp_path)
+
+    assert not any("does not exist" in problem for problem in problems)
+
+
+def test_file_inside_directory_registered_bundle_counts_as_registered(tmp_path: Path) -> None:
+    """A changed file inside a directory-registered bundle is treated as registered."""
+    bundle = tmp_path / "docs/context/evidence/issue_999_bundle"
+    bundle.mkdir(parents=True)
+    summary = bundle / "summary.json"
+    summary.write_text('{"status": "ok"}\n', encoding="utf-8")
+    _write_catalog(tmp_path, [bundle.relative_to(tmp_path).as_posix()])
+
+    problems = check_files([summary.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert not any("not registered" in problem for problem in problems)
+
+
 def test_readme_summary_classification_drift_is_reported(tmp_path: Path) -> None:
     """README evidence status must not disagree with summary.json fields."""
     bundle = tmp_path / "docs/context/evidence/issue_999_drift"

@@ -666,9 +666,11 @@ def test_live_replay_coordinate_helpers_pin_handedness_contract() -> None:
     """CARLA bridge helpers should mirror vector, yaw, and yaw-rate signs."""
     from robot_sf_carla_bridge.live_replay import (
         carla_angular_velocity_to_robot_sf_radps,
+        carla_planar_twist_to_robot_sf,
         carla_planar_vector_to_robot_sf,
         carla_yaw_degrees_to_robot_sf,
         robot_sf_angular_velocity_to_carla_radps,
+        robot_sf_planar_twist_to_carla,
         robot_sf_planar_vector_to_carla,
         robot_sf_yaw_to_carla_degrees,
     )
@@ -687,3 +689,35 @@ def test_live_replay_coordinate_helpers_pin_handedness_contract() -> None:
     carla_omega = robot_sf_angular_velocity_to_carla_radps(0.75)
     assert carla_omega == pytest.approx(-0.75)
     assert carla_angular_velocity_to_robot_sf_radps(carla_omega) == pytest.approx(0.75)
+
+    carla_twist = robot_sf_planar_twist_to_carla({"x": 1.25, "y": -0.5, "angular_velocity": 0.75})
+    assert carla_twist == {
+        "x": pytest.approx(1.25),
+        "y": pytest.approx(0.5),
+        "angular_velocity": pytest.approx(-0.75),
+    }
+    assert carla_planar_twist_to_robot_sf(carla_twist) == {
+        "x": pytest.approx(1.25),
+        "y": pytest.approx(-0.5),
+        "angular_velocity": pytest.approx(0.75),
+    }
+
+
+def test_carla_bridge_exports_planar_twist_handedness_contract() -> None:
+    """Package-level adapter API exposes the strict twist handedness transform."""
+    from robot_sf_carla_bridge import (
+        carla_planar_twist_to_robot_sf,
+        robot_sf_planar_twist_to_carla,
+    )
+
+    carla_twist = robot_sf_planar_twist_to_carla({"x": -2.0, "y": 3.0, "angular_velocity": -1.5})
+    assert carla_twist == {
+        "x": pytest.approx(-2.0),
+        "y": pytest.approx(-3.0),
+        "angular_velocity": pytest.approx(1.5),
+    }
+    assert carla_planar_twist_to_robot_sf(carla_twist) == {
+        "x": pytest.approx(-2.0),
+        "y": pytest.approx(3.0),
+        "angular_velocity": pytest.approx(-1.5),
+    }

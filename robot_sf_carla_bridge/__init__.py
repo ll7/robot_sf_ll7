@@ -59,6 +59,8 @@ from robot_sf_carla_bridge.export import (
 )
 from robot_sf_carla_bridge.live_replay import (
     T1_ORACLE_LIVE_REPLAY_SCHEMA_VERSION,
+    carla_planar_twist_to_robot_sf,
+    robot_sf_planar_twist_to_carla,
     robot_sf_pose_to_carla_transform,
     run_t1_oracle_live_replay_against_server,
 )
@@ -111,6 +113,7 @@ __all__ = [
     "build_export_payload_from_scenario_entry",
     "build_export_payloads_from_scenario_file",
     "build_t1_oracle_replay_smoke_setup",
+    "carla_planar_twist_to_robot_sf",
     "check_carla_availability",
     "compare_oracle_replay_metrics",
     "docker_runtime",
@@ -126,6 +129,7 @@ __all__ = [
     "read_export_payload",
     "require_carla",
     "resolve_export_manifest_payload_paths",
+    "robot_sf_planar_twist_to_carla",
     "robot_sf_pose_to_carla_transform",
     "run_carla_docker_live_replay",
     "run_carla_docker_preflight",

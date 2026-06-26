@@ -9,6 +9,7 @@ from robot_sf.planner.topology_guided_local_policy import (
     TopologyGuidedHybridRulePlannerAdapter,
     _apply_primary_route_reuse_penalty,
     _finalize_near_parity_gate_diagnostic,
+    _recent_primary_route_progress,
     build_topology_guided_local_policy_config,
 )
 
@@ -756,3 +757,234 @@ def test_progress_gate_single_primary_selection_does_not_suppress() -> None:
     assert result["primary_route_recent_progress_m"] == 0.0
     assert result["primary_route_recent_progress_sample_count"] == 1
     assert result["primary_route_progress_gate_satisfied"] is False
+
+
+# ---------------------------------------------------------------------------
+# Issue #3463: route-progress stall hardening + explicit gate-threshold config
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_progress_accounting_uses_oldest_minus_newest() -> None:
+    """Default (legacy) accounting compares the oldest and newest recent samples."""
+    config = _config()
+
+    progress = _recent_primary_route_progress(config, [3.0, 10.0, 2.0])
+
+    # Oldest (3.0) - newest (2.0) = 1.0; the transient 10.0 spike is ignored.
+    assert config.primary_route_progress_gate_use_monotone_accounting is False
+    assert progress == pytest.approx(1.0)
+
+
+def test_legacy_progress_accounting_clamps_replan_bump_to_zero() -> None:
+    """A single re-plan that raises the newest remaining masks progress under legacy mode."""
+    config = _config()
+
+    # Robot advanced from 3.0 -> 2.0 then a re-plan bumped the latest remaining to 3.5.
+    progress = _recent_primary_route_progress(config, [3.0, 2.0, 3.5])
+
+    # Legacy oldest-minus-newest = 3.0 - 3.5 < 0, clamped to 0.0: the stall failure mode.
+    assert progress == 0.0
+
+
+def test_monotone_progress_accounting_survives_replan_bump() -> None:
+    """Monotone accounting uses the max baseline so a re-plan bump does not mask progress."""
+    config = _config(primary_route_progress_gate_use_monotone_accounting=True)
+
+    progress = _recent_primary_route_progress(config, [3.0, 2.0, 3.5])
+
+    # max(3.5, 3.0, 2.0) - newest(3.5) = 0.0 here because the bump *is* the newest.
+    assert progress == 0.0
+    # But when the newest is the smallest, monotone recovers the full advance.
+    progress2 = _recent_primary_route_progress(config, [3.0, 4.0, 1.0])
+    assert progress2 == pytest.approx(3.0)
+
+
+def test_monotone_accounting_does_not_change_simple_monotone_progress() -> None:
+    """On a cleanly decreasing window both accounting modes agree (regression safety)."""
+    samples = [5.0, 4.0, 3.0, 2.0]
+    legacy = _recent_primary_route_progress(_config(), samples)
+    monotone = _recent_primary_route_progress(
+        _config(primary_route_progress_gate_use_monotone_accounting=True), samples
+    )
+
+    assert legacy == pytest.approx(3.0)
+    assert monotone == pytest.approx(3.0)
+
+
+def test_monotone_accounting_suppresses_penalty_through_replan_noise() -> None:
+    """Monotone accounting can prove progress and suppress the penalty despite a re-plan bump."""
+    from collections import deque
+
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_weight=10.0,
+        primary_route_reuse_penalty_cooldown_steps=5,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+        near_parity_diversity_gate_enabled=True,
+        near_parity_route_distance_slack_m=100.0,
+        near_parity_route_distance_slack_ratio=100.0,
+        near_parity_static_clearance_floor_m=100.0,
+        near_parity_diversity_bonus=0.0,
+        primary_route_progress_gate_enabled=True,
+        primary_route_progress_gate_threshold_m=0.3,
+        primary_route_progress_gate_use_monotone_accounting=True,
+    )
+    primary = {"hypothesis_id": "primary_route", "score": -5.0, "selection_score": -5.0}
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+    }
+    # Real progress 4.0 -> 3.0 with a transient re-plan bump to 4.2 in the middle.
+    recent = deque(
+        [("primary_route", 4.0), ("primary_route", 4.2), ("primary_route", 3.0)], maxlen=5
+    )
+
+    result = _apply_primary_route_reuse_penalty(config, [primary, alt], recent)
+
+    assert result["primary_route_progress_accounting_mode"] == "monotone"
+    assert result["primary_route_recent_progress_m"] == pytest.approx(1.2)
+    assert result["primary_route_progress_gate_satisfied"] is True
+    assert result["reuse_penalty_suppressed_by_progress"] is True
+    assert result["reuse_penalty_applied"] is False
+    assert float(primary["selection_score"]) == -5.0
+
+
+def test_legacy_accounting_fires_penalty_through_replan_noise() -> None:
+    """The same re-plan noise under legacy accounting fails to prove progress (baseline)."""
+    from collections import deque
+
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_weight=10.0,
+        primary_route_reuse_penalty_cooldown_steps=5,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+        near_parity_diversity_gate_enabled=True,
+        near_parity_route_distance_slack_m=100.0,
+        near_parity_route_distance_slack_ratio=100.0,
+        near_parity_static_clearance_floor_m=100.0,
+        near_parity_diversity_bonus=0.0,
+        primary_route_progress_gate_enabled=True,
+        primary_route_progress_gate_threshold_m=0.3,
+    )
+    primary = {"hypothesis_id": "primary_route", "score": -5.0, "selection_score": -5.0}
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+    }
+    recent = deque(
+        [("primary_route", 3.2), ("primary_route", 3.0), ("primary_route", 3.4)], maxlen=5
+    )
+
+    result = _apply_primary_route_reuse_penalty(config, [primary, alt], recent)
+
+    # Legacy oldest(3.2) - newest(3.4) clamps to 0.0; gate not satisfied; penalty fires.
+    assert result["primary_route_progress_accounting_mode"] == "legacy"
+    assert result["primary_route_recent_progress_m"] == 0.0
+    assert result["primary_route_progress_gate_satisfied"] is False
+    assert result["reuse_penalty_applied"] is True
+
+
+def test_progress_gate_min_samples_config_parses_and_applies() -> None:
+    """Explicit min-samples threshold should parse and gate progress evaluation."""
+    config = _config(
+        primary_route_reuse_penalty_enabled=True,
+        primary_route_reuse_penalty_weight=10.0,
+        primary_route_reuse_penalty_cooldown_steps=5,
+        primary_route_reuse_penalty_min_prior_primary_selections=1,
+        near_parity_diversity_gate_enabled=True,
+        near_parity_route_distance_slack_m=100.0,
+        near_parity_route_distance_slack_ratio=100.0,
+        near_parity_static_clearance_floor_m=100.0,
+        near_parity_diversity_bonus=0.0,
+        primary_route_progress_gate_enabled=True,
+        primary_route_progress_gate_threshold_m=0.1,
+        primary_route_progress_gate_min_samples=3,
+    )
+    assert config.primary_route_progress_gate_min_samples == 3
+
+    from collections import deque
+
+    primary = {"hypothesis_id": "primary_route", "score": -5.0, "selection_score": -5.0}
+    alt = {
+        "hypothesis_id": "masked_cell_1_1",
+        "score": -6.0,
+        "selection_score": -6.0,
+        "near_parity_gate_reason": "eligible_near_parity_alternative",
+    }
+    # Two samples with clear progress, but the threshold now demands three samples.
+    recent = deque([("primary_route", 2.0), ("primary_route", 1.0)], maxlen=5)
+
+    result = _apply_primary_route_reuse_penalty(config, [primary, alt], recent)
+
+    assert result["primary_route_recent_progress_min_samples"] == 3
+    assert result["primary_route_progress_gate_satisfied"] is False
+    assert result["reuse_penalty_applied"] is True
+
+
+def test_progress_gate_default_min_samples_preserves_two() -> None:
+    """The default min-samples threshold must remain the historical value of 2."""
+    config = _config()
+
+    assert config.primary_route_progress_gate_min_samples == 2
+    assert config.primary_route_progress_gate_use_monotone_accounting is False
+
+
+def test_progress_gate_min_samples_below_two_fails_closed() -> None:
+    """A min-samples threshold below 2 cannot form a finite difference and must raise."""
+    with pytest.raises(ValueError, match="must be >= 2"):
+        _config(primary_route_progress_gate_min_samples=1)
+
+
+def test_progress_gate_min_samples_non_integer_fails_closed() -> None:
+    """A non-integer min-samples value must fail closed instead of silently defaulting."""
+    with pytest.raises(ValueError, match="must be an integer"):
+        _config(primary_route_progress_gate_min_samples="not-a-number")
+
+
+def test_progress_gate_threshold_non_finite_fails_closed() -> None:
+    """A non-finite progress threshold must raise rather than silently default."""
+    with pytest.raises(ValueError, match="must be finite"):
+        _config(primary_route_progress_gate_threshold_m=float("inf"))
+
+
+def test_progress_gate_threshold_nan_fails_closed() -> None:
+    """A NaN progress threshold must raise rather than silently default."""
+    with pytest.raises(ValueError, match="must be finite"):
+        _config(primary_route_progress_gate_threshold_m=float("nan"))
+
+
+def test_progress_accounting_mode_visible_in_decision_and_route_corridor() -> None:
+    """The accounting mode and min-samples threshold should be observable diagnostics."""
+    planner = TopologyGuidedHybridRulePlannerAdapter(
+        _config(
+            primary_route_reuse_penalty_enabled=True,
+            primary_route_reuse_penalty_weight=0.1,
+            primary_route_reuse_penalty_cooldown_steps=5,
+            primary_route_reuse_penalty_min_prior_primary_selections=1,
+            near_parity_diversity_gate_enabled=True,
+            near_parity_route_distance_slack_m=100.0,
+            near_parity_route_distance_slack_ratio=100.0,
+            near_parity_static_clearance_floor_m=100.0,
+            near_parity_diversity_bonus=0.0,
+            primary_route_progress_gate_enabled=True,
+            primary_route_progress_gate_threshold_m=0.1,
+            primary_route_progress_gate_use_monotone_accounting=True,
+            primary_route_progress_gate_min_samples=2,
+        )
+    )
+    obs = _obs(occupied_cells=_two_gap_wall())
+    planner._hypotheses_for_observation(obs)
+
+    decision = planner._hypotheses_for_observation(obs)
+    assert decision["primary_route_progress_accounting_mode"] == "monotone"
+    assert decision["primary_route_recent_progress_min_samples"] == 2
+
+    route_corridor = planner._route_corridor_diagnostics(obs, current_time=1.0)
+    assert route_corridor is not None
+    reuse_penalty = route_corridor["topology_reuse_penalty"]
+    assert reuse_penalty["primary_route_progress_accounting_mode"] == "monotone"
+    assert reuse_penalty["primary_route_recent_progress_min_samples"] == 2

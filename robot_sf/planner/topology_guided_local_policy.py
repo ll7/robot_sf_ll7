@@ -45,8 +45,15 @@ _TOPOLOGY_KEYS = {
     "primary_route_reuse_penalty_min_prior_primary_selections",
     "primary_route_progress_gate_enabled",
     "primary_route_progress_gate_threshold_m",
+    "primary_route_progress_gate_min_samples",
+    "primary_route_progress_gate_use_monotone_accounting",
     "route_hypothesis",
 }
+
+# Minimum number of recent primary-route route-remaining samples required before
+# route-progress can be evaluated. Two samples are the smallest pair that admits
+# a finite-difference progress estimate; this is the historical hardcoded value.
+_DEFAULT_PROGRESS_GATE_MIN_SAMPLES = 2
 
 
 @dataclass(frozen=True)
@@ -81,6 +88,8 @@ class TopologyGuidedLocalPolicyConfig:
     primary_route_reuse_penalty_min_prior_primary_selections: int = 2
     primary_route_progress_gate_enabled: bool = False
     primary_route_progress_gate_threshold_m: float = 0.0
+    primary_route_progress_gate_min_samples: int = _DEFAULT_PROGRESS_GATE_MIN_SAMPLES
+    primary_route_progress_gate_use_monotone_accounting: bool = False
 
 
 @dataclass(frozen=True)
@@ -376,6 +385,37 @@ def _finalize_near_parity_gate_diagnostic(
     return diagnostic
 
 
+def _recent_primary_route_progress(
+    config: TopologyGuidedLocalPolicyConfig,
+    recent_primary_distances: list[float],
+) -> float:
+    """Return recent primary-route progress in metres from route-remaining samples.
+
+    Two accounting modes are supported, both clamped to be non-negative:
+
+    * Legacy (default): ``oldest_sample - newest_sample`` over the recent window.
+      A single A* re-plan that transiently raises ``route_remaining`` can make
+      this underestimate (clamp to ``0``) even while the route is advancing,
+      which can let the reuse penalty fire while the primary route is in fact
+      still progressing -- the premature-stall failure mode.
+    * Monotone (opt-in via ``primary_route_progress_gate_use_monotone_accounting``):
+      ``max_sample - newest_sample``. Using the largest observed remaining
+      distance as the baseline makes the estimate robust to a single re-plan
+      bump, so steady progress is not masked by transient noise.
+
+    Returns:
+        float: Non-negative recent route-progress estimate in metres.
+    """
+    if len(recent_primary_distances) < 2:
+        return 0.0
+    newest = float(recent_primary_distances[-1])
+    if bool(config.primary_route_progress_gate_use_monotone_accounting):
+        baseline = max(float(value) for value in recent_primary_distances)
+    else:
+        baseline = float(recent_primary_distances[0])
+    return max(0.0, baseline - newest)
+
+
 def _apply_primary_route_reuse_penalty(
     config: TopologyGuidedLocalPolicyConfig,
     hypotheses: list[dict[str, Any]],
@@ -407,13 +447,13 @@ def _apply_primary_route_reuse_penalty(
         for hid, dist in recent_primary_selections
         if hid == "primary_route" and dist is not None
     ]
-    recent_progress_m = (
-        max(0.0, float(recent_primary_distances[0]) - float(recent_primary_distances[-1]))
-        if len(recent_primary_distances) >= 2
-        else 0.0
-    )
+    recent_progress_m = _recent_primary_route_progress(config, recent_primary_distances)
+    min_samples = max(int(config.primary_route_progress_gate_min_samples), 2)
     progress_gate_satisfied = False
-    if bool(config.primary_route_progress_gate_enabled) and len(recent_primary_distances) >= 2:
+    if (
+        bool(config.primary_route_progress_gate_enabled)
+        and len(recent_primary_distances) >= min_samples
+    ):
         progress_gate_satisfied = recent_progress_m >= float(
             config.primary_route_progress_gate_threshold_m
         )
@@ -424,6 +464,12 @@ def _apply_primary_route_reuse_penalty(
         "eligible_near_parity_alternative_exists": bool(eligible_alternative),
         "primary_route_recent_progress_m": recent_progress_m,
         "primary_route_recent_progress_sample_count": len(recent_primary_distances),
+        "primary_route_recent_progress_min_samples": int(min_samples),
+        "primary_route_progress_accounting_mode": (
+            "monotone"
+            if bool(config.primary_route_progress_gate_use_monotone_accounting)
+            else "legacy"
+        ),
         "primary_route_progress_gate_satisfied": bool(progress_gate_satisfied),
         "reuse_penalty_suppressed_by_progress": False,
     }
@@ -457,6 +503,51 @@ def _apply_primary_route_reuse_penalty(
     return diagnostic
 
 
+def _finite_float_field(raw: dict[str, Any], key: str, default: float) -> float:
+    """Return a finite float config field, failing closed on non-finite input.
+
+    Returns:
+        float: The parsed finite value.
+
+    Raises:
+        ValueError: If the provided value is not a finite number.
+    """
+    try:
+        value = float(raw.get(key, default))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Topology config '{key}' must be a finite number, got {raw.get(key)!r}."
+        ) from exc
+    if not np.isfinite(value):
+        raise ValueError(f"Topology config '{key}' must be finite, got {value!r}.")
+    return value
+
+
+def _progress_gate_min_samples(raw: dict[str, Any]) -> int:
+    """Return the validated minimum-samples threshold for the progress gate.
+
+    Returns:
+        int: The minimum number of recent primary-route samples (>= 2).
+
+    Raises:
+        ValueError: If the value is not an integer, is non-finite, or is below 2.
+    """
+    value = raw.get("primary_route_progress_gate_min_samples", _DEFAULT_PROGRESS_GATE_MIN_SAMPLES)
+    try:
+        samples = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Topology config 'primary_route_progress_gate_min_samples' must be an integer, "
+            f"got {value!r}."
+        ) from exc
+    if samples < 2:
+        raise ValueError(
+            "Topology config 'primary_route_progress_gate_min_samples' must be >= 2 "
+            f"(a finite difference needs two samples), got {samples}."
+        )
+    return samples
+
+
 def build_topology_guided_local_policy_config(
     cfg: dict[str, Any] | None,
 ) -> TopologyGuidedLocalPolicyConfig:
@@ -464,6 +555,10 @@ def build_topology_guided_local_policy_config(
 
     Returns:
         Parsed topology-guided local policy configuration.
+
+    Raises:
+        ValueError: If a numeric progress-gate field is non-finite, or if
+            ``primary_route_progress_gate_min_samples`` is below the minimum of 2.
     """
     raw = dict(cfg or {}) if isinstance(cfg, dict) else {}
     hybrid_payload = {key: value for key, value in raw.items() if key not in _TOPOLOGY_KEYS}
@@ -532,8 +627,12 @@ def build_topology_guided_local_policy_config(
         primary_route_progress_gate_enabled=bool(
             raw.get("primary_route_progress_gate_enabled", False)
         ),
-        primary_route_progress_gate_threshold_m=float(
-            raw.get("primary_route_progress_gate_threshold_m", 0.0)
+        primary_route_progress_gate_threshold_m=_finite_float_field(
+            raw, "primary_route_progress_gate_threshold_m", 0.0
+        ),
+        primary_route_progress_gate_min_samples=_progress_gate_min_samples(raw),
+        primary_route_progress_gate_use_monotone_accounting=bool(
+            raw.get("primary_route_progress_gate_use_monotone_accounting", False)
         ),
     )
 
@@ -795,6 +894,12 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             "primary_route_recent_progress_m": topology.get("primary_route_recent_progress_m", 0.0),
             "primary_route_recent_progress_sample_count": topology.get(
                 "primary_route_recent_progress_sample_count", 0
+            ),
+            "primary_route_recent_progress_min_samples": topology.get(
+                "primary_route_recent_progress_min_samples", _DEFAULT_PROGRESS_GATE_MIN_SAMPLES
+            ),
+            "primary_route_progress_accounting_mode": topology.get(
+                "primary_route_progress_accounting_mode", "legacy"
             ),
             "primary_route_progress_gate_satisfied": topology.get(
                 "primary_route_progress_gate_satisfied", False

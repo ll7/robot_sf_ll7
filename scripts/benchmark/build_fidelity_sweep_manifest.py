@@ -11,7 +11,9 @@ from robot_sf.benchmark.fidelity_sensitivity import load_fidelity_sensitivity_co
 from robot_sf.benchmark.fidelity_sweep_manifest import (
     ManifestOptions,
     build_fidelity_sweep_manifest,
+    check_fidelity_sweep_manifest,
     write_fidelity_sweep_manifest,
+    write_fidelity_sweep_manifest_check,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +32,14 @@ def _git_head() -> str:
     except (FileNotFoundError, subprocess.SubprocessError):
         return "unknown"
     return result.stdout.strip() if result.returncode == 0 else "unknown"
+
+
+def _display_path(path: Path) -> Path:
+    """Return repo-relative path when possible, otherwise the original path."""
+    try:
+        return path.relative_to(REPO_ROOT)
+    except ValueError:
+        return path
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +61,11 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Required acknowledgement that this only builds a manifest and runs no sweep.",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Also write opt-in fidelity_sweep_manifest_check.json summary.",
+    )
     return parser.parse_args()
 
 
@@ -67,7 +82,11 @@ def main() -> int:
         ),
     )
     manifest_path = write_fidelity_sweep_manifest(manifest, REPO_ROOT / args.out)
-    print(f"wrote dry-run fidelity sweep manifest: {manifest_path.relative_to(REPO_ROOT)}")
+    print(f"wrote dry-run fidelity sweep manifest: {_display_path(manifest_path)}")
+    if args.check:
+        check_summary = check_fidelity_sweep_manifest(manifest)
+        check_path = write_fidelity_sweep_manifest_check(check_summary, REPO_ROOT / args.out)
+        print(f"wrote dry-run fidelity sweep manifest check: {_display_path(check_path)}")
     return 0
 
 

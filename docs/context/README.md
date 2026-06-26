@@ -1302,6 +1302,10 @@ knowledge, not every transient iteration detail.
 * [Issue #1024 H500 PPO Retrain](issue_1024_h500_ppo_retrain.md)
   records the all-available scenario surface, PR #1025 h500 horizon alignment, and SLURM job
   `12350` for the first 12M-step PPO retrain.
+* [Issue #2557 Recovered Reward-Curriculum Seed Runs](issue_2557_recovered_diagnostic_seeds.md)
+  records three reward-curriculum seed runs (506/508/509) whose manifests were lost to the
+  cross-worktree serializer bug and backfilled via #3590; diagnostic-tier only (marginal SNQI,
+  elevated collision), with an in-flight 501–511 variance fill.
 
 ## Performance Notes
 

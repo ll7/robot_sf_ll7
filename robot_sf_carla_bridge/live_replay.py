@@ -31,6 +31,66 @@ class _Actor(Protocol):
         """Remove the actor from the live CARLA world."""
 
 
+def robot_sf_planar_vector_to_carla(vector: dict[str, Any]) -> dict[str, float]:
+    """Mirror a Robot-SF planar vector into CARLA's left-handed x/y frame.
+
+    Returns:
+        Converted ``{"x", "y"}`` vector in CARLA coordinates.
+    """
+
+    return {"x": float(vector["x"]), "y": -float(vector["y"])}
+
+
+def carla_planar_vector_to_robot_sf(vector: dict[str, Any]) -> dict[str, float]:
+    """Mirror a CARLA planar vector back into Robot-SF's right-handed x/y frame.
+
+    Returns:
+        Converted ``{"x", "y"}`` vector in Robot-SF coordinates.
+    """
+
+    return {"x": float(vector["x"]), "y": -float(vector["y"])}
+
+
+def robot_sf_yaw_to_carla_degrees(theta_rad: float) -> float:
+    """Convert Robot-SF counter-clockwise yaw radians to CARLA yaw degrees.
+
+    Returns:
+        CARLA yaw angle in degrees.
+    """
+
+    return -math.degrees(float(theta_rad))
+
+
+def carla_yaw_degrees_to_robot_sf(yaw_degrees: float) -> float:
+    """Convert CARLA yaw degrees back to Robot-SF counter-clockwise yaw radians.
+
+    Returns:
+        Robot-SF yaw angle in radians.
+    """
+
+    return -math.radians(float(yaw_degrees))
+
+
+def robot_sf_angular_velocity_to_carla_radps(omega_radps: float) -> float:
+    """Convert Robot-SF yaw rate to CARLA yaw rate across handedness boundary.
+
+    Returns:
+        CARLA yaw rate in radians per second.
+    """
+
+    return -float(omega_radps)
+
+
+def carla_angular_velocity_to_robot_sf_radps(omega_radps: float) -> float:
+    """Convert CARLA yaw rate back to Robot-SF yaw rate across handedness boundary.
+
+    Returns:
+        Robot-SF yaw rate in radians per second.
+    """
+
+    return -float(omega_radps)
+
+
 def robot_sf_pose_to_carla_transform(
     carla_module: Any,
     pose: dict[str, Any],
@@ -48,9 +108,10 @@ def robot_sf_pose_to_carla_transform(
     """
 
     theta = float(pose.get("theta") or 0.0)
+    location = robot_sf_planar_vector_to_carla(pose)
     return carla_module.Transform(
-        carla_module.Location(x=float(pose["x"]), y=-float(pose["y"]), z=float(z)),
-        carla_module.Rotation(yaw=-math.degrees(theta)),
+        carla_module.Location(x=location["x"], y=location["y"], z=float(z)),
+        carla_module.Rotation(yaw=robot_sf_yaw_to_carla_degrees(theta)),
     )
 
 
@@ -318,8 +379,9 @@ def _spawn_static_obstacle_actors(
 def _static_obstacle_transform(carla_module: Any, bounds: dict[str, float]) -> Any:
     center_x = (bounds["min_x"] + bounds["max_x"]) / 2.0
     center_y = (bounds["min_y"] + bounds["max_y"]) / 2.0
+    center = robot_sf_planar_vector_to_carla({"x": center_x, "y": center_y})
     return carla_module.Transform(
-        carla_module.Location(x=center_x, y=-center_y, z=_DEFAULT_ACTOR_Z),
+        carla_module.Location(x=center["x"], y=center["y"], z=_DEFAULT_ACTOR_Z),
         carla_module.Rotation(yaw=0.0),
     )
 

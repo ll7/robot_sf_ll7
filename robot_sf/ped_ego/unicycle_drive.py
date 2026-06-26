@@ -128,7 +128,7 @@ class UnicycleDrivePedestrian:
         """Action-independent observation bounds for the unicycle pedestrian.
 
         Returns:
-            spaces.Box: 2D continuous box for speed and steering-angle constraints.
+            spaces.Box: 2D continuous box for speed and angular-velocity constraints.
         """
         high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
         low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
@@ -139,7 +139,7 @@ class UnicycleDrivePedestrian:
         """Action bounds accepted by the unicycle pedestrian.
 
         Returns:
-            spaces.Box: 2D continuous box with acceleration and steering limits.
+            spaces.Box: 2D continuous box with acceleration and angular-velocity limits.
         """
         high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
         low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
@@ -164,7 +164,7 @@ class UnicycleDrivePedestrian:
         """Integrate one control command for the configured time step.
 
         Args:
-            action: Unicycle control tuple ``(acceleration, steering)``.
+            action: Unicycle control tuple ``(acceleration, angular velocity)``.
             d_t: Integration duration in seconds.
         """
         self.movement.move(self.state, action, d_t)
@@ -181,7 +181,7 @@ class UnicycleDrivePedestrian:
         """Convert a 2-element action array to the unicycle action tuple.
 
         Args:
-            action: Array-like with ``[acceleration, steering]``.
+            action: Array-like with ``[acceleration, angular velocity]``.
 
         Returns:
             UnicycleAction: Parsed acceleration and angular velocity command tuple.

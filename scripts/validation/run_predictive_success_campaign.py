@@ -78,7 +78,15 @@ class MissingCampaignArtifactError(RuntimeError):
 def parse_args() -> argparse.Namespace:
     """Parse campaign CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoints", nargs="+", required=True)
+    parser.add_argument("--checkpoints", nargs="+")
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help=(
+            "Validate the scenario matrix, hard-seed manifest, and planner grid, then exit "
+            "without requiring checkpoints or running evaluation."
+        ),
+    )
     parser.add_argument(
         "--scenario-matrix",
         type=Path,
@@ -144,13 +152,19 @@ def _load_planner_variants(path: Path) -> list[dict]:
     if not isinstance(variants, list):
         raise TypeError(f"planner grid variants must be a list: {path}")
     out = []
-    for item in variants:
+    names: set[str] = set()
+    for index, item in enumerate(variants, start=1):
         if not isinstance(item, dict):
-            continue
-        name = str(item.get("name", "unnamed"))
+            raise TypeError(f"planner grid variant #{index} must be a mapping: {path}")
+        name = str(item.get("name", "")).strip()
+        if not name:
+            raise ValueError(f"planner grid variant #{index} has no name: {path}")
+        if name in names:
+            raise ValueError(f"planner grid contains duplicate variant name: {name}")
+        names.add(name)
         params = item.get("params", {})
         if not isinstance(params, dict):
-            params = {}
+            raise TypeError(f"planner grid variant params must be a mapping: {name}")
         out.append({"name": name, "params": params})
     if not out:
         raise RuntimeError(f"No planner variants found in {path}")
@@ -532,6 +546,34 @@ def main() -> int:
         raise RuntimeError("Hard-case manifest did not match any scenarios.")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    if getattr(args, "check_only", False):
+        summary = {
+            "contract_version": _CONTRACT_VERSION,
+            "training_family": _TRAINING_FAMILY,
+            "artifact_role": "predictive_success_campaign_manifest_check",
+            "status": "checked_no_evaluation_run",
+            "generated_at": datetime.now(UTC).isoformat(),
+            "scenario_matrix": str(args.scenario_matrix),
+            "hard_seed_manifest": str(args.hard_seed_manifest),
+            "planner_grid": str(args.planner_grid),
+            "hard_manifest_entries": len(hard_manifest),
+            "matched_hard_scenarios": len(hard_scenarios),
+            "planner_variants": [str(variant["name"]) for variant in variants],
+            "num_planner_variants": len(variants),
+            "scope_note": (
+                "Structural manifest/grid check only; no checkpoint evaluation, benchmark run, "
+                "or maneuver-authority success interpretation was performed."
+            ),
+        }
+        json_path = args.output_dir / "manifest_check_summary.json"
+        json_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        print(f"Wrote manifest check summary: {json_path}")
+        return 0
+
+    if not getattr(args, "checkpoints", None):
+        raise SystemExit("--checkpoints is required unless --check-only is set")
+
     results: list[dict] = []
 
     try:

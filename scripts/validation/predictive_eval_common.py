@@ -10,14 +10,24 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 
 def load_seed_manifest(path: Path) -> dict[str, list[int]]:
-    """Load scenario->seed map from YAML."""
+    """Load and validate scenario->seed map from YAML."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise TypeError(f"Seed manifest must be a mapping: {path}")
     out: dict[str, list[int]] = {}
     for key, value in payload.items():
-        if isinstance(value, list):
-            out[str(key)] = [int(v) for v in value]
+        scenario_id = str(key).strip()
+        if not scenario_id:
+            raise ValueError(f"Seed manifest contains an empty scenario id: {path}")
+        if not isinstance(value, list):
+            raise TypeError(f"Seed manifest entry must be a seed list: {scenario_id}")
+        if not value:
+            raise ValueError(f"Seed manifest entry has no seeds: {scenario_id}")
+
+        seeds = [int(v) for v in value]
+        if len(seeds) != len(set(seeds)):
+            raise ValueError(f"Seed manifest entry contains duplicate seeds: {scenario_id}")
+        out[scenario_id] = seeds
     return out
 
 

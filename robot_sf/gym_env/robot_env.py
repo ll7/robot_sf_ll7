@@ -805,7 +805,15 @@ class RobotEnv(BaseEnv):
             self.sim_ui.telemetry_session = self._telemetry_session
 
     def _rollover_proxy_record(self) -> dict[str, Any] | None:
-        """Return opt-in rollover proxy telemetry for the executed robot state."""
+        """Return opt-in rollover proxy telemetry for the executed robot state.
+
+        Assumes ``robot.current_speed`` is ``(linear_velocity, yaw_rate)``. This
+        holds for ``DifferentialDriveRobot`` and ``HolonomicDriveRobot``. It does
+        NOT hold for ``BicycleDriveRobot``, whose ``current_speed`` second element
+        is the heading angle, not the yaw rate; enabling the proxy with that drive
+        would mis-feed the margin. Tracked as follow-up rather than a default-path
+        concern because the proxy is opt-in and disabled by default (issue #3479).
+        """
         if not getattr(self.env_config, "rollover_proxy_enabled", False):
             return None
         current_speed = getattr(self.simulator.robots[0], "current_speed", None)
@@ -860,7 +868,14 @@ class RobotEnv(BaseEnv):
         if not rollover_critical:
             return reward
         penalty = float(getattr(self.env_config, "rollover_proxy_penalty", 0.0))
-        reward_dict["reward_terms"]["rollover_proxy_penalty"] = penalty
+        # Defensively normalize reward_terms before assignment: custom reward
+        # functions may leave it absent or set it to a non-dict value, mirroring
+        # the guard in `_extract_reward_terms`.
+        reward_terms = reward_dict.get("reward_terms")
+        if not isinstance(reward_terms, dict):
+            reward_terms = {}
+            reward_dict["reward_terms"] = reward_terms
+        reward_terms["rollover_proxy_penalty"] = penalty
         return reward + penalty
 
     def step(self, action):

@@ -240,6 +240,24 @@ def test_runtime_rollover_proxy_over_yaw_trips_terminal_penalty() -> None:
     assert info["meta"]["reward_terms"]["rollover_proxy_penalty"] == pytest.approx(-4.0)
 
 
+def test_runtime_rollover_proxy_penalty_handles_non_dict_reward_terms() -> None:
+    """Penalty assignment is robust when a reward function clobbers reward_terms."""
+    env = _make_step_env(penalty=-4.0)
+
+    def _reward_func(meta: dict) -> float:
+        # Custom reward functions may leave reward_terms as a non-dict value.
+        meta["reward_terms"] = None
+        return 1.0
+
+    env.reward_func = _reward_func
+
+    _obs, reward, terminated, _truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(-3.0)
+    assert terminated is True
+    assert info["meta"]["reward_terms"]["rollover_proxy_penalty"] == pytest.approx(-4.0)
+
+
 def test_runtime_rollover_proxy_disabled_by_default_keeps_step_semantics() -> None:
     """Disabled proxy leaves even over-yaw toy command nonterminal."""
     env = _make_step_env(rollover_enabled=False, penalty=-4.0)

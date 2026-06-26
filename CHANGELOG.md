@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a regression guard for **pygame-free headless execution** (#3631). A subprocess-probe test
+  (`tests/test_pygame_headless.py::test_headless_step_does_not_import_pygame`) builds and **steps** the
+  env under forced-headless drivers and asserts `pygame` is never imported and no `sim_ui` is created —
+  extending the no-pygame contract from env *construction* (already covered) through a full step, which
+  the issue's reproduction specifically targets. The headless path was verified already pygame-free, so
+  this is a test-only guard (a negative probe with an injected `import pygame` flips it red, confirming
+  it is not vacuous).
 * Began the #3463 corrective engineering for the topology near-parity selector lane (diagnostic-tier,
   no benchmark claim). `TopologyGuidedLocalPolicyConfig` gains two current-behavior-preserving knobs:
   `primary_route_progress_gate_use_monotone_accounting` (default `False`) hardens primary-route

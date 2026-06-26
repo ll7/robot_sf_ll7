@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.adversarial.archive import curate_failure_archive
+from robot_sf.adversarial.archive import (
+    curate_failure_archive,
+    failure_archive_feature_rows,
+    failure_archive_index,
+)
 from scripts.tools.curate_adversarial_failure_archive import main as archive_cli_main
 
 
@@ -212,6 +216,79 @@ def test_simulation_error_candidates_excluded_from_archive(tmp_path: Path) -> No
     assert archive["summary"]["source_candidate_count"] == 6, (
         "source_candidate_count must still count simulation_error for budget auditing"
     )
+
+
+def test_failure_archive_feature_rows_are_deterministic_export_slice(tmp_path: Path) -> None:
+    """Archive feature rows expose stable scalar metadata for proposal fixtures."""
+    manifest_path = _manifest(tmp_path)
+    archive = curate_failure_archive([manifest_path], output_path=tmp_path / "archive.json")
+
+    rows = failure_archive_feature_rows(archive)
+
+    assert [row["archive_id"] for row in rows] == [
+        "failure_0000",
+        "failure_0001",
+        "failure_0002",
+    ]
+    assert rows[0] == {
+        "archive_id": "failure_0000",
+        "cluster_key": (
+            '{"policy":"goal","primary_failure":"collision",'
+            '"scenario_template":"configs/scenarios/templates/crossing_ttc.yaml",'
+            '"termination_reason":"collision"}'
+        ),
+        "source_manifest": manifest_path.as_posix(),
+        "source_candidate_index": 0,
+        "bundle_path": "output/adversarial/run/candidate_0000",
+        "scenario_yaml_path": "output/adversarial/run/candidate_0000/scenario.yaml",
+        "start_x": 0.25,
+        "start_y": 2.0,
+        "goal_x": 5.0,
+        "goal_y": 2.0,
+        "spawn_time_s": 0.0,
+        "pedestrian_speed_mps": 1.0,
+        "pedestrian_delay_s": 0.0,
+        "scenario_seed": 7.0,
+        "objective_value": 9.0,
+        "primary_failure": "collision",
+        "termination_reason": "collision",
+        "normalized_perturbation": 0.4375,
+        "replay_command": (
+            "uv run robot_sf_bench run --matrix "
+            "output/adversarial/run/candidate_0000/scenario.yaml "
+            "--out output/adversarial/run/candidate_0000/episode_records_replay.jsonl "
+            "--algo goal --no-video"
+        ),
+    }
+
+
+def test_failure_archive_index_groups_export_rows(tmp_path: Path) -> None:
+    """Archive index supports lookup by id, mechanism, failure, and seed."""
+    archive = curate_failure_archive([_manifest(tmp_path)], output_path=tmp_path / "archive.json")
+
+    index = failure_archive_index(archive)
+
+    assert index["schema_version"] == "adversarial_failure_archive_index.v1"
+    assert index["row_count"] == 3
+    assert sorted(index["by_archive_id"]) == ["failure_0000", "failure_0001", "failure_0002"]
+    assert index["by_primary_failure"] == {
+        "collision": ["failure_0000", "failure_0001"],
+        "timeout": ["failure_0002"],
+    }
+    assert index["by_scenario_seed"] == {
+        "7": ["failure_0000"],
+        "8": ["failure_0001"],
+        "9": ["failure_0002"],
+    }
+
+
+def test_failure_archive_feature_rows_reject_malformed_archives() -> None:
+    """Export helpers fail closed for non-archive payloads."""
+    with pytest.raises(ValueError, match="Unsupported failure archive schema"):
+        failure_archive_feature_rows({"schema_version": "unexpected", "entries": []})
+
+    with pytest.raises(ValueError, match="entries must be a list"):
+        failure_archive_index({"schema_version": "adversarial_failure_archive.v1", "entries": {}})
 
 
 def test_curate_failure_archive_cli_writes_summary(

@@ -69,7 +69,7 @@ def _spaces_compatible(  # noqa: C901
                 other_space,
                 allow_box_bounds_mismatch=allow_box_bounds_mismatch,
             )
-            for base_space, other_space in zip(base.spaces, other.spaces, strict=False)
+            for base_space, other_space in zip(base.spaces, other.spaces, strict=True)
         )
     return base == other
 

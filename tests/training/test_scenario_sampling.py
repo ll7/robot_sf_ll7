@@ -69,6 +69,19 @@ def test_spaces_compatible_allows_bounds_mismatch() -> None:
     assert _spaces_compatible(base, other, allow_box_bounds_mismatch=True) is True
 
 
+def test_spaces_compatible_rejects_tuple_length_mismatch() -> None:
+    """Tuple compatibility rejects mismatched child-space counts."""
+    base = spaces.Tuple(
+        (
+            spaces.Discrete(2),
+            spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32),
+        )
+    )
+    other = spaces.Tuple((spaces.Discrete(2),))
+
+    assert _spaces_compatible(base, other, allow_box_bounds_mismatch=True) is False
+
+
 def test_scenario_sampler_cycles_and_filters() -> None:
     """Sampler should honor include filters and cycle strategy."""
     sampler = ScenarioSampler(

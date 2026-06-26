@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **fail-closed planner observation-view integrity guard** in the benchmark runner (#3634,
+  the runtime guard deferred from #3568). New `robot_sf/benchmark/map_runner_view_integrity.py`
+  (`evaluate_effective_view_integrity` + `DegeneratePlannerViewError`, reason `degenerate_planner_view`)
+  is checked on the first step in `map_runner_episode.py`: when the observation handed to the planner
+  contains pedestrians (`observation_ped_count > 0`) but the planner's own extractor returns zero — and
+  the planner is not pedestrian-blind-by-design (per its `observation_spec.inputs`) — the runner raises
+  **before any metrics are recorded**, instead of silently emitting collision "results" from a blind
+  planner (the `stream_gap` failure class fixed in #3567). Ground truth is the *observation's own*
+  pedestrian count, so visibility-masked/occluded or genuinely-empty scenarios do not false-trip. The
+  passing diagnostic is stored at `record["integrity"]["effective_view"]`. 20 guard tests + 145
+  regression + 13 end-to-end episode tests pass.
 * Began the #3463 corrective engineering for the topology near-parity selector lane (diagnostic-tier,
   no benchmark claim). `TopologyGuidedLocalPolicyConfig` gains two current-behavior-preserving knobs:
   `primary_route_progress_gate_use_monotone_accounting` (default `False`) hardens primary-route

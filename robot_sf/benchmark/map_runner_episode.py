@@ -85,6 +85,9 @@ from robot_sf.benchmark.observation_noise import (
 )
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.pedestrian_control_trace import (
+    attach_pedestrian_control_trace,
+)
 from robot_sf.benchmark.planner_command_contract import (
     validate_planner_contract as _validate_planner_contract,
 )
@@ -735,6 +738,13 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "initial_goal_distance_m": initial_goal_distance,
             "steps": simulation_step_trace,
         }
+        attach_pedestrian_control_trace(
+            algo_meta,
+            scenario=scenario,
+            ped_positions=ped_pos_arr,
+            ped_forces=ped_forces_arr if record_forces else None,
+            dt=float(config.sim_config.time_per_step_in_secs),
+        )
     intent_summary = _intent_conditioned_behavior_summary(
         scenario,
         single_pedestrian_intent_metadata,

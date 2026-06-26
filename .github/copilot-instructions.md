@@ -18,6 +18,13 @@ It is everyones guide on how to use this repository effectively.
 - Make everything honest, transparent, and reproducible.
 - In benchmark work, use the canonical fail-closed fallback policy in
   `docs/context/issue_691_benchmark_fallback_policy.md`.
+- Before generating PRs, apply these authoring guardrails:
+  - Diagnostic producers that return floats must reject non-finite input and fail closed; use
+    `robot_sf/benchmark/counterfactual_pair.py` as the local example.
+  - Do not add absolute home-directory paths under `configs/**` unless the path is explicitly
+    annotated as machine-local and not portable.
+  - When cloning a config, update the provenance or issue comment so the copied config points at
+    the correct issue, source, and intended run context.
 - For GitHub issue batches and Project #5 writes, follow the batch-first workflow in
   `docs/context/issue_713_batch_first_issue_workflow.md`: clean up issues first, route project
   metadata second, run derived score sync last, use REST/local `git` for non-project state, reserve

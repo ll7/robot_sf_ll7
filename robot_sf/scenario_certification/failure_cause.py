@@ -23,9 +23,12 @@ from typing import Any
 
 FAILURE_CAUSE_SCHEMA = "scenario_failure_cause.v1"
 FEASIBILITY_DIAGNOSTIC_MANIFEST_SCHEMA = "scenario_feasibility_diagnostic_manifest.v1"
+FEASIBILITY_DIAGNOSTIC_EVIDENCE_SCHEMA = "scenario_feasibility_diagnostic_evidence.v1"
 
 DIAGNOSTIC_STATUS_NOT_RUN = "not_run"
 DIAGNOSTIC_STATUS_NEEDS_EVIDENCE = "needs_evidence"
+DIAGNOSTIC_STATUS_PASSED = "passed"
+DIAGNOSTIC_STATUS_FAILED = "failed"
 
 REQUIRED_DIAGNOSTIC_LANES = (
     "route_clearance",
@@ -33,6 +36,31 @@ REQUIRED_DIAGNOSTIC_LANES = (
     "extended_time_run",
     "oracle_or_scripted_controller",
 )
+
+_DIAGNOSTIC_LANE_ALIASES = {
+    "route-clearance": "route_clearance",
+    "route_clearance": "route_clearance",
+    "actor-free": "actor_free_run",
+    "actor-free-run": "actor_free_run",
+    "actor_free": "actor_free_run",
+    "actor_free_run": "actor_free_run",
+    "extended-time": "extended_time_run",
+    "extended-time-run": "extended_time_run",
+    "extended_time": "extended_time_run",
+    "extended_time_run": "extended_time_run",
+    "oracle": "oracle_or_scripted_controller",
+    "oracle-trajectory": "oracle_or_scripted_controller",
+    "oracle_trajectory": "oracle_or_scripted_controller",
+    "oracle_or_scripted_controller": "oracle_or_scripted_controller",
+    "scripted_controller": "oracle_or_scripted_controller",
+}
+
+_DIAGNOSTIC_LANE_TO_INPUT = {
+    "route_clearance": "route_feasible",
+    "actor_free_run": "actor_free_solved",
+    "extended_time_run": "extended_time_solved",
+    "oracle_or_scripted_controller": "oracle_solved",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +102,24 @@ class FeasibilityDiagnosticRow:
     evidence_status: str = DIAGNOSTIC_STATUS_NEEDS_EVIDENCE
     required_diagnostics: tuple[str, ...] = REQUIRED_DIAGNOSTIC_LANES
     notes: str = "Dry-run planning row only; no feasibility diagnostic was executed."
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticLaneEvidence:
+    """Observed outcome for one offline feasibility diagnostic lane.
+
+    Rows are intentionally small and synthetic-testable. They describe already-observed
+    route-clearance, actor-free, extended-time, or oracle/scripted-controller outcomes
+    without running a simulator, benchmark campaign, or planner.
+    """
+
+    family_id: str
+    lane: str
+    passed: bool | None
+    source: str
+    scenario_id: str | None = None
+    evidence_ref: str | None = None
+    notes: str = ""
 
 
 # Stable verdict vocabulary.
@@ -200,6 +246,127 @@ def feasibility_diagnostic_row_to_dict(row: FeasibilityDiagnosticRow) -> dict[st
     }
 
 
+def normalize_diagnostic_lane(lane: str) -> str:
+    """Return canonical diagnostic lane name or raise for unsupported lanes."""
+
+    normalized = _DIAGNOSTIC_LANE_ALIASES.get(str(lane).strip().lower().replace(" ", "_"))
+    if normalized is None:
+        expected = ", ".join(REQUIRED_DIAGNOSTIC_LANES)
+        raise ValueError(
+            f"Unsupported feasibility diagnostic lane '{lane}'. Expected one of: {expected}"
+        )
+    return normalized
+
+
+def diagnostic_lane_evidence_to_dict(row: DiagnosticLaneEvidence) -> dict[str, Any]:
+    """Convert an offline diagnostic lane observation to the report schema.
+
+    Returns:
+        JSON-safe diagnostic lane evidence row.
+    """
+
+    lane = normalize_diagnostic_lane(row.lane)
+    return {
+        "schema_version": FEASIBILITY_DIAGNOSTIC_EVIDENCE_SCHEMA,
+        "family_id": row.family_id,
+        "scenario_id": row.scenario_id,
+        "lane": lane,
+        "status": _diagnostic_status_from_passed(row.passed),
+        "passed": row.passed,
+        "source": row.source,
+        "evidence_ref": row.evidence_ref,
+        "notes": row.notes,
+    }
+
+
+def family_diagnostics_from_lane_evidence(
+    rows: Iterable[DiagnosticLaneEvidence],
+    *,
+    any_planner_succeeded: bool = False,
+) -> FamilyDiagnostics:
+    """Aggregate offline lane observations into the classifier input model.
+
+    Conflicting pass/fail values for the same diagnostic lane are rejected because
+    silently choosing one would make the failure-cause verdict non-reproducible.
+    Missing lanes remain ``None`` and therefore classify as ``indeterminate``.
+
+    Returns:
+        Aggregated classifier input model.
+    """
+
+    values: dict[str, bool | None] = {
+        "route_feasible": None,
+        "actor_free_solved": None,
+        "extended_time_solved": None,
+        "oracle_solved": None,
+    }
+    seen: dict[str, bool] = {}
+    for row in rows:
+        lane = normalize_diagnostic_lane(row.lane)
+        input_name = _DIAGNOSTIC_LANE_TO_INPUT[lane]
+        if row.passed is None:
+            continue
+        previous = seen.get(input_name)
+        if previous is not None and previous != row.passed:
+            raise ValueError(
+                f"Conflicting feasibility diagnostic evidence for lane '{lane}': "
+                f"{previous!r} vs {row.passed!r}"
+            )
+        seen[input_name] = row.passed
+        values[input_name] = row.passed
+    return FamilyDiagnostics(
+        any_planner_succeeded=any_planner_succeeded,
+        route_feasible=values["route_feasible"],
+        actor_free_solved=values["actor_free_solved"],
+        extended_time_solved=values["extended_time_solved"],
+        oracle_solved=values["oracle_solved"],
+    )
+
+
+def build_feasibility_diagnostic_evidence_report(
+    rows: Iterable[DiagnosticLaneEvidence],
+    *,
+    source: str,
+    any_planner_succeeded_by_family: Mapping[str, bool] | None = None,
+) -> dict[str, Any]:
+    """Build a diagnostic-only evidence report and per-family failure-cause verdicts.
+
+    Returns:
+        Versioned diagnostic-only evidence report.
+    """
+
+    planner_success = any_planner_succeeded_by_family or {}
+    grouped: dict[str, list[DiagnosticLaneEvidence]] = {}
+    rendered_rows: list[dict[str, Any]] = []
+    for row in rows:
+        rendered_rows.append(diagnostic_lane_evidence_to_dict(row))
+        grouped.setdefault(row.family_id, []).append(row)
+
+    verdicts = []
+    for family_id in sorted(grouped):
+        diagnostics = family_diagnostics_from_lane_evidence(
+            grouped[family_id],
+            any_planner_succeeded=bool(planner_success.get(family_id, False)),
+        )
+        verdicts.append(
+            {
+                "family_id": family_id,
+                "failure_cause_verdict": classify_failure_cause(diagnostics),
+            }
+        )
+
+    return {
+        "schema_version": FEASIBILITY_DIAGNOSTIC_EVIDENCE_SCHEMA,
+        "issue": "3484",
+        "evidence_kind": "diagnostic_observation",
+        "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+        "source": source,
+        "row_count": len(rendered_rows),
+        "rows": rendered_rows,
+        "family_verdicts": verdicts,
+    }
+
+
 def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
     """Return the best available scenario-family identifier."""
 
@@ -266,11 +433,28 @@ def _decide(d: FamilyDiagnostics) -> tuple[str, str]:
     )
 
 
+def _diagnostic_status_from_passed(passed: bool | None) -> str:
+    """Convert tri-state pass/fail evidence into stable report status.
+
+    Returns:
+        Stable diagnostic status string.
+    """
+
+    if passed is True:
+        return DIAGNOSTIC_STATUS_PASSED
+    if passed is False:
+        return DIAGNOSTIC_STATUS_FAILED
+    return DIAGNOSTIC_STATUS_NOT_RUN
+
+
 __all__ = [
+    "DIAGNOSTIC_STATUS_FAILED",
     "DIAGNOSTIC_STATUS_NEEDS_EVIDENCE",
     "DIAGNOSTIC_STATUS_NOT_RUN",
+    "DIAGNOSTIC_STATUS_PASSED",
     "DYNAMIC_BLOCKING_OR_DEADLOCK",
     "FAILURE_CAUSE_SCHEMA",
+    "FEASIBILITY_DIAGNOSTIC_EVIDENCE_SCHEMA",
     "FEASIBILITY_DIAGNOSTIC_MANIFEST_SCHEMA",
     "INDETERMINATE",
     "INFEASIBLE_ROUTE",
@@ -279,9 +463,14 @@ __all__ = [
     "REQUIRED_DIAGNOSTIC_LANES",
     "TIME_LIMITED",
     "VEHICLE_INFEASIBLE",
+    "DiagnosticLaneEvidence",
     "FamilyDiagnostics",
     "FeasibilityDiagnosticRow",
+    "build_feasibility_diagnostic_evidence_report",
     "build_feasibility_diagnostic_manifest",
     "classify_failure_cause",
+    "diagnostic_lane_evidence_to_dict",
+    "family_diagnostics_from_lane_evidence",
     "feasibility_diagnostic_row_to_dict",
+    "normalize_diagnostic_lane",
 ]

@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.scenario_certification.failure_cause import (
     DYNAMIC_BLOCKING_OR_DEADLOCK,
     FAILURE_CAUSE_SCHEMA,
+    FEASIBILITY_DIAGNOSTIC_EVIDENCE_SCHEMA,
     INDETERMINATE,
     INFEASIBLE_ROUTE,
     NOT_UNIVERSALLY_FAILING,
     PLANNER_LIMITED,
     TIME_LIMITED,
     VEHICLE_INFEASIBLE,
+    DiagnosticLaneEvidence,
     FamilyDiagnostics,
+    build_feasibility_diagnostic_evidence_report,
     classify_failure_cause,
+    diagnostic_lane_evidence_to_dict,
+    family_diagnostics_from_lane_evidence,
 )
 
 
@@ -98,3 +105,72 @@ def test_verdict_is_schema_tagged_and_echoes_inputs() -> None:
     assert verdict["evidence_kind"] == "diagnostic_proxy"
     assert verdict["inputs"]["route_feasible"] is False
     assert isinstance(verdict["rationale"], str) and verdict["rationale"]
+
+
+def test_diagnostic_lane_evidence_row_normalizes_oracle_trajectory_alias() -> None:
+    """Oracle-trajectory observations serialize without running any simulator work."""
+    row = diagnostic_lane_evidence_to_dict(
+        DiagnosticLaneEvidence(
+            family_id="head_on_corridor",
+            lane="oracle_trajectory",
+            passed=True,
+            source="synthetic-fixture",
+            scenario_id="head_on_corridor_tight",
+            evidence_ref="fixture://oracle-success",
+        )
+    )
+
+    assert row["schema_version"] == FEASIBILITY_DIAGNOSTIC_EVIDENCE_SCHEMA
+    assert row["lane"] == "oracle_or_scripted_controller"
+    assert row["status"] == "passed"
+    assert row["passed"] is True
+
+
+def test_family_diagnostics_aggregate_route_actor_time_and_oracle_lanes() -> None:
+    """Synthetic lane observations feed the existing failure-cause classifier."""
+    diagnostics = family_diagnostics_from_lane_evidence(
+        [
+            DiagnosticLaneEvidence("bottleneck", "route_clearance", True, "fixture"),
+            DiagnosticLaneEvidence("bottleneck", "actor_free_run", True, "fixture"),
+            DiagnosticLaneEvidence("bottleneck", "extended_time_run", False, "fixture"),
+            DiagnosticLaneEvidence("bottleneck", "oracle_trajectory", True, "fixture"),
+        ]
+    )
+
+    verdict = classify_failure_cause(diagnostics)
+
+    assert verdict["cause"] == PLANNER_LIMITED
+    assert verdict["evidence_complete"] is True
+    assert verdict["comparable_for_ranking"] is True
+
+
+def test_evidence_report_rejects_conflicting_lane_observations() -> None:
+    """Conflicting lane inputs fail closed instead of producing an arbitrary verdict."""
+    with pytest.raises(ValueError, match="Conflicting feasibility diagnostic evidence"):
+        build_feasibility_diagnostic_evidence_report(
+            [
+                DiagnosticLaneEvidence("cross_trap", "route_clearance", True, "fixture-a"),
+                DiagnosticLaneEvidence("cross_trap", "route-clearance", False, "fixture-b"),
+            ],
+            source="synthetic-fixture",
+        )
+
+
+def test_evidence_report_keeps_claim_boundary_diagnostic_only() -> None:
+    """The report schema must not present offline lane rows as benchmark evidence."""
+    report = build_feasibility_diagnostic_evidence_report(
+        [
+            DiagnosticLaneEvidence("cross_trap", "route_clearance", False, "fixture"),
+            DiagnosticLaneEvidence("bottleneck", "actor-free-run", None, "fixture"),
+        ],
+        source="synthetic-fixture",
+    )
+
+    assert report["schema_version"] == FEASIBILITY_DIAGNOSTIC_EVIDENCE_SCHEMA
+    assert report["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
+    assert report["row_count"] == 2
+    assert report["rows"][1]["status"] == "not_run"
+    assert report["family_verdicts"][0]["family_id"] == "bottleneck"
+    assert report["family_verdicts"][0]["failure_cause_verdict"]["cause"] == INDETERMINATE
+    assert report["family_verdicts"][1]["family_id"] == "cross_trap"
+    assert report["family_verdicts"][1]["failure_cause_verdict"]["cause"] == INFEASIBLE_ROUTE

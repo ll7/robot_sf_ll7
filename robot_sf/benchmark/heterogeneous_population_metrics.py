@@ -243,9 +243,12 @@ def per_archetype_metrics_from_control_trace(
         Versioned per-archetype metric report with trace provenance fields.
     """
 
+    # Record the same normalized key used for lookup so the provenance field never
+    # disagrees with the metric actually extracted (e.g. a padded " speed_m_s ").
+    normalized_metric_key = str(metric_key).strip()
     observations = pedestrian_metric_observations_from_control_trace(
         control_trace,
-        metric_key,
+        normalized_metric_key,
         reducer=reducer,
     )
     report = per_archetype_metrics(
@@ -254,7 +257,7 @@ def per_archetype_metrics_from_control_trace(
         cvar_alpha=cvar_alpha,
     )
     report["source"] = "pedestrian_control_trace"
-    report["metric_key"] = metric_key
+    report["metric_key"] = normalized_metric_key
     report["pedestrian_metric_reducer"] = reducer
     return report
 

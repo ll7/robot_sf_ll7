@@ -145,6 +145,17 @@ def test_per_archetype_metrics_from_control_trace_keeps_trace_provenance() -> No
     assert report["per_archetype"]["hurried"]["mean"] == pytest.approx(0.7)
 
 
+def test_per_archetype_metrics_from_control_trace_normalizes_metric_key_provenance() -> None:
+    """A padded metric key is normalized for lookup and recorded normalized in provenance."""
+
+    report = per_archetype_metrics_from_control_trace(
+        _control_trace(),
+        "  speed_m_s  ",
+    )
+
+    assert report["metric_key"] == "speed_m_s"
+
+
 def test_control_trace_extraction_supports_final_step_reducer() -> None:
     """Final-step extraction supports endpoint-style per-pedestrian metrics."""
 

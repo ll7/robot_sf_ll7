@@ -7,6 +7,8 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
+from loguru import logger
+
 from robot_sf.benchmark.snqi import WEIGHT_NAMES, compute_snqi
 from robot_sf.benchmark.snqi.weights_validation import validate_weights_mapping
 
@@ -125,6 +127,61 @@ def default_training_snqi_context() -> TrainingSNQIContext:
     )
 
 
+def _resolve_snqi_weights(weights_path: Path | None) -> tuple[dict[str, float], str]:
+    """Load SNQI weights from JSON, falling back to defaults on invalid input.
+
+    Returns:
+        Resolved weights and the source label.
+    """
+    if weights_path is None:
+        return dict(_DEFAULT_SNQI_WEIGHTS), "default"
+
+    try:
+        raw_weights = json.loads(weights_path.read_text(encoding="utf-8"))
+        weights_mapping = _extract_weights_mapping(raw_weights)
+        return validate_weights_mapping(weights_mapping), str(weights_path)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        logger.warning(
+            "Failed to load SNQI weights from {}; using default weights: {}",
+            weights_path,
+            exc,
+        )
+        return dict(_DEFAULT_SNQI_WEIGHTS), "default"
+
+
+def _resolve_snqi_baseline(
+    baseline_path: Path | None,
+) -> tuple[dict[str, dict[str, float]], str, tuple[str, ...]]:
+    """Load SNQI baseline stats from JSON, falling back to defaults on invalid input.
+
+    Returns:
+        Resolved baseline stats, source label, and fallback keys.
+    """
+    if baseline_path is None:
+        return (
+            {key: dict(value) for key, value in _DEFAULT_SNQI_BASELINE.items()},
+            "default",
+            (),
+        )
+
+    try:
+        raw_baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+        baseline_mapping = _extract_baseline_mapping(raw_baseline)
+        baseline_stats, baseline_fallback_keys = _normalize_baseline_mapping(baseline_mapping)
+        return baseline_stats, str(baseline_path), baseline_fallback_keys
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        logger.warning(
+            "Failed to load SNQI baseline stats from {}; using default baseline stats: {}",
+            baseline_path,
+            exc,
+        )
+        return (
+            {key: dict(value) for key, value in _DEFAULT_SNQI_BASELINE.items()},
+            "default",
+            (),
+        )
+
+
 def resolve_training_snqi_context(
     *,
     weights_path: Path | None = None,
@@ -135,24 +192,8 @@ def resolve_training_snqi_context(
     Returns:
         Fully resolved context with sources and any required baseline key fallbacks.
     """
-    if weights_path is None:
-        weights = dict(_DEFAULT_SNQI_WEIGHTS)
-        weights_source = "default"
-    else:
-        raw_weights = json.loads(weights_path.read_text(encoding="utf-8"))
-        weights_mapping = _extract_weights_mapping(raw_weights)
-        weights = validate_weights_mapping(weights_mapping)
-        weights_source = str(weights_path)
-
-    if baseline_path is None:
-        baseline_stats = {key: dict(value) for key, value in _DEFAULT_SNQI_BASELINE.items()}
-        baseline_source = "default"
-        baseline_fallback_keys: tuple[str, ...] = ()
-    else:
-        raw_baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-        baseline_mapping = _extract_baseline_mapping(raw_baseline)
-        baseline_stats, baseline_fallback_keys = _normalize_baseline_mapping(baseline_mapping)
-        baseline_source = str(baseline_path)
+    weights, weights_source = _resolve_snqi_weights(weights_path)
+    baseline_stats, baseline_source, baseline_fallback_keys = _resolve_snqi_baseline(baseline_path)
 
     return TrainingSNQIContext(
         weights=weights,

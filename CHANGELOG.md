@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Began the #3463 corrective engineering for the topology near-parity selector lane (diagnostic-tier,
+  no benchmark claim). `TopologyGuidedLocalPolicyConfig` gains two current-behavior-preserving knobs:
+  `primary_route_progress_gate_use_monotone_accounting` (default `False`) hardens primary-route
+  progress accounting against premature stalls — a single A\* re-plan that transiently raises
+  `route_remaining` no longer masks real progress (uses `max_sample − newest` instead of
+  `oldest − newest`); and `primary_route_progress_gate_min_samples` (default `2`, the historical
+  hardcoded value) makes the progress-gate sample threshold explicit. Progress-gate config is now
+  fail-closed (non-finite threshold or `< 2` / non-integer min-samples raises `ValueError`), and the
+  accounting mode + sample threshold are surfaced in the `topology_reuse_penalty` diagnostics. Deferred
+  to follow-ups: command-arbitration-strength tuning, a registered candidate config + paired benchmark
+  diagnostic for the monotone variant, and any benchmark promotion (#3463).
 * Added a pre-commit lint that fails when a file under `configs/**` contains an absolute
   home-dir path (`/home/`, `/Users/`, `/root/`), which is non-portable for other contributors
   and automated runners. Intentional absolute paths (e.g. private-ops SLURM routing targets

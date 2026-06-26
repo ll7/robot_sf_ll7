@@ -17,6 +17,7 @@ import importlib.util
 import json
 import multiprocessing as mp
 import os
+import re
 import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -62,7 +63,7 @@ def frame_shape_from_map(map_svg_path: str) -> tuple[int, int]:
 
     viewbox = root.get("viewBox") or root.get("viewbox")
     if viewbox:
-        parts = viewbox.strip().split()
+        parts = [part for part in re.split(r"[\s,]+", viewbox.strip()) if part]
         if len(parts) == 4:
             try:
                 _, _, w, h = parts

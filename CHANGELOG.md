@@ -48,6 +48,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **context-note archival-sweep planner** (#3190):
+  [`scripts/tools/plan_context_note_archival.py`](scripts/tools/plan_context_note_archival.py)
+  consumes the existing freshness checker plus `docs/context/catalog.yaml` and proposes which notes
+  should move to `docs/context/archive/`. It classifies **high-confidence** candidates (catalog rows
+  marked `status: superseded` that already name a valid, existing replacement) and **review**
+  candidates (notes flagged stale by `check_context_note_freshness`), computes per-note archive
+  targets, and detects blocking conflicts (basename collisions or a pre-existing target). The planner
+  is **plan-only** — it never moves, writes, or deletes a note (`--json-output` emits a
+  maintainer-reviewable plan) — so the actual archival sweep stays a separate, review-gated PR per
+  issue #3190. It reuses (does not duplicate) the checker's catalog parsing and stale-note rules.
 * Added an **opt-in three-wheeled rollover proxy** runtime hook in `RobotEnv.step()` (#3479). When
   `rollover_proxy_enabled` is set, the env feeds the executed robot `current_speed`
   `(linear_velocity, yaw_rate)` into the existing `rollover_proxy.v1` closed-form stability margin,

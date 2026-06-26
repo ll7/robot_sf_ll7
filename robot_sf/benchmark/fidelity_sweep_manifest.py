@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from robot_sf.benchmark.fidelity_sensitivity import validate_fidelity_sensitivity_config
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
 FIDELITY_SWEEP_MANIFEST_SCHEMA = "fidelity-sweep-manifest.v1"
 FIDELITY_SWEEP_MANIFEST_CHECK_SCHEMA = "fidelity-sweep-manifest-check.v1"
@@ -102,6 +100,8 @@ def check_fidelity_sweep_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]
     Returns:
         JSON-serializable checker payload with coverage counts and boundary violations.
     """
+    if not isinstance(manifest, Mapping):
+        raise ValueError("fidelity sweep manifest must be a mapping")
     axes = manifest.get("axes")
     if not isinstance(axes, list):
         raise ValueError("fidelity sweep manifest must contain axes list")
@@ -184,11 +184,15 @@ def _check_manifest_axis(
     axis_payload_kinds: dict[str, int] = {}
     baseline_variants = 0
     unresolved_runtime_bindings = 0
+    actual_baseline_key = None
     for variant in variants:
         if not isinstance(variant, dict):
             raise ValueError("fidelity sweep manifest variant must be mapping")
-        baseline_variants += int(bool(variant.get("baseline", False)))
-        payload_kind = str(variant.get("payload_kind", "missing"))
+        if variant.get("baseline", False):
+            baseline_variants += 1
+            actual_baseline_key = variant.get("key")
+        payload_kind_value = variant.get("payload_kind")
+        payload_kind = str(payload_kind_value) if payload_kind_value is not None else "missing"
         payload_kind_counts[payload_kind] = payload_kind_counts.get(payload_kind, 0) + 1
         axis_payload_kinds[payload_kind] = axis_payload_kinds.get(payload_kind, 0) + 1
         if variant.get("runtime_binding_status") == UNRESOLVED_RUNTIME_BINDING:
@@ -201,6 +205,11 @@ def _check_manifest_axis(
 
     if baseline_variants != 1:
         violations.append(f"axis {axis.get('key')!r} must have exactly one baseline variant")
+    elif axis.get("baseline_variant") != actual_baseline_key:
+        violations.append(
+            f"axis {axis.get('key')!r} baseline_variant {axis.get('baseline_variant')!r} "
+            f"does not match baseline variant key {actual_baseline_key!r}"
+        )
     return {
         "variant_count": len(variants),
         "unresolved_runtime_binding_count": unresolved_runtime_bindings,

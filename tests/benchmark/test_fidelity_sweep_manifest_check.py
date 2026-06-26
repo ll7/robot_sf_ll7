@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
 from robot_sf.benchmark.fidelity_sensitivity import load_fidelity_sensitivity_config
 from robot_sf.benchmark.fidelity_sweep_manifest import (
     FIDELITY_SWEEP_MANIFEST_CHECK_SCHEMA,
@@ -80,6 +82,25 @@ def test_manifest_checker_fails_closed_on_evidence_boundary_violation() -> None:
     assert "manifest evidence_status must remain not_benchmark_evidence" in summary["violations"]
     assert any("not benchmark evidence" in violation for violation in summary["violations"])
     assert any("unresolved runtime binding" in violation for violation in summary["violations"])
+
+
+def test_manifest_checker_flags_baseline_variant_mismatch() -> None:
+    """Checker fails closed when axis baseline_variant no longer matches its baseline key."""
+    manifest = _repo_manifest()
+    manifest["axes"][0]["baseline_variant"] = "not-a-real-variant-key"
+
+    summary = check_fidelity_sweep_manifest(manifest)
+
+    assert summary["passes"] is False
+    assert any(
+        "does not match baseline variant key" in violation for violation in summary["violations"]
+    )
+
+
+def test_manifest_checker_rejects_non_mapping_manifest() -> None:
+    """Checker raises a clear error instead of AttributeError on a non-mapping manifest."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        check_fidelity_sweep_manifest(None)  # type: ignore[arg-type]
 
 
 def test_manifest_checker_json_output_is_deterministic(tmp_path: Path) -> None:

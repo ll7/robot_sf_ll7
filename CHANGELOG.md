@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prefix), so single-segment extension-less placeholders are treated as prose — while genuinely broken
   path references (e.g. `docs/does_not_exist.md`, `SLURM/missing/template.sl`) are still caught. The
   offending SKILL.md was left untouched; the fix is in the validator.
+* Added a **fail-closed route-clearance guard** to the camera-ready benchmark (#3628). The
+  originally-reported `0.0 m` centerline clearances in `classic_merging_*` / `classic_station_platform_*`
+  were already re-routed to positive margins on `main` (now +0.56 m and +2.5 m), but the preflight
+  only emitted *informational* warnings, so a route with a **negative** margin (centerline-to-obstacle
+  distance < robot radius = guaranteed collision) would still run silently. `prepare_campaign_preflight`
+  / `run_campaign` now raise `RouteClearanceError` on any `min_clearance_margin_m < 0` (certification
+  cannot excuse hard geometric infeasibility; tangent/positive-narrow geometry stays a warning), so
+  both `--mode preflight` and `--mode run` fail closed. Also corrected the stale
+  `route_clearance_certifications_v1.yaml` entries for the 3 repaired scenarios (`negative clearance` →
+  `repaired_geometry`). User-facing: the benchmark can no longer silently run a geometrically-impossible
+  route.
 * **`stream_gap` was blind in the real benchmark runner** (found while promoting the #3556 belief-mode safety contrast to `map_runner`). `StreamGapPlannerAdapter._extract_state` read the nested SOCNAV observation (`obs["robot"]`, `obs["pedestrians"]`) but `map_runner` feeds a flat observation (`robot_position`, `pedestrians_positions`, `goal_current`), so the planner extracted `robot=[0,0]`, `n_peds=0` and drove blind every episode. `_extract_state` now accepts both the nested and flat observation formats (backward-compatible; the ScenarioBelief harness and 24 existing tests still pass), and `robot_sf/benchmark/scenario_belief_policy_hook.py` reads the flat observation and writes the uncertainty sidecar to `pedestrians_uncertainty` where the fixed extractor reads it. After the fix the planner engages pedestrians and the belief modes differentiate in the real runner.
 
 ### Added

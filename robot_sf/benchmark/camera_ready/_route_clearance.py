@@ -14,11 +14,27 @@ from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.nav.svg_map_parser import convert_map
 
 _ROUTE_CLEARANCE_WARN_THRESHOLD_M = 0.5
+# A route whose centerline-to-obstacle margin is below this bound has its centerline closer to a
+# static obstacle than the robot's physical radius, so the footprint necessarily overlaps the
+# obstacle and the route is geometrically impossible to follow without collision. Such routes must
+# fail closed rather than run silently (see issue #3628).
+_ROUTE_CLEARANCE_FAIL_MARGIN_M = 0.0
 _ROUTE_CLEARANCE_CERTIFICATION_STATUSES = {
     "certified_stress_geometry",
     "excluded_from_planner_attribution",
     "repaired_geometry",
 }
+
+
+class RouteClearanceError(RuntimeError):
+    """Raised when a scenario route is geometrically impossible for the robot footprint.
+
+    This signals a fail-closed condition: at least one route centerline lies closer to a static
+    obstacle than the robot's physical radius, guaranteeing a collision. The benchmark must not
+    silently run such routes, and no clearance certification can excuse a negative margin because
+    it is a hard geometric infeasibility rather than intentional narrow-but-positive stress
+    geometry.
+    """
 
 
 def _route_clearance_scenario_id(scenario: dict[str, Any]) -> str:
@@ -284,3 +300,54 @@ def _build_route_clearance_warnings(
         warnings.append(warning)
     warnings.sort(key=lambda item: (item.get("scenario", ""), item.get("map_file", "")))
     return warnings
+
+
+def _assert_route_clearance_feasible(
+    warnings: list[dict[str, Any]],
+    *,
+    fail_margin_threshold_m: float = _ROUTE_CLEARANCE_FAIL_MARGIN_M,
+) -> None:
+    """Fail closed when any route is geometrically impossible for the robot footprint.
+
+    Scans the informational route-clearance warning rows and raises when any scenario reports a
+    centerline-to-obstacle margin below ``fail_margin_threshold_m`` (default ``0.0``), i.e. the
+    route centerline is closer to a static obstacle than the robot's physical radius. Such a route
+    guarantees a collision, so the benchmark must not run it silently (issue #3628). The check is
+    certification-independent: a negative margin is a hard geometric infeasibility, and clearance
+    certifications only document intentional narrow-but-positive stress geometry.
+
+    Raises:
+        RouteClearanceError: When at least one scenario has a sub-radius (negative) clearance
+            margin.
+    """
+    infeasible: list[dict[str, Any]] = []
+    for warning in warnings:
+        margin = warning.get("min_clearance_margin_m")
+        try:
+            margin_value = float(margin)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(margin_value):
+            continue
+        if margin_value < float(fail_margin_threshold_m):
+            infeasible.append(warning)
+    if not infeasible:
+        return
+    details = "; ".join(
+        "{scenario} (map={map_file}, margin={margin:.4f} m, "
+        "center_distance={center:.4f} m, robot_radius={radius:.4f} m)".format(
+            scenario=str(item.get("scenario", "unknown")),
+            map_file=str(item.get("map_file", "")),
+            margin=float(item.get("min_clearance_margin_m", float("nan"))),
+            center=float(item.get("min_center_distance_m", float("nan"))),
+            radius=float(item.get("robot_radius_m", float("nan"))),
+        )
+        for item in infeasible
+    )
+    raise RouteClearanceError(
+        "Route-clearance preflight failed closed: "
+        f"{len(infeasible)} scenario(s) have a route centerline closer to a static obstacle "
+        f"than the robot radius (margin < {float(fail_margin_threshold_m):.4f} m), making the "
+        f"route geometrically impossible to follow without collision: {details}. "
+        "Repair the route geometry before running the benchmark."
+    )

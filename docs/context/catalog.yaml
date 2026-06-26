@@ -2269,7 +2269,7 @@ entries:
   - path: docs/context/evidence/issue_2546_scenario_belief_uncertainty_2026-06-23/diagnostic_report.json
     status: evidence
     freshness: evidence
-    area: benchmark_evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_2661_topology_diagnostic_report_snapshot/report.json
     status: evidence
     freshness: evidence
@@ -2277,7 +2277,7 @@ entries:
   - path: docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
     status: evidence
     freshness: evidence
-    area: benchmark_evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_2754_signalized_failure_pack_smoke/summary.json
     status: evidence
     freshness: evidence
@@ -2309,7 +2309,7 @@ entries:
   - path: docs/context/evidence/issue_2919_scenario_prior_gap_2026-06-21/summary.json
     status: evidence
     freshness: evidence
-    area: benchmark_evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_2927_observation_quality_live_smoke/summary.json
     status: evidence
     freshness: evidence
@@ -2361,7 +2361,7 @@ entries:
   - path: docs/context/evidence/issue_3471_scenario_belief_episode_safety_2026-06-24/report.json
     status: evidence
     freshness: evidence
-    area: benchmark_evidence
+    area: learned_policy
   - path: docs/context/evidence/issue_3558_gate_threshold_sweep_2026-06-25/report.json
     status: evidence
     freshness: evidence
@@ -2394,10 +2394,12 @@ entries:
     status: evidence
     freshness: evidence
     area: predictive_planner
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_1692_topology_hypothesis_probe_2026-05-30
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_1937_ped_route_offset_2026-05-31/summary.json
     status: evidence
     freshness: evidence
@@ -2422,6 +2424,7 @@ entries:
     status: evidence
     freshness: evidence
     area: learned_policy
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/README.md
     status: evidence
     freshness: evidence
@@ -2486,6 +2489,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_2765_dense_pedestrian_stress_2026-06-14/summary.json
     status: evidence
     freshness: evidence
@@ -2494,6 +2498,7 @@ entries:
     status: evidence
     freshness: evidence
     area: predictive_planner
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_2921_first_use/report.json
     status: evidence
     freshness: evidence
@@ -2510,6 +2515,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_3192_external_prior_divergence/current_verdict.json
     status: evidence
     freshness: evidence
@@ -2530,6 +2536,7 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+    legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_3300_false_positive_actor_injection/README.md
     status: evidence
     freshness: evidence

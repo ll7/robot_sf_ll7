@@ -98,6 +98,10 @@ _AREA_RULES: tuple[tuple[str, str], ...] = (
     ("oracle", "learned_policy"),
     ("lidar_ppo", "learned_policy"),
     ("selector_orca", "learned_policy"),
+    # Scenario belief/prior evidence is learned-policy uncertainty work; keep it
+    # ahead of the generic ("scenario", "benchmark_evidence") fallback below.
+    ("scenario_belief", "learned_policy"),
+    ("scenario_prior", "learned_policy"),
     # Predictive / forecast planner evidence.
     ("predictive", "predictive_planner"),
     ("forecast", "predictive_planner"),
@@ -328,16 +332,19 @@ def build_proposal(repo_root: Path, *, catalog_path: Path = _CONTEXT_CATALOG) ->
         members = members_by_bundle.get(bundle_key, [])
         representative = _representative_member(members, repo_root)
         if representative is None:
-            if (repo_root / bundle_key).is_dir():
-                representative = bundle_key
-            else:
-                review.append(
-                    ReviewItem(
-                        bundle=bundle,
-                        reason="no checker-clean evidence file to reference (output/ or local paths)",
-                    )
+            # Fail closed: a bundle with no checker-clean representative file is
+            # left for human review rather than auto-cataloged at the directory
+            # level.  Emitting the directory would bypass the file-only durable
+            # evidence scan and silently admit output/local pointers; dirty
+            # bundles must be acknowledged explicitly (legacy_dirty_evidence) by
+            # a human instead.
+            review.append(
+                ReviewItem(
+                    bundle=bundle,
+                    reason="no checker-clean evidence file to reference (output/ or local paths)",
                 )
-                continue
+            )
+            continue
 
         proposed.append(
             ProposedEntry(

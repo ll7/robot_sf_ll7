@@ -139,6 +139,28 @@ def _campaign_scenario_id(scenario: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _scenario_with_kinematics(
+    scenario: dict[str, Any],
+    *,
+    kinematics: str,
+    holonomic_command_mode: str,
+) -> dict[str, Any]:
+    """Return a scenario copy patched for one robot kinematics mode.
+
+    Returns:
+        dict[str, Any]: Scenario payload with ``robot_config.type`` set.
+    """
+    patched = dict(scenario)
+    robot_cfg = (
+        dict(scenario.get("robot_config")) if isinstance(scenario.get("robot_config"), dict) else {}
+    )
+    robot_cfg["type"] = kinematics
+    if kinematics == "holonomic":
+        robot_cfg.setdefault("command_mode", holonomic_command_mode)
+    patched["robot_config"] = robot_cfg
+    return patched
+
+
 def _load_scenario_horizon_schedule(path: Path) -> dict[str, dict[str, Any]]:
     """Load and validate a scenario-horizon schedule sidecar.
 

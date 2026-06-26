@@ -35,6 +35,7 @@ REQUIRED_CONDITIONS = (
     "low_noise",
     "medium_noise",
     "missed_detection_only",
+    "false_positive_only",
     "occlusion_only",
     "delay_only",
     "combined",
@@ -116,6 +117,20 @@ CONDITIONS = (
         "missed_detection_only",
         "All live pedestrians removed from planner input by missed-detection probability 1.0.",
         ("--missed-detection-probability", "1.0", "--observation-perturbation-seed", "2755"),
+    ),
+    Condition(
+        "false_positive_only",
+        "One deterministic observed-only pedestrian injected into planner input.",
+        (
+            "--false-positive-actor-count",
+            "1",
+            "--false-positive-offset-x-m",
+            "1.0",
+            "--false-positive-offset-y-m",
+            "0.0",
+            "--observation-perturbation-seed",
+            "2755",
+        ),
     ),
     Condition(
         "occlusion_only",
@@ -491,6 +506,7 @@ def _observation_totals(trace: dict[str, Any]) -> dict[str, Any]:
         "missed_actor_observations_total": 0,
         "occluded_actor_observations_total": 0,
         "visibility_hidden_actor_observations_total": 0,
+        "false_positive_actor_observations_total": 0,
         "min_observed_actor_count": None,
         "max_observed_actor_count": None,
         "noise_profiles": set(),
@@ -502,6 +518,9 @@ def _observation_totals(trace: dict[str, Any]) -> dict[str, Any]:
         totals["occluded_actor_observations_total"] += int(meta.get("occluded_actor_count", 0) or 0)
         totals["visibility_hidden_actor_observations_total"] += int(
             meta.get("visibility_hidden_actor_count", 0) or 0
+        )
+        totals["false_positive_actor_observations_total"] += int(
+            meta.get("false_positive_actor_count", 0) or 0
         )
         observed_counts.append(int(meta.get("observed_actor_count", 0) or 0))
         profile = meta.get("noise_profile")

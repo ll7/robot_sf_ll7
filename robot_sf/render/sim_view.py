@@ -399,8 +399,6 @@ class SimulationView:
     def _handle_exit(self):
         """Handle the exit state."""
         pygame.quit()
-        if self.is_abortion_requested:
-            sys.exit()
 
     def _prepare_frame(self, state: VisualizableSimState):
         """Prepare a new frame with the given state."""

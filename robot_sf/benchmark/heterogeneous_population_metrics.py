@@ -157,6 +157,7 @@ def pedestrian_metric_observations_from_control_trace(
 
 
 def _control_trace_pedestrians(control_trace: Mapping[str, Any]) -> Sequence[Any]:
+    """Return the non-empty ``pedestrians`` sequence, failing closed on bad shapes."""
     if not isinstance(control_trace, Mapping):
         raise ValueError("control_trace must be a mapping")
     pedestrians = control_trace.get("pedestrians")
@@ -168,6 +169,7 @@ def _control_trace_pedestrians(control_trace: Mapping[str, Any]) -> Sequence[Any
 
 
 def _control_trace_archetype(pedestrian: Any, pedestrian_index: int) -> str:
+    """Return a non-empty archetype label, rejecting null/blank values fail-closed."""
     if not isinstance(pedestrian, Mapping):
         raise ValueError(f"control_trace.pedestrians[{pedestrian_index}] must be a mapping")
     archetype_value = pedestrian.get("archetype")
@@ -187,6 +189,14 @@ def _control_trace_metric_values(
     pedestrian_index: int,
     metric_key: str,
 ) -> np.ndarray:
+    """Collect the per-step ``metric_key`` values as a finite array, failing closed.
+
+    Missing keys, null values, non-mapping steps, and non-finite values each raise a
+    descriptive ``ValueError`` instead of silently degrading the extracted support.
+
+    Returns:
+        Finite per-step values for ``metric_key`` as a 1-D array.
+    """
     steps = pedestrian.get("steps")
     if not isinstance(steps, Sequence) or isinstance(steps, str) or not steps:
         raise ValueError(f"control_trace.pedestrians[{pedestrian_index}].steps must be non-empty")
@@ -220,6 +230,11 @@ def _control_trace_metric_values(
 
 
 def _reduce_control_trace_metric(values: np.ndarray, reducer: str) -> float:
+    """Reduce a per-step value array to one scalar per the validated reducer name.
+
+    Returns:
+        The reduced scalar value.
+    """
     if reducer == "mean":
         return float(np.mean(values))
     if reducer == "min":

@@ -91,6 +91,44 @@ def carla_angular_velocity_to_robot_sf_radps(omega_radps: float) -> float:
     return -float(omega_radps)
 
 
+def robot_sf_planar_twist_to_carla(twist: dict[str, Any]) -> dict[str, float]:
+    """Convert a Robot-SF planar velocity command into CARLA coordinates.
+
+    The handedness boundary mirrors linear ``y`` and yaw rate together. Keeping
+    the two sign changes in one helper prevents CARLA callers from applying the
+    position transform while leaving angular velocity in the Robot-SF frame.
+
+    Returns:
+        CARLA ``{"x", "y", "angular_velocity"}`` twist in meters and radians per second.
+    """
+
+    velocity = robot_sf_planar_vector_to_carla(twist)
+    return {
+        "x": velocity["x"],
+        "y": velocity["y"],
+        "angular_velocity": robot_sf_angular_velocity_to_carla_radps(
+            float(twist["angular_velocity"])
+        ),
+    }
+
+
+def carla_planar_twist_to_robot_sf(twist: dict[str, Any]) -> dict[str, float]:
+    """Convert a CARLA planar velocity command back into Robot-SF coordinates.
+
+    Returns:
+        Robot-SF ``{"x", "y", "angular_velocity"}`` twist in meters and radians per second.
+    """
+
+    velocity = carla_planar_vector_to_robot_sf(twist)
+    return {
+        "x": velocity["x"],
+        "y": velocity["y"],
+        "angular_velocity": carla_angular_velocity_to_robot_sf_radps(
+            float(twist["angular_velocity"])
+        ),
+    }
+
+
 def robot_sf_pose_to_carla_transform(
     carla_module: Any,
     pose: dict[str, Any],

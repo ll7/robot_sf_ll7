@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import nan
 from types import SimpleNamespace
 
 import pytest
@@ -15,6 +16,15 @@ class _CurrentSpeedRobot:
     """Robot double exposing the legacy ``(linear_velocity, yaw_rate)`` speed tuple."""
 
     current_speed = (0.5, 0.5)
+
+
+class _NonFiniteYawRateRobot:
+    """Robot double that exposes ``current_yaw_rate`` but reports a non-finite value."""
+
+    # ``current_speed[1]`` here stands in for the bicycle heading angle; the proxy must
+    # never silently fall back to it when the dedicated accessor is present.
+    current_speed = (0.5, 0.5)
+    current_yaw_rate = nan
 
 
 def _make_env(robot: object) -> RobotEnv:
@@ -46,3 +56,11 @@ def test_rollover_proxy_keeps_current_speed_yaw_rate_fallback() -> None:
     assert record is not None
     assert record["linear_velocity"] == pytest.approx(0.5)
     assert record["yaw_rate"] == pytest.approx(0.5)
+
+
+def test_rollover_proxy_fails_closed_on_non_finite_explicit_yaw_rate() -> None:
+    """A present-but-non-finite ``current_yaw_rate`` must fail closed, not fall back."""
+    env = _make_env(_NonFiniteYawRateRobot())
+
+    with pytest.raises(RuntimeError, match="finite robot.current_yaw_rate"):
+        env._rollover_proxy_record()

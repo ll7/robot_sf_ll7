@@ -807,9 +807,13 @@ class RobotEnv(BaseEnv):
     def _rollover_proxy_record(self) -> dict[str, Any] | None:
         """Return opt-in rollover proxy telemetry for the executed robot state.
 
-        Reads ``robot.current_yaw_rate`` when available; otherwise it assumes
-        ``robot.current_speed`` is ``(linear_velocity, yaw_rate)``. The fallback
-        remains for drive models that do not expose an explicit yaw-rate value.
+        Reads ``robot.current_yaw_rate`` when the robot exposes it (e.g.
+        ``BicycleDriveRobot``); otherwise it assumes ``robot.current_speed`` is
+        ``(linear_velocity, yaw_rate)``. The fallback is reserved for drive models
+        that do not expose an explicit yaw-rate accessor at all. When a drive does
+        expose ``current_yaw_rate`` but it is non-finite, the proxy fails closed
+        rather than silently falling back to ``current_speed[1]`` (which is the
+        heading angle for bicycle drive, the original #3683 mis-read).
         """
         if not getattr(self.env_config, "rollover_proxy_enabled", False):
             return None
@@ -820,7 +824,6 @@ class RobotEnv(BaseEnv):
         explicit_yaw_rate = (
             explicit_yaw_rate() if callable(explicit_yaw_rate) else explicit_yaw_rate
         )
-        yaw_rate = _coerce_finite_float(explicit_yaw_rate)
         try:
             linear_velocity = float(current_speed[0])
         except (TypeError, ValueError, IndexError) as exc:
@@ -828,7 +831,16 @@ class RobotEnv(BaseEnv):
                 "rollover_proxy_enabled requires robot.current_speed as "
                 "(linear_velocity, yaw_rate)."
             ) from exc
-        if yaw_rate is None:
+        if explicit_yaw_rate is not None:
+            # The drive exposes a dedicated yaw-rate accessor: trust it as the
+            # sole source. Fail closed on a non-finite value instead of falling
+            # back to the heading-bearing ``current_speed[1]``.
+            yaw_rate = _coerce_finite_float(explicit_yaw_rate)
+            if yaw_rate is None:
+                raise RuntimeError(
+                    "rollover_proxy_enabled requires a finite robot.current_yaw_rate."
+                )
+        else:
             try:
                 yaw_rate = float(current_speed[1])
             except (TypeError, ValueError, IndexError) as exc:

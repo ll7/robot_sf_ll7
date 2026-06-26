@@ -44,14 +44,24 @@ class Policy(nn.Module):
         del obs_shape, action_space, base
         self.base = _Base()
         self.weight = nn.Parameter(torch.zeros(1))
-        self._action_index = int(base_kwargs.testing.action_index)
+        testing_config = base_kwargs.testing
+        self._action_sequence = [
+            int(index) for index in getattr(testing_config, "action_sequence", [])
+        ]
+        self._action_index = int(testing_config.action_index)
+        self._cursor = 0
 
     def act(self, inputs, rnn_hxs, masks, deterministic=False):
         del deterministic
         global LAST_INPUTS
         LAST_INPUTS = {key: value.detach().cpu().clone() for key, value in inputs.items()}
         LAST_INPUTS["masks"] = masks.detach().cpu().clone()
-        action = torch.tensor([[self._action_index]], dtype=torch.long, device=self.weight.device)
+        if self._cursor < len(self._action_sequence):
+            action_index = self._action_sequence[self._cursor]
+        else:
+            action_index = self._action_index
+        self._cursor += 1
+        action = torch.tensor([[action_index]], dtype=torch.long, device=self.weight.device)
         return (
             torch.zeros((1, 1), dtype=torch.float32, device=self.weight.device),
             action,
@@ -62,7 +72,9 @@ class Policy(nn.Module):
     )
 
 
-def _write_fake_checkpoint_dir(model_dir: Path, *, action_index: int) -> None:
+def _write_fake_checkpoint_dir(
+    model_dir: Path, *, action_index: int, action_sequence: list[int] | None = None
+) -> None:
     """Create a fake checkpoint directory with configurable discrete action output."""
     _write(model_dir / "configs" / "__init__.py", "")
     _write(
@@ -98,8 +110,10 @@ class Config:
     ppo = BaseConfig()
     ppo.num_steps = 1
     ppo.num_mini_batch = 1
-    testing = BaseConfig()
-    testing.action_index = {action_index}
+testing = BaseConfig()
+testing.action_index = {action_index}
+testing.action_sequence = {list(action_sequence or [])!r}
+Config.testing = testing
 """,
     )
     checkpoint_path = model_dir / "checkpoints" / "fake.pt"
@@ -208,6 +222,55 @@ def test_adapter_rebuilds_height_observation_and_accumulates_stateful_command(
     command_3, turn_3 = adapter.plan(obs)
     assert command_3 == pytest.approx(0.05)
     assert turn_3 == pytest.approx(0.1)
+
+
+def test_adapter_preserves_upstream_desired_state_when_projecting_limited_command(
+    tmp_path: Path,
+) -> None:
+    """Adapter command limits must not overwrite upstream HEIGHT delta-action state."""
+    repo_root = tmp_path / "repo"
+    model_dir = tmp_path / "model"
+    _write_fake_upstream_repo(repo_root)
+    # Two accelerate actions followed by a decelerate action distinguish source-state
+    # preservation from clipping the adapter's internal desired velocity to output limits.
+    _write_fake_checkpoint_dir(model_dir, action_index=4, action_sequence=[0, 0, 7])
+    adapter = CrowdNavHeightAdapter(
+        build_crowdnav_height_config(
+            {
+                "repo_root": str(repo_root),
+                "model_dir": str(model_dir),
+                "checkpoint_name": "fake.pt",
+                "max_linear_speed": 0.05,
+                "max_angular_speed": 0.1,
+            }
+        )
+    )
+    adapter.bind_obstacle_segments([[5.0, -1.0, 5.0, 1.0]])
+    obs = {
+        "robot": {
+            "position": [0.0, 0.0],
+            "heading": [0.0],
+            "velocity_xy": [0.0, 0.0],
+            "radius": [0.3],
+        },
+        "goal": {"current": [4.0, 0.0]},
+        "pedestrians": {"positions": [], "velocities": [], "count": [0], "radius": [0.3]},
+        "sim": {"timestep": [0.1]},
+    }
+
+    command_1, turn_1, meta_1 = adapter.act(obs, time_step=0.1)
+    command_2, turn_2, meta_2 = adapter.act(obs, time_step=0.1)
+    command_3, turn_3, meta_3 = adapter.act(obs, time_step=0.1)
+
+    assert (command_1, turn_1) == pytest.approx((0.05, 0.1))
+    assert (command_2, turn_2) == pytest.approx((0.05, 0.1))
+    assert (command_3, turn_3) == pytest.approx((0.05, 0.1))
+    assert meta_1["upstream_desired_command"] == [pytest.approx(0.05), pytest.approx(0.1)]
+    assert meta_2["upstream_desired_command"] == [pytest.approx(0.1), pytest.approx(0.2)]
+    assert meta_2["projected_command_vw"] == [pytest.approx(0.05), pytest.approx(0.1)]
+    assert meta_3["upstream_delta_command"] == [pytest.approx(-0.05), pytest.approx(0.0)]
+    assert meta_3["upstream_desired_command"] == [pytest.approx(0.05), pytest.approx(0.2)]
+    assert meta_3["projected_command_vw"] == [pytest.approx(0.05), pytest.approx(0.1)]
 
 
 def test_adapter_accepts_flat_benchmark_observation_schema(tmp_path: Path) -> None:

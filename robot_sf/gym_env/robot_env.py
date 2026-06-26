@@ -807,25 +807,35 @@ class RobotEnv(BaseEnv):
     def _rollover_proxy_record(self) -> dict[str, Any] | None:
         """Return opt-in rollover proxy telemetry for the executed robot state.
 
-        Assumes ``robot.current_speed`` is ``(linear_velocity, yaw_rate)``. This
-        holds for ``DifferentialDriveRobot`` and ``HolonomicDriveRobot``. It does
-        NOT hold for ``BicycleDriveRobot``, whose ``current_speed`` second element
-        is the heading angle, not the yaw rate; enabling the proxy with that drive
-        would mis-feed the margin. Tracked as follow-up rather than a default-path
-        concern because the proxy is opt-in and disabled by default (issue #3479).
+        Reads ``robot.current_yaw_rate`` when available; otherwise it assumes
+        ``robot.current_speed`` is ``(linear_velocity, yaw_rate)``. The fallback
+        remains for drive models that do not expose an explicit yaw-rate value.
         """
         if not getattr(self.env_config, "rollover_proxy_enabled", False):
             return None
-        current_speed = getattr(self.simulator.robots[0], "current_speed", None)
+        robot = self.simulator.robots[0]
+        current_speed = getattr(robot, "current_speed", None)
         current_speed = current_speed() if callable(current_speed) else current_speed
+        explicit_yaw_rate = getattr(robot, "current_yaw_rate", None)
+        explicit_yaw_rate = (
+            explicit_yaw_rate() if callable(explicit_yaw_rate) else explicit_yaw_rate
+        )
+        yaw_rate = _coerce_finite_float(explicit_yaw_rate)
         try:
             linear_velocity = float(current_speed[0])
-            yaw_rate = float(current_speed[1])
         except (TypeError, ValueError, IndexError) as exc:
             raise RuntimeError(
                 "rollover_proxy_enabled requires robot.current_speed as "
                 "(linear_velocity, yaw_rate)."
             ) from exc
+        if yaw_rate is None:
+            try:
+                yaw_rate = float(current_speed[1])
+            except (TypeError, ValueError, IndexError) as exc:
+                raise RuntimeError(
+                    "rollover_proxy_enabled requires robot.current_yaw_rate "
+                    "or robot.current_speed (linear_velocity, yaw_rate)."
+                ) from exc
         return rollover_proxy_telemetry(
             linear_velocity,
             yaw_rate,

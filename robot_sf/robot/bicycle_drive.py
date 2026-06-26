@@ -40,6 +40,7 @@ class BicycleDriveState:
 
     pose: RobotPose
     velocity: float = field(default=0)
+    angular_velocity: float = field(default=0)
 
     @property
     def pos(self) -> Vec2D:
@@ -60,6 +61,11 @@ class BicycleDriveState:
     def current_speed(self) -> PolarVec2D:
         """Get the current speed and orientation of the robot."""
         return (self.velocity, self.orient)
+
+    @property
+    def current_yaw_rate(self) -> float:
+        """Return the last executed bicycle yaw rate in radians per second."""
+        return self.angular_velocity
 
 
 @dataclass
@@ -107,6 +113,7 @@ class BicycleMotion:
         # Update state with new pose and velocity
         state.pose = ((new_x, new_y), new_orient)
         state.velocity = new_velocity
+        state.angular_velocity = angular_velocity
 
 
 @dataclass
@@ -173,6 +180,11 @@ class BicycleDriveRobot:
             The current speed/orientation tuple exposed by the drive state.
         """
         return self.state.current_speed
+
+    @property
+    def current_yaw_rate(self) -> float:
+        """Return the last executed bicycle yaw rate in radians per second."""
+        return self.state.current_yaw_rate
 
     def apply_action(self, action: BicycleAction, d_t: float):
         """Apply action and advance simulation by dt.

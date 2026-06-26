@@ -9,6 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -61,6 +62,7 @@ from robot_sf.benchmark.map_runner_metrics import (
     summarize_collision_metrics,
 )
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
+from robot_sf.benchmark.map_runner_policies.registry import build_registered_policy
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
@@ -562,6 +564,64 @@ def test_build_policy_routes_planner_selector_v2_with_diagnostics() -> None:
     assert (
         stats["last_decision"]["trigger_reason"] == "predeclared_seed_sensitive_low_progress_risk"
     )
+
+
+def test_policy_builder_registry_returns_none_for_unmigrated_key() -> None:
+    """Unregistered keys must keep falling through to map-runner legacy branches."""
+    assert build_registered_policy("unmigrated", {}, builders={}) is None
+
+
+def test_policy_builder_registry_forwards_builder_context() -> None:
+    """Registry dispatch preserves the policy-builder call contract."""
+    calls: list[tuple[str, dict[str, Any], str | None, str | None]] = []
+
+    def _builder(
+        algo_key: str,
+        algo_config: dict[str, Any],
+        *,
+        robot_kinematics: str | None = None,
+        robot_command_mode: str | None = None,
+    ) -> tuple[Any, dict[str, Any]]:
+        calls.append((algo_key, algo_config, robot_kinematics, robot_command_mode))
+
+        def _policy(_obs: dict[str, Any]) -> tuple[float, float]:
+            return (0.0, 0.0)
+
+        return _policy, {"algorithm": algo_key}
+
+    policy, meta = build_registered_policy(
+        "demo",
+        {"gain": 2.0},
+        builders={"demo": _builder},
+        robot_kinematics="holonomic",
+        robot_command_mode="vxy",
+    )
+
+    assert policy({}) == (0.0, 0.0)
+    assert meta == {"algorithm": "demo"}
+    assert calls == [("demo", {"gain": 2.0}, "holonomic", "vxy")]
+
+
+def test_build_policy_simple_alias_still_uses_registered_goal_builder() -> None:
+    """Characterize an existing registry-routed alias before larger migrations."""
+    policy, meta = _build_policy(
+        "simple_policy",
+        {"max_speed": 0.4},
+        robot_kinematics="holonomic",
+        robot_command_mode="vxy",
+    )
+
+    linear, angular = policy(
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [1.0, 0.0]},
+        }
+    )
+
+    assert linear == pytest.approx(0.4)
+    assert angular == pytest.approx(0.0)
+    assert meta["algorithm"] == "simple_policy"
+    assert meta["planner_kinematics"]["planner_command_space"] == "unicycle_vw"
 
 
 def test_goal_policy_supports_flat_map_runner_observation() -> None:

@@ -118,6 +118,7 @@ from robot_sf.benchmark.map_runner_observations import (
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
+from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policy_common import (
     build_adapter_policy as _build_adapter_policy,
@@ -886,7 +887,7 @@ def _update_adapter_impact_metrics(
 # Registry of migrated per-algorithm policy builders (#3384). Consulted before the
 # inline dispatch in _build_policy; families not yet migrated fall through to the
 # existing if/elif chain.
-_POLICY_BUILDERS: dict[str, Any] = {
+_POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
     **dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build),
     **dict.fromkeys(
         _adapter_policy_builders.RISK_SURFACE_DWA_KEYS,
@@ -924,14 +925,15 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
     """
     algo_key = algo.lower().strip()
     meta: dict[str, Any] = {"algorithm": algo_key}
-    registered_builder = _POLICY_BUILDERS.get(algo_key)
-    if registered_builder is not None:
-        return registered_builder(
-            algo_key,
-            algo_config,
-            robot_kinematics=robot_kinematics,
-            robot_command_mode=robot_command_mode,
-        )
+    registered_policy = _policy_builder_registry.build_registered_policy(
+        algo_key,
+        algo_config,
+        builders=_POLICY_BUILDERS,
+        robot_kinematics=robot_kinematics,
+        robot_command_mode=robot_command_mode,
+    )
+    if registered_policy is not None:
+        return registered_policy
 
     normalized_robot_command_mode = (
         str(robot_command_mode).strip().lower() if robot_command_mode is not None else None

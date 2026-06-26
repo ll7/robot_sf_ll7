@@ -9,7 +9,9 @@ from pathlib import Path  # noqa: TC003
 
 from scripts.dev.summarize_campaign_progress import main, summarize_campaign_progress
 
-_MTIME_EPOCHS = count(1_700_000_000)
+# Step by 10s so distinct writes stay strictly ordered even on filesystems with
+# coarse mtime resolution (e.g. FAT/exFAT round to 2-second granularity).
+_MTIME_EPOCHS = count(1_700_000_000, 10)
 
 
 def _write_lines(path: Path, count: int) -> None:

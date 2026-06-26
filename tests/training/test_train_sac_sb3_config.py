@@ -197,7 +197,7 @@ def test_load_rejects_non_mapping_yaml(tmp_path: Path) -> None:
 
 
 def test_build_env_uses_expected_observation_and_action_contract() -> None:
-    """Env construction should preserve the PPO-compatible observation/action contract."""
+    """Env construction should preserve the SAC observation and delta-action contract."""
     config = load_sac_training_config(_GATE_CONFIG)
     scenario_definitions = load_scenarios(config.scenario_config)
     vec_env = _build_env(config, scenario_definitions=scenario_definitions)
@@ -207,8 +207,8 @@ def test_build_env_uses_expected_observation_and_action_contract() -> None:
         assert set(vec_env.observation_space.spaces) == {"drive_state", "rays"}
         assert isinstance(vec_env.action_space, gym_spaces.Box)
         assert vec_env.action_space.shape == (2,)
-        assert tuple(vec_env.action_space.low.tolist()) == (0.0, -1.0)
-        assert tuple(vec_env.action_space.high.tolist()) == (2.0, 1.0)
+        assert tuple(vec_env.action_space.low.tolist()) == (-1.0, -1.0)
+        assert tuple(vec_env.action_space.high.tolist()) == (1.0, 1.0)
         assert getattr(vec_env.envs[0], "applied_seed", None) == config.seed
     finally:
         vec_env.close()

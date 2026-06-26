@@ -122,3 +122,36 @@ measurements and the durable evidence plan is satisfied.
 For a concrete campaign, also run the loader, dry-run, or schema command named
 in that campaign manifest. If the manifest only defines a proposal, record that
 status in `campaign.evidence_tier` and do not treat it as run evidence.
+
+## Scenario Denominator Manifest
+
+Use the scenario denominator manifest when a report needs one config-derived source for scenario
+families, scenario cells, densities, seeds, and per-family x planner episode denominators. It is an
+audit artifact, not benchmark evidence: it expands canonical benchmark configs and seed policies
+before runtime exclusions, fallback rows, or planner failures.
+
+Generate the JSON manifest and a downstream-checkable CSV table from the canonical all-planners
+paper matrix with:
+
+```bash
+uv run python scripts/benchmark/build_scenario_denominator_manifest.py \
+  --config configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml \
+  --output output/benchmarks/scenario_denominator_manifest.json \
+  --table output/benchmarks/scenario_denominator_table.csv
+```
+
+Fail closed when a checked-in manifest or report table drifts from the canonical configs:
+
+```bash
+uv run python scripts/benchmark/build_scenario_denominator_manifest.py \
+  --config configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml \
+  --check-manifest docs/context/evidence/<issue>/scenario_denominator_manifest.json
+
+uv run python scripts/benchmark/build_scenario_denominator_manifest.py \
+  --config configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml \
+  --check-table docs/context/evidence/<issue>/scenario_denominator_table.csv
+```
+
+The table contract is one row per `(config_name, family, planner)` with scenario count, cell count,
+unique seed count, denominator episodes, kinematics count, kinematics-expanded denominator
+episodes, and densities. Markdown tables may also be checked when they expose the same column names.

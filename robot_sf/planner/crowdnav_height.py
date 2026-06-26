@@ -879,34 +879,50 @@ class CrowdNavHeightAdapter:
             raise ValueError(f"Unexpected CrowdNav_HEIGHT discrete action index: {action_idx}")
         delta_v, delta_theta = self._action_table[action_idx]
         robot_cfg = self._checkpoint_config.robot
-        linear_min = max(float(robot_cfg.v_min), -self.config.max_linear_speed)
-        linear_max = min(float(robot_cfg.v_max), self.config.max_linear_speed)
-        angular_min = max(float(robot_cfg.w_min), -self.config.max_angular_speed)
-        angular_max = min(float(robot_cfg.w_max), self.config.max_angular_speed)
-        if linear_min > linear_max or angular_min > angular_max:
+        source_linear_min = float(robot_cfg.v_min)
+        source_linear_max = float(robot_cfg.v_max)
+        source_angular_min = float(robot_cfg.w_min)
+        source_angular_max = float(robot_cfg.w_max)
+        if source_linear_min > source_linear_max or source_angular_min > source_angular_max:
             raise ValueError(
                 "CrowdNav_HEIGHT projection limits are inconsistent with the checkpoint robot limits"
             )
         self._desired_velocity[0] = float(
             np.clip(
                 self._desired_velocity[self._LINEAR_VELOCITY_INDEX] + delta_v,
-                linear_min,
-                linear_max,
+                source_linear_min,
+                source_linear_max,
             )
         )
         self._desired_velocity[1] = float(
             np.clip(
                 self._desired_velocity[self._ANGULAR_VELOCITY_INDEX] + delta_theta,
-                angular_min,
-                angular_max,
+                source_angular_min,
+                source_angular_max,
             )
         )
-        linear = float(self._desired_velocity[self._LINEAR_VELOCITY_INDEX])
-        angular = float(self._desired_velocity[self._ANGULAR_VELOCITY_INDEX])
+        linear = float(
+            np.clip(
+                self._desired_velocity[self._LINEAR_VELOCITY_INDEX],
+                -self.config.max_linear_speed,
+                self.config.max_linear_speed,
+            )
+        )
+        angular = float(
+            np.clip(
+                self._desired_velocity[self._ANGULAR_VELOCITY_INDEX],
+                -self.config.max_angular_speed,
+                self.config.max_angular_speed,
+            )
+        )
         meta.update(
             {
                 "action_index": action_idx,
                 "upstream_delta_command": [float(delta_v), float(delta_theta)],
+                "upstream_desired_command": [
+                    float(self._desired_velocity[self._LINEAR_VELOCITY_INDEX]),
+                    float(self._desired_velocity[self._ANGULAR_VELOCITY_INDEX]),
+                ],
                 "projected_command_vw": [linear, angular],
                 "projection_policy": self.projection_policy,
             }

@@ -29,6 +29,8 @@ opt-in follow-up.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -39,8 +41,157 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 TRACKING_PRECISION_SCHEMA = "tracking_precision_contract.v1"
+TRACKING_PRECISION_INTERPRETATION = (
+    "internal_non_hardware_tracking_precision_proxy_not_a_real_sensor_model"
+)
+TRACKING_PRECISION_MODES = frozenset({"diagnostic", "clamp"})
+
+_DEFAULT_SPEED_CONTRACT_SPEC: dict[str, Any] = {
+    "threshold_m": 2.5,
+    "default_speed": 2.0,
+    "defensive_speed": 0.5,
+    "mode": "diagnostic",
+}
+
+_DEFAULT_SPEC: dict[str, Any] = {
+    "enabled": False,
+    "target_motp_m": 0.0,
+    "speed_contract": _DEFAULT_SPEED_CONTRACT_SPEC,
+    "seed_salt": 0,
+    "schema_version": TRACKING_PRECISION_SCHEMA,
+    "interpretation": TRACKING_PRECISION_INTERPRETATION,
+}
 # Rayleigh mean factor: mean Euclidean error = per-axis sigma * sqrt(pi/2).
 _RAYLEIGH_MEAN_FACTOR = math.sqrt(math.pi / 2.0)
+
+
+def tracking_precision_hash(spec: dict[str, Any]) -> str:
+    """Return stable short hash for a normalized tracking-precision spec."""
+
+    encoded = json.dumps(spec, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha1(encoded).hexdigest()[:12]
+
+
+def _normalize_speed_contract_spec(speed_contract: Any) -> dict[str, Any]:
+    """Validate the nested speed-contract block.
+
+    Returns:
+        Canonical speed-contract spec.
+    """
+
+    normalized = dict(_DEFAULT_SPEED_CONTRACT_SPEC)
+    if speed_contract is None:
+        return normalized
+    if not isinstance(speed_contract, dict):
+        raise TypeError("tracking_precision.speed_contract must be a mapping")
+
+    aliases = {
+        "precision_threshold_m": "threshold_m",
+        "defensive_speed_cap": "defensive_speed",
+        "default_speed_cap": "default_speed",
+    }
+    for key, value in speed_contract.items():
+        canonical_key = aliases.get(key, key)
+        if canonical_key not in normalized:
+            raise ValueError(f"unknown tracking_precision.speed_contract key: {key}")
+        normalized[canonical_key] = value
+
+    normalized["threshold_m"] = float(normalized["threshold_m"])
+    normalized["default_speed"] = float(normalized["default_speed"])
+    normalized["defensive_speed"] = float(normalized["defensive_speed"])
+    normalized["mode"] = str(normalized["mode"])
+    if normalized["mode"] not in TRACKING_PRECISION_MODES:
+        raise ValueError(
+            "tracking_precision.speed_contract.mode must be one of "
+            f"{sorted(TRACKING_PRECISION_MODES)}"
+        )
+    TrackingPrecisionContract(
+        precision_threshold_m=normalized["threshold_m"],
+        default_speed_cap=normalized["default_speed"],
+        defensive_speed_cap=normalized["defensive_speed"],
+    )
+    return normalized
+
+
+def normalize_tracking_precision_spec(spec: dict[str, Any] | None) -> dict[str, Any]:
+    """Validate and normalize the default-off tracking-precision run spec.
+
+    The normalized shape mirrors the benchmark observation-noise spec style while
+    preserving issue #3480's speed-contract names: ``threshold_m``,
+    ``default_speed``, ``defensive_speed``, and ``mode``.
+
+    Returns:
+        Canonical tracking-precision run spec.
+    """
+
+    normalized = {
+        **_DEFAULT_SPEC,
+        "speed_contract": dict(_DEFAULT_SPEED_CONTRACT_SPEC),
+    }
+    if spec is None:
+        return normalized
+    if not isinstance(spec, dict):
+        raise TypeError("tracking_precision spec must be a mapping or None")
+
+    speed_contract = spec.get("speed_contract")
+    for key, value in spec.items():
+        if key == "speed_contract":
+            continue
+        if key not in normalized:
+            raise ValueError(f"unknown tracking_precision key: {key}")
+        normalized[key] = value
+
+    normalized["target_motp_m"] = float(normalized["target_motp_m"])
+    if normalized["target_motp_m"] < 0.0:
+        raise ValueError("tracking_precision.target_motp_m must be >= 0")
+
+    normalized["enabled"] = bool(normalized.get("enabled", False)) or (
+        normalized["target_motp_m"] > 0.0
+    )
+    normalized["seed_salt"] = int(normalized["seed_salt"])
+    if normalized["seed_salt"] < 0:
+        raise ValueError("tracking_precision.seed_salt must be >= 0")
+
+    normalized["speed_contract"] = _normalize_speed_contract_spec(speed_contract)
+    normalized["schema_version"] = TRACKING_PRECISION_SCHEMA
+    normalized["interpretation"] = TRACKING_PRECISION_INTERPRETATION
+    return normalized
+
+
+def tracking_precision_contract_from_spec(
+    spec: dict[str, Any] | None,
+) -> TrackingPrecisionContract:
+    """Return the operational contract encoded by a normalized run spec."""
+
+    normalized = normalize_tracking_precision_spec(spec)
+    contract = normalized["speed_contract"]
+    return TrackingPrecisionContract(
+        precision_threshold_m=contract["threshold_m"],
+        default_speed_cap=contract["default_speed"],
+        defensive_speed_cap=contract["defensive_speed"],
+    )
+
+
+def make_tracking_precision_rng(
+    spec: dict[str, Any], *, seed: int, scenario_id: str
+) -> np.random.Generator:
+    """Create deterministic per-episode RNG for tracking-drift corruption.
+
+    Returns:
+        NumPy generator scoped to the normalized spec, scenario, and seed.
+    """
+
+    normalized = normalize_tracking_precision_spec(spec)
+    material = {
+        "episode_seed": int(seed),
+        "scenario_id": str(scenario_id),
+        "spec_hash": tracking_precision_hash(normalized),
+        "seed_salt": normalized["seed_salt"],
+    }
+    digest = hashlib.sha256(
+        json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).digest()
+    return np.random.default_rng(int.from_bytes(digest[:8], "big", signed=False))
 
 
 def drift_std_for_motp(motp_m: float) -> float:
@@ -170,13 +321,72 @@ def tracking_precision_telemetry(
     }
 
 
+def apply_tracking_precision_spec(
+    positions: NDArray[np.floating] | object,
+    spec: dict[str, Any] | None,
+    rng: np.random.Generator,
+) -> NDArray[np.float64]:
+    """Apply the normalized tracking-drift mask to tracked actor positions.
+
+    Returns:
+        Position array copied or corrupted according to the normalized spec.
+    """
+
+    normalized = normalize_tracking_precision_spec(spec)
+    if not normalized["enabled"]:
+        return np.asarray(positions, dtype=np.float64).copy()
+    return apply_tracking_drift(positions, normalized["target_motp_m"], rng)
+
+
+def apply_speed_contract(
+    linear_speed: float,
+    motp_m: float,
+    spec: dict[str, Any] | None,
+) -> tuple[float, dict[str, Any]]:
+    """Apply or diagnose the precision-to-speed cap for one linear command.
+
+    ``mode == "clamp"`` returns ``min(linear_speed, contracted_cap)``.
+    ``mode == "diagnostic"`` leaves the command unchanged and records whether
+    the command would have honored the operational contract.
+
+    Returns:
+        Tuple of applied linear speed and schema-tagged contract telemetry.
+    """
+
+    normalized = normalize_tracking_precision_spec(spec)
+    contract = tracking_precision_contract_from_spec(normalized)
+    mode = normalized["speed_contract"]["mode"]
+    requested = float(linear_speed)
+    contracted_cap = speed_cap_for_precision(motp_m, contract)
+    applied = (
+        min(requested, contracted_cap) if normalized["enabled"] and mode == "clamp" else requested
+    )
+    telemetry = tracking_precision_telemetry(motp_m, applied, contract)
+    telemetry.update(
+        {
+            "contract_mode": mode,
+            "commanded_linear_speed": requested,
+            "tracking_precision_enabled": normalized["enabled"],
+        }
+    )
+    return applied, telemetry
+
+
 __all__ = [
+    "TRACKING_PRECISION_INTERPRETATION",
+    "TRACKING_PRECISION_MODES",
     "TRACKING_PRECISION_SCHEMA",
     "TrackingPrecisionContract",
+    "apply_speed_contract",
     "apply_tracking_drift",
+    "apply_tracking_precision_spec",
     "drift_std_for_motp",
     "is_contract_honored",
+    "make_tracking_precision_rng",
     "minimum_separation",
+    "normalize_tracking_precision_spec",
     "speed_cap_for_precision",
+    "tracking_precision_contract_from_spec",
+    "tracking_precision_hash",
     "tracking_precision_telemetry",
 ]

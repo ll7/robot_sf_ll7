@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-06-20
+updated_at: 2026-06-26
 policy: context-catalog.v1
 description: >
   Machine-readable catalog for the current retrieval-first context index. This is not a full
@@ -2042,3 +2042,533 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_1457_adversarial_generation_protocol_2026-05-23/issue_1457_adversarial_generation_smoke_summary.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1474_shielded_ppo_repair_2026-06-01/learned_policy_eligibility.yaml
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12749.SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_1500_adversarial_manifest/config_checksums.md
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/classic_head_on_corridor_guided_summary.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_1508_carla_eligibility_2026-05-31/candidate_eligibility_summary.json
+    status: evidence
+    freshness: evidence
+    area: carla_external_sim
+  - path: docs/context/evidence/issue_1509_carla_native_fixture_2026-05-31/README.md
+    status: evidence
+    freshness: evidence
+    area: carla_external_sim
+  - path: docs/context/evidence/issue_1569_amv_actuation_smoke_2026-05-27/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1608_seed_sensitivity_2026-05-30/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1609_seed_mechanisms_2026-05-31/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1674_topology_hypothesis_diagnostics_2026-05-30/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1861_adversarial_replay_2026-05-31/replay_determinism_summary.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_1878_head_on_replay_2026-05-31/head_on_replay_determinism_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1897_predictive_coupling_gate_2026-05-31/README.md
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_1904_scenario_perturbation_pilot_2026-05-31/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1933_perturbation_seed_coverage_2026-05-31/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1935_stronger_perturbation_planner_2026-05-31/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1943_ped_speed_perturbation_2026-05-31/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1947_intersection_wait_timing_speed_trace_2026-06-01/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1949_ped_wait_duration_perturbation_2026-06-01/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1951_intersection_wait_phase_grid_2026-06-01/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1953_intersection_wait_speed_grid_trace_2026-06-01/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1957_trajectory_waypoint_pilot_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1959_pedestrian_density_pilot_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2006_shielded_ppo_smoke_after_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2011_amv_actuation_sensitivity_pilot_2026-06-01/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2038_real_env_trace_viewer.png
+    status: evidence
+    freshness: evidence
+    area: manual_control_trace
+  - path: docs/context/evidence/issue_2104_component_ablation_pilot_2026-06-02/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2158_research_v1_carla_replay_2026-06-03/README.md
+    status: evidence
+    freshness: evidence
+    area: carla_external_sim
+  - path: docs/context/evidence/issue_2164_amv_hazard_odd_join_2026-06-03/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2172_benchmark_worker_scaling_2026-06-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2174_one_factor_ablation_pilot_2026-06-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2221_static_recenter_transfer_2026-06-04/comparison_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2223_topology_hypothesis_2026-06-04/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2224_amv_actuation_ranking_2026-06-04/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2227_ammv_mechanism_panel_2026-06-23/trace_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2227_mechanism_panels_2026-06-04/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2227_recenter_topology_panels_2026-06-23/compact_trace_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2258_topology_primary_route_audit_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2259_amv_clipping_success_boundary_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2261_static_recenter_slice_local_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2266_static_recenter_activation_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2268_amv_timeout_decomposition_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2274_hybrid_component_matrix_2026-06-05/matrix.yaml
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2275_predictive_v2_fate_2026-06-05/decision_matrix.csv
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2282_topology_selection_instrumentation_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2302_benchmark_worker_scaling_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2304_benchmark_worker_scaling_stress_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2306_static_recenter_activation_trace_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2307_topology_score_diagnostic_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2308_amv_timeout_trace_2026-06-05/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2441_oracle_imitation_traces_2026-06-06/SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2445_orca_residual_progress_probe_decision_2026-06-23/decision.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2546_scenario_belief_uncertainty_2026-06-23/diagnostic_report.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2661_topology_diagnostic_report_snapshot/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2726_scenario_prior_trace_clusters/report.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2754_signalized_failure_pack_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2766_mixed_scenario_matrix/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2767_benchmark_table_candidates/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2788_negative_result_scenario_candidates/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2902_live_forecast_replay_gate_2026-06-16/live_forecast_replay_gate_report.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2904_forecast_risk_eligibility_2026-06-20/summary.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2915_forecast_baselines_2026-06-20/summary.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_2919_scenario_prior_gap_2026-06-21/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2927_observation_quality_live_smoke/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2944_native_cv_smoke_2026-06-16/live_forecast_replay_gate_report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2966_planner_consumed_forecast_slice_summary.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_3164_frozen_forecast_policy/summary.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_3200_density_runtime_smoke_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_fidelity_sensitivity_actual_slice_2026-06-20/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_fidelity_sensitivity_actual_slice_2026-06-23/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_fidelity_sensitivity_smoke_2026-06-20/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3213_authority_sweep/robust_grid.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3254_predictive_crossing_conflict_13042_2026-06-23/summary.json
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_3294_release_claim_matrix/release_claim_matrix.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3471_scenario_belief_episode_safety_2026-06-24/report.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_3558_gate_threshold_sweep_2026-06-25/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3573_reactivity_ablation_2026-06-25/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_852_asymmetric_critic_10m_seed123_2026-06-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_852_attention_only_10m_seed1337_2026-06-05/SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_852_attention_only_10m_seed231_2026-06-04/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/policy_search_h500_2026-05-06/manifest.sha256
+    status: evidence
+    freshness: evidence
+    area: policy_search
+  - path: docs/context/evidence/predictive_same_seed_row_summary_template.yaml
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+  - path: docs/context/evidence/issue_1427_predictive_same_seed_handoff_2026-05-21
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_1692_topology_hypothesis_probe_2026-05-30
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_1937_ped_route_offset_2026-05-31/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1939_corridor_trace_response_2026-05-31/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1941_ped_timing_phase_2026-05-31/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1945_orca_leave_group_speed_trace_2026-06-01/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1960_local_artifact_retirement_2026-06-01/README.md
+    status: evidence
+    freshness: evidence
+    area: evidence_policy
+  - path: docs/context/evidence/issue_1977_bc_warm_start_cancelled_2026-06-02
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_2156_research_v1_hazard_odd_2026-06-03/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2159_failure_pack_2026-06-23/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2168_ammv_social_force_pair_2026-06-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2176_remaining_one_factor_h80_2026-06-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2178_selector_orca_extra_h80_2026-06-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+  - path: docs/context/evidence/issue_2180_one_factor_h500_2026-06-03/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2182_component_synthesis_2026-06-03/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2214_hot_path_synthesis_2026-06-04/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2222_criticality_metric_2026-06-04/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2225_learned_policy_failure_synthesis_2026-06-04/failure_modes.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2269_research_v1_trace_case_selection_2026-06-05/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2270_panel_candidate_manifest_2026-06-05/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2273_learned_risk_trace_preflight_2026-06-05/trace_status.csv
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2444_ammv_divergence_2026-06-23/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2557_reward_curriculum_partial_2026-06-08/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2749_observation_noise_diagnostics
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_2765_dense_pedestrian_stress_2026-06-14/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2916_forecast_risk_coupling_2026-06-23
+    status: evidence
+    freshness: evidence
+    area: predictive_planner
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_2921_first_use/report.json
+    status: evidence
+    freshness: evidence
+    area: adversarial_search
+  - path: docs/context/evidence/issue_2924_counterfactual_pair_2026-06-21/report.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3066_robot_influence_flow_2026-06-23/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3067_sensor_noise_robustness_2026-06-23
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3192_external_prior_divergence/current_verdict.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3205_release_evidence_gate/snapshot_0_0_2.json
+    status: evidence
+    freshness: evidence
+    area: evidence_policy
+  - path: docs/context/evidence/issue_3206_pedestrian_archetype_reporting_2026-06-20/summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3215_hardcase_portfolio_synthesis_2026-06-21/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3266_ppo_snqi_smoke_2026-06-23
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3300_false_positive_actor_injection/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3556_belief_mode_real_runner_2026-06-24/report.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3556_belief_mode_runner_2026-06-24/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3556_planner_obs_audit_2026-06-24/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_852_reward_curriculum_followup_32k_v2_2026-06-02/SHA256SUMS
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1662_lidar_ppo_smoke_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_1967_orca_residual_bc_smoke_adapter_summary.json
+    status: evidence
+    freshness: evidence
+    area: learned_policy
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3142_fast_pysf_force_optimization_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+    legacy_dirty_evidence: true

@@ -1,11 +1,9 @@
 name: Docs & Evidence Integrity
 
 # Lightweight, changed-path-scoped guard for research-facing documentation and
-# evidence surfaces (issue #3476). First rollout is **advisory / warning-only**:
-# it surfaces findings as non-blocking GitHub warning annotations and never fails
-# the PR, so it cannot block unrelated docs fixes. It only inspects files the PR
-# actually touches and is independent of the full Python test suite. A future
-# increment can promote it to blocking once the surfaces are known to be clean.
+# evidence surfaces (issue #3476). The job is blocking but only inspects files
+# the PR actually touches, so it cannot fail on untouched legacy drift and is
+# independent of the full Python test suite.
 
 on:
   pull_request:
@@ -41,8 +39,7 @@ jobs:
       - name: Install PyYAML
         run: python -m pip install --quiet pyyaml
 
-      - name: Docs/evidence integrity (changed-path scoped, advisory)
+      - name: Docs/evidence integrity (changed-path scoped)
         run: |
           python scripts/dev/check_docs_evidence_integrity.py \
-            --base-ref "origin/${{ github.base_ref }}" \
-            --warn-only
+            --base-ref "origin/${{ github.base_ref }}"

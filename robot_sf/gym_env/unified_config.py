@@ -6,6 +6,7 @@ duplication and provides clear separation of concerns.
 """
 
 import importlib
+import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -225,8 +226,13 @@ class RobotSimulationConfig(BaseSimulationConfig):
 
     def _validate_rollover_proxy(self) -> None:
         """Validate opt-in rollover proxy reward settings."""
-        if self.rollover_proxy_penalty > 0.0:
-            raise ValueError("rollover_proxy_penalty must be non-positive.")
+        if not isinstance(self.rollover_proxy_params, RolloverProxyParams):
+            raise TypeError(
+                "rollover_proxy_params must be a RolloverProxyParams instance; "
+                f"got {type(self.rollover_proxy_params)!r}"
+            )
+        if not math.isfinite(self.rollover_proxy_penalty) or self.rollover_proxy_penalty > 0.0:
+            raise ValueError("rollover_proxy_penalty must be a finite non-positive value.")
 
     def _validate_forecast_variant(self) -> None:
         """Validate the forecast variant selector when configured."""

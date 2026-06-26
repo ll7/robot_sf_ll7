@@ -283,3 +283,20 @@ def test_rollover_proxy_penalty_must_not_be_positive() -> None:
     """Configured rollover penalty must not accidentally reward rollover."""
     with pytest.raises(ValueError, match="rollover_proxy_penalty"):
         EnvSettings(rollover_proxy_penalty=0.1)
+
+
+@pytest.mark.parametrize("bad_penalty", [float("nan"), float("inf"), float("-inf")])
+def test_rollover_proxy_penalty_must_be_finite(bad_penalty: float) -> None:
+    """Non-finite penalties must fail closed in both config paths."""
+    with pytest.raises(ValueError, match="rollover_proxy_penalty"):
+        EnvSettings(rollover_proxy_penalty=bad_penalty)
+    with pytest.raises(ValueError, match="rollover_proxy_penalty"):
+        RobotSimulationConfig(rollover_proxy_penalty=bad_penalty)
+
+
+def test_rollover_proxy_params_must_be_typed() -> None:
+    """A non-RolloverProxyParams value must be rejected in both config paths."""
+    with pytest.raises(TypeError, match="rollover_proxy_params"):
+        EnvSettings(rollover_proxy_params={"track_width_m": 0.8})
+    with pytest.raises(TypeError, match="rollover_proxy_params"):
+        RobotSimulationConfig(rollover_proxy_params={"track_width_m": 0.8})

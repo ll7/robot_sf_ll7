@@ -17,6 +17,7 @@ alternatives for gradual migration.
 All configuration classes validate required fields during initialization and inherit
 telemetry configuration support from `TelemetryConfigMixin`."""
 
+import math
 from dataclasses import dataclass, field
 
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
@@ -104,8 +105,13 @@ class BaseEnvSettings(TelemetryConfigMixin):
                 f"forecast_variant must be one of {list(FORECAST_VARIANT_CHOICES)}; "
                 f"got {self.forecast_variant!r}"
             )
-        if self.rollover_proxy_penalty > 0.0:
-            raise ValueError("rollover_proxy_penalty must be non-positive.")
+        if not isinstance(self.rollover_proxy_params, RolloverProxyParams):
+            raise TypeError(
+                "rollover_proxy_params must be a RolloverProxyParams instance; "
+                f"got {type(self.rollover_proxy_params)!r}"
+            )
+        if not math.isfinite(self.rollover_proxy_penalty) or self.rollover_proxy_penalty > 0.0:
+            raise ValueError("rollover_proxy_penalty must be a finite non-positive value.")
 
         sync_observation_stack_settings(self)
         self._validate_telemetry()

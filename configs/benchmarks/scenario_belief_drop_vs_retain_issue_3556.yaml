@@ -22,6 +22,7 @@ no_benchmark_result_claim: true
 follows:
   - issue: 3471  # controlled-scenario diagnostic + metrics harness (PR #3553)
   - issue: 3553  # the PR that landed #3471
+  - issue: 3635  # near-safe occlusion-bearing crossing family surface
 
 claim_gate:
   target_claim: >-
@@ -58,8 +59,8 @@ belief_uncertainty_source:
 # Predeclared scenario family + seed matrix to attach at campaign authoring time. The crossing /
 # occlusion-bearing families are the discriminating ones (an out-of-FOV agent must be able to be
 # unsafe-to-ignore). Fill with the canonical scenario set + seed_sets_v1 tier before submit.
-scenario_family: configs/scenarios/classic_interactions_francis2023.yaml
-seed_set: paper_eval_s20   # via #1554; predeclared, run-gated
+scenario_family: configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml
+seed_set: issue_3635_s3_contract_only
 
 metric_surface:
   # Episode-level safety metrics (mirrors the #3471 harness): collisions, near misses, minimum

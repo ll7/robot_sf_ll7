@@ -1,0 +1,7 @@
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../single/issue_3635_near_safe_occlusion_bearing_crossing.yaml
+select_scenarios:
+  - issue_3635_near_safe_occlusion_bearing_crossing
+map_search_paths:
+  - ../../../maps/svg_maps

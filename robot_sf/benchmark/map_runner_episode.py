@@ -324,6 +324,15 @@ def _safety_predicates_for_episode(
         track_confidence_arr=visibility_evidence.track_confidence,
     )
 
+    # The late-evasive diagnostic measures latency from first hazard visibility and
+    # always requires a concrete per-step visibility signal. When per-step occlusion
+    # evidence is unavailable (the default map-runner path), retain the prior
+    # all-visible assumption so this predicate keeps computing; only the
+    # occlusion-near-miss predicate distinguishes unavailable visibility evidence.
+    late_evasive_visible = (
+        hazard_visible if hazard_visible is not None else np.ones(step_count, dtype=bool)
+    )
+
     return {
         "oscillatory_control_predicate": oscillatory_control_predicate(
             positions,
@@ -333,7 +342,7 @@ def _safety_predicates_for_episode(
         ),
         "late_evasive_predicate": late_evasive_predicate(
             hazard_distances,
-            hazard_visible,
+            late_evasive_visible,
             speeds,
             dt=dt,
         ),

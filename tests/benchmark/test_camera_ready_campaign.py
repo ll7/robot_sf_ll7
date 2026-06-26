@@ -47,6 +47,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _sanitize_csv_cell,
     _sanitize_git_remote,
     _sanitize_name,
+    _scenario_with_kinematics,
     _sha256_file,
     load_campaign_config,
     prepare_campaign_preflight,
@@ -66,6 +67,50 @@ from robot_sf.benchmark.synthetic_actuation import (
     validate_synthetic_actuation_variability_distribution,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+
+
+def test_scenario_with_kinematics_patches_copy_without_mutating_input() -> None:
+    """Scenario kinematics patching preserves unrelated fields and leaves input untouched."""
+    scenario = {
+        "name": "sample",
+        "robot_config": {"radius": 0.3, "type": "differential"},
+        "metadata": {"group": "smoke"},
+    }
+
+    patched = _scenario_with_kinematics(
+        scenario,
+        kinematics="unicycle",
+        holonomic_command_mode="vx_vy",
+    )
+
+    assert patched == {
+        "name": "sample",
+        "robot_config": {"radius": 0.3, "type": "unicycle"},
+        "metadata": {"group": "smoke"},
+    }
+    assert scenario["robot_config"] == {"radius": 0.3, "type": "differential"}
+    assert patched is not scenario
+    assert patched["robot_config"] is not scenario["robot_config"]
+
+
+def test_scenario_with_kinematics_sets_holonomic_command_mode_default() -> None:
+    """Holonomic scenarios get the campaign default command mode only when missing."""
+    patched = _scenario_with_kinematics(
+        {"name": "sample"},
+        kinematics="holonomic",
+        holonomic_command_mode="vx_vy",
+    )
+    preserved = _scenario_with_kinematics(
+        {"name": "sample", "robot_config": {"command_mode": "speed_heading"}},
+        kinematics="holonomic",
+        holonomic_command_mode="vx_vy",
+    )
+
+    assert patched["robot_config"] == {"type": "holonomic", "command_mode": "vx_vy"}
+    assert preserved["robot_config"] == {
+        "command_mode": "speed_heading",
+        "type": "holonomic",
+    }
 
 
 def test_load_campaign_config_resolves_relative_paths(tmp_path: Path):

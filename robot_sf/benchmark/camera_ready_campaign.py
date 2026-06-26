@@ -50,6 +50,7 @@ from robot_sf.benchmark.camera_ready._config import (  # noqa: F401 - re-exporte
     _sanitize_name,
     _scenario_horizon_summary,
     _scenario_name_key,
+    _scenario_with_kinematics,
     _validate_scenario_amv_override_keys,
 )
 from robot_sf.benchmark.camera_ready._preflight import (
@@ -1869,28 +1870,6 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
     stop_requested = False
 
-    def _scenario_with_kinematics(
-        scenario: dict[str, Any],
-        *,
-        kinematics: str,
-    ) -> dict[str, Any]:
-        """Return a scenario copy patched for one robot kinematics mode.
-
-        Returns:
-            dict[str, Any]: Scenario payload with ``robot_config.type`` set.
-        """
-        patched = dict(scenario)
-        robot_cfg = (
-            dict(scenario.get("robot_config"))
-            if isinstance(scenario.get("robot_config"), dict)
-            else {}
-        )
-        robot_cfg["type"] = kinematics
-        if kinematics == "holonomic":
-            robot_cfg.setdefault("command_mode", cfg.holonomic_command_mode)
-        patched["robot_config"] = robot_cfg
-        return patched
-
     for planner in cfg.planners:
         if not planner.enabled:
             continue
@@ -1924,7 +1903,12 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
             summary: dict[str, Any]
             aggregates: dict[str, Any] | None = None
             scoped_scenarios = [
-                _scenario_with_kinematics(sc, kinematics=kinematics) for sc in scenarios
+                _scenario_with_kinematics(
+                    sc,
+                    kinematics=kinematics,
+                    holonomic_command_mode=cfg.holonomic_command_mode,
+                )
+                for sc in scenarios
             ]
 
             try:

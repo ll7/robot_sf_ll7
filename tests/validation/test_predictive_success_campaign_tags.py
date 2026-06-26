@@ -21,6 +21,85 @@ def test_checkpoint_token_is_path_sensitive() -> None:
     assert b.startswith("predictive_model_")
 
 
+def test_load_planner_variants_rejects_duplicate_names(tmp_path: Path) -> None:
+    """Authority grids should not silently collapse duplicate variant names."""
+    grid = tmp_path / "grid.yaml"
+    grid.write_text(
+        yaml.safe_dump(
+            {
+                "variants": [
+                    {"name": "baseline", "params": {}},
+                    {"name": "baseline", "params": {"max_angular_speed": 1.8}},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate variant name"):
+        campaign._load_planner_variants(grid)
+
+
+def test_main_check_only_writes_manifest_summary(monkeypatch, tmp_path: Path) -> None:
+    """Check-only mode validates toy manifests without checkpoint evaluation."""
+    matrix = tmp_path / "matrix.yaml"
+    map_path = tmp_path / "maps" / "open.svg"
+    map_path.parent.mkdir()
+    map_path.write_text("<svg />", encoding="utf-8")
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "classic_cross_trap_high",
+                        "map_file": "maps/open.svg",
+                        "seeds": [1],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    hard_manifest = tmp_path / "hard.yaml"
+    hard_manifest.write_text(
+        yaml.safe_dump({"classic_cross_trap_high": [101, 102]}),
+        encoding="utf-8",
+    )
+    grid = tmp_path / "grid.yaml"
+    grid.write_text(
+        yaml.safe_dump(
+            {
+                "variants": [
+                    {"name": "baseline", "params": {}},
+                    {"name": "high_angular", "params": {"max_angular_speed": 1.8}},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "out"
+
+    monkeypatch.setattr(
+        campaign,
+        "parse_args",
+        lambda: campaign.argparse.Namespace(
+            checkpoints=None,
+            check_only=True,
+            scenario_matrix=matrix,
+            hard_seed_manifest=hard_manifest,
+            planner_grid=grid,
+            output_dir=output_dir,
+        ),
+    )
+
+    assert campaign.main() == 0
+    summary = json.loads((output_dir / "manifest_check_summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "checked_no_evaluation_run"
+    assert summary["matched_hard_scenarios"] == 1
+    assert summary["planner_variants"] == ["baseline", "high_angular"]
+    assert "no checkpoint evaluation" in summary["scope_note"]
+
+
 def test_rank_key_prefers_global_success_before_clearance_when_hard_tied() -> None:
     """Campaign ranking should not pick the safest failure over the more successful variant."""
     hard_a = campaign.EvalResult(

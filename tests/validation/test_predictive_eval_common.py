@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.validation.predictive_eval_common import make_subset_scenarios
+from scripts.validation.predictive_eval_common import load_seed_manifest, make_subset_scenarios
 
 
 def _write_matrix(tmp_path: Path) -> Path:
@@ -65,3 +65,19 @@ def test_make_subset_scenarios_rejects_empty_selection(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="selected no scenarios"):
         make_subset_scenarios(matrix, {})
+
+
+def test_load_seed_manifest_rejects_invalid_entries(tmp_path: Path) -> None:
+    """Hard-case seed manifests fail closed before campaign execution."""
+    manifest = tmp_path / "hard.yaml"
+    manifest.write_text(
+        yaml.safe_dump({"planner_sanity_simple": [101, 101]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate seeds"):
+        load_seed_manifest(manifest)
+
+    manifest.write_text(yaml.safe_dump({"planner_sanity_simple": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="no seeds"):
+        load_seed_manifest(manifest)

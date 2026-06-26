@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -46,6 +47,7 @@ from robot_sf.benchmark.map_runner_metrics import (
 from robot_sf.benchmark.map_runner_metrics import (
     normalize_pedestrian_impact_controls as _normalize_pedestrian_impact_controls,
 )
+from robot_sf.benchmark.map_runner_observations import normalize_xy_rows as _normalize_xy_rows
 from robot_sf.benchmark.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,
 )
@@ -128,6 +130,16 @@ if TYPE_CHECKING:
 PolicyBuilder = Callable[..., tuple[Any, dict[str, Any]]]
 
 
+@dataclass(frozen=True, slots=True)
+class VisibilityEvidenceTrace:
+    """Episode-level visibility evidence arrays consumed by safety predicates."""
+
+    visibility: np.ndarray | None = None
+    track_confidence: np.ndarray | None = None
+    status: str = "unavailable"
+    reason: str | None = None
+
+
 def _nearest_hazard_distances(
     robot_pos_arr: np.ndarray,
     ped_pos_arr: np.ndarray,
@@ -143,6 +155,143 @@ def _nearest_hazard_distances(
     return np.min(np.linalg.norm(peds - robot, axis=2), axis=1)
 
 
+def _observed_pedestrian_positions(obs: Any) -> np.ndarray | None:
+    """Return planner-facing pedestrian positions when the observation exposes them."""
+    if not isinstance(obs, Mapping):
+        return None
+    pedestrians = obs.get("pedestrians")
+    if isinstance(pedestrians, Mapping) and "positions" in pedestrians:
+        return _normalize_xy_rows(pedestrians.get("positions"))
+    if "pedestrian_positions" in obs:
+        return _normalize_xy_rows(obs.get("pedestrian_positions"))
+    if "ped_positions" in obs:
+        return _normalize_xy_rows(obs.get("ped_positions"))
+    return None
+
+
+def _visibility_evidence_for_step(
+    *,
+    peds: np.ndarray,
+    obs: Any,
+    config: Any,
+) -> tuple[np.ndarray | None, np.ndarray | None, str, str | None]:
+    """Match simulator pedestrians to planner-facing observations for trace labels.
+
+    Returns:
+        Tuple of visible mask, track-confidence values, evidence status, and reason.
+    """
+    peds = (
+        np.asarray(peds, dtype=float).reshape(-1, 2) if np.asarray(peds).size else np.zeros((0, 2))
+    )
+    if peds.shape[0] == 0:
+        return (
+            np.zeros((0,), dtype=bool),
+            np.zeros((0,), dtype=float),
+            "not_applicable",
+            "no_pedestrians",
+        )
+
+    settings = getattr(config, "observation_visibility", None)
+    if settings is None or not bool(getattr(settings, "enabled", False)):
+        return None, None, "not_applicable", "observation_visibility_disabled"
+
+    observed = _observed_pedestrian_positions(obs)
+    if observed is None:
+        return None, None, "unavailable", "planner_observation_missing_pedestrian_positions"
+
+    visible = np.zeros((peds.shape[0],), dtype=bool)
+    if observed.shape[0] > 0:
+        noise_std = float(getattr(settings, "tracking_noise_std_m", 0.0) or 0.0)
+        match_tolerance_m = max(1.0e-4, 3.0 * noise_std + 1.0e-3)
+        distances = np.linalg.norm(peds[:, np.newaxis, :] - observed[np.newaxis, :, :], axis=2)
+        visible = np.min(distances, axis=1) <= match_tolerance_m
+    confidence = visible.astype(float)
+    return visible, confidence, "available", None
+
+
+def _annotate_trace_visibility(
+    pedestrians: list[dict[str, Any]],
+    *,
+    visible: np.ndarray | None,
+    track_confidence: np.ndarray | None,
+    evidence_status: str,
+    evidence_reason: str | None,
+) -> list[dict[str, Any]]:
+    """Attach per-pedestrian visibility labels to trace frames.
+
+    Returns:
+        The same frame list with visibility fields attached to each pedestrian.
+    """
+    for idx, frame in enumerate(pedestrians):
+        if visible is None or track_confidence is None:
+            frame["visibility_state"] = evidence_status
+            frame["track_confidence"] = None
+        else:
+            is_visible = bool(visible[idx]) if idx < visible.shape[0] else False
+            frame["visibility_state"] = "visible" if is_visible else "occluded"
+            frame["track_confidence"] = (
+                float(track_confidence[idx]) if idx < track_confidence.shape[0] else 0.0
+            )
+        frame["visibility_evidence_status"] = evidence_status
+        frame["visibility_evidence_reason"] = evidence_reason
+    return pedestrians
+
+
+def _stack_visibility_values(
+    values: list[np.ndarray | None],
+    *,
+    fill_value: float,
+    dtype: Any,
+) -> np.ndarray | None:
+    """Stack per-step pedestrian scalar labels, preserving missing-evidence state.
+
+    Returns:
+        ``(steps, pedestrians)`` array, or ``None`` when any step lacks evidence.
+    """
+    if not values or any(value is None for value in values):
+        return None
+    width = max((int(np.asarray(value).reshape(-1).shape[0]) for value in values), default=0)
+    stacked = np.full((len(values), width), fill_value, dtype=dtype)
+    for row_idx, value in enumerate(values):
+        arr = np.asarray(value, dtype=dtype).reshape(-1)
+        stacked[row_idx, : arr.shape[0]] = arr
+    return stacked
+
+
+def _nearest_hazard_visibility_signals(
+    *,
+    robot_pos_arr: np.ndarray,
+    ped_pos_arr: np.ndarray,
+    visibility_arr: np.ndarray | None,
+    track_confidence_arr: np.ndarray | None,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Return nearest-pedestrian visibility/confidence signals for the predicate.
+
+    Returns:
+        Tuple of per-step nearest-hazard visibility and confidence arrays.
+    """
+    if visibility_arr is None or track_confidence_arr is None:
+        return None, None
+    step_count = min(int(robot_pos_arr.shape[0]), int(ped_pos_arr.shape[0]))
+    if step_count == 0 or ped_pos_arr.ndim < 3 or ped_pos_arr.shape[1] == 0:
+        return np.zeros((step_count,), dtype=bool), np.zeros((step_count,), dtype=float)
+    peds = np.asarray(ped_pos_arr[:step_count], dtype=float)
+    robot = np.asarray(robot_pos_arr[:step_count], dtype=float)[:, np.newaxis, :]
+    distances = np.linalg.norm(peds - robot, axis=2)
+    distances[~np.isfinite(distances)] = np.inf
+    nearest = np.argmin(distances, axis=1)
+    visible = np.zeros((step_count,), dtype=bool)
+    confidence = np.zeros((step_count,), dtype=float)
+    for step_idx, ped_idx in enumerate(nearest):
+        if not np.isfinite(distances[step_idx, ped_idx]):
+            continue
+        if step_idx < visibility_arr.shape[0] and ped_idx < visibility_arr.shape[1]:
+            visible[step_idx] = bool(visibility_arr[step_idx, ped_idx])
+        if step_idx < track_confidence_arr.shape[0] and ped_idx < track_confidence_arr.shape[1]:
+            confidence[step_idx] = float(track_confidence_arr[step_idx, ped_idx])
+    return visible, confidence
+
+
 def _safety_predicates_for_episode(
     *,
     robot_pos_arr: np.ndarray,
@@ -150,6 +299,7 @@ def _safety_predicates_for_episode(
     robot_headings: list[float],
     ped_pos_arr: np.ndarray,
     dt: float,
+    visibility_evidence: VisibilityEvidenceTrace | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build diagnostic safety predicate records for a completed episode.
 
@@ -166,11 +316,13 @@ def _safety_predicates_for_episode(
     speeds = np.linalg.norm(velocities, axis=1) if velocities.size else np.zeros(step_count)
     hazard_distances = _nearest_hazard_distances(positions, ped_pos_arr)[:step_count]
 
-    # Map-runner currently has simulator full-state traces, not per-step occlusion labels.
-    # Treat actors as visible with full track confidence and let the predicate emit false
-    # unless future visibility evidence shows an occluded actor emerging near a miss.
-    hazard_visible = np.ones(step_count, dtype=bool)
-    track_confidence = np.ones(step_count, dtype=float)
+    visibility_evidence = visibility_evidence or VisibilityEvidenceTrace()
+    hazard_visible, track_confidence = _nearest_hazard_visibility_signals(
+        robot_pos_arr=positions,
+        ped_pos_arr=ped_pos_arr[:step_count],
+        visibility_arr=visibility_evidence.visibility,
+        track_confidence_arr=visibility_evidence.track_confidence,
+    )
 
     return {
         "oscillatory_control_predicate": oscillatory_control_predicate(
@@ -191,6 +343,8 @@ def _safety_predicates_for_episode(
             track_confidence,
             speeds,
             dt=dt,
+            visibility_evidence_status=visibility_evidence.status,
+            visibility_evidence_reason=visibility_evidence.reason,
         ),
     }
 
@@ -359,6 +513,10 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     synthetic_actuation_trace: list[dict[str, Any]] = []
     planner_decision_trace: list[dict[str, Any]] = []
     simulation_step_trace: list[dict[str, Any]] = []
+    visibility_trace: list[np.ndarray | None] = []
+    track_confidence_trace: list[np.ndarray | None] = []
+    visibility_evidence_statuses: list[str] = []
+    visibility_evidence_reasons: list[str | None] = []
     single_pedestrian_intent_metadata = _single_pedestrian_intent_metadata(scenario)
     single_pedestrian_vru_metadata = _single_pedestrian_vru_metadata(scenario)
 
@@ -472,6 +630,16 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 ped_forces.append(forces_arr)
             heading = _observation_heading(obs, default=previous_trace_heading)
             robot_headings.append(float(heading))
+            (
+                step_visible,
+                step_confidence,
+                step_visibility_status,
+                step_visibility_reason,
+            ) = _visibility_evidence_for_step(peds=peds, obs=obs, config=config)
+            visibility_trace.append(step_visible)
+            track_confidence_trace.append(step_confidence)
+            visibility_evidence_statuses.append(step_visibility_status)
+            visibility_evidence_reasons.append(step_visibility_reason)
             if record_simulation_step_trace:
                 dt_seconds = float(config.sim_config.time_per_step_in_secs)
                 robot_velocity = (
@@ -498,6 +666,21 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             [float(force[0]), float(force[1])] for force in forces_arr
                         ]
                     }
+                trace_pedestrians = _annotate_trace_visibility(
+                    _trace_pedestrians(
+                        peds,
+                        previous_trace_ped_pos,
+                        dt_seconds,
+                        single_pedestrian_intent_metadata,
+                        single_pedestrian_vru_metadata,
+                        robot_pos,
+                        robot_velocity,
+                    ),
+                    visible=step_visible,
+                    track_confidence=step_confidence,
+                    evidence_status=step_visibility_status,
+                    evidence_reason=step_visibility_reason,
+                )
                 simulation_step_trace.append(
                     {
                         "step": int(step_idx),
@@ -507,15 +690,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                             "heading": float(heading),
                             "velocity": [float(robot_velocity[0]), float(robot_velocity[1])],
                         },
-                        "pedestrians": _trace_pedestrians(
-                            peds,
-                            previous_trace_ped_pos,
-                            dt_seconds,
-                            single_pedestrian_intent_metadata,
-                            single_pedestrian_vru_metadata,
-                            robot_pos,
-                            robot_velocity,
-                        ),
+                        "pedestrians": trace_pedestrians,
                         "planner": planner_payload,
                     }
                 )
@@ -658,12 +833,40 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         if record_forces
         else np.zeros_like(ped_pos_arr, dtype=float)
     )
+    visibility_arr = _stack_visibility_values(
+        visibility_trace,
+        fill_value=False,
+        dtype=bool,
+    )
+    track_confidence_arr = _stack_visibility_values(
+        track_confidence_trace,
+        fill_value=0.0,
+        dtype=float,
+    )
+    if "unavailable" in visibility_evidence_statuses:
+        visibility_evidence_status = "unavailable"
+    elif visibility_evidence_statuses and all(
+        status == "not_applicable" for status in visibility_evidence_statuses
+    ):
+        visibility_evidence_status = "not_applicable"
+    else:
+        visibility_evidence_status = "available"
+    visibility_evidence_reason = next(
+        (reason for reason in visibility_evidence_reasons if reason),
+        None,
+    )
     safety_predicates = _safety_predicates_for_episode(
         robot_pos_arr=robot_pos_arr,
         robot_vel_arr=robot_vel_arr,
         robot_headings=robot_headings,
         ped_pos_arr=ped_pos_arr,
         dt=float(config.sim_config.time_per_step_in_secs),
+        visibility_evidence=VisibilityEvidenceTrace(
+            visibility=visibility_arr,
+            track_confidence=track_confidence_arr,
+            status=visibility_evidence_status,
+            reason=visibility_evidence_reason,
+        ),
     )
 
     obstacles = (

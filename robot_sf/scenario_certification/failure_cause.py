@@ -37,19 +37,16 @@ REQUIRED_DIAGNOSTIC_LANES = (
     "oracle_or_scripted_controller",
 )
 
+# Keys are stored in canonical underscore form; ``normalize_diagnostic_lane`` folds
+# whitespace and hyphens to underscores before lookup, so hyphenated aliases such as
+# ``route-clearance`` resolve here without separate entries.
 _DIAGNOSTIC_LANE_ALIASES = {
-    "route-clearance": "route_clearance",
     "route_clearance": "route_clearance",
-    "actor-free": "actor_free_run",
-    "actor-free-run": "actor_free_run",
     "actor_free": "actor_free_run",
     "actor_free_run": "actor_free_run",
-    "extended-time": "extended_time_run",
-    "extended-time-run": "extended_time_run",
     "extended_time": "extended_time_run",
     "extended_time_run": "extended_time_run",
     "oracle": "oracle_or_scripted_controller",
-    "oracle-trajectory": "oracle_or_scripted_controller",
     "oracle_trajectory": "oracle_or_scripted_controller",
     "oracle_or_scripted_controller": "oracle_or_scripted_controller",
     "scripted_controller": "oracle_or_scripted_controller",
@@ -249,7 +246,8 @@ def feasibility_diagnostic_row_to_dict(row: FeasibilityDiagnosticRow) -> dict[st
 def normalize_diagnostic_lane(lane: str) -> str:
     """Return canonical diagnostic lane name or raise for unsupported lanes."""
 
-    normalized = _DIAGNOSTIC_LANE_ALIASES.get(str(lane).strip().lower().replace(" ", "_"))
+    key = str(lane).strip().lower().replace(" ", "_").replace("-", "_")
+    normalized = _DIAGNOSTIC_LANE_ALIASES.get(key)
     if normalized is None:
         expected = ", ".join(REQUIRED_DIAGNOSTIC_LANES)
         raise ValueError(

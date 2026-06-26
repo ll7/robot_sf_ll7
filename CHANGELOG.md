@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a regression guard for **pygame-free headless execution** (#3631). A subprocess-probe test
+  (`tests/test_pygame_headless.py::test_headless_step_does_not_import_pygame`) builds and **steps** the
+  env under forced-headless drivers and asserts `pygame` is never imported and no `sim_ui` is created —
+  extending the no-pygame contract from env *construction* (already covered) through a full step, which
+  the issue's reproduction specifically targets. The headless path was verified already pygame-free, so
+  this is a test-only guard (a negative probe with an injected `import pygame` flips it red, confirming
+  it is not vacuous).
 * Added a **performance-PR evidence contract** that fails PR readiness when a `perf`-typed
   conventional-commit change (the #3611 → #3613 failure mode: a `perf(planner): cache ...` whose
   claimed speed-up targeted the wrong layer and had to be reverted) lacks a `## Performance

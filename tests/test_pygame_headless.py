@@ -3,10 +3,81 @@ Test that pygame windows don't open during tests in headless environments.
 """
 
 import os
+import subprocess
+import sys
+import textwrap
 
 import pygame
 
 from robot_sf.gym_env.environment_factory import make_robot_env
+
+
+def _run_headless_probe(code: str) -> str:
+    """Run an isolated Python probe in a forced-headless subprocess and return stdout.
+
+    A subprocess is required because this very test module imports ``pygame`` at the
+    top level, which would otherwise pollute ``sys.modules`` and make an in-process
+    ``"pygame" in sys.modules`` assertion meaningless. The child process starts with a
+    clean interpreter and headless SDL/matplotlib drivers so the assertion reflects only
+    what the production ``make_robot_env`` code path imports.
+
+    Args:
+        code: Python source executed in the child interpreter via ``-c``.
+
+    Returns:
+        The captured standard output of the child process.
+    """
+    env = os.environ.copy()
+    env.update(
+        {
+            "DISPLAY": "",
+            "MPLBACKEND": "Agg",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_AUDIODRIVER": "dummy",
+            "PYGAME_HIDE_SUPPORT_PROMPT": "hide",
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(code)],
+        check=True,
+        cwd=os.getcwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout
+
+
+def test_headless_step_does_not_import_pygame() -> None:
+    """Regression guard: a full reset+step on ``debug=False`` must not import pygame.
+
+    Headless runs (SLURM, minimal CI containers) require that pygame is never imported
+    or display-initialized on the pure-simulation path. ``test_lazy_pygame_init.py`` covers
+    env *construction*; this guard extends the contract through env *execution* by
+    inspecting ``sys.modules`` after a real ``reset()`` and ``step()``, matching the
+    reproduction in issue #3631. If a future change adds a top-level pygame import or a
+    render call on the headless step path, this probe fails.
+    """
+    stdout = _run_headless_probe(
+        """
+        import sys
+
+        from robot_sf.gym_env.environment_factory import make_robot_env
+
+        env = make_robot_env(debug=False)
+        try:
+            env.reset(seed=42)
+            action = env.action_space.sample()
+            env.step(action)
+            print("pygame_after_step", "pygame" in sys.modules)
+            print("sim_ui", getattr(env, "sim_ui", None))
+        finally:
+            env.close()
+        """
+    )
+
+    assert "pygame_after_step False" in stdout, stdout
+    assert "sim_ui None" in stdout, stdout
 
 
 class TestPygameHeadless:

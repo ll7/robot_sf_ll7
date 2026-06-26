@@ -327,3 +327,20 @@ def test_occlusion_rejects_non_finite_predicted_separation() -> None:
             dt=_DT,
             predicted_minimum_separation_m=np.inf,
         )
+
+
+def test_occlusion_missing_visibility_evidence_is_unavailable() -> None:
+    """Missing visibility telemetry must not be reported as a real false predicate."""
+    from robot_sf.benchmark.safety_predicates import occlusion_near_miss_predicate
+
+    result = occlusion_near_miss_predicate(
+        np.array([5.0, 2.0, 0.3]),
+        None,
+        None,
+        np.ones(3),
+        dt=_DT,
+    )
+
+    assert result["occlusion_near_miss"] is False
+    assert result["status"] == "unavailable"
+    assert result["status_reason"] == "missing_visibility_evidence"

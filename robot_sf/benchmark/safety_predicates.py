@@ -265,15 +265,17 @@ class OcclusionNearMissParams:
     decel_threshold_m_s2: float = 0.5
 
 
-def occlusion_near_miss_predicate(
+def occlusion_near_miss_predicate(  # noqa: PLR0913
     hazard_distances: NDArray[np.floating] | object,
-    visible: NDArray[np.bool_] | object,
-    track_confidence: NDArray[np.floating] | object,
+    visible: NDArray[np.bool_] | object | None,
+    track_confidence: NDArray[np.floating] | object | None,
     speeds: NDArray[np.floating] | object,
     *,
     dt: float,
     params: OcclusionNearMissParams | None = None,
     predicted_minimum_separation_m: float | None = None,
+    visibility_evidence_status: str = "available",
+    visibility_evidence_reason: str | None = None,
 ) -> dict[str, Any]:
     """Produce the occlusion-triggered-near-miss predicate fields for one episode.
 
@@ -289,6 +291,8 @@ def occlusion_near_miss_predicate(
         dt: Per-step timestep (s, > 0).
         params: Tunable thresholds; defaults to :class:`OcclusionNearMissParams`.
         predicted_minimum_separation_m: Optional predicted min separation under occlusion.
+        visibility_evidence_status: Evidence availability state for visibility inputs.
+        visibility_evidence_reason: Optional reason for unavailable visibility evidence.
 
     Returns:
         dict[str, Any]: Versioned record with the motivated fields and the diagnostic
@@ -298,16 +302,13 @@ def occlusion_near_miss_predicate(
         raise ValueError(f"dt must be > 0, got {dt!r}")
     params = params or OcclusionNearMissParams()
     dist = np.asarray(hazard_distances, dtype=np.float64).reshape(-1)
-    vis = np.asarray(visible, dtype=bool).reshape(-1)
-    conf = np.asarray(track_confidence, dtype=np.float64).reshape(-1)
     speed = np.asarray(speeds, dtype=np.float64).reshape(-1)
     n = dist.shape[0]
-    if not (vis.shape[0] == n == conf.shape[0] == speed.shape[0]):
-        raise ValueError("all per-step signals must share length N")
+    if speed.shape[0] != n:
+        raise ValueError("hazard_distances and speeds must share length N")
     if n < 2:
         raise ValueError("at least two steps are required")
     require_finite_array("hazard_distances", dist)
-    require_finite_array("track_confidence", conf)
     require_finite_array("speeds", speed)
     if predicted_minimum_separation_m is not None:
         predicted_minimum_separation_m = require_finite_scalar(
@@ -317,6 +318,45 @@ def occlusion_near_miss_predicate(
     min_sep_step = int(np.argmin(dist))
     actual_minimum_separation = float(dist[min_sep_step])
     near_miss = actual_minimum_separation <= params.near_miss_radius_m
+
+    missing_visibility = visible is None or track_confidence is None
+    if missing_visibility:
+        status = (
+            "not_applicable" if visibility_evidence_status == "not_applicable" else "unavailable"
+        )
+        status_reason = visibility_evidence_reason or "missing_visibility_evidence"
+        return {
+            "schema_version": OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
+            "predicate": "occlusion_near_miss",
+            "evidence_kind": "diagnostic_proxy",
+            "occlusion_near_miss": False,
+            "status": status,
+            "status_reason": status_reason,
+            "fields": {
+                "was_occluded_before_min": None,
+                "emergence_step": None,
+                "first_detection_step": None,
+                "first_response_step": None,
+                "min_separation_step": min_sep_step,
+                "actual_minimum_separation_m": actual_minimum_separation,
+                "predicted_minimum_separation_m": predicted_minimum_separation_m,
+                "near_miss": near_miss,
+                "visibility_evidence_status": status,
+                "visibility_evidence_reason": status_reason,
+                "n_steps": n,
+            },
+            "thresholds": {
+                "near_miss_radius_m": params.near_miss_radius_m,
+                "detection_confidence_threshold": params.detection_confidence_threshold,
+                "decel_threshold_m_s2": params.decel_threshold_m_s2,
+            },
+        }
+
+    vis = np.asarray(visible, dtype=bool).reshape(-1)
+    conf = np.asarray(track_confidence, dtype=np.float64).reshape(-1)
+    if not (vis.shape[0] == n == conf.shape[0]):
+        raise ValueError("all per-step signals must share length N")
+    require_finite_array("track_confidence", conf)
 
     # The actor was occluded at some point up to (and including) the closest approach.
     was_occluded_before_min = bool(np.any(~vis[: min_sep_step + 1]))
@@ -339,6 +379,8 @@ def occlusion_near_miss_predicate(
         "predicate": "occlusion_near_miss",
         "evidence_kind": "diagnostic_proxy",
         "occlusion_near_miss": occlusion_near_miss,
+        "status": "true" if occlusion_near_miss else "false",
+        "status_reason": None,
         "fields": {
             "was_occluded_before_min": was_occluded_before_min,
             "emergence_step": emergence_step,
@@ -348,6 +390,8 @@ def occlusion_near_miss_predicate(
             "actual_minimum_separation_m": actual_minimum_separation,
             "predicted_minimum_separation_m": predicted_minimum_separation_m,
             "near_miss": near_miss,
+            "visibility_evidence_status": "available",
+            "visibility_evidence_reason": visibility_evidence_reason,
             "n_steps": n,
         },
         "thresholds": {

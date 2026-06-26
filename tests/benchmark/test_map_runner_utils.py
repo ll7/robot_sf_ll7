@@ -5135,3 +5135,126 @@ def test_holonomic_social_force_diagnosis_config_contains_expected_planners() ->
     assert data.get("holonomic_command_mode") == "vx_vy", (
         "Diagnosis config must use holonomic vx_vy command mode"
     )
+
+
+class _OcclusionVisibilitySim:
+    """Simulator stub with one pedestrian hidden, then revealed during a near miss."""
+
+    def __init__(self, map_def: MapDefinition) -> None:
+        self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+        self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+        self.map_def = map_def
+        self.last_ped_forces = np.zeros((1, 2), dtype=float)
+        self._pedestrian_positions = [
+            np.array([[2.0, 0.0]], dtype=float),
+            np.array([[1.5, 0.0]], dtype=float),
+            np.array([[0.3, 0.0]], dtype=float),
+            np.array([[1.0, 0.0]], dtype=float),
+        ]
+        self.ped_pos = self._pedestrian_positions[0].copy()
+
+
+class _OcclusionVisibilityEnv:
+    """Environment stub exposing planner-facing visibility through observations."""
+
+    def __init__(self, map_def: MapDefinition) -> None:
+        self.simulator = _OcclusionVisibilitySim(map_def)
+        self.action_space = None
+        self._step = 0
+
+    def _observation(self, *, visible: bool) -> dict[str, object]:
+        positions = self.simulator.ped_pos if visible else np.zeros((0, 2), dtype=np.float32)
+        return {
+            "robot": {
+                "position": np.array([0.0, 0.0], dtype=np.float32),
+                "heading": np.array([0.0], dtype=np.float32),
+                "speed": np.array([0.0], dtype=np.float32),
+                "radius": np.array([0.5], dtype=np.float32),
+            },
+            "goal": {"current": np.array([2.0, 0.0], dtype=np.float32)},
+            "pedestrians": {
+                "positions": np.asarray(positions, dtype=np.float32),
+                "velocities": np.zeros((positions.shape[0], 2), dtype=np.float32),
+                "radius": np.array([0.4], dtype=np.float32),
+                "count": np.array([float(positions.shape[0])], dtype=np.float32),
+            },
+        }
+
+    def reset(self, seed: int | None = None):
+        """Return an initially occluded planner observation."""
+        del seed
+        self._step = 0
+        self.simulator.ped_pos = self.simulator._pedestrian_positions[0].copy()
+        return self._observation(visible=False), {}
+
+    def step(self, action):
+        """Advance one synthetic step, revealing the pedestrian at step two."""
+        del action
+        self.simulator.ped_pos = self.simulator._pedestrian_positions[self._step].copy()
+        visible = self._step >= 2
+        obs = self._observation(visible=visible)
+        self._step += 1
+        terminated = self._step >= 4
+        return obs, 0.0, terminated, False, {"success": False}
+
+    def close(self) -> None:
+        """No resources to release."""
+
+
+def test_map_episode_visibility_trace_feeds_occlusion_near_miss_predicate(monkeypatch) -> None:
+    """Per-step visibility labels must feed occlusion-near-miss evidence."""
+    from robot_sf.gym_env.unified_config import ObservationVisibilitySettings
+
+    dummy_config = SimpleNamespace(
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+        robot_config=HolonomicDriveSettings(max_speed=1.0, max_angular_speed=1.0),
+        observation_visibility=ObservationVisibilitySettings(enabled=True),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _OcclusionVisibilityEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._policy_command_to_env_action",
+        lambda env, config, command: np.asarray(command, dtype=np.float32),
+    )
+
+    record = _run_map_episode(
+        {"name": "occlusion-visibility", "simulation_config": {"max_episode_steps": 4}},
+        seed=1,
+        horizon=None,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        algo_config_path=None,
+        scenario_path=Path("."),
+        record_simulation_step_trace=True,
+    )
+
+    trace = record["algorithm_metadata"]["simulation_step_trace"]
+    labels = [step["pedestrians"][0]["visibility_state"] for step in trace["steps"]]
+    confidences = [step["pedestrians"][0]["track_confidence"] for step in trace["steps"]]
+    assert labels == ["occluded", "occluded", "visible", "visible"]
+    assert confidences == pytest.approx([0.0, 0.0, 1.0, 1.0])
+    predicate = record["safety_predicates"]["occlusion_near_miss_predicate"]
+    assert predicate["status"] == "true"
+    assert predicate["occlusion_near_miss"] is True

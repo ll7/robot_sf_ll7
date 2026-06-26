@@ -213,8 +213,6 @@ class ScenarioSwitchingEnv(Env):
 
         env, scenario_id = self._build_env(seed=seed)
         self._activate_env(env, scenario_id)
-        self.observation_space = self._current_env.observation_space
-        self.action_space = self._current_env.action_space
         self.metadata = getattr(self._current_env, "metadata", {})
         self.render_mode = getattr(self._current_env, "render_mode", None)
 
@@ -251,6 +249,8 @@ class ScenarioSwitchingEnv(Env):
         self._scenario_coverage[scenario_id] = self._scenario_coverage.get(scenario_id, 0) + 1
         self._current_env = env
         self._current_scenario_id = scenario_id
+        self.observation_space = env.observation_space
+        self.action_space = env.action_space
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         """Reset the current scenario environment, optionally switching scenarios.
@@ -264,8 +264,6 @@ class ScenarioSwitchingEnv(Env):
         if self._current_env is None:
             env, scenario_id = self._build_env(seed=seed)
             self._activate_env(env, scenario_id)
-            self.observation_space = self._current_env.observation_space
-            self.action_space = self._current_env.action_space
         elif self._switch_per_reset and self._has_reset:
             previous_scenario_id = self._current_scenario_id
             new_env, new_scenario_id = self._build_env(seed=seed)
@@ -292,7 +290,7 @@ class ScenarioSwitchingEnv(Env):
             if not obs_strict and not self._warned_obs_bounds:
                 logger.warning(
                     "Scenario switching detected observation-space bound mismatches; "
-                    "using initial bounds for compatibility. previous={} current={}",
+                    "updating wrapper bounds to the active scenario. previous={} current={}",
                     previous_scenario_id,
                     new_scenario_id,
                 )

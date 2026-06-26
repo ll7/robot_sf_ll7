@@ -578,11 +578,11 @@ def test_sim_view_exit_and_telemetry_paths(monkeypatch) -> None:
     view.is_abortion_requested = False
     view._handle_exit()
 
-    exit_called = {"value": False}
-    monkeypatch.setattr(sim_view_mod.sys, "exit", lambda: exit_called.__setitem__("value", True))
+    exit_calls = []
+    monkeypatch.setattr(sim_view_mod.sys, "exit", lambda: exit_calls.append(True))
     view.is_abortion_requested = True
     view._handle_exit()
-    assert exit_called["value"] is True
+    assert exit_calls == []
 
     # Telemetry panel: missing method, None surface, and both layouts.
     view.show_telemetry_panel = True

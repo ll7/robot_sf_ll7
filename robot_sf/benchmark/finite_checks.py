@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from numbers import Real
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -11,8 +12,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
-def require_finite_scalar(name: str, value: float) -> float:
-    """Return ``value`` as float or raise when it is NaN/Inf."""
+def require_finite_scalar(name: str, value: Real) -> float:
+    """Return a real numeric scalar as float or raise when it is non-finite."""
+    if not isinstance(value, Real):
+        raise TypeError(f"{name} must be a real numeric scalar, got {type(value).__name__}")
     numeric = float(value)
     if not math.isfinite(numeric):
         raise ValueError(f"{name} is not finite: {numeric}")

@@ -25,10 +25,16 @@ from robot_sf.representation import uncertainty_source_generalization
 
 def test_require_finite_scalar_rejects_nan_and_inf() -> None:
     """Scalar diagnostics fail closed on NaN/Inf."""
-    assert require_finite_scalar("metric", "1.25") == pytest.approx(1.25)
+    assert require_finite_scalar("metric", 1.25) == pytest.approx(1.25)
     for bad in (math.nan, math.inf, -math.inf):
         with pytest.raises(ValueError, match="metric"):
             require_finite_scalar("metric", bad)
+
+
+def test_require_finite_scalar_rejects_numeric_string() -> None:
+    """Diagnostic scalar fields must not coerce numeric strings."""
+    with pytest.raises(TypeError, match="metric"):
+        require_finite_scalar("metric", "1.25")
 
 
 def test_require_finite_array_rejects_nan_and_inf() -> None:
@@ -49,6 +55,16 @@ def test_require_finite_fields_names_offending_field() -> None:
 
     with pytest.raises(ValueError, match=r"row\.unsafe"):
         require_finite_fields("row", Row(), ("safe", "unsafe"))
+
+
+def test_require_finite_fields_rejects_numeric_string_field() -> None:
+    """Dataclass-style diagnostic fields also reject numeric strings."""
+
+    class Row:
+        metric = "1.25"
+
+    with pytest.raises(TypeError, match=r"row\.metric"):
+        require_finite_fields("row", Row(), ("metric",))
 
 
 def test_stream_gap_classifier_rejects_non_finite_safety_aggregate() -> None:

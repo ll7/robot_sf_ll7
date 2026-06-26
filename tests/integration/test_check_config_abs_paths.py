@@ -122,3 +122,42 @@ class TestCheckConfigAbsPaths:
             main()
 
         assert exc_info.value.code == 0
+
+    def test_all_checks_tracked_path_with_spaces(self, tmp_path, monkeypatch):
+        """``--all`` still inspects tracked configs whose path contains spaces.
+
+        ``git ls-files`` C-quotes such paths in its default output, so the
+        scan must use the null-delimited (``-z``) listing to see them.
+        """
+        monkeypatch.chdir(tmp_path)
+        rel = "configs/my run/leaky.yaml"
+        _write(tmp_path, rel, "script: /home/dev/cache/run.sh\n")
+
+        subprocess.run(["git", "init"], check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "add", rel],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Test User",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "track spaced config",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        monkeypatch.setattr("sys.argv", ["check_config_abs_paths.py", "--all"])
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 1

@@ -46,14 +46,19 @@ def _iter_config_files(files: list[str]) -> list[Path]:
 
 
 def _iter_tracked_config_files() -> list[str]:
-    """Return Git-tracked files under ``configs/`` for ``--all`` checks."""
+    """Return Git-tracked files under ``configs/`` for ``--all`` checks.
+
+    Uses ``git ls-files -z`` so paths containing spaces or other special
+    characters survive verbatim (default output C-quotes such paths, which
+    would no longer match a real file and could be silently skipped).
+    """
     result = subprocess.run(
-        ["git", "ls-files", "--", str(CONFIG_ROOT)],
+        ["git", "ls-files", "-z", "--", str(CONFIG_ROOT)],
         check=True,
         capture_output=True,
         text=True,
     )
-    return [line for line in result.stdout.splitlines() if Path(line).is_file()]
+    return [name for name in result.stdout.split("\0") if name and Path(name).is_file()]
 
 
 def find_abs_path_violations(files: list[str]) -> dict:

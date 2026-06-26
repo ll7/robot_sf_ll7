@@ -97,6 +97,12 @@ if command -v gh >/dev/null 2>&1 && gh extension list 2>/dev/null | grep -qE "$g
 else
   print_result "optional" "gh-act" "install with: gh extension install https://github.com/nektos/gh-act"
 fi
+if command -v gh >/dev/null 2>&1 && gh extension list 2>/dev/null | grep -qE '(^|[[:space:]])basecamp/gh-signoff([[:space:]]|$)'; then
+  version="$(gh signoff version 2>/dev/null || true)"
+  print_result "ok" "gh-signoff" "${version:-GitHub CLI extension installed}"
+else
+  print_result "optional" "gh-signoff" "advisory local CI statuses; auto-installed by scripts/dev/local_signoff.sh"
+fi
 
 echo
 echo "Container and accelerator capabilities"

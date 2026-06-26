@@ -56,6 +56,8 @@ workflow:
 * `gh` - GitHub issue, PR, checks, and Actions log workflows.
 * `jq` - JSON validation in CI smoke paths and local diagnostics.
 * `ffmpeg` - video/rendering paths and GitHub CI parity.
+* `gh-signoff` - optional advisory local-CI statuses. `scripts/dev/local_signoff.sh`
+  auto-installs `basecamp/gh-signoff` when needed and never changes branch protection.
 
 GitHub Actions currently installs these Ubuntu packages for headless jobs:
 

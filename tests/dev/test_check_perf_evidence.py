@@ -9,6 +9,7 @@ and — when caching is claimed — a cache-hit/reuse counter.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -159,11 +160,14 @@ def test_non_caching_change_does_not_require_cache_counter() -> None:
 
 def _run_cli(args: list[str], tmp_path: Path) -> subprocess.CompletedProcess[str]:
     repo_root = SCRIPT.resolve().parents[2]
+    env = os.environ.copy()
+    env.pop("PR_READY_PR_BODY_FILE", None)
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         capture_output=True,
         text=True,
         cwd=repo_root,
+        env=env,
         check=False,
     )
 

@@ -296,6 +296,7 @@ scripts/dev/ruff_fix_format.sh
 scripts/dev/run_tests_parallel.sh
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
 scripts/dev/run_ci_local.sh
+scripts/dev/local_signoff.sh --no-setup lint test
 scripts/dev/check_docs_proof_consistency_diff.sh
 scripts/dev/sbatch_use_max_time.sh --partition <partition> --qos <qos> --sbatch-arg --partition=<partition> --sbatch-arg --qos=<qos> SLURM/templates/gpu_training.sl
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
@@ -316,6 +317,13 @@ share the same phase definitions (`lint`, `typecheck`, `test`, `examples-smoke`,
 `artifact-policy`). Pass explicit phases to scope a run, for example
 `scripts/dev/run_ci_local.sh lint test`. After dependencies are already current, use
 `scripts/dev/run_ci_local.sh --no-setup lint test` for faster repeat local feedback.
+
+`scripts/dev/local_signoff.sh` is the optional local-CI attestation wrapper. It runs selected
+`run_ci_local.sh` phases, auto-installs the `basecamp/gh-signoff` GitHub CLI extension if missing,
+and posts advisory `signoff/local-*` statuses only after the worktree is clean and `HEAD` is already
+pushed to its push remote. It never calls `gh signoff install` and never changes branch protection.
+Use `scripts/dev/local_signoff.sh --no-setup lint test` for fast repeat local proof, or
+`scripts/dev/local_signoff.sh --full` before a higher-confidence handoff.
 
 Before opening a PR, fetch the latest `origin/main`, integrate it into the feature branch with
 either merge or rebase, and only then run

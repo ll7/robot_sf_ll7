@@ -20,17 +20,17 @@ analysis layers in this run (#3484, #3558, #3557, #3573).
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 
 from robot_sf.benchmark.finite_checks import require_finite_array, require_finite_scalar
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
 HETEROGENEOUS_POPULATION_METRICS_SCHEMA = "heterogeneous_population_metrics.v1"
+
+_CONTROL_TRACE_REDUCERS = frozenset({"mean", "min", "max", "final"})
 
 
 def _require_finite(name: str, value: float) -> None:
@@ -123,6 +123,160 @@ def per_archetype_metrics(
     }
 
 
+def pedestrian_metric_observations_from_control_trace(
+    control_trace: Mapping[str, Any],
+    metric_key: str,
+    *,
+    reducer: str = "mean",
+) -> list[PedestrianMetric]:
+    """Extract per-pedestrian metric observations from a control trace.
+
+    The input is the ``pedestrian_control_trace`` payload attached to episode
+    metadata. This is intentionally a pure trace-to-observation bridge so later
+    ablation code can reuse the per-archetype harness without running benchmark
+    campaigns inside the metric layer.
+
+    Returns:
+        Per-pedestrian observations tagged by archetype.
+    """
+
+    metric_key = str(metric_key).strip()
+    if not metric_key:
+        raise ValueError("metric_key must be non-empty")
+    if reducer not in _CONTROL_TRACE_REDUCERS:
+        raise ValueError(f"reducer must be one of {sorted(_CONTROL_TRACE_REDUCERS)}")
+
+    observations: list[PedestrianMetric] = []
+    for pedestrian_index, pedestrian in enumerate(_control_trace_pedestrians(control_trace)):
+        archetype = _control_trace_archetype(pedestrian, pedestrian_index)
+        arr = _control_trace_metric_values(pedestrian, pedestrian_index, metric_key)
+        value = _reduce_control_trace_metric(arr, reducer)
+        observations.append(PedestrianMetric(archetype=archetype, value=value))
+
+    return observations
+
+
+def _control_trace_pedestrians(control_trace: Mapping[str, Any]) -> Sequence[Any]:
+    """Return the non-empty ``pedestrians`` sequence, failing closed on bad shapes."""
+    if not isinstance(control_trace, Mapping):
+        raise ValueError("control_trace must be a mapping")
+    pedestrians = control_trace.get("pedestrians")
+    if not isinstance(pedestrians, Sequence) or isinstance(pedestrians, str):
+        raise ValueError("control_trace.pedestrians must be a sequence")
+    if not pedestrians:
+        raise ValueError("control_trace.pedestrians must be non-empty")
+    return pedestrians
+
+
+def _control_trace_archetype(pedestrian: Any, pedestrian_index: int) -> str:
+    """Return a non-empty archetype label, rejecting null/blank values fail-closed."""
+    if not isinstance(pedestrian, Mapping):
+        raise ValueError(f"control_trace.pedestrians[{pedestrian_index}] must be a mapping")
+    archetype_value = pedestrian.get("archetype")
+    # Guard against an explicit ``archetype: null`` payload: ``str(None)`` would
+    # coerce to the truthy string ``"None"`` and silently group pedestrians under
+    # a fake archetype, defeating the fail-closed contract of this helper.
+    archetype = str(archetype_value).strip() if archetype_value is not None else ""
+    if not archetype:
+        raise ValueError(
+            f"control_trace.pedestrians[{pedestrian_index}].archetype must be non-empty"
+        )
+    return archetype
+
+
+def _control_trace_metric_values(
+    pedestrian: Mapping[str, Any],
+    pedestrian_index: int,
+    metric_key: str,
+) -> np.ndarray:
+    """Collect the per-step ``metric_key`` values as a finite array, failing closed.
+
+    Missing keys, null values, non-mapping steps, and non-finite values each raise a
+    descriptive ``ValueError`` instead of silently degrading the extracted support.
+
+    Returns:
+        Finite per-step values for ``metric_key`` as a 1-D array.
+    """
+    steps = pedestrian.get("steps")
+    if not isinstance(steps, Sequence) or isinstance(steps, str) or not steps:
+        raise ValueError(f"control_trace.pedestrians[{pedestrian_index}].steps must be non-empty")
+
+    values: list[float] = []
+    for step_index, step in enumerate(steps):
+        if not isinstance(step, Mapping):
+            raise ValueError(
+                "control_trace.pedestrians"
+                f"[{pedestrian_index}].steps[{step_index}] must be a mapping"
+            )
+        if metric_key not in step:
+            raise ValueError(
+                "control_trace.pedestrians"
+                f"[{pedestrian_index}].steps[{step_index}] missing {metric_key!r}"
+            )
+        raw_value = step[metric_key]
+        # A null trace value would raise a bare ``TypeError`` from ``float(None)``;
+        # raise a descriptive ``ValueError`` instead so the offending field is named.
+        if raw_value is None:
+            raise ValueError(
+                "control_trace.pedestrians"
+                f"[{pedestrian_index}].steps[{step_index}].{metric_key} must not be null"
+            )
+        values.append(float(raw_value))
+
+    return require_finite_array(
+        f"control_trace.pedestrians[{pedestrian_index}].steps.{metric_key}",
+        values,
+    )
+
+
+def _reduce_control_trace_metric(values: np.ndarray, reducer: str) -> float:
+    """Reduce a per-step value array to one scalar per the validated reducer name.
+
+    Returns:
+        The reduced scalar value.
+    """
+    if reducer == "mean":
+        return float(np.mean(values))
+    if reducer == "min":
+        return float(np.min(values))
+    if reducer == "max":
+        return float(np.max(values))
+    return float(values[-1])
+
+
+def per_archetype_metrics_from_control_trace(
+    control_trace: Mapping[str, Any],
+    metric_key: str,
+    *,
+    higher_is_safer: bool = True,
+    cvar_alpha: float = 0.1,
+    reducer: str = "mean",
+) -> dict[str, Any]:
+    """Build a per-archetype metric report from a pedestrian control trace.
+
+    Returns:
+        Versioned per-archetype metric report with trace provenance fields.
+    """
+
+    # Record the same normalized key used for lookup so the provenance field never
+    # disagrees with the metric actually extracted (e.g. a padded " speed_m_s ").
+    normalized_metric_key = str(metric_key).strip()
+    observations = pedestrian_metric_observations_from_control_trace(
+        control_trace,
+        normalized_metric_key,
+        reducer=reducer,
+    )
+    report = per_archetype_metrics(
+        observations,
+        higher_is_safer=higher_is_safer,
+        cvar_alpha=cvar_alpha,
+    )
+    report["source"] = "pedestrian_control_trace"
+    report["metric_key"] = normalized_metric_key
+    report["pedestrian_metric_reducer"] = reducer
+    return report
+
+
 def mean_matched_heterogeneity_effect(
     homogeneous_mean: float,
     heterogeneous_mean: float,
@@ -157,5 +311,7 @@ __all__ = [
     "PedestrianMetric",
     "cvar",
     "mean_matched_heterogeneity_effect",
+    "pedestrian_metric_observations_from_control_trace",
     "per_archetype_metrics",
+    "per_archetype_metrics_from_control_trace",
 ]

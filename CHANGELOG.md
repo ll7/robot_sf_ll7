@@ -48,6 +48,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added an **opt-in three-wheeled rollover proxy** runtime hook in `RobotEnv.step()` (#3479). When
+  `rollover_proxy_enabled` is set, the env feeds the executed robot `current_speed`
+  `(linear_velocity, yaw_rate)` into the existing `rollover_proxy.v1` closed-form stability margin,
+  surfaces rollover telemetry in step info / telemetry-analyzer metrics, emits a `ROLLOVER_CRITICAL`
+  termination reason, terminates the step, and applies a configured non-positive
+  `rollover_proxy_penalty` when the internal proxy trips. **Disabled by default**, so existing
+  benchmark/training runs keep identical episode semantics; config validation rejects a non-typed
+  `rollover_proxy_params` and a non-finite or positive penalty. This remains an explicit
+  **internal non-hardware proxy** (governance gate #2416/#2417), not a hardware-calibrated AMV
+  stability claim. The `(linear_velocity, yaw_rate)` assumption holds for differential/holonomic
+  drives but not bicycle drive (tracked follow-up #3683).
 * Added a regression guard for **pygame-free headless execution** (#3631). A subprocess-probe test
   (`tests/test_pygame_headless.py::test_headless_step_does_not_import_pygame`) builds and **steps** the
   env under forced-headless drivers and asserts `pygame` is never imported and no `sim_ui` is created —

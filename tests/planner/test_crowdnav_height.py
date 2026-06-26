@@ -198,7 +198,9 @@ def test_adapter_rebuilds_height_observation_and_accumulates_stateful_command(
     assert last_inputs["robot_node"].shape == (1, 5)
     assert last_inputs["spatial_edges"].shape == (3, 4)
     assert float(last_inputs["detected_human_num"][0]) == pytest.approx(2.0)
-    assert float(last_inputs["point_clouds"][0, 0]) == pytest.approx(2.0)
+    # Ray 0 (heading 0, +x) now hits the pedestrian disc at (1, 0) with radius
+    # 0.3 before the static obstacle at x=2, so the lidar reflects the closer ped.
+    assert float(last_inputs["point_clouds"][0, 0]) == pytest.approx(0.7, abs=1e-6)
     assert float(last_inputs["spatial_edges"][0, 0]) == pytest.approx(0.0, abs=1e-6)
     assert float(last_inputs["spatial_edges"][0, 1]) == pytest.approx(1.0, abs=1e-6)
 
@@ -354,6 +356,48 @@ def test_raycast_obstacles_matches_old_method_reference(tmp_path: Path) -> None:
     assert result.dtype == distances_ref.dtype
     assert result.shape == distances_ref.shape
     assert np.allclose(result, distances_ref)
+
+
+def test_raycast_obstacles_includes_dynamic_pedestrians(tmp_path: Path) -> None:
+    """A pedestrian inside lidar range must shorten the ray pointing at it (issue #3629).
+
+    Regression guard: the HEIGHT lidar previously raycast only static obstacles, so
+    moving pedestrians were invisible to the policy's lidar input. The ray toward a
+    pedestrian disc should now return a closer distance than the obstacle-only scan,
+    while rays with no pedestrian in their path are unchanged.
+    """
+    repo_root = tmp_path / "repo"
+    model_dir = tmp_path / "model"
+    _write_fake_upstream_repo(repo_root)
+    _write_fake_checkpoint_dir(model_dir, action_index=0)
+    adapter = CrowdNavHeightAdapter(
+        build_crowdnav_height_config(
+            {
+                "repo_root": str(repo_root),
+                "model_dir": str(model_dir),
+                "checkpoint_name": "fake.pt",
+            }
+        )
+    )
+    # Far static wall at x = 5 so the pedestrian, not the wall, is the closest hit.
+    adapter.bind_obstacle_segments([[5.0, -2.0, 5.0, 2.0]])
+    robot_pos = np.array([0.0, 0.0], dtype=float)
+    heading = 0.0
+    ped_radius = 0.3
+    ped_positions = np.array([[2.0, 0.0]], dtype=float)
+
+    without_ped = adapter._raycast_obstacles(robot_pos, heading)
+    with_ped = adapter._raycast_obstacles(
+        robot_pos, heading, ped_positions=ped_positions, ped_radius=ped_radius
+    )
+
+    # Ray 0 points along +x straight at the pedestrian disc centred at x = 2.
+    assert float(without_ped[0]) == pytest.approx(5.0)
+    assert float(with_ped[0]) == pytest.approx(2.0 - ped_radius, abs=1e-6)
+    assert float(with_ped[0]) < float(without_ped[0])
+    # A ray pointing away from the pedestrian (e.g. opposite, -x) is unchanged.
+    opposite_idx = without_ped.shape[0] // 2
+    assert float(with_ped[opposite_idx]) == pytest.approx(float(without_ped[opposite_idx]))
 
 
 @pytest.mark.parametrize("seed", [7, 11, 23])

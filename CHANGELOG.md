@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the HEIGHT planner adapter's lidar raycasting **ignoring dynamic pedestrians** (#3629).
+  `CrowdNavHeightAdapter._raycast_obstacles` intersected each ray only against cached static obstacle
+  segments, so the HEIGHT policy's lidar channel was blind to moving pedestrians (they were used for the
+  human spatial-edge tensor but never fed into the raycast). Rays are now also intersected against
+  pedestrian discs (reusing `circle_line_intersection_distance` from `robot_sf/sensor/range_sensor.py`,
+  the same primitive the live env's range sensor uses); the nearest of {static, pedestrian, sensor
+  range} wins per ray, and the disc radius is read from the observation when present (default 0.3 m).
+  Backward-compatible: an empty pedestrian set reproduces the previous static-only behavior exactly.
 * Fixed collision **undercounting** in `summarize_collision_metrics` (#3627): the aggregator read the
   sampled `metrics.collisions` value even when it was a finite `0.0`, only falling back to the exact
   `outcome.collision_event` flag when the metric key was entirely absent — so an episode whose exact

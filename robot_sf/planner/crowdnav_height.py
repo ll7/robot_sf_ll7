@@ -18,6 +18,8 @@ import numpy as np
 import torch
 from gymnasium import spaces
 
+from robot_sf.sensor.range_sensor import circle_line_intersection_distance
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -25,6 +27,10 @@ if TYPE_CHECKING:
 _DEFAULT_MODEL_DIR = Path("output/external_checkpoints/crowdnav_height_extracted/HEIGHT/HEIGHT")
 _DEFAULT_REPO_ROOT = Path("output/repos/CrowdNav_HEIGHT")
 _DEFAULT_CHECKPOINT_NAME = "237800.pt"
+# Fallback disc radius (metres) used when an observation omits a pedestrian
+# radius. Matches the radius supplied by the benchmark/SocNav observation
+# fixtures so the lidar disc approximation stays consistent with training.
+_DEFAULT_PEDESTRIAN_RADIUS_M = 0.3
 
 
 @dataclass(frozen=True)
@@ -85,6 +91,24 @@ def _xy_rows(value: Any) -> np.ndarray:
     if arr.shape[1] < 2:
         return np.zeros((0, 2), dtype=float)
     return arr[:, :2]
+
+
+def _extract_pedestrian_radius(value: Any) -> float:
+    """Return the pedestrian disc radius used to approximate humans for the lidar scan.
+
+    Falls back to :data:`_DEFAULT_PEDESTRIAN_RADIUS_M` when the observation omits a
+    radius or supplies a non-positive value, keeping the disc approximation stable.
+
+    Returns:
+        Positive pedestrian disc radius in metres.
+    """
+    arr = np.asarray([] if value is None else value, dtype=float).reshape(-1)
+    if arr.size == 0:
+        return _DEFAULT_PEDESTRIAN_RADIUS_M
+    radius = float(arr[0])
+    if not math.isfinite(radius) or radius <= 0.0:
+        return _DEFAULT_PEDESTRIAN_RADIUS_M
+    return radius
 
 
 def _robot_world_to_height_robot_frame(vector_xy: np.ndarray, heading: float) -> np.ndarray:
@@ -544,11 +568,14 @@ class CrowdNavHeightAdapter:
 
     def _extract_socnav_fields(
         self, observation: dict[str, Any]
-    ) -> tuple[np.ndarray, float, np.ndarray, np.ndarray, float, np.ndarray, np.ndarray, int]:
+    ) -> tuple[
+        np.ndarray, float, np.ndarray, np.ndarray, float, np.ndarray, np.ndarray, int, float
+    ]:
         """Extract Robot SF structured observation fields required by the upstream checkpoint.
 
         Returns:
-            Parsed robot, goal, pedestrian, and time-step fields.
+            Parsed robot, goal, pedestrian (positions, velocities, count, disc
+            radius), and time-step fields.
         """
         robot = observation.get("robot", {})
         goal = observation.get("goal", {})
@@ -577,6 +604,7 @@ class CrowdNavHeightAdapter:
             )
             ped_positions = ped_positions[:ped_count]
             ped_velocities_robot = ped_velocities_robot[:ped_count]
+            ped_radius = _extract_pedestrian_radius(pedestrians.get("radius"))
             return (
                 robot_pos,
                 heading,
@@ -586,6 +614,7 @@ class CrowdNavHeightAdapter:
                 ped_positions,
                 ped_velocities_robot,
                 ped_count,
+                ped_radius,
             )
 
         robot_pos = _require_array(
@@ -613,6 +642,7 @@ class CrowdNavHeightAdapter:
         ped_count = max(0, min(ped_count, ped_positions.shape[0], ped_velocities_robot.shape[0]))
         ped_positions = ped_positions[:ped_count]
         ped_velocities_robot = ped_velocities_robot[:ped_count]
+        ped_radius = _extract_pedestrian_radius(observation.get("pedestrians_radius"))
         return (
             robot_pos,
             heading,
@@ -622,6 +652,7 @@ class CrowdNavHeightAdapter:
             ped_positions,
             ped_velocities_robot,
             ped_count,
+            ped_radius,
         )
 
     def _build_spatial_edges(
@@ -663,8 +694,27 @@ class CrowdNavHeightAdapter:
             spatial[:used] = np.stack(rows[:used], axis=0)
         return spatial, max(1, used)
 
-    def _raycast_obstacles(self, robot_pos: np.ndarray, heading: float) -> np.ndarray:
-        """Approximate the upstream obstacle-only lidar scan from static obstacle line segments.
+    def _raycast_obstacles(
+        self,
+        robot_pos: np.ndarray,
+        heading: float,
+        ped_positions: np.ndarray | None = None,
+        ped_radius: float = _DEFAULT_PEDESTRIAN_RADIUS_M,
+    ) -> np.ndarray:
+        """Approximate the upstream lidar scan from static obstacles and dynamic pedestrians.
+
+        Pedestrians are represented as discs of ``ped_radius`` and intersected with
+        each ray using the shared :func:`circle_line_intersection_distance` helper,
+        matching how the live environment's range sensor includes dynamic agents.
+        The static obstacle path is unchanged, so an empty pedestrian set reproduces
+        the obstacle-only behaviour exactly.
+
+        Args:
+            robot_pos: World-frame sensor origin ``(x, y)``.
+            heading: Robot heading in radians used to rotate the ray directions.
+            ped_positions: Optional ``(N, 2)`` world-frame pedestrian centres. When
+                ``None`` or empty, only static obstacles contribute to the scan.
+            ped_radius: Disc radius in metres used to approximate each pedestrian.
 
         Returns:
             One lidar range value per angular ray.
@@ -683,6 +733,12 @@ class CrowdNavHeightAdapter:
         directions[:, 0] = base_directions[:, 0] * cos_h - base_directions[:, 1] * sin_h
         directions[:, 1] = base_directions[:, 0] * sin_h + base_directions[:, 1] * cos_h
         segments = self._obstacle_segments
+        peds = (
+            np.zeros((0, 2), dtype=float)
+            if ped_positions is None
+            else np.asarray(ped_positions, dtype=float).reshape(-1, 2)
+        )
+        origin_xy = (float(origin[0]), float(origin[1]))
         for idx, direction in enumerate(directions):
             best = sensor_range
             for seg in segments:
@@ -694,6 +750,14 @@ class CrowdNavHeightAdapter:
                 )
                 if hit is not None and hit < best:
                     best = hit
+            ray_vec = (float(direction[0]), float(direction[1]))
+            for ped in peds:
+                hit = circle_line_intersection_distance(
+                    ((float(ped[0]), float(ped[1])), ped_radius),
+                    origin_xy,
+                    ray_vec,
+                )
+                best = min(best, hit)
             distances[idx] = float(min(best, sensor_range))
         return distances
 
@@ -724,6 +788,7 @@ class CrowdNavHeightAdapter:
             ped_positions,
             ped_velocities_robot,
             ped_count,
+            ped_radius,
         ) = self._extract_socnav_fields(observation)
         spatial_edges, detected_human_num = self._build_spatial_edges(
             robot_pos,
@@ -731,7 +796,12 @@ class CrowdNavHeightAdapter:
             ped_positions,
             ped_velocities_robot,
         )
-        point_clouds = self._raycast_obstacles(robot_pos, heading)
+        point_clouds = self._raycast_obstacles(
+            robot_pos,
+            heading,
+            ped_positions=ped_positions[:ped_count],
+            ped_radius=ped_radius,
+        )
         max_obs = int(
             self._checkpoint_config.sim.static_obs_num
             + self._checkpoint_config.sim.static_obs_num_range

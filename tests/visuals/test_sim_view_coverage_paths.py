@@ -579,7 +579,7 @@ def test_sim_view_exit_and_telemetry_paths(monkeypatch) -> None:
     view._handle_exit()
 
     exit_calls = []
-    monkeypatch.setattr(sim_view_mod.sys, "exit", lambda: exit_calls.append(True))
+    monkeypatch.setattr(sim_view_mod.sys, "exit", lambda *args, **kwargs: exit_calls.append(True))
     view.is_abortion_requested = True
     view._handle_exit()
     assert exit_calls == []

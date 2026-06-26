@@ -60,7 +60,7 @@ and a float (orientation)
 
 # Pedestrian types
 PedPose = tuple[Vec2D, float]
-UnicycleAction = tuple[float, float]  # (acceleration, steering angle)
+UnicycleAction = tuple[float, float]  # (acceleration, angular velocity)
 PedState = np.ndarray
 PedGrouping = set[int]
 ZoneAssignments = dict[int, int]

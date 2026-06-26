@@ -1,7 +1,7 @@
 """This module describes a unicycle drive pedestrian model."""
 
 from dataclasses import dataclass, field
-from math import cos, sin, tan
+from math import cos, sin
 
 import numpy as np
 from gymnasium import spaces
@@ -17,7 +17,7 @@ class UnicycleDriveSettings:
     """
 
     radius: float = 0.4  # Collision radius, not relevant for kinematics
-    max_steer: float = 0.78  # Maximum steering angle (45 degrees in radians)
+    max_steer: float = 0.78  # Maximum angular velocity command, kept for compatibility
     max_velocity: float = 3.0  # Maximum forward velocity
 
     max_accel: float = 1.0  # Maximum acceleration
@@ -75,13 +75,13 @@ class UnicycleMotion:
 
         Args:
             state (UnicycleDriveState): The current unicycle state (mutated in place).
-            action (UnicycleAction): Tuple with acceleration and steering commands.
+            action (UnicycleAction): Tuple with acceleration and angular velocity commands.
             d_t (float): Duration in seconds for which the action is applied.
 
         Notes:
             This method mutates ``state`` directly and does not return a value.
         """
-        acceleration, steering_angle = action
+        acceleration, angular_velocity = action
         (x, y), orient = state.pose
         velocity = state.velocity
 
@@ -90,11 +90,12 @@ class UnicycleMotion:
         new_velocity = velocity + d_t * acceleration
         new_velocity = clip_scalar(new_velocity, self.config.min_velocity, self.config.max_velocity)
 
-        # Apply limits to the steering angle
-        steering_angle = clip_scalar(steering_angle, -self.config.max_steer, self.config.max_steer)
-
-        # Calculate angular velocity based on velocity and steering angle
-        angular_velocity = new_velocity * tan(steering_angle)
+        # Apply limits to the angular velocity command.
+        angular_velocity = clip_scalar(
+            angular_velocity,
+            -self.config.max_steer,
+            self.config.max_steer,
+        )
 
         # Normalize new orientation to ensure it stays within the valid range
         new_orient = normalize_angle_atan2(orient + angular_velocity * d_t)
@@ -127,7 +128,7 @@ class UnicycleDrivePedestrian:
         """Action-independent observation bounds for the unicycle pedestrian.
 
         Returns:
-            spaces.Box: 2D continuous box for speed and steering-angle constraints.
+            spaces.Box: 2D continuous box for speed and angular-velocity constraints.
         """
         high = np.array([self.config.max_velocity, self.config.max_steer], dtype=np.float32)
         low = np.array([self.config.min_velocity, -self.config.max_steer], dtype=np.float32)
@@ -138,7 +139,7 @@ class UnicycleDrivePedestrian:
         """Action bounds accepted by the unicycle pedestrian.
 
         Returns:
-            spaces.Box: 2D continuous box with acceleration and steering limits.
+            spaces.Box: 2D continuous box with acceleration and angular-velocity limits.
         """
         high = np.array([self.config.max_accel, self.config.max_steer], dtype=np.float32)
         low = np.array([-self.config.max_accel, -self.config.max_steer], dtype=np.float32)
@@ -163,7 +164,7 @@ class UnicycleDrivePedestrian:
         """Integrate one control command for the configured time step.
 
         Args:
-            action: Unicycle control tuple ``(acceleration, steering)``.
+            action: Unicycle control tuple ``(acceleration, angular velocity)``.
             d_t: Integration duration in seconds.
         """
         self.movement.move(self.state, action, d_t)
@@ -180,9 +181,9 @@ class UnicycleDrivePedestrian:
         """Convert a 2-element action array to the unicycle action tuple.
 
         Args:
-            action: Array-like with ``[acceleration, steering]``.
+            action: Array-like with ``[acceleration, angular velocity]``.
 
         Returns:
-            UnicycleAction: Parsed acceleration and steering command tuple.
+            UnicycleAction: Parsed acceleration and angular velocity command tuple.
         """
         return (action[0], action[1])

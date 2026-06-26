@@ -102,6 +102,79 @@ def curate_failure_archive(
     return payload
 
 
+def failure_archive_feature_rows(archive: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return deterministic tabular metadata rows from a failure archive.
+
+    The rows intentionally contain compact archive metadata and scalar candidate
+    fields only. They are suitable for fixture-based proposal-model plumbing and
+    index/export checks, not for training claims on raw traces.
+    """
+    rows: list[dict[str, Any]] = []
+    for entry in _archive_entries(archive):
+        candidate = entry.get("candidate") if isinstance(entry.get("candidate"), dict) else {}
+        start = candidate.get("start") if isinstance(candidate.get("start"), dict) else {}
+        goal = candidate.get("goal") if isinstance(candidate.get("goal"), dict) else {}
+        attribution = (
+            entry.get("failure_attribution")
+            if isinstance(entry.get("failure_attribution"), dict)
+            else {}
+        )
+        details = attribution.get("details") if isinstance(attribution.get("details"), dict) else {}
+        cluster_key = entry.get("cluster_key") if isinstance(entry.get("cluster_key"), dict) else {}
+
+        rows.append(
+            {
+                "archive_id": str(entry.get("archive_id", "")),
+                "cluster_key": _stable_json(cluster_key),
+                "source_manifest": _as_optional_str(entry.get("source_manifest")),
+                "source_candidate_index": entry.get("source_candidate_index"),
+                "bundle_path": _as_optional_str(entry.get("bundle_path")),
+                "scenario_yaml_path": _as_optional_str(entry.get("scenario_yaml_path")),
+                "start_x": _finite_float(start.get("x")),
+                "start_y": _finite_float(start.get("y")),
+                "goal_x": _finite_float(goal.get("x")),
+                "goal_y": _finite_float(goal.get("y")),
+                "spawn_time_s": _finite_float(candidate.get("spawn_time_s")),
+                "pedestrian_speed_mps": _finite_float(candidate.get("pedestrian_speed_mps")),
+                "pedestrian_delay_s": _finite_float(candidate.get("pedestrian_delay_s")),
+                "scenario_seed": _finite_float(candidate.get("scenario_seed")),
+                "objective_value": _finite_float(entry.get("objective_value")),
+                "primary_failure": _as_optional_str(attribution.get("primary_failure")),
+                "termination_reason": _as_optional_str(details.get("termination_reason")),
+                "normalized_perturbation": _finite_float(entry.get("normalized_perturbation")),
+                "replay_command": _as_optional_str(entry.get("replay_command")),
+            }
+        )
+    return sorted(rows, key=lambda row: row["archive_id"])
+
+
+def failure_archive_index(archive: dict[str, Any]) -> dict[str, Any]:
+    """Build stable lookup indexes over archive feature rows."""
+    rows = failure_archive_feature_rows(archive)
+    by_archive_id: dict[str, dict[str, Any]] = {}
+    by_cluster_key: dict[str, list[str]] = defaultdict(list)
+    by_primary_failure: dict[str, list[str]] = defaultdict(list)
+    by_scenario_seed: dict[str, list[str]] = defaultdict(list)
+
+    for row in rows:
+        archive_id = row["archive_id"]
+        by_archive_id[archive_id] = row
+        by_cluster_key[str(row["cluster_key"])].append(archive_id)
+        by_primary_failure[str(row["primary_failure"])].append(archive_id)
+        seed = row.get("scenario_seed")
+        if seed is not None:
+            by_scenario_seed[_stable_number_key(seed)].append(archive_id)
+
+    return {
+        "schema_version": "adversarial_failure_archive_index.v1",
+        "row_count": len(rows),
+        "by_archive_id": by_archive_id,
+        "by_cluster_key": _sorted_list_index(by_cluster_key),
+        "by_primary_failure": _sorted_list_index(by_primary_failure),
+        "by_scenario_seed": _sorted_list_index(by_scenario_seed),
+    }
+
+
 def _load_search_manifest(path: Path) -> dict[str, Any]:
     """Load one adversarial search manifest and validate the schema tag."""
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -290,4 +363,43 @@ def _as_optional_str(value: Any) -> str | None:
     return str(value)
 
 
-__all__ = ["ARCHIVE_SCHEMA_VERSION", "curate_failure_archive"]
+def _archive_entries(archive: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return archive entries, raising for malformed archive payloads."""
+    if not isinstance(archive, dict):
+        raise ValueError("Failure archive must be a JSON object.")
+    schema = archive.get("schema_version")
+    if schema != ARCHIVE_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported failure archive schema {schema!r}; expected {ARCHIVE_SCHEMA_VERSION!r}"
+        )
+    entries = archive.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("Failure archive entries must be a list.")
+    if not all(isinstance(entry, dict) for entry in entries):
+        raise ValueError("Failure archive entries must be JSON objects.")
+    return entries
+
+
+def _stable_json(value: Any) -> str:
+    """Return deterministic compact JSON string for index keys."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _stable_number_key(value: float) -> str:
+    """Return stable key for numeric index values."""
+    if float(value).is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _sorted_list_index(index: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Return deterministic index lists sorted by key and archive id."""
+    return {key: sorted(values) for key, values in sorted(index.items())}
+
+
+__all__ = [
+    "ARCHIVE_SCHEMA_VERSION",
+    "curate_failure_archive",
+    "failure_archive_feature_rows",
+    "failure_archive_index",
+]

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from robot_sf.adversarial.archive import failure_archive_feature_rows
 from robot_sf.adversarial.certification import CertificationStatus, certify_candidate
 from robot_sf.adversarial.config import CandidateSpec, SearchSpaceConfig
 from robot_sf.adversarial.scenario_manifest import (
@@ -74,31 +75,9 @@ class FailureArchiveProposalModel:
 
     def get_tabular_view(self) -> list[dict[str, Any]]:
         """Build a tabular feature view from archive entries."""
-        table = []
-        for entry in self.entries:
-            cand = entry.get("candidate", {})
-            start = cand.get("start", {})
-            goal = cand.get("goal", {})
-            attr = entry.get("failure_attribution", {})
-            row = {
-                "archive_id": entry.get("archive_id", ""),
-                "start_x": start.get("x"),
-                "start_y": start.get("y"),
-                "goal_x": goal.get("x"),
-                "goal_y": goal.get("y"),
-                "spawn_time_s": cand.get("spawn_time_s"),
-                "pedestrian_speed_mps": cand.get("pedestrian_speed_mps"),
-                "pedestrian_delay_s": cand.get("pedestrian_delay_s"),
-                "scenario_seed": cand.get("scenario_seed"),
-                "objective_value": entry.get("objective_value"),
-                "primary_failure": attr.get("primary_failure"),
-                "termination_reason": attr.get("details", {}).get("termination_reason")
-                if isinstance(attr.get("details"), dict)
-                else None,
-                "normalized_perturbation": entry.get("normalized_perturbation"),
-            }
-            table.append(row)
-        return table
+        return failure_archive_feature_rows(
+            {"schema_version": "adversarial_failure_archive.v1", "entries": self.entries}
+        )
 
     def _get_candidate_value(self, cand_dict: dict[str, Any], name: str) -> float | None:
         """Helper to safely extract a scalar feature from candidate dict."""

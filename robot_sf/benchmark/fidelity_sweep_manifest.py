@@ -174,7 +174,7 @@ def _check_manifest_axis(
     Returns:
         Axis summary plus per-axis counts used by the top-level checker.
     """
-    if not isinstance(axis, dict):
+    if not isinstance(axis, Mapping):
         raise ValueError("fidelity sweep manifest axis must be mapping")
     variants = axis.get("variants")
     if not isinstance(variants, list) or not variants:
@@ -186,7 +186,7 @@ def _check_manifest_axis(
     unresolved_runtime_bindings = 0
     actual_baseline_key = None
     for variant in variants:
-        if not isinstance(variant, dict):
+        if not isinstance(variant, Mapping):
             raise ValueError("fidelity sweep manifest variant must be mapping")
         if variant.get("baseline", False):
             baseline_variants += 1
@@ -226,6 +226,8 @@ def _append_manifest_boundary_violations(
     manifest: Mapping[str, Any], violations: list[str]
 ) -> None:
     """Append dry-run and no-evidence boundary violations in-place."""
+    if manifest.get("schema_version") != FIDELITY_SWEEP_MANIFEST_SCHEMA:
+        violations.append(f"manifest schema_version must remain {FIDELITY_SWEEP_MANIFEST_SCHEMA!r}")
     if manifest.get("dry_run") is not True:
         violations.append("manifest must remain dry_run=true")
     if manifest.get("status") != "manifest_dry_run_only":

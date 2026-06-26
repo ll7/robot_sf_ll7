@@ -97,6 +97,17 @@ def test_manifest_checker_flags_baseline_variant_mismatch() -> None:
     )
 
 
+def test_manifest_checker_fails_closed_on_unsupported_manifest_schema() -> None:
+    """Checker fails closed when the manifest schema_version drifts from the known schema."""
+    manifest = _repo_manifest()
+    manifest["schema_version"] = "fidelity-sweep-manifest.v2"
+
+    summary = check_fidelity_sweep_manifest(manifest)
+
+    assert summary["passes"] is False
+    assert any("schema_version must remain" in violation for violation in summary["violations"])
+
+
 def test_manifest_checker_rejects_non_mapping_manifest() -> None:
     """Checker raises a clear error instead of AttributeError on a non-mapping manifest."""
     with pytest.raises(ValueError, match="must be a mapping"):

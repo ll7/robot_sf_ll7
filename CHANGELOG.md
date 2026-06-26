@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed collision **undercounting** in `summarize_collision_metrics` (#3627): the aggregator read the
+  sampled `metrics.collisions` value even when it was a finite `0.0`, only falling back to the exact
+  `outcome.collision_event` flag when the metric key was entirely absent — so an episode whose exact
+  environment collision fired but whose sampled metric missed the contact was silently aggregated as
+  **zero** collisions (a validation-integrity hole independent of the per-episode write-time and
+  `EpisodeEventLedger.v1` guards, since this aggregator also reads resumed/loaded JSONL records).
+  `_episode_collision_value` now fails closed: when the exact collision flag fired and the sampled
+  value is `<= 0`, the count is floored to `1` (sourced as `episode.outcome.collision_event`). No
+  inflation — no-collision episodes stay `0` and a larger sampled count is never reduced.
 * **`stream_gap` was blind in the real benchmark runner** (found while promoting the #3556 belief-mode safety contrast to `map_runner`). `StreamGapPlannerAdapter._extract_state` read the nested SOCNAV observation (`obs["robot"]`, `obs["pedestrians"]`) but `map_runner` feeds a flat observation (`robot_position`, `pedestrians_positions`, `goal_current`), so the planner extracted `robot=[0,0]`, `n_peds=0` and drove blind every episode. `_extract_state` now accepts both the nested and flat observation formats (backward-compatible; the ScenarioBelief harness and 24 existing tests still pass), and `robot_sf/benchmark/scenario_belief_policy_hook.py` reads the flat observation and writes the uncertainty sidecar to `pedestrians_uncertainty` where the fixed extractor reads it. After the fix the planner engages pedestrians and the belief modes differentiate in the real runner.
 
 ### Added

@@ -74,7 +74,10 @@ from robot_sf.benchmark.camera_ready._reporting import (  # noqa: F401 - re-expo
 )
 from robot_sf.benchmark.camera_ready._route_clearance import (  # noqa: F401 - re-exported for back-compat
     _ROUTE_CLEARANCE_CERTIFICATION_STATUSES,
+    _ROUTE_CLEARANCE_FAIL_MARGIN_M,
     _ROUTE_CLEARANCE_WARN_THRESHOLD_M,
+    RouteClearanceError,
+    _assert_route_clearance_feasible,
     _load_route_clearance_certifications,
     _map_route_clearance_center_min_m,
     _resolve_map_path_for_scenario,
@@ -1289,6 +1292,9 @@ def prepare_campaign_preflight(
     Raises:
         OrcaRvo2PreflightError: When enabled ORCA-dependent planners require ``rvo2`` but it is
             not importable.
+        RouteClearanceError: When any scenario route centerline lies closer to a static obstacle
+            than the robot radius, making the route geometrically impossible to follow without
+            collision.
     """
     _validate_campaign_config(cfg)
     check_orca_rvo2_preflight(cfg)
@@ -1314,6 +1320,11 @@ def prepare_campaign_preflight(
         scenarios,
         certifications=route_clearance_certifications,
     )
+    # Fail closed before producing any preflight artifact: a route whose centerline is closer to a
+    # static obstacle than the robot radius is geometrically impossible to follow without
+    # collision, so the benchmark must refuse to run it rather than emit a silent warning
+    # (issue #3628).
+    _assert_route_clearance_feasible(route_clearance_warnings)
     route_clearance_warning_summary = _route_clearance_warning_summary(route_clearance_warnings)
     resolved_seeds = _resolved_seed_inventory(scenarios)
     scenario_hash = _hash_payload(scenarios)
@@ -1810,6 +1821,9 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     Raises:
         OrcaRvo2PreflightError: When enabled ORCA-dependent planners require ``rvo2`` but it is
             not importable.
+        RouteClearanceError: When any scenario route centerline lies closer to a static obstacle
+            than the robot radius, making the route geometrically impossible to follow without
+            collision.
     """
     start = time.perf_counter()
     prepared = prepare_campaign_preflight(
@@ -2970,6 +2984,7 @@ __all__ = [
     "AmvProfileConfig",
     "CampaignConfig",
     "PlannerSpec",
+    "RouteClearanceError",
     "SeedPolicy",
     "SnqiContractConfig",
     "load_campaign_config",

@@ -54,22 +54,45 @@ def _finite_float(value: Any) -> float | None:
     return result if math.isfinite(result) else None
 
 
+def _exact_collision_event(record: dict[str, Any]) -> bool | None:
+    """Return the exact environment collision flag for one episode record.
+
+    Returns:
+        ``True``/``False`` when ``outcome.collision_event`` is present and not null,
+        otherwise ``None`` when the exact flag is unavailable.
+    """
+    outcome = record.get("outcome")
+    if not isinstance(outcome, dict) or "collision_event" not in outcome:
+        return None
+    event = outcome.get("collision_event")
+    if event is None:
+        return None
+    return bool(event)
+
+
 def _episode_collision_value(record: dict[str, Any]) -> tuple[float | None, str | None]:
-    """Return one episode's collision value and source path when available."""
+    """Return one episode's collision value and source path when available.
+
+    Fails closed against silent collision undercounting: when the exact environment
+    collision flag (``outcome.collision_event``) fired, the returned value is floored to at
+    least 1.0 even if the sampled collision metrics missed the contact and report zero. The
+    no-collision case is never inflated -- an exact flag of ``False`` (or an unavailable flag)
+    leaves the sampled metric untouched.
+    """
+    exact_event = _exact_collision_event(record)
+
     metrics = record.get("metrics")
     if isinstance(metrics, dict):
         for key in ("collisions", "total_collision_count", "collision_count"):
             if key in metrics:
                 value = _finite_float(metrics.get(key))
                 if value is not None:
+                    if exact_event and value <= 0.0:
+                        return 1.0, "episode.outcome.collision_event"
                     return value, f"episode.metrics.{key}"
 
-    outcome = record.get("outcome")
-    if isinstance(outcome, dict) and "collision_event" in outcome:
-        event = outcome.get("collision_event")
-        if event is None:
-            return None, None
-        return 1.0 if bool(event) else 0.0, "episode.outcome.collision_event"
+    if exact_event is not None:
+        return (1.0 if exact_event else 0.0), "episode.outcome.collision_event"
     return None, None
 
 

@@ -46,19 +46,19 @@ certifications:
     reviewed_by: ll7
     issue: "1105"
   classic_merging_low:
-    status: excluded_from_planner_attribution
-    claim_scope: benchmark row may run, but failures are not planner-mechanism evidence until geometry is repaired
-    rationale: Preflight reports negative clearance because the route centerline overlaps obstacle geometry.
-    reviewed_on: "2026-05-09"
+    status: repaired_geometry
+    claim_scope: benchmark-ready; route geometry repaired to a positive robot-radius clearance margin
+    rationale: Route centerline was re-routed off the obstacle; preflight now reports a positive margin (~0.56 m) above the warning threshold.
+    reviewed_on: "2026-06-26"
     reviewed_by: ll7
-    issue: "1105"
+    issue: "3628"
   classic_merging_medium:
-    status: excluded_from_planner_attribution
-    claim_scope: benchmark row may run, but failures are not planner-mechanism evidence until geometry is repaired
-    rationale: Preflight reports negative clearance because the route centerline overlaps obstacle geometry.
-    reviewed_on: "2026-05-09"
+    status: repaired_geometry
+    claim_scope: benchmark-ready; route geometry repaired to a positive robot-radius clearance margin
+    rationale: Route centerline was re-routed off the obstacle; preflight now reports a positive margin (~0.56 m) above the warning threshold.
+    reviewed_on: "2026-06-26"
     reviewed_by: ll7
-    issue: "1105"
+    issue: "3628"
   classic_overtaking_low:
     status: certified_stress_geometry
     claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat
@@ -74,12 +74,12 @@ certifications:
     reviewed_by: ll7
     issue: "1105"
   classic_station_platform_medium:
-    status: excluded_from_planner_attribution
-    claim_scope: benchmark row may run, but failures are not planner-mechanism evidence until geometry is repaired
-    rationale: Preflight reports negative clearance because the route centerline overlaps station obstacle geometry.
-    reviewed_on: "2026-05-09"
+    status: repaired_geometry
+    claim_scope: benchmark-ready; route geometry repaired to a positive robot-radius clearance margin
+    rationale: Route centerline was re-routed off the station obstacle; preflight now reports a positive margin (~2.5 m) above the warning threshold.
+    reviewed_on: "2026-06-26"
     reviewed_by: ll7
-    issue: "1105"
+    issue: "3628"
   classic_t_intersection_low:
     status: certified_stress_geometry
     claim_scope: benchmark-ready stress geometry; planner-attribution claims require caveat

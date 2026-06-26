@@ -56,7 +56,10 @@ from robot_sf.benchmark.map_runner_batch_plan import (
     build_worker_fixed_params,
     resolve_batch_kinematics_tag,
 )
-from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
+from robot_sf.benchmark.map_runner_metrics import (
+    _episode_collision_value,
+    summarize_collision_metrics,
+)
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.common.types import Rect
@@ -3719,6 +3722,48 @@ def test_summarize_collision_metrics_preserves_missing_collision_events() -> Non
         "denominator": 3,
         "source": "episode.outcome.collision_event",
     }
+
+
+def test_summarize_collision_metrics_floors_exact_event_over_zero_sampled_metric() -> None:
+    """Issue #3627: an exact collision flag must yield a non-zero aggregated count.
+
+    A sampled collision metric of zero must not silently mask an exact environment collision
+    event for the same episode, while the no-collision episode stays exactly zero.
+    """
+    summary = summarize_collision_metrics(
+        [
+            # Exact env flag fired but the sampled metric missed the contact.
+            {"metrics": {"collisions": 0.0}, "outcome": {"collision_event": True}},
+            # Genuine no-collision episode must not be inflated.
+            {"metrics": {"collisions": 0.0}, "outcome": {"collision_event": False}},
+        ]
+    )
+
+    assert summary["collision"] == pytest.approx(1.0)
+    assert summary["collision_count"] == pytest.approx(1.0)
+    assert summary["collision_rate"] == pytest.approx(0.5)
+    assert summary["collision_status"]["status"] == "available"
+    assert "episode.outcome.collision_event" in summary["collision_status"]["source"]
+
+
+def test_episode_collision_value_preserves_larger_sampled_count_with_exact_event() -> None:
+    """A sampled count above the exact floor must survive (no downward clobber)."""
+    value, source = _episode_collision_value(
+        {"metrics": {"collisions": 3.0}, "outcome": {"collision_event": True}}
+    )
+
+    assert value == pytest.approx(3.0)
+    assert source == "episode.metrics.collisions"
+
+
+def test_episode_collision_value_keeps_zero_when_no_collision_event() -> None:
+    """No exact collision event must leave a zero sampled metric untouched."""
+    value, source = _episode_collision_value(
+        {"metrics": {"collisions": 0.0}, "outcome": {"collision_event": False}}
+    )
+
+    assert value == pytest.approx(0.0)
+    assert source == "episode.metrics.collisions"
 
 
 def test_run_map_batch_rejects_unsupported_observation_override(

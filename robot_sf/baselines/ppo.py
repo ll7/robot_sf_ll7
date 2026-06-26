@@ -370,6 +370,7 @@ class PPOPlanner:
         """Return dict observations plus any missing predictive feature payload."""
 
         source_obs = self._flatten_nested_observation(obs)
+        source_obs = self._expand_flat_observation_for_spaces(source_obs, spaces)
         if self._predictive_foresight is not None:
             missing_predictive = [
                 key for key in spaces if key.startswith("predictive_") and key not in source_obs
@@ -398,18 +399,66 @@ class PPOPlanner:
         _flatten_recursive(obs)
         return flattened
 
+    @classmethod
+    def _expand_flat_observation_for_spaces(
+        cls,
+        obs: dict[str, Any],
+        spaces: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return observation with flat map-runner leaves exposed as nested Dict keys."""
+
+        expanded: dict[str, Any] = dict(obs)
+        for key, sub_space in spaces.items():
+            key_str = str(key)
+            if key_str in expanded:
+                continue
+            sub_spaces = getattr(sub_space, "spaces", None)
+            if not isinstance(sub_spaces, dict):
+                continue
+            nested = cls._nested_observation_from_flat_prefix(expanded, key_str, sub_spaces)
+            if nested:
+                expanded[key_str] = nested
+        return expanded
+
+    @classmethod
+    def _nested_observation_from_flat_prefix(
+        cls,
+        obs: dict[str, Any],
+        prefix: str,
+        spaces: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build a nested observation block from ``prefix_child`` flat keys.
+
+        Returns:
+            Nested observation payload containing the available declared leaves.
+        """
+
+        nested: dict[str, Any] = {}
+        for key, sub_space in spaces.items():
+            key_str = str(key)
+            flat_key = f"{prefix}_{key_str}"
+            sub_spaces = getattr(sub_space, "spaces", None)
+            if isinstance(sub_spaces, dict):
+                child = cls._nested_observation_from_flat_prefix(obs, flat_key, sub_spaces)
+                if child:
+                    nested[key_str] = child
+                continue
+            if flat_key in obs:
+                nested[key_str] = obs[flat_key]
+        return nested
+
     def _align_model_obs_dict(
         self,
         source_obs: dict[str, Any],
         spaces: dict[str, Any],
-    ) -> dict[str, np.ndarray]:
+    ) -> dict[str, Any]:
         """Align source observation fields to a model-declared Dict space.
 
         Returns:
             Dict payload shaped and typed to match the model-declared subspaces.
         """
 
-        converted: dict[str, np.ndarray] = {}
+        converted: dict[str, Any] = {}
         missing: list[str] = []
         aliases: dict[str, tuple[str, ...]] = {
             "robot_speed": ("robot_velocity_xy",),
@@ -419,6 +468,15 @@ class PPOPlanner:
             source = self._resolve_dict_observation_source(source_obs, str(key), aliases)
             if source is None:
                 missing.append(str(key))
+                continue
+            sub_spaces = getattr(sub_space, "spaces", None)
+            if isinstance(sub_spaces, dict):
+                if not isinstance(source, dict):
+                    raise ValueError(
+                        f"Observation key '{key}' expected nested Dict payload, "
+                        f"got {type(source).__name__}",
+                    )
+                converted[key] = self._align_model_obs_dict(source, sub_spaces)
                 continue
             target_shape = getattr(sub_space, "shape", None)
             target_dtype = getattr(sub_space, "dtype", None)
@@ -695,8 +753,11 @@ class PPOPlanner:
         Returns:
             Goal-directed fallback action dict.
         """
-        robot_pos = np.asarray(obs.get("robot_position", [0.0, 0.0]), dtype=float).reshape(-1)
-        goal_pos = np.asarray(obs.get("goal_current", [0.0, 0.0]), dtype=float).reshape(-1)
+        source_obs = self._flatten_nested_observation(obs)
+        robot_pos = np.asarray(source_obs.get("robot_position", [0.0, 0.0]), dtype=float).reshape(
+            -1
+        )
+        goal_pos = np.asarray(source_obs.get("goal_current", [0.0, 0.0]), dtype=float).reshape(-1)
         if robot_pos.size < 2 or goal_pos.size < 2:
             if self.config.action_space == "unicycle":
                 return {"v": 0.0, "omega": 0.0}

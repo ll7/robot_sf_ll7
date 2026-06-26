@@ -48,6 +48,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **plan-level preflight for the paper-grade reactivity-vs-replay rank study** (#3637,
+  split from #3573). The new pure checker
+  [`robot_sf/benchmark/reactivity_replay_preflight.py`](robot_sf/benchmark/reactivity_replay_preflight.py)
+  (`reactivity_replay_rank_study_preflight.v1`) verifies a proposed run plan's **preconditions**
+  before any compute is spent: ≥3 planners, exactly the reactive/replay arms with **paired** seeds
+  (common random numbers), a seed budget at/above the S20 rank-stability floor and above the #3573
+  diagnostic matrix, a contrast-registering horizon, and that the **replay limitation** is stated
+  (`'replay' = robot→pedestrian force-off in a live sim, NOT trajectory playback`). The limitation
+  constants now live in the canonical owner `robot_sf/benchmark/reactivity_ablation.py`
+  (`REPLAY_LIMITATION`, `REPLAY_IS_TRAJECTORY_PLAYBACK`, `REACTIVITY_ARMS`) and are imported, not
+  duplicated. Thin CPU-only CLI
+  [`scripts/benchmark/preflight_reactivity_replay_rank_study_issue_3637.py`](scripts/benchmark/preflight_reactivity_replay_rank_study_issue_3637.py)
+  emits a `ready`/`blocked` manifest from the launch packet
+  [`configs/benchmarks/reactivity_replay_rank_study_issue_3637_launch_packet.yaml`](configs/benchmarks/reactivity_replay_rank_study_issue_3637_launch_packet.yaml).
+  This is an evidence-control layer only: it does **not** run the benchmark, interpret rank
+  stability, or make any paper-facing claim (sufficiency stays with
+  `scripts/tools/seed_sufficiency_gate.py` post-run).
 * Added a **context-note archival-sweep planner** (#3190):
   [`scripts/tools/plan_context_note_archival.py`](scripts/tools/plan_context_note_archival.py)
   consumes the existing freshness checker plus `docs/context/catalog.yaml` and proposes which notes

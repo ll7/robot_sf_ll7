@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `_episode_collision_value` now fails closed: when the exact collision flag fired and the sampled
   value is `<= 0`, the count is floored to `1` (sourced as `episode.outcome.collision_event`). No
   inflation — no-collision episodes stay `0` and a larger sampled count is never reduced.
+* Fixed a `scripts/dev/check_skills.py` false-positive path validation (#3623): backticked prose
+  placeholders such as `SLURM/data-gated` (in a SKILL.md) were validated as repo paths and failed the
+  preflight, because `SLURM/` is a real top-level dir. The broken-path check now only flags a
+  non-resolving token when it *looks like* a path (has a file extension or nests ≥2 segments below its
+  prefix), so single-segment extension-less placeholders are treated as prose — while genuinely broken
+  path references (e.g. `docs/does_not_exist.md`, `SLURM/missing/template.sl`) are still caught. The
+  offending SKILL.md was left untouched; the fix is in the validator.
 * **`stream_gap` was blind in the real benchmark runner** (found while promoting the #3556 belief-mode safety contrast to `map_runner`). `StreamGapPlannerAdapter._extract_state` read the nested SOCNAV observation (`obs["robot"]`, `obs["pedestrians"]`) but `map_runner` feeds a flat observation (`robot_position`, `pedestrians_positions`, `goal_current`), so the planner extracted `robot=[0,0]`, `n_peds=0` and drove blind every episode. `_extract_state` now accepts both the nested and flat observation formats (backward-compatible; the ScenarioBelief harness and 24 existing tests still pass), and `robot_sf/benchmark/scenario_belief_policy_hook.py` reads the flat observation and writes the uncertainty sidecar to `pedestrians_uncertainty` where the fixed extractor reads it. After the fix the planner engages pedestrians and the belief modes differentiate in the real runner.
 
 ### Added

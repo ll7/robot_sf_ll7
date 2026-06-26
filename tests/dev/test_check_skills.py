@@ -220,6 +220,63 @@ Return bounded excerpts, and keep full logs in private artifacts.
     assert errors == []
 
 
+# -- broken-path detection tests ------------------------------------------------
+
+
+def test_find_broken_paths_skips_non_path_placeholder(tmp_path: Path) -> None:
+    """A backticked prose placeholder like ``SLURM/data-gated`` is not a path error.
+
+    Regression for issue #3623: ``SLURM`` is a real top-level dir, so the path
+    pattern matches the placeholder, but ``data-gated`` has no extension and only
+    one path segment, so it must be treated as prose rather than a broken file.
+    """
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "SKILL.md"
+    body = "Route local-implementable vs `SLURM/data-gated` to `Success Probability`.\n"
+
+    assert check_skills._find_broken_paths(skill_path, body) == []
+
+
+def test_find_broken_paths_still_flags_broken_real_paths(tmp_path: Path) -> None:
+    """Genuinely broken path references (extension or extra depth) are still caught."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "SKILL.md"
+    body = (
+        "See `docs/does_not_exist.md` and `SLURM/missing/template.sl` and "
+        "`scripts/dev/no/such/file`.\n"
+    )
+
+    broken = check_skills._find_broken_paths(skill_path, body)
+
+    assert any("docs/does_not_exist.md" in entry for entry in broken)
+    assert any("SLURM/missing/template.sl" in entry for entry in broken)
+    assert any("scripts/dev/no/such/file" in entry for entry in broken)
+
+
+def test_find_broken_paths_allows_existing_paths(tmp_path: Path) -> None:
+    """References that resolve on disk produce no errors."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "real.md").write_text("ok\n", encoding="utf-8")
+    skill_path = tmp_path / "SKILL.md"
+    body = "See `docs/real.md` for details.\n"
+
+    assert check_skills._find_broken_paths(skill_path, body) == []
+
+
+def test_looks_like_path_distinguishes_placeholders_from_paths() -> None:
+    """Path-shaped tokens (extension or depth>=2) are paths; bare tokens are not."""
+    check_skills = _load_check_skills_module()
+    assert check_skills._looks_like_path("docs/guide.md") is True
+    assert check_skills._looks_like_path("SLURM/templates/gpu.sl") is True
+    assert check_skills._looks_like_path("scripts/dev/tool") is True
+    assert check_skills._looks_like_path("SLURM/data-gated") is False
+    assert check_skills._looks_like_path("docs/placeholder") is False
+
+
 # -- preflight tests ------------------------------------------------------------
 
 

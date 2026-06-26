@@ -32,6 +32,7 @@ from robot_sf.robot.differential_drive import (
     DifferentialDriveSettings,
 )
 from robot_sf.robot.holonomic_drive import HolonomicDriveRobot, HolonomicDriveSettings
+from robot_sf.robot.rollover_proxy import RolloverProxyParams
 from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
@@ -157,6 +158,11 @@ class RobotSimulationConfig(BaseSimulationConfig):
     )
     # Environment behavior flags
     use_image_obs: bool = field(default=False)
+    # Internal non-hardware three-wheeled rollover proxy. Disabled by default so
+    # existing benchmark/training runs keep identical episode semantics.
+    rollover_proxy_enabled: bool = field(default=False)
+    rollover_proxy_params: RolloverProxyParams = field(default_factory=RolloverProxyParams)
+    rollover_proxy_penalty: float = field(default=0.0)
     # Explicit force flags (new API).
     peds_have_static_obstacle_forces: bool = field(default=True)
     peds_have_robot_repulsion: bool | None = field(default=None)
@@ -213,8 +219,14 @@ class RobotSimulationConfig(BaseSimulationConfig):
         self._validate_grid_visualization()
         self._validate_planner_config()
         self._validate_global_sampling()
+        self._validate_rollover_proxy()
         self._validate_forecast_variant()
         self._validate_predictive_foresight()
+
+    def _validate_rollover_proxy(self) -> None:
+        """Validate opt-in rollover proxy reward settings."""
+        if self.rollover_proxy_penalty > 0.0:
+            raise ValueError("rollover_proxy_penalty must be non-positive.")
 
     def _validate_forecast_variant(self) -> None:
         """Validate the forecast variant selector when configured."""

@@ -45,7 +45,7 @@ from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_state import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
-from robot_sf.robot.rollover_proxy import rollover_proxy_telemetry
+from robot_sf.robot.rollover_proxy import RolloverProxyParams, rollover_proxy_telemetry
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sensor.sensor_fusion import OBS_IMAGE, SensorFusion
 from robot_sf.sensor.socnav_observation import (
@@ -806,7 +806,7 @@ class RobotEnv(BaseEnv):
 
     def _rollover_proxy_record(self) -> dict[str, Any] | None:
         """Return opt-in rollover proxy telemetry for the executed robot state."""
-        if not self.env_config.rollover_proxy_enabled:
+        if not getattr(self.env_config, "rollover_proxy_enabled", False):
             return None
         current_speed = getattr(self.simulator.robots[0], "current_speed", None)
         current_speed = current_speed() if callable(current_speed) else current_speed
@@ -821,7 +821,7 @@ class RobotEnv(BaseEnv):
         return rollover_proxy_telemetry(
             linear_velocity,
             yaw_rate,
-            params=self.env_config.rollover_proxy_params,
+            params=getattr(self.env_config, "rollover_proxy_params", RolloverProxyParams()),
         )
 
     def _apply_rollover_proxy_metadata(self, reward_dict: dict[str, Any]) -> bool:
@@ -859,7 +859,7 @@ class RobotEnv(BaseEnv):
         """
         if not rollover_critical:
             return reward
-        penalty = float(self.env_config.rollover_proxy_penalty)
+        penalty = float(getattr(self.env_config, "rollover_proxy_penalty", 0.0))
         reward_dict["reward_terms"]["rollover_proxy_penalty"] = penalty
         return reward + penalty
 

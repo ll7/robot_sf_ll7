@@ -10,6 +10,7 @@ import pytest
 from robot_sf.benchmark.metrics import evaluate_stability_margin
 from robot_sf.gym_env.env_config import EnvSettings
 from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.robot.rollover_proxy import (
     PROXY_SCHEMA_VERSION,
     RolloverProxyParams,
@@ -184,9 +185,14 @@ class _StepState:
         }
 
 
-def _make_step_env(*, rollover_enabled: bool = True, penalty: float = -4.0) -> RobotEnv:
+def _make_step_env(
+    *,
+    rollover_enabled: bool = True,
+    penalty: float = -4.0,
+    env_config: object | None = None,
+) -> RobotEnv:
     env = RobotEnv.__new__(RobotEnv)
-    env.env_config = EnvSettings(
+    env.env_config = env_config or EnvSettings(
         rollover_proxy_enabled=rollover_enabled,
         rollover_proxy_penalty=penalty,
     )
@@ -237,6 +243,32 @@ def test_runtime_rollover_proxy_over_yaw_trips_terminal_penalty() -> None:
 def test_runtime_rollover_proxy_disabled_by_default_keeps_step_semantics() -> None:
     """Disabled proxy leaves even over-yaw toy command nonterminal."""
     env = _make_step_env(rollover_enabled=False, penalty=-4.0)
+
+    _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(1.0)
+    assert terminated is False
+    assert truncated is False
+    assert "rollover_proxy" not in info
+    assert "termination_reason" not in info
+
+
+def test_robot_simulation_config_rollover_proxy_default_keeps_step_semantics() -> None:
+    """Unified robot configs keep the rollover proxy disabled by default."""
+    env = _make_step_env(env_config=RobotSimulationConfig())
+
+    _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(1.0)
+    assert terminated is False
+    assert truncated is False
+    assert "rollover_proxy" not in info
+    assert "termination_reason" not in info
+
+
+def test_missing_rollover_config_attributes_keep_proxy_disabled() -> None:
+    """Older/minimal config objects without rollover attributes stay compatible."""
+    env = _make_step_env(env_config=SimpleNamespace())
 
     _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
 

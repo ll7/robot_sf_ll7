@@ -10,11 +10,16 @@ import pytest
 from robot_sf.benchmark.tracking_precision_contract import (
     TRACKING_PRECISION_SCHEMA,
     TrackingPrecisionContract,
+    apply_speed_contract,
     apply_tracking_drift,
+    apply_tracking_precision_spec,
     drift_std_for_motp,
     is_contract_honored,
+    make_tracking_precision_rng,
     minimum_separation,
+    normalize_tracking_precision_spec,
     speed_cap_for_precision,
+    tracking_precision_hash,
     tracking_precision_telemetry,
 )
 
@@ -118,3 +123,126 @@ def test_telemetry_is_schema_tagged() -> None:
     assert record["defensive_regime"] is True
     assert record["contracted_speed_cap"] == TrackingPrecisionContract().defensive_speed_cap
     assert record["contract_honored"] is False  # applied 2.0 > defensive ceiling
+
+
+def test_normalized_spec_is_default_off_and_hash_stable() -> None:
+    """Absent spec preserves current behavior and hashes canonically."""
+    normalized = normalize_tracking_precision_spec(None)
+
+    assert normalized["enabled"] is False
+    assert normalized["target_motp_m"] == 0.0
+    assert normalized["speed_contract"]["mode"] == "diagnostic"
+    assert tracking_precision_hash(normalized) == tracking_precision_hash(
+        normalize_tracking_precision_spec(dict(reversed(list(normalized.items()))))
+    )
+
+
+def test_normalized_spec_accepts_issue_aliases() -> None:
+    """Issue #3480 speed-contract aliases normalize to one operational contract."""
+    normalized = normalize_tracking_precision_spec(
+        {
+            "target_motp_m": 3.0,
+            "speed_contract": {
+                "precision_threshold_m": 2.0,
+                "default_speed_cap": 1.4,
+                "defensive_speed_cap": 0.4,
+                "mode": "clamp",
+            },
+            "seed_salt": 17,
+        }
+    )
+
+    assert normalized["enabled"] is True
+    assert normalized["speed_contract"] == {
+        "threshold_m": 2.0,
+        "default_speed": 1.4,
+        "defensive_speed": 0.4,
+        "mode": "clamp",
+    }
+    assert normalized["seed_salt"] == 17
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        {"speed_contract": {"mode": "unknown"}},
+        {"target_motp_m": -0.1},
+        {"seed_salt": -1},
+        {"unexpected": True},
+        {"speed_contract": {"unexpected": True}},
+    ],
+)
+def test_invalid_spec_is_rejected(spec: dict[str, object]) -> None:
+    """Malformed run specs fail before they can enter benchmark provenance."""
+    with pytest.raises((TypeError, ValueError)):
+        normalize_tracking_precision_spec(spec)
+
+
+def test_tracking_precision_rng_is_episode_deterministic() -> None:
+    """Spec, scenario, and seed produce stable but distinct drift streams."""
+    spec = normalize_tracking_precision_spec({"target_motp_m": 2.5, "seed_salt": 4})
+    positions = np.zeros((3, 2))
+
+    rng_a = make_tracking_precision_rng(spec, seed=12, scenario_id="map-a")
+    rng_b = make_tracking_precision_rng(spec, seed=12, scenario_id="map-a")
+    rng_c = make_tracking_precision_rng(spec, seed=12, scenario_id="map-b")
+
+    drift_a = apply_tracking_precision_spec(positions, spec, rng_a)
+    drift_b = apply_tracking_precision_spec(positions, spec, rng_b)
+    drift_c = apply_tracking_precision_spec(positions, spec, rng_c)
+
+    assert np.array_equal(drift_a, drift_b)
+    assert not np.array_equal(drift_a, drift_c)
+
+
+def test_tracking_precision_spec_zero_or_disabled_passes_through() -> None:
+    """Default-off specs do not corrupt observations before explicit opt-in."""
+    rng = np.random.default_rng(42)
+    positions = np.array([[1.0, 2.0], [3.0, 4.0]])
+
+    disabled = apply_tracking_precision_spec(positions, None, rng)
+    zero_motp = apply_tracking_precision_spec(
+        positions,
+        {"enabled": True, "target_motp_m": 0.0},
+        rng,
+    )
+
+    assert np.array_equal(disabled, positions)
+    assert np.array_equal(zero_motp, positions)
+    assert disabled is not positions
+    assert zero_motp is not positions
+
+
+def test_speed_contract_diagnostic_mode_records_without_clamping() -> None:
+    """Diagnostic mode preserves command speed and marks contract violation."""
+    applied, record = apply_speed_contract(
+        1.5,
+        3.0,
+        {
+            "enabled": True,
+            "target_motp_m": 3.0,
+            "speed_contract": {"defensive_speed": 0.5, "mode": "diagnostic"},
+        },
+    )
+
+    assert applied == 1.5
+    assert record["contract_mode"] == "diagnostic"
+    assert record["tracking_precision_enabled"] is True
+    assert record["contract_honored"] is False
+
+
+def test_speed_contract_clamp_mode_applies_defensive_ceiling() -> None:
+    """Clamp mode applies the defensive cap once MOTP crosses the threshold."""
+    applied, record = apply_speed_contract(
+        1.5,
+        3.0,
+        {
+            "enabled": True,
+            "target_motp_m": 3.0,
+            "speed_contract": {"defensive_speed": 0.5, "mode": "clamp"},
+        },
+    )
+
+    assert applied == 0.5
+    assert record["contract_mode"] == "clamp"
+    assert record["contract_honored"] is True

@@ -51,6 +51,14 @@ CONDITIONS: dict[str, dict[str, Any]] = {
         "description": "Single pedestrian fully missed (probability=1.0).",
         "spec_kw": {"missed_detection_probability": 1.0, "seed": 2755},
     },
+    "false_positive_only": {
+        "description": "One observed-only pedestrian injected into the replay observation.",
+        "spec_kw": {
+            "false_positive_positions": [[26.0, 7.0]],
+            "false_positive_velocities": [[0.0, 0.0]],
+            "false_positive_ids": ["false_positive_0"],
+        },
+    },
     "occlusion_only": {
         "description": "Single pedestrian position/velocity zeroed by occlusion mask.",
         "spec_kw": {"occlusion_mask": np.array([True])},
@@ -187,6 +195,7 @@ def evaluate_condition(
     response_delay_steps: int | None = None
     missed_counts: list[int] = []
     occluded_counts: list[int] = []
+    false_positive_counts: list[int] = []
     closest_distances: list[float] = []
     action_proxies: list[dict[str, Any]] = []
     observed_steps: list[int] = []
@@ -232,6 +241,7 @@ def evaluate_condition(
 
         missed_counts.append(meta["missed_actor_count"])
         occluded_counts.append(meta["occluded_actor_count"])
+        false_positive_counts.append(meta["false_positive_actor_count"])
         closest_distances.append(closest_dist)
         action_proxies.append(action_proxy)
 
@@ -258,6 +268,7 @@ def evaluate_condition(
         "perturbed_observed_steps": perturbed_observed_steps,
         "missed_actor_observations_total": sum(missed_counts),
         "occluded_actor_observations_total": sum(occluded_counts),
+        "false_positive_actor_observations_total": sum(false_positive_counts),
         "delay_steps_configured": spec.delay_steps,
         "closest_distance_m": round(min(closest_distances), 4) if closest_distances else None,
         "stop_yield_feasibility": {
@@ -286,6 +297,7 @@ def _spec_summary(spec: ObservationPerturbationSpec) -> dict[str, Any]:
         "position_noise_bound_m": spec.position_noise_bound_m,
         "missed_detection_probability": spec.missed_detection_probability,
         "has_occlusion_mask": spec.occlusion_mask is not None,
+        "false_positive_actor_count": spec.false_positive_actor_count,
         "delay_steps": spec.delay_steps,
         "noise_profile": spec.noise_profile,
         "is_noop": spec.is_noop,
@@ -308,7 +320,7 @@ def _observation_quality_group(spec: ObservationPerturbationSpec) -> dict[str, A
         range_limit_m=None,
         angular_noise_std_rad=0.0,
         false_negative_rate=float(spec.missed_detection_probability),
-        false_positive_rate=0.0,
+        false_positive_rate=1.0 if spec.false_positive_actor_count > 0 else 0.0,
         notes=(
             "Diagnostic simulator observation-quality metadata only; "
             "not hardware-calibrated sensor realism."
@@ -406,6 +418,7 @@ def _safety_effect_summary(result: dict[str, Any]) -> dict[str, Any]:
 
     missed_total = int(result["missed_actor_observations_total"])
     occluded_total = int(result["occluded_actor_observations_total"])
+    false_positive_total = int(result["false_positive_actor_observations_total"])
     delay_steps = result["response_delay_steps"]
     if result["first_observed_step"] is None and (missed_total > 0 or occluded_total > 0):
         false_negative_effect = "full_miss_or_occlusion"
@@ -432,10 +445,12 @@ def _safety_effect_summary(result: dict[str, Any]) -> dict[str, Any]:
             "rationale": false_negative_rationale,
         },
         "false_positive": {
-            "effect": "not_modeled",
+            "effect": "actor_injected" if false_positive_total > 0 else "none_observed",
+            "false_positive_actor_observations_total": false_positive_total,
             "rationale": (
-                "This perturbation path does not inject false-positive actors; false-positive "
-                "effects are explicitly not available from this diagnostic report."
+                "Observed-only actors were injected into the perturbation replay."
+                if false_positive_total > 0
+                else "No false-positive actor observations were recorded."
             ),
         },
     }
@@ -557,7 +572,6 @@ def _generate_markdown(
             "",
             "- Single deterministic fixture (seed=111), single scenario family.",
             "- No live planner replay; action proxies are from the stored trace, not re-executed.",
-            "- False-positive actors are not injected by this diagnostic perturbation path.",
             "- Stop/yield feasibility is from fixture metadata, not re-derived.",
             "- Not paper-facing benchmark evidence.",
         ]

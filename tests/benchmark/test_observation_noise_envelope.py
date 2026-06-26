@@ -44,6 +44,7 @@ EXPECTED_CONDITIONS = [
     "low_noise",
     "medium_noise",
     "missed_detection_only",
+    "false_positive_only",
     "occlusion_only",
     "delay_only",
     "combined",
@@ -76,12 +77,12 @@ def test_report_has_required_top_level_keys() -> None:
     assert report["issue"] == 2755
     assert "claim_boundary" in report
     assert "conditions" in report
-    assert len(report["conditions"]) == 7
+    assert len(report["conditions"]) == len(EXPECTED_CONDITIONS)
     assert "summary" in report
     assert "safety_effects" in report["summary"]
     assert (
         report["summary"]["safety_effects"]["missed_detection_only"]["false_positive"]["effect"]
-        == "not_modeled"
+        == "none_observed"
     )
 
 
@@ -173,7 +174,27 @@ def test_missed_detection_never_observed() -> None:
     assert result["first_observed_step"] is None
     assert result["classification"]["label"] == "scenario_too_weak"
     assert result["safety_effects"]["false_negative"]["effect"] == "full_miss_or_occlusion"
-    assert result["safety_effects"]["false_positive"]["effect"] == "not_modeled"
+    assert result["safety_effects"]["false_positive"]["effect"] == "none_observed"
+
+
+def test_false_positive_condition_injects_observed_only_actor() -> None:
+    """False-positive condition injects a ghost actor into replay observations."""
+    mod = _load_script()
+    trace = _load_fixture_for_test()
+    frames = trace["frames"]
+    first_visible = trace["occlusion"]["first_visible_step"]
+
+    result = mod.evaluate_condition(
+        "false_positive_only", mod.CONDITIONS["false_positive_only"], frames, first_visible
+    )
+
+    assert result["false_positive_actor_observations_total"] > 0
+    assert result["spec"]["false_positive_actor_count"] == 1
+    assert result["safety_effects"]["false_positive"]["effect"] == "actor_injected"
+    assert (
+        result["safety_effects"]["false_positive"]["false_positive_actor_observations_total"]
+        == result["false_positive_actor_observations_total"]
+    )
 
 
 def test_occlusion_only_never_observed() -> None:
@@ -302,7 +323,7 @@ def test_markdown_report_contains_caveats() -> None:
     assert "Diagnostic" in md
     assert "False-negative safety effect" in md
     assert "False-positive safety effect" in md
-    assert "False-positive actors are not injected" in md
+    assert "False-positive actors are not injected" not in md
 
 
 def test_spec_summary_fields() -> None:

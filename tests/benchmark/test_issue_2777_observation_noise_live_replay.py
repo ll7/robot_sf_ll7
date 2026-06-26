@@ -33,7 +33,7 @@ def _load_script():
 
 
 def test_condition_set_matches_issue_2755_contract() -> None:
-    """The wrapper should preserve the seven perturbation family names."""
+    """The wrapper should preserve the default perturbation family names."""
     mod = _load_script()
 
     assert tuple(condition.name for condition in mod.CONDITIONS) == mod.REQUIRED_CONDITIONS
@@ -41,10 +41,23 @@ def test_condition_set_matches_issue_2755_contract() -> None:
     delay = next(condition for condition in mod.CONDITIONS if condition.name == "delay_only")
     assert "--observation-delay-steps" in delay.flags
     assert "2" in delay.flags
+    false_positive = next(
+        condition for condition in mod.CONDITIONS if condition.name == "false_positive_only"
+    )
+    assert false_positive.flags == (
+        "--false-positive-actor-count",
+        "1",
+        "--false-positive-offset-x-m",
+        "1.0",
+        "--false-positive-offset-y-m",
+        "0.0",
+        "--observation-perturbation-seed",
+        "2755",
+    )
 
 
 def test_issue_3328_behavior_probe_condition_set_is_opt_in() -> None:
-    """The #3328 probe should not mutate the default seven-condition run."""
+    """The #3328 probe should not mutate the default condition run."""
     mod = _load_script()
 
     probe_conditions = mod.CONDITION_SETS[mod.ISSUE_3328_CONDITION_SET]
@@ -128,7 +141,7 @@ def test_default_strict_mode_fails_closed_without_occluded_fixture(tmp_path: Pat
     assert report["status"] == "fail_closed"
     assert report["classification"]["label"] == "blocked"
     assert report["fixture_contract"]["satisfied"] is False
-    assert len(report["conditions"]) == 7
+    assert len(report["conditions"]) == len(mod.REQUIRED_CONDITIONS)
     assert {condition["status"] for condition in report["conditions"]} == {"blocked"}
 
 
@@ -402,8 +415,8 @@ def test_live_condition_timeout_becomes_fail_closed_blocker(
         funnel_config=funnel,
     )
 
-    assert len(conditions) == 7
-    assert len(blockers) == 7
+    assert len(conditions) == len(mod.REQUIRED_CONDITIONS)
+    assert len(blockers) == len(mod.REQUIRED_CONDITIONS)
     assert all(condition["status"] == "blocked" for condition in conditions)
     assert "timed out" in blockers[0]
 
@@ -415,6 +428,7 @@ def _write_trace(
     observed_count: int,
     closest: float,
     seed: int = 111,
+    false_positive_count: int = 0,
 ) -> None:
     payload = {
         "candidate": "risk_surface_dwa_v0",
@@ -440,6 +454,7 @@ def _write_trace(
                     "noise_profile": "bounded_gaussian",
                     "missed_actor_count": 0,
                     "occluded_actor_count": 0,
+                    "false_positive_actor_count": false_positive_count,
                     "observed_actor_count": observed_count,
                 },
             }
@@ -833,6 +848,25 @@ def test_trace_comparison_names_scenario_seed_planner_and_policy_insensitive(
     assert comparison["seed"]["same"] is True
     assert comparison["planner_mode"]["candidate"] == "risk_surface_dwa_v0"
     assert comparison["classification"]["label"] == "policy_insensitive"
+
+
+def test_observation_totals_report_false_positive_actor_injection(tmp_path: Path) -> None:
+    """Comparison metadata should expose observed-only actor injection counts."""
+    mod = _load_script()
+    trace = tmp_path / "false_positive.json"
+    _write_trace(
+        trace,
+        command=[1.0, 0.0],
+        observed_count=2,
+        closest=1.5,
+        false_positive_count=1,
+    )
+    payload = json.loads(trace.read_text(encoding="utf-8"))
+
+    totals = mod._observation_totals(payload)
+
+    assert totals["false_positive_actor_observations_total"] == 1
+    assert totals["max_observed_actor_count"] == 2
 
 
 def test_trace_comparison_reports_behavior_change_dimensions(tmp_path: Path) -> None:

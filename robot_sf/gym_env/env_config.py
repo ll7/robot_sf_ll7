@@ -38,6 +38,7 @@ from robot_sf.robot.differential_drive import (
     DifferentialDriveSettings,
 )
 from robot_sf.robot.holonomic_drive import HolonomicDriveRobot, HolonomicDriveSettings
+from robot_sf.robot.rollover_proxy import RolloverProxyParams
 from robot_sf.sensor.image_sensor import ImageSensorSettings
 from robot_sf.sensor.range_sensor import LidarScannerSettings
 from robot_sf.sim.sim_config import SimulationSettings
@@ -78,6 +79,11 @@ class BaseEnvSettings(TelemetryConfigMixin):
     grid_config: GridConfig | None = None
     include_grid_in_observation: bool = False
     show_occupancy_grid: bool = False
+    # Internal non-hardware three-wheeled rollover proxy. Disabled by default so
+    # existing benchmark/training runs keep identical episode semantics.
+    rollover_proxy_enabled: bool = False
+    rollover_proxy_params: RolloverProxyParams = field(default_factory=RolloverProxyParams)
+    rollover_proxy_penalty: float = 0.0
     # Forecast variant selection for planners that consume ProbabilisticPredictor baselines.
     # "none" disables baseline forecast consumption and uses the planner's default behavior.
     forecast_variant: str = field(default="none")
@@ -98,6 +104,9 @@ class BaseEnvSettings(TelemetryConfigMixin):
                 f"forecast_variant must be one of {list(FORECAST_VARIANT_CHOICES)}; "
                 f"got {self.forecast_variant!r}"
             )
+        if self.rollover_proxy_penalty > 0.0:
+            raise ValueError("rollover_proxy_penalty must be non-positive.")
+
         sync_observation_stack_settings(self)
         self._validate_telemetry()
 

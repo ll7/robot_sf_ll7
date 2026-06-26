@@ -1,0 +1,83 @@
+# Issue #3654 vulnerable-user proxy scenario pack v0.
+#
+# This pack is a deferred scaffold only. It is intentionally excluded from default
+# benchmark campaign configs until a later issue defines certification, metrics,
+# and claim boundaries for any executable benchmark use.
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+  - name: vulnerable_user_proxy_slow_crossing_low
+    map_id: classic_crossing
+    simulation_config:
+      max_episode_steps: 650
+      ped_density: 0.02
+    robot_config: {}
+    metadata:
+      archetype: vulnerable_user_proxy
+      pack_id: issue_3654_vulnerable_user_proxy_v0
+      status: deferred
+      enabled_by_default: false
+      benchmark_evidence: false
+      claim_boundary: Synthetic slow-crossing proxy only; not a real-world user-group claim.
+      proxy_dimension: reduced_pedestrian_speed
+      label: vulnerable-user proxy slow crossing low density
+      density: low
+      flow: crossing
+      intended_use: future opt-in validation scaffold
+      requires_before_benchmark_use:
+        - scenario certification
+        - explicit metric contract
+        - opt-in benchmark config
+    seeds: [365401, 365402, 365403]
+
+  - name: vulnerable_user_proxy_waiting_dwell_medium
+    map_id: classic_merging
+    simulation_config:
+      max_episode_steps: 700
+      ped_density: 0.05
+    robot_config: {}
+    metadata:
+      archetype: vulnerable_user_proxy
+      pack_id: issue_3654_vulnerable_user_proxy_v0
+      status: deferred
+      enabled_by_default: false
+      benchmark_evidence: false
+      claim_boundary: Synthetic dwell-and-wait proxy only; not a real-world user-group claim.
+      proxy_dimension: intermittent_pedestrian_dwell
+      label: vulnerable-user proxy waiting dwell medium density
+      density: medium
+      flow: merging_with_dwell
+      intended_use: future opt-in validation scaffold
+      requires_before_benchmark_use:
+        - scenario certification
+        - explicit metric contract
+        - opt-in benchmark config
+    seeds: [365411, 365412, 365413]
+
+  - name: vulnerable_user_proxy_occluded_emergence_low
+    map_id: classic_urban_crossing
+    simulation_config:
+      max_episode_steps: 700
+      ped_density: 0.03
+    observation_visibility:
+      static_occlusion: true
+      dynamic_occlusion: false
+      max_range_m: 9.0
+      fov_degrees: 160
+    robot_config: {}
+    metadata:
+      archetype: vulnerable_user_proxy
+      pack_id: issue_3654_vulnerable_user_proxy_v0
+      status: deferred
+      enabled_by_default: false
+      benchmark_evidence: false
+      claim_boundary: Synthetic occluded-emergence proxy only; not a real-world user-group claim.
+      proxy_dimension: visibility_limited_emergence
+      label: vulnerable-user proxy occluded emergence low density
+      density: low
+      flow: crossing
+      intended_use: future opt-in validation scaffold
+      requires_before_benchmark_use:
+        - scenario certification
+        - explicit metric contract
+        - opt-in benchmark config
+    seeds: [365421, 365422, 365423]

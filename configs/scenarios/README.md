@@ -16,6 +16,10 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
 - `sets/`: manifest files that include other scenario files.
 - `perturbations/`: perturbation manifests for validity preflight before paired criticality pilots.
 
+`sets/vulnerable_user_proxy_pack_v0_deferred_issue3654.yaml` is a deferred vulnerable-user proxy
+scaffold. It is disabled from default benchmark campaigns and records only synthetic proxy intent,
+not real-world user-group evidence or paper-facing results.
+
 ## Plausibility tracking
 
 Scenario metadata includes a `plausibility` block used to record verification

@@ -23,6 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [`scripts/dev/check_perf_evidence.py`](scripts/dev/check_perf_evidence.py); template section in
   [`.github/PULL_REQUEST_TEMPLATE/pr_default.md`](.github/PULL_REQUEST_TEMPLATE/pr_default.md);
   tests: [`tests/dev/test_check_perf_evidence.py`](tests/dev/test_check_perf_evidence.py).
+* Began the #3463 corrective engineering for the topology near-parity selector lane (diagnostic-tier,
+  no benchmark claim). `TopologyGuidedLocalPolicyConfig` gains two current-behavior-preserving knobs:
+  `primary_route_progress_gate_use_monotone_accounting` (default `False`) hardens primary-route
+  progress accounting against premature stalls — a single A\* re-plan that transiently raises
+  `route_remaining` no longer masks real progress (uses `max_sample − newest` instead of
+  `oldest − newest`); and `primary_route_progress_gate_min_samples` (default `2`, the historical
+  hardcoded value) makes the progress-gate sample threshold explicit. Progress-gate config is now
+  fail-closed (non-finite threshold or `< 2` / non-integer min-samples raises `ValueError`), and the
+  accounting mode + sample threshold are surfaced in the `topology_reuse_penalty` diagnostics. Deferred
+  to follow-ups: command-arbitration-strength tuning, a registered candidate config + paired benchmark
+  diagnostic for the monotone variant, and any benchmark promotion (#3463).
 * Added a pre-commit lint that fails when a file under `configs/**` contains an absolute
   home-dir path (`/home/`, `/Users/`, `/root/`), which is non-portable for other contributors
   and automated runners. Intentional absolute paths (e.g. private-ops SLURM routing targets
@@ -48,6 +59,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one pass; an intentional mismatch can be annotated with `# allow-provenance-mismatch: <reason>`.
   Hook: [`hooks/check_config_provenance.py`](hooks/check_config_provenance.py); tests:
   [`tests/integration/test_check_config_provenance.py`](tests/integration/test_check_config_provenance.py) (#3606).
+* Ran the deferred #3573 **reactive-vs-replay pedestrian-reactivity ablation** through the real
+  runner. Added the open-loop replay (non-reactive) pedestrian mode as a scenario-driven toggle:
+  `build_env_config` reads `peds_have_robot_repulsion` and sets `sim_config.prf_config.is_active`
+  (backward-compatible; default reactive). New campaign
+  [`scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py`](scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py)
+  runs each planner under reactive vs replay over identical scenarios + seeds (common random numbers)
+  via `map_runner.run_map_batch` and feeds the per-planner contrast into the merged
+  `assess_reactivity_ablation` quantifier. Diagnostic-tier result on `classic_crossing_subset`
+  (goal + orca, 4 seeds, horizon 150): disabling reactivity raised collisions (orca 0.125 → 0.50,
+  goal 0.50 → 0.625) and cut separation — reactive (yielding) pedestrians flatter planners. Evidence +
+  caveats (sign convention, horizon-sensitivity, small N):
+  `docs/context/evidence/issue_3573_reactivity_ablation_2026-06-25/` (#3573).
 * Classified the ORCA-residual progress-probe lane decision (#2445):
   [`scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py`](scripts/analysis/classify_orca_residual_progress_probe_issue_2445.py)
   reads the existing v1 bounded smoke result (SLURM job 12913) and applies the #2408/PR #2420 stop

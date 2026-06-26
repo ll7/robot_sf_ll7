@@ -17,10 +17,11 @@ scenario pair and generating traces lives with parent issue #2924; pair-manifest
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+
+from robot_sf.benchmark.finite_checks import require_finite_scalar
 
 COUNTERFACTUAL_PAIR_SCHEMA = "counterfactual_pair_result.v1"
 
@@ -116,10 +117,7 @@ def _metric_value(result: Mapping[str, Any], metric: str) -> float:
     metrics = result.get("metrics")
     if not isinstance(metrics, Mapping) or metric not in metrics:
         raise ValueError(f"result.metrics is missing required metric {metric!r}")
-    value = float(metrics[metric])
-    if not math.isfinite(value):
-        raise ValueError(f"metric {metric!r} value {value} is not finite")
-    return value
+    return require_finite_scalar(f"metric {metric!r} value", metrics[metric])
 
 
 def _direction_matches(delta: float, expected_direction: str, tolerance: float) -> bool:

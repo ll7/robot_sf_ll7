@@ -130,6 +130,20 @@ explicitly blocked from manuscript promotion.
 | **Claim gap** | Payload absence is resolved, but the tables remain diagnostic/provenance artifacts until the PPO observation contract and SNQI contract caveats are repaired or explicitly scoped out by a new issue contract. |
 | **Evidence promotion path** | **invalid campaign repair**: fix or intentionally scope the PPO observation-contract failure and SNQI contract caveat, then rerun a fresh bounded campaign before any benchmark or Results wording. |
 
+### 7. Recovered Reward-Curriculum Seed Runs (Diagnostic)
+
+| Field | Value |
+|---|---|
+| **Claim** | Three reward-curriculum expert-policy seed runs (seeds 506/508/509) completed training and 70-scenario evaluation, lost their manifests to a cross-worktree serializer bug, and were recovered by backfilling manifests from retained artefacts; they are diagnostic seed evidence, not benchmark success. |
+| **Artifact status** | current (manifests backfilled, evidence retrieved local) |
+| **Evidence tier** | diagnostic |
+| **Allowed wording** | "Recovered reward-curriculum expert-policy seed runs exist with payload-complete, provenance-tracked manifests for seed-variance bookkeeping and pipeline diagnostics only; their marginal SNQI and elevated collision rate mean they do not establish benchmark-success or Results-chapter evidence." |
+| **Caveat** | Aggregate success 0.81–0.85 but SNQI is at/below zero (−0.069 / +0.017 / −0.111) and collision is 14–19%, failing the issue_2557 success criterion ("improve success without increased collision"). Each manifest is single-seed (`validation_state: draft`); cross-seed variance is not yet established. A 501–511 variance fill is in flight (jobs 13153/13154/13155) under an explicit override of the campaign do-not-rerun policy. |
+| **Source PR/issue** | [#2557](https://github.com/ll7/robot_sf_ll7/issues/2557), [#2919](https://github.com/ll7/robot_sf_ll7/issues/2919), [#3203](https://github.com/ll7/robot_sf_ll7/issues/3203), [#3266](https://github.com/ll7/robot_sf_ll7/issues/3266), [recovered-seeds note](issue_2557_recovered_diagnostic_seeds.md), [#3590](https://github.com/ll7/robot_sf_ll7/pull/3590) |
+| **Dissertation chapter** | Methods, Limitations |
+| **Claim gap** | Manifest/evidence loss is resolved, but the runs remain diagnostic until SNQI validity and collision-rate regressions are repaired under a new hypothesis and a consolidated multi-seed variance analysis supersedes the recovered-seeds stub. |
+| **Evidence promotion path** | **new hypothesis + consolidated variance**: complete the 501–511 seed fill, retrieve/analyse, then author a consolidated seed-variance note; do not promote past diagnostic until the SNQI and collision caveats are repaired or explicitly scoped by a new issue contract. |
+
 ## Stale-Artifact Summary
 
 | Artifact | State | Reason |
@@ -156,6 +170,9 @@ explicitly blocked from manuscript promotion.
 7. **Exported tables**: Discussion/Limitations only. Use as payload-complete table provenance
    with the Issue #3203 invalid-campaign caveat; do not cite as benchmark-success or ranking
    evidence.
+8. **Recovered reward-curriculum seeds**: Methods/Limitations only. Use as provenance-tracked
+   seed-variance bookkeeping and a manifest-recovery case study; do not cite as benchmark-success
+   given marginal SNQI and elevated collision rate.
 
 ## Claim Boundaries
 

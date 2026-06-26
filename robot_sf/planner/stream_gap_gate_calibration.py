@@ -14,9 +14,10 @@ this layer is pure and side-effect free, mirroring the failure-cause classifier 
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Any
+
+from robot_sf.benchmark.finite_checks import require_finite_fields
 
 STREAM_GAP_CALIBRATION_SCHEMA = "stream_gap_gate_calibration.v1"
 
@@ -64,10 +65,7 @@ def _require_finite_setting(result: GateSettingResult, label: str) -> None:
     Raises:
         ValueError: If any safety aggregate of ``result`` is not finite.
     """
-    for field in _SETTING_METRIC_FIELDS:
-        value = getattr(result, field)
-        if not math.isfinite(value):
-            raise ValueError(f"{label}.{field} must be finite, got {value}")
+    require_finite_fields(label, result, _SETTING_METRIC_FIELDS)
 
 
 def classify_setting_safety(

@@ -1,0 +1,76 @@
+{
+  "assessment": {
+    "evidence_kind": "diagnostic_proxy",
+    "mean_replay_collision_inflation": -0.25,
+    "mean_replay_near_miss_inflation": -0.1875,
+    "n_planners": 2,
+    "per_planner": [
+      {
+        "collision_delta": -0.125,
+        "min_separation_delta_m": 0.08050000000000002,
+        "near_miss_delta": 0.0,
+        "planner": "goal",
+        "replay_flatters": false
+      },
+      {
+        "collision_delta": -0.375,
+        "min_separation_delta_m": 0.2611,
+        "near_miss_delta": -0.375,
+        "planner": "orca",
+        "replay_flatters": false
+      }
+    ],
+    "planners_flattered_by_replay": [],
+    "rank_reactivity_sensitive_planners": [],
+    "ranking_is_reactivity_sensitive": false,
+    "schema_version": "reactivity_ablation.v1"
+  },
+  "claim_boundary": "Real-runner reactive-vs-replay mechanism on a bounded family. 'Replay' = robot->ped force disabled in a live social-force sim (not pre-recorded playback); the merged quantifier's grounded-replay sign convention must be read against that. A clean result is gated on a contested-proximity scenario family (the #3556-style gap): on available families the robot stays outside the ped-repulsion activation radius, so the contrast is near-null. Not paper-grade.",
+  "evidence_tier": "diagnostic",
+  "generated_at_utc": "2026-06-25T12:06:34.759830+00:00",
+  "issue": 3573,
+  "per_planner": {
+    "goal": {
+      "reactive": {
+        "collision_rate": 0.5,
+        "episodes": 8,
+        "min_separation_m": 0.5672,
+        "near_miss_rate": 0.625
+      },
+      "replay": {
+        "collision_rate": 0.625,
+        "episodes": 8,
+        "min_separation_m": 0.4867,
+        "near_miss_rate": 0.625
+      }
+    },
+    "orca": {
+      "reactive": {
+        "collision_rate": 0.125,
+        "episodes": 8,
+        "min_separation_m": 0.7815,
+        "near_miss_rate": 0.25
+      },
+      "replay": {
+        "collision_rate": 0.5,
+        "episodes": 8,
+        "min_separation_m": 0.5204,
+        "near_miss_rate": 0.625
+      }
+    }
+  },
+  "planners": [
+    "goal",
+    "orca"
+  ],
+  "quantifier_schema": "reactivity_ablation.v1",
+  "runner": "robot_sf.benchmark.map_runner.run_map_batch",
+  "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
+  "schema_version": "reactivity-ablation-campaign.v1",
+  "seeds": [
+    101,
+    102,
+    103,
+    104
+  ]
+}

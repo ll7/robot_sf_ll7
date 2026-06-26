@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from robot_sf.benchmark.finite_checks import require_finite_array, require_finite_scalar
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -41,8 +43,7 @@ def _require_finite(name: str, value: float) -> None:
     Raises:
         ValueError: If ``value`` is not finite.
     """
-    if not math.isfinite(value):
-        raise ValueError(f"{name} must be finite, got {value}")
+    require_finite_scalar(name, value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,9 +72,7 @@ def cvar(values: Sequence[float], alpha: float, *, higher_is_safer: bool) -> flo
         raise ValueError("values must be non-empty")
     if not (0.0 < alpha <= 1.0):
         raise ValueError("alpha must be in (0, 1]")
-    arr = np.asarray(values, dtype=np.float64)
-    if not np.all(np.isfinite(arr)):
-        raise ValueError("values must contain only finite values")
+    arr = require_finite_array("values", values)
     arr = np.sort(arr)  # ascending
     k = max(1, math.ceil(alpha * arr.size))
     tail = arr[:k] if higher_is_safer else arr[-k:]

@@ -22,7 +22,8 @@ import pickle
 import loguru
 
 from robot_sf.nav.map_config import MapDefinition
-from robot_sf.render.sim_view import SimulationView, VisualizableSimState
+from robot_sf.render.sim_state import VisualizableSimState
+from robot_sf.render.sim_view import SimulationView
 
 logger = loguru.logger
 

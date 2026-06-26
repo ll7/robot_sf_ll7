@@ -42,7 +42,32 @@ def build_env_config(
         use_ego_frame=True,
         center_on_robot=True,
     )
+    apply_pedestrian_reactivity_to_env_config(config, scenario=scenario)
     return config
+
+
+def apply_pedestrian_reactivity_to_env_config(
+    config: RobotSimulationConfig,
+    *,
+    scenario: Mapping[str, Any],
+) -> None:
+    """Apply the scenario's pedestrian-reactivity toggle to the env config.
+
+    The optional scenario key ``peds_have_robot_repulsion`` selects the pedestrian-reactivity
+    condition for the #3573 reactive-vs-replay ablation: ``True`` (default) keeps the robot->
+    pedestrian social force (reactive social-force pedestrians), ``False`` disables it
+    (open-loop / non-reactive replay — the robot-response term is off, so pedestrians do not
+    yield to the robot). Absent the key, current behavior (reactive) is preserved.
+
+    Sets ``sim_config.prf_config.is_active`` directly because the deprecated
+    ``peds_have_robot_repulsion`` alias is only synced in ``__post_init__`` (already run).
+    """
+    reactive = scenario.get("peds_have_robot_repulsion")
+    if reactive is None:
+        return
+    is_active = bool(reactive)
+    config.sim_config.prf_config.is_active = is_active
+    config.peds_have_robot_repulsion = is_active
 
 
 def apply_active_observation_mode_to_env_config(

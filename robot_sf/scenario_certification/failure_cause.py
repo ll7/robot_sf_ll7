@@ -17,10 +17,22 @@ Verdicts are versioned modeling choices, labeled diagnostic until validated.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 FAILURE_CAUSE_SCHEMA = "scenario_failure_cause.v1"
+FEASIBILITY_DIAGNOSTIC_MANIFEST_SCHEMA = "scenario_feasibility_diagnostic_manifest.v1"
+
+DIAGNOSTIC_STATUS_NOT_RUN = "not_run"
+DIAGNOSTIC_STATUS_NEEDS_EVIDENCE = "needs_evidence"
+
+REQUIRED_DIAGNOSTIC_LANES = (
+    "route_clearance",
+    "actor_free_run",
+    "extended_time_run",
+    "oracle_or_scripted_controller",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +55,25 @@ class FamilyDiagnostics:
     actor_free_solved: bool | None = None
     extended_time_solved: bool | None = None
     oracle_solved: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FeasibilityDiagnosticRow:
+    """Dry-run diagnostic planning row for one scenario in a candidate family.
+
+    Rows created by this model are deliberately not benchmark evidence. They record
+    which scenario-family entries need follow-up feasibility diagnostics and keep the
+    failure-cause classifier in its fail-closed ``indeterminate`` state until real
+    evidence is supplied.
+    """
+
+    scenario_id: str
+    family_id: str
+    source: str
+    diagnostic_status: str = DIAGNOSTIC_STATUS_NOT_RUN
+    evidence_status: str = DIAGNOSTIC_STATUS_NEEDS_EVIDENCE
+    required_diagnostics: tuple[str, ...] = REQUIRED_DIAGNOSTIC_LANES
+    notes: str = "Dry-run planning row only; no feasibility diagnostic was executed."
 
 
 # Stable verdict vocabulary.
@@ -102,6 +133,100 @@ def classify_failure_cause(diagnostics: FamilyDiagnostics) -> dict[str, Any]:
     }
 
 
+def build_feasibility_diagnostic_manifest(
+    scenarios: Iterable[Mapping[str, Any]],
+    *,
+    source: str,
+    family_ids: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Build a dry-run feasibility diagnostic manifest for candidate families.
+
+    The manifest prepares issue #3484 classification work without running a campaign
+    or inferring scenario validity. Every row remains ``not_run`` and
+    ``needs_evidence`` until route-clearance, actor-free, extended-time, and oracle
+    diagnostics are populated by follow-up tooling.
+
+    Returns:
+        Versioned dry-run manifest with one row per selected scenario.
+    """
+
+    selected_families = {family.casefold() for family in family_ids or ()}
+    rows: list[dict[str, Any]] = []
+    skipped = 0
+
+    for scenario in scenarios:
+        family_id = _scenario_family_id(scenario)
+        if selected_families and family_id.casefold() not in selected_families:
+            skipped += 1
+            continue
+        row = FeasibilityDiagnosticRow(
+            scenario_id=_scenario_id(scenario),
+            family_id=family_id,
+            source=source,
+        )
+        rows.append(feasibility_diagnostic_row_to_dict(row))
+
+    return {
+        "schema_version": FEASIBILITY_DIAGNOSTIC_MANIFEST_SCHEMA,
+        "issue": "3484",
+        "evidence_kind": "diagnostic_planning",
+        "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+        "source": source,
+        "family_filter": list(family_ids or []),
+        "row_count": len(rows),
+        "skipped_count": skipped,
+        "required_diagnostics": list(REQUIRED_DIAGNOSTIC_LANES),
+        "rows": rows,
+    }
+
+
+def feasibility_diagnostic_row_to_dict(row: FeasibilityDiagnosticRow) -> dict[str, Any]:
+    """Convert a diagnostic planning row to JSON-safe primitives.
+
+    Returns:
+        Dictionary representation including a fail-closed indeterminate verdict.
+    """
+
+    verdict = classify_failure_cause(FamilyDiagnostics())
+    return {
+        "scenario_id": row.scenario_id,
+        "family_id": row.family_id,
+        "source": row.source,
+        "diagnostic_status": row.diagnostic_status,
+        "evidence_status": row.evidence_status,
+        "required_diagnostics": list(row.required_diagnostics),
+        "failure_cause_verdict": verdict,
+        "notes": row.notes,
+    }
+
+
+def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
+    """Return the best available scenario-family identifier."""
+
+    metadata = scenario.get("metadata")
+    metadata_map = metadata if isinstance(metadata, Mapping) else {}
+    for value in (
+        metadata_map.get("scenario_family"),
+        metadata_map.get("family"),
+        metadata_map.get("archetype"),
+        scenario.get("scenario_family"),
+        scenario.get("family"),
+    ):
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown"
+
+
+def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Return a stable scenario identifier for manifest rows."""
+
+    for key in ("scenario_id", "name", "id"):
+        value = scenario.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown"
+
+
 def _decide(d: FamilyDiagnostics) -> tuple[str, str]:
     """Return the (cause, rationale) for a diagnostics bundle."""
     if d.any_planner_succeeded:
@@ -142,14 +267,21 @@ def _decide(d: FamilyDiagnostics) -> tuple[str, str]:
 
 
 __all__ = [
+    "DIAGNOSTIC_STATUS_NEEDS_EVIDENCE",
+    "DIAGNOSTIC_STATUS_NOT_RUN",
     "DYNAMIC_BLOCKING_OR_DEADLOCK",
     "FAILURE_CAUSE_SCHEMA",
+    "FEASIBILITY_DIAGNOSTIC_MANIFEST_SCHEMA",
     "INDETERMINATE",
     "INFEASIBLE_ROUTE",
     "NOT_UNIVERSALLY_FAILING",
     "PLANNER_LIMITED",
+    "REQUIRED_DIAGNOSTIC_LANES",
     "TIME_LIMITED",
     "VEHICLE_INFEASIBLE",
     "FamilyDiagnostics",
+    "FeasibilityDiagnosticRow",
+    "build_feasibility_diagnostic_manifest",
     "classify_failure_cause",
+    "feasibility_diagnostic_row_to_dict",
 ]

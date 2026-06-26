@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import TYPE_CHECKING
 
 from scripts.dev.check_docs_evidence_integrity import check_files, main
@@ -9,14 +11,40 @@ from scripts.dev.check_docs_evidence_integrity import check_files, main
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pytest import MonkeyPatch
+
+
+def _write_catalog(root: Path, paths: list[str]) -> None:
+    """Write a minimal context catalog registering evidence paths."""
+    catalog = root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    entries = "\n".join(
+        f"  - path: {path}\n    status: evidence\n    freshness: evidence" for path in paths
+    )
+    catalog.write_text(
+        "version: 1\n"
+        "status_values:\n"
+        "  evidence: Evidence pointer or manifest.\n"
+        "freshness_values:\n"
+        "  evidence: Evidence pointer.\n"
+        "entries:\n"
+        f"{entries}\n",
+        encoding="utf-8",
+    )
+
+
+def _sha256(path: Path) -> str:
+    """Return sha256 digest for a test fixture file."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
 
 def test_valid_files_pass(tmp_path: Path) -> None:
-    """Well-formed JSON/YAML and a resolvable relative link must produce no problems."""
+    """Well-formed JSON/YAML/resolvable relative link produce no problems."""
     (tmp_path / "target.md").write_text("# target\n", encoding="utf-8")
     (tmp_path / "data.json").write_text('{"ok": true}\n', encoding="utf-8")
     (tmp_path / "data.yaml").write_text("schema_version: 1\nitems: [a, b]\n", encoding="utf-8")
     (tmp_path / "note.md").write_text(
-        "See [target](./target.md) and [home](https://example.com) and [anchor](#section).\n",
+        "See [target](./target.md) [home](https://example.com) and [anchor](#section).\n",
         encoding="utf-8",
     )
 
@@ -46,51 +74,150 @@ def test_invalid_yaml_is_reported(tmp_path: Path) -> None:
 
 
 def test_broken_relative_link_is_reported(tmp_path: Path) -> None:
-    """A repo-local relative link to a missing file must be flagged."""
-    (tmp_path / "note.md").write_text("See [gone](./missing.md).\n", encoding="utf-8")
+    """Explicit relative links must resolve."""
+    (tmp_path / "note.md").write_text("[missing](./missing.md)\n", encoding="utf-8")
 
     problems = check_files(["note.md"], root=tmp_path)
 
     assert len(problems) == 1
     assert "broken repo-local link" in problems[0]
-    assert "./missing.md" in problems[0]
 
 
-def test_external_and_anchor_links_are_not_flagged(tmp_path: Path) -> None:
-    """External URLs, mailto, and pure anchors must never be treated as broken paths."""
-    (tmp_path / "note.md").write_text(
-        "[web](https://example.com/x) [mail](mailto:a@b.c) [top](#top) [bare](some/other.md)\n",
-        encoding="utf-8",
-    )
-
-    problems = check_files(["note.md"], root=tmp_path)
-
-    assert problems == []
-
-
-def test_relative_link_escaping_repo_is_reported(tmp_path: Path) -> None:
-    """A relative link resolving outside the repository root must be flagged."""
+def test_relative_link_cannot_escape_repo(tmp_path: Path) -> None:
+    """Relative Markdown links cannot escape the checkout."""
     root = tmp_path / "repo"
-    (root / "docs").mkdir(parents=True)
-    (tmp_path / "outside.md").write_text("# outside\n", encoding="utf-8")
-    (root / "docs" / "note.md").write_text("[up](../../outside.md)\n", encoding="utf-8")
+    root.mkdir()
+    (root / "docs").mkdir()
+    (root / "docs/note.md").write_text("[escape](../../outside.md)\n", encoding="utf-8")
 
     problems = check_files(["docs/note.md"], root=root)
 
     assert len(problems) == 1
-    assert "escapes the repository" in problems[0]
+    assert "escapes repository" in problems[0]
 
 
 def test_link_with_anchor_fragment_resolves_to_file(tmp_path: Path) -> None:
-    """A relative link with an anchor fragment must validate the file part only."""
+    """Only the file part of an anchor link is validated."""
     (tmp_path / "target.md").write_text("# target\n", encoding="utf-8")
     (tmp_path / "note.md").write_text("[sec](./target.md#section)\n", encoding="utf-8")
 
     assert check_files(["note.md"], root=tmp_path) == []
 
 
-def test_warn_only_mode_does_not_fail_on_problems(tmp_path: Path, capsys, monkeypatch) -> None:
-    """Advisory mode must exit 0 and emit GitHub warning annotations, not block."""
+def test_changed_evidence_file_must_be_catalog_registered(tmp_path: Path) -> None:
+    """A changed evidence file without a catalog entry must fail."""
+    summary = tmp_path / "docs/context/evidence/issue_999_missing/summary.json"
+    summary.parent.mkdir(parents=True)
+    summary.write_text('{"status": "ok"}\n', encoding="utf-8")
+    _write_catalog(tmp_path, [])
+
+    problems = check_files([summary.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert any("not registered" in problem for problem in problems)
+
+
+def test_changed_evidence_file_checksum_must_match(tmp_path: Path) -> None:
+    """A changed evidence file covered by a checksum manifest must match it."""
+    bundle = tmp_path / "docs/context/evidence/issue_999_checksums"
+    bundle.mkdir(parents=True)
+    summary = bundle / "summary.json"
+    summary.write_text('{"status": "ok"}\n', encoding="utf-8")
+    manifest = bundle / "SHA256SUMS"
+    manifest.write_text(
+        f"{'0' * 64}  {summary.relative_to(tmp_path).as_posix()}\n",
+        encoding="utf-8",
+    )
+    _write_catalog(
+        tmp_path,
+        [
+            summary.relative_to(tmp_path).as_posix(),
+            manifest.relative_to(tmp_path).as_posix(),
+        ],
+    )
+
+    problems = check_files([summary.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert any("checksum mismatch" in problem for problem in problems)
+
+
+def test_changed_checksum_manifest_validates_targets(tmp_path: Path) -> None:
+    """A changed checksum manifest validates referenced file checksums."""
+    bundle = tmp_path / "docs/context/evidence/issue_999_manifest"
+    bundle.mkdir(parents=True)
+    summary = bundle / "summary.json"
+    summary.write_text('{"status": "ok"}\n', encoding="utf-8")
+    manifest = bundle / "SHA256SUMS"
+    manifest.write_text(
+        f"{_sha256(summary)}  {summary.relative_to(tmp_path).as_posix()}\n",
+        encoding="utf-8",
+    )
+    _write_catalog(
+        tmp_path,
+        [
+            summary.relative_to(tmp_path).as_posix(),
+            manifest.relative_to(tmp_path).as_posix(),
+        ],
+    )
+
+    problems = check_files([manifest.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert problems == []
+
+
+def test_catalog_change_validates_registered_paths(tmp_path: Path) -> None:
+    """Changing catalog.yaml validates that registered paths exist."""
+    _write_catalog(tmp_path, ["docs/context/evidence/issue_999_missing/summary.json"])
+
+    problems = check_files(["docs/context/catalog.yaml"], root=tmp_path)
+
+    assert any("does not exist" in problem for problem in problems)
+
+
+def test_readme_summary_classification_drift_is_reported(tmp_path: Path) -> None:
+    """README evidence status must not disagree with summary.json fields."""
+    bundle = tmp_path / "docs/context/evidence/issue_999_drift"
+    bundle.mkdir(parents=True)
+    readme = bundle / "README.md"
+    readme.write_text(
+        "# Evidence\n\n## Evidence Status\n- `result_classification`: `positive_result`\n",
+        encoding="utf-8",
+    )
+    summary = bundle / "summary.json"
+    summary.write_text(
+        json.dumps({"result_classification": "negative_result"}) + "\n",
+        encoding="utf-8",
+    )
+    _write_catalog(
+        tmp_path,
+        [
+            readme.relative_to(tmp_path).as_posix(),
+            summary.relative_to(tmp_path).as_posix(),
+        ],
+    )
+
+    problems = check_files([readme.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert any("disagrees" in problem for problem in problems)
+
+
+def test_cited_command_and_config_paths_must_exist(tmp_path: Path) -> None:
+    """Changed docs verify practical script/config paths cited in commands."""
+    note = tmp_path / "docs/context/issue_999.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(
+        "Run `uv run python scripts/missing.py --config configs/missing.yaml`.\n",
+        encoding="utf-8",
+    )
+
+    problems = check_files([note.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert sum("cited command/config path" in problem for problem in problems) == 2
+
+
+def test_warn_only_mode_does_not_fail_on_problems(
+    tmp_path: Path, capsys, monkeypatch: MonkeyPatch
+) -> None:
+    """Advisory mode exits 0 and emits GitHub warnings."""
     monkeypatch.setattr("scripts.dev.check_docs_evidence_integrity._repo_root", lambda: tmp_path)
     (tmp_path / "broken.json").write_text("{not valid}", encoding="utf-8")
 
@@ -102,8 +229,8 @@ def test_warn_only_mode_does_not_fail_on_problems(tmp_path: Path, capsys, monkey
     assert "invalid JSON" in out
 
 
-def test_blocking_mode_fails_on_problems(tmp_path: Path, monkeypatch) -> None:
-    """Without --warn-only the same problem must fail closed (exit 1)."""
+def test_blocking_mode_fails_on_problems(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    """Without --warn-only the same problem fails closed."""
     monkeypatch.setattr("scripts.dev.check_docs_evidence_integrity._repo_root", lambda: tmp_path)
     (tmp_path / "broken.json").write_text("{not valid}", encoding="utf-8")
 

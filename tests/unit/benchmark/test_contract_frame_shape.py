@@ -43,6 +43,21 @@ def test_frame_shape_from_map_viewbox():
     assert (w, h) == (1024, 768)
 
 
+@pytest.mark.parametrize(
+    ("viewbox", "expected"),
+    [
+        ("0,0,100,200", (100, 200)),
+        ("0, 0, 1024, 768", (1024, 768)),
+    ],
+)
+def test_frame_shape_from_map_viewbox_with_commas(viewbox: str, expected: tuple[int, int]):
+    """Parse comma-separated SVG viewBox dimensions."""
+    svg = f"""<svg viewBox="{viewbox}" xmlns="http://www.w3.org/2000/svg"></svg>"""
+    p = make_svg(svg)
+    w, h = frame_shape_from_map(str(p))
+    assert (w, h) == expected
+
+
 def test_frame_shape_from_map_invalid():
     """TODO docstring. Document this function."""
     svg = """<svg></svg>"""

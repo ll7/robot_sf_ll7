@@ -45,6 +45,7 @@ from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_state import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
+from robot_sf.robot.rollover_proxy import RolloverProxyParams, rollover_proxy_telemetry
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sensor.sensor_fusion import OBS_IMAGE, SensorFusion
 from robot_sf.sensor.socnav_observation import (
@@ -66,6 +67,9 @@ _TELEMETRY_ANALYZER_STEP_METRIC_KEYS: tuple[str, ...] = (
     "force_exceed_events",
     "comfort_exposure",
     "jerk_mean",
+    "rollover_stability_margin",
+    "rollover_lateral_acceleration",
+    "rollover_critical_lateral_acceleration",
 )
 _ASYMMETRIC_CRITIC_STATE_KEY = "critic_privileged_state"
 _GridObstacleCacheKey = tuple[int, int, int]
@@ -311,13 +315,19 @@ def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
         or meta.get("is_robot_collision")
     )
     success = bool(meta.get("is_route_complete"))
-    return {
+    info = {
         "step": meta.get("step"),
         "meta": meta,
         "collision": collision,
         "success": success,
         "is_success": success,
     }
+    if "termination_reason" in meta:
+        info["termination_reason"] = meta["termination_reason"]
+    if "rollover_proxy" in meta:
+        info["rollover_proxy"] = meta["rollover_proxy"]
+        info["rollover_critical"] = bool(meta.get("rollover_critical", False))
+    return info
 
 
 def _coerce_finite_float(value: Any) -> float | None:
@@ -794,6 +804,80 @@ class RobotEnv(BaseEnv):
         if self.sim_ui:
             self.sim_ui.telemetry_session = self._telemetry_session
 
+    def _rollover_proxy_record(self) -> dict[str, Any] | None:
+        """Return opt-in rollover proxy telemetry for the executed robot state.
+
+        Assumes ``robot.current_speed`` is ``(linear_velocity, yaw_rate)``. This
+        holds for ``DifferentialDriveRobot`` and ``HolonomicDriveRobot``. It does
+        NOT hold for ``BicycleDriveRobot``, whose ``current_speed`` second element
+        is the heading angle, not the yaw rate; enabling the proxy with that drive
+        would mis-feed the margin. Tracked as follow-up rather than a default-path
+        concern because the proxy is opt-in and disabled by default (issue #3479).
+        """
+        if not getattr(self.env_config, "rollover_proxy_enabled", False):
+            return None
+        current_speed = getattr(self.simulator.robots[0], "current_speed", None)
+        current_speed = current_speed() if callable(current_speed) else current_speed
+        try:
+            linear_velocity = float(current_speed[0])
+            yaw_rate = float(current_speed[1])
+        except (TypeError, ValueError, IndexError) as exc:
+            raise RuntimeError(
+                "rollover_proxy_enabled requires robot.current_speed as "
+                "(linear_velocity, yaw_rate)."
+            ) from exc
+        return rollover_proxy_telemetry(
+            linear_velocity,
+            yaw_rate,
+            params=getattr(self.env_config, "rollover_proxy_params", RolloverProxyParams()),
+        )
+
+    def _apply_rollover_proxy_metadata(self, reward_dict: dict[str, Any]) -> bool:
+        """Add opt-in rollover proxy step metadata.
+
+        Returns:
+            True when the proxy classified this step as ``ROLLOVER_CRITICAL``.
+        """
+        rollover_record = self._rollover_proxy_record()
+        if rollover_record is None:
+            return False
+        reward_dict["rollover_proxy"] = rollover_record
+        reward_dict["rollover_stability_margin"] = rollover_record["stability_margin"]
+        reward_dict["rollover_lateral_acceleration"] = rollover_record["lateral_acceleration"]
+        reward_dict["rollover_critical_lateral_acceleration"] = rollover_record[
+            "critical_lateral_acceleration"
+        ]
+        rollover_critical = bool(rollover_record["rollover_critical"])
+        reward_dict["rollover_critical"] = rollover_critical
+        if rollover_critical:
+            reward_dict["termination_reason"] = "ROLLOVER_CRITICAL"
+        return rollover_critical
+
+    def _apply_rollover_proxy_reward(
+        self,
+        reward: float,
+        reward_dict: dict[str, Any],
+        *,
+        rollover_critical: bool,
+    ) -> float:
+        """Apply configured rollover penalty when the opt-in proxy trips.
+
+        Returns:
+            Reward with the configured rollover penalty applied when critical.
+        """
+        if not rollover_critical:
+            return reward
+        penalty = float(getattr(self.env_config, "rollover_proxy_penalty", 0.0))
+        # Defensively normalize reward_terms before assignment: custom reward
+        # functions may leave it absent or set it to a non-dict value, mirroring
+        # the guard in `_extract_reward_terms`.
+        reward_terms = reward_dict.get("reward_terms")
+        if not isinstance(reward_terms, dict):
+            reward_terms = {}
+            reward_dict["reward_terms"] = reward_terms
+        reward_terms["rollover_proxy_penalty"] = penalty
+        return reward + penalty
+
     def step(self, action):
         """Execute one environment step.
 
@@ -861,6 +945,7 @@ class RobotEnv(BaseEnv):
             )
         )
         # add the action space to dict
+        rollover_critical = self._apply_rollover_proxy_metadata(reward_dict)
         reward_dict["action_space"] = self.action_space
         # add action to dict
         reward_dict["action"] = action
@@ -869,9 +954,15 @@ class RobotEnv(BaseEnv):
         # Determine if the episode has reached terminal state
         term = self.state.is_terminal
         # Compute the reward using the provided reward function
+        term = term or rollover_critical
         reward = self.reward_func(reward_dict)
         if "reward_terms" not in reward_dict:
             reward_dict["reward_terms"] = {"scalar_reward": float(reward)}
+        reward = self._apply_rollover_proxy_reward(
+            reward,
+            reward_dict,
+            rollover_critical=rollover_critical,
+        )
         reward_dict["reward_total"] = float(reward)
         # Update last_action for next step
         self.last_action = action

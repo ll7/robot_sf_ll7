@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import numpy as np
 import pytest
 
 from robot_sf.benchmark.metrics import evaluate_stability_margin
+from robot_sf.gym_env.env_config import EnvSettings
+from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.robot.rollover_proxy import (
     PROXY_SCHEMA_VERSION,
     RolloverProxyParams,
@@ -125,3 +131,190 @@ def test_proxy_agrees_with_benchmark_surface_source_of_truth(v: float, omega: fl
     )
 
     assert proxy_margin == pytest.approx(benchmark_margin)
+
+
+class _StepRobot:
+    """Minimal robot double exposing executed ``current_speed``."""
+
+    def __init__(self) -> None:
+        self.current_speed = (0.0, 0.0)
+
+    def parse_action(self, action: np.ndarray) -> tuple[float, float]:
+        """Return action as differential-drive ``(v, omega)`` command."""
+        return (float(action[0]), float(action[1]))
+
+
+class _StepSimulator:
+    """Minimal simulator double for ``RobotEnv.step`` rollover fixtures."""
+
+    def __init__(self) -> None:
+        self.robots = [_StepRobot()]
+        self.robot_poses = [((0.0, 0.0), 0.0)]
+        self.ped_pos = np.zeros((0, 2), dtype=float)
+
+    def step_once(self, actions: list[tuple[float, float]]) -> None:
+        """Record the executed command as the robot's current speed."""
+        self.robots[0].current_speed = actions[0]
+
+
+class _StepState:
+    """Minimal state double for ``RobotEnv.step`` rollover fixtures."""
+
+    d_t = 0.25
+    is_terminal = False
+
+    def step(self) -> np.ndarray:
+        """Return a deterministic observation."""
+        return np.zeros(1, dtype=np.float32)
+
+    def meta_dict(self) -> dict:
+        """Return nonterminal state metadata."""
+        return {
+            "step": 1,
+            "episode": 1,
+            "step_of_episode": 1,
+            "is_pedestrian_collision": False,
+            "is_robot_collision": False,
+            "is_obstacle_collision": False,
+            "is_waypoint_complete": False,
+            "is_route_complete": False,
+            "distance_to_goal": 1.0,
+            "prev_distance_to_goal": 1.2,
+            "is_timesteps_exceeded": False,
+            "max_sim_steps": 100,
+        }
+
+
+def _make_step_env(
+    *,
+    rollover_enabled: bool = True,
+    penalty: float = -4.0,
+    env_config: object | None = None,
+) -> RobotEnv:
+    env = RobotEnv.__new__(RobotEnv)
+    env.env_config = env_config or EnvSettings(
+        rollover_proxy_enabled=rollover_enabled,
+        rollover_proxy_penalty=penalty,
+    )
+    env.config = env.env_config
+    env.debug_without_robot_movement = False
+    env.simulator = _StepSimulator()
+    env.state = _StepState()
+    env.occupancy_grid = None
+    env._asymmetric_critic_enabled = False
+    env._snqi_proxy = SimpleNamespace(compute_step_metrics=lambda *args, **kwargs: {})
+    env.action_space = SimpleNamespace()
+    env.last_action = None
+    env.reward_func = lambda _meta: 1.0
+    env._telemetry_session = None
+    env.recording_enabled = False
+    return env
+
+
+def test_runtime_rollover_proxy_keeps_feasible_command_nonterminal() -> None:
+    """Opt-in runtime proxy surfaces stable telemetry without terminating."""
+    env = _make_step_env()
+
+    _obs, reward, terminated, truncated, info = env.step(np.array([0.5, 0.5]))
+
+    assert reward == pytest.approx(1.0)
+    assert terminated is False
+    assert truncated is False
+    assert info["rollover_critical"] is False
+    assert info["rollover_proxy"]["stability_margin"] > 0.0
+    assert "termination_reason" not in info
+
+
+def test_runtime_rollover_proxy_over_yaw_trips_terminal_penalty() -> None:
+    """Opt-in runtime proxy trips ``ROLLOVER_CRITICAL`` on over-yaw command."""
+    env = _make_step_env(penalty=-4.0)
+
+    _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(-3.0)
+    assert terminated is True
+    assert truncated is False
+    assert info["termination_reason"] == "ROLLOVER_CRITICAL"
+    assert info["rollover_critical"] is True
+    assert info["rollover_proxy"]["rollover_critical"] is True
+    assert info["meta"]["reward_terms"]["rollover_proxy_penalty"] == pytest.approx(-4.0)
+
+
+def test_runtime_rollover_proxy_penalty_handles_non_dict_reward_terms() -> None:
+    """Penalty assignment is robust when a reward function clobbers reward_terms."""
+    env = _make_step_env(penalty=-4.0)
+
+    def _reward_func(meta: dict) -> float:
+        # Custom reward functions may leave reward_terms as a non-dict value.
+        meta["reward_terms"] = None
+        return 1.0
+
+    env.reward_func = _reward_func
+
+    _obs, reward, terminated, _truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(-3.0)
+    assert terminated is True
+    assert info["meta"]["reward_terms"]["rollover_proxy_penalty"] == pytest.approx(-4.0)
+
+
+def test_runtime_rollover_proxy_disabled_by_default_keeps_step_semantics() -> None:
+    """Disabled proxy leaves even over-yaw toy command nonterminal."""
+    env = _make_step_env(rollover_enabled=False, penalty=-4.0)
+
+    _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(1.0)
+    assert terminated is False
+    assert truncated is False
+    assert "rollover_proxy" not in info
+    assert "termination_reason" not in info
+
+
+def test_robot_simulation_config_rollover_proxy_default_keeps_step_semantics() -> None:
+    """Unified robot configs keep the rollover proxy disabled by default."""
+    env = _make_step_env(env_config=RobotSimulationConfig())
+
+    _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(1.0)
+    assert terminated is False
+    assert truncated is False
+    assert "rollover_proxy" not in info
+    assert "termination_reason" not in info
+
+
+def test_missing_rollover_config_attributes_keep_proxy_disabled() -> None:
+    """Older/minimal config objects without rollover attributes stay compatible."""
+    env = _make_step_env(env_config=SimpleNamespace())
+
+    _obs, reward, terminated, truncated, info = env.step(np.array([2.0, 2.0]))
+
+    assert reward == pytest.approx(1.0)
+    assert terminated is False
+    assert truncated is False
+    assert "rollover_proxy" not in info
+    assert "termination_reason" not in info
+
+
+def test_rollover_proxy_penalty_must_not_be_positive() -> None:
+    """Configured rollover penalty must not accidentally reward rollover."""
+    with pytest.raises(ValueError, match="rollover_proxy_penalty"):
+        EnvSettings(rollover_proxy_penalty=0.1)
+
+
+@pytest.mark.parametrize("bad_penalty", [float("nan"), float("inf"), float("-inf")])
+def test_rollover_proxy_penalty_must_be_finite(bad_penalty: float) -> None:
+    """Non-finite penalties must fail closed in both config paths."""
+    with pytest.raises(ValueError, match="rollover_proxy_penalty"):
+        EnvSettings(rollover_proxy_penalty=bad_penalty)
+    with pytest.raises(ValueError, match="rollover_proxy_penalty"):
+        RobotSimulationConfig(rollover_proxy_penalty=bad_penalty)
+
+
+def test_rollover_proxy_params_must_be_typed() -> None:
+    """A non-RolloverProxyParams value must be rejected in both config paths."""
+    with pytest.raises(TypeError, match="rollover_proxy_params"):
+        EnvSettings(rollover_proxy_params={"track_width_m": 0.8})
+    with pytest.raises(TypeError, match="rollover_proxy_params"):
+        RobotSimulationConfig(rollover_proxy_params={"track_width_m": 0.8})

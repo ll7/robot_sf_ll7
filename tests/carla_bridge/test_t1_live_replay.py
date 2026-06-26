@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -659,3 +660,30 @@ def test_live_replay_uses_carla_coordinate_boundary() -> None:
     assert transform.location.y == pytest.approx(-2.0)
     assert transform.location.z == pytest.approx(0.1)
     assert transform.rotation.yaw == pytest.approx(-90.0)
+
+
+def test_live_replay_coordinate_helpers_pin_handedness_contract() -> None:
+    """CARLA bridge helpers should mirror vector, yaw, and yaw-rate signs."""
+    from robot_sf_carla_bridge.live_replay import (
+        carla_angular_velocity_to_robot_sf_radps,
+        carla_planar_vector_to_robot_sf,
+        carla_yaw_degrees_to_robot_sf,
+        robot_sf_angular_velocity_to_carla_radps,
+        robot_sf_planar_vector_to_carla,
+        robot_sf_yaw_to_carla_degrees,
+    )
+
+    carla_vector = robot_sf_planar_vector_to_carla({"x": -3.0, "y": 4.5})
+    assert carla_vector == {"x": pytest.approx(-3.0), "y": pytest.approx(-4.5)}
+    assert carla_planar_vector_to_robot_sf(carla_vector) == {
+        "x": pytest.approx(-3.0),
+        "y": pytest.approx(4.5),
+    }
+
+    carla_yaw = robot_sf_yaw_to_carla_degrees(-0.25)
+    assert carla_yaw == pytest.approx(math.degrees(0.25))
+    assert carla_yaw_degrees_to_robot_sf(carla_yaw) == pytest.approx(-0.25)
+
+    carla_omega = robot_sf_angular_velocity_to_carla_radps(0.75)
+    assert carla_omega == pytest.approx(-0.75)
+    assert carla_angular_velocity_to_robot_sf_radps(carla_omega) == pytest.approx(0.75)

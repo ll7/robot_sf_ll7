@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+from itertools import count
 from pathlib import Path  # noqa: TC003
 
 from scripts.dev.summarize_campaign_progress import main, summarize_campaign_progress
+
+# Step by 10s so distinct writes stay strictly ordered even on filesystems with
+# coarse mtime resolution (e.g. FAT/exFAT round to 2-second granularity).
+_MTIME_EPOCHS = count(1_700_000_000, 10)
 
 
 def _write_lines(path: Path, count: int) -> None:
@@ -14,6 +20,8 @@ def _write_lines(path: Path, count: int) -> None:
     path.write_text(
         "".join(f'{{"episode": {index}}}\n' for index in range(count)), encoding="utf-8"
     )
+    mtime_epoch = next(_MTIME_EPOCHS)
+    os.utime(path, (mtime_epoch, mtime_epoch))
 
 
 def test_summarize_campaign_progress_reports_active_variant(tmp_path: Path) -> None:

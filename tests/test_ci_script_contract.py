@@ -7,10 +7,10 @@ handle both forms as cheap success paths: exit 0, print usage to stdout,
 and return before sourcing common_setup.sh or invoking heavy dependencies
 (uv, ruff, pytest, gh, etc.).
 
-Covered scripts (9 total):
+Covered scripts (10 total):
   pr_ready_check.sh, gh_comment.sh, run_worktree_shared_venv.sh,
-  run_tests_parallel.sh, run_xdist_race_validation.sh, run_ci_local.sh, ci_driver.sh,
-  check_runtime_requirements.sh, check_carla_runtime.sh
+  run_tests_parallel.sh, run_xdist_race_validation.sh, run_ci_local.sh, local_signoff.sh,
+  ci_driver.sh, check_runtime_requirements.sh, check_carla_runtime.sh
 
 Also covered (in tests/dev/): ci_step_timer.sh
 
@@ -39,6 +39,7 @@ PYPROJECT = ROOT / "pyproject.toml"
 RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
 RUN_XDIST_RACE_VALIDATION = ROOT / "scripts" / "dev" / "run_xdist_race_validation.sh"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
+LOCAL_SIGNOFF = ROOT / "scripts" / "dev" / "local_signoff.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
 PR_BODY_CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "pr-body-contracts.yml"
 RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
@@ -713,6 +714,7 @@ HELP_COVERED_SCRIPTS = [
     RUN_TESTS_PARALLEL,
     RUN_XDIST_RACE_VALIDATION,
     RUN_CI_LOCAL,
+    LOCAL_SIGNOFF,
     CI_DRIVER,
     CHECK_RUNTIME_REQUIREMENTS,
     CHECK_CARLA_RUNTIME,
@@ -826,6 +828,29 @@ def test_ci_driver_help_does_not_invoke_phases(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     assert "Usage:" in result.stdout
+    assert "uv should not be called" not in result.stderr
+
+
+def test_local_signoff_refuses_dirty_worktree_before_signing(tmp_path: Path) -> None:
+    """local_signoff.sh refuses dirty commits before gh or validation can sign them."""
+    repo, script_dir, env = _make_help_fixture_repo(
+        tmp_path,
+        ("local_signoff.sh", "common_setup.sh"),
+    )
+    (repo / "dirty.txt").write_text("not committed\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [str(script_dir / "local_signoff.sh"), "--dry-run", "--no-setup", "artifact-policy"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "refusing to sign HEAD" in result.stderr
     assert "uv should not be called" not in result.stderr
 
 

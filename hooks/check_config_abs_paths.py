@@ -13,6 +13,7 @@ See issue #3605.
 import argparse
 import logging
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -42,6 +43,17 @@ def _iter_config_files(files: list[str]) -> list[Path]:
         if CONFIG_ROOT.name in path.parts and path.is_file():
             selected.append(path)
     return selected
+
+
+def _iter_tracked_config_files() -> list[str]:
+    """Return Git-tracked files under ``configs/`` for ``--all`` checks."""
+    result = subprocess.run(
+        ["git", "ls-files", "--", str(CONFIG_ROOT)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [line for line in result.stdout.splitlines() if Path(line).is_file()]
 
 
 def find_abs_path_violations(files: list[str]) -> dict:
@@ -116,7 +128,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.all:
-        files = [str(p) for p in CONFIG_ROOT.rglob("*") if p.is_file()]
+        files = _iter_tracked_config_files()
     else:
         files = args.files
 

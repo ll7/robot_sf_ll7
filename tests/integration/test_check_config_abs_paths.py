@@ -6,9 +6,12 @@ Covers the reject path (an unannotated `/home/...` leak), the allowlist path
 outside `configs/` are ignored.
 """
 
+import subprocess
 from pathlib import Path
 
-from hooks.check_config_abs_paths import find_abs_path_violations
+import pytest
+
+from hooks.check_config_abs_paths import find_abs_path_violations, main
 
 
 def _write(base: Path, rel: str, content: str) -> str:
@@ -77,9 +80,45 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "pass"
         assert "nothing to check" in result["message"].lower()
 
-    def test_repo_baseline_is_clean(self):
-        """The real configs/ tree must already pass (only annotated paths)."""
-        configs = Path("configs")
-        files = [str(p) for p in configs.rglob("*") if p.is_file()]
-        result = find_abs_path_violations(files)
-        assert result["status"] == "pass", result["message"]
+    def test_repo_baseline_is_clean(self, monkeypatch):
+        """The real tracked configs/ tree must already pass ``--all``."""
+        monkeypatch.setattr("sys.argv", ["check_config_abs_paths.py", "--all"])
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 0
+
+    def test_all_ignores_untracked_config_files(self, tmp_path, monkeypatch):
+        """``--all`` scans Git-tracked configs, not local untracked outputs."""
+        monkeypatch.chdir(tmp_path)
+        _write(tmp_path, "configs/training/clean.yaml", "script: scripts/run.sh\n")
+        _write(tmp_path, "configs/local/leaky.yaml", "script: /home/dev/cache/run.sh\n")
+
+        subprocess.run(["git", "init"], check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "add", "configs/training/clean.yaml"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Test User",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "track clean config",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        monkeypatch.setattr("sys.argv", ["check_config_abs_paths.py", "--all"])
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 0

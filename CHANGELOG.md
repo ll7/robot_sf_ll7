@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the HEIGHT planner adapter's lidar raycasting **ignoring dynamic pedestrians** (#3629).
+  `CrowdNavHeightAdapter._raycast_obstacles` intersected each ray only against cached static obstacle
+  segments, so the HEIGHT policy's lidar channel was blind to moving pedestrians (they were used for the
+  human spatial-edge tensor but never fed into the raycast). Rays are now also intersected against
+  pedestrian discs (reusing `circle_line_intersection_distance` from `robot_sf/sensor/range_sensor.py`,
+  the same primitive the live env's range sensor uses); the nearest of {static, pedestrian, sensor
+  range} wins per ray, and the disc radius is read from the observation when present (default 0.3 m).
+  Backward-compatible: an empty pedestrian set reproduces the previous static-only behavior exactly.
 * **`stream_gap` was blind in the real benchmark runner** (found while promoting the #3556 belief-mode safety contrast to `map_runner`). `StreamGapPlannerAdapter._extract_state` read the nested SOCNAV observation (`obs["robot"]`, `obs["pedestrians"]`) but `map_runner` feeds a flat observation (`robot_position`, `pedestrians_positions`, `goal_current`), so the planner extracted `robot=[0,0]`, `n_peds=0` and drove blind every episode. `_extract_state` now accepts both the nested and flat observation formats (backward-compatible; the ScenarioBelief harness and 24 existing tests still pass), and `robot_sf/benchmark/scenario_belief_policy_hook.py` reads the flat observation and writes the uncertainty sidecar to `pedestrians_uncertainty` where the fixed extractor reads it. After the fix the planner engages pedestrians and the belief modes differentiate in the real runner.
 
 ### Added

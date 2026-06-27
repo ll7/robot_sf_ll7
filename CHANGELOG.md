@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   absolute-velocity contract, while delta increments pass through unchanged. Behavior for the
   `unicycle` action space (the current benchmark config default) is unchanged; the default
   `action_semantics="delta"` is intentionally preserved per the canonical training setting.
+* Fixed `_spaces_compatible` **rejecting wrapper- or subclass-derived `Tuple` spaces** under strict
+  top-level type checking (#3709). In `robot_sf/training/scenario_sampling.py`, the helper opened with
+  `type(base) is not type(other)`, so a `gymnasium.spaces.Tuple` and a Tuple subclass (as produced by
+  some vectorized-env wrappers/adapters) were reported incompatible even when their element spaces
+  matched. Two `Tuple`-compatible spaces are now compared **structurally on their child spaces** while
+  every other space family keeps the strict type check, so `Box`/`Dict`/`Discrete` comparison
+  semantics are unchanged. The recursive child checks (length, per-element compatibility, Tuple
+  vs. non-Tuple) still reject genuine mismatches.
 * Fixed `SNQIWeights.load` / `from_dict` **raising unhandled `KeyError`s on malformed config**
   (#3710). In `robot_sf/benchmark/snqi/types.py`, reconstructing an `SNQIWeights` from JSON used bare
   `data["key"]` access (so a missing provenance field surfaced as an opaque `KeyError`) and never

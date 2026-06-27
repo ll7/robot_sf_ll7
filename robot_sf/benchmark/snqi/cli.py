@@ -242,6 +242,72 @@ def cmd_ablation_analysis(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_inventory_weights(args: argparse.Namespace) -> int:
+    """Implement the SNQI weight-set provenance inventory CLI command.
+
+    Read-only diagnostic: discovers all known SNQI weight sets (code default +
+    shipped JSON), reports their dominant term / scale, and lists provenance
+    conflicts. With ``--fail-on-conflict`` (default), a blocking conflict makes
+    the command exit non-zero (fail-closed) without altering any scoring.
+
+    Returns:
+        Exit code: 0 when no blocking conflict (or ``--no-fail-on-conflict``);
+        ``EXIT_VALIDATION_ERROR`` (2) when a blocking conflict is detected;
+        ``EXIT_RUNTIME_ERROR`` (3) on unexpected failure.
+    """
+    # Imported lazily so the rest of the SNQI CLI does not depend on the
+    # inventory module (and its repo-root resolution) at import time.
+    from robot_sf.benchmark.snqi.exit_codes import (  # noqa: PLC0415
+        EXIT_RUNTIME_ERROR,
+        EXIT_SUCCESS,
+        EXIT_VALIDATION_ERROR,
+    )
+    from robot_sf.benchmark.snqi.weights_inventory import (  # noqa: PLC0415
+        build_inventory_report,
+    )
+
+    try:
+        report = build_inventory_report()
+        payload = report.to_dict()
+
+        if args.json:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print("SNQI weight-set inventory")
+            print("=" * 60)
+            for rec in report.records:
+                if rec.available:
+                    print(
+                        f"- {rec.name:18s} dominant={rec.dominant_term:14s} "
+                        f"scale={rec.scale_class:18s} "
+                        f"canonical={'yes' if rec.declares_canonical else 'no'} "
+                        f"({rec.relpath or 'code default'})"
+                    )
+                else:
+                    print(f"- {rec.name:18s} UNAVAILABLE ({rec.relpath}): {rec.load_error}")
+            print("-" * 60)
+            if report.conflicts:
+                print(f"Conflicts ({len(report.conflicts)}):")
+                for c in report.conflicts:
+                    print(f"  [{c.severity}] {c.kind}: {c.detail}")
+            else:
+                print("No provenance conflicts detected.")
+
+        if args.fail_on_conflict and report.has_blocking_conflict:
+            _log_cli_failure(
+                "weights_inventory",
+                "SNQI weight-set provenance preflight failed (fail-closed).",
+                blocking=[c.kind for c in report.conflicts if c.severity == "error"],
+            )
+            return EXIT_VALIDATION_ERROR
+        return EXIT_SUCCESS
+    except Exception:
+        logger.bind(event="snqi_cli_failed", stage="weights_inventory").exception(
+            "SNQI CLI failed while building the weight-set inventory."
+        )
+        return EXIT_RUNTIME_ERROR
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser for SNQI CLI tools.
 
@@ -314,6 +380,30 @@ def create_parser() -> argparse.ArgumentParser:
         help="Random seed for reproducible analysis (default: 123)",
     )
 
+    # Weight-set provenance inventory subcommand (read-only diagnostic)
+    inventory_parser = subparsers.add_parser(
+        "inventory",
+        help="Inventory SNQI weight sets and report provenance conflicts (read-only)",
+    )
+    inventory_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the inventory report as JSON instead of a text summary",
+    )
+    inventory_parser.add_argument(
+        "--fail-on-conflict",
+        dest="fail_on_conflict",
+        action="store_true",
+        default=True,
+        help="Exit non-zero when a blocking provenance conflict is detected (default)",
+    )
+    inventory_parser.add_argument(
+        "--no-fail-on-conflict",
+        dest="fail_on_conflict",
+        action="store_false",
+        help="Report conflicts but always exit 0 (inspection mode)",
+    )
+
     return parser
 
 
@@ -334,6 +424,8 @@ def main() -> int:
         return cmd_recompute_weights(args)
     elif args.command == "ablation":
         return cmd_ablation_analysis(args)
+    elif args.command == "inventory":
+        return cmd_inventory_weights(args)
     else:
         return 1
 

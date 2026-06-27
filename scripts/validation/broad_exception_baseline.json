@@ -8,6 +8,7 @@
       "robot_sf/benchmark/cli.py": 47,
       "robot_sf/benchmark/doctor.py": 1,
       "robot_sf/benchmark/figure_qa.py": 2,
+      "robot_sf/benchmark/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/freeze_manifest.py": 1,
       "robot_sf/benchmark/full_classic/orchestrator.py": 11,
       "robot_sf/benchmark/full_classic/plots.py": 5,
@@ -124,7 +125,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 284
+    "total": 285
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -640,6 +641,15 @@
       "lineno": 321,
       "path": "robot_sf/benchmark/figure_qa.py",
       "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "_probe_capability",
+      "fingerprint": "b5dcc0004133d42e",
+      "handler": "Exception",
+      "lineno": 282,
+      "path": "robot_sf/benchmark/forecast_lane_inventory.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - report any import failure as a blocker"
     },
     {
       "col_offset": 4,

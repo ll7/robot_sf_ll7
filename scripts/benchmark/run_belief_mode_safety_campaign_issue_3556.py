@@ -37,7 +37,7 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 #: Belief modes -> planner uncertainty gate (oracle/retained keep agents; dropped drops them).
 MODES = ("oracle", "uncertain_retained", "uncertain_dropped")
-DEFAULT_SCENARIO_SET = "configs/scenarios/sets/classic_crossing_subset.yaml"
+DEFAULT_SCENARIO_SET = "configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml"
 DEFAULT_SEEDS = list(range(101, 113))
 DEFAULT_FOV = 120.0
 NEAR_MISS_NOTE = (

@@ -25,6 +25,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry/preflight metadata only`). CLI:
   `scripts/tools/research_package_preflight.py` (Markdown or JSON, with an optional
   `--fail-on-blocked` gate).
+* Added a **fail-closed campaign-readiness gate for the learned-risk model v1 Slurm campaign**
+  (#1472). New module `robot_sf/training/learned_risk_campaign_readiness.py` exposes
+  `evaluate_campaign_readiness`, which aggregates the two existing canonical owners — the
+  launch-packet validator (`validate_launch_packet`) and the durable trace-manifest validator
+  (`validate_trace_manifest`) — into a single campaign launch decision. The decision is
+  `campaign_launch_ready` only when **both** gates pass; an invalid launch packet, a structurally
+  invalid manifest, or unresolved durable artifact pointers all fold into a fail-closed
+  `campaign_blocked` result with the underlying per-gate blockers surfaced. A new CLI
+  `scripts/validation/check_learned_risk_campaign_readiness.py` defaults to the checked-in #1472
+  inputs and reports decision-coded exit status (`0` ready, `2` input file missing, `3` blocked).
+  This is **readiness/preflight only**: it submits no SLURM job, trains nothing, fetches nothing,
+  and promotes no artifacts — a ready decision means the checked-in contract is locally complete.
+  Against current `main` the campaign correctly reports `campaign_blocked` (the launch packet is
+  valid; the durable trace/baseline artifacts are still `:pending`).
 * Added a **durable trace-URI registry contract and validator** for oracle-imitation artifacts so
   the downstream `training_ready` state is mechanically checkable (#2655). The new canonical module
   `robot_sf/training/oracle_trace_uri_registry.py` (schema `oracle-trace-uri-registry.v1`) records,
@@ -37,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   slice only: it collects no traces, publishes no artifacts, submits no jobs, and makes no training
   readiness claim (the checked-in example is intentionally not training-ready). See
   `docs/context/issue_2655_oracle_trace_uri_registry.md`.
+
 * Added a **fail-closed curation readiness preflight** for SDD-derived benchmark scenarios (#1126).
   Issue #1126 curates the first real Stanford Drone Dataset (SDD) benchmark scenario set, but stays
   blocked on licensed external data (#1497/#2413). The new `scripts/tools/sdd_curation_preflight.py`
@@ -67,7 +82,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   handoff-complete / `2` incomplete. This is **inventory/preflight only**: it does **not** submit
   SLURM, train policies, alter planner behavior, run benchmarks, or assert any benchmark/paper
   result. #1358 remains a parent/umbrella coordination issue gated by child #1475.
-
+* Added a read-only **oracle-imitation warm-start readiness preflight** for the downstream
+  warm-start training and benchmark comparison (#1496). Issue #1496 is the training step that
+  *consumes* the durable oracle-imitation dataset from #1470; safe shared-PC work is verifying
+  prerequisites, not launching training or data collection. The new
+  `check_warm_start_readiness` function in
+  `robot_sf/training/oracle_imitation_warm_start_readiness.py` and the
+  `scripts/validation/check_oracle_imitation_warm_start_readiness.py` CLI take a readiness
+  manifest, validate the referenced dataset launch packet via the canonical
+  `validate_launch_packet(..., require_training_ready=True)` checker, and confirm the
+  behaviour-cloning warm-start config, RL-only baseline config, optional PPO fine-tuning config,
+  and split/leakage contract all exist. They emit a compact readiness report (`ready`/`blocked`)
+  with an explicit blocker list and **fail closed** under `--require-ready`. This is
+  preflight/provenance hygiene only: it collects **no** data, trains nothing, submits no Slurm,
+  and asserts no benchmark result. The shipped manifest
+  (`configs/training/ppo_imitation/oracle_warm_start_readiness_issue_1496.yaml`) currently reports
+  `blocked` because the #1397 dataset packet is intentionally not training-ready until #1470 lands.
 * Added a **fail-closed SocNavBench map-conversion readiness preflight** for the ETH import batch
   (#1134, parent #334). The batch validator
   (`scripts/tools/validate_socnav_map_batch.py`) gains a `conversion_readiness()` function and a
@@ -82,7 +112,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **preflight/readiness only**: it does not download assets, stage data, convert maps, run
   simulations, or assert any benchmark result. Against the current repo state the preflight reports
   `blocked_pending_source_assets`, matching the issue's blocked status.
-
 * Added a **read-only readiness preflight for the compact CARLA native↔aligned parity bundle**
   (#1510). New module `robot_sf_carla_bridge/parity_bundle_preflight.py` exposes
   `check_parity_bundle_readiness` (and the pure `evaluate_payload_metadata`), which checks — per

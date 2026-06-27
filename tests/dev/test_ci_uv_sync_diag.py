@@ -78,6 +78,69 @@ def test_ci_uv_sync_diag_reports_runner_and_uv_state() -> None:
         assert "uv_version=uv " in output
 
 
+def test_ci_uv_sync_diag_cache_sizing_is_single_pass(tmp_path: Path) -> None:
+    """Cache sizing must traverse the cache exactly once (issue #3703).
+
+    The probe previously ran ``du`` once for the whole cache and then again per
+    curated subdirectory, re-walking the tree up to a dozen times. This test
+    pins the optimized contract: a single ``du`` invocation over the cache tree
+    while the curated per-subdirectory keys and the total are still emitted.
+    """
+    script = _script_path()
+    bash_path = shutil.which("bash")
+    assert bash_path, "bash is required for this test"
+
+    # Build a fake uv cache populated with a few curated subdirectories.
+    cache_dir = tmp_path / "uv-cache"
+    for sub in ("archive-v0", "wheels-v6", "git-v0"):
+        (cache_dir / sub).mkdir(parents=True)
+        (cache_dir / sub / "blob").write_bytes(b"x" * 1024)
+
+    # Fake ``du`` that records every invocation and emits ``du -h -d 1`` style
+    # tab-separated output (one line per immediate subdir plus the cache root).
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    du_calls = tmp_path / "du_calls.log"
+    du_shim = fake_bin / "du"
+    du_shim.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "%s\\n" "$*" >> "{du_calls}"\n'
+        'target="${@: -1}"\n'
+        'for d in "$target"/*/; do\n'
+        '  [ -d "$d" ] && printf "1.0K\\t%s\\n" "${d%/}"\n'
+        "done\n"
+        'printf "16K\\t%s\\n" "$target"\n'
+    )
+    du_shim.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["UV_CACHE_DIR"] = str(cache_dir)
+
+    result = subprocess.run(
+        [bash_path, str(script), "single-pass-test"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        cwd=tmp_path,  # no .venv here, so du is only invoked for the cache
+        timeout=30,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+
+    # The cache tree must be walked by exactly one du invocation (single pass).
+    invocations = du_calls.read_text().splitlines() if du_calls.exists() else []
+    cache_invocations = [line for line in invocations if str(cache_dir) in line]
+    assert len(cache_invocations) == 1, f"expected single du pass, got: {cache_invocations}"
+
+    # Curated per-subdirectory keys and the total are preserved.
+    output = result.stdout
+    assert "cache_total_size=16K" in output
+    assert "cache_archive-v0_size=1.0K" in output
+    assert "cache_wheels-v6_size=1.0K" in output
+    assert "cache_git-v0_size=1.0K" in output
+
+
 def test_workflow_uv_cache_paths_match_setup_uv_cache_dir() -> None:
     """Workflow uv caching must match the UV_CACHE_DIR configured by setup-uv."""
     inline_cache_workflows = [

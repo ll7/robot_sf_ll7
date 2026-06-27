@@ -49,12 +49,24 @@ fi
 
 if [[ -d "$cache_dir" ]]; then
     echo "  cache_dir=${cache_dir}"
-    du -sh "$cache_dir" 2>/dev/null | awk '{print "  cache_total_size="$1}' || true
-    for sub in archive-v0 wheels-v6 wheels-v5 sdists-v9 sdists-v8 simple-v21 simple-v20 builds-v0 environments-v2 environments-v1 interpreter-v4 git-v0; do
-        if [[ -d "$cache_dir/$sub" ]]; then
-            du -sh "$cache_dir/$sub" 2>/dev/null | awk -v s="$sub" '{print "  cache_"s"_size="$1}' || true
-        fi
-    done
+    # Single-pass cache sizing (issue #3703): `du -h -d 1` walks the cache tree
+    # once and emits the size of every immediate subdirectory plus the cache
+    # total. The previous loop re-ran `du` per subdirectory, re-traversing the
+    # tree up to a dozen times and risking preflight timeouts on large caches.
+    # The captured output is then parsed in a single awk pass (pure in-memory,
+    # no further disk I/O), preserving the curated key names and ordering.
+    cache_du="$(du -h -d 1 "$cache_dir" 2>/dev/null || true)"
+    printf '%s\n' "$cache_du" | awk -F'\t' -v dir="$cache_dir" '
+        { size[$2] = $1 }
+        END {
+            if (dir in size) print "  cache_total_size=" size[dir]
+            n = split("archive-v0 wheels-v6 wheels-v5 sdists-v9 sdists-v8 simple-v21 simple-v20 builds-v0 environments-v2 environments-v1 interpreter-v4 git-v0", subs, " ")
+            for (i = 1; i <= n; i++) {
+                p = dir "/" subs[i]
+                if (p in size) print "  cache_" subs[i] "_size=" size[p]
+            }
+        }
+    '
 else
     echo "  cache_dir=${cache_dir} (does not exist)"
 fi

@@ -48,6 +48,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **fail-closed archive-readiness checker** for the adversarial proposal-vs-random study
+  (#3275). Before the proposal runner consumes a *real* certified failure archive, the archive must
+  carry the fields the downstream disjoint split, overlap provenance, candidate certification, and
+  null tests depend on — otherwise those steps cannot be computed. The new pure checker
+  (`assess_archive_readiness` / `assess_archive_file_readiness` in
+  [`robot_sf/adversarial/disjoint_evaluation.py`](robot_sf/adversarial/disjoint_evaluation.py),
+  composing the existing `scenario_family_key` / `disjoint_family_split`) reports a precise
+  `ready` / `not_ready` verdict over schema, per-entry `archive_id` / `candidate.scenario_seed` /
+  `failure_attribution` presence, derivable scenario families, and whether a disjoint scenario-family
+  split with non-empty fit/eval sides is even possible. Unlike the runner's loader, it **never falls
+  back to a synthetic fixture**: a missing, empty, unreadable, malformed, or under-populated archive
+  is reported `ready=False` with the blocking reasons. A thin CLI
+  [`scripts/tools/check_adversarial_archive_readiness.py`](scripts/tools/check_adversarial_archive_readiness.py)
+  prints the JSON report and exits non-zero when not ready, so it is safe to use as an input gate.
+  This is a readiness/input-hygiene slice only — it runs no proposal-model evaluation, fabricates no
+  archive inputs, and makes no held-out-yield or benchmark claim.
 * Added a **plan-level preflight for the paper-grade reactivity-vs-replay rank study** (#3637,
   split from #3573). The new pure checker
   [`robot_sf/benchmark/reactivity_replay_preflight.py`](robot_sf/benchmark/reactivity_replay_preflight.py)

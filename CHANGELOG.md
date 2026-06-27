@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a metadata-only staging/preflight checker for external pedestrian-prior extraction (#2918).
+  New module `robot_sf/benchmark/pedestrian_prior_extraction_manifest.py` exposes
+  `check_pedestrian_prior_extraction_manifest`, which validates a
+  `pedestrian_prior_extraction_manifest.v1` manifest (allowed external source type, the bounded
+  prior parameters the run will emit — walking speed, crossing angle, density, interaction
+  distance, stop/yield timing — provenance fields, and the authored-vs-dataset-backed separation)
+  and reports missing parameters, provenance/separation blockers, and whether a dataset-backed
+  prior claim is yet allowed. The checker **ingests no external data, stores no raw trajectories,
+  and makes no calibrated- or representative-prior claim** (`evidence_boundary:
+  prior_extraction_plan_only_no_calibrated_prior_claim`); a dataset-backed claim is gated behind
+  accepted provenance and a source family with a registered external-data staging contract, while
+  `blocked-external-input` (the default, matching issue #2918's external-data block) and
+  `proxy-only` manifests cannot assert a prior, and a `proxy-only` manifest declaring a
+  dataset-backed source is rejected as boundary conflation. The allowed source-type → external-data
+  asset-id map is cross-checked against the canonical `scripts/tools/manage_external_data.py`
+  registry. CLI: `scripts/tools/check_pedestrian_prior_extraction_manifest.py`; example manifest:
+  `configs/research/pedestrian_prior_extraction_manifest_issue_2918_example.yaml`; context note:
+  `docs/context/issue_2918_pedestrian_prior_extraction_preflight.md`.
 * Added a metadata-only measurement/intake-manifest checker for autonomous micromobility vehicle
   (AMV) actuation latency and rider-coupling response (#3283). New module
   `robot_sf/benchmark/actuation_latency_measurement_manifest.py` exposes

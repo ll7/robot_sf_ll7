@@ -88,6 +88,44 @@ print_compact_worktree_status() {
   fi
 }
 
+resolve_base_ref() {
+  # Ensure BASE_REF resolves to a real commit before any `git diff
+  # "$BASE_REF...HEAD"` comparison or downstream consumer (perf/coverage/
+  # freshness checks) uses it. On fresh checkouts where the default
+  # origin/main has not been fetched, the unresolved ref otherwise leaks a
+  # raw `fatal: ambiguous argument` from git: the comparison sits inside a
+  # process substitution, so `set -e` silently swallows the failure and the
+  # script proceeds with an empty changed-file set and an invalid base ref.
+  if git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  printf 'BASE_REF %q does not resolve to a local commit.\n' "$BASE_REF" >&2
+
+  # Best-effort fetch for remote-tracking refs (e.g. origin/main) so a network
+  # checkout can still compare against the intended base before falling back.
+  if [[ "$BASE_REF" == */* ]]; then
+    local remote="${BASE_REF%%/*}"
+    local branch="${BASE_REF#*/}"
+    if git remote get-url "$remote" >/dev/null 2>&1; then
+      printf 'Attempting git fetch --quiet %q %q to resolve BASE_REF.\n' "$remote" "$branch" >&2
+      if git fetch --quiet "$remote" "$branch" >/dev/null 2>&1 \
+        && git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null 2>&1; then
+        printf 'Resolved BASE_REF %q after fetch.\n' "$BASE_REF" >&2
+        return 0
+      fi
+    fi
+  fi
+
+  # Fall back to HEAD so readiness gates still run instead of crashing. On a
+  # fresh checkout this yields an empty changed-file set rather than a fatal
+  # git error, and keeps a valid ref flowing to the coverage/perf/freshness
+  # checks that also consume BASE_REF.
+  printf 'Falling back to BASE_REF=HEAD; changed-file gates will compare against HEAD.\n' >&2
+  BASE_REF="HEAD"
+  export BASE_REF
+}
+
 is_optional_readiness_path() {
   case "$1" in
     robot_sf/benchmark/*|\
@@ -164,6 +202,8 @@ fi
 if [[ "$pr_ready_final" == "1" ]]; then
   preflight_check_test_deps
 fi
+
+resolve_base_ref
 
 changed_files=()
 core_changed_files=()

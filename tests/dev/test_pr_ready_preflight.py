@@ -292,6 +292,58 @@ def test_optional_lane_collection_hook_skips_core_paths(monkeypatch: pytest.Monk
     )
 
 
+def test_missing_base_ref_falls_back_to_head_without_crashing(preflight_repo: Path) -> None:
+    """A BASE_REF that does not resolve must fall back to HEAD, not leak a git fatal.
+
+    Regression for issue #3702: on fresh checkouts the default origin/main is not
+    always present. The unresolved ref previously leaked a raw
+    ``fatal: ambiguous argument`` from the ``git diff "$BASE_REF...HEAD"`` call
+    (silently swallowed by ``set -e`` inside the process substitution) and left an
+    invalid base ref flowing to the downstream coverage/perf/freshness checks.
+    """
+    _make_fake_bin(preflight_repo, fail=True)
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "non_existent_branch",
+            "PR_READY_MODE": "interim",
+        },
+    )
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+    assert "Falling back to BASE_REF=HEAD" in result.stderr
+    # The raw git error must not leak; the missing ref is handled gracefully.
+    assert "fatal" not in result.stderr.lower()
+    assert "unknown revision" not in result.stderr.lower()
+
+
+def test_valid_base_ref_is_used_unchanged(preflight_repo: Path) -> None:
+    """A BASE_REF that resolves must be used as-is, with no fallback or fetch.
+
+    Guards against the issue #3702 fix degrading the normal path: a valid ref
+    (here HEAD~1) should never trigger the HEAD fallback or a fetch attempt.
+    """
+    _make_fake_bin(preflight_repo, fail=True)
+    extra = preflight_repo / "tests" / "unit" / "test_valid_base_ref.py"
+    extra.parent.mkdir(parents=True, exist_ok=True)
+    extra.write_text("print('valid base ref')\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "valid base ref change")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD~1",
+            "PR_READY_MODE": "interim",
+        },
+    )
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+    assert "Falling back to BASE_REF=HEAD" not in result.stderr
+    assert "does not resolve to a local commit" not in result.stderr
+    assert "Attempting git fetch" not in result.stderr
+
+
 def test_preflight_passes_when_modules_available(preflight_repo: Path) -> None:
     """Preflight should pass silently when python reports no missing modules."""
     _make_fake_bin(preflight_repo, fail=False)

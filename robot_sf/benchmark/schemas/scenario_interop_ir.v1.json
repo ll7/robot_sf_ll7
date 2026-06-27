@@ -1,0 +1,178 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://ll7.github.io/robot_sf/scenario_interop_ir.v1.json",
+    "title": "Robot SF Cross-Benchmark Scenario Interop Intermediate Representation (v1)",
+    "description": "Target-neutral intermediate representation (IR) emitted by the dry-run Robot SF -> external-benchmark scenario converter. It captures geometry, agent paths, start/goal states, timing, and environment semantics that are common across social-navigation testbeds, plus explicit provenance and unsupported-field reporting. It is NOT a SocNavBench or HuNavSim asset and makes no cross-benchmark validity claim.",
+    "type": "object",
+    "required": [
+        "schema_version",
+        "provenance",
+        "geometry",
+        "environment",
+        "agents",
+        "timing",
+        "unsupported_fields"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "schema_version": {
+            "const": "robot_sf.scenario_interop_ir.v1"
+        },
+        "provenance": {
+            "type": "object",
+            "required": [
+                "source_scenario_id",
+                "source_kind",
+                "source_file",
+                "converter",
+                "converter_version",
+                "source_fields"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "source_scenario_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "source_kind": {
+                    "type": "string",
+                    "enum": ["axis", "explicit_map"]
+                },
+                "source_file": {
+                    "type": ["string", "null"]
+                },
+                "converter": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "converter_version": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "source_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_metadata": {
+                    "type": "object"
+                }
+            }
+        },
+        "geometry": {
+            "type": "object",
+            "required": ["environment_type", "obstacle_topology", "map_file"],
+            "additionalProperties": false,
+            "properties": {
+                "environment_type": {
+                    "type": ["string", "null"]
+                },
+                "obstacle_topology": {
+                    "type": ["string", "null"]
+                },
+                "map_file": {
+                    "type": ["string", "null"]
+                }
+            }
+        },
+        "environment": {
+            "type": "object",
+            "required": [
+                "density",
+                "flow",
+                "groups_fraction",
+                "speed_variation",
+                "goal_topology",
+                "robot_context"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "density": {
+                    "type": ["string", "null"]
+                },
+                "flow": {
+                    "type": ["string", "null"]
+                },
+                "groups_fraction": {
+                    "type": ["number", "null"]
+                },
+                "speed_variation": {
+                    "type": ["string", "null"]
+                },
+                "goal_topology": {
+                    "type": ["string", "null"]
+                },
+                "robot_context": {
+                    "type": ["string", "null"]
+                }
+            }
+        },
+        "agents": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["id", "start", "goal"],
+                "additionalProperties": false,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "start": {
+                        "type": ["string", "null"]
+                    },
+                    "goal": {
+                        "type": ["string", "null"]
+                    },
+                    "preferred_speed_mps": {
+                        "type": ["number", "null"]
+                    },
+                    "role": {
+                        "type": ["string", "null"]
+                    },
+                    "role_target_id": {
+                        "type": ["string", "null"]
+                    },
+                    "wait_points": {
+                        "type": ["array", "null"]
+                    }
+                }
+            }
+        },
+        "timing": {
+            "type": "object",
+            "required": ["repeats", "seeds"],
+            "additionalProperties": false,
+            "properties": {
+                "repeats": {
+                    "type": ["integer", "null"]
+                },
+                "seeds": {
+                    "type": ["array", "null"],
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "unsupported_fields": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["field", "reason"],
+                "additionalProperties": false,
+                "properties": {
+                    "field": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                }
+            }
+        }
+    }
+}

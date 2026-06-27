@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
+  self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
+  `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*
+  the reported safety metrics mean — LiDAR `scan_noise` (noisy default `[0.005, 0.002]` vs deterministic
+  `[0.0, 0.0]`; see `robot_sf/sensor/range_sensor.py`) and the collision-handling regime
+  (`terminate_on_contact` vs `bounce_back`; the robot benchmark env terminates on collision per
+  `RobotState.is_terminal`). The map-runner now embeds this block under
+  `provenance.config_identity.metric_affecting_config` in every batch summary
+  (`robot_sf/benchmark/map_runner.py`), derived once per batch via the fail-soft
+  `representative_metric_affecting_config` helper, so two result sets can be checked for comparability
+  without out-of-band knowledge of each run's config. The helper is descriptive provenance only — it
+  does not redefine metrics, rerun campaigns, or promote benchmark claims, and degrades to a
+  `status: not_available` block rather than ever breaking a run.
 * Added an **opt-in factorial-ablation manifest + checker** for the merged planner-agnostic safety
   wrapper (#3501). `robot_sf/benchmark/safety_wrapper_ablation_manifest.py` enumerates the
   `planner × {wrapper off, wrapper on}` ablation cells from a tracked config

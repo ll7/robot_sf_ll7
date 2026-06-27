@@ -239,6 +239,25 @@ def test_cited_command_and_config_paths_must_exist(tmp_path: Path) -> None:
     assert sum("cited command/config path" in problem for problem in problems) == 2
 
 
+def test_output_flag_paths_are_not_required_to_exist(tmp_path: Path) -> None:
+    """Paths handed to an output flag are created by the command, not inputs."""
+    script = tmp_path / "scripts/tools/create_scenario.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# stub\n", encoding="utf-8")
+
+    note = tmp_path / "docs/context/issue_998.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(
+        "Run `uv run python scripts/tools/create_scenario.py "
+        "--output configs/scenarios/single/draft_review.yaml`.\n",
+        encoding="utf-8",
+    )
+
+    problems = check_files([note.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert not any("cited command/config path" in problem for problem in problems)
+
+
 def test_warn_only_mode_does_not_fail_on_problems(
     tmp_path: Path, capsys, monkeypatch: MonkeyPatch
 ) -> None:

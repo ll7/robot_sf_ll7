@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reporting only: it does not download external assets, change benchmark results, or count
   fallback/degraded rows as evidence. Focused fixture tests cover the available, placeholder, and
   excluded states. Docs updated in `docs/socnav_assets_setup.md`.
+* Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
+  traces routed through the `amv-calibration` external-data path (#2415). New schema
+  `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker
+  `robot_sf/research/amv_command_response_trace_manifest.py` validate, per candidate trace bundle,
+  the provenance/license, the command/response/timing channels the bundle would expose, and the
+  declared calibration targets — fail-closed against the canonical synthetic-actuation envelope
+  vocabulary (`robot_sf.benchmark.synthetic_actuation.actuation_variability_fields()`) so the
+  manifest cannot drift from what calibration can consume. CLI
+  `scripts/validation/check_amv_command_response_trace_manifest_issue_2415.py` prints a JSON report
+  and (with `--probe-live-staging`) reconciles each trace's declared staging status against a live
+  `manage_external_data.check_asset` presence probe. The shipped example manifest
+  (`configs/research/amv_command_response_trace_manifest_issue_2415.yaml`) is
+  `blocked-external-input` today, matching the maintainer decision on #2415 (2026-06-22) that no
+  realistic real-data source is currently available. This is **manifest-contract only**: it does
+  not ingest traces, run a calibration, or make a hardware-calibrated realism claim
+  (`evidence_boundary = manifest_contract_only_no_trace_ingest_no_calibration_run_no_calibrated_claim`).
 * Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
   surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
   `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware
@@ -109,6 +125,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
   manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
   protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
+* Added a **diagnostic-only** inventory of SNQI per-term normalization status (#3699). New module
+  `robot_sf/benchmark/snqi/normalization_inventory.py` and CLI
+  `scripts/benchmark/snqi_normalization_inventory_report.py` enumerate each SNQI term's scaling
+  regime and surface that `compute_snqi` mixes *raw, unbounded* penalty terms (`time`, `comfort`)
+  with *baseline-normalized* `[0, 1]` terms (collisions, near-misses, force-exceed, jerk), which
+  makes the weight coefficients non-comparable as relative priorities. The report flags the
+  mixed-scale condition and any baseline-normalized term lacking median/p95 coverage, and can fail
+  closed (`--fail-on-mixed-scale`, `--fail-on-missing-baseline`). It does **not** change the SNQI
+  formula, weights, `normalize_metric`, or any emitted score, and does **not** choose between the
+  normalize vs. clip-and-document remedies (that remains `decision-required` on #3699). An anti-drift
+  test reconstructs the SNQI score from the inventory's term table and asserts it equals
+  `compute_snqi` exactly.
 * Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
   campaign can verify its input prerequisites before execution (#3078). New manifest
   `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario

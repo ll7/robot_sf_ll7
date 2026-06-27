@@ -60,6 +60,27 @@ launcher/config path, public partition/cluster class when allowed, job id, final
 durable pointer status, compact summary path, and the final decision (`promote`,
 `keep diagnostic`, `block`, or `stop`).
 
+## Local Readiness Gate (shared-PC-safe)
+
+Before the slice is run on a SLURM-capable host, the inputs it will consume can be checked locally
+with a CPU-only readiness gate. This does **not** submit SLURM work, run the reconciler end-to-end,
+or promote any claim; it only reports whether the queue, submission manifest, and finalizer manifest
+inputs are present and provenance-complete, and fails closed when durable pointers or manifest
+linkage are missing:
+
+```bash
+uv run python scripts/validation/preflight_slurm_finalizer.py \
+  --queue experiments/submission_queue.yaml \
+  --submission-manifest <submission-manifest.yaml> \
+  --finalizer-manifest <finalizer-manifest.json> \
+  --json
+```
+
+Exit `0` means the slice inputs are ready; exit `1` lists each missing prerequisite together with
+the smallest external action to unblock it; exit `2` means an input could not be parsed. The gate
+reuses the canonical loaders in `scripts/tools/reconcile_slurm_evidence.py`, so it evaluates exactly
+the inputs the real reconciliation consumes.
+
 ## Current Decision
 
 `block`: no SLURM job was submitted, no finalizer manifest was produced, no durable pointer was

@@ -69,6 +69,11 @@ from robot_sf_carla_bridge.parity import (
     MetricParityRow,
     compare_oracle_replay_metrics,
 )
+from robot_sf_carla_bridge.parity_bundle_preflight import (
+    PREFLIGHT_SCHEMA_VERSION,
+    check_parity_bundle_readiness,
+    evaluate_payload_metadata,
+)
 from robot_sf_carla_bridge.replay_smoke import (
     T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION,
     build_t1_oracle_replay_smoke_setup,
@@ -91,6 +96,7 @@ __all__ = [
     "DEFAULT_PARITY_METRICS",
     "EXPORT_MANIFEST_SCHEMA_VERSION",
     "EXPORT_SCHEMA_VERSION",
+    "PREFLIGHT_SCHEMA_VERSION",
     "SCHEMA_CATALOG_VERSION",
     "T1_ORACLE_LIVE_REPLAY_SCHEMA_VERSION",
     "T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION",
@@ -115,8 +121,10 @@ __all__ = [
     "build_t1_oracle_replay_smoke_setup",
     "carla_planar_twist_to_robot_sf",
     "check_carla_availability",
+    "check_parity_bundle_readiness",
     "compare_oracle_replay_metrics",
     "docker_runtime",
+    "evaluate_payload_metadata",
     "list_carla_bridge_schema_catalog",
     "load_availability_schema",
     "load_batch_validation_summary_schema",

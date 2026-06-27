@@ -1,0 +1,103 @@
+# Read-only research-package registry for epic #3057
+# (build Robot SF continuous social-navigation research engine).
+#
+# This file declares the research-engine packages and infrastructure stages that epic
+# #3057 coordinates, the tracked artifacts each one requires, and the upstream packages it
+# depends on. The companion preflight (scripts/tools/research_package_preflight.py) reports
+# which artifacts are present vs. missing and derives a fail-closed ready/blocked status.
+#
+# Scope: this is metadata reporting only. It composes existing config/contract/issue
+# metadata; it makes no benchmark, metric, or research claim, schedules nothing, and runs
+# no campaign. `required_artifacts` are repo-relative paths; `prerequisites` reference the
+# `id` of an upstream package. A package is `ready` only when every required artifact
+# exists and every prerequisite is `ready`; otherwise it is `blocked`.
+schema_version: research-package-registry.v1
+description: >-
+  Read-only registry of continuous social-navigation research-engine packages for epic
+  #3057. Lists each package, its required tracked artifacts, and prerequisite packages so a
+  preflight can report present vs. missing artifacts and blocked prerequisites.
+
+packages:
+  - id: scenario_suite_v0
+    title: Research-engine scenario suite v0
+    issue: 3059
+    resource: local
+    required_artifacts:
+      - configs/benchmarks/issue_3059_research_engine_suite_v0.yaml
+    prerequisites: []
+
+  - id: planner_readiness_matrix
+    title: Baseline planner readiness matrix
+    issue: 3060
+    resource: local
+    required_artifacts:
+      - configs/benchmarks/planner_readiness_matrix_v1.yaml
+    prerequisites: []
+
+  - id: campaign_manifest_flow
+    title: Standardized research campaign manifest and artifact flow
+    issue: 3062
+    resource: local
+    required_artifacts:
+      - configs/benchmarks/research_campaign_manifest.example.yaml
+      - docs/benchmark_campaign_manifest.md
+    prerequisites:
+      - scenario_suite_v0
+      - planner_readiness_matrix
+
+  - id: campaign_result_store
+    title: Canonical campaign result store (Parquet/DuckDB)
+    issue: 3076
+    resource: local
+    required_artifacts:
+      - scripts/tools/campaign_result_store.py
+      - docs/context/issue_3076_campaign_result_store_contract.md
+    prerequisites:
+      - campaign_manifest_flow
+
+  - id: package_a_rank_stability
+    title: Package A - rank-stability and held-out-family
+    issue: 3078
+    resource: local
+    required_artifacts:
+      - configs/benchmarks/issue_3078_package_a_readiness.yaml
+    prerequisites:
+      - scenario_suite_v0
+      - planner_readiness_matrix
+      - campaign_result_store
+
+  - id: package_b_adversarial
+    title: Package B - budget-matched adversarial falsification
+    issue: 3079
+    resource: local
+    required_artifacts:
+      - configs/adversarial/issue_3079_package_b_budget_matched.yaml
+    prerequisites:
+      - scenario_suite_v0
+      - planner_readiness_matrix
+      - campaign_result_store
+
+  - id: package_c_prediction
+    title: Package C - closed-loop prediction and observation
+    issue: 3080
+    resource: local
+    required_artifacts:
+      - scripts/tools/prediction_package_c_readiness.py
+    prerequisites:
+      - scenario_suite_v0
+      - campaign_result_store
+
+  - id: release_july_2026
+    title: July 2026 research package release and claim audit
+    issue: 3081
+    resource: local
+    # Release-owned artifact: the claim-audit/manifest deliverable of #3081 itself.
+    # It does not exist until the release lands, so this gate fails closed to `blocked`
+    # until #3081 publishes it (rather than reusing an upstream package's artifact and
+    # reporting the release as ready before it is produced).
+    required_artifacts:
+      - docs/context/issue_3081_july_2026_release_manifest.md
+    prerequisites:
+      - package_a_rank_stability
+      - package_b_adversarial
+      - package_c_prediction

@@ -63,7 +63,7 @@ def _load_yaml(path: Path) -> Any:
         return None
 
 
-def _check_config(config: dict | None, config_path: Path) -> tuple[str, list[str]]:
+def _check_config(config: Any, config_path: Path) -> tuple[str, list[str]]:
     """Verify the readiness contract exists and declares the required keys."""
     if config is None:
         return STATUS_BLOCKED, [f"readiness config not found or unreadable: {config_path}"]
@@ -132,7 +132,9 @@ def _check_checkpoint_artifacts(
             continue
         local_path = entry.get("local_path")
         resolved = _resolve_local_path(local_path, repo_root)
-        present = bool(resolved and resolved.exists())
+        # Only a regular file counts as a resolvable checkpoint: a mis-registered local_path
+        # pointing at a directory must not let the preflight report ready (fail-closed).
+        present = bool(resolved and resolved.is_file())
         candidates.append(
             {
                 "model_id": model_id,
@@ -232,9 +234,9 @@ def check_readiness(
 ) -> dict[str, Any]:
     """Run all proxy-checkpoint-selection readiness checks and return a structured report."""
     config = _load_yaml(config_path)
-    config_status, config_messages = _check_config(
-        config if isinstance(config, dict) else None, config_path
-    )
+    # Pass the raw YAML result through so a non-mapping top-level document (e.g. a list) is
+    # reported as a "must be a mapping" failure rather than coerced to a "not found" blocked.
+    config_status, config_messages = _check_config(config, config_path)
 
     prerequisites: dict[str, dict[str, Any]] = {
         "readiness_config": {"status": config_status, "messages": config_messages}

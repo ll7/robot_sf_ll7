@@ -258,6 +258,36 @@ def test_output_flag_paths_are_not_required_to_exist(tmp_path: Path) -> None:
     assert not any("cited command/config path" in problem for problem in problems)
 
 
+def test_artifact_registry_paths_may_be_missing(tmp_path: Path) -> None:
+    """A self-declared artifact-presence registry may list not-yet-existing artifacts."""
+    registry = tmp_path / "configs/research/registry.yaml"
+    registry.parent.mkdir(parents=True)
+    registry.write_text(
+        "schema_version: research-package-registry.v1\n"
+        "packages:\n"
+        "  - id: pkg\n"
+        "    title: Pkg\n"
+        "    required_artifacts:\n"
+        "      - scripts/tools/not_yet_built.py\n",
+        encoding="utf-8",
+    )
+
+    problems = check_files([registry.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert not any("cited command/config path" in problem for problem in problems)
+
+
+def test_non_registry_yaml_still_enforces_cited_paths(tmp_path: Path) -> None:
+    """A YAML file without the registry schema marker still requires cited paths to exist."""
+    config = tmp_path / "configs/research/other.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("entrypoint: scripts/tools/not_yet_built.py\n", encoding="utf-8")
+
+    problems = check_files([config.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert any("cited command/config path" in problem for problem in problems)
+
+
 def test_warn_only_mode_does_not_fail_on_problems(
     tmp_path: Path, capsys, monkeypatch: MonkeyPatch
 ) -> None:

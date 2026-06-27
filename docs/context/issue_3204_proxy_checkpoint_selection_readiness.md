@@ -46,6 +46,7 @@ paper/dissertation claim edits.
 ## Reproduce
 
 ```bash
-uv run python scripts/research/check_predictive_checkpoint_proxy_readiness.py --json
+uv run python scripts/research/check_predictive_checkpoint_proxy_readiness.py \
+  --config configs/research/predictive_checkpoint_proxy_v1.yaml --json
 uv run pytest tests/research/test_check_predictive_checkpoint_proxy_readiness.py -q
 ```

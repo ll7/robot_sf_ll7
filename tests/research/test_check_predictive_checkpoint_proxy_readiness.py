@@ -94,6 +94,35 @@ def test_blocked_when_config_missing(tmp_path):
     assert report["prerequisites"]["readiness_config"]["status"] == "blocked"
 
 
+def test_failed_when_config_not_a_mapping(tmp_path):
+    """A config YAML whose top-level document is not a mapping reports a clean failed status."""
+    registry = _write_registry(tmp_path, present_count=6, absent_count=0)
+    bad_config = tmp_path / "proxy_config.yaml"
+    bad_config.write_text(yaml.safe_dump([1, 2, 3]), encoding="utf-8")
+    report = mod.check_readiness(
+        config_path=bad_config, registry_path=registry, repo_root=_REPO_ROOT
+    )
+    assert report["status"] == "blocked"
+    cfg_check = report["prerequisites"]["readiness_config"]
+    assert cfg_check["status"] == "failed"
+    assert any("must be a mapping" in m for m in cfg_check["messages"])
+
+
+def test_blocked_when_checkpoint_local_path_is_directory(tmp_path):
+    """A predictive local_path pointing at a directory must not count as a resolvable checkpoint."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    ckpt_dir = tmp_path / "predictive_dir"
+    ckpt_dir.mkdir()
+    models = [{"model_id": "predictive_dir_0", "local_path": str(ckpt_dir), "tags": ["predictive"]}]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    assert ckpt["status"] == "blocked"
+    assert ckpt["mapping"]["resolvable_count"] == 0
+    assert report["status"] == "blocked"
+
+
 def test_blocked_when_too_few_checkpoints_resolve(tmp_path):
     """Fewer locally-resolvable checkpoints than the minimum fails closed (mapping metadata)."""
     config = _write_config(tmp_path, min_resolvable=6)

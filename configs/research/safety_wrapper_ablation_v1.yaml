@@ -1,0 +1,78 @@
+# Planner-agnostic safety-wrapper factorial ablation contract (bounded #3501 slice).
+#
+# This file declares the `planner x {wrapper off, wrapper on}` factorial design that
+# later runs use to compare the merged planner-agnostic safety wrapper
+# (robot_sf.robot.safety_wrapper, landed in #3591) consistently with and without
+# the mitigation lever, under paired seeds applied identically to both arms.
+#
+# It is a DESIGN/MANIFEST contract only. It binds no runtime objects, runs no
+# benchmark episodes, tunes no thresholds, and makes no mitigation-effectiveness
+# claim. The wrapper-on thresholds are the FIXED, PREDECLARED modeling choices that
+# match robot_sf.robot.safety_wrapper.SafetyWrapperConfig defaults (no per-planner
+# tuning). Quantifying the effect is a downstream benchmark/SLURM run, split out
+# when the bounded local result motivates it.
+schema_version: safety-wrapper-ablation.v1
+issue: 3501
+study_id: issue_3501_safety_wrapper_ablation_v1
+status: launch_packet
+
+claim_boundary: >
+  Factorial-design and provenance contract only. This config enumerates the fixed
+  planner x {wrapper off, wrapper on} ablation cells and paired seeds required before
+  any with/without mitigation comparison can be run. It is not benchmark evidence,
+  not a mitigation-effectiveness result, and not paper-facing evidence until the
+  ablation is run and promoted through a compact evidence bundle.
+
+fixed_scope:
+  # Scenario distribution the ablation runs over (verify against tree before running).
+  scenario_set: configs/benchmarks/paper_experiment_matrix_v1.yaml
+  # Paired seeds: the SAME seed list is applied identically to both wrapper arms so
+  # the only difference between the two arms is the wrapper itself.
+  seeds: [111, 112, 113]
+  planner_groups:
+    - orca
+    - default_social_force
+    - hybrid_rule_v0_minimal
+
+# The single factor under test: the planner-agnostic safety wrapper, off vs on.
+# Exactly two arms; the off arm is the baseline. Thresholds are predeclared and
+# fixed (no per-planner tuning); they mirror SafetyWrapperConfig defaults.
+wrapper_arms:
+  - key: wrapper_off
+    baseline: true
+    enabled: false
+  - key: wrapper_on
+    baseline: false
+    enabled: true
+    config:
+      pedestrian_caution_radius_m: 2.0
+      capped_speed_m_s: 0.5
+      ttc_veto_threshold_s: 1.0
+      clearance_veto_m: 0.3
+
+# Primary outcomes reported per cell (positive AND negative/transfer effects).
+primary_outcomes:
+  - exact_collision_probability
+  - near_miss_probability
+  - min_predicted_separation
+  - completion_probability
+  - progress_at_timeout
+  - false_positive_stop_rate
+  - stop_yield_latency
+  - wrapper_intervention_rate
+
+# Per-episode safety-event ledger the ablation emits into (issue #3482).
+event_ledger_target: 3482
+
+result_contract:
+  required_outputs:
+    - planner
+    - wrapper_arm
+    - seed
+    - scenario_id
+    - metric_values
+    - wrapper_intervention_rate
+  caveat_rule: >
+    Report both positive and negative/transfer-poorly effects. Any effect must be
+    reported as diagnostic until durable, paired-seed evidence over the full scenario
+    distribution is collected; a single arm or unpaired seed is not a valid contrast.

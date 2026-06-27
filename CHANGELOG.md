@@ -28,6 +28,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   #1490 decision. This is **coordination/preflight readiness only**: it does not train, evaluate, tune
   planners, run benchmarks, or submit SLURM.
 
+* Added a **fail-closed SocNavBench map-conversion readiness preflight** for the ETH import batch
+  (#1134, parent #334). The batch validator
+  (`scripts/tools/validate_socnav_map_batch.py`) gains a `conversion_readiness()` function and a
+  `--preflight` CLI mode that layer a conversion *decision* on top of the existing raw
+  asset-existence report. Conversion is reported `ready` only when every `required_for_conversion`
+  source asset is staged; while the ETH traversible `data.pkl` (or mesh dir) is missing the verdict
+  is `blocked_pending_source_assets` with `conversion_ready: false`, a `next_action` naming the
+  missing source paths, and a non-zero exit code. When blocked, any pre-existing planned map
+  *artifact* (`map_svg`, `scenario_config`) is surfaced as `placeholder_risk` so a hand-authored or
+  inferred ETH-like SVG cannot be silently mistaken for an official conversion; the provenance note
+  is intentionally excluded because it is expected to exist during the blocked phase. This is
+  **preflight/readiness only**: it does not download assets, stage data, convert maps, run
+  simulations, or assert any benchmark result. Against the current repo state the preflight reports
+  `blocked_pending_source_assets`, matching the issue's blocked status.
+
 * Added a **read-only readiness preflight for the compact CARLA native↔aligned parity bundle**
   (#1510). New module `robot_sf_carla_bridge/parity_bundle_preflight.py` exposes
   `check_parity_bundle_readiness` (and the pure `evaluate_payload_metadata`), which checks — per

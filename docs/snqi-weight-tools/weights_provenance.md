@@ -48,6 +48,54 @@ The Social Navigation Quality Index (SNQI) uses weighted composite scoring to ev
 }
 ```
 
+## Known Provenance Conflict (issue #3723)
+
+> **Status:** unresolved — `decision-required`. The "canonical" label is currently
+> attached to **more than one disagreeing weight set**, so which weights produce a
+> given planner ranking depends on which path is loaded. Choosing the single source
+> of truth is a maintainer decision and is **out of scope** for the diagnostic
+> described below.
+
+Conflicting sets that exist today:
+
+| Source | Designation | Dominant term | Scale |
+| --- | --- | --- | --- |
+| `recompute_snqi_weights("canonical")` (code default) | canonical | `w_collisions` (2.0) | raw |
+| `model/snqi_canonical_weights_v1.json` | canonical | `w_jerk` (3.0) | raw |
+| `configs/benchmarks/snqi_weights_camera_ready_v1.json` | versioned | `w_jerk` (3.0) | raw |
+| `configs/benchmarks/snqi_weights_camera_ready_v2.json` | versioned | `w_time` | normalized (sum ≈ 1) |
+| `configs/benchmarks/snqi_weights_camera_ready_v3.json` | versioned | `w_near` | normalized (sum ≈ 1) |
+
+The code default (collision-dominant) and `model/snqi_canonical_weights_v1.json`
+(jerk-dominant) both claim "canonical" yet yield different rankings; the
+raw-vs-normalized scale split overlaps with #3699.
+
+### Fail-closed provenance preflight (read-only diagnostic)
+
+Until a canonical set is designated, a read-only inventory/preflight surfaces these
+conflicts instead of letting them stay silent. It **does not** change scoring,
+re-tune weights, or pick a winner.
+
+```bash
+# Human-readable inventory + conflicts; exits non-zero (2) on a blocking conflict.
+uv run python -m robot_sf.benchmark.snqi.cli inventory
+
+# Machine-readable report; inspection mode never fails.
+uv run python -m robot_sf.benchmark.snqi.cli inventory --json --no-fail-on-conflict
+```
+
+Programmatic use:
+
+```python
+from robot_sf.benchmark.snqi import preflight_snqi_weight_sets
+
+# Raises SNQIWeightProvenanceError on a blocking (error-severity) conflict.
+report = preflight_snqi_weight_sets(strict=True)
+```
+
+Implementation: `robot_sf/benchmark/snqi/weights_inventory.py`; guard tests in
+`tests/test_snqi_weights_inventory.py`.
+
 ## Weight Selection Methodology
 
 ### 1. Multi-Objective Optimization Process

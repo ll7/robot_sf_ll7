@@ -32,9 +32,11 @@ class DifferentialDriveSettings:
     interaxis_length: float = 0.3
     # Whether backwards motion is allowed (enables negative linear speed)
     allow_backwards: bool = False
-    # Maximum linear velocity delta accepted as an action
+    # Maximum linear acceleration (m/s^2) accepted as an action; the per-step
+    # velocity delta is max_linear_accel * d_t (see issue #3711)
     max_linear_accel: float = 1.0
-    # Maximum angular velocity delta accepted as an action
+    # Maximum angular acceleration (rad/s^2) accepted as an action; the per-step
+    # angular velocity delta is max_angular_accel * d_t (see issue #3711)
     max_angular_accel: float = 1.0
 
     def __post_init__(self):
@@ -93,10 +95,10 @@ class DifferentialDriveMotion:
         the action taken and elapsed time.
 
         :param state: The current state of the differential drive.
-        :param action: The desired change in velocity and orientation (dx, dtheta).
+        :param action: The commanded linear/angular acceleration (a_linear, a_angular).
         :param d_t: The time elapsed since the last update in seconds.
         """
-        robot_vel = self._robot_velocity(state.velocity, action)
+        robot_vel = self._robot_velocity(state.velocity, action, d_t)
         new_wheel_speeds = self._resulting_wheel_speeds(robot_vel)
         distance = self._covered_distance(state.wheel_speeds, new_wheel_speeds, d_t)
         new_orient = self._new_orientation(state.pose[1], state.wheel_speeds, new_wheel_speeds, d_t)
@@ -105,26 +107,39 @@ class DifferentialDriveMotion:
         state.wheel_speeds = new_wheel_speeds
         state.velocity = robot_vel
 
-    def _robot_velocity(self, velocity: PolarVec2D, action: PolarVec2D) -> PolarVec2D:
+    def _robot_velocity(self, velocity: PolarVec2D, action: PolarVec2D, d_t: float) -> PolarVec2D:
         """
-        Computes the new polar velocity vector from the current velocity and
-        the action applied.
+        Computes the new polar velocity vector from the current velocity and the
+        commanded acceleration integrated over the timestep.
+
+        The action is interpreted as a commanded acceleration ``(a_linear,
+        a_angular)``. It is first clipped to the configured acceleration limits,
+        then integrated over ``d_t`` to obtain the velocity delta
+        (``max_delta = max_accel * d_t``). Scaling by ``d_t`` keeps the velocity
+        update timestep-invariant: the same acceleration command applied over the
+        same elapsed time produces the same velocity change regardless of how the
+        interval is subdivided. Without this scaling, smaller timesteps inflated
+        the effective acceleration and produced unstable velocity spikes at high
+        update frequencies (see issue #3711).
 
         Args:
             velocity: The current velocity of the robot (linear speed, angular speed).
-            action: The action to apply on the velocity (dV, dTheta).
+            action: The commanded acceleration to apply (a_linear, a_angular).
+            d_t: The time elapsed since the last update in seconds.
 
         Returns:
-            PolarVec2D: The new velocity clipped by configured delta and speed limits.
+            PolarVec2D: The new velocity clipped by configured accel and speed limits.
         """
-        linear_delta = clip_scalar(
+        linear_accel = clip_scalar(
             action[0], -self.config.max_linear_accel, self.config.max_linear_accel
         )
-        angular_delta = clip_scalar(
+        angular_accel = clip_scalar(
             action[1], -self.config.max_angular_accel, self.config.max_angular_accel
         )
-        dot_x = velocity[0] + linear_delta
-        dot_orient = velocity[1] + angular_delta
+        # Integrate the commanded acceleration over the timestep so the per-step
+        # velocity delta scales with d_t (max_delta = max_accel * d_t).
+        dot_x = velocity[0] + linear_accel * d_t
+        dot_orient = velocity[1] + angular_accel * d_t
         dot_x = clip_scalar(dot_x, self.config.min_linear_speed, self.config.max_linear_speed)
         angular_max = self.config.max_angular_speed
         dot_orient = clip_scalar(dot_orient, -angular_max, angular_max)
@@ -266,8 +281,8 @@ class DifferentialDriveRobot:
 
         Returns:
             Box: An instance of gymnasium.spaces.Box representing the continuous
-            action space where each action is a vector containing
-            linear and angular velocity deltas.
+            action space where each action is a vector containing commanded
+            linear and angular accelerations (integrated over d_t per step).
         """
         high = np.array(
             [self.config.max_linear_accel, self.config.max_angular_accel],
@@ -315,8 +330,8 @@ class DifferentialDriveRobot:
         Applies an action to the robot over a time interval.
 
         Args:
-            action: The action to be applied represented by linear and angular
-                    velocities.
+            action: The action to be applied represented by commanded linear and
+                    angular accelerations.
             d_t: The duration in seconds over which to apply the action.
         """
         self.movement.move(self.state, action, d_t)

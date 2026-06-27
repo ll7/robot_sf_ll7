@@ -19,6 +19,7 @@
       "robot_sf/benchmark/imitation_manifest.py": 1,
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
+      "robot_sf/benchmark/map_runner_env.py": 1,
       "robot_sf/benchmark/metrics.py": 1,
       "robot_sf/benchmark/orca_preflight.py": 1,
       "robot_sf/benchmark/planner_inclusion.py": 2,
@@ -123,7 +124,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 283
+    "total": 284
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -168,7 +169,7 @@
       "context": "run_campaign",
       "fingerprint": "7d11e1766f0c13ae",
       "handler": "Exception",
-      "lineno": 1954,
+      "lineno": 1952,
       "path": "robot_sf/benchmark/camera_ready_campaign.py",
       "source": "except Exception as exc:"
     },
@@ -177,7 +178,7 @@
       "context": "run_campaign",
       "fingerprint": "7d11e1766f0c13ae",
       "handler": "Exception",
-      "lineno": 2002,
+      "lineno": 2000,
       "path": "robot_sf/benchmark/camera_ready_campaign.py",
       "source": "except Exception as exc:"
     },
@@ -186,7 +187,7 @@
       "context": "run_campaign",
       "fingerprint": "7d11e1766f0c13ae",
       "handler": "Exception",
-      "lineno": 2895,
+      "lineno": 2893,
       "path": "robot_sf/benchmark/camera_ready_campaign.py",
       "source": "except Exception as exc:"
     },
@@ -951,7 +952,7 @@
       "context": "_to_json_ready",
       "fingerprint": "282c0ddbbcb7b444",
       "handler": "Exception",
-      "lineno": 105,
+      "lineno": 136,
       "path": "robot_sf/benchmark/imitation_manifest.py",
       "source": "except Exception:  # pragma: no cover - best effort fallback"
     },
@@ -960,7 +961,7 @@
       "context": "_preflight_policy",
       "fingerprint": "9d6addfc4094f787",
       "handler": "Exception",
-      "lineno": 682,
+      "lineno": 686,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as exc:"
     },
@@ -969,7 +970,7 @@
       "context": "_preflight_policy",
       "fingerprint": "3f6860893c2f6ced",
       "handler": "Exception",
-      "lineno": 712,
+      "lineno": 716,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as fallback_exc:"
     },
@@ -999,6 +1000,15 @@
       "lineno": 211,
       "path": "robot_sf/benchmark/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover - write/validate path"
+    },
+    {
+      "col_offset": 4,
+      "context": "representative_metric_affecting_config",
+      "fingerprint": "ca3a7028492cbd27",
+      "handler": "Exception",
+      "lineno": 80,
+      "path": "robot_sf/benchmark/map_runner_env.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
     },
     {
       "col_offset": 4,
@@ -1293,7 +1303,7 @@
       "context": "frame_shape_from_map",
       "fingerprint": "bba45879be658dd5",
       "handler": "Exception",
-      "lineno": 59,
+      "lineno": 60,
       "path": "robot_sf/benchmark/visualization.py",
       "source": "except Exception:"
     },
@@ -1302,7 +1312,7 @@
       "context": "frame_shape_from_map",
       "fingerprint": "bba45879be658dd5",
       "handler": "Exception",
-      "lineno": 70,
+      "lineno": 71,
       "path": "robot_sf/benchmark/visualization.py",
       "source": "except Exception:"
     },
@@ -1311,7 +1321,7 @@
       "context": "generate_benchmark_plots_from_data",
       "fingerprint": "8f539027d1a9c59a",
       "handler": "Exception",
-      "lineno": 223,
+      "lineno": 224,
       "path": "robot_sf/benchmark/visualization.py",
       "source": "except Exception as e:"
     },
@@ -1320,7 +1330,7 @@
       "context": "generate_benchmark_plots_from_data",
       "fingerprint": "8f539027d1a9c59a",
       "handler": "Exception",
-      "lineno": 245,
+      "lineno": 246,
       "path": "robot_sf/benchmark/visualization.py",
       "source": "except Exception as e:"
     },
@@ -1329,7 +1339,7 @@
       "context": "_plot_subprocess_worker",
       "fingerprint": "bba1e9e83de4d87b",
       "handler": "Exception",
-      "lineno": 400,
+      "lineno": 401,
       "path": "robot_sf/benchmark/visualization.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive fallback"
     },
@@ -1338,7 +1348,7 @@
       "context": "_generate_metrics_plot",
       "fingerprint": "c90db09c9215e774",
       "handler": "Exception",
-      "lineno": 583,
+      "lineno": 584,
       "path": "robot_sf/benchmark/visualization.py",
       "source": "except Exception:"
     },
@@ -1347,7 +1357,7 @@
       "context": "_generate_scenario_comparison_plot",
       "fingerprint": "fe958e2b9ee653e9",
       "handler": "Exception",
-      "lineno": 672,
+      "lineno": 673,
       "path": "robot_sf/benchmark/visualization.py",
       "source": "except Exception:"
     },
@@ -1482,7 +1492,7 @@
       "context": "_git_head",
       "fingerprint": "921b9a3a806e63e6",
       "handler": "Exception",
-      "lineno": 92,
+      "lineno": 100,
       "path": "scripts/benchmark/run_observation_noise_envelope.py",
       "source": "except Exception:"
     },
@@ -1491,7 +1501,7 @@
       "context": "_fixture_contract",
       "fingerprint": "23019bf113bfda33",
       "handler": "Exception",
-      "lineno": 343,
+      "lineno": 358,
       "path": "scripts/benchmark/run_observation_noise_live_replay_issue_2777.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive fail-closed path"
     },
@@ -2166,7 +2176,7 @@
       "context": "run_recipe",
       "fingerprint": "461262047f30f3e3",
       "handler": "Exception",
-      "lineno": 124,
+      "lineno": 159,
       "path": "scripts/tools/run_benchmark_sql_recipe.py",
       "source": "except Exception as exc:"
     },
@@ -2175,7 +2185,7 @@
       "context": "_validate_columns",
       "fingerprint": "ae2c94585588b271",
       "handler": "Exception",
-      "lineno": 266,
+      "lineno": 322,
       "path": "scripts/tools/run_benchmark_sql_recipe.py",
       "source": "except Exception as exc:"
     },
@@ -2589,7 +2599,7 @@
       "context": "main",
       "fingerprint": "ea061efac66ad94e",
       "handler": "(Exception, SystemExit)",
-      "lineno": 543,
+      "lineno": 585,
       "path": "scripts/validation/run_predictive_success_campaign.py",
       "source": "except (Exception, SystemExit) as exc:"
     },

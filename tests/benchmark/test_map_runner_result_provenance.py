@@ -47,6 +47,12 @@ def test_run_map_batch_empty_summary_has_result_provenance(
     assert config_identity["algo_config_path"] is None
     assert config_identity["benchmark_profile"] == "experimental"
     assert isinstance(config_identity["scenario_matrix_hash"], str)
+    # With no scenarios the metric-affecting run-config block is fail-soft but
+    # still present, so the manifest is explicit about the missing provenance.
+    assert config_identity["metric_affecting_config"] == {
+        "status": "not_available",
+        "reason": "no scenarios",
+    }
 
     seed_identity = provenance["seed_identity"]
     assert seed_identity["suite_key"] == "default"
@@ -72,6 +78,32 @@ def test_map_result_provenance_preserves_planned_skipped_job_count() -> None:
     assert provenance["seed_identity"]["total_jobs"] == 2
     assert provenance["seed_identity"]["written"] == 0
     assert provenance["artifact_pointer_status"] == "not_available"
+    # Backwards compatible: omitting the optional block leaves config_identity unchanged.
+    assert "metric_affecting_config" not in provenance["config_identity"]
+
+
+def test_map_result_provenance_embeds_metric_affecting_config() -> None:
+    """A provided metric-affecting block is embedded under config_identity (issue #3701)."""
+    block = {
+        "schema": "metric_affecting_run_config.v1",
+        "sensor_noise": {"scan_noise": [0.0, 0.0], "scan_noise_enabled": False},
+        "collision_regime": {"regime": "terminate_on_contact"},
+    }
+    provenance = _map_result_provenance(
+        schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
+        scenario_path=Path("configs/example.yaml"),
+        scenarios=[{"name": "one"}],
+        algo="goal",
+        algo_config_path=None,
+        benchmark_profile="experimental",
+        suite_key="default",
+        total_jobs=1,
+        written=1,
+        artifact_pointer_status="local_jsonl_present",
+        metric_affecting_config=block,
+    )
+
+    assert provenance["config_identity"]["metric_affecting_config"] == block
 
 
 def test_map_result_provenance_can_mark_existing_jsonl_available() -> None:

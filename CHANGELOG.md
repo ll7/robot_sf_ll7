@@ -7,8 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
+  self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
+  `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*
+  the reported safety metrics mean — LiDAR `scan_noise` (noisy default `[0.005, 0.002]` vs deterministic
+  `[0.0, 0.0]`; see `robot_sf/sensor/range_sensor.py`) and the collision-handling regime
+  (`terminate_on_contact` vs `bounce_back`; the robot benchmark env terminates on collision per
+  `RobotState.is_terminal`). The map-runner now embeds this block under
+  `provenance.config_identity.metric_affecting_config` in every batch summary
+  (`robot_sf/benchmark/map_runner.py`), derived once per batch via the fail-soft
+  `representative_metric_affecting_config` helper, so two result sets can be checked for comparability
+  without out-of-band knowledge of each run's config. The helper is descriptive provenance only — it
+  does not redefine metrics, rerun campaigns, or promote benchmark claims, and degrades to a
+  `status: not_available` block rather than ever breaking a run.
+* Added an **opt-in factorial-ablation manifest + checker** for the merged planner-agnostic safety
+  wrapper (#3501). `robot_sf/benchmark/safety_wrapper_ablation_manifest.py` enumerates the
+  `planner × {wrapper off, wrapper on}` ablation cells from a tracked config
+  (`configs/research/safety_wrapper_ablation_v1.yaml`) and **checks** the design so later runs can
+  compare the wrapper on/off consistently: exactly the two `{wrapper_off, wrapper_on}` arms with one
+  baseline (off), the off arm disabled and the on arm enabled, the on-arm thresholds validated as a
+  real `SafetyWrapperConfig` (predeclared, no per-planner tuning), every planner present in both
+  arms, and paired seeds shared identically across arms. The manifest records provenance fields
+  (`schema_version`, `safety_wrapper_schema`, `config_path`, `git_head`, `claim_boundary`,
+  `evidence_status`) and a `factorial_check` summary; a thin runner
+  (`scripts/benchmark/build_safety_wrapper_ablation_manifest.py --dry-run`) writes it. This is a
+  **dry-run design contract only** — it binds no runtime objects, runs no benchmark episodes, tunes
+  no thresholds, and makes no mitigation-effectiveness claim (the factorial campaign run is the
+  deferred downstream follow-up tracked by #3501).
+* Added a fail-closed readiness check for scenario-horizon Results evidence (#3266). New module
+  `robot_sf/benchmark/scenario_horizon_readiness.py` and CLI
+  `scripts/validation/check_scenario_horizon_results_readiness.py` read a re-exported scenario-horizon
+  campaign artifact (the dissertation `campaign_table.md` from PR #3263 / issue #3203, or an equivalent
+  campaign-summary JSON) and classify it as `valid`, `diagnostic_only`, or `blocked`. The check is
+  diagnostic-only — it never reruns a campaign or promotes evidence — and fails closed: a missing or
+  unparseable artifact is `blocked`, any non-benchmark-success planner row (e.g. the PPO
+  `partial-failure` recorded for #3266) caps the verdict at `diagnostic_only`, and an unasserted SNQI
+  contract status keeps the evidence diagnostic-only rather than assuming it passed. Per-row status
+  normalization reuses the canonical `fallback_policy.classify_planner_row_status` owner. Run against
+  the real #3203 bundle, the check reports `diagnostic_only` (exit 2), confirming those tables remain
+  diagnostic/provenance evidence only.
+
 ### Fixed
 
+* Fixed `SNQIWeights.load` / `from_dict` **raising unhandled `KeyError`s on malformed config**
+  (#3710). In `robot_sf/benchmark/snqi/types.py`, reconstructing an `SNQIWeights` from JSON used bare
+  `data["key"]` access (so a missing provenance field surfaced as an opaque `KeyError`) and never
+  validated the weights mapping values. Loading now **fails closed with structured diagnostics**:
+  non-mapping input, missing or non-string required metadata fields, a non-mapping `bootstrap_params`,
+  a non-list `components`, and weight values that are non-numeric, non-finite, or negative each raise a
+  descriptive `ValueError` naming the offending field and the source path. Invalid JSON is also
+  wrapped in a `ValueError` that includes the file path. This is bounded to input validation — SNQI
+  metric definitions, weights, normalization, and benchmark results are unchanged.
+* Fixed differential-drive velocity updates **ignoring timestep scaling** (#3711). In
+  `DifferentialDriveMotion._robot_velocity` the commanded acceleration (clipped to
+  `max_linear_accel` / `max_angular_accel`, the follow-up to #3666/#3689) was applied directly as a
+  per-step velocity delta without multiplying by the simulation timestep `d_t`. At the default
+  `d_t = 0.1` this permitted 10× the labeled acceleration per step and made the dynamics
+  timestep-dependent (smaller timesteps inflated the effective acceleration — the unstable velocity
+  spikes reported in the issue). The action is now integrated over `d_t`
+  (`max_delta = max_accel * d_t`), making the velocity update timestep-invariant and consistent with
+  the `bicycle_drive` model. All pre-existing differential-drive tests use `d_t = 1.0`, where
+  `accel * d_t == accel`, so their behavior is unchanged; new regression tests cover `d_t != 1.0`.
+  **Behavioral note:** at the simulator's default `d_t = 0.1` this reduces the realized per-step
+  velocity change for a given action by 10×; differential-drive controllers tuned against the
+  previous (timestep-dependent) integration may need re-tuning. Controller re-tuning and benchmark
+  re-validation are out of scope for this fix.
 * Fixed the HEIGHT planner adapter's lidar raycasting **ignoring dynamic pedestrians** (#3629).
   `CrowdNavHeightAdapter._raycast_obstacles` intersected each ray only against cached static obstacle
   segments, so the HEIGHT policy's lidar channel was blind to moving pedestrians (they were used for the
@@ -48,6 +113,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **fail-closed archive-readiness checker** for the adversarial proposal-vs-random study
+  (#3275). Before the proposal runner consumes a *real* certified failure archive, the archive must
+  carry the fields the downstream disjoint split, overlap provenance, candidate certification, and
+  null tests depend on — otherwise those steps cannot be computed. The new pure checker
+  (`assess_archive_readiness` / `assess_archive_file_readiness` in
+  [`robot_sf/adversarial/disjoint_evaluation.py`](robot_sf/adversarial/disjoint_evaluation.py),
+  composing the existing `scenario_family_key` / `disjoint_family_split`) reports a precise
+  `ready` / `not_ready` verdict over schema, per-entry `archive_id` / `candidate.scenario_seed` /
+  `failure_attribution` presence, derivable scenario families, and whether a disjoint scenario-family
+  split with non-empty fit/eval sides is even possible. Unlike the runner's loader, it **never falls
+  back to a synthetic fixture**: a missing, empty, unreadable, malformed, or under-populated archive
+  is reported `ready=False` with the blocking reasons. A thin CLI
+  [`scripts/tools/check_adversarial_archive_readiness.py`](scripts/tools/check_adversarial_archive_readiness.py)
+  prints the JSON report and exits non-zero when not ready, so it is safe to use as an input gate.
+  This is a readiness/input-hygiene slice only — it runs no proposal-model evaluation, fabricates no
+  archive inputs, and makes no held-out-yield or benchmark claim.
+* Added a **plan-level preflight for the paper-grade reactivity-vs-replay rank study** (#3637,
+  split from #3573). The new pure checker
+  [`robot_sf/benchmark/reactivity_replay_preflight.py`](robot_sf/benchmark/reactivity_replay_preflight.py)
+  (`reactivity_replay_rank_study_preflight.v1`) verifies a proposed run plan's **preconditions**
+  before any compute is spent: ≥3 planners, exactly the reactive/replay arms with **paired** seeds
+  (common random numbers), a seed budget at/above the S20 rank-stability floor and above the #3573
+  diagnostic matrix, a contrast-registering horizon, and that the **replay limitation** is stated
+  (`'replay' = robot→pedestrian force-off in a live sim, NOT trajectory playback`). The limitation
+  constants now live in the canonical owner `robot_sf/benchmark/reactivity_ablation.py`
+  (`REPLAY_LIMITATION`, `REPLAY_IS_TRAJECTORY_PLAYBACK`, `REACTIVITY_ARMS`) and are imported, not
+  duplicated. Thin CPU-only CLI
+  [`scripts/benchmark/preflight_reactivity_replay_rank_study_issue_3637.py`](scripts/benchmark/preflight_reactivity_replay_rank_study_issue_3637.py)
+  emits a `ready`/`blocked` manifest from the launch packet
+  [`configs/benchmarks/reactivity_replay_rank_study_issue_3637_launch_packet.yaml`](configs/benchmarks/reactivity_replay_rank_study_issue_3637_launch_packet.yaml).
+  This is an evidence-control layer only: it does **not** run the benchmark, interpret rank
+  stability, or make any paper-facing claim (sufficiency stays with
+  `scripts/tools/seed_sufficiency_gate.py` post-run).
 * Added a **context-note archival-sweep planner** (#3190):
   [`scripts/tools/plan_context_note_archival.py`](scripts/tools/plan_context_note_archival.py)
   consumes the existing freshness checker plus `docs/context/catalog.yaml` and proposes which notes

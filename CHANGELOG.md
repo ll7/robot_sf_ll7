@@ -25,6 +25,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/tools/check_real_trace_validation_contract.py`. Decision note:
   `docs/context/issue_3278_real_trace_validation_contract.md`. Tests cover complete, incompatible,
   and missing/placeholder-metadata descriptors.
+* Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
+  schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
+  New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,
+  which maps geometry, agent paths, start/goal states, timing, and environment semantics into a
+  target-neutral IR (`robot_sf/benchmark/schemas/scenario_interop_ir.v1.json`), preserves source
+  provenance (scenario id, source file, source fields, metadata), and reports every unmapped source
+  field explicitly in `unsupported_fields` instead of silently dropping it. A documented dry-run CLI
+  (`scripts/tools/convert_scenario_interop.py --matrix <file>`) prints the IR per scenario and a
+  validity summary. This is the local, asset-free slice of the cross-benchmark interop work: it emits
+  **no** SocNavBench/HuNavSim asset and makes **no** cross-benchmark validity or score-parity claim;
+  producing real external assets remains blocked on #1456/#1498/#2414/#1134. See
+  `docs/context/issue_3285_scenario_interop_converter.md`.
+* Added a **presence-only tournament-readiness helper** for the predictive hard-case breakthrough
+  portfolio (#3215). `scripts/tools/predictive_tournament_readiness.py` inventories the local
+  prerequisites (expected configs, harness scripts, and output path) for the three concurrent
+  tournament arms — Selection (#3204), Authority (#3213), and Model (#3214) — plus the shared
+  `predictive_hard_seeds_v1` benchmark protocol, and classifies each as `ready` or `blocked` with the
+  missing paths named as blockers. The check is deliberately fail-closed and **never** asserts run
+  authorization: `run_authorized` is always `False` and the standing `run_gates` (open child bets,
+  maintainer-set overnight SLURM/GPU budget, Autonomous Usage Stop Guard) are reported so a
+  "prerequisites ready" result is not mistaken for "authorized to launch". It does not submit Slurm
+  jobs, run the tournament, rank arms, or edit any claim. Text and `--json` reports; exit code 0 when
+  local prerequisites are ready, 1 when blocked.
 * Added a read-only **re-export readiness preflight** for stale dissertation table bundles
   (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
   `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability

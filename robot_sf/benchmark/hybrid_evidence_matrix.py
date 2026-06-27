@@ -30,6 +30,16 @@ VERDICTS = frozenset({"continue", "revise", "stop", "insufficient_evidence", "pe
 SUCCESS_LIKE_TIERS = frozenset({"smoke_only", "nominal_only", "stress", "full_matrix"})
 SYNTHESIS_TIERS = frozenset({"stress", "full_matrix"})
 SYNTHESIS_VERDICTS = frozenset({"continue", "revise"})
+# Campaign-lifecycle states for the #1489 prerequisite/status matrix, ordered by
+# escalating readiness. Only ``complete`` lanes count toward unblocking synthesis.
+COMPONENT_CAMPAIGN_STATES = ("missing", "blocked", "ready", "complete")
+# Evidence tiers that represent a pre-runtime or non-comparable lane: the campaign
+# has not produced durable runtime evidence yet, so the lane stays ``blocked``.
+PRE_RUNTIME_TIERS = frozenset({"launch_packet", "failed", "not_available"})
+# Default number of ``complete`` (synthesis-eligible) lanes required before the
+# #1489 synthesis gate opens. The umbrella contract requires at least two
+# component campaigns with durable comparable outputs.
+DEFAULT_SYNTHESIS_PREREQUISITE_COUNT = 2
 ROW_REQUIRED_FIELDS = frozenset(
     {
         "component",
@@ -162,6 +172,194 @@ def validate_hybrid_evidence_rows(
         "invalid_row_count": invalid_row_count,
         "rows": row_reports,
     }
+
+
+def classify_component_campaign_state(row_report: dict[str, Any]) -> str:
+    """Classify one validated evidence row into a campaign-lifecycle state.
+
+    The lifecycle escalates ``missing -> blocked -> ready -> complete``:
+
+    - ``complete``: the row is synthesis-eligible — a durable comparable output
+      (``stress``/``full_matrix`` tier with a ``continue``/``revise`` verdict and
+      no validation errors). Only ``complete`` lanes count toward the #1489
+      synthesis prerequisite, so no single pre-result lane can unblock synthesis.
+    - ``ready``: the campaign executed and produced runtime evidence that is not
+      yet synthesis-grade (smoke/nominal/degraded/fallback tiers, or a terminal
+      tier with a non-synthesis verdict such as ``stop``).
+    - ``blocked``: the row is pre-runtime or non-comparable — a launch packet, a
+      ``not_run`` slice, a failed/unavailable tier, or an invalid row.
+
+    ``missing`` is assigned by :func:`build_hybrid_prerequisite_matrix` for
+    expected components that have no row; it is never returned here.
+
+    Args:
+        row_report: A per-row entry produced by :func:`validate_hybrid_evidence_rows`.
+
+    Returns:
+        One of ``"blocked"``, ``"ready"``, or ``"complete"``.
+    """
+    if row_report.get("synthesis_eligible"):
+        return "complete"
+    if row_report.get("status") == "invalid":
+        return "blocked"
+    if row_report.get("evaluation_slice") == "not_run":
+        return "blocked"
+    if row_report.get("evidence_tier") in PRE_RUNTIME_TIERS:
+        return "blocked"
+    return "ready"
+
+
+def build_hybrid_prerequisite_matrix(
+    rows: list[dict[str, Any]],
+    *,
+    expected_components: list[str] | None = None,
+    repo_root: Path | None = None,
+    check_git_history: bool = False,
+    prerequisite_count: int = DEFAULT_SYNTHESIS_PREREQUISITE_COUNT,
+) -> dict[str, Any]:
+    """Build the #1489 prerequisite/status matrix for hybrid-learning lanes.
+
+    Validates every row, classifies each into a campaign-lifecycle state, marks
+    expected-but-absent components as ``missing``, and decides whether the
+    synthesis prerequisite (at least ``prerequisite_count`` ``complete`` lanes)
+    is met. The gate is intentionally conservative: a lane counts only when the
+    row validator already marked it synthesis-eligible, so launch packets, smoke
+    runs, fallback/degraded rows, and invalid rows never open the gate.
+
+    Args:
+        rows: Evidence-matrix row mappings, as accepted by the row validator.
+        expected_components: Optional component names that should have a row.
+            Each name with no matching row becomes a ``missing`` lane.
+        repo_root: Repository root for provenance-path resolution.
+        check_git_history: Forwarded to the row validator to verify git SHAs.
+        prerequisite_count: Minimum ``complete`` lanes that open the gate.
+
+    Returns:
+        Structured report with the gate decision, per-state counts, and per-lane
+        classification details.
+    """
+    if prerequisite_count < 1:
+        raise HybridEvidenceMatrixValidationError("prerequisite_count must be >= 1")
+    validation = validate_hybrid_evidence_rows(
+        rows, repo_root=repo_root, check_git_history=check_git_history
+    )
+    lanes: list[dict[str, Any]] = []
+    seen_components: set[str] = set()
+    for row_report in validation["rows"]:
+        component = row_report.get("component")
+        if isinstance(component, str):
+            seen_components.add(component)
+        lanes.append(
+            {
+                "component": component,
+                "source_issue": row_report.get("source_issue"),
+                "state": classify_component_campaign_state(row_report),
+                "evaluation_slice": row_report.get("evaluation_slice"),
+                "evidence_tier": row_report.get("evidence_tier"),
+                "verdict": row_report.get("verdict"),
+                "row_status": row_report.get("status"),
+                "synthesis_eligible": bool(row_report.get("synthesis_eligible")),
+                "row_index": row_report.get("index"),
+            }
+        )
+    for component in _missing_components(expected_components, seen_components):
+        lanes.append(
+            {
+                "component": component,
+                "source_issue": None,
+                "state": "missing",
+                "evaluation_slice": None,
+                "evidence_tier": None,
+                "verdict": None,
+                "row_status": None,
+                "synthesis_eligible": False,
+                "row_index": None,
+            }
+        )
+    state_counts = dict.fromkeys(COMPONENT_CAMPAIGN_STATES, 0)
+    for lane in lanes:
+        state_counts[lane["state"]] += 1
+    complete_count = state_counts["complete"]
+    prerequisite_met = complete_count >= prerequisite_count
+    return {
+        "gate": "ready_for_synthesis" if prerequisite_met else "blocked",
+        "prerequisite_met": prerequisite_met,
+        "prerequisite_count": prerequisite_count,
+        "complete_count": complete_count,
+        "lane_count": len(lanes),
+        "state_counts": state_counts,
+        "rows_valid": validation["status"] == "valid",
+        "invalid_row_count": validation["invalid_row_count"],
+        "provenance_validation": validation["provenance_validation"],
+        "lanes": lanes,
+    }
+
+
+def build_hybrid_prerequisite_matrix_file(
+    path: Path,
+    *,
+    expected_components: list[str] | None = None,
+    repo_root: Path | None = None,
+    check_git_history: bool = False,
+    prerequisite_count: int = DEFAULT_SYNTHESIS_PREREQUISITE_COUNT,
+) -> dict[str, Any]:
+    """Load a matrix file and build its #1489 prerequisite/status report.
+
+    Args:
+        path: YAML/JSON evidence-matrix file accepted by
+            :func:`load_hybrid_evidence_input`.
+        expected_components: Optional expected component names (see
+            :func:`build_hybrid_prerequisite_matrix`).
+        repo_root: Repository root for provenance-path resolution.
+        check_git_history: Forwarded to the row validator to verify git SHAs.
+        prerequisite_count: Minimum ``complete`` lanes that open the gate.
+
+    Returns:
+        The prerequisite-matrix report with the input format and path attached.
+    """
+    input_format, rows = load_hybrid_evidence_input(path)
+    report = build_hybrid_prerequisite_matrix(
+        rows,
+        expected_components=expected_components,
+        repo_root=repo_root,
+        check_git_history=check_git_history,
+        prerequisite_count=prerequisite_count,
+    )
+    report["input_format"] = input_format
+    report["input_path"] = _repo_relative_or_absolute(
+        path.resolve(), root=(repo_root or get_repository_root())
+    )
+    return report
+
+
+def _missing_components(
+    expected_components: list[str] | None,
+    seen_components: set[str],
+) -> list[str]:
+    """Return expected component names that have no row, preserving input order.
+
+    Returns:
+        The de-duplicated list of expected names absent from ``seen_components``.
+    """
+    if not expected_components:
+        return []
+    if isinstance(expected_components, str):
+        raise HybridEvidenceMatrixValidationError(
+            "expected_components must be a list of strings, not a single string"
+        )
+    seen_normalized = {
+        component.strip() for component in seen_components if isinstance(component, str)
+    }
+    missing: list[str] = []
+    for component in expected_components:
+        if not isinstance(component, str) or not component.strip():
+            raise HybridEvidenceMatrixValidationError(
+                "expected_components entries must be non-empty strings"
+            )
+        normalized = component.strip()
+        if normalized not in seen_normalized and normalized not in missing:
+            missing.append(normalized)
+    return missing
 
 
 def _validate_row(
@@ -803,7 +1001,13 @@ def _repo_relative_or_absolute(path: Path, *, root: Path) -> str:
 
 
 __all__ = [
+    "COMPONENT_CAMPAIGN_STATES",
+    "DEFAULT_SYNTHESIS_PREREQUISITE_COUNT",
+    "PRE_RUNTIME_TIERS",
     "HybridEvidenceMatrixValidationError",
+    "build_hybrid_prerequisite_matrix",
+    "build_hybrid_prerequisite_matrix_file",
+    "classify_component_campaign_state",
     "load_hybrid_evidence_input",
     "validate_hybrid_evidence_file",
     "validate_hybrid_evidence_rows",

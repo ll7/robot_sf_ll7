@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check on a YAML/JSON spec and exits non-zero (3) when blocked. This is a bounded readiness/contract
   slice only — it does not run a replay campaign, change sensor semantics, or make any benchmark or
   safety claim.
+* Added a read-only **re-export readiness preflight** for stale dissertation table bundles
+  (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
+  `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability
+  check and reduces both signals to a single `fresh` / `stale` / `blocked` state: `fresh` when the
+  payload is present and checksums match (no re-export needed), `stale` when a re-export is needed and
+  all required inputs (campaign config, generation script, source-commit provenance) are present
+  (re-export unblocked), and `blocked` when a re-export is needed but a required input is missing or
+  the provenance cannot be reconstructed. This prevents a stale bundle from being silently cited as
+  current evidence without first checking that the bounded campaign can be reproduced here. The tool
+  never runs the campaign, regenerates a table, or edits dissertation claims.
 * Added a machine-readable classic archetype density / tier index
   (`configs/scenarios/archetypes/classic_density_tier_index.yaml`) that documents the *current*
   per-archetype density-tier coverage, density bands, and pedestrian spawn semantics of the classic

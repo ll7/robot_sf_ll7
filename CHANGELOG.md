@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
+  traces routed through the `amv-calibration` external-data path (#2415). New schema
+  `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker
+  `robot_sf/research/amv_command_response_trace_manifest.py` validate, per candidate trace bundle,
+  the provenance/license, the command/response/timing channels the bundle would expose, and the
+  declared calibration targets — fail-closed against the canonical synthetic-actuation envelope
+  vocabulary (`robot_sf.benchmark.synthetic_actuation.actuation_variability_fields()`) so the
+  manifest cannot drift from what calibration can consume. CLI
+  `scripts/validation/check_amv_command_response_trace_manifest_issue_2415.py` prints a JSON report
+  and (with `--probe-live-staging`) reconciles each trace's declared staging status against a live
+  `manage_external_data.check_asset` presence probe. The shipped example manifest
+  (`configs/research/amv_command_response_trace_manifest_issue_2415.yaml`) is
+  `blocked-external-input` today, matching the maintainer decision on #2415 (2026-06-22) that no
+  realistic real-data source is currently available. This is **manifest-contract only**: it does
+  not ingest traces, run a calibration, or make a hardware-calibrated realism claim
+  (`evidence_boundary = manifest_contract_only_no_trace_ingest_no_calibration_run_no_calibrated_claim`).
 * Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
   surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
   `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware

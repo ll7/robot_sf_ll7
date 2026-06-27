@@ -1,0 +1,68 @@
+# Example external pedestrian-prior extraction staging/preflight manifest (issue #2918).
+#
+# This is a METADATA-ONLY manifest. It declares HOW a future pedestrian-prior
+# extraction run would consume a license-compatible external trajectory dataset
+# (ETH/UCY, SDD, or SocNavBench-derived): the source type, provenance fields, the
+# bounded prior parameters the run intends to emit, and the authored-vs-dataset-backed
+# separation. It can be checked with `check_pedestrian_prior_extraction_manifest`
+# from `robot_sf.benchmark.pedestrian_prior_extraction_manifest`.
+#
+# It ingests NO external data, stores NO raw trajectories in git, and makes NO
+# calibrated- or representative-prior claim. `extraction_status: blocked-external-input`
+# is intentional: license-compatible external data is not yet staged/accepted
+# (issue #2918 is blocked-external-input, awaiting the opt-in BYO-dataset path of
+# #3065/#2657/#1498). Every prior parameter stays `pending`.
+#
+# Promote to `extraction_status: dataset-backed` only after license-compatible
+# data is staged and reviewed through the data-staging workflow
+# (`.agents/skills/data-staging-provenance/SKILL.md` and
+# `scripts/tools/manage_external_data.py`).
+schema_version: pedestrian_prior_extraction_manifest.v1
+manifest_id: pedestrian_prior_extraction_placeholder_sdd
+extraction_status: blocked-external-input
+description: >
+  Planned extraction of bounded pedestrian-prior parameters (walking speed,
+  crossing angle, local density, interaction distance, and stop/yield timing)
+  from a license-compatible staged trajectory dataset, for comparison against the
+  authored scenario-prior cards. No raw trajectories are stored; only bounded
+  prior parameters and provenance.
+
+# Allowed source family. `sdd` maps to the canonical external-data asset id used
+# by scripts/tools/manage_external_data.py; the raw data itself is not staged here.
+source:
+  type: sdd
+  external_data_asset_id: sdd
+  note: >
+    Stanford Drone Dataset, opt-in BYO-dataset path (#3065/#2657). Stage locally
+    under the dataset license; this manifest never redistributes raw data.
+
+# Bounded pedestrian-prior parameters a future dataset-backed run would emit.
+# All `pending` here because license-compatible external data is not yet staged.
+prior_parameters:
+  - name: walking_speed
+    units: m/s
+    value_status: pending
+  - name: crossing_angle
+    units: deg
+    value_status: pending
+  - name: density
+    units: ped/m^2
+    value_status: pending
+  - name: interaction_distance
+    units: m
+    value_status: pending
+  - name: stop_yield_timing
+    units: s
+    value_status: pending
+
+# Keep authored scenario priors strictly separate from dataset-backed priors so
+# a dataset-backed comparison can never silently overwrite the authored baseline.
+authored_separation:
+  separation: enforced
+  note: >
+    Authored priors live in configs/research/scenario_prior_cards_issue_2917.yaml;
+    dataset-backed priors must be recorded separately and compared, not merged.
+
+# No provenance source is declared while blocked-external-input: a dataset-backed
+# run must populate source_id, source_uri, license, citation, access_date, and
+# checksum (plus an optional staging_manifest pointer) before claiming a value.

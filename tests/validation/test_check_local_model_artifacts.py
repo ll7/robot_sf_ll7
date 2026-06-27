@@ -8,12 +8,28 @@ from pathlib import Path
 import pytest
 import yaml
 
-from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
+from robot_sf.benchmark.local_model_artifacts import (
+    BLOCKLIST_ACTIVE,
+    BLOCKLIST_ORPHANED_CONFIG_MISSING,
+    BLOCKLIST_ORPHANED_REFERENCE_GONE,
+    audit_blocklist_coverage,
+    validate_no_local_model_artifacts,
+)
 from scripts.validation.check_local_model_artifacts import (
+    DEFAULT_BLOCKLIST,
     REPO_ROOT,
+    audit_blocklist,
     check_local_model_artifacts,
     main,
 )
+
+
+def _write_blocklist(path: Path, entries: str) -> None:
+    """Write a minimal v1 blocklist with the given ``blocked_references`` block."""
+    path.write_text(
+        "version: 1\nblocked_references:\n" + entries,
+        encoding="utf-8",
+    )
 
 
 def test_checked_in_baseline_local_paths_are_explicitly_blocked() -> None:
@@ -273,3 +289,118 @@ def test_fail_on_blocked_returns_nonzero_for_explicit_blockers(
 
     assert main() == 1
     assert "BLOCKED:" in capsys.readouterr().out
+
+
+def test_checked_in_blocklist_entries_are_all_active() -> None:
+    """Every shipped blocklist entry should still cover a present local reference."""
+    entries = audit_blocklist_coverage(DEFAULT_BLOCKLIST, repo_root=REPO_ROOT)
+
+    assert entries
+    assert {entry.status for entry in entries} == {BLOCKLIST_ACTIVE}
+
+
+def test_audit_flags_retired_config_as_orphan(tmp_path: Path) -> None:
+    """A blocklist entry whose config was removed should be reported as orphaned."""
+    blocklist = tmp_path / "blocklist.yaml"
+    _write_blocklist(
+        blocklist,
+        """  - path: configs/baselines/retired.yaml
+    field: model_path
+    value: output/model_cache/retired/model.zip
+    reason: Retired checkpoint.
+""",
+    )
+
+    entries = audit_blocklist_coverage(blocklist, repo_root=tmp_path)
+
+    assert len(entries) == 1
+    assert entries[0].status == BLOCKLIST_ORPHANED_CONFIG_MISSING
+    assert entries[0].path == "configs/baselines/retired.yaml"
+
+
+def test_audit_flags_migrated_config_as_orphan(tmp_path: Path) -> None:
+    """A config migrated to a durable model_id should orphan its old blocklist entry."""
+    config = tmp_path / "configs" / "baselines" / "migrated.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("model_id: durable_registry_id\n", encoding="utf-8")
+    blocklist = tmp_path / "blocklist.yaml"
+    _write_blocklist(
+        blocklist,
+        """  - path: configs/baselines/migrated.yaml
+    field: model_path
+    value: output/model_cache/migrated/model.zip
+    reason: Pre-migration local artifact.
+""",
+    )
+
+    entries = audit_blocklist_coverage(blocklist, repo_root=tmp_path)
+
+    assert len(entries) == 1
+    assert entries[0].status == BLOCKLIST_ORPHANED_REFERENCE_GONE
+
+
+def test_audit_marks_present_reference_active(tmp_path: Path) -> None:
+    """A blocklist entry that still matches a live local reference stays active."""
+    config = tmp_path / "configs" / "baselines" / "live.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("model_path: output/model_cache/live/model.zip\n", encoding="utf-8")
+    blocklist = tmp_path / "blocklist.yaml"
+    _write_blocklist(
+        blocklist,
+        """  - path: configs/baselines/live.yaml
+    field: model_path
+    value: output/model_cache/live/model.zip
+    reason: Still-local checkpoint.
+""",
+    )
+
+    entries = audit_blocklist_coverage(blocklist, repo_root=tmp_path)
+
+    assert len(entries) == 1
+    assert entries[0].status == BLOCKLIST_ACTIVE
+
+
+def test_audit_cli_fails_on_orphan_and_reports_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The ``--audit-blocklist`` CLI mode should fail and emit rows when orphans exist."""
+    blocklist = tmp_path / "blocklist.yaml"
+    _write_blocklist(
+        blocklist,
+        """  - path: configs/baselines/retired.yaml
+    field: model_path
+    value: output/model_cache/retired/model.zip
+    reason: Retired checkpoint.
+""",
+    )
+    monkeypatch.setattr("scripts.validation.check_local_model_artifacts.REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "check_local_model_artifacts.py",
+            "--audit-blocklist",
+            "--json",
+            "--blocklist",
+            str(blocklist),
+        ],
+    )
+
+    assert main() == 1
+    rows = json.loads(capsys.readouterr().out)
+    assert rows[0]["status"] == BLOCKLIST_ORPHANED_CONFIG_MISSING
+
+
+def test_audit_helper_uses_default_blocklist() -> None:
+    """The script-level helper should audit the shipped blocklist by default."""
+    entries = audit_blocklist()
+
+    assert entries
+    assert all(entry.status == BLOCKLIST_ACTIVE for entry in entries)
+
+
+def test_audit_fails_closed_on_missing_blocklist(tmp_path: Path) -> None:
+    """A missing blocklist path must raise rather than report a vacuously green audit."""
+    with pytest.raises(FileNotFoundError):
+        audit_blocklist_coverage(tmp_path / "absent.yaml", repo_root=tmp_path)

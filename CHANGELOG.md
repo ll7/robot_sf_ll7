@@ -21,6 +21,324 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check on a YAML/JSON spec and exits non-zero (3) when blocked. This is a bounded readiness/contract
   slice only — it does not run a replay campaign, change sensor semantics, or make any benchmark or
   safety claim.
+
+* Added a **fail-closed curation readiness preflight** for SDD-derived benchmark scenarios (#1126).
+  Issue #1126 curates the first real Stanford Drone Dataset (SDD) benchmark scenario set, but stays
+  blocked on licensed external data (#1497/#2413). The new `scripts/tools/sdd_curation_preflight.py`
+  is a thin *curation-step* gate that composes the canonical owners — `resolve_sdd_scenario_prior_mode`
+  from `scripts/tools/manage_external_data.py` (staging gate) and `load_sdd_points` from
+  `scripts/tools/import_sdd_scenarios.py` (the importer's own parser) — to classify whether a
+  curation run may be promoted as benchmark evidence. `benchmark_promotion_allowed` is True **only**
+  when SDD is staged and checksum-validated (`dataset_backed_prior`) *and* the candidate annotation
+  satisfies the deterministic selection rule; a parseable fixture or unvalidated copy stays
+  `proxy_schema_smoke` and is never promoted. `--require-benchmark-ready` exits non-zero so callers
+  fail closed. This is readiness/schema preflight only: it does **not** download, ingest, or curate
+  real SDD data, write any scenario/map artifact, run a benchmark campaign, or assert any benchmark
+  result. Fixture-backed tests cover the blocked, proxy, and dataset-backed-candidate states.
+  Documented in `docs/context/issue_1126_sdd_curation_preflight.md`.
+
+* Added a read-only **ORCA-residual learned-policy lane readiness/preflight surface** (#1358).
+  New module `robot_sf/benchmark/orca_residual_lane_readiness.py` exposes `assess_lane_readiness`,
+  which inventories the lane's local prerequisites (behavior-cloning lineage packet, smoke/pretrain
+  config, the `orca_residual_guarded_ppo_v0` / `orca_residual_guarded_ppo_progress_v1` candidate
+  configs and their `training_required: true` registry entries, the policy-search runner, and the
+  grounding 2026-05-05 evidence report), the canonical command shapes (routes), and the declared
+  external blockers (child #1475 continue/revise/stop classification, `resource:slurm` training, and
+  pending durable dataset/checkpoint artifacts). The diagnostics contract and lineage-packet schema
+  are reused from `robot_sf/training/orca_residual_lineage_packet.py` (no fork). Status fails
+  **closed** to `prerequisites_incomplete` when any local surface is missing or the packet is
+  invalid, otherwise `blocked_on_followup` (scaffolding handoff-complete, lane still gated). A new
+  CLI `scripts/tools/orca_residual_lane_readiness.py` exposes the report (`--json`) with exit `0`
+  handoff-complete / `2` incomplete. This is **inventory/preflight only**: it does **not** submit
+  SLURM, train policies, alter planner behavior, run benchmarks, or assert any benchmark/paper
+  result. #1358 remains a parent/umbrella coordination issue gated by child #1475.
+
+* Added a **fail-closed SocNavBench map-conversion readiness preflight** for the ETH import batch
+  (#1134, parent #334). The batch validator
+  (`scripts/tools/validate_socnav_map_batch.py`) gains a `conversion_readiness()` function and a
+  `--preflight` CLI mode that layer a conversion *decision* on top of the existing raw
+  asset-existence report. Conversion is reported `ready` only when every `required_for_conversion`
+  source asset is staged; while the ETH traversible `data.pkl` (or mesh dir) is missing the verdict
+  is `blocked_pending_source_assets` with `conversion_ready: false`, a `next_action` naming the
+  missing source paths, and a non-zero exit code. When blocked, any pre-existing planned map
+  *artifact* (`map_svg`, `scenario_config`) is surfaced as `placeholder_risk` so a hand-authored or
+  inferred ETH-like SVG cannot be silently mistaken for an official conversion; the provenance note
+  is intentionally excluded because it is expected to exist during the blocked phase. This is
+  **preflight/readiness only**: it does not download assets, stage data, convert maps, run
+  simulations, or assert any benchmark result. Against the current repo state the preflight reports
+  `blocked_pending_source_assets`, matching the issue's blocked status.
+
+* Added a **read-only readiness preflight for the compact CARLA native↔aligned parity bundle**
+  (#1510). New module `robot_sf_carla_bridge/parity_bundle_preflight.py` exposes
+  `check_parity_bundle_readiness` (and the pure `evaluate_payload_metadata`), which checks — per
+  candidate scenario, fail-closed — that each T0 export manifest reads/validates, every referenced
+  export payload exists and is schema-valid, the scenario fixture certificate is present with an
+  eligible status, provenance carries a `robot_sf_commit`, and the recorded `trajectory_fields` are
+  non-empty, plus that the intended output directory is path-safe (never created). It composes the
+  canonical export readers (`resolve_export_manifest_payload_paths`, `read_export_payload`) and the
+  canonical parity metric list (`parity.DEFAULT_PARITY_METRICS`). CLI
+  `robot-sf-carla-parity-bundle-preflight` prints a JSON report and exits nonzero when not ready.
+  This is the **agent-executable local slice only**: it does **not** import CARLA, run a simulator,
+  execute a replay, or assert metric parity — a `ready` verdict means the static prerequisites are
+  staged, not that native↔aligned parity holds (runtime eligibility must be confirmed on a capable
+  CARLA host; see `docs/context/issue_1511_carla_native_aligned_parity_claim_boundary.md`).
+* Added a **coherence regression guard** for the real AMV command-response trace *acquisition*
+  issue (#2000). Issue #2000 is hard-blocked on external data (no realistic real-trace source,
+  <5% feasibility) and its only agent-executable action is to keep the acquisition path documented
+  and the downstream consumer (#2415 staging manifest) and proxy fallback (#1585) coherent. The
+  consumer manifest mechanism is already owned by #2415
+  (`robot_sf/research/amv_command_response_trace_manifest.py`); this change adds the missing test
+  (`tests/research/test_issue_2000_amv_acquisition_coherence.py`) that locks in #2000's acceptance
+  criteria so future edits cannot silently drop the #2000/#1585 cross-reference from the shipped
+  manifest, flip the still-blocked acquisition into a "ready"/"staged" state without a real source,
+  or let the preflight imply a calibrated/hardware realism claim. It also guards that the trace
+  declares the command/response/timing field classes #2000 names. This is a test-only guard: it
+  does **not** collect traces, calibrate any envelope value, copy private data, run a campaign, or
+  edit any paper/dissertation claim.
+
+* Added a **diagnostic readiness/preflight checker for AMV actuation-envelope calibration inputs**
+  (#1559). New module `robot_sf/benchmark/amv_calibration_readiness.py` exposes
+  `assess_amv_calibration_readiness` / `assess_amv_calibration_readiness_from_config`, which inspect a
+  candidate calibrated-actuation profile (e.g. the
+  `configs/benchmarks/issue_1586_calibrated_actuation_profile_skeleton_v0.yaml` skeleton) and report
+  `ready` vs `blocked`, **fail-closed**. It closes a real gap: the existing
+  `synthetic_actuation.validate_actuation_profile_claim_boundary` checks only that provenance fields
+  are *present and non-empty*, so the placeholder skeleton (`source_id: "pending-#1585"`,
+  `measurement_date: "pending"`, …) passes structural validation while remaining unfit for use. The
+  readiness checker additionally flags placeholder/pending provenance, missing fields, tracking-issue
+  `source_uri`s, synthetic-vs-calibrated conflation, and the proxy-vs-hardware source distinction. CLI
+  `scripts/benchmark/check_amv_calibration_readiness.py` prints a JSON report and exits non-zero when
+  blocked. **Claim boundary:** paper-facing AMV actuation use stays **blocked** — `paper_facing_allowed`
+  is True only for a hardware/official-spec source class (a real trace #2000 or official spec), never
+  for the accepted #1585 proxy. This change does **not** calibrate from data, tune envelope values, or
+  run any campaign.
+* Added a **durable learned-risk training trace manifest contract and fail-closed validator**
+  (#2312, parent #1472). New module `robot_sf/training/learned_risk_trace_manifest.py` exposes
+  `validate_trace_manifest`, which checks a `learned-risk-trace-manifest.v1` YAML (durable baseline
+  and per-slice trace artifact URIs, recorded SHA-256 checksums, scenario split ids, required
+  episode fields, a per-label availability table, and `retrieval_status`) and returns a
+  `training_readiness_decision`. The decision is `ready_for_training_handoff` only when every input
+  is locally contract-complete; any placeholder alias (`:pending`), missing checksum, absent label,
+  or missing slice fails **closed** to `artifact_retrieval_blocked` — never an implied training-ready
+  state. A new CLI `scripts/validation/validate_learned_risk_trace_manifest.py` exposes the check
+  with decision-coded exit status (`0` ready, `2` structurally invalid, `3` blocked). The tracked
+  manifest `configs/training/learned_risk_trace_manifest_issue_2312.yaml` records the honest current
+  `blocked` state. This is **manifest/preflight readiness only**: it does **not** materialize traces,
+  copy external data, run training, or submit SLURM (the trace bytes come from the #1472 / #2441
+  runs). Shared checksum logic was promoted to `sha256_file()` in
+  `robot_sf/training/learned_risk_launch_packet.py`. See
+  `docs/context/issue_2312_learned_risk_trace_manifest.md`.
+* Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
+  The local-artifact preflight blocklist
+  (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`
+  triples, but nothing previously detected entries left stale when a baseline config is retired,
+  removed, or migrated to a durable `model_id`. The new `audit_blocklist_coverage` function in
+  `robot_sf/benchmark/local_model_artifacts.py` and the `--audit-blocklist` mode of
+  `scripts/validation/check_local_model_artifacts.py` classify each blocklist entry as `active`,
+  `orphaned_config_missing` (config no longer exists), or `orphaned_reference_gone` (config
+  migrated/rewritten away from the blocked path), and **fail closed** (non-zero exit) when any
+  orphaned entry remains so the allowlist shrinks as configs are recovered or retired. This is
+  inventory/provenance hygiene only: it does **not** publish or recover any checkpoint artifact,
+  rewrite benchmark configs, change registry entries, or assert any benchmark result. On the
+  current tree all seven shipped entries report `active`.
+* Made the **SocNavBench control-pipeline asset readiness checker fail-closed against empty
+  placeholder directories** (#1456). `scripts/tools/prepare_socnav_assets.py` now classifies each
+  required asset as `available` (directory backed by real files), `placeholder` (directory exists
+  but is empty), `missing`, or `excluded` (not required for the selected `render_mode`). Both
+  `placeholder` and `missing` required assets are reported under `missing_required`, so an empty
+  `wayptnav_data/` shell can no longer pass as a restored asset — matching the non-empty directory
+  contract already used by `scripts/tools/manage_external_data.py`. This is asset-readiness
+  reporting only: it does not download external assets, change benchmark results, or count
+  fallback/degraded rows as evidence. Focused fixture tests cover the available, placeholder, and
+  excluded states. Docs updated in `docs/socnav_assets_setup.md`.
+* Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
+  traces routed through the `amv-calibration` external-data path (#2415). New schema
+  `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker
+  `robot_sf/research/amv_command_response_trace_manifest.py` validate, per candidate trace bundle,
+  the provenance/license, the command/response/timing channels the bundle would expose, and the
+  declared calibration targets — fail-closed against the canonical synthetic-actuation envelope
+  vocabulary (`robot_sf.benchmark.synthetic_actuation.actuation_variability_fields()`) so the
+  manifest cannot drift from what calibration can consume. CLI
+  `scripts/validation/check_amv_command_response_trace_manifest_issue_2415.py` prints a JSON report
+  and (with `--probe-live-staging`) reconciles each trace's declared staging status against a live
+  `manage_external_data.check_asset` presence probe. The shipped example manifest
+  (`configs/research/amv_command_response_trace_manifest_issue_2415.yaml`) is
+  `blocked-external-input` today, matching the maintainer decision on #2415 (2026-06-22) that no
+  realistic real-data source is currently available. This is **manifest-contract only**: it does
+  not ingest traces, run a calibration, or make a hardware-calibrated realism claim
+  (`evidence_boundary = manifest_contract_only_no_trace_ingest_no_calibration_run_no_calibrated_claim`).
+* Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
+  surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
+  `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware
+  near-miss requires: a finite positive `dt`, a `(T,2)` `robot_pos`/`robot_vel` with at least two
+  frames, and a `(T,K,2)` `peds_pos`) and `compute_ttc_near_miss_diagnostic`, which counts steps
+  whose minimum projected TTC falls below a threshold and reports the worst closing speed under
+  distinct `near_miss_ttc__*` keys. It reuses the existing TTC convention from
+  `time_to_collision_min` and the canonical pedestrian-velocity primitive. This is **additive and
+  diagnostic-only**: it does **not** modify the canonical distance-based `near_misses` metric, wire
+  anything into SNQI or any scoring path, calibrate the threshold (the default
+  `DIAGNOSTIC_TTC_THRESHOLD_S` is an explicit uncalibrated placeholder, `decision-required` per
+  #3700), or assert any safety result. The diagnostic fails closed — raising `NearMissTtcInputError`
+  rather than returning zeros — when the timing/velocity inputs are missing or invalid. Tests cover
+  fast-closing vs. opening synthetic trajectories, the fail-closed contract for missing timing
+  fields, and that the canonical `near_misses` output is unchanged.
+* Added a read-only diagnostic inventory / fail-closed preflight for **conflicting "canonical" SNQI
+  weight sets** (#3723). New module `robot_sf/benchmark/snqi/weights_inventory.py` discovers every
+  known SNQI weight source — the code default `recompute_snqi_weights("canonical")` plus the shipped
+  JSON files under `model/` and `configs/benchmarks/` — records each set's dominant term and numeric
+  scale (raw vs normalized), and reports provenance conflicts: two sources both claiming the
+  "canonical" designation but yielding different weight *directions* (e.g. the collision-dominant
+  code default vs the jerk-dominant `model/snqi_canonical_weights_v1.json`), raw-vs-normalized scale
+  splits, and duplicate weights shipped under distinct labels. A new `inventory` subcommand on the
+  SNQI CLI (`python -m robot_sf.benchmark.snqi.cli inventory [--json] [--no-fail-on-conflict]`) and
+  the `preflight_snqi_weight_sets(strict=True)` API expose the report and **fail closed** (non-zero
+  exit / `SNQIWeightProvenanceError`) when a blocking conflict is detected. This is provenance
+  disambiguation only: it does **not** choose a canonical set, re-tune weights, change normalization
+  (#3699), or alter SNQI scoring — picking the source of truth remains a maintainer decision. See
+  `docs/snqi-weight-tools/weights_provenance.md`.
+* Added a **diagnostic inventory** for the two incompatible collision/near-miss definitions
+  (#3724). The benchmark metric (`robot_sf/benchmark/metrics.py`) classifies collision/near-miss
+  with a radius-aware *clearance* rule, while the SNQI proxy (`robot_sf/gym_env/snqi_proxy.py`)
+  and policy-search validation (`scripts/validation/policy_search_common.py`) use the *raw center
+  distance* against `COLLISION_DIST=0.25` — so the same geometry is labeled differently (the
+  clearance collision boundary sits at a center distance of ~1.4 m with default radii vs 0.25 m, a
+  ~5× gap). New module `robot_sf/benchmark/collision_definition_inventory.py` classifies center
+  distances under both regimes and reports where they diverge, and CLI
+  `scripts/benchmark/collision_definition_inventory_report.py` prints/saves a preflight report with
+  an optional `--fail-on-divergence` (fail-closed) exit. This is **diagnostic only**: it does not
+  change any threshold, metric, proxy, or validation behavior, and does not choose a canonical
+  definition (that remains `decision-required` on #3724).
+* Added a **read-only heavy forecast-model family inventory / preflight** for the offline
+  prediction study (#2845). New pure module `robot_sf/research/forecast_heavy_model_inventory.py`
+  documents the candidate heavy predictor families (transformer, AgentFormer-like, CVAE,
+  diffusion) with qualitative literature-derived planning estimates of compute cost, inference
+  latency, uncertainty quality, and repository integration burden; probes that the
+  offline-evaluation surfaces an experiment would touch are importable (the forecast
+  metrics/calibration/conformal/dataset/batch/baseline surfaces; fail-closed on the required
+  ones); and reports the minimum-offline-experiment prerequisites (a staged held-out dataset, a
+  heavy-model→`ForecastBatch` adapter, a CPU runtime budget, the study report, plus external
+  dependency/checkpoint decisions) as explicit blockers, rolled up into a `ready`/`blocked`
+  minimum-experiment status. Thin CLI
+  `scripts/research/check_forecast_heavy_model_inventory.py` (`--json`/`--list`) and study report
+  `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
+  runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
+  (`evidence_tier` stays blocked → analysis_only).
+* Added a metadata-only staging/preflight checker for external pedestrian-prior extraction (#2918).
+  New module `robot_sf/benchmark/pedestrian_prior_extraction_manifest.py` exposes
+  `check_pedestrian_prior_extraction_manifest`, which validates a
+  `pedestrian_prior_extraction_manifest.v1` manifest (allowed external source type, the bounded
+  prior parameters the run will emit — walking speed, crossing angle, density, interaction
+  distance, stop/yield timing — provenance fields, and the authored-vs-dataset-backed separation)
+  and reports missing parameters, provenance/separation blockers, and whether a dataset-backed
+  prior claim is yet allowed. The checker **ingests no external data, stores no raw trajectories,
+  and makes no calibrated- or representative-prior claim** (`evidence_boundary:
+  prior_extraction_plan_only_no_calibrated_prior_claim`); a dataset-backed claim is gated behind
+  accepted provenance and a source family with a registered external-data staging contract, while
+  `blocked-external-input` (the default, matching issue #2918's external-data block) and
+  `proxy-only` manifests cannot assert a prior, and a `proxy-only` manifest declaring a
+  dataset-backed source is rejected as boundary conflation. The allowed source-type → external-data
+  asset-id map is cross-checked against the canonical `scripts/tools/manage_external_data.py`
+  registry. CLI: `scripts/tools/check_pedestrian_prior_extraction_manifest.py`; example manifest:
+  `configs/research/pedestrian_prior_extraction_manifest_issue_2918_example.yaml`; context note:
+  `docs/context/issue_2918_pedestrian_prior_extraction_preflight.md`.
+* Added a metadata-only staging-contract checker for dataset-backed scenario priors (#3161). New
+  module `robot_sf/research/scenario_prior_staging_contract.py` exposes
+  `check_scenario_prior_staging_contract`, which validates a `scenario_prior_staging_contract.v1`
+  contract (per-dataset provenance/license, the canonical scenario-prior distribution fields a
+  dataset-backed prior would expose, and the explicit external-data blocker) for the Stanford Drone
+  Dataset, SocNavBench ETH, and AMV candidates. Declared distribution fields are checked against the
+  live `PARAMETER_GROUPS` vocabulary of the #2919 comparison harness so the contract cannot drift
+  from what the comparison can compute, and a dataset declared `staged` is reconciled against a live
+  `manage_external_data.check_asset` presence probe (fail-closed). The checker **ingests no dataset,
+  stores no raw trajectories, runs no comparison, and makes no real-world realism claim**; with no
+  dataset staged it reports `blocked-external-input`. Example contract
+  `configs/research/scenario_prior_staging_contract_issue_3161.yaml`, CLI
+  `scripts/analysis/check_scenario_prior_staging_contract_issue_3161.py`, context note
+  `docs/context/issue_3161_scenario_prior_staging_contract.md`.
+* Added a metadata-only measurement/intake-manifest checker for autonomous micromobility vehicle
+  (AMV) actuation latency and rider-coupling response (#3283). New module
+  `robot_sf/benchmark/actuation_latency_measurement_manifest.py` exposes
+  `check_amv_actuation_latency_measurement_manifest`, which validates an
+  `amv_actuation_latency_measurement_manifest.v1` manifest (declared sensor channels, per-channel
+  sampling rate, time synchronization, provenance, and the synthetic-vs-measured separation)
+  against the canonical command-response latency and rider-coupling quantity contract and reports
+  missing channels, synchronization/provenance/separation blockers, and whether a measured-value
+  claim is yet allowed. The checker **collects no data, fabricates nothing, and makes no
+  measured-value or calibrated-actuation claim** (`evidence_boundary:
+  measurement_intake_plan_only_no_measured_value_claim`); a `measured` claim is gated behind
+  accepted provenance, while `blocked-external-input` (the default, matching issue #3283's
+  external-data block) and `synthetic-only` manifests cannot assert measured values, and a
+  `synthetic-only` manifest declaring a measured source is rejected as boundary conflation. It also
+  proposes the latency and rider-coupling fields a future measured AMV actuation profile would
+  expose, extending the synthetic actuation-envelope schema in
+  `robot_sf/benchmark/synthetic_actuation.py` without promoting placeholders into calibration
+  evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
+  manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
+  protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
+* Added a **diagnostic-only** inventory of SNQI per-term normalization status (#3699). New module
+  `robot_sf/benchmark/snqi/normalization_inventory.py` and CLI
+  `scripts/benchmark/snqi_normalization_inventory_report.py` enumerate each SNQI term's scaling
+  regime and surface that `compute_snqi` mixes *raw, unbounded* penalty terms (`time`, `comfort`)
+  with *baseline-normalized* `[0, 1]` terms (collisions, near-misses, force-exceed, jerk), which
+  makes the weight coefficients non-comparable as relative priorities. The report flags the
+  mixed-scale condition and any baseline-normalized term lacking median/p95 coverage, and can fail
+  closed (`--fail-on-mixed-scale`, `--fail-on-missing-baseline`). It does **not** change the SNQI
+  formula, weights, `normalize_metric`, or any emitted score, and does **not** choose between the
+  normalize vs. clip-and-document remedies (that remains `decision-required` on #3699). An anti-drift
+  test reconstructs the SNQI score from the inventory's term table and asserts it equals
+  `compute_snqi` exactly.
+* Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
+  campaign can verify its input prerequisites before execution (#3078). New manifest
+  `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario
+  inputs, seed-plan metadata, and frozen-protocol entry points; new checker
+  `scripts/validation/check_package_a_readiness.py` verifies every declared input exists, that the
+  seed-plan metadata is explicit, and that the output location is disposable under `output/`,
+  exiting non-zero with `status: not_ready` when any prerequisite is missing. This is a
+  provenance/readiness gate only — it does not execute the benchmark, submit Slurm, or interpret
+  ranks.
+* Added a **static launch preflight** for crossing-conflict predictive retraining configs (#3214).
+  New module `robot_sf/training/predictive_retrain_preflight.py` and CLI
+  `scripts/validation/validate_predictive_retrain_preflight.py` validate a predictive training
+  pipeline config (the kind consumed by `scripts/training/run_predictive_training_pipeline.py`)
+  *before* any SLURM/GPU launch: config structure, data prerequisites (scenario matrix, hard-seed
+  manifest, planner grid, and weighting spec) exist, base/hard-case feature-width compatibility (the
+  checkpoint-lineage contract), the navigation gate kept separate from the trajectory gate
+  (`max_val_ade`/`max_val_fde`), a present evaluation block, and a declared output root. The check is
+  cheap and CPU-only — it fills the gap left by the pipeline's own guards, which only run mid-pipeline
+  after expensive dataset collection. It does **not** collect data, train, submit Slurm, change
+  augmentation semantics, or make any model-improvement claim; the actual weighted retraining run is
+  owned by #3254. Text and `--json` reports; exit code 0 when valid, 2 when invalid.
+* Added a metadata-only validation-contract checker for candidate real-world micromobility traces
+  (#3278). New module `robot_sf/analysis_workbench/real_trace_validation_contract.py` exposes
+  `check_real_trace_validation_contract`, which maps a candidate dataset descriptor
+  (`real_trace_validation_contract.v1` schema) onto the existing trace-failure predicate input
+  contract and reports, per predicate, whether the declared channels make it *validatable* or
+  *blocked*, which required channels are missing, whether a directly observed ground-truth label
+  exists, and the resulting limitation (e.g. `late_evasive_reaction` / `oscillatory_local_control`
+  are computable from kinematics but usually have no directly observed label to cross-check). It
+  also surfaces metadata, provenance/access, and missing-data blockers. The checker **does not
+  ingest, copy, or read any external/private data and makes no real-world validation claim**
+  (`evidence_boundary: contract_check_only_no_real_world_validation`); the committed example
+  descriptor (`configs/benchmarks/issue_3278_real_trace_validation_contract_example.yaml`) is a
+  placeholder with `access_status: blocked` because external data access is not yet accepted. CLI:
+  `scripts/tools/check_real_trace_validation_contract.py`. Decision note:
+  `docs/context/issue_3278_real_trace_validation_contract.md`. Tests cover complete, incompatible,
+  and missing/placeholder-metadata descriptors.
+* Added a **read-only pedestrian-model assumption inventory / preflight** for the proposed
+  headed social-force (HSFM) + time-to-collision (TTC) predictive-force experiments (#3481).
+  New pure module `robot_sf/research/ped_model_assumption_inventory.py` documents the current
+  force-model assumptions the upgrade would change (no field-of-view attenuation on ped-ped
+  repulsion, heading coupled to instantaneous velocity, Euclidean-distance repulsion with no
+  TTC term), probes that the entry-point surfaces an HSFM/TTC experiment would touch are
+  importable (the vendored Social Force core plus the `robot_sf/ped_npc` behavior/population
+  surfaces; fail-closed if any required surface is missing), and reports the still-missing
+  prerequisites (HSFM heading state, FoV weight, TTC term, narrow-passage and bottleneck
+  fixtures, versioned parameters, external calibration data) as explicit blockers. A documented
+  CLI (`scripts/research/check_ped_model_assumption_inventory.py`, `--json`/`--list`) renders the
+  inventory. This is the **assumption-and-artifact inventory** slice only: it implements **no**
+  force law, changes **no** scenario behavior, runs **no** benchmark, and makes **no** realism
+  claim (the force-model upgrade itself stays `evidence_tier: idea`).
+
 * Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
   schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
   New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,
@@ -33,6 +351,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **no** SocNavBench/HuNavSim asset and makes **no** cross-benchmark validity or score-parity claim;
   producing real external assets remains blocked on #1456/#1498/#2414/#1134. See
   `docs/context/issue_3285_scenario_interop_converter.md`.
+* Added a **readiness/preflight helper for closed-loop prediction Package C** (#3080).
+  `scripts/tools/prediction_package_c_readiness.py` inventories the local prerequisites for the four
+  Package C forecast arms — `no_forecast`, `cv`, `semantic_cv`, and `interaction_aware` — across the
+  three coordination stages (open-loop forecast analysis #2915, observation-perturbation replay #2777,
+  closed-loop forecast-risk coupling #2916). For each arm it reports the required configs and code
+  entry points, the declared same-seed plan (`[111, 2868]` read from the #2915/#2916 configs), the
+  declared output roots, and the named blockers, then classifies the arm as fail-closed
+  `ready` / `blocked` / `missing`. Per the issue-audit on 2026-06-22, Package C is gated solely on
+  #2916 producing a durable campaign result store, so the default status is `blocked` until a
+  `--coupling-result-store` with a canonical `summary.json` is supplied; `blocked`/`missing` are never
+  treated as success evidence. The helper inspects the repository only — it does **not** execute any
+  benchmark campaign, alter predictor semantics, or claim forecast performance. Text and `--markdown`
+  reports plus optional `--output-json`; exit code 0 only when every arm is `ready`, 1 otherwise. New
+  fixture tests `tests/tools/test_prediction_package_c_readiness.py` cover the ready/blocked/missing
+  states (synthetic trees) and assert the real repo is wired (fails closed to `blocked`, not
+  `missing`).
 * Added a **presence-only tournament-readiness helper** for the predictive hard-case breakthrough
   portfolio (#3215). `scripts/tools/predictive_tournament_readiness.py` inventories the local
   prerequisites (expected configs, harness scripts, and output path) for the three concurrent
@@ -44,6 +378,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "prerequisites ready" result is not mistaken for "authorized to launch". It does not submit Slurm
   jobs, run the tournament, rank arms, or edit any claim. Text and `--json` reports; exit code 0 when
   local prerequisites are ready, 1 when blocked.
+* Tightened the **oracle-imitation dataset launch-packet preflight** to require a `collection_roots`
+  block before a collection job runs (#1470). The validator
+  (`robot_sf/training/oracle_imitation_launch_packet.py`,
+  `scripts/validation/validate_oracle_imitation_launch_packet.py`) now fails closed unless the packet
+  declares durable destinations for collection logs (`log_root`), raw trace output
+  (`dataset_output_root`), and the dataset manifest (`manifest_destination`). Each root must be a
+  durable artifact URI (a `:pending` alias is allowed because collection has not run yet) and may
+  never point at the gitignored worktree-local `output/` directory, which is not a safe shared
+  destination on a multi-agent host. The checked-in `#1397` packet now carries these `:pending`
+  destinations. This is a preflight-contract change only: it submits no jobs and collects no data.
 * Added a read-only **re-export readiness preflight** for stale dissertation table bundles
   (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
   `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability
@@ -67,6 +411,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uniform. New test `tests/test_classic_archetype_density_index.py` re-derives the same facts from the
   `classic_*.yaml` configs and `classic_interactions.yaml` and fails closed on drift or missing
   config/tier coverage. The scenario zoo index links the new file for discoverability.
+* Added a **presence-only publication-prerequisites preflight** for the v0.1 validation/falsification
+  benchmark package (epic #2910). A declarative checklist
+  (`configs/benchmarks/releases/benchmark_v0_1_publication_prerequisites.yaml`) enumerates the
+  canonical prerequisite owners a v0.1 package must be built on — ODD/scenario contracts, scenario
+  certification, benchmark/row claim metadata, ODD/hazard coverage matrix, the release protocol and
+  pinned v0.1 release manifest, the seed schedule, the release checklist doc, and citation metadata.
+  The companion checker `scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`
+  verifies every referenced path exists and fails closed (exit `1`) when a required prerequisite is
+  missing. It is deliberately presence-only: it does **not** release, tag, upload artifacts, run a
+  benchmark/falsification campaign, judge scenario certification, or declare the benchmark "ready" —
+  every report carries an explicit `claim_boundary` to that effect. Run with
+  `uv run python scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

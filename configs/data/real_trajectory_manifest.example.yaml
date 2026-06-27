@@ -1,0 +1,77 @@
+# Real-trajectory ingestion manifest -- EXAMPLE / TEMPLATE (GitHub issue #3065)
+#
+# This is a synthetic, copy-me template for the bring-your-own-dataset (BYO) real-trajectory
+# ingestion contract. It does NOT point at any real dataset and stages no data. Copy it, fill in the
+# fields for trajectory data you have the rights to use, and validate with:
+#
+#   uv run python scripts/tools/check_real_trajectory_manifest.py <path/to/your_manifest.yaml>
+#
+# The repository never commits or hosts raw external data: only this manifest (metadata, license
+# acknowledgment, retrieval instructions, conversion shape, checksums, split naming, and a durable
+# pointer) is tracked. Raw files live in a git-ignored staging directory. See
+# docs/context/issue_3065_real_trajectory_ingestion_contract.md.
+
+schema: robot_sf_real_trajectory_ingestion_manifest.v1
+dataset_id: example_byo_trajectories
+title: Example bring-your-own pedestrian trajectory recordings
+
+source:
+  url: https://example.org/your-dataset
+  version: v0-example
+  citation: "Supplier et al. Replace with the real citation/attribution for your dataset."
+  access_date: "2026-06-27"
+
+license:
+  name: replace-with-real-license
+  url: null
+  posture: bring-your-own
+  # Supplier asserts they hold the rights to use this data under the named license.
+  supplier_acknowledgment: true
+  # The repository never redistributes raw external data.
+  redistribution: false
+
+retrieval:
+  instructions: >-
+    Obtain the dataset from its official source under its terms, then place the extracted files
+    under the staging_dir below. This template intentionally encodes no auto-download URL.
+  download_url: null
+  fail_closed: true
+
+checksums:
+  algorithm: SHA-256
+  tree_sha256: null            # filled on real staging (aggregate over staged files)
+  expected_tree_sha256: null   # pin after first trusted staging to detect drift
+
+conversion:
+  frame_rate_hz: 2.5
+  length_unit: meters
+  coordinate_frame: world_meters_xy
+  timestamp_field: frame
+  agent_id_field: ped_id
+  position_fields: [x, y]
+  map_context_field: scene
+  missing_data_behavior: drop
+
+splits:
+  naming: train_val_test
+  members: [train, val, test]
+
+staging:
+  # Git-ignored: resolves under output/ (or $ROBOT_SF_EXTERNAL_DATA_ROOT) so raw data never enters git.
+  staging_dir: output/external_data/example_byo_trajectories
+  local_only_raw: true
+  # Durable boundary for project-generated derived artifacts. Use a wandb:// artifact URI once
+  # derived artifacts exist, or 'local-only-byo' when only this manifest + checksum are tracked.
+  durable_storage_target: local-only-byo
+
+privacy:
+  pii_reviewed: true
+  notes: >-
+    Replace with the privacy posture for your data (anonymization applied, consent basis, any
+    restrictions). Trajectory data can be re-identifying; review before staging.
+
+# Local copy not staged yet, so this stays diagnostic-only and below benchmark-claim grade.
+availability: missing
+benchmark_eligibility: diagnostic_only
+
+related_issues: [3065, 3057]

@@ -39,6 +39,32 @@ class LocalModelReference:
     availability: str = ""
 
 
+# Blocklist coverage-audit statuses (see ``audit_blocklist_coverage``).
+BLOCKLIST_ACTIVE = "active"
+BLOCKLIST_ORPHANED_CONFIG_MISSING = "orphaned_config_missing"
+BLOCKLIST_ORPHANED_REFERENCE_GONE = "orphaned_reference_gone"
+
+
+@dataclass(frozen=True)
+class BlocklistAuditEntry:
+    """Coverage status for one ``blocked_references`` entry.
+
+    The local-artifact blocklist names exact ``(path, field, value)`` triples so a stale
+    allowlist row cannot silently hide a new local path. When a baseline config is retired,
+    removed, or migrated to a durable ``model_id``, the matching blocklist entry stops
+    covering anything real and becomes an orphan that should be pruned. This audit makes
+    those retired/migrated rows explicit so the preflight allowlist can shrink as configs are
+    resolved.
+    """
+
+    path: str
+    field: str
+    value: str
+    reason: str
+    status: str
+    detail: str
+
+
 def is_local_output_model_path(value: Any) -> bool:
     """Return whether a value points at a local output model artifact.
 
@@ -166,6 +192,72 @@ def load_blocklist(path: Path, *, strict: bool = False) -> BlocklistMetadata:
         if next_action:
             next_actions[key] = next_action
     return BlocklistMetadata(blocklist, decisions, next_actions, follow_up_issue)
+
+
+def audit_blocklist_coverage(
+    blocklist_path: Path,
+    *,
+    repo_root: Path,
+) -> list[BlocklistAuditEntry]:
+    """Classify each blocklist entry as active or orphaned against the current configs.
+
+    Args:
+        blocklist_path: YAML blocklist with exact ``(path, field, value)`` triples.
+        repo_root: Repository root used to resolve repo-relative config paths.
+
+    Returns:
+        One :class:`BlocklistAuditEntry` per ``blocked_references`` triple. ``active`` entries
+        still cover a present local reference; ``orphaned_config_missing`` entries name a config
+        that no longer exists (retired/removed); ``orphaned_reference_gone`` entries name a config
+        that exists but no longer carries the blocked local reference (e.g. migrated to a durable
+        ``model_id`` or rewritten). Orphaned rows are safe to prune from the allowlist.
+    """
+    blocklist = load_blocklist(blocklist_path, strict=True)
+    entries: list[BlocklistAuditEntry] = []
+    for (config_path, field, value), reason in blocklist.reasons.items():
+        resolved = Path(config_path)
+        if not resolved.is_absolute():
+            resolved = repo_root / resolved
+        if not resolved.exists():
+            entries.append(
+                BlocklistAuditEntry(
+                    config_path,
+                    field,
+                    value,
+                    reason,
+                    BLOCKLIST_ORPHANED_CONFIG_MISSING,
+                    "Config file no longer exists; remove this blocklist entry.",
+                )
+            )
+            continue
+        payload = yaml.safe_load(resolved.read_text(encoding="utf-8"))
+        present = set(iter_local_model_references(payload))
+        if (field, value) in present:
+            entries.append(
+                BlocklistAuditEntry(
+                    config_path,
+                    field,
+                    value,
+                    reason,
+                    BLOCKLIST_ACTIVE,
+                    "Config still carries this local artifact reference.",
+                )
+            )
+        else:
+            entries.append(
+                BlocklistAuditEntry(
+                    config_path,
+                    field,
+                    value,
+                    reason,
+                    BLOCKLIST_ORPHANED_REFERENCE_GONE,
+                    (
+                        "Config no longer references this local artifact "
+                        "(migrated or rewritten); remove this blocklist entry."
+                    ),
+                )
+            )
+    return entries
 
 
 def _parse_promoted_surface_entry(

@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
+  The local-artifact preflight blocklist
+  (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`
+  triples, but nothing previously detected entries left stale when a baseline config is retired,
+  removed, or migrated to a durable `model_id`. The new `audit_blocklist_coverage` function in
+  `robot_sf/benchmark/local_model_artifacts.py` and the `--audit-blocklist` mode of
+  `scripts/validation/check_local_model_artifacts.py` classify each blocklist entry as `active`,
+  `orphaned_config_missing` (config no longer exists), or `orphaned_reference_gone` (config
+  migrated/rewritten away from the blocked path), and **fail closed** (non-zero exit) when any
+  orphaned entry remains so the allowlist shrinks as configs are recovered or retired. This is
+  inventory/provenance hygiene only: it does **not** publish or recover any checkpoint artifact,
+  rewrite benchmark configs, change registry entries, or assert any benchmark result. On the
+  current tree all seven shipped entries report `active`.
 * Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
   surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
   `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware

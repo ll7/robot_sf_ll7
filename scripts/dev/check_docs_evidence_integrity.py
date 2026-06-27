@@ -80,6 +80,12 @@ _CITED_REPO_PATH = re.compile(
     r"(?<![\w./-])(?P<path>(?:scripts|configs)/[A-Za-z0-9_./:-]+\.(?:py|sh|ya?ml))"
 )
 _RELATIVE_PREFIXES = ("./", "../")
+# A self-declared artifact-presence registry (e.g. the research-package registry,
+# issue #3057) enumerates artifact paths that a companion preflight probes for
+# presence and surfaces as explicit gaps when missing. Such entries are meant to
+# name not-yet-existing artifacts, so the must-exist cited-path check does not
+# apply; all other integrity checks still run.
+_ARTIFACT_REGISTRY_SCHEMA_PREFIXES = ("research-package-registry",)
 
 
 def _repo_root() -> Path:
@@ -475,9 +481,30 @@ def _extract_cited_paths(text: str) -> set[str]:
     return {path for path in paths if path and not _looks_dynamic(path)}
 
 
+def _is_artifact_registry(path: Path) -> bool:
+    """Return whether a YAML file declares itself an artifact-presence registry.
+
+    Such registries enumerate artifact paths that a companion preflight probes for
+    presence and reports as explicit gaps when missing, so their entries may name
+    not-yet-existing artifacts and are exempt from the must-exist cited-path check.
+    """
+    if path.suffix.lower() not in {".yaml", ".yml"}:
+        return False
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    schema_version = str(payload.get("schema_version", "")).strip()
+    return schema_version.startswith(_ARTIFACT_REGISTRY_SCHEMA_PREFIXES)
+
+
 def _cited_path_problems(path: Path, *, root: Path) -> list[str]:
     """Return missing cited command/config path diagnostics."""
     if path.suffix.lower() not in {".md", ".json", ".yaml", ".yml"}:
+        return []
+    if _is_artifact_registry(path):
         return []
     try:
         text = path.read_text(encoding="utf-8")

@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only research-package registry and preflight for the continuous
+  social-navigation research-engine epic (#3057). New module
+  `robot_sf/research/package_registry.py` exposes `load_registry` and
+  `evaluate_registry_preflight`, which read the declarative registry
+  `configs/research/research_package_registry_issue_3057.yaml` and report, for each
+  research-engine package (scenario suite v0, planner-readiness matrix, campaign-manifest
+  flow, canonical result store, and sprint packages A/B/C plus the July-2026 release),
+  which required tracked artifacts are present vs. missing and whether declared
+  prerequisite packages are satisfied. A package is reported `ready` only when every
+  required artifact exists and every prerequisite is `ready`; any missing artifact or
+  unsatisfied prerequisite **fails closed to `blocked`** with explicit gaps. The helper
+  **composes existing config/contract/issue metadata only — it makes no benchmark, metric,
+  or research claim, schedules nothing, and runs no campaign** (`claim_boundary:
+  registry/preflight metadata only`). CLI:
+  `scripts/tools/research_package_preflight.py` (Markdown or JSON, with an optional
+  `--fail-on-blocked` gate).
 * Added a **design-stage evidence-stream integration contract inventory** for issue #3293 — the
   local, no-data slice of "design evidence integration between simulation and real-world AMV data".
   `robot_sf/research/evidence_integration_inventory.py` enumerates the evidence streams Robot SF

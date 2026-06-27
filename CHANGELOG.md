@@ -26,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `robot_sf/training/learned_risk_launch_packet.py`. See
   `docs/context/issue_2312_learned_risk_trace_manifest.md`.
 
+* Made the **SocNavBench control-pipeline asset readiness checker fail-closed against empty
+  placeholder directories** (#1456). `scripts/tools/prepare_socnav_assets.py` now classifies each
+  required asset as `available` (directory backed by real files), `placeholder` (directory exists
+  but is empty), `missing`, or `excluded` (not required for the selected `render_mode`). Both
+  `placeholder` and `missing` required assets are reported under `missing_required`, so an empty
+  `wayptnav_data/` shell can no longer pass as a restored asset — matching the non-empty directory
+  contract already used by `scripts/tools/manage_external_data.py`. This is asset-readiness
+  reporting only: it does not download external assets, change benchmark results, or count
+  fallback/degraded rows as evidence. Focused fixture tests cover the available, placeholder, and
+  excluded states. Docs updated in `docs/socnav_assets_setup.md`.
 * Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
   traces routed through the `amv-calibration` external-data path (#2415). New schema
   `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker

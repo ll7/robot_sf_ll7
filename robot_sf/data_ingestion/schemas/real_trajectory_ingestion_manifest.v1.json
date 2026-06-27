@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "robot_sf/data_ingestion/schemas/real_trajectory_ingestion_manifest.v1.json",
+  "title": "Real-trajectory ingestion and artifact-staging manifest (v1)",
+  "description": "Dataset-agnostic, bring-your-own-dataset contract for staging real pedestrian/agent trajectory data. The repository never commits or hosts raw external data; this manifest records only metadata, license acknowledgment, retrieval instructions, the canonical conversion shape, checksums, split naming, and the durable pointer format. Mirrors the External artifact pointer category in docs/context/artifact_evidence_vocabulary.md. Schema rules here are structural; semantic gates (license acknowledgment, gitignored staging, fail-closed eligibility) are enforced by robot_sf.data_ingestion.real_trajectory_contract.run_preflight.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "dataset_id",
+    "title",
+    "source",
+    "license",
+    "retrieval",
+    "checksums",
+    "conversion",
+    "splits",
+    "staging",
+    "privacy",
+    "availability",
+    "benchmark_eligibility"
+  ],
+  "properties": {
+    "schema": {
+      "const": "robot_sf_real_trajectory_ingestion_manifest.v1",
+      "description": "Schema identifier and version tag."
+    },
+    "dataset_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "description": "Stable, filesystem-safe dataset identifier, e.g. 'eth_hotel' or 'my_lab_recordings'."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable dataset title."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "version", "citation", "access_date"],
+      "properties": {
+        "url": {
+          "type": ["string", "null"],
+          "description": "Upstream project/source URL, or null for purely local recordings."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dataset version or release tag chosen by the supplier."
+        },
+        "citation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Citation or attribution string for the source dataset."
+        },
+        "access_date": {
+          "type": "string",
+          "format": "date",
+          "description": "ISO-8601 date (YYYY-MM-DD) the supplier obtained the data."
+        }
+      }
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "posture", "supplier_acknowledgment", "redistribution"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "License name as understood by the supplier, e.g. 'CC-BY-NC-SA-3.0' or 'proprietary-internal'."
+        },
+        "url": {
+          "type": ["string", "null"],
+          "description": "License text URL when available."
+        },
+        "posture": {
+          "enum": ["bring-your-own", "project-hosted"],
+          "description": "'bring-your-own': supplier holds the rights and stages locally (default). 'project-hosted' requires an explicit maintainer decision."
+        },
+        "supplier_acknowledgment": {
+          "type": "boolean",
+          "description": "Supplier asserts they hold the rights to use this data under the named license. Must be true for the bring-your-own posture (enforced by preflight)."
+        },
+        "redistribution": {
+          "const": false,
+          "description": "The repository never redistributes raw external data. Always false."
+        }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instructions", "fail_closed"],
+      "properties": {
+        "instructions": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reproducible steps another machine follows to obtain an equivalent local copy."
+        },
+        "download_url": {
+          "type": ["string", "null"],
+          "description": "Optional direct download URL. null when access is license-gated or manual."
+        },
+        "fail_closed": {
+          "type": "boolean",
+          "description": "When true, dependent pipelines must fail with an actionable error if the local copy is missing rather than silently substituting a proxy."
+        }
+      }
+    },
+    "checksums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "tree_sha256", "expected_tree_sha256"],
+      "properties": {
+        "algorithm": {
+          "const": "SHA-256",
+          "description": "Checksum algorithm for the aggregate staged-file tree hash."
+        },
+        "tree_sha256": {
+          "type": ["string", "null"],
+          "description": "Aggregate hash over staged files, filled on real staging. 'pending'/null before staging.",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "expected_tree_sha256": {
+          "type": ["string", "null"],
+          "description": "Pinned expected hash to detect drift after first trusted staging.",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "conversion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frame_rate_hz",
+        "length_unit",
+        "coordinate_frame",
+        "timestamp_field",
+        "agent_id_field",
+        "position_fields",
+        "map_context_field",
+        "missing_data_behavior"
+      ],
+      "properties": {
+        "frame_rate_hz": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Sampling rate of the canonical converted frames in Hz."
+        },
+        "length_unit": {
+          "enum": ["meters", "pixels", "normalized"],
+          "description": "Spatial unit of position fields in the source data."
+        },
+        "coordinate_frame": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Coordinate frame description, e.g. 'world_meters_xy' or 'image_pixels_uv'."
+        },
+        "timestamp_field": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Source column/key holding the per-row timestamp or frame index."
+        },
+        "agent_id_field": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Source column/key holding the per-agent identifier."
+        },
+        "position_fields": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"type": "string", "minLength": 1},
+          "description": "Ordered source columns/keys for agent position, e.g. ['x', 'y']."
+        },
+        "map_context_field": {
+          "type": ["string", "null"],
+          "description": "Source field or asset id identifying scene/map context, or null when not available."
+        },
+        "missing_data_behavior": {
+          "enum": ["drop", "interpolate", "fail_closed"],
+          "description": "How to treat gaps/missing rows during conversion."
+        }
+      }
+    },
+    "splits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["naming", "members"],
+      "properties": {
+        "naming": {
+          "enum": ["train_val_test", "scene", "custom"],
+          "description": "Split-naming convention used by the supplier."
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "description": "Named splits, e.g. ['train', 'val', 'test'] or scene names."
+        }
+      }
+    },
+    "staging": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["staging_dir", "local_only_raw", "durable_storage_target"],
+      "properties": {
+        "staging_dir": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Git-ignored local staging directory for raw/converted files. Must resolve under output/ or the ROBOT_SF_EXTERNAL_DATA_ROOT external root (enforced by preflight)."
+        },
+        "local_only_raw": {
+          "const": true,
+          "description": "Raw external files stay local and are never committed. Always true."
+        },
+        "durable_storage_target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Durable pointer for project-generated derived artifacts, e.g. a 'wandb://...' artifact URI or 'local-only-byo' when only the manifest/checksum is tracked."
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pii_reviewed", "notes"],
+      "properties": {
+        "pii_reviewed": {
+          "type": "boolean",
+          "description": "Supplier confirms a privacy/PII review was performed for the data."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Privacy/licensing notes and any anonymization applied."
+        }
+      }
+    },
+    "availability": {
+      "enum": ["missing", "staged", "validated"],
+      "description": "Local availability state. 'missing' until a copy is staged; 'validated' only after checksum verification."
+    },
+    "benchmark_eligibility": {
+      "enum": ["not_eligible", "diagnostic_only", "research_only", "benchmark_candidate"],
+      "description": "Downstream evidence tier. Must stay below 'benchmark_candidate' until availability is 'validated' (enforced by preflight)."
+    },
+    "related_issues": {
+      "type": "array",
+      "items": {"type": "integer"},
+      "description": "Related GitHub issue numbers."
+    }
+  }
+}

@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the provenance cannot be reconstructed. This prevents a stale bundle from being silently cited as
   current evidence without first checking that the bounded campaign can be reproduced here. The tool
   never runs the campaign, regenerates a table, or edits dissertation claims.
+* Added a machine-readable classic archetype density / tier index
+  (`configs/scenarios/archetypes/classic_density_tier_index.yaml`) that documents the *current*
+  per-archetype density-tier coverage, density bands, and pedestrian spawn semantics of the classic
+  interaction archetypes (#3725). It clarifies the benchmark scenario denominator (the in-matrix
+  graded total is **23 rows across 11 configs**, not "12 archetypes × 3 densities = 36") and the
+  overloaded meaning of `simulation_config.ped_density`: for `spawn_mode: markers` configs
+  (`classic_bottleneck`, `classic_realworld_bottleneck`) `ped_density: 0.0` is a placement-mode
+  placeholder (pedestrians come from fixed markers, with `density_advisory:
+  zero_baseline_route_spawn`), **not** an empty scene. The index is a *derived, documentation-only*
+  artifact — it does not change scenario generation behavior, rename any field, or make tier coverage
+  uniform. New test `tests/test_classic_archetype_density_index.py` re-derives the same facts from the
+  `classic_*.yaml` configs and `classic_interactions.yaml` and fails closed on drift or missing
+  config/tier coverage. The scenario zoo index links the new file for discoverability.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

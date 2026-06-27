@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **diagnostic inventory** for the two incompatible collision/near-miss definitions
+  (#3724). The benchmark metric (`robot_sf/benchmark/metrics.py`) classifies collision/near-miss
+  with a radius-aware *clearance* rule, while the SNQI proxy (`robot_sf/gym_env/snqi_proxy.py`)
+  and policy-search validation (`scripts/validation/policy_search_common.py`) use the *raw center
+  distance* against `COLLISION_DIST=0.25` — so the same geometry is labeled differently (the
+  clearance collision boundary sits at a center distance of ~1.4 m with default radii vs 0.25 m, a
+  ~5× gap). New module `robot_sf/benchmark/collision_definition_inventory.py` classifies center
+  distances under both regimes and reports where they diverge, and CLI
+  `scripts/benchmark/collision_definition_inventory_report.py` prints/saves a preflight report with
+  an optional `--fail-on-divergence` (fail-closed) exit. This is **diagnostic only**: it does not
+  change any threshold, metric, proxy, or validation behavior, and does not choose a canonical
+  definition (that remains `decision-required` on #3724).
 * Added a **static launch preflight** for crossing-conflict predictive retraining configs (#3214).
   New module `robot_sf/training/predictive_retrain_preflight.py` and CLI
   `scripts/validation/validate_predictive_retrain_preflight.py` validate a predictive training

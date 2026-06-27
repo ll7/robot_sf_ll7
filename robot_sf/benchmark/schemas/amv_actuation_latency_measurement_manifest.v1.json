@@ -46,7 +46,7 @@
         },
         "max_skew_ms": {
           "type": "number",
-          "minimum": 0
+          "exclusiveMinimum": 0
         }
       }
     },

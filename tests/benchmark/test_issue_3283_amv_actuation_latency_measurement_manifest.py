@@ -175,6 +175,36 @@ def test_value_status_must_match_measurement_status() -> None:
     assert any("requires 'pending'" in b for b in report.proposed_field_blockers)
 
 
+def test_duplicate_proposed_field_name_is_blocker() -> None:
+    """A duplicate proposed field name (case-insensitive) fails closed as a blocker."""
+    manifest = _measured_manifest()
+    duplicate = dict(manifest["proposed_profile_fields"][0])
+    duplicate["name"] = duplicate["name"].upper()  # case variant of an existing field
+    manifest["proposed_profile_fields"] = manifest["proposed_profile_fields"] + [duplicate]
+
+    report = check_amv_actuation_latency_measurement_manifest(manifest)
+
+    assert report.contract_status == CONTRACT_STATUS_BLOCKED
+    assert any("duplicate name" in b for b in report.proposed_field_blockers)
+
+
+def test_proposed_field_parameter_class_must_match_canonical() -> None:
+    """A proposed field whose parameter_class disagrees with the canonical map is blocked."""
+    manifest = _measured_manifest()
+    # Mislabel a latency field as rider_coupling.
+    fields = [dict(field) for field in manifest["proposed_profile_fields"]]
+    latency_name = next(iter(PROPOSED_LATENCY_PROFILE_FIELDS))
+    for field in fields:
+        if field["name"] == latency_name:
+            field["parameter_class"] = "rider_coupling"
+    manifest["proposed_profile_fields"] = fields
+
+    report = check_amv_actuation_latency_measurement_manifest(manifest)
+
+    assert report.contract_status == CONTRACT_STATUS_BLOCKED
+    assert any("parameter_class" in b for b in report.proposed_field_blockers)
+
+
 def test_missing_latency_channel_is_blocker() -> None:
     """Dropping a required latency channel surfaces a missing-latency blocker."""
     manifest = _measured_manifest()

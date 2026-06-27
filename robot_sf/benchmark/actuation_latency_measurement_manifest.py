@@ -101,6 +101,13 @@ PROPOSED_RIDER_COUPLING_PROFILE_FIELDS: dict[str, str] = {
     "rider_response_latency_s": "s",
 }
 
+#: Canonical ``parameter_class`` each proposed profile field must declare, so a
+#: latency field is never mislabeled as rider-coupling (or vice versa).
+PROPOSED_FIELD_PARAMETER_CLASS: dict[str, str] = {
+    **dict.fromkeys(PROPOSED_LATENCY_PROFILE_FIELDS, "latency"),
+    **dict.fromkeys(PROPOSED_RIDER_COUPLING_PROFILE_FIELDS, "rider_coupling"),
+}
+
 #: Provenance fields required before a ``measured`` manifest may claim a value.
 MEASURED_MANIFEST_REQUIRED_PROVENANCE_FIELDS: tuple[str, ...] = (
     "source_id",
@@ -206,9 +213,20 @@ def load_amv_actuation_latency_measurement_manifest(path: str | Path) -> dict[st
     return dict(payload)
 
 
+@lru_cache(maxsize=1)
+def _manifest_validator() -> Draft202012Validator:
+    """Return a cached schema validator.
+
+    Compiling the schema and resolving references is comparatively expensive, so
+    the validator is built once and reused across manifests (e.g. when checking
+    several manifests in a loop or in CI).
+    """
+    return Draft202012Validator(load_amv_actuation_latency_measurement_manifest_schema())
+
+
 def _raise_on_schema_errors(payload: Mapping[str, Any], *, source: str | Path | None) -> None:
     """Raise ``AmvActuationLatencyManifestError`` if the payload violates the schema."""
-    validator = Draft202012Validator(load_amv_actuation_latency_measurement_manifest_schema())
+    validator = _manifest_validator()
     errors = [
         f"{json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
@@ -351,8 +369,11 @@ def _proposed_field_blockers(proposed_fields: Any, *, measurement_status: str) -
     """Validate the proposed latency/rider-coupling fields against the status contract.
 
     Every proposed field must carry the single ``value_status`` allowed for the
-    manifest's measurement status, and the union of proposed fields must cover
-    the canonical latency and rider-coupling field sets exactly once.
+    manifest's measurement status, declare the canonical ``parameter_class`` for
+    its name, and the union of proposed fields must cover the canonical latency
+    and rider-coupling field sets exactly once. Field names are required to be
+    unique under case-insensitive normalization so a duplicate (or case-variant)
+    entry can never silently satisfy coverage with conflicting metadata.
 
     Returns:
         Sorted blocker strings.
@@ -360,15 +381,24 @@ def _proposed_field_blockers(proposed_fields: Any, *, measurement_status: str) -
     expected_status = _VALUE_STATUS_BY_MEASUREMENT_STATUS[measurement_status]
     blockers: list[str] = []
     declared_names: set[str] = set()
+    seen_normalized: set[str] = set()
     for entry in proposed_fields or []:
         name = str(entry.get("name", ""))
         declared_names.add(name)
+        normalized = name.strip().lower()
+        if normalized in seen_normalized:
+            # Fail closed: duplicate names (including case variants) make coverage
+            # and per-field checks ambiguous.
+            blockers.append(f"proposed field {name!r} is a duplicate name (case-insensitive)")
+        else:
+            seen_normalized.add(normalized)
         value_status = str(entry.get("value_status", ""))
         if value_status != expected_status:
             blockers.append(
                 f"proposed field {name!r} has value_status {value_status!r}; "
                 f"measurement_status {measurement_status!r} requires {expected_status!r}"
             )
+        _check_proposed_field_parameter_class(entry, name=name, blockers=blockers)
         _check_proposed_field_units(entry, name=name, blockers=blockers)
 
     expected_names = set(PROPOSED_LATENCY_PROFILE_FIELDS) | set(
@@ -377,6 +407,20 @@ def _proposed_field_blockers(proposed_fields: Any, *, measurement_status: str) -
     for missing in sorted(expected_names - declared_names):
         blockers.append(f"proposed_profile_fields is missing canonical field: {missing}")
     return sorted(blockers)
+
+
+def _check_proposed_field_parameter_class(
+    entry: Mapping[str, Any], *, name: str, blockers: list[str]
+) -> None:
+    """Append a blocker when a proposed field's parameter_class disagrees with the canonical map."""
+    canonical_class = PROPOSED_FIELD_PARAMETER_CLASS.get(name)
+    if canonical_class is None:
+        return  # Unknown field names are tolerated; coverage is checked separately.
+    if str(entry.get("parameter_class", "")) != canonical_class:
+        blockers.append(
+            f"proposed field {name!r} parameter_class {entry.get('parameter_class')!r} "
+            f"!= canonical {canonical_class!r}"
+        )
 
 
 def _check_proposed_field_units(

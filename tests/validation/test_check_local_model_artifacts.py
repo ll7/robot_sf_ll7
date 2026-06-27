@@ -398,3 +398,9 @@ def test_audit_helper_uses_default_blocklist() -> None:
 
     assert entries
     assert all(entry.status == BLOCKLIST_ACTIVE for entry in entries)
+
+
+def test_audit_fails_closed_on_missing_blocklist(tmp_path: Path) -> None:
+    """A missing blocklist path must raise rather than report a vacuously green audit."""
+    with pytest.raises(FileNotFoundError):
+        audit_blocklist_coverage(tmp_path / "absent.yaml", repo_root=tmp_path)

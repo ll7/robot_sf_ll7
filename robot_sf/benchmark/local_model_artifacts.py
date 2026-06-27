@@ -211,14 +211,20 @@ def audit_blocklist_coverage(
         that no longer exists (retired/removed); ``orphaned_reference_gone`` entries name a config
         that exists but no longer carries the blocked local reference (e.g. migrated to a durable
         ``model_id`` or rewritten). Orphaned rows are safe to prune from the allowlist.
+
+    Raises:
+        FileNotFoundError: If ``blocklist_path`` does not exist. The audit fails closed rather than
+            reporting an empty (vacuously green) result for a missing or mistyped blocklist path.
     """
+    if not blocklist_path.is_file():
+        raise FileNotFoundError(f"Blocklist file not found: {blocklist_path}")
     blocklist = load_blocklist(blocklist_path, strict=True)
     entries: list[BlocklistAuditEntry] = []
     for (config_path, field, value), reason in blocklist.reasons.items():
         resolved = Path(config_path)
         if not resolved.is_absolute():
             resolved = repo_root / resolved
-        if not resolved.exists():
+        if not resolved.is_file():
             entries.append(
                 BlocklistAuditEntry(
                     config_path,

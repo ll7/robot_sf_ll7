@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -389,7 +390,8 @@ def main(argv: list[str] | None = None) -> int:
         waivers = _parse_waiver_args(args.waive)
         report = evaluate_readiness(args.repo_root, waivers)
     except WaiverError as exc:
-        print(f"error: {exc}")
+        # Diagnostics go to stderr so stdout stays reserved for the text/JSON report.
+        print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

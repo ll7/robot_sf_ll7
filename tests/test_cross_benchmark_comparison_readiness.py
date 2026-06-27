@@ -157,7 +157,8 @@ def test_main_exit_code_tracks_prerequisites(tmp_path: Path, capsys: pytest.Capt
 def test_main_rejects_malformed_waiver(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """A malformed CLI waiver returns the dedicated error exit code (2)."""
     assert main(["--repo-root", str(tmp_path), "--waive", "external_assets"]) == 2
-    assert "error:" in capsys.readouterr().out
+    # Diagnostics are written to stderr so stdout stays reserved for the report.
+    assert "error:" in capsys.readouterr().err
 
 
 def test_render_text_marks_status_and_gates(tmp_path: Path) -> None:

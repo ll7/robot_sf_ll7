@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   slice only: it collects no traces, publishes no artifacts, submits no jobs, and makes no training
   readiness claim (the checked-in example is intentionally not training-ready). See
   `docs/context/issue_2655_oracle_trace_uri_registry.md`.
+* Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
+  campaign can verify its input prerequisites before execution (#3078). New manifest
+  `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario
+  inputs, seed-plan metadata, and frozen-protocol entry points; new checker
+  `scripts/validation/check_package_a_readiness.py` verifies every declared input exists, that the
+  seed-plan metadata is explicit, and that the output location is disposable under `output/`,
+  exiting non-zero with `status: not_ready` when any prerequisite is missing. This is a
+  provenance/readiness gate only — it does not execute the benchmark, submit Slurm, or interpret
+  ranks.
 * Added a **static launch preflight** for crossing-conflict predictive retraining configs (#3214).
   New module `robot_sf/training/predictive_retrain_preflight.py` and CLI
   `scripts/validation/validate_predictive_retrain_preflight.py` validate a predictive training

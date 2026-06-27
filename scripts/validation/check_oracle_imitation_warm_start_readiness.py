@@ -7,7 +7,7 @@ no data, and submits no compute.
 
 Example:
     uv run python scripts/validation/check_oracle_imitation_warm_start_readiness.py \\
-        --manifest configs/training/imitation/oracle_warm_start_readiness.yaml --json
+        --manifest configs/training/ppo_imitation/oracle_warm_start_readiness_issue_1496.yaml --json
 """
 
 from __future__ import annotations

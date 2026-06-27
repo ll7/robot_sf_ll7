@@ -20,13 +20,15 @@ can fail closed instead of starting an unbacked comparison.
 
 The check distinguishes two failure classes:
 
-* A malformed readiness manifest (missing/blank required keys, wrong schema, unparseable
-  YAML) raises :class:`WarmStartReadinessError`. The input contract is broken, so there is
-  nothing meaningful to report.
+* A malformed readiness manifest (missing/blank schema identity keys ``schema_version`` or
+  ``experiment_id``, wrong schema version, non-mapping or unparseable YAML) raises
+  :class:`WarmStartReadinessError`. The input contract is broken, so there is nothing
+  meaningful to report.
 * A well-formed manifest whose *prerequisites* are not yet satisfied (dataset not
-  training-ready, a config file missing) is reported as ``status == "blocked"`` with a
-  populated ``blockers`` list. This is the normal, expected output of a preflight; it only
-  becomes a hard error when the caller opts into ``require_ready=True``.
+  training-ready, a referenced config/contract file missing or its path key blank) is
+  reported as ``status == "blocked"`` with a populated ``blockers`` list. This is the
+  normal, expected output of a preflight; it only becomes a hard error
+  (:class:`PrerequisitesNotReadyError`) when the caller opts into ``require_ready=True``.
 """
 
 from __future__ import annotations
@@ -59,7 +61,21 @@ class WarmStartReadinessError(ValueError):
 
     This is distinct from an unmet prerequisite: a missing dataset or config is a
     *blocker* recorded in the report, whereas a broken manifest contract (bad schema,
-    blank required key, unparseable YAML) means there is no well-formed input to check.
+    blank schema identity key, unparseable YAML) means there is no well-formed input to
+    check.
+    """
+
+
+class PrerequisitesNotReadyError(WarmStartReadinessError):
+    """Raised when a well-formed manifest still has unmet prerequisites under fail-closed mode.
+
+    This is *not* a malformed-manifest error: the manifest parsed and validated, but one or
+    more durable prerequisites (dataset not training-ready, missing config/contract file) are
+    still blocking. It is raised only when the caller opts into ``require_ready=True`` so a
+    launch gate can fail closed. Being a subclass of :class:`WarmStartReadinessError` lets
+    callers that do not care about the distinction keep a single ``except`` clause, while the
+    CLI catches it specifically to map blocked-vs-malformed onto distinct exit codes without a
+    fragile error-message string check.
     """
 
 
@@ -114,8 +130,10 @@ def check_warm_start_readiness(
         ``blockers`` list.
 
     Raises:
-        WarmStartReadinessError: If the manifest itself is malformed, or if
-            ``require_ready`` is set and at least one blocker remains.
+        WarmStartReadinessError: If the manifest itself is malformed.
+        PrerequisitesNotReadyError: If ``require_ready`` is set and at least one blocker
+            remains (a :class:`WarmStartReadinessError` subclass, so existing single-clause
+            handlers keep working).
     """
     root = (repo_root or Path.cwd()).resolve()
     manifest_path = _resolve_path(manifest_path, root)
@@ -148,7 +166,7 @@ def check_warm_start_readiness(
 
     if require_ready and blockers:
         joined = "\n- ".join(blockers)
-        raise WarmStartReadinessError(
+        raise PrerequisitesNotReadyError(
             f"oracle-imitation warm-start prerequisites not ready:\n- {joined}"
         )
     return report
@@ -265,6 +283,7 @@ def _check_file_path(
 
 
 __all__ = [
+    "PrerequisitesNotReadyError",
     "WarmStartReadinessError",
     "check_warm_start_readiness",
     "load_readiness_manifest",

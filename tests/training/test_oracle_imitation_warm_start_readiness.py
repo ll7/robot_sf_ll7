@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from robot_sf.training.oracle_imitation_warm_start_readiness import (
+    PrerequisitesNotReadyError,
     WarmStartReadinessError,
     check_warm_start_readiness,
     load_readiness_manifest,
@@ -137,13 +138,21 @@ def test_missing_config_is_a_blocker_not_an_error(tmp_path: Path) -> None:
 
 
 def test_require_ready_fails_closed_when_blocked(tmp_path: Path) -> None:
-    """require_ready turns a blocked manifest into a fail-closed error."""
+    """require_ready turns a blocked manifest into a fail-closed PrerequisitesNotReadyError.
+
+    The specific subclass (not just the base WarmStartReadinessError) is what lets the CLI
+    map an unmet-prerequisite gate rejection (exit 1) apart from a malformed manifest (exit 2)
+    without a fragile error-message string check.
+    """
     manifest_dict = _ready_manifest(tmp_path)
     manifest_dict["warm_start_config"] = "configs/missing.yaml"
     manifest = _write_manifest(tmp_path, manifest_dict)
 
-    with pytest.raises(WarmStartReadinessError, match="prerequisites not ready"):
+    with pytest.raises(PrerequisitesNotReadyError, match="prerequisites not ready"):
         check_warm_start_readiness(manifest, require_ready=True)
+    # A malformed manifest must NOT raise the prerequisite subclass: keep the two error
+    # classes distinct so the CLI exit-code split stays principled.
+    assert issubclass(PrerequisitesNotReadyError, WarmStartReadinessError)
 
 
 def test_blank_dataset_reference_is_a_blocker(tmp_path: Path) -> None:

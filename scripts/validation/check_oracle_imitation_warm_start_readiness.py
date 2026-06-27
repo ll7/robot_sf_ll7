@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 from robot_sf.training.oracle_imitation_warm_start_readiness import (
+    PrerequisitesNotReadyError,
     WarmStartReadinessError,
     check_warm_start_readiness,
 )
@@ -58,14 +59,22 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=args.repo_root,
             require_ready=args.require_ready,
         )
+    except PrerequisitesNotReadyError as exc:
+        # Well-formed manifest, but --require-ready found unmet prerequisites: a fail-closed
+        # gate rejection (exit 1), not a structural error. Caught before the base class so the
+        # exit-code split does not depend on the error message text.
+        if args.json:
+            print(json.dumps({"status": "blocked", "error": str(exc)}, indent=2, sort_keys=True))
+        else:
+            print(str(exc))
+        return 1
     except WarmStartReadinessError as exc:
+        # Structurally malformed manifest: there is no well-formed input to check (exit 2).
         if args.json:
             print(json.dumps({"status": "invalid", "error": str(exc)}, indent=2, sort_keys=True))
         else:
             print(str(exc))
-        # A blocked manifest under --require-ready is a gate rejection (exit 1); a structural
-        # manifest error is exit 2. Distinguish via the error text prefix.
-        return 1 if str(exc).startswith("oracle-imitation warm-start prerequisites") else 2
+        return 2
 
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

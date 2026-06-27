@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **design-stage evidence-stream integration contract inventory** for issue #3293 — the
+  local, no-data slice of "design evidence integration between simulation and real-world AMV data".
+  `robot_sf/research/evidence_integration_inventory.py` enumerates the evidence streams Robot SF
+  could integrate (`simulation_trace`, `amv_command_response`, `external_pedestrian_trajectory`,
+  `pilot_fleet_operational`), separates them into `calibration` / `benchmark` / `operational`
+  categories (which use different denominators and must not be mixed), and declares the required
+  provenance + uncertainty fields per stream. A mandatory `calibration_status` field prevents any
+  synthetic/proxy envelope from silently passing as calibrated. `check_stream_metadata` (and the
+  `scripts/tools/check_evidence_integration_inventory.py` CLI: `--list` / `--check`) is a
+  **presence-only** structural check on synthetic metadata — it ingests no real data, validates no
+  field values, weights no evidence, and makes no safety/benchmark/paper-facing claim. Externally
+  blocked streams (notably AMV command-response, per the #3293 maintainer decision: <5% feasibility,
+  implementation hard-blocked) declare an explicit `blocked_until` unblock condition. Design note:
+  `docs/context/issue_3293_evidence_integration_contract_inventory.md`.
 * Added a **fail-closed readiness check for false-positive actor-injection replay inputs** (#3300),
   the acceptance dimension PR #3271 closed out of #2927 as *unavailable*. New pure module
   `robot_sf/benchmark/false_positive_injection_readiness.py` exposes

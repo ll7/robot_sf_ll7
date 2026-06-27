@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf/schemas/scenario_prior_staging_contract.v1.json",
+  "title": "Scenario-prior dataset staging contract (v1)",
+  "description": "Metadata-only staging contract for dataset-backed scenario-prior comparison (issue #3161). Declares, per candidate external dataset, the provenance, license/status, the canonical distribution fields a dataset-backed prior would expose, and the explicit external-data blocker. It describes staging intent only; it neither ingests datasets nor stores raw trajectories.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "issue",
+    "claim_boundary",
+    "authored_baseline",
+    "comparison_harness",
+    "datasets"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "scenario_prior_staging_contract.v1"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "issue": {
+      "type": "integer"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authored_baseline": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to the authored ScenarioPrior.v1 card registry used as the comparison baseline."
+    },
+    "comparison_harness": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to the comparison harness (#2919) this contract feeds once a dataset is staged."
+    },
+    "datasets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/dataset"
+      }
+    }
+  },
+  "$defs": {
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id",
+        "title",
+        "staging_status",
+        "redistribution",
+        "blocker_issues",
+        "provenance",
+        "distribution_fields"
+      ],
+      "properties": {
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "asset_id": {
+          "type": ["string", "null"],
+          "description": "External-data AssetSpec id in scripts/tools/manage_external_data.py, or null when no asset spec is wired yet."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "staging_status": {
+          "type": "string",
+          "enum": ["blocked-external-input", "missing", "staged"]
+        },
+        "redistribution": {
+          "type": "string",
+          "enum": ["none"],
+          "description": "Raw external data is never redistributed by this repository."
+        },
+        "blocker_issues": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_url", "license", "license_status", "citation"],
+          "properties": {
+            "source_url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "license": {
+              "type": "string",
+              "minLength": 1
+            },
+            "license_status": {
+              "type": "string",
+              "enum": ["license-gated", "open", "unknown"]
+            },
+            "citation": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "distribution_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Canonical scenario-prior parameter-group names the dataset-backed prior would extract for comparison."
+        }
+      }
+    }
+  }
+}

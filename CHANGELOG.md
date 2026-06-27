@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **fail-closed readiness check for false-positive actor-injection replay inputs** (#3300),
+  the acceptance dimension PR #3271 closed out of #2927 as *unavailable*. New pure module
+  `robot_sf/benchmark/false_positive_injection_readiness.py` exposes
+  `check_false_positive_injection_readiness(spec)`, which validates a replay-condition spec's injected
+  actor inputs (reusing the canonical `ObservationPerturbationSpec` for shape rules rather than
+  re-deriving them) and its provenance fields (scenario, seed, planner mode, perturbation family,
+  execution mode). It returns an explicit `ready` / `not_available` / `blocked` verdict so a malformed
+  or unavailable false-positive condition fails closed with an actionable blocker list instead of
+  silently passing. A thin CLI `scripts/benchmark/check_false_positive_injection_readiness.py` runs the
+  check on a YAML/JSON spec and exits non-zero (3) when blocked. This is a bounded readiness/contract
+  slice only — it does not run a replay campaign, change sensor semantics, or make any benchmark or
+  safety claim.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

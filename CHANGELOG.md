@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **diagnostic inventory** for the two incompatible collision/near-miss definitions
+  (#3724). The benchmark metric (`robot_sf/benchmark/metrics.py`) classifies collision/near-miss
+  with a radius-aware *clearance* rule, while the SNQI proxy (`robot_sf/gym_env/snqi_proxy.py`)
+  and policy-search validation (`scripts/validation/policy_search_common.py`) use the *raw center
+  distance* against `COLLISION_DIST=0.25` — so the same geometry is labeled differently (the
+  clearance collision boundary sits at a center distance of ~1.4 m with default radii vs 0.25 m, a
+  ~5× gap). New module `robot_sf/benchmark/collision_definition_inventory.py` classifies center
+  distances under both regimes and reports where they diverge, and CLI
+  `scripts/benchmark/collision_definition_inventory_report.py` prints/saves a preflight report with
+  an optional `--fail-on-divergence` (fail-closed) exit. This is **diagnostic only**: it does not
+  change any threshold, metric, proxy, or validation behavior, and does not choose a canonical
+  definition (that remains `decision-required` on #3724).
+* Added a **read-only heavy forecast-model family inventory / preflight** for the offline
+  prediction study (#2845). New pure module `robot_sf/research/forecast_heavy_model_inventory.py`
+  documents the candidate heavy predictor families (transformer, AgentFormer-like, CVAE,
+  diffusion) with qualitative literature-derived planning estimates of compute cost, inference
+  latency, uncertainty quality, and repository integration burden; probes that the
+  offline-evaluation surfaces an experiment would touch are importable (the forecast
+  metrics/calibration/conformal/dataset/batch/baseline surfaces; fail-closed on the required
+  ones); and reports the minimum-offline-experiment prerequisites (a staged held-out dataset, a
+  heavy-model→`ForecastBatch` adapter, a CPU runtime budget, the study report, plus external
+  dependency/checkpoint decisions) as explicit blockers, rolled up into a `ready`/`blocked`
+  minimum-experiment status. Thin CLI
+  `scripts/research/check_forecast_heavy_model_inventory.py` (`--json`/`--list`) and study report
+  `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
+  runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
+  (`evidence_tier` stays blocked → analysis_only).
 * Added a metadata-only staging/preflight checker for external pedestrian-prior extraction (#2918).
   New module `robot_sf/benchmark/pedestrian_prior_extraction_manifest.py` exposes
   `check_pedestrian_prior_extraction_manifest`, which validates a
@@ -47,7 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
   manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
   protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
-
 * Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
   campaign can verify its input prerequisites before execution (#3078). New manifest
   `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario

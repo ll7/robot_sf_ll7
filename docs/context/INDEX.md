@@ -141,6 +141,13 @@ Social-Navigation-PyEnvs adapter-backed behavior variants. Current status is one
 `benchmark_valid_candidate`, one `diagnostic_only`, and four `not_available` rows; diagnostic and
 unavailable rows are not benchmark-success evidence.
 
+Recent heavy forecast-model study/preflight: [forecast_heavy_model_study_2026-06-20.md](forecast_heavy_model_study_2026-06-20.md)
+records the analysis-only inventory of heavy predictor families (transformer, AgentFormer-like,
+CVAE, diffusion) with literature-derived compute/latency/uncertainty/integration estimates, the
+fail-closed offline-evaluation surface probe, and the `blocked` minimum-offline-experiment
+status (owner: `robot_sf/research/forecast_heavy_model_inventory.py`, #2845). No model is trained
+and no model-quality claim is made.
+
 Recent campaign comparison report: [issue_3063_campaign_comparison_report.md](issue_3063_campaign_comparison_report.md)
 records the analysis-only report path from canonical campaign result stores, with tracked fixture
 evidence showing row-status caveats, denominators, metric summaries, visual summaries, and

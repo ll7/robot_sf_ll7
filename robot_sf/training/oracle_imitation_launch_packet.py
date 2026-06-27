@@ -13,6 +13,9 @@ _SCHEMA_VERSION = "oracle-imitation-launch-packet.v1"
 _SPLITS = ("train", "validation", "evaluation")
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DURABLE_URI_PREFIXES = ("wandb-artifact://", "artifact://", "s3://", "gs://", "https://")
+# Required destinations the launch packet must declare before a collection job runs:
+# where collection logs, raw trace output, and the dataset manifest are durably written.
+_REQUIRED_COLLECTION_ROOTS = ("log_root", "dataset_output_root", "manifest_destination")
 
 
 class LaunchPacketError(ValueError):
@@ -83,6 +86,7 @@ def validate_launch_packet(
     _validate_relabeling(packet, errors)
     _validate_generating_commit(packet, errors)
     artifact_paths = _validate_artifacts(packet, root, errors)
+    collection_roots = _validate_collection_roots(packet, errors)
     training_ready = _validate_training_artifact_gate(
         artifact_paths,
         require_training_ready=require_training_ready,
@@ -102,6 +106,7 @@ def validate_launch_packet(
         "episode_count": sum(len(packet["episode_ids_by_split"][split]) for split in _SPLITS),
         "seeds_by_split": {split: list(packet["seeds_by_split"][split]) for split in _SPLITS},
         "artifact_paths": artifact_paths,
+        "collection_roots": collection_roots,
         "training_ready": training_ready,
     }
 
@@ -415,17 +420,69 @@ def _validate_training_artifact_gate(
     return training_ready
 
 
+def _validate_collection_roots(packet: dict[str, Any], errors: list[str]) -> dict[str, str]:
+    """Validate the durable destinations a collection job must declare before it runs.
+
+    Requires a ``collection_roots`` mapping that names where collection logs, raw trace
+    output, and the dataset manifest are durably written. Each root must be a durable
+    artifact URI (a ``:pending`` alias is allowed because collection has not run yet) and
+    must never point at the gitignored worktree-local ``output`` directory, which is not a
+    safe shared destination on a multi-agent host.
+
+    Args:
+        packet: Parsed launch packet.
+        errors: Mutable error accumulator extended in place on any violation.
+
+    Returns:
+        Mapping of validated root name to its normalized destination string. Roots that
+        failed validation are omitted.
+    """
+    roots = packet.get("collection_roots")
+    if not isinstance(roots, dict):
+        errors.append("collection_roots must be a mapping")
+        return {}
+
+    normalized: dict[str, str] = {}
+    for key in _REQUIRED_COLLECTION_ROOTS:
+        value = roots.get(key)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"collection_roots.{key} must be a non-empty string")
+            continue
+        text = value.strip()
+        if _has_worktree_output_component(text):
+            errors.append(
+                f"collection_roots.{key} must not depend on worktree-local output: {text}"
+            )
+            continue
+        if not _is_durable_uri(text):
+            errors.append(
+                f"collection_roots.{key} must be a durable artifact URI "
+                f"(one of {_DURABLE_URI_PREFIXES}): {text}"
+            )
+            continue
+        normalized[key] = text
+    return normalized
+
+
 def _artifact_path_text(name: str, raw_path: Any, errors: list[str]) -> str | None:
     if not isinstance(raw_path, str) or not raw_path.strip():
         errors.append(f"artifact_paths.{name} must be a non-empty string")
         return None
     path_text = raw_path.strip()
-    _path_parts = Path(path_text).parts
-    if "output" in _path_parts:
+    if _has_worktree_output_component(path_text):
         errors.append(
             f"artifact_paths.{name} must not depend on worktree-local output: {path_text}"
         )
     return path_text
+
+
+def _has_worktree_output_component(path_text: str) -> bool:
+    """Return True when a path embeds the gitignored worktree-local ``output`` directory.
+
+    The match is on a full path component so durable names that merely contain the
+    substring ``output`` (for example ``docs/my_output_config``) are not rejected.
+    """
+    return "output" in Path(path_text).parts
 
 
 def _is_durable_uri(path_text: str) -> bool:

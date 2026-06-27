@@ -71,6 +71,11 @@ def _valid_packet(tmp_path: Path) -> dict[str, object]:
             "future_dataset_npz_uri": "wandb-artifact://robot-sf/demo:pending",
         },
         "checksums": {str(fixture): digest},
+        "collection_roots": {
+            "log_root": "wandb-artifact://robot-sf/demo-logs:pending",
+            "dataset_output_root": "wandb-artifact://robot-sf/demo-traces:pending",
+            "manifest_destination": "wandb-artifact://robot-sf/demo-manifest:pending",
+        },
     }
 
 
@@ -85,6 +90,11 @@ def test_issue_1397_launch_packet_validates() -> None:
     assert report["source_candidate"] == "hybrid_rule_v3_static_margin0_waypoint2"
     assert report["scenario_count"] == 6
     assert report["training_ready"] is False
+    assert set(report["collection_roots"]) == {
+        "log_root",
+        "dataset_output_root",
+        "manifest_destination",
+    }
 
 
 def test_issue_1397_launch_packet_fails_training_ready_gate() -> None:
@@ -117,6 +127,49 @@ def test_validate_launch_packet_rejects_unpredeclared_evaluation_hard_slice(
     ]
 
     with pytest.raises(LaunchPacketError, match="assigns evaluation without predeclaration"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_validate_launch_packet_requires_collection_roots(tmp_path: Path) -> None:
+    """A launch packet that omits collection_roots must fail closed."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    del broken["collection_roots"]
+
+    with pytest.raises(LaunchPacketError, match="collection_roots must be a mapping"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_validate_launch_packet_requires_each_collection_root(tmp_path: Path) -> None:
+    """Each required collection root (incl. the manifest destination) must be present."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    del broken["collection_roots"]["manifest_destination"]
+
+    with pytest.raises(
+        LaunchPacketError,
+        match="collection_roots.manifest_destination must be a non-empty string",
+    ):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_validate_launch_packet_rejects_non_durable_collection_root(tmp_path: Path) -> None:
+    """Collection roots must be durable artifact URIs, not bare local paths."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken["collection_roots"]["dataset_output_root"] = "data/oracle_imitation/raw_traces"
+
+    with pytest.raises(LaunchPacketError, match="must be a durable artifact URI"):
+        validate_launch_packet(_write_packet(tmp_path, broken))
+
+
+def test_validate_launch_packet_rejects_output_collection_root(tmp_path: Path) -> None:
+    """Collection roots must never point at the worktree-local output directory."""
+    packet = _valid_packet(tmp_path)
+    broken = copy.deepcopy(packet)
+    broken["collection_roots"]["log_root"] = "output/oracle_imitation/logs"
+
+    with pytest.raises(LaunchPacketError, match="must not depend on worktree-local output"):
         validate_launch_packet(_write_packet(tmp_path, broken))
 
 

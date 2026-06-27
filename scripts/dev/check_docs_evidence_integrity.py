@@ -71,6 +71,11 @@ _CLASSIFICATION_KEYS = {
 _MD_LINK = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 _README_FIELD = re.compile(r"`(?P<key>[A-Za-z0-9_-]+)`\s*:\s*`(?P<value>[^`]+)`")
 _CONFIG_FLAG = re.compile(r"--[A-Za-z0-9_-]*config(?:=|\s+)(?P<path>[A-Za-z0-9_./:-]+)")
+# Paths handed to an output flag are *created* by the documented command, not
+# pre-existing inputs, so they must not be enforced as must-exist citations.
+_OUTPUT_FLAG = re.compile(
+    r"(?:--[A-Za-z0-9-]*out(?:put)?[A-Za-z0-9-]*|-o)(?:=|\s+)(?P<path>[A-Za-z0-9_./:-]+)"
+)
 _CITED_REPO_PATH = re.compile(
     r"(?<![\w./-])(?P<path>(?:scripts|configs)/[A-Za-z0-9_./:-]+\.(?:py|sh|ya?ml))"
 )
@@ -454,12 +459,19 @@ def _readme_summary_drift_problems(path: Path, *, root: Path) -> list[str]:  # n
 
 
 def _extract_cited_paths(text: str) -> set[str]:
-    """Return script and config paths cited by changed text."""
+    """Return script and config paths cited by changed text.
+
+    Paths passed to an output flag (for example ``--output``/``--out``/``-o``)
+    name files the documented command *creates*, so they are excluded from the
+    must-exist citation set even when they live under ``configs/``/``scripts/``.
+    """
+    output_paths = {_clean_cited_path(match.group("path")) for match in _OUTPUT_FLAG.finditer(text)}
     paths: set[str] = set()
     for match in _CONFIG_FLAG.finditer(text):
         paths.add(_clean_cited_path(match.group("path")))
     for match in _CITED_REPO_PATH.finditer(text):
         paths.add(_clean_cited_path(match.group("path")))
+    paths -= output_paths
     return {path for path in paths if path and not _looks_dynamic(path)}
 
 

@@ -8,7 +8,9 @@ import json
 from pathlib import Path
 
 from robot_sf.benchmark.hybrid_evidence_matrix import (
+    DEFAULT_SYNTHESIS_PREREQUISITE_COUNT,
     HybridEvidenceMatrixValidationError,
+    build_hybrid_prerequisite_matrix_file,
     validate_hybrid_evidence_file,
 )
 from robot_sf.common.artifact_paths import get_repository_root
@@ -36,6 +38,35 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "local repository history. Default validation remains format-only."
         ),
     )
+    parser.add_argument(
+        "--prerequisite-matrix",
+        action="store_true",
+        help=(
+            "Emit the #1489 prerequisite/status matrix instead of the row-validation report: "
+            "classify each component lane as missing, blocked, ready, or complete and decide "
+            "whether the synthesis gate is open."
+        ),
+    )
+    parser.add_argument(
+        "--expected-component",
+        action="append",
+        default=None,
+        dest="expected_components",
+        metavar="NAME",
+        help=(
+            "Component name expected to have a row (repeatable). Expected components with no "
+            "matching row are reported as 'missing'. Only used with --prerequisite-matrix."
+        ),
+    )
+    parser.add_argument(
+        "--prerequisite-count",
+        type=int,
+        default=DEFAULT_SYNTHESIS_PREREQUISITE_COUNT,
+        help=(
+            "Minimum number of 'complete' (synthesis-eligible) lanes that open the synthesis "
+            "gate. Only used with --prerequisite-matrix."
+        ),
+    )
     return parser
 
 
@@ -43,6 +74,16 @@ def main(argv: list[str] | None = None) -> int:
     """Validate a matrix file and return a shell-friendly exit code."""
     args = build_arg_parser().parse_args(argv)
     try:
+        if args.prerequisite_matrix:
+            report = build_hybrid_prerequisite_matrix_file(
+                args.input,
+                expected_components=args.expected_components,
+                repo_root=args.repo_root,
+                check_git_history=args.check_git_history,
+                prerequisite_count=args.prerequisite_count,
+            )
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 0 if report["rows_valid"] else 2
         report = validate_hybrid_evidence_file(
             args.input,
             repo_root=args.repo_root,

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added an **opt-in factorial-ablation manifest + checker** for the merged planner-agnostic safety
+  wrapper (#3501). `robot_sf/benchmark/safety_wrapper_ablation_manifest.py` enumerates the
+  `planner × {wrapper off, wrapper on}` ablation cells from a tracked config
+  (`configs/research/safety_wrapper_ablation_v1.yaml`) and **checks** the design so later runs can
+  compare the wrapper on/off consistently: exactly the two `{wrapper_off, wrapper_on}` arms with one
+  baseline (off), the off arm disabled and the on arm enabled, the on-arm thresholds validated as a
+  real `SafetyWrapperConfig` (predeclared, no per-planner tuning), every planner present in both
+  arms, and paired seeds shared identically across arms. The manifest records provenance fields
+  (`schema_version`, `safety_wrapper_schema`, `config_path`, `git_head`, `claim_boundary`,
+  `evidence_status`) and a `factorial_check` summary; a thin runner
+  (`scripts/benchmark/build_safety_wrapper_ablation_manifest.py --dry-run`) writes it. This is a
+  **dry-run design contract only** — it binds no runtime objects, runs no benchmark episodes, tunes
+  no thresholds, and makes no mitigation-effectiveness claim (the factorial campaign run is the
+  deferred downstream follow-up tracked by #3501).
 * Added a fail-closed readiness check for scenario-horizon Results evidence (#3266). New module
   `robot_sf/benchmark/scenario_horizon_readiness.py` and CLI
   `scripts/validation/check_scenario_horizon_results_readiness.py` read a re-exported scenario-horizon

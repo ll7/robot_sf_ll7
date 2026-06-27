@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **durable trace-URI registry contract and validator** for oracle-imitation artifacts so
+  the downstream `training_ready` state is mechanically checkable (#2655). The new canonical module
+  `robot_sf/training/oracle_trace_uri_registry.py` (schema `oracle-trace-uri-registry.v1`) records,
+  per split, the durable trace URI, its SHA-256 checksum, the split/trace identity, the schema
+  version, and a `retrieval_status` (`resolvable`/`pending`/`blocked`); large traces stay out of git.
+  A fail-closed CLI (`scripts/validation/validate_oracle_trace_uri_registry.py --require-training-ready`)
+  and an example registry (`configs/training/ppo_imitation/oracle_trace_uri_registry_example.yaml`)
+  let the oracle-imitation lane leave `artifact_retrieval_blocked` only when every required split has
+  a concrete, durable, resolvable pointer with a valid checksum. This is the local registry/validator
+  slice only: it collects no traces, publishes no artifacts, submits no jobs, and makes no training
+  readiness claim (the checked-in example is intentionally not training-ready). See
+  `docs/context/issue_2655_oracle_trace_uri_registry.md`.
 * Added a **fail-closed curation readiness preflight** for SDD-derived benchmark scenarios (#1126).
   Issue #1126 curates the first real Stanford Drone Dataset (SDD) benchmark scenario set, but stays
   blocked on licensed external data (#1497/#2413). The new `scripts/tools/sdd_curation_preflight.py`

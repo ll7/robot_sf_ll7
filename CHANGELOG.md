@@ -21,6 +21,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   slice only: it collects no traces, publishes no artifacts, submits no jobs, and makes no training
   readiness claim (the checked-in example is intentionally not training-ready). See
   `docs/context/issue_2655_oracle_trace_uri_registry.md`.
+* Added a read-only diagnostic inventory / fail-closed preflight for **conflicting "canonical" SNQI
+  weight sets** (#3723). New module `robot_sf/benchmark/snqi/weights_inventory.py` discovers every
+  known SNQI weight source — the code default `recompute_snqi_weights("canonical")` plus the shipped
+  JSON files under `model/` and `configs/benchmarks/` — records each set's dominant term and numeric
+  scale (raw vs normalized), and reports provenance conflicts: two sources both claiming the
+  "canonical" designation but yielding different weight *directions* (e.g. the collision-dominant
+  code default vs the jerk-dominant `model/snqi_canonical_weights_v1.json`), raw-vs-normalized scale
+  splits, and duplicate weights shipped under distinct labels. A new `inventory` subcommand on the
+  SNQI CLI (`python -m robot_sf.benchmark.snqi.cli inventory [--json] [--no-fail-on-conflict]`) and
+  the `preflight_snqi_weight_sets(strict=True)` API expose the report and **fail closed** (non-zero
+  exit / `SNQIWeightProvenanceError`) when a blocking conflict is detected. This is provenance
+  disambiguation only: it does **not** choose a canonical set, re-tune weights, change normalization
+  (#3699), or alter SNQI scoring — picking the source of truth remains a maintainer decision. See
+  `docs/snqi-weight-tools/weights_provenance.md`.
+* Added a **diagnostic inventory** for the two incompatible collision/near-miss definitions
+  (#3724). The benchmark metric (`robot_sf/benchmark/metrics.py`) classifies collision/near-miss
+  with a radius-aware *clearance* rule, while the SNQI proxy (`robot_sf/gym_env/snqi_proxy.py`)
+  and policy-search validation (`scripts/validation/policy_search_common.py`) use the *raw center
+  distance* against `COLLISION_DIST=0.25` — so the same geometry is labeled differently (the
+  clearance collision boundary sits at a center distance of ~1.4 m with default radii vs 0.25 m, a
+  ~5× gap). New module `robot_sf/benchmark/collision_definition_inventory.py` classifies center
+  distances under both regimes and reports where they diverge, and CLI
+  `scripts/benchmark/collision_definition_inventory_report.py` prints/saves a preflight report with
+  an optional `--fail-on-divergence` (fail-closed) exit. This is **diagnostic only**: it does not
+  change any threshold, metric, proxy, or validation behavior, and does not choose a canonical
+  definition (that remains `decision-required` on #3724).
 * Added a **read-only heavy forecast-model family inventory / preflight** for the offline
   prediction study (#2845). New pure module `robot_sf/research/forecast_heavy_model_inventory.py`
   documents the candidate heavy predictor families (transformer, AgentFormer-like, CVAE,
@@ -56,7 +82,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
   manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
   protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
-
 * Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
   campaign can verify its input prerequisites before execution (#3078). New manifest
   `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario

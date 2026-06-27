@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+from loguru import logger
+
+from robot_sf.benchmark.run_config_provenance import metric_affecting_run_config
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario
@@ -44,6 +47,39 @@ def build_env_config(
     )
     apply_pedestrian_reactivity_to_env_config(config, scenario=scenario)
     return config
+
+
+def representative_metric_affecting_config(
+    scenarios: Sequence[Mapping[str, Any]],
+    *,
+    scenario_path: Path,
+) -> dict[str, Any]:
+    """Return the metric-affecting run-config provenance block for a batch (issue #3701).
+
+    Builds a representative environment config from the first scenario and
+    extracts the metric-affecting toggles (LiDAR ``scan_noise`` and the
+    collision-handling regime) so the benchmark run manifest is self-describing.
+    The benchmark uses a uniform sensor configuration across a batch, so the
+    first scenario is representative of the run.
+
+    This helper is *fail-soft*: it returns a ``status: not_available`` block
+    instead of raising, because this is descriptive provenance metadata and must
+    never break an otherwise valid benchmark run. A run that omits the block on
+    error is still honest; a run that crashes while annotating metadata is not.
+
+    Returns:
+        A JSON-safe metric-affecting run-config block, or a
+        ``{"status": "not_available", "reason": ...}`` block when no scenario is
+        available or config construction fails.
+    """
+    if not scenarios:
+        return {"status": "not_available", "reason": "no scenarios"}
+    try:
+        config = build_env_config(dict(scenarios[0]), scenario_path=scenario_path)
+        return metric_affecting_run_config(config)
+    except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run.
+        logger.debug("metric-affecting run-config provenance unavailable: {}", exc)
+        return {"status": "not_available", "reason": str(exc)}
 
 
 def apply_pedestrian_reactivity_to_env_config(

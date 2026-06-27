@@ -215,6 +215,7 @@ def build_completed_batch_summary(  # noqa: PLR0913
     algo_config_path: str | None,
     suite_key: str,
     kinematics_tag: str,
+    metric_affecting_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the final successful batch summary after all map jobs finish.
 
@@ -340,6 +341,7 @@ def build_completed_batch_summary(  # noqa: PLR0913
         total_jobs=total_jobs,
         written=wrote,
         artifact_pointer_status=artifact_pointer_status,
+        metric_affecting_config=metric_affecting_config,
     )
     summary["benchmark_availability"] = availability_payload(summary)
     return summary

@@ -84,6 +84,9 @@ from robot_sf.benchmark.map_runner_env import (
 )
 from robot_sf.benchmark.map_runner_env import build_env_config as _build_env_config
 from robot_sf.benchmark.map_runner_env import (
+    representative_metric_affecting_config as _representative_metric_affecting_config,
+)
+from robot_sf.benchmark.map_runner_env import (
     validate_sensor_fusion_adapter_config as _validate_sensor_fusion_adapter_config,  # noqa: F401 - compatibility re-export.
 )
 from robot_sf.benchmark.map_runner_episode import run_map_episode as _execute_map_episode
@@ -2285,6 +2288,13 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             continue
         filtered.append(scenario)
 
+    # Record the metric-affecting run config (scan_noise, collision regime) once so
+    # the emitted result manifest is self-describing about settings that change
+    # metric semantics (issue #3701). Fail-soft: never blocks a run.
+    metric_affecting_config = _representative_metric_affecting_config(
+        filtered, scenario_path=scenario_path
+    )
+
     kinematics_tag, scenario_kinematics = _resolve_batch_kinematics_tag(filtered)
     batch_observation_mode = str(observation_mode).strip() if observation_mode is not None else None
     raw_policy_cfg = _parse_algo_config(algo_config_path)
@@ -2486,6 +2496,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             total_jobs=len(jobs),
             written=0,
             artifact_pointer_status="not_available",
+            metric_affecting_config=metric_affecting_config,
         )
         summary["benchmark_availability"] = availability_payload(summary)
         return summary
@@ -2654,6 +2665,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         algo_config_path=algo_config_path,
         suite_key=suite_key,
         kinematics_tag=kinematics_tag,
+        metric_affecting_config=metric_affecting_config,
     )
 
 

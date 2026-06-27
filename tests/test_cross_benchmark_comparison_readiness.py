@@ -184,12 +184,14 @@ def test_external_asset_ids_exist_in_canonical_registry() -> None:
         assert asset_id in registry_ids, f"{asset_id} missing from canonical external-data registry"
 
 
-def test_real_checkout_reports_converter_blocked_metric_ready() -> None:
-    """Sanity check against the live checkout: metric wrapper present, converter not yet.
+def test_real_checkout_reports_converter_and_metric_ready_external_blocked() -> None:
+    """Sanity check against the live checkout: converter + metric wrapper present, assets not.
 
     This is a presence-only assertion about the current repository layout; it does not run any
-    campaign. If #3285 later lands the converter on main, update this expectation.
+    campaign. The converter prerequisite (#3285) landed on main, so it now classifies ``ready``;
+    the external-asset family stays ``blocked`` because those assets are never staged in-repo.
     """
     report = evaluate_readiness()  # real REPO_ROOT
+    assert _family(report, "converter")["status"] == "ready"
     assert _family(report, "metric_wrapper")["status"] == "ready"
     assert _family(report, "external_assets")["status"] == "blocked"

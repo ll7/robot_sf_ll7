@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only **ORCA-residual learned-policy lane readiness/preflight surface** (#1358).
+  New module `robot_sf/benchmark/orca_residual_lane_readiness.py` exposes `assess_lane_readiness`,
+  which inventories the lane's local prerequisites (behavior-cloning lineage packet, smoke/pretrain
+  config, the `orca_residual_guarded_ppo_v0` / `orca_residual_guarded_ppo_progress_v1` candidate
+  configs and their `training_required: true` registry entries, the policy-search runner, and the
+  grounding 2026-05-05 evidence report), the canonical command shapes (routes), and the declared
+  external blockers (child #1475 continue/revise/stop classification, `resource:slurm` training, and
+  pending durable dataset/checkpoint artifacts). The diagnostics contract and lineage-packet schema
+  are reused from `robot_sf/training/orca_residual_lineage_packet.py` (no fork). Status fails
+  **closed** to `prerequisites_incomplete` when any local surface is missing or the packet is
+  invalid, otherwise `blocked_on_followup` (scaffolding handoff-complete, lane still gated). A new
+  CLI `scripts/tools/orca_residual_lane_readiness.py` exposes the report (`--json`) with exit `0`
+  handoff-complete / `2` incomplete. This is **inventory/preflight only**: it does **not** submit
+  SLURM, train policies, alter planner behavior, run benchmarks, or assert any benchmark/paper
+  result. #1358 remains a parent/umbrella coordination issue gated by child #1475.
 * Added a read-only **oracle-imitation warm-start readiness preflight** for the downstream
   warm-start training and benchmark comparison (#1496). Issue #1496 is the training step that
   *consumes* the durable oracle-imitation dataset from #1470; safe shared-PC work is verifying
@@ -348,6 +363,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "prerequisites ready" result is not mistaken for "authorized to launch". It does not submit Slurm
   jobs, run the tournament, rank arms, or edit any claim. Text and `--json` reports; exit code 0 when
   local prerequisites are ready, 1 when blocked.
+* Tightened the **oracle-imitation dataset launch-packet preflight** to require a `collection_roots`
+  block before a collection job runs (#1470). The validator
+  (`robot_sf/training/oracle_imitation_launch_packet.py`,
+  `scripts/validation/validate_oracle_imitation_launch_packet.py`) now fails closed unless the packet
+  declares durable destinations for collection logs (`log_root`), raw trace output
+  (`dataset_output_root`), and the dataset manifest (`manifest_destination`). Each root must be a
+  durable artifact URI (a `:pending` alias is allowed because collection has not run yet) and may
+  never point at the gitignored worktree-local `output/` directory, which is not a safe shared
+  destination on a multi-agent host. The checked-in `#1397` packet now carries these `:pending`
+  destinations. This is a preflight-contract change only: it submits no jobs and collects no data.
 * Added a read-only **re-export readiness preflight** for stale dissertation table bundles
   (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
   `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability

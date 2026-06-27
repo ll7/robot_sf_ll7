@@ -70,8 +70,9 @@ def _check_config(config: dict | None, config_path: Path) -> tuple[str, list[str
     if not isinstance(config, dict):
         return STATUS_FAILED, ["readiness config must be a mapping"]
     errors: list[str] = []
-    if not config.get("hard_seed_fixture"):
-        errors.append("readiness config missing hard_seed_fixture")
+    hard_seed = config.get("hard_seed_fixture")
+    if not isinstance(hard_seed, str) or not hard_seed:
+        errors.append("readiness config missing or invalid hard_seed_fixture")
     selector = config.get("checkpoint_selector")
     if not isinstance(selector, dict):
         errors.append("readiness config missing checkpoint_selector mapping")
@@ -80,6 +81,9 @@ def _check_config(config: dict | None, config_path: Path) -> tuple[str, list[str
             errors.append("checkpoint_selector missing registry_tag")
         if not isinstance(selector.get("min_resolvable_checkpoints"), int):
             errors.append("checkpoint_selector missing integer min_resolvable_checkpoints")
+    summary_contract = config.get("proxy_summary_contract")
+    if summary_contract is not None and not isinstance(summary_contract, dict):
+        errors.append("proxy_summary_contract must be a mapping when provided")
     if errors:
         return STATUS_FAILED, errors
     return STATUS_PASSED, []
@@ -87,17 +91,17 @@ def _check_config(config: dict | None, config_path: Path) -> tuple[str, list[str
 
 def _check_hard_seed_fixture(fixture_path: Path) -> tuple[str, list[str]]:
     """Verify the hard-seed fixture exists and parses to a non-empty mapping/list."""
-    if not fixture_path.exists():
-        return STATUS_BLOCKED, [f"hard-seed fixture not found: {fixture_path}"]
+    if not fixture_path.is_file():
+        return STATUS_BLOCKED, [f"hard-seed fixture not found or is not a file: {fixture_path}"]
     data = _load_yaml(fixture_path)
     if not data:
         return STATUS_FAILED, [f"hard-seed fixture empty or unreadable: {fixture_path}"]
     return STATUS_PASSED, []
 
 
-def _resolve_local_path(local_path: str | None, repo_root: Path) -> Path | None:
+def _resolve_local_path(local_path: Any, repo_root: Path) -> Path | None:
     """Resolve a registry ``local_path`` against ``repo_root`` without downloading."""
-    if not local_path:
+    if not isinstance(local_path, str) or not local_path:
         return None
     candidate = Path(local_path)
     if not candidate.is_absolute():
@@ -121,6 +125,8 @@ def _check_checkpoint_artifacts(
     tag = registry_tag.strip().lower()
     candidates: list[dict[str, Any]] = []
     for model_id, entry in registry.items():
+        if not isinstance(entry, dict):
+            continue
         tags = {str(t).strip().lower() for t in (entry.get("tags") or [])}
         if tag not in tags:
             continue
@@ -180,12 +186,14 @@ def _check_proxy_summary(
     Returns:
         tuple[str, list[str], dict[str, Any]]: status, messages, and a compact summary payload.
     """
-    if not summary_path.exists():
-        return STATUS_BLOCKED, [f"training summary not found: {summary_path}"], {}
+    if not summary_path.is_file():
+        return STATUS_BLOCKED, [f"training summary not found or is not a file: {summary_path}"], {}
     try:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return STATUS_FAILED, [f"training summary unreadable: {exc}"], {}
+    if not isinstance(summary, dict):
+        return STATUS_FAILED, ["training summary must be a JSON object/mapping"], {}
 
     report = analyzer.analyze_summary(summary)
     verdict = report.get("verdict")
@@ -236,7 +244,7 @@ def check_readiness(
     cfg = config if isinstance(config, dict) and config_status != STATUS_BLOCKED else {}
 
     fixture_rel = cfg.get("hard_seed_fixture") if cfg else None
-    if fixture_rel:
+    if isinstance(fixture_rel, str) and fixture_rel:
         fixture_path = Path(fixture_rel)
         if not fixture_path.is_absolute():
             fixture_path = repo_root / fixture_path

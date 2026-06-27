@@ -145,6 +145,24 @@ def test_blocked_when_proxy_disabled(tmp_path):
     )
 
 
+def test_blocked_when_summary_not_a_mapping(tmp_path):
+    """A training summary whose JSON is not an object fails closed without crashing."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    bad_summary = tmp_path / "summary.json"
+    bad_summary.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=bad_summary,
+    )
+    assert report["status"] == "blocked"
+    summary_check = report["prerequisites"]["proxy_training_summary"]
+    assert summary_check["status"] == "failed"
+    assert any("JSON object" in m for m in summary_check["messages"])
+
+
 def test_ready_when_inputs_present_and_summary_has_spread(tmp_path):
     """All inputs resolve and the summary has non-degenerate spread -> ready (exit 0)."""
     config = _write_config(tmp_path, min_resolvable=6, min_epochs=4)

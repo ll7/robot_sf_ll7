@@ -63,6 +63,13 @@ artifact_paths:
   future_dataset_npz_uri: wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_npz:pending
 checksums:
   docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/dry_run_dataset_stub.json: eb5ef938d15725ff29a013a196216d093dd549ae58ae805e642c98441777529f
+# Durable destinations the Slurm collection job must target. These are declared up front
+# (as :pending aliases) so the preflight can reject worktree-local output/ roots before any
+# job runs; concrete aliases replace the :pending placeholders once collection completes.
+collection_roots:
+  log_root: wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_logs:pending
+  dataset_output_root: wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_raw_traces:pending
+  manifest_destination: wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_manifest:pending
 artifact_promotion_policy:
   raw_outputs_are_durable: false
   downstream_training_ready: false

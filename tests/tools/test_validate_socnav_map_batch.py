@@ -7,10 +7,17 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from scripts.tools.validate_socnav_map_batch import validate_batch
+from scripts.tools.validate_socnav_map_batch import (
+    BLOCKED,
+    READY,
+    conversion_readiness,
+    validate_batch,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+PLANNED_MAP_SVG = "maps/svg_maps/socnavbench/socnavbench_eth.svg"
 
 
 def _write_manifest(path: Path) -> None:
@@ -44,12 +51,22 @@ def _write_manifest(path: Path) -> None:
                                 "required_for_conversion": True,
                             },
                         ],
+                        "planned_outputs": {"map_svg": PLANNED_MAP_SVG},
                     }
                 ],
             }
         ],
     }
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def _stage_eth_assets(root: Path) -> None:
+    """Stage the exact ETH mesh dir and traversible pickle under ``root``."""
+    base = root / "sd3dis" / "stanford_building_parser_dataset"
+    (base / "mesh" / "ETH").mkdir(parents=True)
+    traversible = base / "traversibles" / "ETH" / "data.pkl"
+    traversible.parent.mkdir(parents=True)
+    traversible.write_bytes(b"fixture")
 
 
 def test_validate_batch_reports_missing_required_assets(tmp_path: Path) -> None:
@@ -75,12 +92,7 @@ def test_validate_batch_accepts_staged_eth_assets(tmp_path: Path) -> None:
     manifest = tmp_path / "manifest.yaml"
     _write_manifest(manifest)
     root = tmp_path / "socnavbench"
-    (root / "sd3dis" / "stanford_building_parser_dataset" / "mesh" / "ETH").mkdir(parents=True)
-    traversible = (
-        root / "sd3dis" / "stanford_building_parser_dataset" / "traversibles" / "ETH" / "data.pkl"
-    )
-    traversible.parent.mkdir(parents=True)
-    traversible.write_bytes(b"fixture")
+    _stage_eth_assets(root)
 
     report = validate_batch(
         manifest_path=manifest,
@@ -123,6 +135,69 @@ def test_validate_batch_rejects_parent_relative_path(tmp_path: Path) -> None:
             socnav_root=tmp_path / "socnavbench",
             batch_id="eth_first",
         )
+
+
+def test_conversion_readiness_blocks_when_traversible_missing(tmp_path: Path) -> None:
+    """Preflight must fail closed and name the missing traversible while blocked."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_manifest(manifest)
+
+    report = conversion_readiness(
+        manifest_path=manifest,
+        socnav_root=tmp_path / "socnavbench",
+        batch_id="eth_first",
+        repo_root=tmp_path / "repo",
+    )
+
+    assert report["conversion_ready"] is False
+    assert report["status"] == BLOCKED
+    missing_keys = {item["asset_key"] for item in report["missing_required"]}
+    assert "eth_traversible_pickle" in missing_keys
+    # The next-action hint must point at staging the missing traversible path.
+    assert "traversibles/ETH/data.pkl" in report["next_action"]
+    # Nothing was staged, so there is no placeholder masquerading as a conversion.
+    assert report["placeholder_risk"] == []
+
+
+def test_conversion_readiness_ready_when_assets_staged(tmp_path: Path) -> None:
+    """Preflight should clear conversion only once every required asset is staged."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_manifest(manifest)
+    root = tmp_path / "socnavbench"
+    _stage_eth_assets(root)
+
+    report = conversion_readiness(
+        manifest_path=manifest,
+        socnav_root=root,
+        batch_id="eth_first",
+        repo_root=tmp_path / "repo",
+    )
+
+    assert report["conversion_ready"] is True
+    assert report["status"] == READY
+    assert report["missing_required"] == []
+    assert report["placeholder_risk"] == []
+
+
+def test_conversion_readiness_flags_placeholder_when_blocked(tmp_path: Path) -> None:
+    """A pre-existing planned SVG while blocked is a provenance/placeholder risk."""
+    manifest = tmp_path / "manifest.yaml"
+    _write_manifest(manifest)
+    repo_root = tmp_path / "repo"
+    placeholder = repo_root / PLANNED_MAP_SVG
+    placeholder.parent.mkdir(parents=True)
+    placeholder.write_text("<svg></svg>", encoding="utf-8")
+
+    report = conversion_readiness(
+        manifest_path=manifest,
+        socnav_root=tmp_path / "socnavbench",
+        batch_id="eth_first",
+        repo_root=repo_root,
+    )
+
+    assert report["conversion_ready"] is False
+    assert [risk["relative_path"] for risk in report["placeholder_risk"]] == [PLANNED_MAP_SVG]
+    assert report["placeholder_risk"][0]["output_key"] == "map_svg"
 
 
 def test_validate_batch_rejects_absolute_relative_path(tmp_path: Path) -> None:

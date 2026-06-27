@@ -55,6 +55,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uniform. New test `tests/test_classic_archetype_density_index.py` re-derives the same facts from the
   `classic_*.yaml` configs and `classic_interactions.yaml` and fails closed on drift or missing
   config/tier coverage. The scenario zoo index links the new file for discoverability.
+* Added a **presence-only publication-prerequisites preflight** for the v0.1 validation/falsification
+  benchmark package (epic #2910). A declarative checklist
+  (`configs/benchmarks/releases/benchmark_v0_1_publication_prerequisites.yaml`) enumerates the
+  canonical prerequisite owners a v0.1 package must be built on — ODD/scenario contracts, scenario
+  certification, benchmark/row claim metadata, ODD/hazard coverage matrix, the release protocol and
+  pinned v0.1 release manifest, the seed schedule, the release checklist doc, and citation metadata.
+  The companion checker `scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`
+  verifies every referenced path exists and fails closed (exit `1`) when a required prerequisite is
+  missing. It is deliberately presence-only: it does **not** release, tag, upload artifacts, run a
+  benchmark/falsification campaign, judge scenario certification, or declare the benchmark "ready" —
+  every report carries an explicit `claim_boundary` to that effect. Run with
+  `uv run python scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

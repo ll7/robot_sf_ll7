@@ -102,6 +102,11 @@ provenance only — it never reports dataset-backed.
 
 ## Reproducibility commands
 
+> Canonical owner note: the commands below drive the original `scripts/data/stage_sdd_dataset_issue_2657.py`
+> staging script. The provenance-safe BYO opt-in gate added for #1497 lives in the canonical
+> external-data owner `scripts/tools/manage_external_data.py` (`sdd-preflight`); see the
+> "Issue #1497" section below.
+
 ```bash
 # Plan only -- NEVER downloads (default):
 uv run python scripts/data/stage_sdd_dataset_issue_2657.py
@@ -129,7 +134,10 @@ transforming any data:
 - A new preflight reports the two staging prerequisites and the blocked-external-input state. It is
   `ready` only when the license acknowledgment is **satisfied** AND the annotation files are present
   locally; otherwise it fails closed (CLI exit 2). Parsing fails closed on a non-boolean
-  acknowledgment or a malformed recipe so the gate cannot be bypassed by a typo.
+  acknowledgment, a malformed recipe, or a non-string statement so the gate cannot be bypassed by a
+  typo. The acknowledgment is **mandatory**: `license_acknowledgment.required: false` is rejected, so
+  a locally edited manifest cannot disable the gate and report `ready` without an explicit license
+  affirmation.
 - Canonical owner: extends `scripts/tools/manage_external_data.py`
   (`SddLicenseAcknowledgment`, `build_sdd_preflight`, CLI `sdd-preflight`); no parallel per-issue
   script. Tests: `tests/tools/test_sdd_preflight_issue_1497.py`.

@@ -111,6 +111,28 @@ def test_non_boolean_acknowledgment_fails_closed(tmp_path: Path) -> None:
         canonical.load_sdd_staging_spec(manifest)
 
 
+def test_required_false_is_rejected_so_gate_cannot_be_disabled(tmp_path: Path) -> None:
+    """`required: false` must fail closed: the SDD acknowledgment is mandatory and non-disableable."""
+    manifest = _write_manifest(
+        tmp_path,
+        staging_dir=tmp_path / "sdd",
+        license_acknowledgment={"required": False, "acknowledged": False},
+    )
+    with pytest.raises(canonical.ExternalDataError, match="required.*cannot be disabled"):
+        canonical.load_sdd_staging_spec(manifest)
+
+
+def test_non_string_statement_fails_closed(tmp_path: Path) -> None:
+    """A non-string statement (e.g. a list) must be rejected, not silently coerced."""
+    manifest = _write_manifest(
+        tmp_path,
+        staging_dir=tmp_path / "sdd",
+        license_acknowledgment={"required": True, "acknowledged": False, "statement": ["a", "b"]},
+    )
+    with pytest.raises(canonical.ExternalDataError, match="statement.*string"):
+        canonical.load_sdd_staging_spec(manifest)
+
+
 def test_malformed_retrieval_recipe_fails_closed(tmp_path: Path) -> None:
     """A retrieval recipe with an empty step must fail closed."""
     manifest = _write_manifest(

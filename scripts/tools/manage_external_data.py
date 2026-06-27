@@ -583,8 +583,13 @@ class SddLicenseAcknowledgment:
 
     @property
     def satisfied(self) -> bool:
-        """True when the opt-in is not required, or required and explicitly affirmed."""
-        return (not self.required) or self.acknowledged
+        """True only when the contributor has explicitly affirmed the license.
+
+        The SDD acknowledgment is mandatory: the manifest cannot disable the gate via
+        ``required: false`` (rejected by ``_parse_sdd_license_acknowledgment``), so
+        satisfaction always requires ``acknowledged: true`` and fails closed otherwise.
+        """
+        return self.required and self.acknowledged
 
 
 @dataclass(frozen=True)
@@ -732,6 +737,8 @@ def _parse_sdd_license_acknowledgment(ack_raw: Any) -> SddLicenseAcknowledgment:
     A missing block defaults to required-but-unacknowledged so the asset stays blocked until a
     contributor affirms their own license rights. ``acknowledged`` and ``required`` must be real
     booleans when present (a YAML string is rejected) so the gate cannot be bypassed by a typo.
+    The acknowledgment is mandatory: ``required: false`` is rejected so a locally edited manifest
+    cannot disable the gate and report ``ready`` without an explicit license affirmation.
     """
     if ack_raw is None:
         return SddLicenseAcknowledgment(required=True, acknowledged=False, statement="")
@@ -741,10 +748,17 @@ def _parse_sdd_license_acknowledgment(ack_raw: Any) -> SddLicenseAcknowledgment:
     acknowledged = ack_raw.get("acknowledged", False)
     if not isinstance(required, bool):
         raise ExternalDataError("`license_acknowledgment.required` must be a boolean.")
+    if required is False:
+        raise ExternalDataError(
+            "`license_acknowledgment.required` cannot be disabled; the SDD license acknowledgment "
+            "is mandatory (set `acknowledged: true` after reading the license)."
+        )
     if not isinstance(acknowledged, bool):
         raise ExternalDataError("`license_acknowledgment.acknowledged` must be a boolean.")
     statement = ack_raw.get("statement")
-    statement_text = "" if statement is None else str(statement).strip()
+    if statement is not None and not isinstance(statement, str):
+        raise ExternalDataError("`license_acknowledgment.statement` must be a string.")
+    statement_text = "" if statement is None else statement.strip()
     return SddLicenseAcknowledgment(
         required=required,
         acknowledged=acknowledged,

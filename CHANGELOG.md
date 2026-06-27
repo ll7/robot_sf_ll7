@@ -19,8 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/tools/manage_external_data.py` (`build_sdd_preflight`) reports the two staging
   prerequisites and the blocked-external-input state, and **fails closed** (CLI exit 2) until the
   license acknowledgment is affirmed *and* the annotation files are present locally. Manifest
-  parsing also fails closed on a non-boolean acknowledgment or a malformed recipe so the gate cannot
-  be bypassed by a typo. This is staging-gate/provenance work only: it does **not** download,
+  parsing also fails closed on a non-boolean acknowledgment, a malformed recipe, or a non-string
+  statement, and rejects `license_acknowledgment.required: false`, so the mandatory gate cannot be
+  bypassed by a typo or disabled by a locally edited manifest. This is staging-gate/provenance work
+  only: it does **not** download,
   ingest, or transform any SDD data, run benchmarks, or edit any benchmark/paper claim. Scenario
   curation against real annotations remains #1126.
 * Added a **durable trace-URI registry contract and validator** for oracle-imitation artifacts so

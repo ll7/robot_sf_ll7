@@ -99,6 +99,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
   manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
   protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
+* Added a **diagnostic-only** inventory of SNQI per-term normalization status (#3699). New module
+  `robot_sf/benchmark/snqi/normalization_inventory.py` and CLI
+  `scripts/benchmark/snqi_normalization_inventory_report.py` enumerate each SNQI term's scaling
+  regime and surface that `compute_snqi` mixes *raw, unbounded* penalty terms (`time`, `comfort`)
+  with *baseline-normalized* `[0, 1]` terms (collisions, near-misses, force-exceed, jerk), which
+  makes the weight coefficients non-comparable as relative priorities. The report flags the
+  mixed-scale condition and any baseline-normalized term lacking median/p95 coverage, and can fail
+  closed (`--fail-on-mixed-scale`, `--fail-on-missing-baseline`). It does **not** change the SNQI
+  formula, weights, `normalize_metric`, or any emitted score, and does **not** choose between the
+  normalize vs. clip-and-document remedies (that remains `decision-required` on #3699). An anti-drift
+  test reconstructs the SNQI score from the inventory's term table and asserts it equals
+  `compute_snqi` exactly.
 * Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
   campaign can verify its input prerequisites before execution (#3078). New manifest
   `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario

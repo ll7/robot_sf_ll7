@@ -82,6 +82,46 @@ def test_spaces_compatible_rejects_tuple_length_mismatch() -> None:
     assert _spaces_compatible(base, other, allow_box_bounds_mismatch=True) is False
 
 
+class _WrappedTuple(spaces.Tuple):
+    """Tuple subclass standing in for wrapper/adapter-derived Tuple spaces."""
+
+
+def test_spaces_compatible_tuple_subclass_recurses_on_children() -> None:
+    """Tuple subclasses with matching children should be compatible (issue #3709)."""
+    children = (
+        spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32),
+        spaces.Discrete(3),
+    )
+    base = spaces.Tuple(children)
+    wrapped = _WrappedTuple(children)
+    # Both directions must hold despite the strict top-level type difference.
+    assert _spaces_compatible(base, wrapped, allow_box_bounds_mismatch=False) is True
+    assert _spaces_compatible(wrapped, base, allow_box_bounds_mismatch=False) is True
+    assert _spaces_compatible(wrapped, wrapped, allow_box_bounds_mismatch=False) is True
+
+
+def test_spaces_compatible_tuple_subclass_still_checks_children() -> None:
+    """Tuple recursion must still reject mismatched child spaces, lengths, and non-Tuples."""
+    base = spaces.Tuple(
+        (spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32), spaces.Discrete(3))
+    )
+    mismatched_child = _WrappedTuple(
+        (spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32), spaces.Discrete(4))
+    )
+    shorter = _WrappedTuple((spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32),))
+    assert _spaces_compatible(base, mismatched_child, allow_box_bounds_mismatch=False) is False
+    assert _spaces_compatible(base, shorter, allow_box_bounds_mismatch=False) is False
+    # A Tuple is never compatible with a non-Tuple space.
+    assert (
+        _spaces_compatible(
+            base,
+            spaces.Box(low=0.0, high=1.0, shape=(2,), dtype=np.float32),
+            allow_box_bounds_mismatch=False,
+        )
+        is False
+    )
+
+
 def test_scenario_sampler_cycles_and_filters() -> None:
     """Sampler should honor include filters and cycle strategy."""
     sampler = ScenarioSampler(

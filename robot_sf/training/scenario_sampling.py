@@ -35,7 +35,13 @@ def _spaces_compatible(  # noqa: C901
     allow_box_bounds_mismatch: bool,
 ) -> bool:
     """Return whether two spaces can safely share one vectorized env contract."""
-    if type(base) is not type(other):
+    # Tuple spaces are often re-created by wrappers or subclassed by vectorized-env
+    # adapters, so their concrete type can differ even when the element spaces match.
+    # Compare such Tuple-compatible spaces structurally on their child spaces instead
+    # of rejecting them on strict top-level type identity. All other space families
+    # keep the strict type check so Box/Dict/Discrete semantics are unchanged.
+    both_tuple = isinstance(base, spaces.Tuple) and isinstance(other, spaces.Tuple)
+    if not both_tuple and type(base) is not type(other):
         return False
     if isinstance(base, spaces.Box):
         if base.shape != other.shape or np.dtype(base.dtype) != np.dtype(other.dtype):

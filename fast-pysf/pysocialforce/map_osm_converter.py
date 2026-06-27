@@ -18,6 +18,26 @@ OSM_REFERENCE_SCALE = 1350  # Reference scale denominator from OSM export
 OSM_COORDINATE_ADJUSTMENT = 4.08  # Coordinate system scaling factor
 
 
+def parse_viewbox(viewbox_str: str) -> list[float]:
+    """Parse an SVG ``viewBox`` attribute into a list of floats.
+
+    Per the SVG specification, the four ``viewBox`` values (min-x, min-y, width,
+    height) may be separated by whitespace and/or commas, e.g. ``"0 0 488 458"``,
+    ``"0,0,488,458"``, or ``"0, 0, 488, 458"``. A plain ``str.split()`` only
+    handles whitespace, so comma-delimited exports raise ``ValueError`` on float
+    conversion. Splitting on any run of commas/whitespace handles every valid
+    form (see issue #3708).
+
+    Args:
+        viewbox_str (str): The raw ``viewBox`` attribute value.
+
+    Returns:
+        list[float]: The parsed numeric viewBox components.
+    """
+    tokens = re.split(r"[\s,]+", viewbox_str.strip())
+    return [float(token) for token in tokens if token]
+
+
 def extract_buildings_as_obstacle(
     map_full_name,
     building_rgb_color_str: str = "rgb(85.098039%,81.568627%,78.823529%)",
@@ -76,7 +96,7 @@ def extract_buildings_as_obstacle(
     # Copy viewBox attribute from the original root to the new root
 
     if "viewBox" in root.attrib:
-        viewbox = list(map(float, root.attrib["viewBox"].split()))
+        viewbox = parse_viewbox(root.attrib["viewBox"])
         logger.debug("Old viewBox: {}", viewbox)
         viewbox[2] *= scale_factor  # Scale the width
         viewbox[3] *= scale_factor  # Scale the height
@@ -123,7 +143,7 @@ def add_scale_bar_to_root(root: ET.Element, line_length: int = 100):
         ET.Element: The modified root element with the scale bar added.
     """
     # Get the width of the image
-    viewbox = list(map(float, root.attrib["viewBox"].split()))
+    viewbox = parse_viewbox(root.attrib["viewBox"])
     image_width = viewbox[2]
 
     # Add an alternating black and white line over the whole image width

@@ -51,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed **OSM SVG `viewBox` parsing failing on comma-separated values** in
+  `fast-pysf/pysocialforce/map_osm_converter.py` (#3708). The converter parsed the `viewBox`
+  attribute with bare `str.split()`, which only handles whitespace separators, so SVG exports using
+  the equally valid comma-delimited form (e.g. `"0,0,488.48,458.33"`) raised
+  `ValueError: could not convert string to float`. A new `parse_viewbox` helper splits on any run of
+  commas and/or whitespace per the SVG spec, and both call sites (`extract_buildings_as_obstacle` and
+  `add_scale_bar_to_root`) now use it. Whitespace-separated viewBoxes are unaffected.
 * Fixed the PPO baseline adapter **crashing on partial dict observations** instead of backfilling
   missing keys (#3704). In `robot_sf/baselines/ppo.py`, `_align_model_obs_dict` previously raised
   `ValueError: Missing required dict observation keys` whenever a runner emitted a subset of the keys

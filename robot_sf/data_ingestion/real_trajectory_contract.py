@@ -1,0 +1,235 @@
+"""Schema loading, validation, and fail-closed preflight for the real-trajectory ingestion contract.
+
+The contract (GitHub issue #3065) is a *bring-your-own-dataset* (BYO) staging contract: a contributor
+points the tooling at trajectory data they have the rights to, and the repository tracks only a
+manifest (metadata, license acknowledgment, retrieval instructions, conversion shape, checksums,
+split naming, and a durable pointer). Raw external data is never committed.
+
+Two validation layers exist:
+
+* ``validate_manifest_structure`` enforces the JSON Schema (shape, types, required fields).
+* ``run_preflight`` enforces the *semantic* contract that the schema cannot express on its own:
+  license acknowledgment for BYO data, git-ignored staging locations, an explicit durable-storage
+  boundary, and fail-closed benchmark eligibility that stays below claim grade until the local copy
+  is checksum-validated.
+
+This module performs no network access and stages no data; it only reads a manifest file/dict.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import jsonschema
+import yaml
+
+MANIFEST_SCHEMA_ID = "robot_sf_real_trajectory_ingestion_manifest.v1"
+
+_SCHEMA_PATH = (
+    Path(__file__).resolve().parent / "schemas" / "real_trajectory_ingestion_manifest.v1.json"
+)
+
+# Git-ignored roots where raw/converted BYO trajectory data may live. ``output/`` is the canonical
+# worktree artifact root (git-ignored); ``ROBOT_SF_EXTERNAL_DATA_ROOT`` is the optional external
+# staging root honored by scripts/tools/manage_external_data.py.
+_GITIGNORED_STAGING_PREFIXES = (
+    "output/",
+    "${ROBOT_SF_EXTERNAL_DATA_ROOT}",
+    "$ROBOT_SF_EXTERNAL_DATA_ROOT",
+)
+
+
+class ContractError(RuntimeError):
+    """Raised when a manifest cannot be loaded or fails structural schema validation."""
+
+
+@dataclass(frozen=True)
+class PreflightIssue:
+    """A single semantic contract violation found by :func:`run_preflight`."""
+
+    code: str
+    message: str
+    severity: str = "error"  # "error" blocks readiness; "warning" is advisory only.
+
+
+@dataclass
+class PreflightResult:
+    """Outcome of a semantic preflight over a structurally valid manifest."""
+
+    dataset_id: str
+    availability: str
+    benchmark_eligibility: str
+    issues: list[PreflightIssue] = field(default_factory=list)
+
+    @property
+    def errors(self) -> list[PreflightIssue]:
+        """Return only blocking issues."""
+        return [issue for issue in self.issues if issue.severity == "error"]
+
+    @property
+    def warnings(self) -> list[PreflightIssue]:
+        """Return only advisory issues."""
+        return [issue for issue in self.issues if issue.severity == "warning"]
+
+    @property
+    def ok(self) -> bool:
+        """True when no blocking issues were found."""
+        return not self.errors
+
+
+def load_schema() -> dict[str, Any]:
+    """Load the manifest JSON Schema bundled with this package.
+
+    Returns:
+        The parsed JSON Schema as a dict.
+    """
+    with _SCHEMA_PATH.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def load_manifest(path: str | Path) -> dict[str, Any]:
+    """Load a manifest from a YAML or JSON file.
+
+    Returns:
+        The parsed manifest mapping.
+
+    Raises:
+        ContractError: If the file is missing or does not parse to a mapping.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise ContractError(f"Manifest file not found: {path}")
+    text = path.read_text(encoding="utf-8")
+    try:
+        data = yaml.safe_load(text)  # YAML is a JSON superset, so this also parses .json manifests.
+    except yaml.YAMLError as exc:  # pragma: no cover - exercised via malformed-input tests
+        raise ContractError(f"Manifest {path} is not valid YAML/JSON: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ContractError(f"Manifest {path} must be a mapping, got {type(data).__name__}.")
+    return data
+
+
+def validate_manifest_structure(
+    manifest: dict[str, Any], schema: dict[str, Any] | None = None
+) -> None:
+    """Validate manifest shape against the JSON Schema.
+
+    Raises:
+        jsonschema.ValidationError: If the manifest violates the schema.
+    """
+    jsonschema.validate(instance=manifest, schema=schema or load_schema())
+
+
+def _staging_is_gitignored(staging_dir: str) -> bool:
+    """Return True when ``staging_dir`` resolves under a known git-ignored staging root."""
+    normalized = staging_dir.strip()
+    return any(normalized.startswith(prefix) for prefix in _GITIGNORED_STAGING_PREFIXES)
+
+
+def run_preflight(manifest: dict[str, Any], *, validate_structure: bool = True) -> PreflightResult:
+    """Run the fail-closed semantic preflight over a manifest.
+
+    Args:
+        manifest: Parsed manifest mapping.
+        validate_structure: When True, run JSON Schema validation first (recommended). Set False
+            only when the caller has already validated structure.
+
+    Returns:
+        A :class:`PreflightResult`. Inspect ``result.ok``/``result.errors`` to gate readiness.
+
+    Raises:
+        jsonschema.ValidationError: If ``validate_structure`` is True and the manifest is malformed.
+    """
+    if validate_structure:
+        validate_manifest_structure(manifest)
+
+    issues: list[PreflightIssue] = []
+
+    license_block = manifest["license"]
+    if (
+        license_block["posture"] == "bring-your-own"
+        and not license_block["supplier_acknowledgment"]
+    ):
+        issues.append(
+            PreflightIssue(
+                code="license.acknowledgment_missing",
+                message=(
+                    "bring-your-own data requires license.supplier_acknowledgment: true "
+                    "(the supplier must assert they hold the rights to use this data)."
+                ),
+            )
+        )
+    if license_block["posture"] == "project-hosted":
+        issues.append(
+            PreflightIssue(
+                code="license.project_hosted_requires_decision",
+                message=(
+                    "license.posture 'project-hosted' requires an explicit maintainer "
+                    "redistribution decision; default to 'bring-your-own'."
+                ),
+                severity="warning",
+            )
+        )
+
+    staging = manifest["staging"]
+    if not _staging_is_gitignored(staging["staging_dir"]):
+        issues.append(
+            PreflightIssue(
+                code="staging.not_gitignored",
+                message=(
+                    f"staging_dir '{staging['staging_dir']}' must resolve under a git-ignored "
+                    "staging root (output/ or $ROBOT_SF_EXTERNAL_DATA_ROOT) so raw data is never "
+                    "committed."
+                ),
+            )
+        )
+    # The durable-storage boundary must be explicit and must not point back at the disposable
+    # output/ artifact root, which is not a durable dependency.
+    durable = staging["durable_storage_target"].strip()
+    if durable.startswith("output/"):
+        issues.append(
+            PreflightIssue(
+                code="staging.durable_target_is_output",
+                message=(
+                    "durable_storage_target must name a durable boundary (e.g. a wandb:// artifact "
+                    "URI or 'local-only-byo'); the git-ignored output/ root is not durable."
+                ),
+            )
+        )
+
+    availability = manifest["availability"]
+    eligibility = manifest["benchmark_eligibility"]
+    checksums = manifest["checksums"]
+
+    # Fail-closed evidence gate: nothing may be marked a benchmark candidate until a local copy is
+    # checksum-validated. This keeps downstream claims diagnostic-only until real data is staged.
+    if eligibility == "benchmark_candidate" and availability != "validated":
+        issues.append(
+            PreflightIssue(
+                code="eligibility.not_validated",
+                message=(
+                    f"benchmark_eligibility 'benchmark_candidate' requires availability 'validated', "
+                    f"got availability '{availability}'."
+                ),
+            )
+        )
+    if availability == "validated" and not checksums["tree_sha256"]:
+        issues.append(
+            PreflightIssue(
+                code="checksums.missing_for_validated",
+                message=(
+                    "availability 'validated' requires checksums.tree_sha256 to be set "
+                    "(the aggregate hash over staged files)."
+                ),
+            )
+        )
+
+    return PreflightResult(
+        dataset_id=manifest["dataset_id"],
+        availability=availability,
+        benchmark_eligibility=eligibility,
+        issues=issues,
+    )

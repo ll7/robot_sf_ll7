@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **real-trajectory ingestion and artifact-staging contract** (#3065): a dataset-agnostic,
+  bring-your-own-dataset (BYO) manifest schema plus a fail-closed preflight checker. New package
+  `robot_sf/data_ingestion/` defines the JSON Schema
+  (`schemas/real_trajectory_ingestion_manifest.v1.json`) and `real_trajectory_contract.py`
+  (`load_manifest`, `validate_manifest_structure`, `run_preflight`). The manifest tracks dataset
+  metadata, license posture + supplier acknowledgment (the repo never redistributes raw data),
+  retrieval instructions, the canonical conversion shape, SHA-256 checksums, split naming, a
+  git-ignored staging dir, and an explicit durable-storage pointer. `run_preflight` enforces the
+  semantic gates the schema cannot: BYO license acknowledgment, git-ignored staging, a durable
+  boundary that is not the disposable `output/` root, and `benchmark_eligibility` that stays below
+  claim grade until availability is checksum-`validated`. Ships a copy-me template
+  (`configs/data/real_trajectory_manifest.example.yaml`) and a CLI
+  (`scripts/tools/check_real_trajectory_manifest.py`). Contract-only: no external dataset is
+  downloaded, copied, committed, or claimed as real-world validation. See
+  `docs/context/issue_3065_real_trajectory_ingestion_contract.md`.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

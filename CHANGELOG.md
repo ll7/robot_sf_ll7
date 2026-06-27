@@ -25,6 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checkpoint mapping, the all-zero degenerate-spread state, `proxy.enabled=false`, the ready case,
   and CLI exit codes, plus a pin on the current blocked live-registry state (the intended revival
   signal once checkpoints hydrate).
+* Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
+  traces routed through the `amv-calibration` external-data path (#2415). New schema
+  `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker
+  `robot_sf/research/amv_command_response_trace_manifest.py` validate, per candidate trace bundle,
+  the provenance/license, the command/response/timing channels the bundle would expose, and the
+  declared calibration targets — fail-closed against the canonical synthetic-actuation envelope
+  vocabulary (`robot_sf.benchmark.synthetic_actuation.actuation_variability_fields()`) so the
+  manifest cannot drift from what calibration can consume. CLI
+  `scripts/validation/check_amv_command_response_trace_manifest_issue_2415.py` prints a JSON report
+  and (with `--probe-live-staging`) reconciles each trace's declared staging status against a live
+  `manage_external_data.check_asset` presence probe. The shipped example manifest
+  (`configs/research/amv_command_response_trace_manifest_issue_2415.yaml`) is
+  `blocked-external-input` today, matching the maintainer decision on #2415 (2026-06-22) that no
+  realistic real-data source is currently available. This is **manifest-contract only**: it does
+  not ingest traces, run a calibration, or make a hardware-calibrated realism claim
+  (`evidence_boundary = manifest_contract_only_no_trace_ingest_no_calibration_run_no_calibrated_claim`).
 * Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
   surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
   `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware
@@ -81,6 +97,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
   runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
   (`evidence_tier` stays blocked → analysis_only).
+* Added a metadata-only staging/preflight checker for external pedestrian-prior extraction (#2918).
+  New module `robot_sf/benchmark/pedestrian_prior_extraction_manifest.py` exposes
+  `check_pedestrian_prior_extraction_manifest`, which validates a
+  `pedestrian_prior_extraction_manifest.v1` manifest (allowed external source type, the bounded
+  prior parameters the run will emit — walking speed, crossing angle, density, interaction
+  distance, stop/yield timing — provenance fields, and the authored-vs-dataset-backed separation)
+  and reports missing parameters, provenance/separation blockers, and whether a dataset-backed
+  prior claim is yet allowed. The checker **ingests no external data, stores no raw trajectories,
+  and makes no calibrated- or representative-prior claim** (`evidence_boundary:
+  prior_extraction_plan_only_no_calibrated_prior_claim`); a dataset-backed claim is gated behind
+  accepted provenance and a source family with a registered external-data staging contract, while
+  `blocked-external-input` (the default, matching issue #2918's external-data block) and
+  `proxy-only` manifests cannot assert a prior, and a `proxy-only` manifest declaring a
+  dataset-backed source is rejected as boundary conflation. The allowed source-type → external-data
+  asset-id map is cross-checked against the canonical `scripts/tools/manage_external_data.py`
+  registry. CLI: `scripts/tools/check_pedestrian_prior_extraction_manifest.py`; example manifest:
+  `configs/research/pedestrian_prior_extraction_manifest_issue_2918_example.yaml`; context note:
+  `docs/context/issue_2918_pedestrian_prior_extraction_preflight.md`.
 * Added a metadata-only staging-contract checker for dataset-backed scenario priors (#3161). New
   module `robot_sf/research/scenario_prior_staging_contract.py` exposes
   `check_scenario_prior_staging_contract`, which validates a `scenario_prior_staging_contract.v1`
@@ -115,6 +149,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
   manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
   protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
+* Added a **diagnostic-only** inventory of SNQI per-term normalization status (#3699). New module
+  `robot_sf/benchmark/snqi/normalization_inventory.py` and CLI
+  `scripts/benchmark/snqi_normalization_inventory_report.py` enumerate each SNQI term's scaling
+  regime and surface that `compute_snqi` mixes *raw, unbounded* penalty terms (`time`, `comfort`)
+  with *baseline-normalized* `[0, 1]` terms (collisions, near-misses, force-exceed, jerk), which
+  makes the weight coefficients non-comparable as relative priorities. The report flags the
+  mixed-scale condition and any baseline-normalized term lacking median/p95 coverage, and can fail
+  closed (`--fail-on-mixed-scale`, `--fail-on-missing-baseline`). It does **not** change the SNQI
+  formula, weights, `normalize_metric`, or any emitted score, and does **not** choose between the
+  normalize vs. clip-and-document remedies (that remains `decision-required` on #3699). An anti-drift
+  test reconstructs the SNQI score from the inventory's term table and asserts it equals
+  `compute_snqi` exactly.
 * Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
   campaign can verify its input prerequisites before execution (#3078). New manifest
   `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario

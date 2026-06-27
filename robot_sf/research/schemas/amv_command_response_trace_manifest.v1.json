@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf/schemas/amv_command_response_trace_manifest.v1.json",
+  "title": "AMV command-response trace staging manifest (v1)",
+  "description": "Metadata-only staging manifest for real AMV command-response actuation traces routed through the amv-calibration external-data path (issue #2415). Declares, per candidate trace bundle, provenance/license, the command and response channels the bundle would expose, the timing/latency fields a command-response calibration needs, and which canonical synthetic-actuation envelope fields the trace would calibrate. It describes staging intent only; it neither ingests traces nor stores raw command-response samples.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "issue",
+    "claim_boundary",
+    "calibration_asset_id",
+    "synthetic_envelope_module",
+    "traces"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "amv_command_response_trace_manifest.v1"
+    },
+    "manifest_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "issue": {
+      "type": "integer"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "calibration_asset_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "External-data AssetSpec id the trace bundles stage through (the amv-calibration path in scripts/tools/manage_external_data.py)."
+    },
+    "synthetic_envelope_module": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to the synthetic actuation-envelope module whose fields a calibrated command-response trace would inform (robot_sf/benchmark/synthetic_actuation.py)."
+    },
+    "traces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/trace"
+      }
+    }
+  },
+  "$defs": {
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trace_id",
+        "title",
+        "staging_status",
+        "redistribution",
+        "blocker_issues",
+        "provenance",
+        "command_channels",
+        "response_channels",
+        "timing_fields",
+        "calibration_targets"
+      ],
+      "properties": {
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "asset_id": {
+          "type": ["string", "null"],
+          "description": "External-data AssetSpec id this trace bundle stages through, or null when no asset spec is wired yet. Defaults conceptually to calibration_asset_id."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "staging_status": {
+          "type": "string",
+          "enum": ["blocked-external-input", "missing", "staged"]
+        },
+        "redistribution": {
+          "type": "string",
+          "enum": ["none"],
+          "description": "Raw external command-response traces are never redistributed by this repository."
+        },
+        "blocker_issues": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_url", "license", "license_status", "citation"],
+          "properties": {
+            "source_url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "license": {
+              "type": "string",
+              "minLength": 1
+            },
+            "license_status": {
+              "type": "string",
+              "enum": ["license-gated", "open", "unknown"]
+            },
+            "citation": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "command_channels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Commanded actuation channels the trace bundle would expose (e.g. linear_velocity_command_mps, yaw_rate_command_rad_s)."
+        },
+        "response_channels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Measured response channels the trace bundle would expose (e.g. measured_linear_velocity_mps, measured_yaw_rate_rad_s)."
+        },
+        "timing_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Timing/latency fields a command-response calibration needs (e.g. timestamp_s, control_latency_s, sample_rate_hz)."
+        },
+        "calibration_targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Canonical synthetic-actuation envelope fields this trace would calibrate (validated against robot_sf.benchmark.synthetic_actuation.actuation_variability_fields())."
+        }
+      }
+    }
+  }
+}

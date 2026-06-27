@@ -21,7 +21,7 @@ traces are durably retrievable*.
 - Module (canonical owner): `robot_sf/training/oracle_trace_uri_registry.py`
 - CLI: `scripts/validation/validate_oracle_trace_uri_registry.py`
 - Example entry: `configs/training/ppo_imitation/oracle_trace_uri_registry_example.yaml`
-- Tests: `tests/training/test_oracle_trace_uri_registry.py`
+- Tests: `tests/training/test_oracle_imitation_trace_uri_registry.py`
 
 Each registry records, per split (`train`, `validation`, `evaluation`):
 
@@ -52,7 +52,7 @@ match the declared checksum.
 uv run python scripts/validation/validate_oracle_trace_uri_registry.py \
   --config configs/training/ppo_imitation/oracle_trace_uri_registry_example.yaml --json
 # add --require-training-ready to fail closed until the traces are resolvable.
-uv run python -m pytest tests/training/test_oracle_trace_uri_registry.py -q
+uv run python -m pytest tests/training/test_oracle_imitation_trace_uri_registry.py -q
 ```
 
 The checked-in example is intentionally not training-ready (all splits `pending`), documenting the

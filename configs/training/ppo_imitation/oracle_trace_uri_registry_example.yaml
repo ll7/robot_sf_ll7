@@ -1,0 +1,36 @@
+# Durable trace-URI registry for oracle-imitation artifacts (issue #2655).
+#
+# This registry records durable pointers to the raw train/validation/evaluation traces that
+# oracle-imitation training consumes. Large traces stay OUT of git; only resolvable URIs,
+# checksums, and retrieval status live here. A downstream imitation-training lane leaves the
+# `artifact_retrieval_blocked` state only when every required split is `resolvable` with a
+# concrete (non-`:pending`) durable URI and a 64-character SHA-256 checksum.
+#
+# Validate with:
+#   uv run python scripts/validation/validate_oracle_trace_uri_registry.py \
+#     --config configs/training/ppo_imitation/oracle_trace_uri_registry_example.yaml --json
+#   # add --require-training-ready to fail closed until the traces below are resolvable.
+#
+# STATUS (2026-06-27): traces are NOT yet collected/published, so every entry is `pending`
+# with a `:pending` URI alias and no concrete checksum. This is intentional: it documents the
+# contract while keeping `training_ready=False`. Replace each URI with a concrete durable
+# artifact reference, add the SHA-256 digest, and set `retrieval_status: resolvable` once the
+# traces are published to a durable store (e.g. a W&B artifact version).
+schema_version: oracle-trace-uri-registry.v1
+dataset_id: issue_1397_oracle_imitation_v1
+traces:
+  - split: train
+    trace_id: train__issue_1397_oracle_imitation_v1
+    uri: wandb-artifact://robot-sf/oracle-imitation/issue_1397_train:pending
+    sha256: pending
+    retrieval_status: pending
+  - split: validation
+    trace_id: validation__issue_1397_oracle_imitation_v1
+    uri: wandb-artifact://robot-sf/oracle-imitation/issue_1397_validation:pending
+    sha256: pending
+    retrieval_status: pending
+  - split: evaluation
+    trace_id: evaluation__issue_1397_oracle_imitation_v1
+    uri: wandb-artifact://robot-sf/oracle-imitation/issue_1397_evaluation:pending
+    sha256: pending
+    retrieval_status: pending

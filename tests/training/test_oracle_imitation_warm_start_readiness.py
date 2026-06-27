@@ -82,6 +82,14 @@ def _write_training_ready_packet(tmp_path: Path) -> Path:
             "evaluation_trace_jsonl_uri": "wandb-artifact://robot-sf/evaluation:v1",
             "trace_source_manifest_uri": "wandb-artifact://robot-sf/manifest:v1",
         },
+        # Durable collection destinations are required by the canonical validator
+        # (oracle_imitation_launch_packet, #1470); they must be durable artifact URIs and
+        # must not depend on the gitignored worktree-local ``output`` directory.
+        "collection_roots": {
+            "log_root": "wandb-artifact://robot-sf/logs:v1",
+            "dataset_output_root": "wandb-artifact://robot-sf/raw-traces:v1",
+            "manifest_destination": "wandb-artifact://robot-sf/manifest-dest:v1",
+        },
         "checksums": {},
     }
     path = tmp_path / "packet.yaml"

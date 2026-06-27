@@ -412,15 +412,15 @@ def _check_evidence_root(evidence_root: Path | None) -> PreflightCheck:
             severity=_ADVISORY,
             detail="no evidence root configured; reconciler will skip preservation checks",
         )
-    if not evidence_root.exists():
+    if not evidence_root.is_dir():
         return PreflightCheck(
             name="evidence_root_present",
             status=_BLOCKED,
             severity=_ADVISORY,
-            detail=f"evidence root does not exist: {evidence_root}",
+            detail=f"evidence root is not a directory: {evidence_root}",
             remediation=(
-                "create the compact evidence root or pass --evidence-root at the directory the "
-                "reconciler should scan"
+                "create the compact evidence root directory or pass --evidence-root at the "
+                "directory the reconciler should scan"
             ),
         )
     return PreflightCheck(

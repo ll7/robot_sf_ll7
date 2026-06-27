@@ -212,6 +212,22 @@ def test_advisory_evidence_root_does_not_block(tmp_path: Path) -> None:
     assert "evidence_root_present" in advisory_names
 
 
+def test_advisory_evidence_root_file_is_not_a_directory(tmp_path: Path) -> None:
+    """A file passed as the evidence root is advisory-blocked (reconciler scans a dir)."""
+    evidence_file = tmp_path / "evidence.txt"
+    evidence_file.write_text("not a directory", encoding="utf-8")
+
+    report = gate.preflight(**_ready_inputs(tmp_path), evidence_root=evidence_file)
+
+    # Advisory only: ready stays True, but the check reports the non-directory.
+    assert report["ready"] is True
+    advisory_names = {advisory["check"] for advisory in report["advisories"]}
+    assert "evidence_root_present" in advisory_names
+    root_check = next(c for c in report["checks"] if c["name"] == "evidence_root_present")
+    assert root_check["status"] == "blocked"
+    assert "not a directory" in root_check["detail"]
+
+
 def test_cli_exit_codes_ready_blocked_and_input_error(tmp_path: Path) -> None:
     """The CLI returns 0 ready, 1 blocked, and 2 on input error."""
     queue = _write_queue(tmp_path / "queue.yaml")

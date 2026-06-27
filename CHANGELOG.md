@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only **readiness preflight for proxy-based predictive-planner checkpoint selection**
+  (#3204). New config `configs/research/predictive_checkpoint_proxy_v1.yaml` declares the inputs the
+  merged proxy-vs-ADE analyzer (`scripts/research/analyze_predictive_checkpoint_proxy.py`, #3307)
+  needs, and new tool `scripts/research/check_predictive_checkpoint_proxy_readiness.py` fails closed
+  (`status: blocked`, exit 2) when those inputs are absent or degenerate. It maps each `predictive`
+  registry checkpoint to its `local_path` presence (reusing the canonical
+  `robot_sf.models.registry.load_registry`, no download), gates on the claim contract's "≥ 6
+  resolvable checkpoints", and — when a training summary is supplied — reuses the analyzer's verdict
+  so an `inconclusive` (no hard-success spread) summary is rejected. This operationalizes the manual
+  "predictive checkpoints not available" diagnostic recorded on #3204: against the live registry all
+  8 predictive checkpoints resolve to absent `output/tmp/...` paths, so the tool reports `blocked`.
+  It is **diagnostic/preflight only** — it selects no checkpoint, runs no training, submits no jobs,
+  promotes no evidence, and asserts no benchmark result. Fixture tests cover missing config, missing
+  checkpoint mapping, the all-zero degenerate-spread state, `proxy.enabled=false`, the ready case,
+  and CLI exit codes, plus a pin on the current blocked live-registry state (the intended revival
+  signal once checkpoints hydrate).
 * Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
   surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
   `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware

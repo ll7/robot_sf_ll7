@@ -25,6 +25,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry/preflight metadata only`). CLI:
   `scripts/tools/research_package_preflight.py` (Markdown or JSON, with an optional
   `--fail-on-blocked` gate).
+* Added a **read-only readiness preflight for the compact CARLA native↔aligned parity bundle**
+  (#1510). New module `robot_sf_carla_bridge/parity_bundle_preflight.py` exposes
+  `check_parity_bundle_readiness` (and the pure `evaluate_payload_metadata`), which checks — per
+  candidate scenario, fail-closed — that each T0 export manifest reads/validates, every referenced
+  export payload exists and is schema-valid, the scenario fixture certificate is present with an
+  eligible status, provenance carries a `robot_sf_commit`, and the recorded `trajectory_fields` are
+  non-empty, plus that the intended output directory is path-safe (never created). It composes the
+  canonical export readers (`resolve_export_manifest_payload_paths`, `read_export_payload`) and the
+  canonical parity metric list (`parity.DEFAULT_PARITY_METRICS`). CLI
+  `robot-sf-carla-parity-bundle-preflight` prints a JSON report and exits nonzero when not ready.
+  This is the **agent-executable local slice only**: it does **not** import CARLA, run a simulator,
+  execute a replay, or assert metric parity — a `ready` verdict means the static prerequisites are
+  staged, not that native↔aligned parity holds (runtime eligibility must be confirmed on a capable
+  CARLA host; see `docs/context/issue_1511_carla_native_aligned_parity_claim_boundary.md`).
+* Added a **coherence regression guard** for the real AMV command-response trace *acquisition*
+  issue (#2000). Issue #2000 is hard-blocked on external data (no realistic real-trace source,
+  <5% feasibility) and its only agent-executable action is to keep the acquisition path documented
+  and the downstream consumer (#2415 staging manifest) and proxy fallback (#1585) coherent. The
+  consumer manifest mechanism is already owned by #2415
+  (`robot_sf/research/amv_command_response_trace_manifest.py`); this change adds the missing test
+  (`tests/research/test_issue_2000_amv_acquisition_coherence.py`) that locks in #2000's acceptance
+  criteria so future edits cannot silently drop the #2000/#1585 cross-reference from the shipped
+  manifest, flip the still-blocked acquisition into a "ready"/"staged" state without a real source,
+  or let the preflight imply a calibrated/hardware realism claim. It also guards that the trace
+  declares the command/response/timing field classes #2000 names. This is a test-only guard: it
+  does **not** collect traces, calibrate any envelope value, copy private data, run a campaign, or
+  edit any paper/dissertation claim.
+
+* Added a **diagnostic readiness/preflight checker for AMV actuation-envelope calibration inputs**
+  (#1559). New module `robot_sf/benchmark/amv_calibration_readiness.py` exposes
+  `assess_amv_calibration_readiness` / `assess_amv_calibration_readiness_from_config`, which inspect a
+  candidate calibrated-actuation profile (e.g. the
+  `configs/benchmarks/issue_1586_calibrated_actuation_profile_skeleton_v0.yaml` skeleton) and report
+  `ready` vs `blocked`, **fail-closed**. It closes a real gap: the existing
+  `synthetic_actuation.validate_actuation_profile_claim_boundary` checks only that provenance fields
+  are *present and non-empty*, so the placeholder skeleton (`source_id: "pending-#1585"`,
+  `measurement_date: "pending"`, …) passes structural validation while remaining unfit for use. The
+  readiness checker additionally flags placeholder/pending provenance, missing fields, tracking-issue
+  `source_uri`s, synthetic-vs-calibrated conflation, and the proxy-vs-hardware source distinction. CLI
+  `scripts/benchmark/check_amv_calibration_readiness.py` prints a JSON report and exits non-zero when
+  blocked. **Claim boundary:** paper-facing AMV actuation use stays **blocked** — `paper_facing_allowed`
+  is True only for a hardware/official-spec source class (a real trace #2000 or official spec), never
+  for the accepted #1585 proxy. This change does **not** calibrate from data, tune envelope values, or
+  run any campaign.
+* Added a **durable learned-risk training trace manifest contract and fail-closed validator**
+  (#2312, parent #1472). New module `robot_sf/training/learned_risk_trace_manifest.py` exposes
+  `validate_trace_manifest`, which checks a `learned-risk-trace-manifest.v1` YAML (durable baseline
+  and per-slice trace artifact URIs, recorded SHA-256 checksums, scenario split ids, required
+  episode fields, a per-label availability table, and `retrieval_status`) and returns a
+  `training_readiness_decision`. The decision is `ready_for_training_handoff` only when every input
+  is locally contract-complete; any placeholder alias (`:pending`), missing checksum, absent label,
+  or missing slice fails **closed** to `artifact_retrieval_blocked` — never an implied training-ready
+  state. A new CLI `scripts/validation/validate_learned_risk_trace_manifest.py` exposes the check
+  with decision-coded exit status (`0` ready, `2` structurally invalid, `3` blocked). The tracked
+  manifest `configs/training/learned_risk_trace_manifest_issue_2312.yaml` records the honest current
+  `blocked` state. This is **manifest/preflight readiness only**: it does **not** materialize traces,
+  copy external data, run training, or submit SLURM (the trace bytes come from the #1472 / #2441
+  runs). Shared checksum logic was promoted to `sha256_file()` in
+  `robot_sf/training/learned_risk_launch_packet.py`. See
+  `docs/context/issue_2312_learned_risk_trace_manifest.md`.
+* Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
+  The local-artifact preflight blocklist
+  (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`
+  triples, but nothing previously detected entries left stale when a baseline config is retired,
+  removed, or migrated to a durable `model_id`. The new `audit_blocklist_coverage` function in
+  `robot_sf/benchmark/local_model_artifacts.py` and the `--audit-blocklist` mode of
+  `scripts/validation/check_local_model_artifacts.py` classify each blocklist entry as `active`,
+  `orphaned_config_missing` (config no longer exists), or `orphaned_reference_gone` (config
+  migrated/rewritten away from the blocked path), and **fail closed** (non-zero exit) when any
+  orphaned entry remains so the allowlist shrinks as configs are recovered or retired. This is
+  inventory/provenance hygiene only: it does **not** publish or recover any checkpoint artifact,
+  rewrite benchmark configs, change registry entries, or assert any benchmark result. On the
+  current tree all seven shipped entries report `active`.
+* Made the **SocNavBench control-pipeline asset readiness checker fail-closed against empty
+  placeholder directories** (#1456). `scripts/tools/prepare_socnav_assets.py` now classifies each
+  required asset as `available` (directory backed by real files), `placeholder` (directory exists
+  but is empty), `missing`, or `excluded` (not required for the selected `render_mode`). Both
+  `placeholder` and `missing` required assets are reported under `missing_required`, so an empty
+  `wayptnav_data/` shell can no longer pass as a restored asset — matching the non-empty directory
+  contract already used by `scripts/tools/manage_external_data.py`. This is asset-readiness
+  reporting only: it does not download external assets, change benchmark results, or count
+  fallback/degraded rows as evidence. Focused fixture tests cover the available, placeholder, and
+  excluded states. Docs updated in `docs/socnav_assets_setup.md`.
 * Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
   traces routed through the `amv-calibration` external-data path (#2415). New schema
   `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker
@@ -97,6 +180,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
   runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
   (`evidence_tier` stays blocked → analysis_only).
+* Added a metadata-only staging/preflight checker for external pedestrian-prior extraction (#2918).
+  New module `robot_sf/benchmark/pedestrian_prior_extraction_manifest.py` exposes
+  `check_pedestrian_prior_extraction_manifest`, which validates a
+  `pedestrian_prior_extraction_manifest.v1` manifest (allowed external source type, the bounded
+  prior parameters the run will emit — walking speed, crossing angle, density, interaction
+  distance, stop/yield timing — provenance fields, and the authored-vs-dataset-backed separation)
+  and reports missing parameters, provenance/separation blockers, and whether a dataset-backed
+  prior claim is yet allowed. The checker **ingests no external data, stores no raw trajectories,
+  and makes no calibrated- or representative-prior claim** (`evidence_boundary:
+  prior_extraction_plan_only_no_calibrated_prior_claim`); a dataset-backed claim is gated behind
+  accepted provenance and a source family with a registered external-data staging contract, while
+  `blocked-external-input` (the default, matching issue #2918's external-data block) and
+  `proxy-only` manifests cannot assert a prior, and a `proxy-only` manifest declaring a
+  dataset-backed source is rejected as boundary conflation. The allowed source-type → external-data
+  asset-id map is cross-checked against the canonical `scripts/tools/manage_external_data.py`
+  registry. CLI: `scripts/tools/check_pedestrian_prior_extraction_manifest.py`; example manifest:
+  `configs/research/pedestrian_prior_extraction_manifest_issue_2918_example.yaml`; context note:
+  `docs/context/issue_2918_pedestrian_prior_extraction_preflight.md`.
 * Added a metadata-only staging-contract checker for dataset-backed scenario priors (#3161). New
   module `robot_sf/research/scenario_prior_staging_contract.py` exposes
   `check_scenario_prior_staging_contract`, which validates a `scenario_prior_staging_contract.v1`

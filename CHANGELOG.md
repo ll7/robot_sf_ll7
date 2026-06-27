@@ -38,6 +38,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed differential-drive velocity updates **ignoring timestep scaling** (#3711). In
+  `DifferentialDriveMotion._robot_velocity` the commanded acceleration (clipped to
+  `max_linear_accel` / `max_angular_accel`, the follow-up to #3666/#3689) was applied directly as a
+  per-step velocity delta without multiplying by the simulation timestep `d_t`. At the default
+  `d_t = 0.1` this permitted 10× the labeled acceleration per step and made the dynamics
+  timestep-dependent (smaller timesteps inflated the effective acceleration — the unstable velocity
+  spikes reported in the issue). The action is now integrated over `d_t`
+  (`max_delta = max_accel * d_t`), making the velocity update timestep-invariant and consistent with
+  the `bicycle_drive` model. All pre-existing differential-drive tests use `d_t = 1.0`, where
+  `accel * d_t == accel`, so their behavior is unchanged; new regression tests cover `d_t != 1.0`.
+  **Behavioral note:** at the simulator's default `d_t = 0.1` this reduces the realized per-step
+  velocity change for a given action by 10×; differential-drive controllers tuned against the
+  previous (timestep-dependent) integration may need re-tuning. Controller re-tuning and benchmark
+  re-validation are out of scope for this fix.
 * Fixed the HEIGHT planner adapter's lidar raycasting **ignoring dynamic pedestrians** (#3629).
   `CrowdNavHeightAdapter._raycast_obstacles` intersected each ray only against cached static obstacle
   segments, so the HEIGHT policy's lidar channel was blind to moving pedestrians (they were used for the

@@ -203,6 +203,74 @@ def test_over_limit_negative_angular_speed_clipped() -> None:
     assert dot_orient == -1.0
 
 
+def test_velocity_delta_scales_with_timestep() -> None:
+    """Per-step velocity delta scales linearly with d_t (issue #3711).
+
+    The action is a commanded acceleration; the realized velocity change over one
+    step must be ``accel * d_t``. Halving the timestep must halve the velocity
+    delta for the same command.
+    """
+    settings = DifferentialDriveSettings(max_linear_speed=10.0, max_linear_accel=5.0)
+
+    state_half = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    DifferentialDriveMotion(settings).move(state_half, (2.0, 0.0), 0.5)
+
+    state_tenth = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    DifferentialDriveMotion(settings).move(state_tenth, (2.0, 0.0), 0.1)
+
+    # delta = accel (2.0) * d_t
+    assert state_half.velocity[0] == pytest.approx(1.0)
+    assert state_tenth.velocity[0] == pytest.approx(0.2)
+    # Halving d_t (0.5 -> 0.1, factor 5) scales the delta by the same factor.
+    assert state_half.velocity[0] == pytest.approx(5.0 * state_tenth.velocity[0])
+
+
+def test_acceleration_clip_then_scaled_by_dt() -> None:
+    """Over-limit accel commands are clipped, then integrated over d_t (issue #3711).
+
+    With ``max_linear_accel=0.4`` and ``d_t=0.1`` the maximum reachable per-step
+    delta is ``0.4 * 0.1 = 0.04`` (contrast the d_t=1.0 case which yields 0.4).
+    """
+    motion = DifferentialDriveMotion(
+        DifferentialDriveSettings(max_linear_speed=10.0, max_linear_accel=0.4)
+    )
+    state = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+
+    motion.move(state, (100.0, 0.0), 0.1)
+
+    assert state.velocity[0] == pytest.approx(0.04)
+
+
+def test_velocity_update_is_timestep_invariant_over_equal_real_time() -> None:
+    """Equal real elapsed time yields the same velocity regardless of step size.
+
+    Integrating a constant acceleration command for 1.0s in a single d_t=1.0 step
+    must match ten d_t=0.1 substeps. Before issue #3711 the finer schedule
+    inflated the velocity tenfold because the delta ignored d_t.
+    """
+    settings = DifferentialDriveSettings(
+        max_linear_speed=10.0,
+        max_angular_speed=10.0,
+        max_linear_accel=5.0,
+        max_angular_accel=5.0,
+    )
+    accel = (1.0, 0.5)
+
+    coarse = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    DifferentialDriveMotion(settings).move(coarse, accel, 1.0)
+
+    fine = DifferentialDriveState(((0.0, 0.0), 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    fine_motion = DifferentialDriveMotion(settings)
+    for _ in range(10):
+        fine_motion.move(fine, accel, 0.1)
+
+    assert fine.velocity[0] == pytest.approx(coarse.velocity[0])
+    assert fine.velocity[1] == pytest.approx(coarse.velocity[1])
+    # Sanity: the constant command reaches accel * total_time after 1.0s.
+    assert coarse.velocity[0] == pytest.approx(1.0)
+    assert coarse.velocity[1] == pytest.approx(0.5)
+
+
 def test_in_place_rotation_matches_kinematics() -> None:
     """Verify in-place rotation math to prevent drift in heading updates."""
     motion = DifferentialDriveMotion(

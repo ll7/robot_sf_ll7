@@ -197,6 +197,31 @@ def test_unsupported_schema_version_rejected(tmp_path: Path) -> None:
         load_registry(path)
 
 
+def test_non_string_list_entry_rejected(tmp_path: Path) -> None:
+    """A non-string artifact/prerequisite entry is rejected instead of coerced."""
+    registry_path = _write_registry(
+        tmp_path,
+        [
+            {
+                "id": "pkg_a",
+                "title": "Package A",
+                "required_artifacts": [123],  # not a string
+                "prerequisites": [],
+            }
+        ],
+    )
+    with pytest.raises(ValueError, match="non-string entry"):
+        load_registry(registry_path)
+
+
+def test_invalid_yaml_raises_value_error(tmp_path: Path) -> None:
+    """A syntactically invalid registry surfaces as the documented ValueError."""
+    path = tmp_path / "registry.yaml"
+    path.write_text("schema_version: [unbalanced\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not valid YAML"):
+        load_registry(path)
+
+
 def test_render_markdown_contains_summary(tmp_path: Path) -> None:
     """Markdown rendering surfaces the package table and gap section."""
     (tmp_path / "a.yaml").write_text("ok", encoding="utf-8")
@@ -241,3 +266,6 @@ def test_real_registry_preflight_against_checkout() -> None:
     statuses = {p["package_id"]: p["status"] for p in report["packages"]}
     assert statuses["scenario_suite_v0"] == "ready"
     assert statuses["package_b_adversarial"] == "ready"
+    # The release gate points at a release-owned artifact that #3081 has not yet
+    # published, so it must fail closed to blocked rather than reporting ready.
+    assert statuses["release_july_2026"] == "blocked"

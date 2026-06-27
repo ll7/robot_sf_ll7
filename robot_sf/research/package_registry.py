@@ -88,10 +88,16 @@ def load_registry(path: Path) -> ResearchPackageRegistry:
         The parsed :class:`ResearchPackageRegistry`.
 
     Raises:
-        ValueError: If the document is malformed, uses an unsupported schema version,
-            declares duplicate package ids, or references unknown prerequisites.
+        ValueError: If the document cannot be parsed as YAML, is malformed, uses an
+            unsupported schema version, declares duplicate package ids, or references
+            unknown prerequisites.
     """
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        # Surface a syntactically invalid registry as the documented ValueError so callers
+        # (e.g. the CLI) get one consistent error type for any malformed document.
+        raise ValueError(f"{path} is not valid YAML: {exc}") from exc
     if not isinstance(raw, dict):
         raise ValueError(f"{path} must contain a YAML mapping")
 
@@ -356,7 +362,14 @@ def _parse_str_list(value: Any, *, field: str, package_id: str) -> tuple[str, ..
         raise ValueError(f"package {package_id!r} '{field}' must be a list")
     items: list[str] = []
     for entry in value:
-        text = str(entry).strip()
+        # Reject non-string entries instead of coercing them: silently turning a
+        # mistyped scalar (e.g. an unquoted number or bool) into a string would mask
+        # a typo in an artifact path or prerequisite id.
+        if not isinstance(entry, str):
+            raise ValueError(
+                f"package {package_id!r} '{field}' contains a non-string entry: {entry!r}"
+            )
+        text = entry.strip()
         if not text:
             raise ValueError(f"package {package_id!r} '{field}' contains an empty entry")
         items.append(text)

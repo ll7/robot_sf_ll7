@@ -91,8 +91,12 @@ packages:
     title: July 2026 research package release and claim audit
     issue: 3081
     resource: local
+    # Release-owned artifact: the claim-audit/manifest deliverable of #3081 itself.
+    # It does not exist until the release lands, so this gate fails closed to `blocked`
+    # until #3081 publishes it (rather than reusing an upstream package's artifact and
+    # reporting the release as ready before it is produced).
     required_artifacts:
-      - docs/context/issue_3076_campaign_result_store_contract.md
+      - docs/context/issue_3081_july_2026_release_manifest.md
     prerequisites:
       - package_a_rank_stability
       - package_b_adversarial

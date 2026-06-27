@@ -569,6 +569,30 @@ class SddExpectedFile:
 
 
 @dataclass(frozen=True)
+class SddLicenseAcknowledgment:
+    """Parsed bring-your-own (BYO) license-acknowledgment opt-in contract (Issue #1497).
+
+    Under the BYO-dataset reframe the contributor stages annotations they already have rights to.
+    ``acknowledged`` is shipped ``False`` so the committed manifest never implies redistribution
+    rights; a contributor sets it ``True`` in their local checkout after reading the license.
+    """
+
+    required: bool
+    acknowledged: bool
+    statement: str
+
+    @property
+    def satisfied(self) -> bool:
+        """True only when the contributor has explicitly affirmed the license.
+
+        The SDD acknowledgment is mandatory: the manifest cannot disable the gate via
+        ``required: false`` (rejected by ``_parse_sdd_license_acknowledgment``), so
+        satisfaction always requires ``acknowledged: true`` and fails closed otherwise.
+        """
+        return self.required and self.acknowledged
+
+
+@dataclass(frozen=True)
 class SddStagingSpec:
     """Parsed SDD staging manifest contract (checksum policy + availability gate)."""
 
@@ -587,6 +611,8 @@ class SddStagingSpec:
     checksum_algorithm: str
     expected_tree_sha256: str | None
     local_availability_declared: str
+    retrieval_recipe: tuple[str, ...]
+    license_acknowledgment: SddLicenseAcknowledgment
 
     @property
     def expected_total_size_mib(self) -> float:
@@ -687,6 +713,59 @@ def _required_manifest_text(raw: dict[str, Any], key: str) -> str:
     return value
 
 
+def _parse_sdd_retrieval_recipe(recipe_raw: Any) -> tuple[str, ...]:
+    """Parse the manifest `retrieval_recipe` into an ordered tuple of non-empty step strings.
+
+    A missing recipe is allowed (empty tuple); a present recipe must be a list of non-empty
+    strings so the contract fails closed on malformed acquisition instructions.
+    """
+    if recipe_raw is None:
+        return ()
+    if not isinstance(recipe_raw, list):
+        raise ExternalDataError("Manifest `retrieval_recipe` must be a list of step strings.")
+    steps: list[str] = []
+    for index, entry in enumerate(recipe_raw):
+        if not isinstance(entry, str) or not entry.strip():
+            raise ExternalDataError(f"`retrieval_recipe[{index}]` must be a non-empty string.")
+        steps.append(entry.strip())
+    return tuple(steps)
+
+
+def _parse_sdd_license_acknowledgment(ack_raw: Any) -> SddLicenseAcknowledgment:
+    """Parse the manifest `license_acknowledgment` opt-in block (Issue #1497).
+
+    A missing block defaults to required-but-unacknowledged so the asset stays blocked until a
+    contributor affirms their own license rights. ``acknowledged`` and ``required`` must be real
+    booleans when present (a YAML string is rejected) so the gate cannot be bypassed by a typo.
+    The acknowledgment is mandatory: ``required: false`` is rejected so a locally edited manifest
+    cannot disable the gate and report ``ready`` without an explicit license affirmation.
+    """
+    if ack_raw is None:
+        return SddLicenseAcknowledgment(required=True, acknowledged=False, statement="")
+    if not isinstance(ack_raw, dict):
+        raise ExternalDataError("Manifest `license_acknowledgment` must be a mapping.")
+    required = ack_raw.get("required", True)
+    acknowledged = ack_raw.get("acknowledged", False)
+    if not isinstance(required, bool):
+        raise ExternalDataError("`license_acknowledgment.required` must be a boolean.")
+    if required is False:
+        raise ExternalDataError(
+            "`license_acknowledgment.required` cannot be disabled; the SDD license acknowledgment "
+            "is mandatory (set `acknowledged: true` after reading the license)."
+        )
+    if not isinstance(acknowledged, bool):
+        raise ExternalDataError("`license_acknowledgment.acknowledged` must be a boolean.")
+    statement = ack_raw.get("statement")
+    if statement is not None and not isinstance(statement, str):
+        raise ExternalDataError("`license_acknowledgment.statement` must be a string.")
+    statement_text = "" if statement is None else statement.strip()
+    return SddLicenseAcknowledgment(
+        required=required,
+        acknowledged=acknowledged,
+        statement=statement_text,
+    )
+
+
 def _optional_checksum_text(checksums: dict[str, Any], key: str) -> str | None:
     """Return an optional checksum string, preserving null/empty as unpinned."""
     value = checksums.get(key)
@@ -745,6 +824,8 @@ def load_sdd_staging_spec(manifest_path: Path | None = None) -> SddStagingSpec:
         checksum_algorithm=_manifest_text(checksums, "algorithm", "SHA-256"),
         expected_tree_sha256=_optional_checksum_text(checksums, "expected_tree_sha256"),
         local_availability_declared=_manifest_text(raw, "local_availability", "missing"),
+        retrieval_recipe=_parse_sdd_retrieval_recipe(raw.get("retrieval_recipe")),
+        license_acknowledgment=_parse_sdd_license_acknowledgment(raw.get("license_acknowledgment")),
     )
 
 
@@ -1027,6 +1108,81 @@ def build_sdd_plan(spec: SddStagingSpec) -> dict[str, Any]:
     }
 
 
+def build_sdd_preflight(spec: SddStagingSpec) -> dict[str, Any]:
+    """Build the BYO staging preflight report (Issue #1497).
+
+    The preflight surfaces the bring-your-own opt-in prerequisites before any staging work and
+    reports the blocked-external-input state fail closed. ``ready`` is True only when the license
+    acknowledgment is satisfied AND the annotation files are present locally. It performs no
+    download, ingest, or transform; it only inspects the manifest contract and the staging dir.
+    """
+    validation = validate_sdd_staging(spec, compute_checksum=False)
+    annotations_present = not validation["missing_expected"]
+
+    ack = spec.license_acknowledgment
+    prerequisites = [
+        {
+            "key": "license_acknowledgment",
+            "satisfied": ack.satisfied,
+            "detail": (
+                "License acknowledgment affirmed."
+                if ack.satisfied
+                else "Set `license_acknowledgment.acknowledged: true` in your local manifest after "
+                "reading the dataset license; the committed default is false (fail closed)."
+            ),
+        },
+        {
+            "key": "annotations_staged",
+            "satisfied": annotations_present,
+            "detail": (
+                "Expected annotation files were found under the staging dir."
+                if annotations_present
+                else "Place at least one `annotations.txt` under the staging dir; missing: "
+                + ", ".join(validation["missing_expected"])
+            ),
+        },
+    ]
+    unmet = [item["key"] for item in prerequisites if not item["satisfied"]]
+    ready = not unmet
+
+    if ready:
+        next_step = (
+            "Prerequisites satisfied. Run `sdd-validate` to compute and pin the tree checksum, "
+            "then proceed to #1126 scenario curation with the staged path."
+        )
+    else:
+        next_step = (
+            "Blocked on external input: resolve the unmet prerequisites above. Follow "
+            "`retrieval_recipe`; no data is downloaded, ingested, or transformed by this command."
+        )
+
+    return {
+        "schema": "sdd_preflight.v1",
+        "asset_id": spec.asset_id,
+        "title": spec.title,
+        "version_tag": spec.version_tag,
+        "source_url": spec.source_url,
+        "license": spec.license,
+        "license_url": spec.license_url,
+        "staging_dir": str(spec.staging_dir),
+        "retrieval_recipe": list(spec.retrieval_recipe),
+        "license_acknowledgment": {
+            "required": ack.required,
+            "acknowledged": ack.acknowledged,
+            "satisfied": ack.satisfied,
+            "statement": ack.statement,
+        },
+        "prerequisites": prerequisites,
+        "unmet_prerequisites": unmet,
+        "ready": ready,
+        "blocked_external_input": not ready,
+        "local_availability": validation["local_availability"],
+        "scenario_prior_mode": validation["mode"],
+        "availability": validation["availability"],
+        "next_step": next_step,
+    }
+
+
 def write_sdd_staging_status(spec: SddStagingSpec, report: dict[str, Any]) -> Path:
     """Write a staging-status manifest into the staging dir after validation."""
     spec.staging_dir.mkdir(parents=True, exist_ok=True)
@@ -1189,6 +1345,12 @@ def parse_args() -> argparse.Namespace:
     )
     sdd_plan.add_argument("--manifest", type=Path, default=None)
 
+    sdd_preflight = subparsers.add_parser(
+        "sdd-preflight",
+        help="Report BYO staging prerequisites (license opt-in + annotations) and blocked state.",
+    )
+    sdd_preflight.add_argument("--manifest", type=Path, default=None)
+
     sdd_status = subparsers.add_parser(
         "sdd-status", help="Report SDD local availability/checksums WITHOUT downloading."
     )
@@ -1299,6 +1461,14 @@ def _handle_sdd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_sdd_preflight(args: argparse.Namespace) -> int:
+    """Handle the sdd-preflight subcommand."""
+    spec = load_sdd_staging_spec(args.manifest)
+    report = build_sdd_preflight(spec)
+    _print_json(report)
+    return 0 if report["ready"] else 2
+
+
 def _handle_sdd_status(args: argparse.Namespace) -> int:
     """Handle the sdd-status subcommand."""
     spec = load_sdd_staging_spec(args.manifest)
@@ -1352,6 +1522,7 @@ def main() -> int:
         "stage": _handle_stage,
         "download": _handle_download,
         "sdd-plan": _handle_sdd_plan,
+        "sdd-preflight": _handle_sdd_preflight,
         "sdd-status": _handle_sdd_status,
         "sdd-validate": _handle_sdd_validate,
         "sdd-mode": _handle_sdd_mode,

@@ -37,10 +37,13 @@ def test_inventory_is_non_empty_and_unique() -> None:
     assert streams, "inventory must not be empty"
     ids = [spec.stream_id for spec in streams]
     assert len(ids) == len(set(ids)), "stream ids must be unique"
-    # The four evidence categories named in issue #3293 must all be representable.
-    assert {"simulation_trace", "amv_command_response", "external_pedestrian_trajectory"} <= set(
-        ids
-    )
+    # All four evidence streams named in issue #3293 must be representable.
+    assert {
+        "simulation_trace",
+        "amv_command_response",
+        "external_pedestrian_trajectory",
+        "pilot_fleet_operational",
+    } <= set(ids)
 
 
 def test_categories_cover_calibration_benchmark_operational() -> None:
@@ -103,6 +106,15 @@ def test_check_accepts_top_level_fields() -> None:
     flat.update(dict.fromkeys(spec.required_uncertainty_fields, "x"))
     result = check_stream_metadata("simulation_trace", flat)
     assert result.ok
+
+
+def test_check_handles_non_dict_metadata() -> None:
+    """A non-dict record (e.g. None) is treated as all-fields-missing, not a crash."""
+    result = check_stream_metadata("simulation_trace", None)  # type: ignore[arg-type]
+    assert not result.ok
+    assert set(result.missing_provenance_fields) == set(
+        get_stream("simulation_trace").required_provenance_fields
+    )
 
 
 def test_get_stream_unknown_raises() -> None:

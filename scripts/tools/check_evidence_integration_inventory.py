@@ -50,8 +50,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def _load_metadata(path: Path) -> dict[str, Any]:
     """Load and minimally validate the synthetic metadata JSON record."""
-    if not path.exists():
-        raise ValueError(f"metadata file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"metadata file not found or is not a regular file: {path}")
     with path.open("r", encoding="utf-8") as stream:
         data = json.load(stream)
     if not isinstance(data, dict):

@@ -1,4 +1,4 @@
-# Issue #3293 — Evidence-integration contract inventory (design slice)
+# Issue #3293 — Evidence-Integration Contract Inventory (Design Slice) (2026-06-27)
 
 **Status**: Proposal (design-stage). Not benchmark evidence, not a calibration or safety claim.
 **Evidence tier**: `proposal` (`evidence:proposal`, `type:synthesis`).

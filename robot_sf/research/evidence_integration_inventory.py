@@ -279,14 +279,17 @@ def check_stream_metadata(stream_id: str, metadata: dict[str, object]) -> Stream
         KeyError: if ``stream_id`` is unknown.
     """
     spec = get_stream(stream_id)
-    provenance = metadata.get("provenance")
+    # Guard against a non-dict record (e.g. ``None``) so a malformed caller cannot crash the
+    # presence check; a non-dict is treated as "no fields present".
+    record = metadata if isinstance(metadata, dict) else {}
+    provenance = record.get("provenance")
     provenance = provenance if isinstance(provenance, dict) else {}
-    uncertainty = metadata.get("uncertainty")
+    uncertainty = record.get("uncertainty")
     uncertainty = uncertainty if isinstance(uncertainty, dict) else {}
 
     def _present(key: str, nested: dict[str, object]) -> bool:
         """Return True if ``key`` appears at the top level or in its nested block."""
-        return key in metadata or key in nested
+        return key in record or key in nested
 
     missing_prov = tuple(f for f in spec.required_provenance_fields if not _present(f, provenance))
     missing_unc = tuple(f for f in spec.required_uncertainty_fields if not _present(f, uncertainty))

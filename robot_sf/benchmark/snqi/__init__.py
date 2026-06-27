@@ -14,6 +14,11 @@ from .exit_codes import (
     EXIT_SUCCESS,
     EXIT_VALIDATION_ERROR,
 )
+from .normalization_inventory import (
+    NormalizationInventory,
+    TermScaling,
+    build_snqi_normalization_inventory,
+)
 from .schema import EXPECTED_SCHEMA_VERSION, assert_all_finite, validate_snqi
 from .weights_validation import validate_weights_mapping
 
@@ -27,7 +32,11 @@ __all__ = [
     "EXIT_VALIDATION_ERROR",
     "EXPECTED_SCHEMA_VERSION",
     "WEIGHT_NAMES",
+    # Normalization inventory (diagnostic only, issue #3699)
+    "NormalizationInventory",
+    "TermScaling",
     "assert_all_finite",
+    "build_snqi_normalization_inventory",
     # Core compute
     "compute_snqi",
     "normalize_metric",

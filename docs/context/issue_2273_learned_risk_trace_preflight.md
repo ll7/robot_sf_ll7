@@ -50,7 +50,7 @@ Observed validator summary:
 | `trace_contract_fixture.jsonl` | `fixture_valid` | Two small tracked rows include required fields and labels, with checksum recorded in the launch packet. This is contract proof only. |
 | `baseline_summary_stub.json` | `freeze_stub` | The frozen baseline candidate/slices/seeds are recorded, but the file says to use durable run artifacts before SLURM training. |
 | Pending W&B baseline alias | `missing_concrete_uri` | The launch packet still references `wandb-artifact://...:pending`; this is not a concrete artifact pointer. |
-| Training trace manifest | `missing` | No durable manifest with scenario rows, labels, checksums, and artifact URI is recorded for Issue #1472 training. |
+| Training trace manifest | `contract_defined_blocked` | Issue #2312 added a tracked manifest (`configs/training/learned_risk_trace_manifest_issue_2312.yaml`) and a fail-closed validator (`scripts/validation/validate_learned_risk_trace_manifest.py`). The manifest contract (durable URIs, checksums, splits, labels) is now mechanically checkable; the decision stays `artifact_retrieval_blocked` until the #1472 / #2441 run materializes the artifacts. See [`issue_2312_learned_risk_trace_manifest.md`](issue_2312_learned_risk_trace_manifest.md). |
 | Learned-risk checkpoint | `missing` | Expected after training, not available at this preflight stage. |
 
 ## Gate Recommendation

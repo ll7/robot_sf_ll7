@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **durable learned-risk training trace manifest contract and fail-closed validator**
+  (#2312, parent #1472). New module `robot_sf/training/learned_risk_trace_manifest.py` exposes
+  `validate_trace_manifest`, which checks a `learned-risk-trace-manifest.v1` YAML (durable baseline
+  and per-slice trace artifact URIs, recorded SHA-256 checksums, scenario split ids, required
+  episode fields, a per-label availability table, and `retrieval_status`) and returns a
+  `training_readiness_decision`. The decision is `ready_for_training_handoff` only when every input
+  is locally contract-complete; any placeholder alias (`:pending`), missing checksum, absent label,
+  or missing slice fails **closed** to `artifact_retrieval_blocked` — never an implied training-ready
+  state. A new CLI `scripts/validation/validate_learned_risk_trace_manifest.py` exposes the check
+  with decision-coded exit status (`0` ready, `2` structurally invalid, `3` blocked). The tracked
+  manifest `configs/training/learned_risk_trace_manifest_issue_2312.yaml` records the honest current
+  `blocked` state. This is **manifest/preflight readiness only**: it does **not** materialize traces,
+  copy external data, run training, or submit SLURM (the trace bytes come from the #1472 / #2441
+  runs). Shared checksum logic was promoted to `sha256_file()` in
+  `robot_sf/training/learned_risk_launch_packet.py`. See
+  `docs/context/issue_2312_learned_risk_trace_manifest.md`.
+
 * Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
   The local-artifact preflight blocklist
   (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`

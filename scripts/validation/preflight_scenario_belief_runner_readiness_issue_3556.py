@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
-"""Fail-closed readiness gate for the ScenarioBelief drop-vs-retain runner (#3556).
+"""Fail-closed readiness gate for the #3471 controlled-scenario ScenarioBelief runner (#3556).
+
+Scope note: this gate validates the *controlled-scenario diagnostic predecessor*
+(``run_scenario_belief_episode_safety_issue_3471``) whose finding #3556 promotes -- it does **not**
+gate the real benchmark campaign. The real campaign runner
+(``scripts/benchmark/run_belief_mode_safety_campaign_issue_3556.py``) carries its own fail-closed
+readiness gate over its own inputs (``run_belief_mode_safety_campaign_issue_3556.check_campaign_readiness``,
+or ``--preflight-only``). Keep the two distinct: this script pins the #3471 controlled-episode
+inputs; that one pins the real ``run_map_batch`` campaign inputs.
 
 Plain-language summary: issue #3471 (PR #3553) produced a *diagnostic*-tier finding that
 **dropping** uncertain agents raises unsafe commitment while **retaining** them stays near an
-oracle baseline. Issue #3556 wants to promote that contrast toward nominal benchmark evidence by
-running the same three belief modes through the real benchmark runner. Before any such real run
-burns compute, the runner *inputs* must be pinned and the planner's uncertainty contract must
-**fail closed** on unsupported paths -- otherwise a real campaign can silently run a planner that
-ignores the uncertainty sidecar and the drop-vs-retain contrast becomes meaningless.
+oracle baseline. Issue #3556 promotes that contrast toward nominal benchmark evidence by running
+the three belief modes through the real benchmark runner. Before that promotion is trustworthy, the
+*controlled-scenario inputs* the finding rests on must be pinned and the planner's uncertainty
+contract must **fail closed** on unsupported paths -- otherwise the diagnostic itself could run a
+planner that ignores the uncertainty sidecar and the drop-vs-retain contrast becomes meaningless.
 
-This is the cheap CPU-only pre-run gate. It does **not** execute the benchmark matrix, roll
-episodes, or interpret outcomes. It only verifies that:
+This is the cheap CPU-only gate for those controlled-scenario inputs. It does **not** execute the
+benchmark matrix, roll episodes, or interpret outcomes. It only verifies that:
 
 * the predeclared config pins the exact three belief modes (oracle / uncertain_retained /
   uncertain_dropped) needed for the drop-vs-retain contrast plus the near-safe oracle baseline;
@@ -26,9 +34,9 @@ It is a thin orchestrator: it **composes** the canonical runner
 (``robot_sf.planner.scenario_belief_adapter``); it never redefines the mode set, the parameter
 schema, or the fail-closed semantics.
 
-Exit code ``0`` means the runner inputs are pinned and the fail-closed contract holds (safe to
-proceed to a real run). Exit ``1`` means at least one readiness check failed (do not run). Exit
-``2`` means the check itself could not be evaluated (e.g. missing/unparseable config).
+Exit code ``0`` means the #3471 controlled-scenario inputs are pinned and the fail-closed contract
+holds. Exit ``1`` means at least one readiness check failed. Exit ``2`` means the check itself could
+not be evaluated (e.g. missing/unparseable config).
 """
 
 from __future__ import annotations

@@ -25,6 +25,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry/preflight metadata only`). CLI:
   `scripts/tools/research_package_preflight.py` (Markdown or JSON, with an optional
   `--fail-on-blocked` gate).
+* Added a **fail-closed curation readiness preflight** for SDD-derived benchmark scenarios (#1126).
+  Issue #1126 curates the first real Stanford Drone Dataset (SDD) benchmark scenario set, but stays
+  blocked on licensed external data (#1497/#2413). The new `scripts/tools/sdd_curation_preflight.py`
+  is a thin *curation-step* gate that composes the canonical owners — `resolve_sdd_scenario_prior_mode`
+  from `scripts/tools/manage_external_data.py` (staging gate) and `load_sdd_points` from
+  `scripts/tools/import_sdd_scenarios.py` (the importer's own parser) — to classify whether a
+  curation run may be promoted as benchmark evidence. `benchmark_promotion_allowed` is True **only**
+  when SDD is staged and checksum-validated (`dataset_backed_prior`) *and* the candidate annotation
+  satisfies the deterministic selection rule; a parseable fixture or unvalidated copy stays
+  `proxy_schema_smoke` and is never promoted. `--require-benchmark-ready` exits non-zero so callers
+  fail closed. This is readiness/schema preflight only: it does **not** download, ingest, or curate
+  real SDD data, write any scenario/map artifact, run a benchmark campaign, or assert any benchmark
+  result. Fixture-backed tests cover the blocked, proxy, and dataset-backed-candidate states.
+  Documented in `docs/context/issue_1126_sdd_curation_preflight.md`.
+
+* Added a read-only **ORCA-residual learned-policy lane readiness/preflight surface** (#1358).
+  New module `robot_sf/benchmark/orca_residual_lane_readiness.py` exposes `assess_lane_readiness`,
+  which inventories the lane's local prerequisites (behavior-cloning lineage packet, smoke/pretrain
+  config, the `orca_residual_guarded_ppo_v0` / `orca_residual_guarded_ppo_progress_v1` candidate
+  configs and their `training_required: true` registry entries, the policy-search runner, and the
+  grounding 2026-05-05 evidence report), the canonical command shapes (routes), and the declared
+  external blockers (child #1475 continue/revise/stop classification, `resource:slurm` training, and
+  pending durable dataset/checkpoint artifacts). The diagnostics contract and lineage-packet schema
+  are reused from `robot_sf/training/orca_residual_lineage_packet.py` (no fork). Status fails
+  **closed** to `prerequisites_incomplete` when any local surface is missing or the packet is
+  invalid, otherwise `blocked_on_followup` (scaffolding handoff-complete, lane still gated). A new
+  CLI `scripts/tools/orca_residual_lane_readiness.py` exposes the report (`--json`) with exit `0`
+  handoff-complete / `2` incomplete. This is **inventory/preflight only**: it does **not** submit
+  SLURM, train policies, alter planner behavior, run benchmarks, or assert any benchmark/paper
+  result. #1358 remains a parent/umbrella coordination issue gated by child #1475.
+
 * Added a **fail-closed SocNavBench map-conversion readiness preflight** for the ETH import batch
   (#1134, parent #334). The batch validator
   (`scripts/tools/validate_socnav_map_batch.py`) gains a `conversion_readiness()` function and a
@@ -349,6 +380,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "prerequisites ready" result is not mistaken for "authorized to launch". It does not submit Slurm
   jobs, run the tournament, rank arms, or edit any claim. Text and `--json` reports; exit code 0 when
   local prerequisites are ready, 1 when blocked.
+* Tightened the **oracle-imitation dataset launch-packet preflight** to require a `collection_roots`
+  block before a collection job runs (#1470). The validator
+  (`robot_sf/training/oracle_imitation_launch_packet.py`,
+  `scripts/validation/validate_oracle_imitation_launch_packet.py`) now fails closed unless the packet
+  declares durable destinations for collection logs (`log_root`), raw trace output
+  (`dataset_output_root`), and the dataset manifest (`manifest_destination`). Each root must be a
+  durable artifact URI (a `:pending` alias is allowed because collection has not run yet) and may
+  never point at the gitignored worktree-local `output/` directory, which is not a safe shared
+  destination on a multi-agent host. The checked-in `#1397` packet now carries these `:pending`
+  destinations. This is a preflight-contract change only: it submits no jobs and collects no data.
 * Added a read-only **re-export readiness preflight** for stale dissertation table bundles
   (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
   `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability

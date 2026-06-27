@@ -53,6 +53,39 @@ Ship the thing.
     assert result.missing_sections == ()
 
 
+def test_scope_non_goals_heading_is_recognized() -> None:
+    """Verify the ``Scope / non-goals`` heading variant is credited and signals the leaner core.
+
+    This matters because agent-authored analysis/research bodies write ``## Scope / non-goals``
+    (slash variant) where the YAML forms write ``Scope and non-goals``; without the alias the
+    audit reported a false "missing Scope" and held the body to the full markdown contract.
+    """
+
+    body = """## Goal / Problem
+
+Investigate the thing.
+
+## Scope / non-goals
+
+- In scope: the analysis.
+- Out of scope: implementation.
+
+## Definition of Done
+
+- [ ] Analysis complete.
+
+## Validation / Testing
+
+- [ ] Run the analysis script.
+"""
+
+    assert normalize_section_title("Scope / non-goals") == "Scope"
+    assert select_required_sections(body) == CORE_SECTION_ORDER
+    result = audit_issue_body(body)
+    assert "Scope" not in result.missing_sections
+    assert result.missing_sections == ()
+
+
 def test_agent_exec_spec_h3_content_counts_as_present() -> None:
     """Verify contract content carried as ``###`` headings in the agent-exec-spec is credited.
 

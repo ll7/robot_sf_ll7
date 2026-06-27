@@ -36,7 +36,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -202,7 +202,7 @@ def _check_params(report: ReadinessReport, raw: dict[str, Any], params: EpisodeP
     if not isinstance(declared, dict):
         report.add("params_pinned", False, "config is missing a 'params' mapping")
         return
-    field_names = {f.name for f in EpisodeParams.__dataclass_fields__.values()}
+    field_names = {f.name for f in fields(EpisodeParams)}
     unpinned = sorted(field_names - set(declared))
     if unpinned:
         report.add(

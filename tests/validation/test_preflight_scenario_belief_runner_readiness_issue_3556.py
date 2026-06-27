@@ -139,7 +139,7 @@ def test_report_schema_shape(tmp_path):
     assert payload["failed_checks"] == []
 
 
-def test_cli_exit_codes(tmp_path, capsys):
+def test_cli_exit_codes(tmp_path):
     """The CLI returns 0 when ready, 1 when not ready, and 2 on an unevaluable config."""
     ready_cfg = _write(tmp_path, _VALID_CONFIG)
     assert main(["--config", str(ready_cfg), "--json"]) == 0

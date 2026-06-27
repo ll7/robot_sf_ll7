@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **read-only readiness preflight for the compact CARLA native↔aligned parity bundle**
+  (#1510). New module `robot_sf_carla_bridge/parity_bundle_preflight.py` exposes
+  `check_parity_bundle_readiness` (and the pure `evaluate_payload_metadata`), which checks — per
+  candidate scenario, fail-closed — that each T0 export manifest reads/validates, every referenced
+  export payload exists and is schema-valid, the scenario fixture certificate is present with an
+  eligible status, provenance carries a `robot_sf_commit`, and the recorded `trajectory_fields` are
+  non-empty, plus that the intended output directory is path-safe (never created). It composes the
+  canonical export readers (`resolve_export_manifest_payload_paths`, `read_export_payload`) and the
+  canonical parity metric list (`parity.DEFAULT_PARITY_METRICS`). CLI
+  `robot-sf-carla-parity-bundle-preflight` prints a JSON report and exits nonzero when not ready.
+  This is the **agent-executable local slice only**: it does **not** import CARLA, run a simulator,
+  execute a replay, or assert metric parity — a `ready` verdict means the static prerequisites are
+  staged, not that native↔aligned parity holds (runtime eligibility must be confirmed on a capable
+  CARLA host; see `docs/context/issue_1511_carla_native_aligned_parity_claim_boundary.md`).
 * Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
   traces routed through the `amv-calibration` external-data path (#2415). New schema
   `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker

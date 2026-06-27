@@ -9,6 +9,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **diagnostic inventory** for the two incompatible collision/near-miss definitions
+  (#3724). The benchmark metric (`robot_sf/benchmark/metrics.py`) classifies collision/near-miss
+  with a radius-aware *clearance* rule, while the SNQI proxy (`robot_sf/gym_env/snqi_proxy.py`)
+  and policy-search validation (`scripts/validation/policy_search_common.py`) use the *raw center
+  distance* against `COLLISION_DIST=0.25` — so the same geometry is labeled differently (the
+  clearance collision boundary sits at a center distance of ~1.4 m with default radii vs 0.25 m, a
+  ~5× gap). New module `robot_sf/benchmark/collision_definition_inventory.py` classifies center
+  distances under both regimes and reports where they diverge, and CLI
+  `scripts/benchmark/collision_definition_inventory_report.py` prints/saves a preflight report with
+  an optional `--fail-on-divergence` (fail-closed) exit. This is **diagnostic only**: it does not
+  change any threshold, metric, proxy, or validation behavior, and does not choose a canonical
+  definition (that remains `decision-required` on #3724).
+* Added a **read-only heavy forecast-model family inventory / preflight** for the offline
+  prediction study (#2845). New pure module `robot_sf/research/forecast_heavy_model_inventory.py`
+  documents the candidate heavy predictor families (transformer, AgentFormer-like, CVAE,
+  diffusion) with qualitative literature-derived planning estimates of compute cost, inference
+  latency, uncertainty quality, and repository integration burden; probes that the
+  offline-evaluation surfaces an experiment would touch are importable (the forecast
+  metrics/calibration/conformal/dataset/batch/baseline surfaces; fail-closed on the required
+  ones); and reports the minimum-offline-experiment prerequisites (a staged held-out dataset, a
+  heavy-model→`ForecastBatch` adapter, a CPU runtime budget, the study report, plus external
+  dependency/checkpoint decisions) as explicit blockers, rolled up into a `ready`/`blocked`
+  minimum-experiment status. Thin CLI
+  `scripts/research/check_forecast_heavy_model_inventory.py` (`--json`/`--list`) and study report
+  `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
+  runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
+  (`evidence_tier` stays blocked → analysis_only).
+* Added a metadata-only measurement/intake-manifest checker for autonomous micromobility vehicle
+  (AMV) actuation latency and rider-coupling response (#3283). New module
+  `robot_sf/benchmark/actuation_latency_measurement_manifest.py` exposes
+  `check_amv_actuation_latency_measurement_manifest`, which validates an
+  `amv_actuation_latency_measurement_manifest.v1` manifest (declared sensor channels, per-channel
+  sampling rate, time synchronization, provenance, and the synthetic-vs-measured separation)
+  against the canonical command-response latency and rider-coupling quantity contract and reports
+  missing channels, synchronization/provenance/separation blockers, and whether a measured-value
+  claim is yet allowed. The checker **collects no data, fabricates nothing, and makes no
+  measured-value or calibrated-actuation claim** (`evidence_boundary:
+  measurement_intake_plan_only_no_measured_value_claim`); a `measured` claim is gated behind
+  accepted provenance, while `blocked-external-input` (the default, matching issue #3283's
+  external-data block) and `synthetic-only` manifests cannot assert measured values, and a
+  `synthetic-only` manifest declaring a measured source is rejected as boundary conflation. It also
+  proposes the latency and rider-coupling fields a future measured AMV actuation profile would
+  expose, extending the synthetic actuation-envelope schema in
+  `robot_sf/benchmark/synthetic_actuation.py` without promoting placeholders into calibration
+  evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
+  manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
+  protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
+* Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
+  campaign can verify its input prerequisites before execution (#3078). New manifest
+  `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario
+  inputs, seed-plan metadata, and frozen-protocol entry points; new checker
+  `scripts/validation/check_package_a_readiness.py` verifies every declared input exists, that the
+  seed-plan metadata is explicit, and that the output location is disposable under `output/`,
+  exiting non-zero with `status: not_ready` when any prerequisite is missing. This is a
+  provenance/readiness gate only — it does not execute the benchmark, submit Slurm, or interpret
+  ranks.
+* Added a **static launch preflight** for crossing-conflict predictive retraining configs (#3214).
+  New module `robot_sf/training/predictive_retrain_preflight.py` and CLI
+  `scripts/validation/validate_predictive_retrain_preflight.py` validate a predictive training
+  pipeline config (the kind consumed by `scripts/training/run_predictive_training_pipeline.py`)
+  *before* any SLURM/GPU launch: config structure, data prerequisites (scenario matrix, hard-seed
+  manifest, planner grid, and weighting spec) exist, base/hard-case feature-width compatibility (the
+  checkpoint-lineage contract), the navigation gate kept separate from the trajectory gate
+  (`max_val_ade`/`max_val_fde`), a present evaluation block, and a declared output root. The check is
+  cheap and CPU-only — it fills the gap left by the pipeline's own guards, which only run mid-pipeline
+  after expensive dataset collection. It does **not** collect data, train, submit Slurm, change
+  augmentation semantics, or make any model-improvement claim; the actual weighted retraining run is
+  owned by #3254. Text and `--json` reports; exit code 0 when valid, 2 when invalid.
+* Added a metadata-only validation-contract checker for candidate real-world micromobility traces
+  (#3278). New module `robot_sf/analysis_workbench/real_trace_validation_contract.py` exposes
+  `check_real_trace_validation_contract`, which maps a candidate dataset descriptor
+  (`real_trace_validation_contract.v1` schema) onto the existing trace-failure predicate input
+  contract and reports, per predicate, whether the declared channels make it *validatable* or
+  *blocked*, which required channels are missing, whether a directly observed ground-truth label
+  exists, and the resulting limitation (e.g. `late_evasive_reaction` / `oscillatory_local_control`
+  are computable from kinematics but usually have no directly observed label to cross-check). It
+  also surfaces metadata, provenance/access, and missing-data blockers. The checker **does not
+  ingest, copy, or read any external/private data and makes no real-world validation claim**
+  (`evidence_boundary: contract_check_only_no_real_world_validation`); the committed example
+  descriptor (`configs/benchmarks/issue_3278_real_trace_validation_contract_example.yaml`) is a
+  placeholder with `access_status: blocked` because external data access is not yet accepted. CLI:
+  `scripts/tools/check_real_trace_validation_contract.py`. Decision note:
+  `docs/context/issue_3278_real_trace_validation_contract.md`. Tests cover complete, incompatible,
+  and missing/placeholder-metadata descriptors.
+* Added a **read-only pedestrian-model assumption inventory / preflight** for the proposed
+  headed social-force (HSFM) + time-to-collision (TTC) predictive-force experiments (#3481).
+  New pure module `robot_sf/research/ped_model_assumption_inventory.py` documents the current
+  force-model assumptions the upgrade would change (no field-of-view attenuation on ped-ped
+  repulsion, heading coupled to instantaneous velocity, Euclidean-distance repulsion with no
+  TTC term), probes that the entry-point surfaces an HSFM/TTC experiment would touch are
+  importable (the vendored Social Force core plus the `robot_sf/ped_npc` behavior/population
+  surfaces; fail-closed if any required surface is missing), and reports the still-missing
+  prerequisites (HSFM heading state, FoV weight, TTC term, narrow-passage and bottleneck
+  fixtures, versioned parameters, external calibration data) as explicit blockers. A documented
+  CLI (`scripts/research/check_ped_model_assumption_inventory.py`, `--json`/`--list`) renders the
+  inventory. This is the **assumption-and-artifact inventory** slice only: it implements **no**
+  force law, changes **no** scenario behavior, runs **no** benchmark, and makes **no** realism
+  claim (the force-model upgrade itself stays `evidence_tier: idea`).
 * Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
   schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
   New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,
@@ -71,6 +169,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uniform. New test `tests/test_classic_archetype_density_index.py` re-derives the same facts from the
   `classic_*.yaml` configs and `classic_interactions.yaml` and fails closed on drift or missing
   config/tier coverage. The scenario zoo index links the new file for discoverability.
+* Added a **presence-only publication-prerequisites preflight** for the v0.1 validation/falsification
+  benchmark package (epic #2910). A declarative checklist
+  (`configs/benchmarks/releases/benchmark_v0_1_publication_prerequisites.yaml`) enumerates the
+  canonical prerequisite owners a v0.1 package must be built on — ODD/scenario contracts, scenario
+  certification, benchmark/row claim metadata, ODD/hazard coverage matrix, the release protocol and
+  pinned v0.1 release manifest, the seed schedule, the release checklist doc, and citation metadata.
+  The companion checker `scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`
+  verifies every referenced path exists and fails closed (exit `1`) when a required prerequisite is
+  missing. It is deliberately presence-only: it does **not** release, tag, upload artifacts, run a
+  benchmark/falsification campaign, judge scenario certification, or declare the benchmark "ready" —
+  every report carries an explicit `claim_boundary` to that effect. Run with
+  `uv run python scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

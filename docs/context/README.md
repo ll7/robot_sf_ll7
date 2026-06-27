@@ -456,6 +456,10 @@ knowledge, not every transient iteration detail.
 
   [issue_2688_trace_predicate_matrix.md](issue_2688_trace_predicate_matrix.md)
 
+* Issue #3278 real micromobility trace validation contract:
+
+  [issue_3278_real_trace_validation_contract.md](issue_3278_real_trace_validation_contract.md)
+
 * Issue #2544 mechanism-aware suite smoke:
 
   [issue_2544_mechanism_aware_suite_smoke.md](issue_2544_mechanism_aware_suite_smoke.md)

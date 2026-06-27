@@ -147,6 +147,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **no** SocNavBench/HuNavSim asset and makes **no** cross-benchmark validity or score-parity claim;
   producing real external assets remains blocked on #1456/#1498/#2414/#1134. See
   `docs/context/issue_3285_scenario_interop_converter.md`.
+* Added a **readiness/preflight helper for closed-loop prediction Package C** (#3080).
+  `scripts/tools/prediction_package_c_readiness.py` inventories the local prerequisites for the four
+  Package C forecast arms — `no_forecast`, `cv`, `semantic_cv`, and `interaction_aware` — across the
+  three coordination stages (open-loop forecast analysis #2915, observation-perturbation replay #2777,
+  closed-loop forecast-risk coupling #2916). For each arm it reports the required configs and code
+  entry points, the declared same-seed plan (`[111, 2868]` read from the #2915/#2916 configs), the
+  declared output roots, and the named blockers, then classifies the arm as fail-closed
+  `ready` / `blocked` / `missing`. Per the issue-audit on 2026-06-22, Package C is gated solely on
+  #2916 producing a durable campaign result store, so the default status is `blocked` until a
+  `--coupling-result-store` with a canonical `summary.json` is supplied; `blocked`/`missing` are never
+  treated as success evidence. The helper inspects the repository only — it does **not** execute any
+  benchmark campaign, alter predictor semantics, or claim forecast performance. Text and `--markdown`
+  reports plus optional `--output-json`; exit code 0 only when every arm is `ready`, 1 otherwise. New
+  fixture tests `tests/tools/test_prediction_package_c_readiness.py` cover the ready/blocked/missing
+  states (synthetic trees) and assert the real repo is wired (fails closed to `blocked`, not
+  `missing`).
 * Added a **presence-only tournament-readiness helper** for the predictive hard-case breakthrough
   portfolio (#3215). `scripts/tools/predictive_tournament_readiness.py` inventories the local
   prerequisites (expected configs, harness scripts, and output path) for the three concurrent

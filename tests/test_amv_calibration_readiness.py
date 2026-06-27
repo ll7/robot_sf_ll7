@@ -145,6 +145,24 @@ def test_missing_config_file_is_blocked(tmp_path) -> None:
     assert any("not found" in reason for reason in readiness.blocking_reasons)
 
 
+def test_malformed_yaml_config_is_blocked(tmp_path) -> None:
+    """A config that is not valid YAML fails closed rather than raising."""
+    bad = tmp_path / "broken.yaml"
+    bad.write_text("synthetic_actuation_profile: [unterminated\n", encoding="utf-8")
+    readiness = assess_amv_calibration_readiness_from_config(bad)
+    assert readiness.status == "blocked"
+    assert any("not valid YAML" in reason for reason in readiness.blocking_reasons)
+
+
+def test_nested_placeholder_in_provenance_is_blocked() -> None:
+    """A placeholder hidden in a nested provenance value (e.g. units) still fails closed."""
+    provenance = _real_proxy_provenance()
+    provenance["units"] = {"max_linear_accel_m_s2": "pending"}
+    readiness = assess_amv_calibration_readiness(_calibrated_profile(provenance=provenance))
+    assert readiness.status == "blocked"
+    assert "units" in readiness.placeholder_fields
+
+
 def test_to_dict_is_json_serializable() -> None:
     """The readiness outcome serializes cleanly for diagnostic reports."""
     import json

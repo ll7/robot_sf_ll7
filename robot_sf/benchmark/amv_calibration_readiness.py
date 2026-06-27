@@ -76,17 +76,30 @@ PAPER_FACING_SOURCE_MARKERS: tuple[str, ...] = (
 )
 
 
-def _scan_placeholder_fields(provenance: Mapping[str, Any]) -> list[str]:
-    """Return required provenance fields whose string value contains a placeholder marker."""
-    placeholder_fields: list[str] = []
-    for field_name in CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS:
-        value = provenance.get(field_name)
-        if not isinstance(value, str):
-            continue
+def _contains_placeholder(value: Any) -> bool:
+    """Return whether ``value`` (or any nested string within it) holds a placeholder marker.
+
+    Recurses into mappings, lists, and tuples so a placeholder hidden in a nested provenance
+    structure (e.g. ``supported_actuation_fields: ["pending"]`` or ``units: {field: "tbd"}``) still
+    fails closed, rather than only top-level string values being inspected.
+    """
+    if isinstance(value, str):
         lowered = value.strip().lower()
-        if any(marker in lowered for marker in PLACEHOLDER_PROVENANCE_MARKERS):
-            placeholder_fields.append(field_name)
-    return placeholder_fields
+        return any(marker in lowered for marker in PLACEHOLDER_PROVENANCE_MARKERS)
+    if isinstance(value, Mapping):
+        return any(_contains_placeholder(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_placeholder(item) for item in value)
+    return False
+
+
+def _scan_placeholder_fields(provenance: Mapping[str, Any]) -> list[str]:
+    """Return required provenance fields whose value (or a nested value) holds a placeholder marker."""
+    return [
+        field_name
+        for field_name in CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS
+        if _contains_placeholder(provenance.get(field_name))
+    ]
 
 
 def _source_uri_is_tracking_issue(provenance: Mapping[str, Any]) -> bool:
@@ -105,8 +118,9 @@ def _classify_source(provenance: Mapping[str, Any]) -> str:
         ``"hardware"``, ``"proxy"``, or ``"unknown"`` based on source-type/id/claim markers.
     """
     tokens = " ".join(
-        str(provenance.get(key, "")).lower()
+        value.lower()
         for key in ("source_type", "source_id", "claim_boundary")
+        if isinstance(value := provenance.get(key), str)
     )
     if any(marker in tokens for marker in PAPER_FACING_SOURCE_MARKERS):
         return "hardware"
@@ -268,7 +282,20 @@ def assess_amv_calibration_readiness_from_config(
             blocking_reasons=(f"config file not found: {path}",),
         )
 
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        # A malformed config is an incomplete input: fail closed rather than raising.
+        return AmvCalibrationReadiness(
+            status="blocked",
+            profile_name=None,
+            claim_scope=None,
+            source_class="unknown",
+            paper_facing_allowed=False,
+            looks_calibrated=False,
+            blocking_reasons=(f"config is not valid YAML: {exc}",),
+        )
+
     profile_metadata = payload.get(profile_key) if isinstance(payload, Mapping) else None
     if profile_metadata is None:
         return AmvCalibrationReadiness(

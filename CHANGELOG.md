@@ -30,6 +30,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them, and is complementary to the package-level `research/package_registry` preflight (#3057).
   Synthetic tests cover each fail-closed path plus a smoke check of the shipped checklist.
 
+* Added a **fail-closed readiness/preflight checker for the predictive planner v2 same-seed
+  comparison** (#1490 umbrella, ego-conditioning child #1504). New module
+  `robot_sf/benchmark/predictive_v2_comparison_readiness.py` exposes
+  `validate_predictive_v2_comparison_readiness`, which validates the committed feature contract
+  `configs/training/predictive/predictive_ego_features_contract_v1.yaml` across four metadata stage
+  gates: variant completeness (baseline / obstacle-only / ego-only / combined with the expected
+  schema and input-dim), provenance (every referenced config and seed/scenario/grid manifest exists),
+  ego-obstacle conditioning metadata (ego variants declare a defined `ego_motion_channel_producer` and
+  share a single comparability key), and same-seed schedule (seed manifests, fixed seed, and forecast
+  vs. navigation metric separation). A fifth gate, `blocked_slurm_gate`, fails **closed**: the
+  four-way expansion (#1505/#1506/#1507) stays `blocked` behind the maintainer-selected revised
+  hypothesis and the same-seed coupling gate #2916, clearing only when an explicit `continue`
+  coupling-gate artifact and the maintainer-hypothesis acknowledgement are both supplied. A new CLI
+  `scripts/validation/validate_predictive_v2_comparison_readiness.py` exposes the check with
+  decision-coded exit status (`0` ready, `2` blocked/incomplete, `1` contract load error). Against the
+  committed contract the preflight reports metadata-complete-but-`blocked`, mirroring the recorded
+  #1490 decision. This is **coordination/preflight readiness only**: it does not train, evaluate, tune
+  planners, run benchmarks, or submit SLURM.
+
 * Added a **fail-closed campaign-readiness gate for the learned-risk model v1 Slurm campaign**
   (#1472). New module `robot_sf/training/learned_risk_campaign_readiness.py` exposes
   `evaluate_campaign_readiness`, which aggregates the two existing canonical owners — the
@@ -88,7 +107,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   handoff-complete / `2` incomplete. This is **inventory/preflight only**: it does **not** submit
   SLURM, train policies, alter planner behavior, run benchmarks, or assert any benchmark/paper
   result. #1358 remains a parent/umbrella coordination issue gated by child #1475.
-
+* Added a read-only **oracle-imitation warm-start readiness preflight** for the downstream
+  warm-start training and benchmark comparison (#1496). Issue #1496 is the training step that
+  *consumes* the durable oracle-imitation dataset from #1470; safe shared-PC work is verifying
+  prerequisites, not launching training or data collection. The new
+  `check_warm_start_readiness` function in
+  `robot_sf/training/oracle_imitation_warm_start_readiness.py` and the
+  `scripts/validation/check_oracle_imitation_warm_start_readiness.py` CLI take a readiness
+  manifest, validate the referenced dataset launch packet via the canonical
+  `validate_launch_packet(..., require_training_ready=True)` checker, and confirm the
+  behaviour-cloning warm-start config, RL-only baseline config, optional PPO fine-tuning config,
+  and split/leakage contract all exist. They emit a compact readiness report (`ready`/`blocked`)
+  with an explicit blocker list and **fail closed** under `--require-ready`. This is
+  preflight/provenance hygiene only: it collects **no** data, trains nothing, submits no Slurm,
+  and asserts no benchmark result. The shipped manifest
+  (`configs/training/ppo_imitation/oracle_warm_start_readiness_issue_1496.yaml`) currently reports
+  `blocked` because the #1397 dataset packet is intentionally not training-ready until #1470 lands.
 * Added a **fail-closed SocNavBench map-conversion readiness preflight** for the ETH import batch
   (#1134, parent #334). The batch validator
   (`scripts/tools/validate_socnav_map_batch.py`) gains a `conversion_readiness()` function and a

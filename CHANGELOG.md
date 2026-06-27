@@ -23,6 +23,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   real SDD data, write any scenario/map artifact, run a benchmark campaign, or assert any benchmark
   result. Fixture-backed tests cover the blocked, proxy, and dataset-backed-candidate states.
   Documented in `docs/context/issue_1126_sdd_curation_preflight.md`.
+
+* Added a read-only **ORCA-residual learned-policy lane readiness/preflight surface** (#1358).
+  New module `robot_sf/benchmark/orca_residual_lane_readiness.py` exposes `assess_lane_readiness`,
+  which inventories the lane's local prerequisites (behavior-cloning lineage packet, smoke/pretrain
+  config, the `orca_residual_guarded_ppo_v0` / `orca_residual_guarded_ppo_progress_v1` candidate
+  configs and their `training_required: true` registry entries, the policy-search runner, and the
+  grounding 2026-05-05 evidence report), the canonical command shapes (routes), and the declared
+  external blockers (child #1475 continue/revise/stop classification, `resource:slurm` training, and
+  pending durable dataset/checkpoint artifacts). The diagnostics contract and lineage-packet schema
+  are reused from `robot_sf/training/orca_residual_lineage_packet.py` (no fork). Status fails
+  **closed** to `prerequisites_incomplete` when any local surface is missing or the packet is
+  invalid, otherwise `blocked_on_followup` (scaffolding handoff-complete, lane still gated). A new
+  CLI `scripts/tools/orca_residual_lane_readiness.py` exposes the report (`--json`) with exit `0`
+  handoff-complete / `2` incomplete. This is **inventory/preflight only**: it does **not** submit
+  SLURM, train policies, alter planner behavior, run benchmarks, or assert any benchmark/paper
+  result. #1358 remains a parent/umbrella coordination issue gated by child #1475.
+
 * Added a **fail-closed SocNavBench map-conversion readiness preflight** for the ETH import batch
   (#1134, parent #334). The batch validator
   (`scripts/tools/validate_socnav_map_batch.py`) gains a `conversion_readiness()` function and a

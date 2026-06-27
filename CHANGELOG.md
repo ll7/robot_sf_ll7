@@ -23,6 +23,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   be bypassed by a typo. This is staging-gate/provenance work only: it does **not** download,
   ingest, or transform any SDD data, run benchmarks, or edit any benchmark/paper claim. Scenario
   curation against real annotations remains #1126.
+* Added a **read-only readiness preflight for the compact CARLA native↔aligned parity bundle**
+  (#1510). New module `robot_sf_carla_bridge/parity_bundle_preflight.py` exposes
+  `check_parity_bundle_readiness` (and the pure `evaluate_payload_metadata`), which checks — per
+  candidate scenario, fail-closed — that each T0 export manifest reads/validates, every referenced
+  export payload exists and is schema-valid, the scenario fixture certificate is present with an
+  eligible status, provenance carries a `robot_sf_commit`, and the recorded `trajectory_fields` are
+  non-empty, plus that the intended output directory is path-safe (never created). It composes the
+  canonical export readers (`resolve_export_manifest_payload_paths`, `read_export_payload`) and the
+  canonical parity metric list (`parity.DEFAULT_PARITY_METRICS`). CLI
+  `robot-sf-carla-parity-bundle-preflight` prints a JSON report and exits nonzero when not ready.
+  This is the **agent-executable local slice only**: it does **not** import CARLA, run a simulator,
+  execute a replay, or assert metric parity — a `ready` verdict means the static prerequisites are
+  staged, not that native↔aligned parity holds (runtime eligibility must be confirmed on a capable
+  CARLA host; see `docs/context/issue_1511_carla_native_aligned_parity_claim_boundary.md`).
 * Added a **coherence regression guard** for the real AMV command-response trace *acquisition*
   issue (#2000). Issue #2000 is hard-blocked on external data (no realistic real-trace source,
   <5% feasibility) and its only agent-executable action is to keep the acquisition path documented

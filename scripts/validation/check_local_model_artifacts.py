@@ -4,6 +4,12 @@
 The checker targets benchmark/config portability for Issue #1638. It flags
 ``model_path`` and ``resume_from`` values under ``output/`` unless the exact
 reference is listed in the blocklist with an artifact-promotion follow-up.
+
+The ``--audit-blocklist`` mode (Issue #1764) inverts the check: it reports
+blocklist entries that no longer cover a present local reference because the
+named config was retired/removed or migrated to a durable ``model_id``. Those
+orphaned entries can be pruned so the preflight allowlist shrinks as configs are
+recovered or retired.
 """
 
 from __future__ import annotations
@@ -13,8 +19,11 @@ import json
 from pathlib import Path
 
 from robot_sf.benchmark.local_model_artifacts import (
+    BLOCKLIST_ACTIVE,
     PROMOTED_BLOCKED_STATUS,
+    BlocklistAuditEntry,
     LocalModelReference,
+    audit_blocklist_coverage,
     classify_local_model_references,
 )
 
@@ -42,6 +51,19 @@ def check_local_model_artifacts(
         blocklist_path=blocklist_path,
         promoted_surfaces_path=promoted_surfaces_path,
     )
+
+
+def audit_blocklist(
+    *,
+    blocklist_path: Path = DEFAULT_BLOCKLIST,
+) -> list[BlocklistAuditEntry]:
+    """Audit the blocklist for orphaned (retired/migrated) entries.
+
+    Returns:
+        list[BlocklistAuditEntry]: One entry per blocklist triple. Non-``active`` rows name a
+        retired or migrated config whose allowlist entry can now be pruned.
+    """
+    return audit_blocklist_coverage(blocklist_path, repo_root=REPO_ROOT)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -72,12 +94,37 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Also fail when all local references are explicitly blocked.",
     )
+    parser.add_argument(
+        "--audit-blocklist",
+        action="store_true",
+        help=(
+            "Audit the blocklist for orphaned entries (configs that were retired or migrated to a "
+            "durable model_id). Fails when any orphaned entry remains."
+        ),
+    )
     return parser.parse_args()
+
+
+def _run_blocklist_audit(blocklist_path: Path, *, as_json: bool) -> int:
+    """Print the blocklist coverage audit and fail when orphaned entries remain."""
+    entries = audit_blocklist(blocklist_path=blocklist_path)
+    if as_json:
+        print(json.dumps([entry.__dict__ for entry in entries], indent=2, sort_keys=True))
+    else:
+        if not entries:
+            print("OK: blocklist has no entries to audit.")
+        for entry in entries:
+            print(f"{entry.status.upper()}: {entry.path}:{entry.field}: {entry.value}")
+            print(f"  detail: {entry.detail}")
+    orphaned = [entry for entry in entries if entry.status != BLOCKLIST_ACTIVE]
+    return 1 if orphaned else 0
 
 
 def main() -> int:
     """Run the local model artifact preflight."""
     args = _parse_args()
+    if args.audit_blocklist:
+        return _run_blocklist_audit(args.blocklist, as_json=args.json)
     rows = check_local_model_artifacts(
         args.paths,
         blocklist_path=args.blocklist,

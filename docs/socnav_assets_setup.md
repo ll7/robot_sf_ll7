@@ -101,6 +101,19 @@ uv run python scripts/tools/prepare_socnav_assets.py \
   --report-json output/tmp/socnav_asset_report.json
 ```
 
+Readiness reporting is fail-closed and placeholder-aware. Each required asset is reported
+with a `status`:
+
+- `available`: directory exists and contains real files (restored).
+- `placeholder`: directory exists but is empty — a shell, **not** counted as restored.
+- `missing`: directory does not exist.
+- `excluded`: not required for the selected `render_mode` (for example SURREAL assets in
+  `schematic`).
+
+The command exits non-zero unless every required asset is `available`; both `placeholder`
+and `missing` required assets appear under `missing_required` so an empty directory shell
+can never pass as a restored asset (issue #1456).
+
 ## 5. Benchmark Sanity Test (No Fallback)
 
 Run strict preflight smoke benchmark:

@@ -31,7 +31,7 @@
       "robot_sf/benchmark/scenario_schema.py": 2,
       "robot_sf/benchmark/schema_reference.py": 1,
       "robot_sf/benchmark/snqi/campaign_contract.py": 1,
-      "robot_sf/benchmark/snqi/cli.py": 2,
+      "robot_sf/benchmark/snqi/cli.py": 3,
       "robot_sf/benchmark/snqi/compute.py": 1,
       "robot_sf/benchmark/snqi/weights_validation.py": 2,
       "robot_sf/benchmark/summary.py": 2,
@@ -125,7 +125,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 285
+    "total": 286
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -1233,6 +1233,15 @@
       "fingerprint": "13191370dd7974a7",
       "handler": "Exception",
       "lineno": 238,
+      "path": "robot_sf/benchmark/snqi/cli.py",
+      "source": "except Exception:"
+    },
+    {
+      "col_offset": 4,
+      "context": "cmd_inventory_weights",
+      "fingerprint": "4075c6fe619c5fa9",
+      "handler": "Exception",
+      "lineno": 304,
       "path": "robot_sf/benchmark/snqi/cli.py",
       "source": "except Exception:"
     },

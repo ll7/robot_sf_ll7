@@ -347,10 +347,24 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the readiness gate. Returns the process exit code (0 ready, 1 not ready, 2 error)."""
+    import yaml
+
     args = _parse_args(argv)
+    # Narrow fail-closed surface: catch the input/parse/contract errors the readiness
+    # evaluation can realistically raise (missing or malformed config, bad YAML, type/value
+    # mismatches while pinning the matrix or building the probe belief) and report exit 2.
+    # Genuinely unexpected errors are intentionally *not* swallowed so they surface as a crash.
     try:
         report = check_runner_readiness(args.config)
-    except Exception as exc:  # noqa: BLE001 - surface any evaluation failure as a fail-closed error
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        ImportError,
+        yaml.YAMLError,
+    ) as exc:
         message = f"readiness evaluation failed for {args.config}: {exc}"
         if args.json:
             print(json.dumps({"issue": ISSUE, "ready": False, "error": message}, indent=2))

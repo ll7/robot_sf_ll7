@@ -454,12 +454,20 @@ class PPOPlanner:
     ) -> dict[str, Any]:
         """Align source observation fields to a model-declared Dict space.
 
+        Keys declared by the model space but absent from ``source_obs`` (after
+        flattening, expansion, and alias resolution) are backfilled with an
+        in-bounds default derived from the target subspace rather than raising.
+        This keeps PPO evaluation running when a runner emits a subset of the
+        keys a checkpoint declares (see issue #3704); the backfill is logged so
+        the substitution stays visible, and callers should treat heavily
+        backfilled runs as degraded rather than faithful evidence.
+
         Returns:
             Dict payload shaped and typed to match the model-declared subspaces.
         """
 
         converted: dict[str, Any] = {}
-        missing: list[str] = []
+        backfilled: list[str] = []
         aliases: dict[str, tuple[str, ...]] = {
             "robot_speed": ("robot_velocity_xy",),
             "robot_velocity_xy": ("robot_speed",),
@@ -467,7 +475,8 @@ class PPOPlanner:
         for key, sub_space in spaces.items():
             source = self._resolve_dict_observation_source(source_obs, str(key), aliases)
             if source is None:
-                missing.append(str(key))
+                converted[key] = self._default_for_space(sub_space)
+                backfilled.append(str(key))
                 continue
             sub_spaces = getattr(sub_space, "spaces", None)
             if isinstance(sub_spaces, dict):
@@ -490,10 +499,42 @@ class PPOPlanner:
                     )
                 arr = arr.reshape(target_shape)
             converted[key] = arr
-        if missing:
-            missing_preview = ", ".join(missing[:6])
-            raise ValueError(f"Missing required dict observation keys: {missing_preview}")
+        if backfilled:
+            logger.debug(
+                "PPO dict observation backfilled {} missing key(s) with space defaults: {}",
+                len(backfilled),
+                ", ".join(backfilled[:6]),
+            )
         return converted
+
+    @classmethod
+    def _default_for_space(cls, sub_space: Any) -> Any:
+        """Build an in-bounds default payload for a missing model observation key.
+
+        Nested Dict subspaces recurse so each declared leaf is materialized;
+        leaf Box subspaces yield zeros clipped to the (finite) box bounds, so the
+        default never falls outside a declared low/high range. Unknown subspace
+        types fall back to a zero array matching the declared shape.
+
+        Returns:
+            A nested dict, or an ``np.ndarray`` default for the subspace.
+        """
+
+        sub_spaces = getattr(sub_space, "spaces", None)
+        if isinstance(sub_spaces, dict):
+            return {str(key): cls._default_for_space(leaf) for key, leaf in sub_spaces.items()}
+
+        target_shape = getattr(sub_space, "shape", None)
+        target_dtype = getattr(sub_space, "dtype", None) or np.float32
+        shape = tuple(target_shape) if target_shape is not None else ()
+        default = np.zeros(shape, dtype=target_dtype)
+        low = getattr(sub_space, "low", None)
+        high = getattr(sub_space, "high", None)
+        if low is not None and high is not None:
+            # Clip the zero default into the declared range so a non-zero lower
+            # bound (e.g. counts/radii bounded away from 0) stays in-bounds.
+            default = np.clip(default, low, high).astype(target_dtype)
+        return default
 
     @staticmethod
     def _resolve_dict_observation_source(

@@ -195,16 +195,22 @@ def test_bind_env_rejects_flat_box_checkpoint_shape_mismatch() -> None:
         )
 
 
-def test_build_model_obs_dict_raises_on_missing_key():
-    """Planner should fail when required dict keys are missing."""
+def test_build_model_obs_dict_backfills_missing_key():
+    """Planner should backfill missing dict keys with space defaults, not crash (#3704)."""
     planner = PPOPlanner(_planner_config(obs_mode="dict"))
     planner._model = SimpleNamespace(
         observation_space=SimpleNamespace(
             spaces={"required": SimpleNamespace(shape=(1,), dtype=np.float32)},
         ),
     )
-    with pytest.raises(ValueError, match="Missing required dict observation keys"):
-        planner._build_model_obs_dict({"other": [1.0]})
+
+    converted = planner._build_model_obs_dict({"other": [1.0]})
+
+    # The declared key is materialized with an in-bounds (zero) default instead
+    # of raising ValueError, so PPO evaluation keeps running on partial obs.
+    assert "required" in converted
+    np.testing.assert_allclose(converted["required"], [0.0])
+    assert converted["required"].shape == (1,)
 
 
 def test_build_model_obs_dict_backfills_predictive_features(monkeypatch):

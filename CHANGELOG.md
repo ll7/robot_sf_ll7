@@ -51,6 +51,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the PPO baseline adapter **crashing on partial dict observations** instead of backfilling
+  missing keys (#3704). In `robot_sf/baselines/ppo.py`, `_align_model_obs_dict` previously raised
+  `ValueError: Missing required dict observation keys` whenever a runner emitted a subset of the keys
+  a checkpoint's `Dict` observation space declares (after flattening, prefix-expansion, and alias
+  resolution); this failed all 144/144 serial-worker jobs in the #3203 campaign. Missing keys are now
+  backfilled with an in-bounds default derived from the target subspace via the new
+  `_default_for_space` helper: nested `Dict` subspaces recurse so each declared leaf is materialized,
+  and leaf `Box` subspaces yield zeros **clipped to the declared low/high bounds** so a non-zero
+  lower bound (e.g. counts/radii) stays in range. The backfill is logged at debug level so the
+  substitution stays visible. Genuine shape mismatches and non-Dict payloads for nested keys still
+  raise. This keeps PPO evaluation running on partial observations; heavily backfilled runs should be
+  treated as degraded rather than faithful evidence. Gym wrapper observation spaces are unchanged.
 * Fixed `_spaces_compatible` **rejecting wrapper- or subclass-derived `Tuple` spaces** under strict
   top-level type checking (#3709). In `robot_sf/training/scenario_sampling.py`, the helper opened with
   `type(base) is not type(other)`, so a `gymnasium.spaces.Tuple` and a Tuple subclass (as produced by

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only **re-export readiness preflight** for stale dissertation table bundles
+  (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
+  `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability
+  check and reduces both signals to a single `fresh` / `stale` / `blocked` state: `fresh` when the
+  payload is present and checksums match (no re-export needed), `stale` when a re-export is needed and
+  all required inputs (campaign config, generation script, source-commit provenance) are present
+  (re-export unblocked), and `blocked` when a re-export is needed but a required input is missing or
+  the provenance cannot be reconstructed. This prevents a stale bundle from being silently cited as
+  current evidence without first checking that the bounded campaign can be reproduced here. The tool
+  never runs the campaign, regenerates a table, or edits dissertation claims.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

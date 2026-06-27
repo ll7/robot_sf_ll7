@@ -67,6 +67,11 @@ payloads, not the local output tree.
 - `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/benchmark_publication_bundle.py dissertation-bundle ...`
 - `uv run python scripts/tools/benchmark_publication_bundle.py validate-dissertation-bundle --bundle-dir docs/context/evidence/issue_2542_dissertation_export_bundle --source-root docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-06-20/reports --expected-source-command "uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml --output-root <disposable-output-root>/benchmarks/issue_3203 --campaign-id issue3203_scenario_horizons_h500_reexport_2026-06-20 --mode run --log-level INFO" --expected-source-commit 76d84347a40c669fb878b55489a2614917399bda`
 - `uv run python scripts/tools/stale_artifact_detector.py docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json --json-out output/issue-3203/stale_artifact_report.json`
+- `uv run python scripts/tools/reexport_readiness_preflight.py docs/context/evidence/issue_2542_dissertation_export_bundle/artifact_manifest.json --repo-root .` —
+  read-only re-export readiness preflight (Issue #3203). Reports `fresh` / `stale` / `blocked` and
+  the required re-export inputs (campaign config, generation script, source-commit provenance) so a
+  stale bundle is never silently cited as current without checking that a bounded campaign can be
+  reproduced here. It does not run the campaign or edit dissertation claims.
 - `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh`
 
 ## Boundary

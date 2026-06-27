@@ -25,7 +25,8 @@ from __future__ import annotations
 import hashlib
 import json
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -359,3 +360,265 @@ def classify_held_out_evidence(
     if not null_tests_reject_null:
         return "not_available_null_tests_not_rejected"
     return "eligible_held_out_diagnostic"
+
+
+# --- Archive-readiness / fail-closed input checker (issue #3275) ---------------
+#
+# Before the proposal-vs-random runner consumes a *real* certified failure
+# archive, the archive must satisfy structural prerequisites or the downstream
+# disjoint split, overlap provenance, certification, and null tests cannot be
+# computed. The runner historically degraded a missing/malformed archive to a
+# synthetic fixture (``run_proposal_vs_random_issue_2921.py``), which is fine for
+# plumbing but hides whether a real archive is actually usable. These helpers
+# provide a standalone, fail-closed readiness verdict over a real archive input.
+# They never fabricate entries and never fall back to synthetic data: an archive
+# that fails any prerequisite is reported ``ready=False`` with precise reasons.
+
+#: Top-level schema tag emitted by ``robot_sf.adversarial.archive``.
+ARCHIVE_SCHEMA_VERSION = "adversarial_failure_archive.v1"
+
+#: Minimum scenario families required to form a disjoint fit/eval split. A
+#: single family collapses both sides together and can never pass the held-out
+#: disjointness gate (see :func:`classify_held_out_evidence`).
+_MIN_DISJOINT_FAMILIES = 2
+
+
+@dataclass(frozen=True)
+class ArchiveReadinessReport:
+    """Fail-closed readiness verdict for a certified failure-archive input.
+
+    ``ready`` is ``True`` only when the archive can drive a non-circular,
+    held-out proposal-vs-random comparison: it parses, carries entries with the
+    fields the overlap-provenance and certification gates need, and admits a
+    disjoint scenario-family split with non-empty fit/eval sides. Any failing
+    prerequisite leaves ``ready=False`` with a precise entry in
+    ``blocking_reasons``.
+    """
+
+    ready: bool
+    status: str
+    schema_ok: bool
+    entry_count: int
+    distinct_family_count: int
+    disjoint_split_possible: bool
+    overlap_metadata_ready: bool
+    null_test_prerequisites_ready: bool
+    entries_missing_archive_id: int
+    entries_missing_scenario_seed: int
+    entries_missing_failure_attribution: int
+    entries_unknown_family: int
+    archive_sha256: str | None = None
+    blocking_reasons: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe representation of the readiness report."""
+        return {
+            "ready": self.ready,
+            "status": self.status,
+            "schema_ok": self.schema_ok,
+            "entry_count": self.entry_count,
+            "distinct_family_count": self.distinct_family_count,
+            "disjoint_split_possible": self.disjoint_split_possible,
+            "overlap_metadata_ready": self.overlap_metadata_ready,
+            "null_test_prerequisites_ready": self.null_test_prerequisites_ready,
+            "entries_missing_archive_id": self.entries_missing_archive_id,
+            "entries_missing_scenario_seed": self.entries_missing_scenario_seed,
+            "entries_missing_failure_attribution": self.entries_missing_failure_attribution,
+            "entries_unknown_family": self.entries_unknown_family,
+            "archive_sha256": self.archive_sha256,
+            "blocking_reasons": list(self.blocking_reasons),
+        }
+
+
+def _not_ready(status: str, *reasons: str, **fields: Any) -> ArchiveReadinessReport:
+    """Build a fail-closed ``not_ready`` report with sensible numeric defaults."""
+    defaults: dict[str, Any] = {
+        "schema_ok": False,
+        "entry_count": 0,
+        "distinct_family_count": 0,
+        "disjoint_split_possible": False,
+        "overlap_metadata_ready": False,
+        "null_test_prerequisites_ready": False,
+        "entries_missing_archive_id": 0,
+        "entries_missing_scenario_seed": 0,
+        "entries_missing_failure_attribution": 0,
+        "entries_unknown_family": 0,
+        "archive_sha256": None,
+    }
+    defaults.update(fields)
+    return ArchiveReadinessReport(
+        ready=False, status=status, blocking_reasons=list(reasons), **defaults
+    )
+
+
+def _entry_scenario_seed(entry: dict[str, Any]) -> Any:
+    """Return the nested ``candidate.scenario_seed`` value, or ``None``."""
+    candidate = entry.get("candidate")
+    if isinstance(candidate, dict):
+        return candidate.get("scenario_seed")
+    return None
+
+
+@dataclass(frozen=True)
+class _EntryStats:
+    """Aggregate structural statistics over a list of archive entries."""
+
+    entry_count: int
+    non_dict_count: int
+    missing_archive_id: int
+    missing_seed: int
+    missing_attribution: int
+    unknown_family: int
+    distinct_family_count: int
+    disjoint_split_possible: bool
+
+
+def _collect_entry_stats(
+    entries: list[Any], *, eval_fraction: float, split_seed: int
+) -> _EntryStats:
+    """Compute fail-closed structural statistics over raw archive entries."""
+    dict_entries = [e for e in entries if isinstance(e, dict)]
+    distinct_families = {scenario_family_key(e) for e in dict_entries}
+
+    # A disjoint split must actually produce non-empty fit and eval sides; this
+    # is the prerequisite for overlap provenance and the null tests downstream.
+    disjoint_split_possible = False
+    if len(distinct_families) >= _MIN_DISJOINT_FAMILIES:
+        split = disjoint_family_split(dict_entries, eval_fraction=eval_fraction, seed=split_seed)
+        disjoint_split_possible = split.is_disjoint_split
+
+    return _EntryStats(
+        entry_count=len(dict_entries),
+        non_dict_count=len(entries) - len(dict_entries),
+        missing_archive_id=sum(1 for e in dict_entries if not e.get("archive_id")),
+        missing_seed=sum(1 for e in dict_entries if _entry_scenario_seed(e) is None),
+        missing_attribution=sum(
+            1 for e in dict_entries if not isinstance(e.get("failure_attribution"), dict)
+        ),
+        unknown_family=sum(1 for e in dict_entries if scenario_family_key(e) == "unknown_family"),
+        distinct_family_count=len(distinct_families),
+        disjoint_split_possible=disjoint_split_possible,
+    )
+
+
+def _readiness_blocking_reasons(
+    stats: _EntryStats, *, schema_ok: bool, schema_version: Any, min_entries: int
+) -> list[str]:
+    """Collect precise fail-closed reasons an archive is not ready, in order."""
+    reasons: list[str] = []
+    if not schema_ok:
+        reasons.append(f"unexpected_schema_version:{schema_version!r}")
+    if stats.non_dict_count:
+        reasons.append(f"non_object_entries:{stats.non_dict_count}")
+    if stats.entry_count < min_entries:
+        reasons.append(f"too_few_entries:{stats.entry_count}<{min_entries}")
+    if stats.missing_archive_id:
+        reasons.append(f"entries_missing_archive_id:{stats.missing_archive_id}")
+    if stats.missing_seed:
+        reasons.append(f"entries_missing_scenario_seed:{stats.missing_seed}")
+    if stats.missing_attribution:
+        reasons.append(f"entries_missing_failure_attribution:{stats.missing_attribution}")
+    if stats.unknown_family:
+        reasons.append(f"entries_unknown_family:{stats.unknown_family}")
+    if stats.distinct_family_count < _MIN_DISJOINT_FAMILIES:
+        reasons.append(f"insufficient_scenario_families:{stats.distinct_family_count}")
+    if not stats.disjoint_split_possible:
+        reasons.append("no_disjoint_split_possible")
+    return reasons
+
+
+def assess_archive_readiness(
+    archive_data: Any,
+    *,
+    min_entries: int = _MIN_DISJOINT_FAMILIES,
+    eval_fraction: float = 0.5,
+    split_seed: int = 0,
+) -> ArchiveReadinessReport:
+    """Assess whether a loaded failure archive is ready for held-out evaluation.
+
+    This is a pure, fail-closed structural check over already-parsed archive
+    data. It does not execute planners, fabricate entries, or fall back to
+    synthetic data. It composes :func:`scenario_family_key` and
+    :func:`disjoint_family_split` so its notion of "splittable" matches the
+    machinery the proposal runner actually uses.
+
+    Args:
+        archive_data: Parsed archive payload (expected to be a dict with a
+            ``schema_version`` tag and a non-empty ``entries`` list).
+        min_entries: Minimum number of entries required to attempt a split.
+        eval_fraction: Eval-side family fraction forwarded to the trial split.
+        split_seed: Deterministic seed forwarded to the trial split.
+
+    Returns:
+        An :class:`ArchiveReadinessReport`.
+    """
+    if not isinstance(archive_data, dict):
+        return _not_ready("not_ready", "archive_payload_not_object")
+
+    schema_version = archive_data.get("schema_version")
+    schema_ok = schema_version == ARCHIVE_SCHEMA_VERSION
+    archive_hash = archive_sha256(archive_data)
+
+    entries = archive_data.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return _not_ready(
+            "not_ready",
+            "archive_has_no_entries",
+            schema_ok=schema_ok,
+            archive_sha256=archive_hash,
+        )
+
+    stats = _collect_entry_stats(entries, eval_fraction=eval_fraction, split_seed=split_seed)
+    reasons = _readiness_blocking_reasons(
+        stats, schema_ok=schema_ok, schema_version=schema_version, min_entries=min_entries
+    )
+
+    # Overlap provenance needs disjoint families, unique archive ids, and seeds
+    # to compare. Null tests additionally need a non-empty eval side, which the
+    # disjoint-split check guarantees.
+    overlap_metadata_ready = (
+        stats.disjoint_split_possible and not stats.missing_archive_id and not stats.missing_seed
+    )
+    null_test_prerequisites_ready = stats.disjoint_split_possible and not stats.missing_attribution
+
+    ready = not reasons
+    return ArchiveReadinessReport(
+        ready=ready,
+        status="ready" if ready else "not_ready",
+        schema_ok=schema_ok,
+        entry_count=stats.entry_count,
+        distinct_family_count=stats.distinct_family_count,
+        disjoint_split_possible=stats.disjoint_split_possible,
+        overlap_metadata_ready=overlap_metadata_ready,
+        null_test_prerequisites_ready=null_test_prerequisites_ready,
+        entries_missing_archive_id=stats.missing_archive_id,
+        entries_missing_scenario_seed=stats.missing_seed,
+        entries_missing_failure_attribution=stats.missing_attribution,
+        entries_unknown_family=stats.unknown_family,
+        archive_sha256=archive_hash,
+        blocking_reasons=reasons,
+    )
+
+
+def assess_archive_file_readiness(path: Path | None) -> ArchiveReadinessReport:
+    """Load an archive file fail-closed and assess its readiness.
+
+    Unlike the proposal runner's loader, this never substitutes a synthetic
+    fixture: a missing, empty, unreadable, or malformed input is reported
+    ``ready=False`` with a precise ``not_ready`` reason. A real archive that
+    parses is delegated to :func:`assess_archive_readiness`.
+
+    Returns:
+        An :class:`ArchiveReadinessReport`.
+    """
+    if path is None:
+        return _not_ready("not_ready", "no_archive_path_provided")
+    if not path.exists():
+        return _not_ready("not_ready", f"archive_path_missing:{path}")
+    if path.stat().st_size == 0:
+        return _not_ready("not_ready", f"archive_file_empty:{path}")
+    try:
+        archive_data = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        return _not_ready("not_ready", f"archive_unreadable:{exc}")
+    return assess_archive_readiness(archive_data)

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only diagnostic inventory / fail-closed preflight for **conflicting "canonical" SNQI
+  weight sets** (#3723). New module `robot_sf/benchmark/snqi/weights_inventory.py` discovers every
+  known SNQI weight source — the code default `recompute_snqi_weights("canonical")` plus the shipped
+  JSON files under `model/` and `configs/benchmarks/` — records each set's dominant term and numeric
+  scale (raw vs normalized), and reports provenance conflicts: two sources both claiming the
+  "canonical" designation but yielding different weight *directions* (e.g. the collision-dominant
+  code default vs the jerk-dominant `model/snqi_canonical_weights_v1.json`), raw-vs-normalized scale
+  splits, and duplicate weights shipped under distinct labels. A new `inventory` subcommand on the
+  SNQI CLI (`python -m robot_sf.benchmark.snqi.cli inventory [--json] [--no-fail-on-conflict]`) and
+  the `preflight_snqi_weight_sets(strict=True)` API expose the report and **fail closed** (non-zero
+  exit / `SNQIWeightProvenanceError`) when a blocking conflict is detected. This is provenance
+  disambiguation only: it does **not** choose a canonical set, re-tune weights, change normalization
+  (#3699), or alter SNQI scoring — picking the source of truth remains a maintainer decision. See
+  `docs/snqi-weight-tools/weights_provenance.md`.
 * Added a **diagnostic inventory** for the two incompatible collision/near-miss definitions
   (#3724). The benchmark metric (`robot_sf/benchmark/metrics.py`) classifies collision/near-miss
   with a radius-aware *clearance* rule, while the SNQI proxy (`robot_sf/gym_env/snqi_proxy.py`)
@@ -54,6 +68,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry. CLI: `scripts/tools/check_pedestrian_prior_extraction_manifest.py`; example manifest:
   `configs/research/pedestrian_prior_extraction_manifest_issue_2918_example.yaml`; context note:
   `docs/context/issue_2918_pedestrian_prior_extraction_preflight.md`.
+* Added a metadata-only staging-contract checker for dataset-backed scenario priors (#3161). New
+  module `robot_sf/research/scenario_prior_staging_contract.py` exposes
+  `check_scenario_prior_staging_contract`, which validates a `scenario_prior_staging_contract.v1`
+  contract (per-dataset provenance/license, the canonical scenario-prior distribution fields a
+  dataset-backed prior would expose, and the explicit external-data blocker) for the Stanford Drone
+  Dataset, SocNavBench ETH, and AMV candidates. Declared distribution fields are checked against the
+  live `PARAMETER_GROUPS` vocabulary of the #2919 comparison harness so the contract cannot drift
+  from what the comparison can compute, and a dataset declared `staged` is reconciled against a live
+  `manage_external_data.check_asset` presence probe (fail-closed). The checker **ingests no dataset,
+  stores no raw trajectories, runs no comparison, and makes no real-world realism claim**; with no
+  dataset staged it reports `blocked-external-input`. Example contract
+  `configs/research/scenario_prior_staging_contract_issue_3161.yaml`, CLI
+  `scripts/analysis/check_scenario_prior_staging_contract_issue_3161.py`, context note
+  `docs/context/issue_3161_scenario_prior_staging_contract.md`.
 * Added a metadata-only measurement/intake-manifest checker for autonomous micromobility vehicle
   (AMV) actuation latency and rider-coupling response (#3283). New module
   `robot_sf/benchmark/actuation_latency_measurement_manifest.py` exposes

@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a metadata-only validation-contract checker for candidate real-world micromobility traces
+  (#3278). New module `robot_sf/analysis_workbench/real_trace_validation_contract.py` exposes
+  `check_real_trace_validation_contract`, which maps a candidate dataset descriptor
+  (`real_trace_validation_contract.v1` schema) onto the existing trace-failure predicate input
+  contract and reports, per predicate, whether the declared channels make it *validatable* or
+  *blocked*, which required channels are missing, whether a directly observed ground-truth label
+  exists, and the resulting limitation (e.g. `late_evasive_reaction` / `oscillatory_local_control`
+  are computable from kinematics but usually have no directly observed label to cross-check). It
+  also surfaces metadata, provenance/access, and missing-data blockers. The checker **does not
+  ingest, copy, or read any external/private data and makes no real-world validation claim**
+  (`evidence_boundary: contract_check_only_no_real_world_validation`); the committed example
+  descriptor (`configs/benchmarks/issue_3278_real_trace_validation_contract_example.yaml`) is a
+  placeholder with `access_status: blocked` because external data access is not yet accepted. CLI:
+  `scripts/tools/check_real_trace_validation_contract.py`. Decision note:
+  `docs/context/issue_3278_real_trace_validation_contract.md`. Tests cover complete, incompatible,
+  and missing/placeholder-metadata descriptors.
 * Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
   schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
   New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,

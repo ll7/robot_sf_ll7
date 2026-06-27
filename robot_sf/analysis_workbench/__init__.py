@@ -1,5 +1,14 @@
 """Analysis-workbench contracts and helpers."""
 
+from robot_sf.analysis_workbench.real_trace_validation_contract import (
+    CONTRACT_EVIDENCE_BOUNDARY,
+    REAL_TRACE_VALIDATION_CONTRACT_SCHEMA_VERSION,
+    PredicateCompatibility,
+    RealTraceValidationContractError,
+    RealTraceValidationContractReport,
+    check_real_trace_validation_contract,
+    load_real_trace_validation_contract,
+)
 from robot_sf.analysis_workbench.simulation_trace_export import (
     SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
     SimulationTraceExport,
@@ -25,9 +34,14 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
 )
 
 __all__ = [
+    "CONTRACT_EVIDENCE_BOUNDARY",
+    "REAL_TRACE_VALIDATION_CONTRACT_SCHEMA_VERSION",
     "SIMULATION_TRACE_EXPORT_SCHEMA_VERSION",
     "TRACE_ANNOTATION_SET_SCHEMA_VERSION",
     "TRACE_FAILURE_PREDICATE_SCHEMA_VERSION",
+    "PredicateCompatibility",
+    "RealTraceValidationContractError",
+    "RealTraceValidationContractReport",
     "SimulationTraceExport",
     "SimulationTraceExportValidationError",
     "TraceAnnotationSet",
@@ -36,7 +50,9 @@ __all__ = [
     "TraceFailurePredicateDefinition",
     "aggregate_trace_failure_predicate_tables",
     "build_trace_failure_predicate_definitions",
+    "check_real_trace_validation_contract",
     "extract_trace_failure_predicates",
+    "load_real_trace_validation_contract",
     "load_simulation_trace_export",
     "load_trace_annotation_set",
     "render_trace_failure_predicate_markdown",

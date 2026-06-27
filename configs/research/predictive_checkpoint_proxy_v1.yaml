@@ -1,0 +1,50 @@
+# Predictive-planner proxy-based checkpoint selection — readiness contract (issue #3204)
+#
+# This file is metadata only. It declares the *inputs* that the proxy-vs-ADE
+# checkpoint-selection analysis (scripts/research/analyze_predictive_checkpoint_proxy.py,
+# merged via #3307) needs before a conclusive run can be attempted. It does NOT
+# select a checkpoint, run training, or assert any benchmark result.
+#
+# The companion preflight
+# (scripts/research/check_predictive_checkpoint_proxy_readiness.py) reads this
+# contract and fails closed (status: blocked) when the inputs are absent or
+# degenerate, operationalizing the manual "checkpoints not available" diagnostic
+# recorded on issue #3204.
+
+schema_version: predictive-checkpoint-proxy-readiness.v1
+
+# Held-out hard-seed fixture used to score proxy success per checkpoint.
+hard_seed_fixture: configs/benchmarks/predictive_hard_seeds_v1.yaml
+
+# Checkpoint candidate set: registry entries (model/registry.yaml) selected by
+# tag. Every candidate's local_path must resolve on disk for the analysis to
+# proceed; the preflight reports each candidate's mapping (model_id -> local_path
+# -> present/absent) without downloading.
+checkpoint_selector:
+  registry_tag: predictive
+  # Minimum distinct, locally-resolvable checkpoints required by the issue's
+  # claim contract (">= 6 checkpoints from >= 1 real training run").
+  min_resolvable_checkpoints: 6
+
+# Candidate rollout-derived proxy signals under evaluation (documentation of
+# intent only; the analyzer consumes whatever the training summary recorded).
+candidate_proxy_signals:
+  - predicted_clearance_weighted_progress
+  - social_margin_min_predicted_clearance
+  - progress_risk_coupling
+
+# Training-summary contract consumed by the analyzer. A summary is "ready" for a
+# conclusive proxy-vs-ADE comparison only when proxy scoring was enabled and the
+# recorded per-epoch hard-seed success has non-degenerate spread across enough
+# proxy epochs. The all-zero `hardcase_proxy_probe_v1` probe is the canonical
+# blocked (inconclusive) case.
+proxy_summary_contract:
+  require_enabled: true
+  min_proxy_epochs: 6
+  # success spread strictly greater than this counts as non-degenerate.
+  min_success_spread: 1.0e-9
+
+# Baseline selector this study compares against.
+ade_baseline:
+  metric: val_ade
+  description: default ADE/FDE-selected checkpoint (predictive_proxy_selected_v1 lineage)

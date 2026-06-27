@@ -25,6 +25,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   downloaded, copied, committed, or claimed as real-world validation. See
   `docs/context/issue_3065_real_trajectory_ingestion_contract.md`.
 
+* Added a **fail-closed readiness/preflight checker for the predictive planner v2 same-seed
+  comparison** (#1490 umbrella, ego-conditioning child #1504). New module
+  `robot_sf/benchmark/predictive_v2_comparison_readiness.py` exposes
+  `validate_predictive_v2_comparison_readiness`, which validates the committed feature contract
+  `configs/training/predictive/predictive_ego_features_contract_v1.yaml` across four metadata stage
+  gates: variant completeness (baseline / obstacle-only / ego-only / combined with the expected
+  schema and input-dim), provenance (every referenced config and seed/scenario/grid manifest exists),
+  ego-obstacle conditioning metadata (ego variants declare a defined `ego_motion_channel_producer` and
+  share a single comparability key), and same-seed schedule (seed manifests, fixed seed, and forecast
+  vs. navigation metric separation). A fifth gate, `blocked_slurm_gate`, fails **closed**: the
+  four-way expansion (#1505/#1506/#1507) stays `blocked` behind the maintainer-selected revised
+  hypothesis and the same-seed coupling gate #2916, clearing only when an explicit `continue`
+  coupling-gate artifact and the maintainer-hypothesis acknowledgement are both supplied. A new CLI
+  `scripts/validation/validate_predictive_v2_comparison_readiness.py` exposes the check with
+  decision-coded exit status (`0` ready, `2` blocked/incomplete, `1` contract load error). Against the
+  committed contract the preflight reports metadata-complete-but-`blocked`, mirroring the recorded
+  #1490 decision. This is **coordination/preflight readiness only**: it does not train, evaluate, tune
+  planners, run benchmarks, or submit SLURM.
+
 * Added a **fail-closed campaign-readiness gate for the learned-risk model v1 Slurm campaign**
   (#1472). New module `robot_sf/training/learned_risk_campaign_readiness.py` exposes
   `evaluate_campaign_readiness`, which aggregates the two existing canonical owners — the

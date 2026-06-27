@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only **ORCA-residual learned-policy lane readiness/preflight surface** (#1358).
+  New module `robot_sf/benchmark/orca_residual_lane_readiness.py` exposes `assess_lane_readiness`,
+  which inventories the lane's local prerequisites (behavior-cloning lineage packet, smoke/pretrain
+  config, the `orca_residual_guarded_ppo_v0` / `orca_residual_guarded_ppo_progress_v1` candidate
+  configs and their `training_required: true` registry entries, the policy-search runner, and the
+  grounding 2026-05-05 evidence report), the canonical command shapes (routes), and the declared
+  external blockers (child #1475 continue/revise/stop classification, `resource:slurm` training, and
+  pending durable dataset/checkpoint artifacts). The diagnostics contract and lineage-packet schema
+  are reused from `robot_sf/training/orca_residual_lineage_packet.py` (no fork). Status fails
+  **closed** to `prerequisites_incomplete` when any local surface is missing or the packet is
+  invalid, otherwise `blocked_on_followup` (scaffolding handoff-complete, lane still gated). A new
+  CLI `scripts/tools/orca_residual_lane_readiness.py` exposes the report (`--json`) with exit `0`
+  handoff-complete / `2` incomplete. This is **inventory/preflight only**: it does **not** submit
+  SLURM, train policies, alter planner behavior, run benchmarks, or assert any benchmark/paper
+  result. #1358 remains a parent/umbrella coordination issue gated by child #1475.
+
 * Added a **durable learned-risk training trace manifest contract and fail-closed validator**
   (#2312, parent #1472). New module `robot_sf/training/learned_risk_trace_manifest.py` exposes
   `validate_trace_manifest`, which checks a `learned-risk-trace-manifest.v1` YAML (durable baseline

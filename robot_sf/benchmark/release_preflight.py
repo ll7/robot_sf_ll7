@@ -373,7 +373,16 @@ def _audit_promoted_claim(index: int, claim: Any) -> list[str]:
     if not bool(claim.get("promoted", False)):
         return []
     claim_id = str(claim.get("claim_id", f"claims[{index}]"))
-    mode = str(claim.get("planner_mode", claim.get("row_status", ""))).strip().lower()
+    # Normalize hyphen to underscore so the underscore-spelled
+    # ``EXCLUDED_CLAIM_MODES`` matches the canonical vocabulary, which lists both
+    # ``partial-failure`` and ``partial_failure`` (see
+    # ``failure_mechanism_classifier._UNAVAILABLE_STATUSES``).
+    mode = (
+        str(claim.get("planner_mode", claim.get("row_status", "")))
+        .strip()
+        .lower()
+        .replace("-", "_")
+    )
     if not mode:
         return [f"promoted claim {claim_id} is missing planner_mode/row_status"]
     if mode in EXCLUDED_CLAIM_MODES:

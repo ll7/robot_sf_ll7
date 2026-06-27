@@ -291,6 +291,21 @@ def test_claim_audit_promoted_fallback_fails_closed(tmp_path: Path) -> None:
     assert "fallback" in result["items"][0]["gaps"][0]
 
 
+def test_claim_audit_promoted_hyphenated_partial_failure_fails_closed(tmp_path: Path) -> None:
+    """A promoted hyphenated ``partial-failure`` mode fails closed.
+
+    The canonical exclusion vocabulary lists both spellings; the audit normalizes
+    hyphen to underscore so neither escapes.
+    """
+    _write(
+        tmp_path / "claims.yaml",
+        {"claims": [{"claim_id": "c1", "promoted": True, "row_status": "partial-failure"}]},
+    )
+    result = _load_and_eval(tmp_path, _checklist([_claim_item()]))
+    assert result["status"] == "blocked"
+    assert "partial_failure" in result["items"][0]["gaps"][0]
+
+
 def test_claim_audit_unpromoted_fallback_is_ignored(tmp_path: Path) -> None:
     """A non-promoted fallback claim does not block."""
     # A non-promoted (diagnostic) claim may carry a fallback mode without blocking.

@@ -18,6 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exiting non-zero with `status: not_ready` when any prerequisite is missing. This is a
   provenance/readiness gate only — it does not execute the benchmark, submit Slurm, or interpret
   ranks.
+* Added a metadata-only validation-contract checker for candidate real-world micromobility traces
+  (#3278). New module `robot_sf/analysis_workbench/real_trace_validation_contract.py` exposes
+  `check_real_trace_validation_contract`, which maps a candidate dataset descriptor
+  (`real_trace_validation_contract.v1` schema) onto the existing trace-failure predicate input
+  contract and reports, per predicate, whether the declared channels make it *validatable* or
+  *blocked*, which required channels are missing, whether a directly observed ground-truth label
+  exists, and the resulting limitation (e.g. `late_evasive_reaction` / `oscillatory_local_control`
+  are computable from kinematics but usually have no directly observed label to cross-check). It
+  also surfaces metadata, provenance/access, and missing-data blockers. The checker **does not
+  ingest, copy, or read any external/private data and makes no real-world validation claim**
+  (`evidence_boundary: contract_check_only_no_real_world_validation`); the committed example
+  descriptor (`configs/benchmarks/issue_3278_real_trace_validation_contract_example.yaml`) is a
+  placeholder with `access_status: blocked` because external data access is not yet accepted. CLI:
+  `scripts/tools/check_real_trace_validation_contract.py`. Decision note:
+  `docs/context/issue_3278_real_trace_validation_contract.md`. Tests cover complete, incompatible,
+  and missing/placeholder-metadata descriptors.
 * Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
   schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
   New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,
@@ -64,6 +80,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uniform. New test `tests/test_classic_archetype_density_index.py` re-derives the same facts from the
   `classic_*.yaml` configs and `classic_interactions.yaml` and fails closed on drift or missing
   config/tier coverage. The scenario zoo index links the new file for discoverability.
+* Added a **presence-only publication-prerequisites preflight** for the v0.1 validation/falsification
+  benchmark package (epic #2910). A declarative checklist
+  (`configs/benchmarks/releases/benchmark_v0_1_publication_prerequisites.yaml`) enumerates the
+  canonical prerequisite owners a v0.1 package must be built on — ODD/scenario contracts, scenario
+  certification, benchmark/row claim metadata, ODD/hazard coverage matrix, the release protocol and
+  pinned v0.1 release manifest, the seed schedule, the release checklist doc, and citation metadata.
+  The companion checker `scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`
+  verifies every referenced path exists and fails closed (exit `1`) when a required prerequisite is
+  missing. It is deliberately presence-only: it does **not** release, tag, upload artifacts, run a
+  benchmark/falsification campaign, judge scenario certification, or declare the benchmark "ready" —
+  every report carries an explicit `claim_boundary` to that effect. Run with
+  `uv run python scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

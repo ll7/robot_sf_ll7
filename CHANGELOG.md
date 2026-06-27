@@ -51,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed **OSM SVG `viewBox` parsing failing on comma-separated values** in
+  `fast-pysf/pysocialforce/map_osm_converter.py` (#3708). The converter parsed the `viewBox`
+  attribute with bare `str.split()`, which only handles whitespace separators, so SVG exports using
+  the equally valid comma-delimited form (e.g. `"0,0,488.48,458.33"`) raised
+  `ValueError: could not convert string to float`. A new `parse_viewbox` helper splits on any run of
+  commas and/or whitespace per the SVG spec, and both call sites (`extract_buildings_as_obstacle` and
+  `add_scale_bar_to_root`) now use it. Whitespace-separated viewBoxes are unaffected.
 * Fixed the **SAC baseline velocity action space ignoring `action_semantics`** when converting model
   output to benchmark commands (#3705). In `robot_sf/baselines/sac.py`, `_action_vec_to_dict` always
   scaled the `velocity` (`vx`, `vy`) output vector to `v_max`, even when `action_semantics="delta"`.

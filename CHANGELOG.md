@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only diagnostic inventory / fail-closed preflight for **conflicting "canonical" SNQI
+  weight sets** (#3723). New module `robot_sf/benchmark/snqi/weights_inventory.py` discovers every
+  known SNQI weight source — the code default `recompute_snqi_weights("canonical")` plus the shipped
+  JSON files under `model/` and `configs/benchmarks/` — records each set's dominant term and numeric
+  scale (raw vs normalized), and reports provenance conflicts: two sources both claiming the
+  "canonical" designation but yielding different weight *directions* (e.g. the collision-dominant
+  code default vs the jerk-dominant `model/snqi_canonical_weights_v1.json`), raw-vs-normalized scale
+  splits, and duplicate weights shipped under distinct labels. A new `inventory` subcommand on the
+  SNQI CLI (`python -m robot_sf.benchmark.snqi.cli inventory [--json] [--no-fail-on-conflict]`) and
+  the `preflight_snqi_weight_sets(strict=True)` API expose the report and **fail closed** (non-zero
+  exit / `SNQIWeightProvenanceError`) when a blocking conflict is detected. This is provenance
+  disambiguation only: it does **not** choose a canonical set, re-tune weights, change normalization
+  (#3699), or alter SNQI scoring — picking the source of truth remains a maintainer decision. See
+  `docs/snqi-weight-tools/weights_provenance.md`.
 * Added a **diagnostic inventory** for the two incompatible collision/near-miss definitions
   (#3724). The benchmark metric (`robot_sf/benchmark/metrics.py`) classifies collision/near-miss
   with a radius-aware *clearance* rule, while the SNQI proxy (`robot_sf/gym_env/snqi_proxy.py`)

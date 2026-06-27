@@ -162,18 +162,16 @@ def _looks_calibrated_actuation_profile(payload: Mapping[str, Any]) -> bool:
     )
 
 
-def _validate_calibrated_actuation_provenance(
-    payload: Mapping[str, Any],
-    *,
-    label: str,
-) -> None:
-    """Validate required provenance fields for calibrated-labeled actuation profiles."""
+def missing_calibrated_provenance_fields(payload: Mapping[str, Any]) -> list[str]:
+    """Return required calibrated-provenance fields that are absent or empty in ``payload``.
+
+    A missing ``provenance`` mapping reports every required field as missing. This is the single
+    owner of the field-emptiness rules so structural validation and the readiness/preflight checker
+    in :mod:`robot_sf.benchmark.amv_calibration_readiness` stay consistent.
+    """
     provenance = payload.get("provenance")
     if not isinstance(provenance, Mapping):
-        fields = ", ".join(CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS)
-        raise ValueError(
-            f"{label} calibrated actuation profile requires provenance fields: {fields}"
-        )
+        return list(CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS)
 
     missing: list[str] = []
     for field_name in CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS:
@@ -186,6 +184,31 @@ def _validate_calibrated_actuation_provenance(
                 missing.append(field_name)
         elif not _non_empty_string(value):
             missing.append(field_name)
+    return missing
+
+
+def looks_calibrated_actuation_profile(payload: Mapping[str, Any]) -> bool:
+    """Public wrapper for calibrated-marker detection.
+
+    Returns:
+        True when ``payload`` is labeled calibrated/hardware-aligned/measured.
+    """
+    return _looks_calibrated_actuation_profile(payload)
+
+
+def _validate_calibrated_actuation_provenance(
+    payload: Mapping[str, Any],
+    *,
+    label: str,
+) -> None:
+    """Validate required provenance fields for calibrated-labeled actuation profiles."""
+    if not isinstance(payload.get("provenance"), Mapping):
+        fields = ", ".join(CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS)
+        raise ValueError(
+            f"{label} calibrated actuation profile requires provenance fields: {fields}"
+        )
+
+    missing = missing_calibrated_provenance_fields(payload)
     if missing:
         raise ValueError(
             f"{label} calibrated actuation profile missing provenance fields: {', '.join(missing)}"

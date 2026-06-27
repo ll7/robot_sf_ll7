@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **fail-closed release-readiness / claim-audit preflight checklist** for research-package
+  releases (#3081). New module `robot_sf/benchmark/release_preflight.py` evaluates a declarative
+  checklist (`load_release_preflight_checklist` + `evaluate_release_preflight`) that maps issue
+  #3081's four acceptance criteria to concrete, mechanically checkable prerequisites: a reproduction
+  record (`artifact_present`), regenerated tables/figures bound to canonical-source digests
+  (`checksum_manifest`), promoted claim cards that exclude fallback/degraded/unavailable execution
+  modes (`claim_audit`), and a sprint-issue classification ledger (`issue_classification_ledger`).
+  Every check **fails closed** — a missing artifact, a checksum mismatch, a symlinked or
+  worktree-local `output/` path, a promoted claim resting on an excluded mode, or an unclassified
+  sprint issue all resolve to `blocked` with explicit gaps rather than silently passing. The
+  companion CLI `scripts/tools/release_preflight_check.py` renders a Markdown/JSON report with an
+  optional `--fail-on-blocked` gate, and the shipped checklist
+  `configs/benchmarks/releases/release_july_2026_preflight_issue_3081.yaml` honestly reports
+  `blocked` against the current checkout (the durable July-2026 artifacts do not exist yet). This is
+  a **preflight, not a release step**: it never publishes, tags, uploads, regenerates artifacts,
+  closes issues, edits claims, or *declares* readiness — a passing run only means no blocking gaps
+  were found among declared prerequisites, and a maintainer still owns the readiness decision. It
+  composes existing contracts (`release_protocol`, `benchmark_row_claim`) rather than duplicating
+  them, and is complementary to the package-level `research/package_registry` preflight (#3057).
+  Synthetic tests cover each fail-closed path plus a smoke check of the shipped checklist.
 * Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
   surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
   `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware

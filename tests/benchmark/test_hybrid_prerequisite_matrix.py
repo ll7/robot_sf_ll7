@@ -185,6 +185,18 @@ def test_blank_expected_component_is_rejected() -> None:
         raise AssertionError("expected HybridEvidenceMatrixValidationError")
 
 
+def test_single_string_expected_components_is_rejected() -> None:
+    """A bare string must not be iterated character-by-character into lanes."""
+    try:
+        build_hybrid_prerequisite_matrix(
+            [_complete_row()], expected_components="learned_risk_model_v1"
+        )
+    except HybridEvidenceMatrixValidationError as exc:
+        assert "expected_components" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("expected HybridEvidenceMatrixValidationError")
+
+
 def test_file_helper_attaches_input_metadata() -> None:
     """The file helper should classify fixture rows and record the input path."""
     report = build_hybrid_prerequisite_matrix_file(FIXTURE_ROOT / "valid_rows.yaml")

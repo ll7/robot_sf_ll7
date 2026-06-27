@@ -343,6 +343,10 @@ def _missing_components(
     """
     if not expected_components:
         return []
+    if isinstance(expected_components, str):
+        raise HybridEvidenceMatrixValidationError(
+            "expected_components must be a list of strings, not a single string"
+        )
     seen_normalized = {
         component.strip() for component in seen_components if isinstance(component, str)
     }

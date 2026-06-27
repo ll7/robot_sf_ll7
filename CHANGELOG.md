@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Made the **SocNavBench control-pipeline asset readiness checker fail-closed against empty
+  placeholder directories** (#1456). `scripts/tools/prepare_socnav_assets.py` now classifies each
+  required asset as `available` (directory backed by real files), `placeholder` (directory exists
+  but is empty), `missing`, or `excluded` (not required for the selected `render_mode`). Both
+  `placeholder` and `missing` required assets are reported under `missing_required`, so an empty
+  `wayptnav_data/` shell can no longer pass as a restored asset — matching the non-empty directory
+  contract already used by `scripts/tools/manage_external_data.py`. This is asset-readiness
+  reporting only: it does not download external assets, change benchmark results, or count
+  fallback/degraded rows as evidence. Focused fixture tests cover the available, placeholder, and
+  excluded states. Docs updated in `docs/socnav_assets_setup.md`.
 * Added a **diagnostic inventory** for the two incompatible collision/near-miss definitions
   (#3724). The benchmark metric (`robot_sf/benchmark/metrics.py`) classifies collision/near-miss
   with a radius-aware *clearance* rule, while the SNQI proxy (`robot_sf/gym_env/snqi_proxy.py`)

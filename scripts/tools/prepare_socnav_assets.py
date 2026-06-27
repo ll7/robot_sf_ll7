@@ -5,6 +5,10 @@ This helper is intentionally license-safe:
 - it can optionally copy already-downloaded local assets into
   ``third_party/socnavbench``,
 - it validates required directory layout for benchmark preflight.
+
+Readiness reporting is fail-closed: a required asset directory that exists but is
+empty is classified as a ``placeholder`` shell, not as a restored asset, so an empty
+directory can never be counted as restored evidence. See issue #1456.
 """
 
 from __future__ import annotations
@@ -94,22 +98,62 @@ def _required(asset: AssetPath, render_mode: str) -> bool:
     return asset.required_for_schematic
 
 
+def _has_real_files(target: Path) -> bool:
+    """Return whether a directory holds at least one regular file (recursively).
+
+    An asset directory that exists but contains no files is treated as a placeholder
+    shell, not a restored asset. This mirrors the non-empty directory contract used by
+    ``scripts/tools/manage_external_data.py`` so the readiness signal stays fail-closed:
+    an empty ``wayptnav_data/`` placeholder must never be counted as restored evidence.
+    """
+    if not target.is_dir():
+        return False
+    return any(child.is_file() for child in target.rglob("*"))
+
+
 def evaluate_assets(socnav_root: Path, *, render_mode: str) -> dict[str, Any]:
-    """Return a validation report for SocNav data layout."""
+    """Return a fail-closed validation report for SocNav data layout.
+
+    Each asset is classified into one of four states:
+
+    - ``available``: required for this render mode and backed by real files.
+    - ``placeholder``: required and the directory exists but is empty (shell only).
+    - ``missing``: required and the directory does not exist.
+    - ``excluded``: not required for this render mode (e.g. SURREAL assets in schematic).
+
+    Both ``placeholder`` and ``missing`` required assets contribute to
+    ``missing_required`` so an empty directory shell cannot pass readiness.
+    """
     entries: list[dict[str, Any]] = []
     missing_required: list[str] = []
+    placeholder_required: list[str] = []
     for asset in ASSET_PATHS:
         target = socnav_root / asset.relative_path
         exists = target.is_dir()
+        has_real_files = _has_real_files(target)
         required = _required(asset, render_mode)
-        if required and not exists:
+        if not required:
+            status = "excluded"
+        elif has_real_files:
+            status = "available"
+        elif exists:
+            status = "placeholder"
+        else:
+            status = "missing"
+        if required and status != "available":
             missing_required.append(asset.key)
+            if status == "placeholder":
+                placeholder_required.append(asset.key)
         entries.append(
             {
                 "key": asset.key,
                 "relative_path": asset.relative_path,
+                # ``exists`` is the literal on-disk directory presence; ``has_real_files``
+                # is the restored-real signal that distinguishes assets from placeholders.
                 "exists": exists,
+                "has_real_files": has_real_files,
                 "required": required,
+                "status": status,
                 "description": asset.description,
             }
         )
@@ -118,6 +162,7 @@ def evaluate_assets(socnav_root: Path, *, render_mode: str) -> dict[str, Any]:
         "render_mode": render_mode,
         "ok": not missing_required,
         "missing_required": missing_required,
+        "placeholder_required": placeholder_required,
         "assets": entries,
     }
 
@@ -181,11 +226,15 @@ def _print_report(report: dict[str, Any]) -> None:
     print(f"[socnav-assets] render_mode={report['render_mode']}")
     for entry in report["assets"]:
         req = "required" if entry["required"] else "optional"
-        state = "present" if entry["exists"] else "missing"
-        print(f"- {entry['key']}: {state} ({req}) -> {entry['relative_path']}")
+        print(f"- {entry['key']}: {entry['status']} ({req}) -> {entry['relative_path']}")
+    if report.get("placeholder_required"):
+        print("")
+        print("Placeholder (empty) required directories — not counted as restored:")
+        for key in report["placeholder_required"]:
+            print(f"- {key}")
     if report["missing_required"]:
         print("")
-        print("Missing required assets:")
+        print("Missing or placeholder required assets:")
         for key in report["missing_required"]:
             print(f"- {key}")
 

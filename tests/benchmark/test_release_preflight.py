@@ -353,8 +353,23 @@ def test_render_markdown_contains_status(tmp_path: Path) -> None:
     assert "blocked" in md
 
 
+def test_loader_rejects_malformed_checklist_yaml(tmp_path: Path) -> None:
+    """A syntactically invalid checklist YAML fails closed as a structural error."""
+    path = tmp_path / "c.yaml"
+    path.write_text("schema_version: [unbalanced\n", encoding="utf-8")
+    with pytest.raises(ReleasePreflightError, match="Could not parse checklist"):
+        load_release_preflight_checklist(path)
+
+
+def test_referenced_file_malformed_yaml_fails_closed(tmp_path: Path) -> None:
+    """A referenced file with invalid YAML fails closed to blocked (not a crash)."""
+    (tmp_path / "claims.yaml").write_text("claims: [unterminated\n", encoding="utf-8")
+    result = _load_and_eval(tmp_path, _checklist([_claim_item()]))
+    assert result["status"] == "blocked"
+    assert "could not be parsed" in result["items"][0]["gaps"][0]
+
+
 def test_shipped_checklist_loads_and_evaluates() -> None:
-    """The shipped July 2026 checklist loads and reports blocked."""
     """The shipped July 2026 checklist loads and honestly reports blocked.
 
     The release artifacts are not present on the current checkout (issue #3081 is

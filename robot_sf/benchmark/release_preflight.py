@@ -193,7 +193,12 @@ def load_release_preflight_checklist(path: str | Path) -> ReleasePreflightCheckl
     Raises:
         ReleasePreflightError: If the definition is structurally invalid.
     """
-    payload = _load_payload(Path(path))
+    try:
+        payload = _load_payload(Path(path))
+    except (ValueError, yaml.YAMLError) as exc:
+        # Surface a malformed checklist as a structural error (fail-closed)
+        # rather than letting a raw parser exception escape the loader.
+        raise ReleasePreflightError(f"Could not parse checklist {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ReleasePreflightError(f"Expected mapping payload in {path}")
 
@@ -245,7 +250,7 @@ def _resolve_repo_path(repo_root: Path, raw_value: Any) -> tuple[Path | None, li
     if candidate.is_absolute():
         return None, [f"path must be repository-relative, got absolute {raw_value!r}"]
     posix = candidate.as_posix()
-    if posix.startswith("output/") or "/output/" in f"/{posix}":
+    if "output" in candidate.parts:
         gaps.append(f"path {posix!r} is worktree-local output/, not durable evidence")
     # Detect a symlink on the lexical join before `.resolve()` follows it, so a
     # symlinked artifact fails closed instead of being read as its target.
@@ -296,7 +301,10 @@ def _load_referenced_file(
         return None, gaps
     try:
         return _load_payload(resolved), gaps
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        # ``yaml.YAMLError`` is not a ``ValueError`` subclass, so a malformed
+        # referenced YAML file would otherwise escape as an unhandled crash
+        # instead of failing closed to a gap.
         return None, [f"{kind} {raw_value!r} could not be parsed: {exc}"]
 
 

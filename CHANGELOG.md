@@ -9,20 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Added a **read-only pedestrian-model assumption inventory / preflight** for the proposed
-  headed social-force (HSFM) + time-to-collision (TTC) predictive-force experiments (#3481).
-  New pure module `robot_sf/research/ped_model_assumption_inventory.py` documents the current
-  force-model assumptions the upgrade would change (no field-of-view attenuation on ped-ped
-  repulsion, heading coupled to instantaneous velocity, Euclidean-distance repulsion with no
-  TTC term), probes that the entry-point surfaces an HSFM/TTC experiment would touch are
-  importable (the vendored Social Force core plus the `robot_sf/ped_npc` behavior/population
-  surfaces; fail-closed if any required surface is missing), and reports the still-missing
-  prerequisites (HSFM heading state, FoV weight, TTC term, narrow-passage and bottleneck
-  fixtures, versioned parameters, external calibration data) as explicit blockers. A documented
-  CLI (`scripts/research/check_ped_model_assumption_inventory.py`, `--json`/`--list`) renders the
-  inventory. This is the **assumption-and-artifact inventory** slice only: it implements **no**
-  force law, changes **no** scenario behavior, runs **no** benchmark, and makes **no** realism
-  claim (the force-model upgrade itself stays `evidence_tier: idea`).
+* Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
+  campaign can verify its input prerequisites before execution (#3078). New manifest
+  `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario
+  inputs, seed-plan metadata, and frozen-protocol entry points; new checker
+  `scripts/validation/check_package_a_readiness.py` verifies every declared input exists, that the
+  seed-plan metadata is explicit, and that the output location is disposable under `output/`,
+  exiting non-zero with `status: not_ready` when any prerequisite is missing. This is a
+  provenance/readiness gate only — it does not execute the benchmark, submit Slurm, or interpret
+  ranks.
 * Added a **static launch preflight** for crossing-conflict predictive retraining configs (#3214).
   New module `robot_sf/training/predictive_retrain_preflight.py` and CLI
   `scripts/validation/validate_predictive_retrain_preflight.py` validate a predictive training
@@ -51,6 +46,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/tools/check_real_trace_validation_contract.py`. Decision note:
   `docs/context/issue_3278_real_trace_validation_contract.md`. Tests cover complete, incompatible,
   and missing/placeholder-metadata descriptors.
+* Added a **read-only pedestrian-model assumption inventory / preflight** for the proposed
+  headed social-force (HSFM) + time-to-collision (TTC) predictive-force experiments (#3481).
+  New pure module `robot_sf/research/ped_model_assumption_inventory.py` documents the current
+  force-model assumptions the upgrade would change (no field-of-view attenuation on ped-ped
+  repulsion, heading coupled to instantaneous velocity, Euclidean-distance repulsion with no
+  TTC term), probes that the entry-point surfaces an HSFM/TTC experiment would touch are
+  importable (the vendored Social Force core plus the `robot_sf/ped_npc` behavior/population
+  surfaces; fail-closed if any required surface is missing), and reports the still-missing
+  prerequisites (HSFM heading state, FoV weight, TTC term, narrow-passage and bottleneck
+  fixtures, versioned parameters, external calibration data) as explicit blockers. A documented
+  CLI (`scripts/research/check_ped_model_assumption_inventory.py`, `--json`/`--list`) renders the
+  inventory. This is the **assumption-and-artifact inventory** slice only: it implements **no**
+  force law, changes **no** scenario behavior, runs **no** benchmark, and makes **no** realism
+  claim (the force-model upgrade itself stays `evidence_tier: idea`).
 * Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
   schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
   New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,

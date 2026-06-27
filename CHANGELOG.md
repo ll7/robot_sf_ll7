@@ -25,6 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry/preflight metadata only`). CLI:
   `scripts/tools/research_package_preflight.py` (Markdown or JSON, with an optional
   `--fail-on-blocked` gate).
+* Added a presence-only **cross-benchmark comparison readiness** checker
+  (`scripts/tools/cross_benchmark_comparison_readiness.py`, #3287) for the downstream cross-suite
+  policy-comparison campaign. It inventories the four prerequisite families named by the issue —
+  scenario converter (#3285), metric wrappers (#3286), campaign policy metadata/manifest, and
+  external social-nav benchmark assets (#1456 / #1498 / #2414 / #3161 / #2918) — and reduces each to
+  a `ready` / `blocked` / `waived` state: `ready` when every expected local artifact is present,
+  `blocked` when an artifact is missing (the default for external assets, which are never staged
+  in-repo), and `waived` when a maintainer explicitly waives a family with a recorded reason
+  (mirroring the issue's "satisfied or explicitly waived" acceptance criterion). The report is
+  fail-closed: `campaign_authorized` is always `False` and `run_gates` lists the standing blockers,
+  so a "prerequisites ready" report can never be mistaken for authorization to run the campaign or
+  claim cross-suite equivalence. The tool does not access external assets, run a campaign, or assert
+  equivalence.
 * Added a **bring-your-own (BYO) staging preflight** for licensed Stanford Drone Dataset (SDD)
   annotations (#1497). Under the BYO-dataset reframe (#3065) the repository never licenses, hosts,
   or redistributes SDD; a contributor stages a copy they already have rights to. The canonical SDD

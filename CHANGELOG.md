@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **bring-your-own (BYO) staging preflight** for licensed Stanford Drone Dataset (SDD)
+  annotations (#1497). Under the BYO-dataset reframe (#3065) the repository never licenses, hosts,
+  or redistributes SDD; a contributor stages a copy they already have rights to. The canonical SDD
+  manifest (`configs/data/sdd_staging_manifest.yaml`) now carries an ordered `retrieval_recipe`
+  (concrete acquisition steps, no auto-download) and a `license_acknowledgment` opt-in
+  (`{required, acknowledged, statement}`, shipped `acknowledged: false` so the committed default
+  never implies redistribution rights). A new `sdd-preflight` command in
+  `scripts/tools/manage_external_data.py` (`build_sdd_preflight`) reports the two staging
+  prerequisites and the blocked-external-input state, and **fails closed** (CLI exit 2) until the
+  license acknowledgment is affirmed *and* the annotation files are present locally. Manifest
+  parsing also fails closed on a non-boolean acknowledgment or a malformed recipe so the gate cannot
+  be bypassed by a typo. This is staging-gate/provenance work only: it does **not** download,
+  ingest, or transform any SDD data, run benchmarks, or edit any benchmark/paper claim. Scenario
+  curation against real annotations remains #1126.
 * Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
   The local-artifact preflight blocklist
   (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`

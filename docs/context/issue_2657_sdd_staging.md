@@ -113,6 +113,37 @@ uv run python scripts/data/stage_sdd_dataset_issue_2657.py validate
 uv run python scripts/data/stage_sdd_dataset_issue_2657.py mode
 ```
 
+## Issue #1497 — Bring-your-own (BYO) opt-in preflight (2026-06-27)
+
+Issue #1497 owns the provenance-safe staging *gate* for licensed SDD annotations (scenario curation
+itself stays in #1126). Under the BYO-dataset reframe (#3065, issue-audit 2026-06-22) the project
+never licenses, hosts, or redistributes SDD; a contributor stages a copy they already have rights
+to. This slice makes that opt-in explicit and machine-checkable without downloading, ingesting, or
+transforming any data:
+
+- The canonical manifest `configs/data/sdd_staging_manifest.yaml` now carries two fields:
+  - `retrieval_recipe`: an ordered list of concrete acquisition steps (no auto-download).
+  - `license_acknowledgment`: `{required, acknowledged, statement}`. It ships
+    `acknowledged: false` so the committed manifest never implies redistribution rights; a
+    contributor sets it `true` in their local checkout after reading the license.
+- A new preflight reports the two staging prerequisites and the blocked-external-input state. It is
+  `ready` only when the license acknowledgment is **satisfied** AND the annotation files are present
+  locally; otherwise it fails closed (CLI exit 2). Parsing fails closed on a non-boolean
+  acknowledgment or a malformed recipe so the gate cannot be bypassed by a typo.
+- Canonical owner: extends `scripts/tools/manage_external_data.py`
+  (`SddLicenseAcknowledgment`, `build_sdd_preflight`, CLI `sdd-preflight`); no parallel per-issue
+  script. Tests: `tests/tools/test_sdd_preflight_issue_1497.py`.
+
+Provenance state (placeholders until a contributor stages a real copy): source
+<https://cvgl.stanford.edu/projects/uav_data/>; version `sdd-v1.0-uav-data`; staging dir
+`output/external_data/sdd` (git-ignored); checksum pinned by `sdd-validate` after first trusted
+staging; license CC BY-NC-SA 3.0 (manual, license-gated, no approved download URL).
+
+```bash
+# Report BYO prerequisites + blocked-external state (no download); exit 0 ready / 2 blocked:
+uv run python scripts/tools/manage_external_data.py --json sdd-preflight
+```
+
 ## Validation Checklist
 
 - [x] Source URL and version tag are recorded.

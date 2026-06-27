@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version, and a `retrieval_status` (`resolvable`/`pending`/`blocked`); large traces stay out of git.
   A fail-closed CLI (`scripts/validation/validate_oracle_trace_uri_registry.py --require-training-ready`)
   and an example registry (`configs/training/ppo_imitation/oracle_trace_uri_registry_example.yaml`)
-  let the oracle-imitation lane leave `artifact_retrieval_blocked` only when every required split has
-  a concrete, durable, resolvable pointer with a valid checksum. This is the local registry/validator
+  let the oracle-imitation lane leave `artifact_retrieval_blocked` only when every required split is
+  present and all of its traces are concrete, durable, resolvable pointers with valid checksums. This is the local registry/validator
   slice only: it collects no traces, publishes no artifacts, submits no jobs, and makes no training
   readiness claim (the checked-in example is intentionally not training-ready). See
   `docs/context/issue_2655_oracle_trace_uri_registry.md`.

@@ -276,13 +276,20 @@ def _summarize_traces(
 ) -> tuple[dict[str, list[str]], dict[str, str], dict[str, bool]]:
     """Build per-split trace-id lists, a trace-id->status map, and resolvable-required flags.
 
+    A required split is treated as durably resolvable only when it has at least one trace *and*
+    every trace listed for that split is concrete, durable, and ``resolvable``. This fails closed
+    per the issue contract ("the lane leaves ``artifact_retrieval_blocked`` only when all required
+    traces are resolvable"): a split that mixes a resolvable trace with a ``pending``/``blocked``
+    one is not ready, because the blocked trace is still a required-but-unretrievable input.
+
     Returns:
-        A tuple of (split -> trace ids, trace id -> retrieval status, split -> whether at least
-        one concrete durable resolvable trace exists for that required split).
+        A tuple of (split -> trace ids, trace id -> retrieval status, split -> whether the split
+        has at least one trace and every one of its traces is concrete, durable, and resolvable).
     """
     splits_to_trace_ids: dict[str, list[str]] = {}
     retrieval_status: dict[str, str] = {}
-    resolvable_required: dict[str, bool] = dict.fromkeys(_REQUIRED_SPLITS, False)
+    split_present: dict[str, bool] = dict.fromkeys(_REQUIRED_SPLITS, False)
+    split_all_resolvable: dict[str, bool] = dict.fromkeys(_REQUIRED_SPLITS, True)
     for trace in traces:
         split = trace.get("split")
         trace_id = trace.get("trace_id")
@@ -290,16 +297,18 @@ def _summarize_traces(
         if not isinstance(trace_id, str) or not trace_id.strip():
             continue
         trace_id = trace_id.strip()
-        if split in _REQUIRED_SPLITS:
-            splits_to_trace_ids.setdefault(split, []).append(trace_id)
         if isinstance(status, str):
             retrieval_status[trace_id] = status
-        if (
-            split in _REQUIRED_SPLITS
-            and status == "resolvable"
-            and trace.get("_uri_is_concrete_durable", False)
-        ):
-            resolvable_required[split] = True
+        if split not in _REQUIRED_SPLITS:
+            continue
+        splits_to_trace_ids.setdefault(split, []).append(trace_id)
+        split_present[split] = True
+        trace_resolvable = status == "resolvable" and trace.get("_uri_is_concrete_durable", False)
+        if not trace_resolvable:
+            split_all_resolvable[split] = False
+    resolvable_required = {
+        split: split_present[split] and split_all_resolvable[split] for split in _REQUIRED_SPLITS
+    }
     return splits_to_trace_ids, retrieval_status, resolvable_required
 
 
@@ -312,8 +321,8 @@ def _validate_training_ready_gate(
 ) -> bool:
     """Compute and optionally enforce the ``training_ready`` gate.
 
-    The lane leaves ``artifact_retrieval_blocked`` only when every required split has at least
-    one concrete, durable, ``resolvable`` trace pointer.
+    The lane leaves ``artifact_retrieval_blocked`` only when every required split is present and
+    every trace listed for it is a concrete, durable, ``resolvable`` pointer.
 
     Returns:
         ``True`` when every required split is concretely, durably resolvable, else ``False``.

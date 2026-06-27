@@ -41,8 +41,10 @@ match the declared checksum.
 
 ## Training-Ready Gate
 
-`training_ready` is `True` only when every required split has at least one **concrete** (non
-`:pending`) durable URI with a valid checksum and `retrieval_status: resolvable`. The
+`training_ready` is `True` only when every required split is present and **every** trace listed
+for it is a **concrete** (non-`:pending`) durable URI with a valid checksum and
+`retrieval_status: resolvable`. A split that mixes a resolvable trace with a `pending`/`blocked`
+one fails closed, because the blocked trace is still a required-but-unretrievable input. The
 `--require-training-ready` flag turns this into a fail-closed gate. The lane leaves
 `artifact_retrieval_blocked` only when this gate passes for all required traces.
 

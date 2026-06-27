@@ -143,6 +143,36 @@ def test_blocked_retrieval_is_not_training_ready(tmp_path: Path) -> None:
         )
 
 
+def test_split_with_one_blocked_trace_is_not_training_ready(tmp_path: Path) -> None:
+    """A split is ready only when *all* of its traces are resolvable, not just one of them.
+
+    A required split that mixes a resolvable trace with a blocked trace must fail closed: the
+    blocked trace is still a required-but-unretrievable input, so the lane stays out of
+    ``training_ready`` per the issue contract ("all required traces are resolvable").
+    """
+    registry = _training_ready_registry()
+    registry["traces"].append(
+        {
+            "split": "train",
+            "trace_id": "train__demo_v1_shard2",
+            "uri": "wandb-artifact://robot-sf/oracle-imitation/train_shard2:pending",
+            "sha256": "pending",
+            "retrieval_status": "blocked",
+        }
+    )
+
+    # Base validation still passes (a blocked trace is a legitimate state)...
+    base_report = validate_trace_uri_registry(_write_registry(tmp_path, registry))
+    assert base_report["training_ready"] is False
+
+    # ...but the strict gate fails closed naming the not-fully-resolvable split.
+    with pytest.raises(OracleTraceUriRegistryError, match="not resolvable: train"):
+        validate_trace_uri_registry(
+            _write_registry(tmp_path, registry),
+            require_training_ready=True,
+        )
+
+
 def test_pending_uri_is_not_concrete_durable(tmp_path: Path) -> None:
     """A `:pending` URI alias is a placeholder, not a concrete durable training input."""
     registry = _training_ready_registry()

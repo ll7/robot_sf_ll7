@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _MODULE_PATH = (
     Path(__file__).resolve().parents[2]
     / "scripts"
@@ -17,6 +19,21 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 assert _SPEC.loader is not None
 _SPEC.loader.exec_module(_MODULE)
 classify_screened_decision = _MODULE.classify_screened_decision
+check_campaign_readiness = _MODULE.check_campaign_readiness
+run_campaign = _MODULE.run_campaign
+main = _MODULE.main
+
+
+def _ready_kwargs() -> dict[str, float | int]:
+    """Valid, strictly-positive campaign run geometry for readiness checks."""
+    return {"fov_degrees": 120.0, "horizon": 300, "dt": 0.1, "workers": 4}
+
+
+def _scenario_set(tmp_path) -> Path:
+    """Create a placeholder scenario-set file so the existence check passes."""
+    path = tmp_path / "scenario_set.yaml"
+    path.write_text("scenarios: []\n")
+    return path
 
 
 def _mode(collision_rate: float, near_misses: int) -> dict[str, float | int]:
@@ -74,3 +91,75 @@ def test_near_safe_discriminating_matrix_recommends_revise() -> None:
     assert decision["screening_status"] == "near_safe_discriminating"
     assert decision["oracle_near_safe"] is True
     assert decision["mode_is_discriminating"] is True
+
+
+def test_campaign_readiness_ready_with_valid_inputs(tmp_path) -> None:
+    """Valid pinned inputs pass every fail-closed readiness check for the real campaign."""
+    report = check_campaign_readiness(_scenario_set(tmp_path), [101, 102, 103], **_ready_kwargs())
+
+    assert report["ready"] is True
+    assert report["failed_checks"] == []
+    names = {c["name"] for c in report["checks"]}
+    # The gate must actually exercise the oracle-near-safety + planner contracts, not just inputs.
+    assert {"oracle_near_safety_contract", "uncertainty_planner_contract"} <= names
+
+
+def test_campaign_readiness_missing_scenario_set(tmp_path) -> None:
+    """A missing scenario set fails closed before any compute."""
+    report = check_campaign_readiness(tmp_path / "absent.yaml", [101, 102], **_ready_kwargs())
+
+    assert report["ready"] is False
+    assert "scenario_set_exists" in report["failed_checks"]
+
+
+def test_campaign_readiness_duplicate_seeds_block(tmp_path) -> None:
+    """A seed matrix with duplicates is not a valid pinned matrix."""
+    report = check_campaign_readiness(_scenario_set(tmp_path), [101, 101, 102], **_ready_kwargs())
+
+    assert report["ready"] is False
+    assert "seeds_pinned" in report["failed_checks"]
+
+
+def test_campaign_readiness_nonpositive_geometry(tmp_path) -> None:
+    """Zero/negative run geometry fails closed."""
+    kwargs = _ready_kwargs()
+    kwargs["dt"] = 0.0
+    report = check_campaign_readiness(_scenario_set(tmp_path), [101], **kwargs)
+
+    assert report["ready"] is False
+    assert "run_geometry_positive" in report["failed_checks"]
+
+
+def test_run_campaign_fails_closed_on_bad_inputs(tmp_path) -> None:
+    """run_campaign aborts (rolling no episodes) when the readiness gate fails."""
+    out_dir = tmp_path / "out"
+    with pytest.raises(RuntimeError, match="readiness gate failed"):
+        run_campaign(
+            _scenario_set(tmp_path),
+            [101, 101],  # duplicate -> not ready
+            out_dir,
+            **_ready_kwargs(),
+        )
+    # Fail-closed means nothing was written.
+    assert not out_dir.exists()
+
+
+def test_main_preflight_only_exit_codes(tmp_path) -> None:
+    """--preflight-only returns 0 when ready and 1 when a check fails; rolls no episodes."""
+    scenario_set = _scenario_set(tmp_path)
+    ready_code = main(
+        ["--preflight-only", "--scenario-set", str(scenario_set), "--seeds", "101", "102"]
+    )
+    assert ready_code == 0
+
+    not_ready_code = main(
+        [
+            "--preflight-only",
+            "--scenario-set",
+            str(tmp_path / "absent.yaml"),
+            "--seeds",
+            "101",
+            "102",
+        ]
+    )
+    assert not_ready_code == 1

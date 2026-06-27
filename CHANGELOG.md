@@ -25,6 +25,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   downloaded, copied, committed, or claimed as real-world validation. See
   `docs/context/issue_3065_real_trajectory_ingestion_contract.md`.
 
+* Added a **read-only capability inventory / preflight** for the learned probabilistic graph
+  predictor v1 lane (#2844). New module
+  `robot_sf/benchmark/learned_predictor_capability_inventory.py` enumerates the *code-level*
+  prerequisites a v1 learned predictor would extend — the `ProbabilisticPredictor` protocol and
+  `ProbabilisticPrediction` container, the `BaselineProbabilisticPredictor` surface, the
+  `ForecastBatch.v1` contract, the forecast dataset recorder + split-manifest builder, the durable
+  model-artifact registry classifier, and the readiness evidence gate + contract doc — and reports
+  whether each hook is present in the checkout. CLI
+  `scripts/validation/inventory_learned_predictor_capability.py [--json]` prints the report and
+  exits non-zero only on a *missing wiring* hook. This is strictly a wiring/preflight surface: it
+  does **not** implement, train, or run a predictor, change planner behavior, or run any campaign,
+  and `unblocks_training` is always `False` — the lane unblock decision remains owned by the
+  evidence gate `scripts/validation/validate_learned_prediction_readiness.py`. A complete inventory
+  matches the 2026-06-23 readiness audit: the lane is blocked on *evidence*, not on missing hooks.
+* Added a presence-only **cross-benchmark comparison readiness** checker
+  (`scripts/tools/cross_benchmark_comparison_readiness.py`, #3287) for the downstream cross-suite
+  policy-comparison campaign. It inventories the four prerequisite families named by the issue —
+  scenario converter (#3285), metric wrappers (#3286), campaign policy metadata/manifest, and
+  external social-nav benchmark assets (#1456 / #1498 / #2414 / #3161 / #2918) — and reduces each to
+  a `ready` / `blocked` / `waived` state: `ready` when every expected local artifact is present,
+  `blocked` when an artifact is missing (the default for external assets, which are never staged
+  in-repo), and `waived` when a maintainer explicitly waives a family with a recorded reason
+  (mirroring the issue's "satisfied or explicitly waived" acceptance criterion). The report is
+  fail-closed: `campaign_authorized` is always `False` and `run_gates` lists the standing blockers,
+  so a "prerequisites ready" report can never be mistaken for authorization to run the campaign or
+  claim cross-suite equivalence. The tool does not access external assets, run a campaign, or assert
+  equivalence.
 * Added a **bring-your-own (BYO) staging preflight** for licensed Stanford Drone Dataset (SDD)
   annotations (#1497). Under the BYO-dataset reframe (#3065) the repository never licenses, hosts,
   or redistributes SDD; a contributor stages a copy they already have rights to. The canonical SDD

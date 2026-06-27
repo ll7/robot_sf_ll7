@@ -34,6 +34,11 @@ def _box(shape: tuple[int, ...]) -> gym_spaces.Box:
     return gym_spaces.Box(low=-np.inf, high=np.inf, shape=shape, dtype=np.float32)
 
 
+def _bounded_box(shape: tuple[int, ...], low: float, high: float) -> gym_spaces.Box:
+    """Return a float32 Box leaf with explicit finite bounds for backfill tests."""
+    return gym_spaces.Box(low=low, high=high, shape=shape, dtype=np.float32)
+
+
 def _planner_with_model(model: _FakePPOModel) -> PPOPlanner:
     """Build a PPOPlanner with a fake loaded model and no checkpoint IO."""
     planner = PPOPlanner.__new__(PPOPlanner)
@@ -127,3 +132,102 @@ def test_ppo_dict_obs_keeps_nested_env_obs_compatible_with_flat_model_space() ->
     }
     np.testing.assert_allclose(model.last_obs["robot_position"], [1.0, 2.0])
     np.testing.assert_allclose(model.last_obs["goal_current"], [4.0, 5.0])
+
+
+def test_ppo_dict_obs_backfills_missing_leaf_key_with_space_default() -> None:
+    """A missing leaf inside a nested block is backfilled instead of crashing (#3704)."""
+    model = _FakePPOModel(
+        gym_spaces.Dict(
+            {
+                "robot": gym_spaces.Dict(
+                    {
+                        "position": _box((2,)),
+                        "velocity": _box((2,)),
+                    }
+                ),
+                "goal": gym_spaces.Dict({"current": _box((2,))}),
+            }
+        )
+    )
+    planner = _planner_with_model(model)
+    # Runner only emits robot_position and goal_current; robot_velocity is absent.
+    partial_obs = {
+        "robot_position": np.array([1.0, 2.0], dtype=np.float32),
+        "goal_current": np.array([4.0, 5.0], dtype=np.float32),
+    }
+
+    action = planner.step(partial_obs)
+
+    assert action == {"vx": pytest.approx(0.4), "vy": pytest.approx(-0.2)}
+    assert model.last_obs is not None
+    np.testing.assert_allclose(model.last_obs["robot"]["position"], [1.0, 2.0])
+    # Missing leaf backfilled with an in-bounds (zero) default for the (2,) Box.
+    np.testing.assert_allclose(model.last_obs["robot"]["velocity"], [0.0, 0.0])
+    assert model.last_obs["robot"]["velocity"].shape == (2,)
+
+
+def test_ppo_dict_obs_backfills_entire_missing_nested_block() -> None:
+    """A nested Dict block absent from the runner obs is recursively backfilled (#3704)."""
+    model = _FakePPOModel(
+        gym_spaces.Dict(
+            {
+                "robot": gym_spaces.Dict({"position": _box((2,))}),
+                "pedestrians": gym_spaces.Dict(
+                    {
+                        "positions": _box((2, 2)),
+                        "count": _box((1,)),
+                    }
+                ),
+            }
+        )
+    )
+    planner = _planner_with_model(model)
+    # The entire pedestrians block is missing from the runner observation.
+    partial_obs = {"robot_position": np.array([1.0, 2.0], dtype=np.float32)}
+
+    action = planner.step(partial_obs)
+
+    assert action == {"vx": pytest.approx(0.4), "vy": pytest.approx(-0.2)}
+    assert model.last_obs is not None
+    np.testing.assert_allclose(model.last_obs["robot"]["position"], [1.0, 2.0])
+    np.testing.assert_allclose(model.last_obs["pedestrians"]["positions"], np.zeros((2, 2)))
+    np.testing.assert_allclose(model.last_obs["pedestrians"]["count"], [0.0])
+    assert model.last_obs["pedestrians"]["positions"].shape == (2, 2)
+
+
+def test_ppo_dict_obs_backfill_respects_nonzero_lower_bound() -> None:
+    """Backfill clips the zero default into the declared box bounds (#3704)."""
+    model = _FakePPOModel(
+        gym_spaces.Dict(
+            {
+                "robot_position": _box((2,)),
+                # Lower bound above zero: a raw zero fill would be out of bounds.
+                "pedestrians_radius": _bounded_box((1,), low=0.5, high=2.0),
+            }
+        )
+    )
+    planner = _planner_with_model(model)
+    partial_obs = {"robot_position": np.array([1.0, 2.0], dtype=np.float32)}
+
+    action = planner.step(partial_obs)
+
+    assert action == {"vx": pytest.approx(0.4), "vy": pytest.approx(-0.2)}
+    assert model.last_obs is not None
+    # Clipped to the declared lower bound rather than left at an out-of-bounds 0.0.
+    np.testing.assert_allclose(model.last_obs["pedestrians_radius"], [0.5])
+
+
+def test_align_model_obs_dict_default_for_space_is_in_bounds() -> None:
+    """`_default_for_space` returns in-bounds defaults for nested and bounded spaces (#3704)."""
+    planner = _planner_with_model(_FakePPOModel(gym_spaces.Dict({"x": _box((1,))})))
+
+    nested_default = planner._default_for_space(
+        gym_spaces.Dict({"a": _box((2,)), "b": _bounded_box((1,), low=1.0, high=3.0)})
+    )
+    assert set(nested_default) == {"a", "b"}
+    np.testing.assert_allclose(nested_default["a"], [0.0, 0.0])
+    np.testing.assert_allclose(nested_default["b"], [1.0])
+
+    box_default = planner._default_for_space(_bounded_box((3,), low=-2.0, high=-0.5))
+    # Zero is above the upper bound here, so the default clips down to -0.5.
+    np.testing.assert_allclose(box_default, [-0.5, -0.5, -0.5])

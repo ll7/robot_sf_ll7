@@ -47,6 +47,29 @@ access_note: >-
   staging_dir. The staging script will NOT fetch data from the network without an explicit
   user-confirmed `--confirm-download` decision and a configured download URL.
 
+# --- Bring-your-own (BYO) opt-in contract (Issue #1497) ---------------------------------------
+# Under the BYO-dataset reframe (#3065, issue-audit 2026-06-22) the repository never licenses,
+# hosts, or redistributes SDD annotations. A contributor stages a copy they already have rights to.
+# These two fields make that opt-in explicit and machine-checkable via the `sdd-preflight` command:
+#   * `retrieval_recipe` lists the concrete, ordered acquisition steps (no auto-download).
+#   * `license_acknowledgment` records that the contributor affirms their own license/usage rights
+#     before staging. `acknowledged: false` keeps the asset blocked (fail closed) until a
+#     contributor who has read the license sets it to `true` in their local checkout. It is shipped
+#     as `false` so the committed default never implies redistribution rights.
+retrieval_recipe:
+  - Open the official SDD project page (source_url) and read the dataset terms and license.
+  - Confirm you personally have the right to use the annotations under those terms (BYO copy).
+  - Download the SDD annotation archive from the official page; keep the license alongside it.
+  - Extract at least one `annotations.txt` into the manifest `staging_dir` (git-ignored).
+  - "Set `license_acknowledgment.acknowledged: true` in your local manifest copy."
+  - Run `sdd-preflight` to confirm prerequisites, then `sdd-validate` to pin the checksum.
+license_acknowledgment:
+  required: true
+  acknowledged: false  # contributor sets true locally after reading the license; never committed true
+  statement: >-
+    I obtained the Stanford Drone Dataset annotations from the official source and have the right to
+    use them under the CC BY-NC-SA 3.0 dataset terms. Robot SF does not redistribute this data.
+
 # --- Expected layout & size ------------------------------------------------------------------
 # At least one `annotations.txt` is required by the SDD importer. These are the files the staging
 # script validates after a download/extraction completes.

@@ -589,8 +589,9 @@ def probe_prerequisite(spec: PrerequisiteSpec, root: Path | None = None) -> Prer
     matched: list[str] = []
     for pattern in spec.probe_paths:
         if any(ch in pattern for ch in "*?["):
-            if list(base.glob(pattern)):
-                matched.append(pattern)
+            # Record the resolved relative paths of the matched files, not the glob pattern
+            # itself, so the report names the exact artifact that satisfied the prerequisite.
+            matched.extend(str(p.relative_to(base)) for p in base.glob(pattern))
         elif (base / pattern).exists():
             matched.append(pattern)
     if matched:

@@ -1,4 +1,4 @@
-# Heavy forecast-model family study / preflight (issue #2845)
+# Heavy Forecast-Model Family Study / Preflight - Issue #2845 (2026-06-20)
 
 - **Issue**: [#2845](https://github.com/ll7/robot_sf_ll7/issues/2845) — *prediction: offline
   transformer or diffusion benchmark study*

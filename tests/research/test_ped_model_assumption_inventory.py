@@ -1,10 +1,9 @@
-"""Tests for the heavy forecast-model inventory / preflight (issue #2845).
+"""Tests for the pedestrian-model assumption inventory / preflight (issue #3481).
 
 These exercise the read-only inventory against synthetic checkouts (tmp_path) and the real
 repository tree. They assert the probe semantics (present / missing-files / missing-symbols /
-import-failure), the prerequisite present/absent/external classification, the fail-closed import
-verdict, the minimum-offline-experiment ready/blocked roll-up, and the CLI exit codes. No model
-is trained, no inference is run, and no simulation behavior is executed.
+import-failure), the prerequisite present/absent/external classification, the fail-closed
+verdict logic, and the CLI exit codes. No simulation behavior is executed.
 """
 
 from __future__ import annotations
@@ -14,14 +13,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from robot_sf.research import forecast_heavy_model_inventory as inv
-from robot_sf.research.forecast_heavy_model_inventory import (
+from robot_sf.research import ped_model_assumption_inventory as inv
+from robot_sf.research.ped_model_assumption_inventory import (
+    CURRENT_ASSUMPTIONS,
     ENTRY_POINT_SURFACES,
     EXPERIMENT_PREREQUISITES,
-    MODEL_FAMILIES,
-    CostTier,
     EntryPointSpec,
-    MinimumExperimentStatus,
     PrerequisiteSpec,
     PrerequisiteStatus,
     SurfaceStatus,
@@ -31,7 +28,7 @@ from robot_sf.research.forecast_heavy_model_inventory import (
     render_markdown,
     repo_root,
 )
-from scripts.research.check_forecast_heavy_model_inventory import main as cli_main
+from scripts.research.check_ped_model_assumption_inventory import main as cli_main
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -43,45 +40,29 @@ if TYPE_CHECKING:
 
 def test_inventories_are_non_empty_and_uniquely_keyed():
     """Every inventory list is populated and free of duplicate keys."""
-    assert MODEL_FAMILIES
+    assert CURRENT_ASSUMPTIONS
     assert ENTRY_POINT_SURFACES
     assert EXPERIMENT_PREREQUISITES
-    for items in (MODEL_FAMILIES, ENTRY_POINT_SURFACES, EXPERIMENT_PREREQUISITES):
+    for items in (CURRENT_ASSUMPTIONS, ENTRY_POINT_SURFACES, EXPERIMENT_PREREQUISITES):
         keys = [i.key for i in items]
         assert len(keys) == len(set(keys)), f"duplicate keys in {keys}"
 
 
 def test_specs_are_json_serializable():
     """Every spec's ``to_dict`` round-trips through JSON without error."""
-    for items in (MODEL_FAMILIES, ENTRY_POINT_SURFACES, EXPERIMENT_PREREQUISITES):
+    for items in (CURRENT_ASSUMPTIONS, ENTRY_POINT_SURFACES, EXPERIMENT_PREREQUISITES):
         for item in items:
             json.dumps(item.to_dict())
 
 
-def test_model_families_cover_the_four_issue_archetypes():
-    """The family inventory names the transformer, AgentFormer, CVAE, and diffusion archetypes."""
-    keys = {m.key for m in MODEL_FAMILIES}
-    assert {"transformer", "agentformer", "cvae", "diffusion"} <= keys
-
-
-def test_model_family_tier_fields_use_cost_tier_enum():
-    """Each family exposes the four required qualitative tradeoff axes as CostTier values."""
-    for m in MODEL_FAMILIES:
-        assert isinstance(m.compute_cost, CostTier)
-        assert isinstance(m.inference_latency, CostTier)
-        assert isinstance(m.uncertainty_quality, CostTier)
-        assert isinstance(m.integration_burden, CostTier)
-        # offline_use_cases is what the per-use-case recommendation keys off; never empty.
-        assert m.offline_use_cases
-
-
-def test_diffusion_has_worst_inference_latency():
-    """Sanity check on the planning estimates: diffusion is the costliest for online latency."""
-    by_key = {m.key: m for m in MODEL_FAMILIES}
-    order = list(CostTier)
-    diffusion_rank = order.index(by_key["diffusion"].inference_latency)
-    for key in ("transformer", "cvae"):
-        assert diffusion_rank >= order.index(by_key[key].inference_latency)
+def test_assumptions_target_the_three_issue_axes():
+    """The assumption inventory names the FoV, HSFM-heading, and TTC gaps the issue targets."""
+    keys = {a.key for a in CURRENT_ASSUMPTIONS}
+    assert {
+        "no_fov_attenuation",
+        "heading_coupled_to_velocity",
+        "euclidean_distance_repulsion",
+    } <= keys
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +99,7 @@ def test_probe_missing_module_when_import_fails(tmp_path):
     spec = EntryPointSpec(
         key="x",
         title="x",
-        module="robot_sf_no_such_module_2845",
+        module="robot_sf_no_such_module_3481",
         file_path="pkg/mod.py",
     )
     result = probe_entry_point(spec, root=tmp_path)
@@ -134,11 +115,11 @@ def test_probe_missing_symbols_when_symbol_absent(tmp_path):
         title="x",
         module="os.path",
         file_path="os_path_stub.py",
-        required_symbols=("join", "definitely_not_a_real_symbol_2845"),
+        required_symbols=("join", "definitely_not_a_real_symbol_3481"),
     )
     result = probe_entry_point(spec, root=tmp_path)
     assert result.status is SurfaceStatus.MISSING_SYMBOLS
-    assert result.missing_symbols == ("definitely_not_a_real_symbol_2845",)
+    assert result.missing_symbols == ("definitely_not_a_real_symbol_3481",)
     assert result.is_blocker
 
 
@@ -193,29 +174,29 @@ def test_prerequisite_absent_when_no_path_matches(tmp_path):
 
 def test_prerequisite_present_when_path_exists(tmp_path):
     """A prerequisite flips to PRESENT once any probe path lands."""
-    _write(tmp_path, "configs/forecast/heavy_model_cpu_budget.yaml")
+    _write(tmp_path, "configs/pedestrian/hsfm_ttc.yaml")
     spec = PrerequisiteSpec(
         key="p",
         title="p",
         description="d",
         blocks=("b",),
-        probe_paths=("configs/forecast/heavy_model_cpu_budget.yaml",),
+        probe_paths=("configs/pedestrian/hsfm_ttc.yaml",),
     )
     result = probe_prerequisite(spec, root=tmp_path)
     assert result.status is PrerequisiteStatus.PRESENT
     assert result.satisfied
-    assert result.matched_paths == ("configs/forecast/heavy_model_cpu_budget.yaml",)
+    assert result.matched_paths == ("configs/pedestrian/hsfm_ttc.yaml",)
 
 
 def test_prerequisite_glob_path_matches(tmp_path):
     """Glob probe paths match created files."""
-    _write(tmp_path, "configs/forecast/heavy_model_holdout_v1.yaml")
+    _write(tmp_path, "tests/fixtures/ped_npc/narrow_passage_sliding.yaml")
     spec = PrerequisiteSpec(
         key="p",
         title="p",
         description="d",
         blocks=("b",),
-        probe_paths=("configs/forecast/heavy_model_holdout*.yaml",),
+        probe_paths=("tests/fixtures/ped_npc/*.yaml",),
     )
     result = probe_prerequisite(spec, root=tmp_path)
     assert result.satisfied
@@ -236,78 +217,43 @@ def test_external_prerequisite_is_external_without_paths(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Aggregate verdict + minimum-experiment roll-up.
+# Aggregate verdict.
 # ---------------------------------------------------------------------------
 
 
-def test_import_verdict_fails_closed_when_required_surfaces_missing(tmp_path):
+def test_verdict_fails_closed_when_required_surfaces_missing(tmp_path):
     """Against an empty synthetic checkout every required surface is missing, so the verdict fails."""
     # On an empty tmp tree the declared entry-point files are absent (file probe runs before
-    # import), so each required surface blocks and the import verdict fails closed.
+    # import), so each required surface blocks and the verdict fails closed.
     report = build_inventory_report(root=tmp_path)
     assert not report.ok
     assert report.surface_blockers
-    # When surfaces are broken the minimum experiment is necessarily blocked too.
-    assert report.minimum_experiment_status is MinimumExperimentStatus.BLOCKED
-    assert report.exit_code() == 1
 
 
-def test_real_checkout_imports_but_minimum_experiment_is_blocked():
-    """On the live repo every required surface imports, yet the minimum experiment is blocked.
+def test_real_checkout_inventory_passes_and_lists_pending_blockers():
+    """On the live repository every required entry-point imports; HSFM/TTC work is still pending.
 
     This keeps the declared required surfaces honest against the current tree (if a named
-    forecast surface is renamed, this fails) while documenting that the offline heavy-model
-    experiment cannot run yet: its local prerequisites (dataset, adapter, runtime budget) and
-    external prerequisites (dependency decision, trained checkpoint) are not satisfied.
+    force-core or ped-NPC surface is renamed, this fails) while documenting that the force-law
+    upgrade itself has not landed.
     """
     report = build_inventory_report(root=repo_root())
     assert report.ok, [b.to_dict() for b in report.surface_blockers]
-    assert report.exit_code() == 0
-    assert report.minimum_experiment_status is MinimumExperimentStatus.BLOCKED
+    # The HSFM/TTC/FoV terms and fixtures are not built yet on the inventory branch.
     pending_keys = {p.spec.key for p in report.pending_prerequisites}
-    assert {"staged_holdout_dataset", "heavy_model_adapter", "cpu_runtime_budget"} <= pending_keys
+    assert {"hsfm_heading_state", "fov_attenuation", "ttc_predictive_term"} <= pending_keys
+    # The calibration-data prerequisite is an external standing blocker.
     external = {p.spec.key for p in report.prerequisites if p.status is PrerequisiteStatus.EXTERNAL}
-    assert {"dependency_decision", "trained_checkpoint"} <= external
-
-
-def test_minimum_experiment_ready_only_when_local_prereqs_satisfied(tmp_path):
-    """The roll-up reports READY when surfaces import and all non-external prereqs are present.
-
-    Surfaces import from the live interpreter regardless of ``root`` (file-presence is the only
-    root-relative surface check), so creating the local prerequisite probe files under
-    ``tmp_path`` plus the declared surface files is enough to flip the roll-up to READY. External
-    prerequisites stay unsatisfied but must not block local readiness.
-    """
-    # Create the declared entry-point files so the file-presence probe passes.
-    for surface in ENTRY_POINT_SURFACES:
-        _write(tmp_path, surface.file_path)
-    # Satisfy every non-external prerequisite by creating a file for its first probe path,
-    # expanding any glob wildcard into a concrete filename so the probe matches.
-    for prereq in EXPERIMENT_PREREQUISITES:
-        if prereq.external or not prereq.probe_paths:
-            continue
-        probe = prereq.probe_paths[0]
-        concrete = probe.replace("*", "match").replace("?", "x").replace("[", "").replace("]", "")
-        _write(tmp_path, concrete)
-    report = build_inventory_report(root=tmp_path)
-    assert report.ok
-    assert not report.local_pending_prerequisites
-    assert report.minimum_experiment_status is MinimumExperimentStatus.READY
-    # External standing blockers are still reported as pending even when local readiness holds.
-    assert report.pending_prerequisites
+    assert "calibration_data" in external
 
 
 def test_report_to_dict_summary_counts_are_consistent():
     """The report summary counts agree with the probed lists."""
     report = build_inventory_report(root=repo_root())
-    payload = report.to_dict()
-    summary = payload["summary"]
-    assert summary["model_families_total"] == len(MODEL_FAMILIES)
+    summary = report.to_dict()["summary"]
     assert summary["required_surfaces_total"] == len(report.required_surfaces)
     assert summary["prerequisites_total"] == len(EXPERIMENT_PREREQUISITES)
     assert summary["pending_prerequisites"] == len(report.pending_prerequisites)
-    assert summary["local_pending_prerequisites"] == len(report.local_pending_prerequisites)
-    assert payload["minimum_experiment_status"] == report.minimum_experiment_status.value
 
 
 def test_render_markdown_mentions_verdict_and_sections():
@@ -315,10 +261,9 @@ def test_render_markdown_mentions_verdict_and_sections():
     report = build_inventory_report(root=repo_root())
     text = render_markdown(report)
     assert f"#{inv.ISSUE}" in text
-    assert "Candidate model families" in text
-    assert "Offline-evaluation entry-point surfaces" in text
-    assert "Minimum offline-experiment prerequisites" in text
-    assert report.minimum_experiment_status.value.upper() in text
+    assert "Current force-model assumptions" in text
+    assert "Entry-point surfaces" in text
+    assert "Experiment prerequisites" in text
 
 
 # ---------------------------------------------------------------------------
@@ -327,11 +272,11 @@ def test_render_markdown_mentions_verdict_and_sections():
 
 
 def test_cli_default_exits_zero_on_real_checkout(capsys):
-    """The default CLI run passes the import verdict (exit 0) and prints Markdown."""
+    """The default CLI run passes (exit 0) on the live checkout and prints Markdown."""
     code = cli_main([])
     out = capsys.readouterr().out
     assert code == 0
-    assert "Heavy forecast-model inventory" in out
+    assert "Pedestrian-model assumption inventory" in out
 
 
 def test_cli_json_mode_emits_report(capsys):
@@ -339,15 +284,8 @@ def test_cli_json_mode_emits_report(capsys):
     code = cli_main(["--json"])
     payload = json.loads(capsys.readouterr().out)
     assert code == 0
-    assert payload["issue"] == 2845
-    assert set(payload) >= {
-        "ok",
-        "minimum_experiment_status",
-        "model_families",
-        "surfaces",
-        "prerequisites",
-        "summary",
-    }
+    assert payload["issue"] == 3481
+    assert set(payload) >= {"ok", "assumptions", "surfaces", "prerequisites", "summary"}
 
 
 def test_cli_list_mode_emits_static_inventory(capsys):
@@ -355,7 +293,7 @@ def test_cli_list_mode_emits_static_inventory(capsys):
     code = cli_main(["--list"])
     payload = json.loads(capsys.readouterr().out)
     assert code == 0
-    assert len(payload["model_families"]) == len(MODEL_FAMILIES)
+    assert len(payload["assumptions"]) == len(CURRENT_ASSUMPTIONS)
     assert len(payload["entry_point_surfaces"]) == len(ENTRY_POINT_SURFACES)
     assert len(payload["experiment_prerequisites"]) == len(EXPERIMENT_PREREQUISITES)
 

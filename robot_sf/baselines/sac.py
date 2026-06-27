@@ -484,11 +484,17 @@ class SACPlanner:
             return {"v": v, "omega": w}
         vx = float(act[0]) if act.size >= 1 else 0.0
         vy = float(act[1]) if act.size >= 2 else 0.0
-        speed = float(np.hypot(vx, vy))
-        if speed > self.config.v_max and speed > self.EPS:
-            scale = self.config.v_max / (speed + self.EPS)
-            vx *= scale
-            vy *= scale
+        # Mirror the unicycle branch: only the absolute-velocity contract is
+        # clamped to the configured speed cap. Delta actions are increments the
+        # env later accumulates (new_v = old_v + delta) and are already bounded
+        # by the SAC action space, so scaling them toward v_max would distort the
+        # accumulated trajectory.
+        if str(self.config.action_semantics).strip().lower() != "delta":
+            speed = float(np.hypot(vx, vy))
+            if speed > self.config.v_max and speed > self.EPS:
+                scale = self.config.v_max / (speed + self.EPS)
+                vx *= scale
+                vy *= scale
         return {"vx": vx, "vy": vy}
 
     def _fallback_action(self, obs: Observation) -> dict[str, float]:

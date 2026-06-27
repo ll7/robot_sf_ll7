@@ -1,0 +1,61 @@
+# Durable learned-risk training trace manifest (issue #2312, parent #1472).
+#
+# This manifest records the durable trace + baseline artifact contract that
+# learned-risk training (#1472) must satisfy before it runs. It is validated by
+# scripts/validation/validate_learned_risk_trace_manifest.py.
+#
+# Current state is intentionally fail-closed: the durable training traces are
+# produced by the #1472 / #2441 SLURM runs and do not exist yet, so the pointers
+# below are still pending aliases and `retrieval_status` is `blocked`. The
+# validator therefore returns `artifact_retrieval_blocked`, never an implied
+# training-ready state. When the SLURM run materializes the traces, replace the
+# `:pending` aliases with concrete durable URIs, record their SHA-256 digests
+# under `checksums`, set each label to `present`, and flip `retrieval_status` to
+# `available`.
+schema_version: learned-risk-trace-manifest.v1
+source_issue: 2312
+parent_issue: 1472
+candidate_id: learned_risk_model_v1
+trace_schema_version: mechanism_trace.v1
+
+# Concrete durable baseline artifact pointer. Still the pending alias from the
+# #1395 launch packet until the baseline run is frozen to a versioned artifact.
+baseline_artifact_uri: wandb-artifact://robot-sf/policy-search/hybrid_rule_v3_static_margin0_waypoint2_baseline:pending
+
+# Durable training-trace artifact pointers, one per scenario slice. Pending until
+# the #1472 / #2441 run uploads versioned trace artifacts.
+trace_artifacts:
+  - wandb-artifact://robot-sf/learned-risk/learned_risk_training_traces_stress_slice:pending
+  - wandb-artifact://robot-sf/learned-risk/learned_risk_training_traces_full_matrix:pending
+
+split_ids:
+  - stress_slice
+  - full_matrix
+
+required_episode_fields:
+  - scenario_id
+  - seed
+  - candidate_id
+  - termination_reason
+  - metrics
+  - trajectory_features
+  - labels
+
+# Per-label availability table. `pending` until the materialized traces are
+# inspected and confirmed to carry each learned-risk training label.
+label_availability:
+  collision: pending
+  near_miss: pending
+  low_progress: pending
+
+# SHA-256 digests keyed by durable URI or local fixture path. Empty until the
+# concrete artifacts are materialized and frozen.
+checksums: {}
+
+# `blocked` until durable trace + baseline artifacts are resolvable.
+retrieval_status: blocked
+
+notes: >
+  Blocked-until: durable traces are produced by the #1472 / #2441 SLURM runs.
+  The manifest and validator are buildable now; materialization is out of scope
+  for #2312 (no SLURM submission, no external data copy, no training).

@@ -1162,6 +1162,10 @@ entries:
     status: proposal
     freshness: maintained
     area: adversarial_search
+  - path: docs/context/issue_3293_evidence_integration_contract_inventory.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2468/adversarial_generation_roadmap.yaml
     status: proposal
     freshness: evidence

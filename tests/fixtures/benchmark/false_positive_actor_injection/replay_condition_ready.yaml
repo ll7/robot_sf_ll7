@@ -1,0 +1,19 @@
+# Minimal valid false-positive actor-injection replay condition (issue #3300).
+#
+# Readiness fixture only: it carries the injected-actor inputs and the provenance
+# fields required before a false-positive actor-injection replay can run. It does
+# not itself run a replay or assert any benchmark/safety outcome.
+false_positive_injection:
+  # Provenance contract (REQUIRED_PROVENANCE_FIELDS).
+  scenario_id: occluded_emergence_episode_0000
+  seed: 2755
+  planner_mode: trace_derived
+  perturbation_family: false_positive_actor_injection
+  execution_mode: readiness_check_only
+  # Injected observed-only false-positive actor inputs.
+  false_positive_positions:
+    - [2.0, 3.0]
+  false_positive_velocities:
+    - [0.0, 0.0]
+  false_positive_ids:
+    - fp_close

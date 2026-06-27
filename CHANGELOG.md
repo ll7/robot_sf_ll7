@@ -25,6 +25,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry/preflight metadata only`). CLI:
   `scripts/tools/research_package_preflight.py` (Markdown or JSON, with an optional
   `--fail-on-blocked` gate).
+* Added a **design-stage evidence-stream integration contract inventory** for issue #3293 — the
+  local, no-data slice of "design evidence integration between simulation and real-world AMV data".
+  `robot_sf/research/evidence_integration_inventory.py` enumerates the evidence streams Robot SF
+  could integrate (`simulation_trace`, `amv_command_response`, `external_pedestrian_trajectory`,
+  `pilot_fleet_operational`), separates them into `calibration` / `benchmark` / `operational`
+  categories (which use different denominators and must not be mixed), and declares the required
+  provenance + uncertainty fields per stream. A mandatory `calibration_status` field prevents any
+  synthetic/proxy envelope from silently passing as calibrated. `check_stream_metadata` (and the
+  `scripts/tools/check_evidence_integration_inventory.py` CLI: `--list` / `--check`) is a
+  **presence-only** structural check on synthetic metadata — it ingests no real data, validates no
+  field values, weights no evidence, and makes no safety/benchmark/paper-facing claim. Externally
+  blocked streams (notably AMV command-response, per the #3293 maintainer decision: <5% feasibility,
+  implementation hard-blocked) declare an explicit `blocked_until` unblock condition. Design note:
+  `docs/context/issue_3293_evidence_integration_contract_inventory.md`.
+* Added a **fail-closed readiness check for false-positive actor-injection replay inputs** (#3300),
+  the acceptance dimension PR #3271 closed out of #2927 as *unavailable*. New pure module
+  `robot_sf/benchmark/false_positive_injection_readiness.py` exposes
+  `check_false_positive_injection_readiness(spec)`, which validates a replay-condition spec's injected
+  actor inputs (reusing the canonical `ObservationPerturbationSpec` for shape rules rather than
+  re-deriving them) and its provenance fields (scenario, seed, planner mode, perturbation family,
+  execution mode). It returns an explicit `ready` / `not_available` / `blocked` verdict so a malformed
+  or unavailable false-positive condition fails closed with an actionable blocker list instead of
+  silently passing. A thin CLI `scripts/benchmark/check_false_positive_injection_readiness.py` runs the
+  check on a YAML/JSON spec and exits non-zero (3) when blocked. This is a bounded readiness/contract
+  slice only — it does not run a replay campaign, change sensor semantics, or make any benchmark or
+  safety claim.
+* Added a **fail-closed release-readiness / claim-audit preflight checklist** for research-package
+  releases (#3081). New module `robot_sf/benchmark/release_preflight.py` evaluates a declarative
+  checklist (`load_release_preflight_checklist` + `evaluate_release_preflight`) that maps issue
+  #3081's four acceptance criteria to concrete, mechanically checkable prerequisites: a reproduction
+  record (`artifact_present`), regenerated tables/figures bound to canonical-source digests
+  (`checksum_manifest`), promoted claim cards that exclude fallback/degraded/unavailable execution
+  modes (`claim_audit`), and a sprint-issue classification ledger (`issue_classification_ledger`).
+  Every check **fails closed** — a missing artifact, a checksum mismatch, a symlinked or
+  worktree-local `output/` path, a promoted claim resting on an excluded mode, or an unclassified
+  sprint issue all resolve to `blocked` with explicit gaps rather than silently passing. The
+  companion CLI `scripts/tools/release_preflight_check.py` renders a Markdown/JSON report with an
+  optional `--fail-on-blocked` gate, and the shipped checklist
+  `configs/benchmarks/releases/release_july_2026_preflight_issue_3081.yaml` honestly reports
+  `blocked` against the current checkout (the durable July-2026 artifacts do not exist yet). This is
+  a **preflight, not a release step**: it never publishes, tags, uploads, regenerates artifacts,
+  closes issues, edits claims, or *declares* readiness — a passing run only means no blocking gaps
+  were found among declared prerequisites, and a maintainer still owns the readiness decision. It
+  composes existing contracts (`release_protocol`, `benchmark_row_claim`) rather than duplicating
+  them, and is complementary to the package-level `research/package_registry` preflight (#3057).
+  Synthetic tests cover each fail-closed path plus a smoke check of the shipped checklist.
 * Added a **real-trajectory ingestion and artifact-staging contract** (#3065): a dataset-agnostic,
   bring-your-own-dataset (BYO) manifest schema plus a fail-closed preflight checker. New package
   `robot_sf/data_ingestion/` defines the JSON Schema
@@ -40,7 +86,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`scripts/tools/check_real_trajectory_manifest.py`). Contract-only: no external dataset is
   downloaded, copied, committed, or claimed as real-world validation. See
   `docs/context/issue_3065_real_trajectory_ingestion_contract.md`.
-
 * Added a **read-only capability inventory / preflight** for the learned probabilistic graph
   predictor v1 lane (#2844). New module
   `robot_sf/benchmark/learned_predictor_capability_inventory.py` enumerates the *code-level*

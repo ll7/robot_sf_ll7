@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a read-only **oracle-imitation warm-start readiness preflight** for the downstream
+  warm-start training and benchmark comparison (#1496). Issue #1496 is the training step that
+  *consumes* the durable oracle-imitation dataset from #1470; safe shared-PC work is verifying
+  prerequisites, not launching training or data collection. The new
+  `check_warm_start_readiness` function in
+  `robot_sf/training/oracle_imitation_warm_start_readiness.py` and the
+  `scripts/validation/check_oracle_imitation_warm_start_readiness.py` CLI take a readiness
+  manifest, validate the referenced dataset launch packet via the canonical
+  `validate_launch_packet(..., require_training_ready=True)` checker, and confirm the
+  behaviour-cloning warm-start config, RL-only baseline config, optional PPO fine-tuning config,
+  and split/leakage contract all exist. They emit a compact readiness report (`ready`/`blocked`)
+  with an explicit blocker list and **fail closed** under `--require-ready`. This is
+  preflight/provenance hygiene only: it collects **no** data, trains nothing, submits no Slurm,
+  and asserts no benchmark result. The shipped manifest
+  (`configs/training/ppo_imitation/oracle_warm_start_readiness_issue_1496.yaml`) currently reports
+  `blocked` because the #1397 dataset packet is intentionally not training-ready until #1470 lands.
 * Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
   The local-artifact preflight blocklist
   (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **coherence regression guard** for the real AMV command-response trace *acquisition*
+  issue (#2000). Issue #2000 is hard-blocked on external data (no realistic real-trace source,
+  <5% feasibility) and its only agent-executable action is to keep the acquisition path documented
+  and the downstream consumer (#2415 staging manifest) and proxy fallback (#1585) coherent. The
+  consumer manifest mechanism is already owned by #2415
+  (`robot_sf/research/amv_command_response_trace_manifest.py`); this change adds the missing test
+  (`tests/research/test_issue_2000_amv_acquisition_coherence.py`) that locks in #2000's acceptance
+  criteria so future edits cannot silently drop the #2000/#1585 cross-reference from the shipped
+  manifest, flip the still-blocked acquisition into a "ready"/"staged" state without a real source,
+  or let the preflight imply a calibrated/hardware realism claim. It also guards that the trace
+  declares the command/response/timing field classes #2000 names. This is a test-only guard: it
+  does **not** collect traces, calibrate any envelope value, copy private data, run a campaign, or
+  edit any paper/dissertation claim.
+
 * Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
   The local-artifact preflight blocklist
   (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`

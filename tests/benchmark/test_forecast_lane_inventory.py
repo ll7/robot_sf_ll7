@@ -1,0 +1,177 @@
+"""Tests for the forecast-lane capability inventory / preflight (issue #2835).
+
+These are synthetic introspection tests: they assert that the read-only
+inventory correctly reports present vs missing forecast-lane capabilities and
+that it fails closed when a required capability is broken. No predictors,
+training, or benchmark runs are involved.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from robot_sf.benchmark import forecast_lane_inventory as fli
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_inventory_passes_on_current_checkout():
+    """Every required forecast-lane capability is present on the real repo."""
+    report = fli.build_forecast_lane_inventory()
+    assert report["schema"] == "forecast_lane_inventory.v1"
+    assert report["ok"] is True, report["summary"]["missing_required_ids"]
+    summary = report["summary"]
+    assert summary["required_missing"] == 0
+    assert summary["required_present"] == summary["required"]
+    assert summary["required"] >= 1
+
+
+def test_every_capability_declares_an_owner_and_note():
+    """The registry stays self-documenting: owner + note for each capability."""
+    for spec in fli._FORECAST_CAPABILITIES:
+        assert spec.owner, spec.capability_id
+        assert spec.note, spec.capability_id
+        assert spec.symbols, spec.capability_id
+
+
+def test_capability_ids_are_unique():
+    """Capability ids must be unique so report rows are unambiguous."""
+    ids = [spec.capability_id for spec in fli._FORECAST_CAPABILITIES]
+    assert len(ids) == len(set(ids))
+
+
+def test_missing_file_is_reported_as_blocker(tmp_path):
+    """A declared companion file that is absent surfaces as an explicit blocker."""
+    spec = fli.ForecastCapabilitySpec(
+        capability_id="probe_missing_file",
+        sublane="contract",
+        module="robot_sf.benchmark.forecast_batch",
+        symbols=("ForecastBatch",),
+        required=True,
+        files=("does/not/exist.json",),
+        owner="n/a",
+        note="probe",
+    )
+    result = fli._probe_capability(spec, repo_root=tmp_path)
+    assert not result.present
+    assert result.status == "missing_files"
+    assert any("does/not/exist.json" in b for b in result.blockers)
+
+
+def test_missing_module_is_reported_as_blocker():
+    """An unimportable module is reported as a missing_module blocker, not raised."""
+    spec = fli.ForecastCapabilitySpec(
+        capability_id="probe_missing_module",
+        sublane="contract",
+        module="robot_sf.benchmark._definitely_not_a_real_forecast_module",
+        symbols=("Whatever",),
+        required=True,
+        owner="n/a",
+        note="probe",
+    )
+    result = fli._probe_capability(spec, repo_root=_REPO_ROOT)
+    assert result.status == "missing_module"
+    assert not result.present
+    assert any("import failed" in b for b in result.blockers)
+
+
+def test_missing_symbol_is_reported_as_blocker():
+    """A real module missing a declared symbol surfaces as missing_symbols."""
+    spec = fli.ForecastCapabilitySpec(
+        capability_id="probe_missing_symbol",
+        sublane="contract",
+        module="robot_sf.benchmark.forecast_batch",
+        symbols=("ForecastBatch", "ThisSymbolDoesNotExist"),
+        required=True,
+        owner="n/a",
+        note="probe",
+    )
+    result = fli._probe_capability(spec, repo_root=_REPO_ROOT)
+    assert result.status == "missing_symbols"
+    assert not result.present
+    assert any("ThisSymbolDoesNotExist" in b for b in result.blockers)
+
+
+def test_optional_missing_does_not_fail_overall(monkeypatch):
+    """Optional capabilities never flip the overall ok flag to False."""
+    broken_optional = fli.ForecastCapabilitySpec(
+        capability_id="broken_optional",
+        sublane="risk",
+        module="robot_sf.benchmark._missing_optional_module",
+        symbols=("X",),
+        required=False,
+        owner="n/a",
+        note="probe",
+    )
+    good_required = fli._FORECAST_CAPABILITIES[0]
+    monkeypatch.setattr(fli, "_FORECAST_CAPABILITIES", (good_required, broken_optional))
+    report = fli.build_forecast_lane_inventory()
+    assert report["ok"] is True
+    assert report["summary"]["optional_missing"] == 1
+    assert "broken_optional" in report["summary"]["missing_optional_ids"]
+
+
+def test_missing_required_fails_overall(monkeypatch):
+    """A missing required capability flips ok to False and lists the id."""
+    broken_required = fli.ForecastCapabilitySpec(
+        capability_id="broken_required",
+        sublane="contract",
+        module="robot_sf.benchmark._missing_required_module",
+        symbols=("X",),
+        required=True,
+        owner="n/a",
+        note="probe",
+    )
+    monkeypatch.setattr(fli, "_FORECAST_CAPABILITIES", (broken_required,))
+    report = fli.build_forecast_lane_inventory()
+    assert report["ok"] is False
+    assert "broken_required" in report["summary"]["missing_required_ids"]
+
+
+def test_markdown_render_contains_overall_and_blockers(monkeypatch):
+    """The markdown view shows the verdict and lists blockers when present."""
+    broken_required = fli.ForecastCapabilitySpec(
+        capability_id="broken_required",
+        sublane="contract",
+        module="robot_sf.benchmark._missing_required_module",
+        symbols=("X",),
+        required=True,
+        owner="owner.py",
+        note="probe",
+    )
+    monkeypatch.setattr(fli, "_FORECAST_CAPABILITIES", (broken_required,))
+    report = fli.build_forecast_lane_inventory()
+    text = fli.format_inventory_markdown(report)
+    assert "FAIL" in text
+    assert "Blockers" in text
+    assert "broken_required" in text
+
+
+def test_cli_runs_and_emits_json():
+    """The runnable script exits 0 and emits a valid JSON report on the real repo."""
+    proc = subprocess.run(
+        [sys.executable, "scripts/benchmark/forecast_lane_preflight.py", "--json"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert payload["ok"] is True
+    assert payload["schema"] == "forecast_lane_inventory.v1"
+
+
+def test_module_invocation_matches_script(monkeypatch):
+    """`python -m` entry returns 0 when all required capabilities are present."""
+    assert fli.main([]) == 0
+    assert fli.main(["--json"]) == 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(pytest.main([__file__, "-v"]))

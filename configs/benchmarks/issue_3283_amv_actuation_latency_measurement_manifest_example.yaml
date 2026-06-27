@@ -1,0 +1,104 @@
+# Example AMV actuation-latency & rider-coupling MEASUREMENT intake manifest (issue #3283).
+#
+# This is a METADATA-ONLY intake manifest. It declares HOW a future
+# autonomous-micromobility-vehicle (AMV) actuation-latency and rider-coupling
+# measurement campaign would be collected (sensor channels, sampling rate, time
+# synchronization, provenance, and the synthetic-vs-measured separation) so it
+# can be checked with `check_amv_actuation_latency_measurement_manifest` from
+# `robot_sf.benchmark.actuation_latency_measurement_manifest`.
+#
+# It contains NO measured values and makes NO calibrated-actuation claim.
+# `measurement_status: blocked-external-input` is intentional: real
+# command-response data is not yet collected or accepted (issue #3283 is
+# blocked-external-input). Every proposed profile field stays `pending`.
+# Promote to `measurement_status: measured` only after data is staged and
+# reviewed through the data-staging workflow
+# (`.agents/skills/data-staging-provenance/SKILL.md`).
+schema_version: amv_actuation_latency_measurement_manifest.v1
+manifest_id: amv_actuation_latency_intake_placeholder
+measurement_status: blocked-external-input
+description: >
+  Planned bench + on-vehicle measurement of AMV command-to-response latency and
+  rider-coupling response: command issuance, mechanical/yaw response onset, and
+  braking/acceleration latency under declared rider/load conditions.
+
+# Time alignment across command, actuator, and IMU channels.
+synchronization:
+  method: shared_hardware_trigger_with_ptp
+  reference_clock: ptp_grandmaster
+  max_skew_ms: 2.0
+
+# Sensor channels the campaign must expose. `quantity` values must cover the
+# canonical latency and rider-coupling quantities the checker requires.
+sensor_channels:
+  - quantity: command_issuance
+    sensor: vehicle_command_bus_logger
+    units: timestamp_s
+    sampling_rate_hz: 200.0
+  - quantity: mechanical_response
+    sensor: wheel_encoder
+    units: rad/s
+    sampling_rate_hz: 200.0
+  - quantity: yaw_response
+    sensor: imu_gyro_z
+    units: rad/s
+    sampling_rate_hz: 200.0
+  - quantity: braking_latency
+    sensor: brake_pressure_transducer
+    units: bar
+    sampling_rate_hz: 200.0
+  - quantity: acceleration_latency
+    sensor: imu_accel_x
+    units: m/s^2
+    sampling_rate_hz: 200.0
+  - quantity: rider_load_condition
+    sensor: seat_load_cell
+    units: kg
+    sampling_rate_hz: 50.0
+  - quantity: rider_response
+    sensor: handlebar_force_torque
+    units: N
+    sampling_rate_hz: 100.0
+
+# Latency + rider-coupling fields a future MEASURED AMV profile would expose.
+# All `pending` here because external data is not yet collected.
+proposed_profile_fields:
+  - name: command_to_motion_latency_s
+    parameter_class: latency
+    units: s
+    value_status: pending
+  - name: command_to_yaw_latency_s
+    parameter_class: latency
+    units: s
+    value_status: pending
+  - name: braking_onset_latency_s
+    parameter_class: latency
+    units: s
+    value_status: pending
+  - name: acceleration_onset_latency_s
+    parameter_class: latency
+    units: s
+    value_status: pending
+  - name: rider_load_kg
+    parameter_class: rider_coupling
+    units: kg
+    value_status: pending
+  - name: rider_coupling_gain
+    parameter_class: rider_coupling
+    units: dimensionless
+    value_status: pending
+  - name: rider_response_latency_s
+    parameter_class: rider_coupling
+    units: s
+    value_status: pending
+
+synthetic_separation:
+  separation: enforced
+  note: >
+    Synthetic actuation placeholders (robot_sf.benchmark.synthetic_actuation)
+    remain diagnostic-only and must never be promoted into these measured fields
+    without accepted provenance.
+
+# Provenance is intentionally omitted while blocked-external-input. It becomes
+# required (source_id, source_uri, source_type, measurement_date, units) only
+# when measurement_status is promoted to `measured`.

@@ -1,0 +1,98 @@
+# Publication prerequisites checklist for the Robot SF validation/falsification
+# benchmark v0.1 package (epic #2910).
+#
+# IMPORTANT — scope and limits:
+# This file is a *presence* checklist of the canonical prerequisite artifacts a
+# v0.1 benchmark package must be built on. The companion preflight
+# (`scripts/validation/check_benchmark_v0_1_publication_prerequisites.py`) only
+# verifies that the referenced owners exist on disk. It does NOT release, tag,
+# upload artifacts, run a benchmark campaign, judge scenario certification, or
+# declare the benchmark "ready". A passing preflight means the prerequisite
+# owners are present, not that any benchmark/falsification claim is established.
+#
+# Extend `prerequisites` as new canonical owners are frozen for the v0.1 package.
+schema_version: benchmark-v0_1-publication-prerequisites.v1
+release_target: paper-benchmark-v0.1.0
+epic: 2910
+
+prerequisites:
+  - id: odd_contract
+    category: contract
+    required: true
+    epic_acceptance: "ODD bounds for included scenarios"
+    description: "Canonical Operational Design Domain (ODD) contract owner."
+    paths:
+      - robot_sf/benchmark/odd_contract.py
+
+  - id: scenario_contract
+    category: contract
+    required: true
+    epic_acceptance: "All included scenarios have scenario contracts"
+    description: "Canonical scenario-contract owner for benchmark suites."
+    paths:
+      - robot_sf/benchmark/scenario_contract.py
+
+  - id: scenario_certification
+    category: certification
+    required: true
+    epic_acceptance: "All included scenarios have certification status"
+    description: "Scenario certification v1 owner that records certification status."
+    paths:
+      - robot_sf/scenario_certification/v1.py
+
+  - id: benchmark_claim_metadata
+    category: claim_matrix
+    required: true
+    epic_acceptance: "Planner rows fail-closed; claims classified"
+    description: "Benchmark and per-row claim-metadata owners for the claim matrix."
+    paths:
+      - robot_sf/benchmark/benchmark_claim.py
+      - robot_sf/benchmark/benchmark_row_claim.py
+
+  - id: odd_hazard_coverage_matrix
+    category: coverage
+    required: true
+    epic_acceptance: "ODD/hazard coverage matrix"
+    description: "ODD/hazard coverage-matrix owner used to position suite coverage."
+    paths:
+      - robot_sf/benchmark/odd_hazard_coverage_matrix.py
+
+  - id: release_protocol
+    category: release
+    required: true
+    epic_acceptance: "Release summary states what is/is not supported"
+    description: "Release-protocol owner that builds and validates release manifests."
+    paths:
+      - robot_sf/benchmark/release_protocol.py
+
+  - id: release_manifest_v0_1
+    category: release
+    required: true
+    epic_acceptance: "All claims link to durable artifacts (manifest)"
+    description: "Versioned v0.1 release manifest pinning configs, seeds, and hashes."
+    paths:
+      - configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml
+
+  - id: seed_schedule
+    category: seed
+    required: true
+    epic_acceptance: "Seed schedule for every suite"
+    description: "Canonical seed-set schedule referenced by the release manifest."
+    paths:
+      - configs/benchmarks/seed_sets_v1.yaml
+
+  - id: release_checklist_doc
+    category: release
+    required: true
+    epic_acceptance: "Release summary states what is/is not supported"
+    description: "Human release checklist describing the publication steps."
+    paths:
+      - docs/RELEASE.md
+
+  - id: citation
+    category: provenance
+    required: true
+    epic_acceptance: "All claims link to durable artifacts (provenance)"
+    description: "Citation metadata for the published benchmark package."
+    paths:
+      - CITATION.cff

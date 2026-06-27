@@ -1,0 +1,52 @@
+# Example candidate real-world micromobility trace descriptor (issue #3278).
+#
+# This is a METADATA-ONLY contract descriptor. It declares what a hypothetical
+# candidate dataset *would* provide so the descriptor can be checked against the
+# Robot SF trace-failure predicate contract with
+# `robot_sf.analysis_workbench.check_real_trace_validation_contract`.
+#
+# It contains NO real-world trace data, makes NO measured-value or validation
+# claim, and intentionally keeps `access_status: blocked` /
+# `provenance_status: pending` because external data access is not yet accepted
+# (see issue #3278 "blocked-until"). Replace the placeholders only after data
+# access and provenance/license are accepted through the data-staging workflow
+# (`.agents/skills/data-staging-provenance/SKILL.md`).
+schema_version: real_trace_validation_contract.v1
+dataset_id: candidate_micromobility_dataset_placeholder
+
+metadata:
+  description: >
+    Placeholder candidate dataset of urban shared-path micromobility trajectories
+    (e-scooter / cyclist / pedestrian interactions) recorded from a fixed
+    overhead sensor. Used here only to demonstrate the validation-contract check.
+  license: unknown
+  provenance_status: pending
+  access_status: blocked
+  coordinate_frame: world_enu_meters
+  units:
+    distance: m
+    linear_velocity: m/s
+    angular_velocity: rad/s
+  source_reference: "TBD - pending external data access and license acceptance"
+
+# Sensor channels the candidate dataset is expected to expose, expressed as the
+# same dotted trace-field paths the predicate contract consumes.
+available_channels:
+  - robot.position
+  - pedestrians.id
+  - pedestrians.position
+  - planner.selected_action.linear_velocity
+  - planner.selected_action.angular_velocity
+
+# Behavior labels the dataset directly annotates (human-coded ground truth).
+# Empty here: this candidate provides kinematics but no directly observed
+# event labels, so derived predicates are computable-only (a stated limitation).
+available_event_labels: []
+
+# Optional. Omit to check all canonical predicates.
+target_predicates:
+  - late_evasive_reaction
+  - oscillatory_local_control
+  - clearance_critical_interaction
+  - occlusion_triggered_near_miss
+  - bottleneck_deadlock

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/real_trace_validation_contract.v1.json",
+  "title": "Robot SF Real Micromobility Trace Validation Contract v1",
+  "description": "Metadata-only descriptor for a candidate real-world micromobility dataset. Declares dataset provenance, available sensor channels, and directly observed event labels so the descriptor can be checked against the Robot SF trace-failure predicate contract WITHOUT ingesting, copying, or claiming validation on the underlying data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_id",
+    "metadata",
+    "available_channels"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "real_trace_validation_contract.v1"
+    },
+    "dataset_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "license",
+        "provenance_status",
+        "access_status",
+        "coordinate_frame",
+        "units"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance_status": {
+          "enum": ["accepted", "pending", "unknown"]
+        },
+        "access_status": {
+          "enum": ["available", "pending", "blocked"]
+        },
+        "coordinate_frame": {
+          "type": "string",
+          "minLength": 1
+        },
+        "units": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "source_reference": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "available_channels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "available_event_labels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "target_predicates": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  }
+}

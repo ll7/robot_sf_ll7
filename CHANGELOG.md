@@ -23,6 +23,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `unblocks_training` is always `False` — the lane unblock decision remains owned by the
   evidence gate `scripts/validation/validate_learned_prediction_readiness.py`. A complete inventory
   matches the 2026-06-23 readiness audit: the lane is blocked on *evidence*, not on missing hooks.
+* Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
+  surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
+  `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware
+  near-miss requires: a finite positive `dt`, a `(T,2)` `robot_pos`/`robot_vel` with at least two
+  frames, and a `(T,K,2)` `peds_pos`) and `compute_ttc_near_miss_diagnostic`, which counts steps
+  whose minimum projected TTC falls below a threshold and reports the worst closing speed under
+  distinct `near_miss_ttc__*` keys. It reuses the existing TTC convention from
+  `time_to_collision_min` and the canonical pedestrian-velocity primitive. This is **additive and
+  diagnostic-only**: it does **not** modify the canonical distance-based `near_misses` metric, wire
+  anything into SNQI or any scoring path, calibrate the threshold (the default
+  `DIAGNOSTIC_TTC_THRESHOLD_S` is an explicit uncalibrated placeholder, `decision-required` per
+  #3700), or assert any safety result. The diagnostic fails closed — raising `NearMissTtcInputError`
+  rather than returning zeros — when the timing/velocity inputs are missing or invalid. Tests cover
+  fast-closing vs. opening synthetic trajectories, the fail-closed contract for missing timing
+  fields, and that the canonical `near_misses` output is unchanged.
 * Added a read-only diagnostic inventory / fail-closed preflight for **conflicting "canonical" SNQI
   weight sets** (#3723). New module `robot_sf/benchmark/snqi/weights_inventory.py` discovers every
   known SNQI weight source — the code default `recompute_snqi_weights("canonical")` plus the shipped
@@ -64,6 +79,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
   runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
   (`evidence_tier` stays blocked → analysis_only).
+* Added a metadata-only staging-contract checker for dataset-backed scenario priors (#3161). New
+  module `robot_sf/research/scenario_prior_staging_contract.py` exposes
+  `check_scenario_prior_staging_contract`, which validates a `scenario_prior_staging_contract.v1`
+  contract (per-dataset provenance/license, the canonical scenario-prior distribution fields a
+  dataset-backed prior would expose, and the explicit external-data blocker) for the Stanford Drone
+  Dataset, SocNavBench ETH, and AMV candidates. Declared distribution fields are checked against the
+  live `PARAMETER_GROUPS` vocabulary of the #2919 comparison harness so the contract cannot drift
+  from what the comparison can compute, and a dataset declared `staged` is reconciled against a live
+  `manage_external_data.check_asset` presence probe (fail-closed). The checker **ingests no dataset,
+  stores no raw trajectories, runs no comparison, and makes no real-world realism claim**; with no
+  dataset staged it reports `blocked-external-input`. Example contract
+  `configs/research/scenario_prior_staging_contract_issue_3161.yaml`, CLI
+  `scripts/analysis/check_scenario_prior_staging_contract_issue_3161.py`, context note
+  `docs/context/issue_3161_scenario_prior_staging_contract.md`.
 * Added a metadata-only measurement/intake-manifest checker for autonomous micromobility vehicle
   (AMV) actuation latency and rider-coupling response (#3283). New module
   `robot_sf/benchmark/actuation_latency_measurement_manifest.py` exposes
@@ -84,6 +113,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
   manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
   protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
+* Added a **diagnostic-only** inventory of SNQI per-term normalization status (#3699). New module
+  `robot_sf/benchmark/snqi/normalization_inventory.py` and CLI
+  `scripts/benchmark/snqi_normalization_inventory_report.py` enumerate each SNQI term's scaling
+  regime and surface that `compute_snqi` mixes *raw, unbounded* penalty terms (`time`, `comfort`)
+  with *baseline-normalized* `[0, 1]` terms (collisions, near-misses, force-exceed, jerk), which
+  makes the weight coefficients non-comparable as relative priorities. The report flags the
+  mixed-scale condition and any baseline-normalized term lacking median/p95 coverage, and can fail
+  closed (`--fail-on-mixed-scale`, `--fail-on-missing-baseline`). It does **not** change the SNQI
+  formula, weights, `normalize_metric`, or any emitted score, and does **not** choose between the
+  normalize vs. clip-and-document remedies (that remains `decision-required` on #3699). An anti-drift
+  test reconstructs the SNQI score from the inventory's term table and asserts it equals
+  `compute_snqi` exactly.
 * Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
   campaign can verify its input prerequisites before execution (#3078). New manifest
   `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario
@@ -147,6 +188,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **no** SocNavBench/HuNavSim asset and makes **no** cross-benchmark validity or score-parity claim;
   producing real external assets remains blocked on #1456/#1498/#2414/#1134. See
   `docs/context/issue_3285_scenario_interop_converter.md`.
+* Added a **readiness/preflight helper for closed-loop prediction Package C** (#3080).
+  `scripts/tools/prediction_package_c_readiness.py` inventories the local prerequisites for the four
+  Package C forecast arms — `no_forecast`, `cv`, `semantic_cv`, and `interaction_aware` — across the
+  three coordination stages (open-loop forecast analysis #2915, observation-perturbation replay #2777,
+  closed-loop forecast-risk coupling #2916). For each arm it reports the required configs and code
+  entry points, the declared same-seed plan (`[111, 2868]` read from the #2915/#2916 configs), the
+  declared output roots, and the named blockers, then classifies the arm as fail-closed
+  `ready` / `blocked` / `missing`. Per the issue-audit on 2026-06-22, Package C is gated solely on
+  #2916 producing a durable campaign result store, so the default status is `blocked` until a
+  `--coupling-result-store` with a canonical `summary.json` is supplied; `blocked`/`missing` are never
+  treated as success evidence. The helper inspects the repository only — it does **not** execute any
+  benchmark campaign, alter predictor semantics, or claim forecast performance. Text and `--markdown`
+  reports plus optional `--output-json`; exit code 0 only when every arm is `ready`, 1 otherwise. New
+  fixture tests `tests/tools/test_prediction_package_c_readiness.py` cover the ready/blocked/missing
+  states (synthetic trees) and assert the real repo is wired (fails closed to `blocked`, not
+  `missing`).
 * Added a **presence-only tournament-readiness helper** for the predictive hard-case breakthrough
   portfolio (#3215). `scripts/tools/predictive_tournament_readiness.py` inventories the local
   prerequisites (expected configs, harness scripts, and output path) for the three concurrent

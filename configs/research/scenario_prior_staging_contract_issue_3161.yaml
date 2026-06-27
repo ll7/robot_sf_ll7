@@ -1,0 +1,91 @@
+# Dataset-backed scenario-prior staging contract -- Issue #3161
+#
+# Issue #3161 asks whether real-data scenario priors (Stanford Drone Dataset, SocNavBench ETH, AMV)
+# change the scenario space enough to matter relative to the authored + trace-derived baseline from
+# #2919. That comparison is BLOCKED on external data: no licensed dataset is staged, and Robot SF
+# never ingests or redistributes raw trajectories.
+#
+# This file is the metadata-only staging CONTRACT for the local, buildable half. It declares, per
+# candidate dataset, the provenance/license, the canonical scenario-prior distribution fields a
+# dataset-backed prior would expose, and the explicit external-data blocker, so that once a dataset
+# is staged (via scripts/tools/manage_external_data.py) the #2919 comparison can ingest it without
+# guesswork. It is checked by:
+#   uv run python scripts/analysis/check_scenario_prior_staging_contract_issue_3161.py
+#
+# This contract neither ingests datasets nor stores raw trajectories, and makes NO realism claim.
+
+schema_version: scenario_prior_staging_contract.v1
+contract_id: scenario_prior_staging_contract_issue_3161
+issue: 3161
+
+claim_boundary: >-
+  Staging-contract metadata only. Declares how dataset-backed scenario priors would be staged and
+  compared; it does not stage data, ingest trajectories, run the comparison, infer planner ranking,
+  or claim real-world realism. A dataset-backed comparison is permitted only after a dataset is
+  staged and validated through scripts/tools/manage_external_data.py.
+
+# Authored baseline (ScenarioPrior.v1 cards) and the comparison harness this contract feeds.
+authored_baseline: configs/research/scenario_prior_cards_issue_2917.yaml
+comparison_harness: scripts/analysis/compare_scenario_priors_issue_2919.py
+
+# distribution_fields below are canonical comparison parameter groups from the #2919 harness
+# (PARAMETER_GROUPS). The checker fails closed if a field is not in that vocabulary, so the contract
+# cannot drift from what the comparison can actually compute.
+datasets:
+  - dataset_id: sdd
+    asset_id: sdd
+    title: Stanford Drone Dataset annotations
+    staging_status: blocked-external-input
+    redistribution: none
+    blocker_issues: [1497, 2657]
+    provenance:
+      source_url: https://cvgl.stanford.edu/projects/uav_data/
+      license: Creative Commons Attribution-NonCommercial-ShareAlike 3.0
+      license_status: license-gated
+      citation: >-
+        A. Robicquet, A. Sadeghian, A. Alahi, S. Savarese. "Learning Social Etiquette: Human
+        Trajectory Understanding in Crowded Scenes." ECCV 2016.
+    distribution_fields:
+      - pedestrian_density
+      - pedestrian_speed
+      - spatial_offset_m
+      - route_coordinate_m
+      - clearance_distance_m
+
+  - dataset_id: socnavbench_eth
+    asset_id: socnavbench-s3dis-eth
+    title: SocNavBench ETH pedestrian traversible assets
+    staging_status: blocked-external-input
+    redistribution: none
+    blocker_issues: [1498]
+    provenance:
+      source_url: https://github.com/CMU-TBD/SocNavBench
+      license: SocNavBench/S3DIS external data; access terms apply, not redistributed
+      license_status: license-gated
+      citation: >-
+        A. Biswas et al. "SocNavBench: A Grounded Simulation Testing Framework for Evaluating
+        Social Navigation." ACM THRI 2022. ETH pedestrian source: S. Pellegrini et al. "You'll
+        Never Walk Alone: Modeling Social Behavior for Multi-target Tracking." ICCV 2009.
+    distribution_fields:
+      - pedestrian_speed
+      - spatial_offset_m
+      - route_coordinate_m
+      - clearance_distance_m
+
+  - dataset_id: amv
+    asset_id: amv-calibration
+    title: AMV calibration source provenance
+    staging_status: blocked-external-input
+    redistribution: none
+    blocker_issues: [2000, 1585]
+    provenance:
+      source_url: https://github.com/ll7/robot_sf_ll7/issues/1585
+      license: Access and redistribution depend on the selected source; private traces stay local
+      license_status: unknown
+      citation: >-
+        AMV actuation calibration source to be identified via #1585/#2000 (official platform or
+        controller specification, or an accepted command-response trace bundle). No public citation
+        is pinned until the source class is accepted.
+    distribution_fields:
+      - pedestrian_speed
+      - timing_offset_s

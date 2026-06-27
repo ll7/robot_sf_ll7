@@ -235,6 +235,57 @@ def test_step_vector_mode_uses_model_prediction_and_fallback_action(
     assert fallback["omega"] == pytest.approx(0.7853981633974483)
 
 
+def _velocity_planner(action_semantics: str, *, v_max: float = 2.0) -> SACPlanner:
+    """Build a fallback SAC planner in the velocity action space (issue #3705).
+
+    The model is left unloaded; tests exercise ``_action_vec_to_dict`` directly
+    so the conversion contract is checked independently of model inference.
+    """
+    planner = SACPlanner(
+        {
+            "model_path": "model/does_not_exist_sac.zip",
+            "action_space": "velocity",
+            "action_semantics": action_semantics,
+            "v_max": v_max,
+            "fallback_to_goal": True,
+        }
+    )
+    planner._model = None
+    return planner
+
+
+def test_velocity_absolute_semantics_scales_speed_to_v_max() -> None:
+    """Absolute velocity outputs above v_max are scaled to the configured cap (issue #3705)."""
+    planner = _velocity_planner("absolute", v_max=2.0)
+    # Raw speed = hypot(3.0, 4.0) = 5.0 > v_max=2.0, so the vector is scaled to magnitude 2.0.
+    action = planner._action_vec_to_dict(np.array([3.0, 4.0], dtype=float))
+    speed = float(np.hypot(action["vx"], action["vy"]))
+    assert speed == pytest.approx(2.0)
+    # Direction is preserved while only the magnitude is clamped.
+    assert action["vx"] == pytest.approx(3.0 / 5.0 * 2.0)
+    assert action["vy"] == pytest.approx(4.0 / 5.0 * 2.0)
+
+
+def test_velocity_absolute_semantics_passes_through_within_bounds() -> None:
+    """Absolute velocity outputs already within v_max are returned unchanged (issue #3705)."""
+    planner = _velocity_planner("absolute", v_max=2.0)
+    action = planner._action_vec_to_dict(np.array([0.25, -0.5], dtype=float))
+    assert action == {"vx": pytest.approx(0.25), "vy": pytest.approx(-0.5)}
+
+
+def test_velocity_delta_semantics_are_not_scaled() -> None:
+    """Delta velocity increments must not be scaled toward v_max (issue #3705).
+
+    Deltas are increments the env accumulates (``new_v = old_v + delta``) and are
+    already bounded by the SAC action space; scaling them would distort the
+    accumulated trajectory, mirroring the unicycle delta contract.
+    """
+    planner = _velocity_planner("delta", v_max=2.0)
+    # Raw speed = 5.0 > v_max, but delta semantics must leave the increment intact.
+    action = planner._action_vec_to_dict(np.array([3.0, 4.0], dtype=float))
+    assert action == {"vx": pytest.approx(3.0), "vy": pytest.approx(4.0)}
+
+
 def test_step_dict_mode_applies_transform_and_aliases(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

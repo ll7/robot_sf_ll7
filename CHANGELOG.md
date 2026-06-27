@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **static launch preflight** for crossing-conflict predictive retraining configs (#3214).
+  New module `robot_sf/training/predictive_retrain_preflight.py` and CLI
+  `scripts/validation/validate_predictive_retrain_preflight.py` validate a predictive training
+  pipeline config (the kind consumed by `scripts/training/run_predictive_training_pipeline.py`)
+  *before* any SLURM/GPU launch: config structure, data prerequisites (scenario matrix, hard-seed
+  manifest, planner grid, and weighting spec) exist, base/hard-case feature-width compatibility (the
+  checkpoint-lineage contract), the navigation gate kept separate from the trajectory gate
+  (`max_val_ade`/`max_val_fde`), a present evaluation block, and a declared output root. The check is
+  cheap and CPU-only — it fills the gap left by the pipeline's own guards, which only run mid-pipeline
+  after expensive dataset collection. It does **not** collect data, train, submit Slurm, change
+  augmentation semantics, or make any model-improvement claim; the actual weighted retraining run is
+  owned by #3254. Text and `--json` reports; exit code 0 when valid, 2 when invalid.
 * Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
   schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
   New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,

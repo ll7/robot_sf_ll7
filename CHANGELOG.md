@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed `SNQIWeights.load` / `from_dict` **raising unhandled `KeyError`s on malformed config**
+  (#3710). In `robot_sf/benchmark/snqi/types.py`, reconstructing an `SNQIWeights` from JSON used bare
+  `data["key"]` access (so a missing provenance field surfaced as an opaque `KeyError`) and never
+  validated the weights mapping values. Loading now **fails closed with structured diagnostics**:
+  non-mapping input, missing or non-string required metadata fields, a non-mapping `bootstrap_params`,
+  a non-list `components`, and weight values that are non-numeric, non-finite, or negative each raise a
+  descriptive `ValueError` naming the offending field and the source path. Invalid JSON is also
+  wrapped in a `ValueError` that includes the file path. This is bounded to input validation — SNQI
+  metric definitions, weights, normalization, and benchmark results are unchanged.
 * Fixed differential-drive velocity updates **ignoring timestep scaling** (#3711). In
   `DifferentialDriveMotion._robot_velocity` the commanded acceleration (clipped to
   `max_linear_accel` / `max_angular_accel`, the follow-up to #3666/#3689) was applied directly as a

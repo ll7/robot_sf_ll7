@@ -235,7 +235,8 @@ def check_real_trace_validation_contract(
 
     Returns:
         A structured compatibility report. The report never asserts real-world
-        validation; ``evidence_boundary`` is always ``contract_check_only``.
+        validation; ``evidence_boundary`` is always
+        ``contract_check_only_no_real_world_validation``.
 
     Raises:
         RealTraceValidationContractError: when the descriptor violates the schema.

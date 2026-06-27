@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **read-only capability inventory / preflight** for the learned probabilistic graph
+  predictor v1 lane (#2844). New module
+  `robot_sf/benchmark/learned_predictor_capability_inventory.py` enumerates the *code-level*
+  prerequisites a v1 learned predictor would extend — the `ProbabilisticPredictor` protocol and
+  `ProbabilisticPrediction` container, the `BaselineProbabilisticPredictor` surface, the
+  `ForecastBatch.v1` contract, the forecast dataset recorder + split-manifest builder, the durable
+  model-artifact registry classifier, and the readiness evidence gate + contract doc — and reports
+  whether each hook is present in the checkout. CLI
+  `scripts/validation/inventory_learned_predictor_capability.py [--json]` prints the report and
+  exits non-zero only on a *missing wiring* hook. This is strictly a wiring/preflight surface: it
+  does **not** implement, train, or run a predictor, change planner behavior, or run any campaign,
+  and `unblocks_training` is always `False` — the lane unblock decision remains owned by the
+  evidence gate `scripts/validation/validate_learned_prediction_readiness.py`. A complete inventory
+  matches the 2026-06-23 readiness audit: the lane is blocked on *evidence*, not on missing hooks.
 * Added a presence-only **cross-benchmark comparison readiness** checker
   (`scripts/tools/cross_benchmark_comparison_readiness.py`, #3287) for the downstream cross-suite
   policy-comparison campaign. It inventories the four prerequisite families named by the issue —

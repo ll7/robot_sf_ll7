@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
+  schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
+  New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,
+  which maps geometry, agent paths, start/goal states, timing, and environment semantics into a
+  target-neutral IR (`robot_sf/benchmark/schemas/scenario_interop_ir.v1.json`), preserves source
+  provenance (scenario id, source file, source fields, metadata), and reports every unmapped source
+  field explicitly in `unsupported_fields` instead of silently dropping it. A documented dry-run CLI
+  (`scripts/tools/convert_scenario_interop.py --matrix <file>`) prints the IR per scenario and a
+  validity summary. This is the local, asset-free slice of the cross-benchmark interop work: it emits
+  **no** SocNavBench/HuNavSim asset and makes **no** cross-benchmark validity or score-parity claim;
+  producing real external assets remains blocked on #1456/#1498/#2414/#1134. See
+  `docs/context/issue_3285_scenario_interop_converter.md`.
 * Added a **presence-only tournament-readiness helper** for the predictive hard-case breakthrough
   portfolio (#3215). `scripts/tools/predictive_tournament_readiness.py` inventories the local
   prerequisites (expected configs, harness scripts, and output path) for the three concurrent

@@ -30,6 +30,7 @@ import yaml
 
 from robot_sf.benchmark.false_positive_injection_readiness import (
     STATUS_BLOCKED,
+    FalsePositiveInjectionReadiness,
     check_false_positive_injection_readiness,
 )
 
@@ -47,9 +48,14 @@ def _load_spec(path: pathlib.Path) -> dict[str, Any]:
         The replay-condition mapping.
 
     Raises:
-        ValueError: When the file does not parse to a mapping.
+        ValueError: When the file cannot be read/parsed or does not parse to a
+            mapping.  Callers convert this into a ``blocked`` verdict so loader
+            failures honor the same fail-closed contract as malformed specs.
     """
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise ValueError(f"failed to load spec file {path}: {exc}") from exc
     if isinstance(data, dict) and isinstance(data.get("false_positive_injection"), dict):
         data = data["false_positive_injection"]
     if not isinstance(data, dict):
@@ -80,7 +86,15 @@ def main(argv: list[str] | None = None) -> int:
     if not spec_path.exists():
         parser.error(f"spec file not found: {spec_path}")
 
-    spec = _load_spec(spec_path)
+    try:
+        spec = _load_spec(spec_path)
+    except ValueError as exc:
+        # Loader failures must fail closed like any other blocked spec rather than
+        # escaping as a traceback, so the documented exit-code 3 contract holds.
+        readiness = FalsePositiveInjectionReadiness(status=STATUS_BLOCKED, blockers=[str(exc)])
+        print(json.dumps(readiness.to_dict(), indent=2, sort_keys=True))
+        return BLOCKED_EXIT_CODE
+
     readiness = check_false_positive_injection_readiness(spec)
     print(json.dumps(readiness.to_dict(), indent=2, sort_keys=True))
 

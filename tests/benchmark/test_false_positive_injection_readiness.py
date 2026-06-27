@@ -186,3 +186,35 @@ class TestCli:
         payload = json.loads(result.stdout)
         assert payload["status"] == STATUS_BLOCKED
         assert payload["blockers"]
+
+    def test_cli_malformed_yaml_fails_closed(self, tmp_path: Path) -> None:
+        """Unparseable YAML fails closed with a blocked payload, not a traceback."""
+        bad = tmp_path / "malformed.yaml"
+        bad.write_text("false_positive_injection: [unterminated\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(CLI_PATH), str(bad)],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+            check=False,
+        )
+        assert result.returncode == CLI_BLOCKED_EXIT_CODE, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["status"] == STATUS_BLOCKED
+        assert any("failed to load spec file" in blocker for blocker in payload["blockers"])
+
+    def test_cli_non_mapping_spec_fails_closed(self, tmp_path: Path) -> None:
+        """A spec that parses to a non-mapping fails closed instead of raising."""
+        bad = tmp_path / "scalar.yaml"
+        bad.write_text("42\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, str(CLI_PATH), str(bad)],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+            check=False,
+        )
+        assert result.returncode == CLI_BLOCKED_EXIT_CODE, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["status"] == STATUS_BLOCKED
+        assert any("must contain a mapping" in blocker for blocker in payload["blockers"])

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Tightened the **oracle-imitation dataset launch-packet preflight** to require a `collection_roots`
+  block before a collection job runs (#1470). The validator
+  (`robot_sf/training/oracle_imitation_launch_packet.py`,
+  `scripts/validation/validate_oracle_imitation_launch_packet.py`) now fails closed unless the packet
+  declares durable destinations for collection logs (`log_root`), raw trace output
+  (`dataset_output_root`), and the dataset manifest (`manifest_destination`). Each root must be a
+  durable artifact URI (a `:pending` alias is allowed because collection has not run yet) and may
+  never point at the gitignored worktree-local `output/` directory, which is not a safe shared
+  destination on a multi-agent host. The checked-in `#1397` packet now carries these `:pending`
+  destinations. This is a preflight-contract change only: it submits no jobs and collects no data.
+
 * Added a read-only **re-export readiness preflight** for stale dissertation table bundles
   (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
   `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability

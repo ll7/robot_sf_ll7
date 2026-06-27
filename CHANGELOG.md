@@ -51,6 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed **`scripts/dev/pr_ready_check.sh` mishandling a missing `BASE_REF`** on fresh checkouts
+  (#3702). When the default `origin/main` (or any configured `BASE_REF`) was not present locally, the
+  `git diff "$BASE_REF...HEAD"` comparison emitted a raw `fatal: ambiguous argument` error; because the
+  command runs inside a process substitution, `set -e` silently swallowed the failure and the script
+  proceeded with an empty changed-file set while still passing the unresolved ref to the downstream
+  coverage, perf-evidence, and freshness checks. The script now resolves `BASE_REF` once up front via a
+  new `resolve_base_ref` helper: a resolvable ref is used unchanged, a remote-tracking ref (e.g.
+  `origin/main`) triggers a best-effort `git fetch`, and an otherwise-unresolvable ref falls back to
+  `HEAD` with a clear message instead of crashing. Regression coverage lives in
+  `tests/dev/test_pr_ready_preflight.py`. This is a developer-tooling fix only — it changes no test
+  lane coverage semantics, coverage thresholds, or CI policy.
 * Fixed **OSM SVG `viewBox` parsing failing on comma-separated values** in
   `fast-pysf/pysocialforce/map_osm_converter.py` (#3708). The converter parsed the `viewBox`
   attribute with bare `str.split()`, which only handles whitespace separators, so SVG exports using

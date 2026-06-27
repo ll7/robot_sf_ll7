@@ -1,0 +1,273 @@
+# Classic Archetype Density / Tier Index (machine-readable)
+#
+# Purpose
+#   A single, checked, machine-readable description of the *current* density-tier
+#   coverage and pedestrian spawn semantics of the classic interaction archetypes
+#   (the `classic_*.yaml` configs in this directory, composed by
+#   `configs/scenarios/classic_interactions.yaml`). It exists to make the
+#   benchmark scenario denominator and the meaning of the `ped_density` field
+#   unambiguous when reconstructing the evaluation matrix. See issue #3725.
+#
+# Scope / non-goals
+#   This index DOCUMENTS the existing configs; it does not change scenario
+#   generation behavior. It does not rename any config field, does not make the
+#   tier coverage uniform, and does not move any density band. It is a derived
+#   artifact: `tests/test_classic_archetype_density_index.py` re-derives the same
+#   facts from the `classic_*.yaml` configs and fails closed if this index drifts
+#   from them or omits a config/tier (missing-coverage guard).
+#
+# `density` semantics — read this before counting the matrix
+#   `simulation_config.ped_density` is NOT uniform in meaning across configs:
+#     * route_density               -> `ped_density` is a real route-spawn
+#                                       pedestrian density (peds/m of route area).
+#     * markers                     -> `ped_density: 0.0` is a PLACEHOLDER, not
+#                                       "no pedestrians". Pedestrians are placed
+#                                       from fixed markers (SVG `single_ped`
+#                                       markers and/or config `single_pedestrians`)
+#                                       and the config carries
+#                                       `metadata.density_advisory:
+#                                       zero_baseline_route_spawn`.
+#     * scripted_and_route_density  -> `ped_density > 0` route-spawn pedestrians
+#                                       PLUS additional scripted `single_pedestrians`
+#                                       overlaid from the config.
+#   Counting the matrix as "12 archetypes x 3 densities = 36" overcounts: the
+#   true in-matrix graded total is 23 rows across 11 configs (see `summary`).
+#
+schema: robot_sf.classic_archetype_density_index.v1
+issue: 3725
+
+# Pedestrian spawn modes used by the classic archetypes.
+spawn_modes:
+  route_density:
+    description: >-
+      Pedestrians spawned by route-density sampling at simulation_config.ped_density
+      (> 0). The ped_density value is a real spawn density.
+    pedestrian_source: route_spawn
+  markers:
+    description: >-
+      simulation_config.ped_density == 0.0 with metadata.density_advisory ==
+      zero_baseline_route_spawn. ped_density is a placeholder and does NOT mean
+      "no pedestrians"; pedestrians come from fixed markers.
+    note: ped_density=0.0 is a placement-mode placeholder, not an empty scene.
+  scripted_and_route_density:
+    description: >-
+      Route-density spawn (ped_density > 0) plus additional scripted
+      single_pedestrians overlaid from the config.
+    pedestrian_source: route_spawn_plus_config_single_pedestrians
+
+# Canonical density triad most configs follow (documentation only; the test does
+# not force any config onto this band — group_crossing intentionally differs).
+recommended_density_band:
+  low: 0.02
+  medium: 0.05
+  high: 0.08
+
+density_tiers: [low, medium, high]
+
+# One entry per classic_*.yaml config in this directory. `in_matrix` marks whether
+# configs/scenarios/classic_interactions.yaml composes the config. Each tier lists
+# the scenario name, its simulation_config.ped_density, and any density_advisory.
+archetypes:
+  - config: classic_bottleneck.yaml
+    archetype: bottleneck
+    in_matrix: true
+    spawn_mode: markers
+    pedestrian_source: map_markers
+    notes: ped_density=0.0; pedestrians from SVG single_ped markers.
+    tiers:
+      - tier: low
+        scenario: classic_bottleneck_low
+        ped_density: 0.0
+        density_advisory: zero_baseline_route_spawn
+      - tier: medium
+        scenario: classic_bottleneck_medium
+        ped_density: 0.0
+        density_advisory: zero_baseline_route_spawn
+      - tier: high
+        scenario: classic_bottleneck_high
+        ped_density: 0.0
+        density_advisory: zero_baseline_route_spawn
+
+  - config: classic_realworld_bottleneck.yaml
+    archetype: bottleneck
+    in_matrix: true
+    spawn_mode: markers
+    pedestrian_source: config_single_pedestrians
+    notes: >-
+      Real-world-inspired double bottleneck. ped_density=0.0; pedestrians from
+      explicit config single_pedestrians (8 opposing lanes). Single high tier only.
+    tiers:
+      - tier: high
+        scenario: classic_realworld_double_bottleneck_high
+        ped_density: 0.0
+        density_advisory: zero_baseline_route_spawn
+
+  - config: classic_station_platform.yaml
+    archetype: station_platform
+    in_matrix: true
+    spawn_mode: scripted_and_route_density
+    pedestrian_source: route_spawn_plus_config_single_pedestrians
+    notes: >-
+      ped_density=0.05 route-spawn plus two scripted single_pedestrians with
+      timed waits. Single medium tier only.
+    tiers:
+      - tier: medium
+        scenario: classic_station_platform_medium
+        ped_density: 0.05
+
+  - config: classic_cross_trap.yaml
+    archetype: cross_trap
+    in_matrix: true
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    tiers:
+      - tier: low
+        scenario: classic_cross_trap_low
+        ped_density: 0.02
+      - tier: medium
+        scenario: classic_cross_trap_medium
+        ped_density: 0.05
+      - tier: high
+        scenario: classic_cross_trap_high
+        ped_density: 0.08
+
+  - config: classic_doorway.yaml
+    archetype: doorway
+    in_matrix: true
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    tiers:
+      - tier: low
+        scenario: classic_doorway_low
+        ped_density: 0.02
+      - tier: medium
+        scenario: classic_doorway_medium
+        ped_density: 0.05
+      - tier: high
+        scenario: classic_doorway_high
+        ped_density: 0.08
+
+  - config: classic_group_crossing.yaml
+    archetype: group_crossing
+    in_matrix: true
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    notes: >-
+      Intentionally denser band than the 0.02/0.05/0.08 triad; high tier carries
+      density_advisory: high_density_stress. Sets groups=0.5.
+    tiers:
+      - tier: low
+        scenario: classic_group_crossing_low
+        ped_density: 0.04
+      - tier: medium
+        scenario: classic_group_crossing_medium
+        ped_density: 0.08
+      - tier: high
+        scenario: classic_group_crossing_high
+        ped_density: 0.12
+        density_advisory: high_density_stress
+
+  - config: classic_head_on_corridor.yaml
+    archetype: head_on_corridor
+    in_matrix: true
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    notes: low + medium only; no high tier defined.
+    tiers:
+      - tier: low
+        scenario: classic_head_on_corridor_low
+        ped_density: 0.02
+      - tier: medium
+        scenario: classic_head_on_corridor_medium
+        ped_density: 0.05
+
+  - config: classic_merging.yaml
+    archetype: merging
+    in_matrix: true
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    notes: low + medium only; no high tier defined.
+    tiers:
+      - tier: low
+        scenario: classic_merging_low
+        ped_density: 0.02
+      - tier: medium
+        scenario: classic_merging_medium
+        ped_density: 0.05
+
+  - config: classic_overtaking.yaml
+    archetype: overtaking
+    in_matrix: true
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    notes: low + medium only; no high tier defined.
+    tiers:
+      - tier: low
+        scenario: classic_overtaking_low
+        ped_density: 0.02
+      - tier: medium
+        scenario: classic_overtaking_medium
+        ped_density: 0.05
+
+  - config: classic_t_intersection.yaml
+    archetype: t_intersection
+    in_matrix: true
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    notes: low + medium only; no high tier defined.
+    tiers:
+      - tier: low
+        scenario: classic_t_intersection_low
+        ped_density: 0.02
+      - tier: medium
+        scenario: classic_t_intersection_medium
+        ped_density: 0.05
+
+  - config: classic_urban_crossing.yaml
+    archetype: crossing
+    in_matrix: true
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    notes: Single medium tier only.
+    tiers:
+      - tier: medium
+        scenario: classic_urban_crossing_medium
+        ped_density: 0.05
+
+  - config: classic_crossing.yaml
+    archetype: crossing
+    in_matrix: false
+    deprecated_alias_for: cross_trap
+    spawn_mode: route_density
+    pedestrian_source: route_spawn
+    notes: >-
+      Deprecated compatibility aliases for issue #594; not composed by
+      classic_interactions.yaml. Excluded from the in-matrix denominator.
+    tiers:
+      - tier: low
+        scenario: classic_crossing_low
+        ped_density: 0.02
+      - tier: medium
+        scenario: classic_crossing_medium
+        ped_density: 0.05
+      - tier: high
+        scenario: classic_crossing_high
+        ped_density: 0.08
+
+# Aggregate facts for the in-matrix configs (in_matrix: true). The test recomputes
+# every value below from the configs and the classic_interactions.yaml includes.
+summary:
+  in_matrix:
+    config_files: 11
+    graded_scenario_rows: 23
+    rows_by_spawn_mode:
+      route_density: 18
+      markers: 4
+      scripted_and_route_density: 1
+    tier_coverage:
+      full_triad: 4          # low + medium + high: bottleneck, cross_trap, doorway, group_crossing
+      low_medium: 4          # head_on_corridor, merging, overtaking, t_intersection
+      single_tier: 3         # realworld_bottleneck (high), station_platform (medium), urban_crossing (medium)
+  deprecated_excluded:
+    config_files: 1          # classic_crossing.yaml (alias for cross_trap)
+    graded_scenario_rows: 3

@@ -4,7 +4,7 @@
 # ingestion contract. It does NOT point at any real dataset and stages no data. Copy it, fill in the
 # fields for trajectory data you have the rights to use, and validate with:
 #
-#   uv run python scripts/tools/check_real_trajectory_manifest.py configs/data/your_manifest.yaml
+#   uv run python scripts/tools/check_real_trajectory_manifest.py <path/to/your_manifest.yaml>
 #
 # The repository never commits or hosts raw external data: only this manifest (metadata, license
 # acknowledgment, retrieval instructions, conversion shape, checksums, split naming, and a durable

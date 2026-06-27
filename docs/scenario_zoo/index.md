@@ -43,6 +43,20 @@ The atlas complements this hand-maintained zoo index. It should be read as a
 discoverability artifact unless the row separately links certification and
 executed benchmark evidence.
 
+## Classic Archetype Density / Tier Index
+
+The classic interaction archetypes parameterize pedestrian density unevenly (different tier coverage
+per archetype, different density bands, and an overloaded `ped_density: 0.0` placeholder for
+marker-spawn configs). For a single machine-readable description of the *current* per-archetype tier
+coverage, density bands, and pedestrian spawn modes, see
+[classic_density_tier_index.yaml](../../configs/scenarios/archetypes/classic_density_tier_index.yaml).
+
+It clarifies the scenario denominator — the in-matrix graded total is **23 rows across 11 configs**,
+not "12 archetypes × 3 densities" — and documents that `ped_density: 0.0` in `spawn_mode: markers`
+configs is a placement-mode placeholder (pedestrians come from fixed markers), not an empty scene.
+The index is a derived, documentation-only artifact and does not change scenario generation; it is
+kept in sync with the configs by `tests/test_classic_archetype_density_index.py` (issue #3725).
+
 ## Families
 
 | Family | Scenario ids / examples | Maps and configs | Agents / actors | Difficulty | Known failure modes | Recommended seed / source | Example command or links |

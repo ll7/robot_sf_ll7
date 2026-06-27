@@ -52,6 +52,7 @@ SECTION_ALIASES: dict[str, str] = {
     # YAML issue forms (epic/execution-run/test-debt/blocked-external-artifact) name this
     # "Scope and non-goals"; treat it as the canonical Scope section.
     "scope and non-goals": "Scope",
+    "scope / non-goals": "Scope",
     "scope / out of scope": "Scope",
     "out of scope": "Scope",
     "scope / decision needed": "Scope",
@@ -94,6 +95,7 @@ SECTION_ALIASES: dict[str, str] = {
 LEANER_TEMPLATE_SIGNATURES: frozenset[str] = frozenset(
     {
         "scope and non-goals",
+        "scope / non-goals",
         "scope / out of scope",
         "non-goals",
         "acceptance criteria",

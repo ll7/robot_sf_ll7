@@ -24,6 +24,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`scripts/tools/check_real_trajectory_manifest.py`). Contract-only: no external dataset is
   downloaded, copied, committed, or claimed as real-world validation. See
   `docs/context/issue_3065_real_trajectory_ingestion_contract.md`.
+* Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
+  schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
+  New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,
+  which maps geometry, agent paths, start/goal states, timing, and environment semantics into a
+  target-neutral IR (`robot_sf/benchmark/schemas/scenario_interop_ir.v1.json`), preserves source
+  provenance (scenario id, source file, source fields, metadata), and reports every unmapped source
+  field explicitly in `unsupported_fields` instead of silently dropping it. A documented dry-run CLI
+  (`scripts/tools/convert_scenario_interop.py --matrix <file>`) prints the IR per scenario and a
+  validity summary. This is the local, asset-free slice of the cross-benchmark interop work: it emits
+  **no** SocNavBench/HuNavSim asset and makes **no** cross-benchmark validity or score-parity claim;
+  producing real external assets remains blocked on #1456/#1498/#2414/#1134. See
+  `docs/context/issue_3285_scenario_interop_converter.md`.
+* Added a **presence-only tournament-readiness helper** for the predictive hard-case breakthrough
+  portfolio (#3215). `scripts/tools/predictive_tournament_readiness.py` inventories the local
+  prerequisites (expected configs, harness scripts, and output path) for the three concurrent
+  tournament arms — Selection (#3204), Authority (#3213), and Model (#3214) — plus the shared
+  `predictive_hard_seeds_v1` benchmark protocol, and classifies each as `ready` or `blocked` with the
+  missing paths named as blockers. The check is deliberately fail-closed and **never** asserts run
+  authorization: `run_authorized` is always `False` and the standing `run_gates` (open child bets,
+  maintainer-set overnight SLURM/GPU budget, Autonomous Usage Stop Guard) are reported so a
+  "prerequisites ready" result is not mistaken for "authorized to launch". It does not submit Slurm
+  jobs, run the tournament, rank arms, or edit any claim. Text and `--json` reports; exit code 0 when
+  local prerequisites are ready, 1 when blocked.
+* Added a read-only **re-export readiness preflight** for stale dissertation table bundles
+  (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
+  `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability
+  check and reduces both signals to a single `fresh` / `stale` / `blocked` state: `fresh` when the
+  payload is present and checksums match (no re-export needed), `stale` when a re-export is needed and
+  all required inputs (campaign config, generation script, source-commit provenance) are present
+  (re-export unblocked), and `blocked` when a re-export is needed but a required input is missing or
+  the provenance cannot be reconstructed. This prevents a stale bundle from being silently cited as
+  current evidence without first checking that the bounded campaign can be reproduced here. The tool
+  never runs the campaign, regenerates a table, or edits dissertation claims.
+* Added a machine-readable classic archetype density / tier index
+  (`configs/scenarios/archetypes/classic_density_tier_index.yaml`) that documents the *current*
+  per-archetype density-tier coverage, density bands, and pedestrian spawn semantics of the classic
+  interaction archetypes (#3725). It clarifies the benchmark scenario denominator (the in-matrix
+  graded total is **23 rows across 11 configs**, not "12 archetypes × 3 densities = 36") and the
+  overloaded meaning of `simulation_config.ped_density`: for `spawn_mode: markers` configs
+  (`classic_bottleneck`, `classic_realworld_bottleneck`) `ped_density: 0.0` is a placement-mode
+  placeholder (pedestrians come from fixed markers, with `density_advisory:
+  zero_baseline_route_spawn`), **not** an empty scene. The index is a *derived, documentation-only*
+  artifact — it does not change scenario generation behavior, rename any field, or make tier coverage
+  uniform. New test `tests/test_classic_archetype_density_index.py` re-derives the same facts from the
+  `classic_*.yaml` configs and `classic_interactions.yaml` and fails closed on drift or missing
+  config/tier coverage. The scenario zoo index links the new file for discoverability.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

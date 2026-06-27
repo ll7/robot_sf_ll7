@@ -21,7 +21,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check on a YAML/JSON spec and exits non-zero (3) when blocked. This is a bounded readiness/contract
   slice only — it does not run a replay campaign, change sensor semantics, or make any benchmark or
   safety claim.
-
+* Added a presence-only **cross-benchmark comparison readiness** checker
+  (`scripts/tools/cross_benchmark_comparison_readiness.py`, #3287) for the downstream cross-suite
+  policy-comparison campaign. It inventories the four prerequisite families named by the issue —
+  scenario converter (#3285), metric wrappers (#3286), campaign policy metadata/manifest, and
+  external social-nav benchmark assets (#1456 / #1498 / #2414 / #3161 / #2918) — and reduces each to
+  a `ready` / `blocked` / `waived` state: `ready` when every expected local artifact is present,
+  `blocked` when an artifact is missing (the default for external assets, which are never staged
+  in-repo), and `waived` when a maintainer explicitly waives a family with a recorded reason
+  (mirroring the issue's "satisfied or explicitly waived" acceptance criterion). The report is
+  fail-closed: `campaign_authorized` is always `False` and `run_gates` lists the standing blockers,
+  so a "prerequisites ready" report can never be mistaken for authorization to run the campaign or
+  claim cross-suite equivalence. The tool does not access external assets, run a campaign, or assert
+  equivalence.
+* Added a **bring-your-own (BYO) staging preflight** for licensed Stanford Drone Dataset (SDD)
+  annotations (#1497). Under the BYO-dataset reframe (#3065) the repository never licenses, hosts,
+  or redistributes SDD; a contributor stages a copy they already have rights to. The canonical SDD
+  manifest (`configs/data/sdd_staging_manifest.yaml`) now carries an ordered `retrieval_recipe`
+  (concrete acquisition steps, no auto-download) and a `license_acknowledgment` opt-in
+  (`{required, acknowledged, statement}`, shipped `acknowledged: false` so the committed default
+  never implies redistribution rights). A new `sdd-preflight` command in
+  `scripts/tools/manage_external_data.py` (`build_sdd_preflight`) reports the two staging
+  prerequisites and the blocked-external-input state, and **fails closed** (CLI exit 2) until the
+  license acknowledgment is affirmed *and* the annotation files are present locally. Manifest
+  parsing also fails closed on a non-boolean acknowledgment, a malformed recipe, or a non-string
+  statement, and rejects `license_acknowledgment.required: false`, so the mandatory gate cannot be
+  bypassed by a typo or disabled by a locally edited manifest. This is staging-gate/provenance work
+  only: it does **not** download,
+  ingest, or transform any SDD data, run benchmarks, or edit any benchmark/paper claim. Scenario
+  curation against real annotations remains #1126.
 * Added a **fail-closed readiness/preflight checker for the predictive planner v2 same-seed
   comparison** (#1490 umbrella, ego-conditioning child #1504). New module
   `robot_sf/benchmark/predictive_v2_comparison_readiness.py` exposes
@@ -40,7 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   committed contract the preflight reports metadata-complete-but-`blocked`, mirroring the recorded
   #1490 decision. This is **coordination/preflight readiness only**: it does not train, evaluate, tune
   planners, run benchmarks, or submit SLURM.
-
 * Added a **fail-closed campaign-readiness gate for the learned-risk model v1 Slurm campaign**
   (#1472). New module `robot_sf/training/learned_risk_campaign_readiness.py` exposes
   `evaluate_campaign_readiness`, which aggregates the two existing canonical owners — the
@@ -55,7 +82,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and promotes no artifacts — a ready decision means the checked-in contract is locally complete.
   Against current `main` the campaign correctly reports `campaign_blocked` (the launch packet is
   valid; the durable trace/baseline artifacts are still `:pending`).
-
 * Added a **durable trace-URI registry contract and validator** for oracle-imitation artifacts so
   the downstream `training_ready` state is mechanically checkable (#2655). The new canonical module
   `robot_sf/training/oracle_trace_uri_registry.py` (schema `oracle-trace-uri-registry.v1`) records,

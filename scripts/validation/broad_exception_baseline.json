@@ -18,6 +18,7 @@
       "robot_sf/benchmark/hazard_odd_coverage.py": 4,
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/imitation_manifest.py": 1,
+      "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
@@ -125,7 +126,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 286
+    "total": 287
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -965,6 +966,15 @@
       "lineno": 136,
       "path": "robot_sf/benchmark/imitation_manifest.py",
       "source": "except Exception:  # pragma: no cover - best effort fallback"
+    },
+    {
+      "col_offset": 4,
+      "context": "_resolve_importable",
+      "fingerprint": "1146768a3efa6c55",
+      "handler": "Exception",
+      "lineno": 189,
+      "path": "robot_sf/benchmark/learned_predictor_capability_inventory.py",
+      "source": "except Exception as error:  # noqa: BLE001 - report any import failure as missing"
     },
     {
       "col_offset": 4,

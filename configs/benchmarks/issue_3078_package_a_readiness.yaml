@@ -1,0 +1,82 @@
+# Package A readiness manifest (issue #3078).
+#
+# Scope: this manifest declares the *input prerequisites* that must exist before a
+# Package A campaign (seed/planner-rank stability + held-out scenario-family transfer)
+# can be executed. It is consumed by `scripts/validation/check_package_a_readiness.py`,
+# which fails closed when any declared prerequisite is missing.
+#
+# This manifest does NOT execute the benchmark, submit Slurm, interpret ranks, or move
+# any claim boundary. It is a provenance/readiness gate only. Actual execution and
+# interpretation are owned by the canonical campaign runners referenced below and are
+# tracked under issue #3078 / parent #3057.
+schema_version: package-a-readiness.v0.1
+
+package:
+  id: issue_3078_package_a_readiness
+  issue: 3078
+  parent_issue: 3057
+  purpose: >
+    Verify that held-out-family inputs, seed-plan metadata, and output locations are
+    present and well-formed before a Package A rank-stability / held-out-family
+    transfer campaign is launched.
+  claim_boundary: >
+    Readiness/provenance gating only. A passing check proves the declared input
+    prerequisites exist; it does NOT constitute benchmark evidence, rank interpretation,
+    or a paper-facing claim.
+
+# Held-out scenario-family transfer inputs. Every path must exist on disk for the
+# held-out transfer rows to be runnable with a valid leakage audit.
+heldout_family_inputs:
+  description: >
+    Frozen held-out scenario-family pilot definition plus the disjoint training-pool
+    and held-out evaluation scenario sets used for the leakage audit and transfer-delta.
+  required_paths:
+    - experiments/issue_2128_heldout_family_transfer_pilot.yaml
+    - configs/scenarios/sets/issue_2128_heldout_family_transfer_training_pool.yaml
+    - configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml
+  leakage_audit_tool: scripts/tools/validate_heldout_transfer_partitions.py
+
+# Seed-plan metadata for the seed/planner-rank stability analysis. The metadata fields
+# below must be declared (so the seed plan is explicit and reproducible) and the
+# referenced seed tooling must exist on disk.
+seed_plan:
+  description: >
+    Seed-sufficiency analysis plan for rank stability. Metadata is declared here so the
+    seed budget and acceptance gate are explicit before execution.
+  mode: seed-sufficiency-gated
+  min_seeds: 5
+  rank_metric: kendall_tau
+  required_paths:
+    - scripts/tools/analyze_seed_sufficiency.py
+    - scripts/tools/seed_sufficiency_gate.py
+    - robot_sf/benchmark/seed_variance.py
+  # Metadata keys that MUST be present and non-empty in this section for the plan to be
+  # considered explicit. The checker validates presence, not numeric correctness.
+  required_metadata:
+    - mode
+    - min_seeds
+    - rank_metric
+
+# Frozen protocol / canonical result store the campaign must write through.
+frozen_protocol:
+  description: >
+    Frozen research-engine suite and canonical campaign result store that anchor the
+    Package A protocol. These are inputs to (not outputs of) the readiness check.
+  required_paths:
+    - configs/benchmarks/issue_3059_research_engine_suite_v0.yaml
+    - scripts/tools/campaign_result_store.py
+    - robot_sf/benchmark/benchmark_row_claim.py
+
+# Local output location for any generated readiness/preflight artifacts. The checker
+# validates the declared location is safe (under output/, disposable); it does not
+# require the directory to already exist because it is produced by execution.
+outputs:
+  local_root: output/benchmarks/issue_3078_package_a_readiness
+  disposable: true
+
+# Durable-evidence plan: where a tracked, reviewable readiness record should live if the
+# readiness verdict is promoted. Must not point into the disposable output/ tree.
+durable_evidence:
+  plan:
+    path: docs/context/evidence/issue_3078_package_a_readiness
+    required_before_claim: true

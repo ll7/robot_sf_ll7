@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
+  campaign can verify its input prerequisites before execution (#3078). New manifest
+  `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario
+  inputs, seed-plan metadata, and frozen-protocol entry points; new checker
+  `scripts/validation/check_package_a_readiness.py` verifies every declared input exists, that the
+  seed-plan metadata is explicit, and that the output location is disposable under `output/`,
+  exiting non-zero with `status: not_ready` when any prerequisite is missing. This is a
+  provenance/readiness gate only — it does not execute the benchmark, submit Slurm, or interpret
+  ranks.
 * Recorded metric-affecting run configuration in benchmark result provenance so result artifacts are
   self-describing (#3701). New pure module `robot_sf/benchmark/run_config_provenance.py` exposes
   `metric_affecting_run_config(config)`, which serializes the two run-config toggles that change *what*

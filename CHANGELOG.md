@@ -24,6 +24,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
   runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
   (`evidence_tier` stays blocked → analysis_only).
+* Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
+  campaign can verify its input prerequisites before execution (#3078). New manifest
+  `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario
+  inputs, seed-plan metadata, and frozen-protocol entry points; new checker
+  `scripts/validation/check_package_a_readiness.py` verifies every declared input exists, that the
+  seed-plan metadata is explicit, and that the output location is disposable under `output/`,
+  exiting non-zero with `status: not_ready` when any prerequisite is missing. This is a
+  provenance/readiness gate only — it does not execute the benchmark, submit Slurm, or interpret
+  ranks.
+* Added a **static launch preflight** for crossing-conflict predictive retraining configs (#3214).
+  New module `robot_sf/training/predictive_retrain_preflight.py` and CLI
+  `scripts/validation/validate_predictive_retrain_preflight.py` validate a predictive training
+  pipeline config (the kind consumed by `scripts/training/run_predictive_training_pipeline.py`)
+  *before* any SLURM/GPU launch: config structure, data prerequisites (scenario matrix, hard-seed
+  manifest, planner grid, and weighting spec) exist, base/hard-case feature-width compatibility (the
+  checkpoint-lineage contract), the navigation gate kept separate from the trajectory gate
+  (`max_val_ade`/`max_val_fde`), a present evaluation block, and a declared output root. The check is
+  cheap and CPU-only — it fills the gap left by the pipeline's own guards, which only run mid-pipeline
+  after expensive dataset collection. It does **not** collect data, train, submit Slurm, change
+  augmentation semantics, or make any model-improvement claim; the actual weighted retraining run is
+  owned by #3254. Text and `--json` reports; exit code 0 when valid, 2 when invalid.
 * Added a metadata-only validation-contract checker for candidate real-world micromobility traces
   (#3278). New module `robot_sf/analysis_workbench/real_trace_validation_contract.py` exposes
   `check_real_trace_validation_contract`, which maps a candidate dataset descriptor

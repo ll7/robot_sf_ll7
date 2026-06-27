@@ -129,6 +129,15 @@ def test_config_rejects_unpaired_seeds() -> None:
         build_safety_wrapper_ablation_manifest(config, options=_options())
 
 
+def test_config_rejects_non_mapping_wrapper_arm() -> None:
+    """A non-mapping entry in wrapper_arms is rejected cleanly (no raw TypeError)."""
+    config = _repo_config()
+    config["wrapper_arms"].append("not-a-mapping")
+
+    with pytest.raises(ValueError, match="each entry in wrapper_arms must be a mapping"):
+        build_safety_wrapper_ablation_manifest(config, options=_options())
+
+
 def test_check_factorial_ablation_flags_missing_arm() -> None:
     """The checker reports incomplete factorization when an arm is missing."""
     only_off = [{"key": WRAPPER_OFF_ARM, "enabled": False, "baseline": True}]

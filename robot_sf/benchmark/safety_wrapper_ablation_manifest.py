@@ -108,6 +108,8 @@ def _validate_wrapper_arms(arms: Any) -> None:
     """Require exactly the {off, on} factorial arms with one baseline and valid thresholds."""
     if not isinstance(arms, Sequence) or isinstance(arms, (str, bytes)):
         raise ValueError("wrapper_arms must be a list")
+    if not all(isinstance(arm, Mapping) for arm in arms):
+        raise ValueError("each entry in wrapper_arms must be a mapping")
     keys = [str(arm.get("key")) for arm in arms if isinstance(arm, Mapping)]
     if keys != [WRAPPER_OFF_ARM, WRAPPER_ON_ARM] and sorted(keys) != sorted(
         [WRAPPER_OFF_ARM, WRAPPER_ON_ARM]

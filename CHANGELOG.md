@@ -22,6 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inventory/provenance hygiene only: it does **not** publish or recover any checkpoint artifact,
   rewrite benchmark configs, change registry entries, or assert any benchmark result. On the
   current tree all seven shipped entries report `active`.
+* Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
+  traces routed through the `amv-calibration` external-data path (#2415). New schema
+  `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker
+  `robot_sf/research/amv_command_response_trace_manifest.py` validate, per candidate trace bundle,
+  the provenance/license, the command/response/timing channels the bundle would expose, and the
+  declared calibration targets — fail-closed against the canonical synthetic-actuation envelope
+  vocabulary (`robot_sf.benchmark.synthetic_actuation.actuation_variability_fields()`) so the
+  manifest cannot drift from what calibration can consume. CLI
+  `scripts/validation/check_amv_command_response_trace_manifest_issue_2415.py` prints a JSON report
+  and (with `--probe-live-staging`) reconciles each trace's declared staging status against a live
+  `manage_external_data.check_asset` presence probe. The shipped example manifest
+  (`configs/research/amv_command_response_trace_manifest_issue_2415.yaml`) is
+  `blocked-external-input` today, matching the maintainer decision on #2415 (2026-06-22) that no
+  realistic real-data source is currently available. This is **manifest-contract only**: it does
+  not ingest traces, run a calibration, or make a hardware-calibrated realism claim
+  (`evidence_boundary = manifest_contract_only_no_trace_ingest_no_calibration_run_no_calibrated_claim`).
 * Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
   surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
   `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware
@@ -78,6 +94,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
   runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
   (`evidence_tier` stays blocked → analysis_only).
+* Added a metadata-only staging/preflight checker for external pedestrian-prior extraction (#2918).
+  New module `robot_sf/benchmark/pedestrian_prior_extraction_manifest.py` exposes
+  `check_pedestrian_prior_extraction_manifest`, which validates a
+  `pedestrian_prior_extraction_manifest.v1` manifest (allowed external source type, the bounded
+  prior parameters the run will emit — walking speed, crossing angle, density, interaction
+  distance, stop/yield timing — provenance fields, and the authored-vs-dataset-backed separation)
+  and reports missing parameters, provenance/separation blockers, and whether a dataset-backed
+  prior claim is yet allowed. The checker **ingests no external data, stores no raw trajectories,
+  and makes no calibrated- or representative-prior claim** (`evidence_boundary:
+  prior_extraction_plan_only_no_calibrated_prior_claim`); a dataset-backed claim is gated behind
+  accepted provenance and a source family with a registered external-data staging contract, while
+  `blocked-external-input` (the default, matching issue #2918's external-data block) and
+  `proxy-only` manifests cannot assert a prior, and a `proxy-only` manifest declaring a
+  dataset-backed source is rejected as boundary conflation. The allowed source-type → external-data
+  asset-id map is cross-checked against the canonical `scripts/tools/manage_external_data.py`
+  registry. CLI: `scripts/tools/check_pedestrian_prior_extraction_manifest.py`; example manifest:
+  `configs/research/pedestrian_prior_extraction_manifest_issue_2918_example.yaml`; context note:
+  `docs/context/issue_2918_pedestrian_prior_extraction_preflight.md`.
 * Added a metadata-only staging-contract checker for dataset-backed scenario priors (#3161). New
   module `robot_sf/research/scenario_prior_staging_contract.py` exposes
   `check_scenario_prior_staging_contract`, which validates a `scenario_prior_staging_contract.v1`

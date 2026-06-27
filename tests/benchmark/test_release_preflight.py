@@ -306,6 +306,43 @@ def test_claim_audit_promoted_hyphenated_partial_failure_fails_closed(tmp_path: 
     assert "partial_failure" in result["items"][0]["gaps"][0]
 
 
+def test_claim_audit_promoted_non_success_row_status_fails_closed(tmp_path: Path) -> None:
+    """A promoted claim on a non-success ``row_status`` fails closed.
+
+    ``excluded`` is in the canonical ``benchmark_row_claim._NON_SUCCESS_STATUSES``
+    row-status vocabulary but not in the planner-mode set, so it must still block.
+    """
+    _write(
+        tmp_path / "claims.yaml",
+        {"claims": [{"claim_id": "c1", "promoted": True, "row_status": "excluded"}]},
+    )
+    result = _load_and_eval(tmp_path, _checklist([_claim_item()]))
+    assert result["status"] == "blocked"
+    assert "excluded" in result["items"][0]["gaps"][0]
+
+
+def test_claim_audit_checks_both_fields(tmp_path: Path) -> None:
+    """A native planner_mode does not mask a non-success row_status."""
+    # Both descriptor fields are audited; a success planner_mode must not let a
+    # non-success row_status slip through.
+    _write(
+        tmp_path / "claims.yaml",
+        {
+            "claims": [
+                {
+                    "claim_id": "c1",
+                    "promoted": True,
+                    "planner_mode": "native",
+                    "row_status": "blocked",
+                }
+            ]
+        },
+    )
+    result = _load_and_eval(tmp_path, _checklist([_claim_item()]))
+    assert result["status"] == "blocked"
+    assert "row_status" in result["items"][0]["gaps"][0]
+
+
 def test_claim_audit_unpromoted_fallback_is_ignored(tmp_path: Path) -> None:
     """A non-promoted fallback claim does not block."""
     # A non-promoted (diagnostic) claim may carry a fallback mode without blocking.

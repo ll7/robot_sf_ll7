@@ -58,14 +58,38 @@ SUPPORTED_CHECKS = (
     "issue_classification_ledger",
 )
 
-# Execution modes / row statuses that cannot back a promoted (paper-facing)
-# claim. Mirrors the canonical exclusion vocabulary in
-# ``benchmark_row_claim._NON_SUCCESS_MODES`` and
-# ``failure_mechanism_classifier._UNAVAILABLE_STATUSES``; kept as a local
+# Execution modes that cannot back a promoted (paper-facing) claim. Mirrors the
+# canonical exclusion vocabulary in ``benchmark_row_claim._NON_SUCCESS_MODES``
+# and ``failure_mechanism_classifier._UNAVAILABLE_STATUSES``; kept as a local
 # constant here to avoid importing private names across modules.
 EXCLUDED_CLAIM_MODES = frozenset(
     {"fallback", "degraded", "not_available", "unavailable", "failed", "partial_failure"}
 )
+
+# Row statuses that cannot back a promoted claim. Mirrors the canonical
+# ``benchmark_row_claim._NON_SUCCESS_STATUSES`` row-status vocabulary, which is
+# broader than the planner-mode set above (e.g. ``excluded``, ``blocked``,
+# ``revise``). A promoted claim card may carry a ``row_status`` instead of (or
+# in addition to) a ``planner_mode``; checking only the mode vocabulary would
+# let a non-success status slip through fail-open, so the two fields are audited
+# against the union of both vocabularies.
+EXCLUDED_CLAIM_ROW_STATUSES = frozenset(
+    {
+        "accepted_unavailable",
+        "unexpected_failure",
+        "fallback",
+        "degraded",
+        "blocked",
+        "excluded",
+        "revise",
+        "completed_smoke_not_benchmark_evidence",
+        "not_yet_populated",
+    }
+)
+
+# Combined excluded vocabulary: any planner_mode or row_status value landing in
+# this set blocks a promoted claim (fail-closed).
+_EXCLUDED_CLAIM_VALUES = EXCLUDED_CLAIM_MODES | EXCLUDED_CLAIM_ROW_STATUSES
 
 # Allowed terminal classifications for sprint issues, per issue #3081's body
 # ("closed or classified continue, revise, stop, negative_result, invalid, or
@@ -373,24 +397,27 @@ def _audit_promoted_claim(index: int, claim: Any) -> list[str]:
     if not bool(claim.get("promoted", False)):
         return []
     claim_id = str(claim.get("claim_id", f"claims[{index}]"))
-    # Normalize hyphen to underscore so the underscore-spelled
-    # ``EXCLUDED_CLAIM_MODES`` matches the canonical vocabulary, which lists both
-    # ``partial-failure`` and ``partial_failure`` (see
-    # ``failure_mechanism_classifier._UNAVAILABLE_STATUSES``).
-    mode = (
-        str(claim.get("planner_mode", claim.get("row_status", "")))
-        .strip()
-        .lower()
-        .replace("-", "_")
-    )
-    if not mode:
+    # Audit both descriptor fields independently: a promoted claim may carry a
+    # ``planner_mode``, a ``row_status``, or both, and a non-success value in
+    # *either* must fail closed (checking only ``planner_mode`` would let a
+    # non-success ``row_status`` slip through fail-open). Normalize hyphen to
+    # underscore so e.g. ``partial-failure`` matches the underscore-spelled
+    # canonical vocabulary.
+    descriptors = {
+        field: str(claim.get(field, "")).strip().lower().replace("-", "_")
+        for field in ("planner_mode", "row_status")
+    }
+    present = {field: value for field, value in descriptors.items() if value}
+    if not present:
         return [f"promoted claim {claim_id} is missing planner_mode/row_status"]
-    if mode in EXCLUDED_CLAIM_MODES:
-        return [
-            f"promoted claim {claim_id} depends on excluded mode {mode!r}; "
-            "fallback/degraded/unavailable rows cannot back a release claim"
-        ]
-    return []
+    gaps: list[str] = []
+    for field, value in present.items():
+        if value in _EXCLUDED_CLAIM_VALUES:
+            gaps.append(
+                f"promoted claim {claim_id} depends on excluded {field} {value!r}; "
+                "fallback/degraded/unavailable/non-success rows cannot back a release claim"
+            )
+    return gaps
 
 
 def _evaluate_claim_audit(item: ReleasePreflightItem, repo_root: Path) -> list[str]:

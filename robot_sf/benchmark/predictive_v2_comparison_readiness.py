@@ -264,7 +264,10 @@ def _coupling_gate_recommendation(path: Path) -> tuple[str | None, str | None]:
         return recommendation.strip().lower(), None
 
     if suffix in {".md", ".markdown"}:
-        content = path.read_text(encoding="utf-8")
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return None, f"coupling-gate Markdown could not be read: {exc}"
         match = re.search(
             r"(?im)^[-*]?\s*(?:recommendation|decision)\s*:\s*`?([A-Za-z_]+)`?", content
         )

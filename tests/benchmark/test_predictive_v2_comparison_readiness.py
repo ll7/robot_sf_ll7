@@ -7,7 +7,6 @@ benchmark, training, or Slurm execution is performed.
 
 from __future__ import annotations
 
-import copy
 import json
 from typing import TYPE_CHECKING
 
@@ -272,7 +271,11 @@ def test_cli_markdown_gate_clears(tmp_path: Path, capsys) -> None:
 
 # Guard against accidental mutation of the shared REQUIRED_VARIANTS template in tests.
 def test_minimal_contract_is_independent(tmp_path: Path) -> None:
-    """The helper returns an independent contract each call (deepcopy hygiene)."""
+    """Each helper call returns a fresh contract; mutating one must not affect the next."""
     first = _minimal_contract(tmp_path)
-    second = copy.deepcopy(first)
-    assert first == second
+    first["row_identifiers"]["baseline"]["input_dim"] = 999
+    del first["same_seed_comparability"]["seed"]
+
+    second = _minimal_contract(tmp_path)
+    assert second["row_identifiers"]["baseline"]["input_dim"] == 4
+    assert second["same_seed_comparability"]["seed"] == 42

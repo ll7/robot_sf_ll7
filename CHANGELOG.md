@@ -51,6 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fixed the **SAC baseline velocity action space ignoring `action_semantics`** when converting model
+  output to benchmark commands (#3705). In `robot_sf/baselines/sac.py`, `_action_vec_to_dict` always
+  scaled the `velocity` (`vx`, `vy`) output vector to `v_max`, even when `action_semantics="delta"`.
+  Deltas are increments the env later accumulates (`new_v = old_v + delta`) and are already bounded by
+  the SAC action space, so scaling them toward `v_max` distorted the accumulated trajectory. The
+  velocity branch now mirrors the existing unicycle contract: the speed cap is applied only for the
+  absolute-velocity contract, while delta increments pass through unchanged. Behavior for the
+  `unicycle` action space (the current benchmark config default) is unchanged; the default
+  `action_semantics="delta"` is intentionally preserved per the canonical training setting.
 * Fixed `_spaces_compatible` **rejecting wrapper- or subclass-derived `Tuple` spaces** under strict
   top-level type checking (#3709). In `robot_sf/training/scenario_sampling.py`, the helper opened with
   `type(base) is not type(other)`, so a `gymnasium.spaces.Tuple` and a Tuple subclass (as produced by

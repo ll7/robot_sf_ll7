@@ -1,0 +1,71 @@
+# AMV command-response trace staging manifest -- Issue #2415
+#
+# Issue #2415 asks to stage REAL AMV command-response actuation traces so the synthetic actuation
+# envelope (robot_sf/benchmark/synthetic_actuation.py) can eventually be calibrated against measured
+# command-response dynamics (latency, update rate, accel/decel, yaw-rate limits). That calibration
+# is BLOCKED on external data: per the maintainer decision on #2415 (2026-06-22) no realistic
+# real-data source is currently available (estimated < 5% feasibility), and Robot SF never ingests
+# or redistributes raw command-response traces.
+#
+# This file is the metadata-only staging MANIFEST for the local, buildable half. It declares, per
+# candidate trace bundle, the provenance/license, the command/response/timing channels the bundle
+# would expose, and which canonical synthetic-actuation envelope fields the trace would calibrate,
+# so that once a trace bundle is staged through the amv-calibration external-data path
+# (scripts/tools/manage_external_data.py) a command-response calibration can ingest it without
+# guesswork. It is checked by:
+#   uv run python scripts/validation/check_amv_command_response_trace_manifest_issue_2415.py
+#
+# This manifest neither ingests traces nor stores raw command-response samples, and makes NO
+# hardware-calibrated realism claim.
+
+schema_version: amv_command_response_trace_manifest.v1
+manifest_id: amv_command_response_trace_manifest_issue_2415
+issue: 2415
+
+claim_boundary: >-
+  Staging-manifest metadata only. Declares how real AMV command-response traces would be staged and
+  what a calibration would consume; it does not stage traces, ingest command-response samples, run a
+  calibration, or claim hardware-calibrated realism. A command-response calibration is permitted
+  only after a trace bundle is staged and validated through scripts/tools/manage_external_data.py
+  (asset id amv-calibration).
+
+# External-data asset the trace bundles stage through, and the synthetic envelope a calibrated
+# trace would inform.
+calibration_asset_id: amv-calibration
+synthetic_envelope_module: robot_sf/benchmark/synthetic_actuation.py
+
+# calibration_targets below are canonical synthetic-actuation envelope fields from
+# robot_sf.benchmark.synthetic_actuation.actuation_variability_fields(). The checker fails closed if
+# a target is not in that vocabulary, so the manifest cannot drift from what calibration can consume.
+traces:
+  - trace_id: amv_command_response_primary
+    asset_id: amv-calibration
+    title: Real AMV command-response actuation trace bundle
+    staging_status: blocked-external-input
+    redistribution: none
+    blocker_issues: [2000, 1585]
+    provenance:
+      source_url: https://github.com/ll7/robot_sf_ll7/issues/2000
+      license: Access and redistribution depend on the selected source; private traces stay local
+      license_status: unknown
+      citation: >-
+        Real AMV command-response trace source to be identified via #2000/#1585 (an accepted
+        command-response trace bundle from an official platform, controller logging, or a
+        field-measurement opportunity). No public citation is pinned until the source is accepted.
+    command_channels:
+      - linear_velocity_command_mps
+      - yaw_rate_command_rad_s
+    response_channels:
+      - measured_linear_velocity_mps
+      - measured_yaw_rate_rad_s
+    timing_fields:
+      - timestamp_s
+      - control_latency_s
+      - sample_rate_hz
+    calibration_targets:
+      - max_linear_accel_m_s2
+      - max_linear_decel_m_s2
+      - max_yaw_rate_rad_s
+      - max_angular_accel_rad_s2
+      - latency_mode
+      - update_mode

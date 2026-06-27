@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Added a fail-closed readiness check for scenario-horizon Results evidence (#3266). New module
+  `robot_sf/benchmark/scenario_horizon_readiness.py` and CLI
+  `scripts/validation/check_scenario_horizon_results_readiness.py` read a re-exported scenario-horizon
+  campaign artifact (the dissertation `campaign_table.md` from PR #3263 / issue #3203, or an equivalent
+  campaign-summary JSON) and classify it as `valid`, `diagnostic_only`, or `blocked`. The check is
+  diagnostic-only — it never reruns a campaign or promotes evidence — and fails closed: a missing or
+  unparseable artifact is `blocked`, any non-benchmark-success planner row (e.g. the PPO
+  `partial-failure` recorded for #3266) caps the verdict at `diagnostic_only`, and an unasserted SNQI
+  contract status keeps the evidence diagnostic-only rather than assuming it passed. Per-row status
+  normalization reuses the canonical `fallback_policy.classify_planner_row_status` owner. Run against
+  the real #3203 bundle, the check reports `diagnostic_only` (exit 2), confirming those tables remain
+  diagnostic/provenance evidence only.
+
 ### Fixed
 
 * Fixed the HEIGHT planner adapter's lidar raycasting **ignoring dynamic pedestrians** (#3629).

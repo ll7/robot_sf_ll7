@@ -23,6 +23,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   be bypassed by a typo. This is staging-gate/provenance work only: it does **not** download,
   ingest, or transform any SDD data, run benchmarks, or edit any benchmark/paper claim. Scenario
   curation against real annotations remains #1126.
+* Added a **fail-closed SocNavBench map-conversion readiness preflight** for the ETH import batch
+  (#1134, parent #334). The batch validator
+  (`scripts/tools/validate_socnav_map_batch.py`) gains a `conversion_readiness()` function and a
+  `--preflight` CLI mode that layer a conversion *decision* on top of the existing raw
+  asset-existence report. Conversion is reported `ready` only when every `required_for_conversion`
+  source asset is staged; while the ETH traversible `data.pkl` (or mesh dir) is missing the verdict
+  is `blocked_pending_source_assets` with `conversion_ready: false`, a `next_action` naming the
+  missing source paths, and a non-zero exit code. When blocked, any pre-existing planned map
+  *artifact* (`map_svg`, `scenario_config`) is surfaced as `placeholder_risk` so a hand-authored or
+  inferred ETH-like SVG cannot be silently mistaken for an official conversion; the provenance note
+  is intentionally excluded because it is expected to exist during the blocked phase. This is
+  **preflight/readiness only**: it does not download assets, stage data, convert maps, run
+  simulations, or assert any benchmark result. Against the current repo state the preflight reports
+  `blocked_pending_source_assets`, matching the issue's blocked status.
 * Added a **read-only readiness preflight for the compact CARLA native↔aligned parity bundle**
   (#1510). New module `robot_sf_carla_bridge/parity_bundle_preflight.py` exposes
   `check_parity_bundle_readiness` (and the pure `evaluate_payload_metadata`), which checks — per
@@ -332,6 +346,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "prerequisites ready" result is not mistaken for "authorized to launch". It does not submit Slurm
   jobs, run the tournament, rank arms, or edit any claim. Text and `--json` reports; exit code 0 when
   local prerequisites are ready, 1 when blocked.
+* Tightened the **oracle-imitation dataset launch-packet preflight** to require a `collection_roots`
+  block before a collection job runs (#1470). The validator
+  (`robot_sf/training/oracle_imitation_launch_packet.py`,
+  `scripts/validation/validate_oracle_imitation_launch_packet.py`) now fails closed unless the packet
+  declares durable destinations for collection logs (`log_root`), raw trace output
+  (`dataset_output_root`), and the dataset manifest (`manifest_destination`). Each root must be a
+  durable artifact URI (a `:pending` alias is allowed because collection has not run yet) and may
+  never point at the gitignored worktree-local `output/` directory, which is not a safe shared
+  destination on a multi-agent host. The checked-in `#1397` packet now carries these `:pending`
+  destinations. This is a preflight-contract change only: it submits no jobs and collects no data.
 * Added a read-only **re-export readiness preflight** for stale dissertation table bundles
   (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
   `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability

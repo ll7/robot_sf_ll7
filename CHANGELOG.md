@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **read-only heavy forecast-model family inventory / preflight** for the offline
+  prediction study (#2845). New pure module `robot_sf/research/forecast_heavy_model_inventory.py`
+  documents the candidate heavy predictor families (transformer, AgentFormer-like, CVAE,
+  diffusion) with qualitative literature-derived planning estimates of compute cost, inference
+  latency, uncertainty quality, and repository integration burden; probes that the
+  offline-evaluation surfaces an experiment would touch are importable (the forecast
+  metrics/calibration/conformal/dataset/batch/baseline surfaces; fail-closed on the required
+  ones); and reports the minimum-offline-experiment prerequisites (a staged held-out dataset, a
+  heavy-model→`ForecastBatch` adapter, a CPU runtime budget, the study report, plus external
+  dependency/checkpoint decisions) as explicit blockers, rolled up into a `ready`/`blocked`
+  minimum-experiment status. Thin CLI
+  `scripts/research/check_forecast_heavy_model_inventory.py` (`--json`/`--list`) and study report
+  `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
+  runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
+  (`evidence_tier` stays blocked → analysis_only).
 * Added a metadata-only validation-contract checker for candidate real-world micromobility traces
   (#3278). New module `robot_sf/analysis_workbench/real_trace_validation_contract.py` exposes
   `check_real_trace_validation_contract`, which maps a candidate dataset descriptor

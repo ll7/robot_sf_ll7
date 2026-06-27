@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checkpoint mapping, the all-zero degenerate-spread state, `proxy.enabled=false`, the ready case,
   and CLI exit codes, plus a pin on the current blocked live-registry state (the intended revival
   signal once checkpoints hydrate).
+* Added a **fail-closed curation readiness preflight** for SDD-derived benchmark scenarios (#1126).
+  Issue #1126 curates the first real Stanford Drone Dataset (SDD) benchmark scenario set, but stays
+  blocked on licensed external data (#1497/#2413). The new `scripts/tools/sdd_curation_preflight.py`
+  is a thin *curation-step* gate that composes the canonical owners — `resolve_sdd_scenario_prior_mode`
+  from `scripts/tools/manage_external_data.py` (staging gate) and `load_sdd_points` from
+  `scripts/tools/import_sdd_scenarios.py` (the importer's own parser) — to classify whether a
+  curation run may be promoted as benchmark evidence. `benchmark_promotion_allowed` is True **only**
+  when SDD is staged and checksum-validated (`dataset_backed_prior`) *and* the candidate annotation
+  satisfies the deterministic selection rule; a parseable fixture or unvalidated copy stays
+  `proxy_schema_smoke` and is never promoted. `--require-benchmark-ready` exits non-zero so callers
+  fail closed. This is readiness/schema preflight only: it does **not** download, ingest, or curate
+  real SDD data, write any scenario/map artifact, run a benchmark campaign, or assert any benchmark
+  result. Fixture-backed tests cover the blocked, proxy, and dataset-backed-candidate states.
+  Documented in `docs/context/issue_1126_sdd_curation_preflight.md`.
+
 * Added a read-only **ORCA-residual learned-policy lane readiness/preflight surface** (#1358).
   New module `robot_sf/benchmark/orca_residual_lane_readiness.py` exposes `assess_lane_readiness`,
   which inventories the lane's local prerequisites (behavior-cloning lineage packet, smoke/pretrain

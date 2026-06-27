@@ -1,0 +1,30 @@
+# Oracle-imitation warm-start readiness manifest (issue #1496).
+#
+# Read-only preflight input for
+# scripts/validation/check_oracle_imitation_warm_start_readiness.py. It names the durable
+# prerequisites for the downstream warm-start training and benchmark comparison so a launch
+# can fail closed when something is missing. It does not collect data, train, or submit Slurm.
+#
+# Current expected state: BLOCKED. The referenced #1397 dataset launch packet is intentionally
+# not training-ready (it carries a `:pending` durable trace URI); the durable dataset lands via
+# issue #1470. Re-run the checker after #1470 publishes concrete durable trace artifact URIs.
+schema_version: oracle-imitation-warm-start-readiness.v1
+experiment_id: issue_1496_oracle_imitation_warm_start_v1
+
+# Durable dataset launch packet from the #1397/#1470 line; validated with
+# require_training_ready=True (must carry concrete durable trace artifact URIs).
+dataset_launch_packet: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+
+# Behaviour-cloning warm-start training config (consumed by
+# scripts/training/pretrain_from_expert.py).
+warm_start_config: configs/training/ppo_imitation/bc_pretrain.yaml
+
+# RL-only baseline comparator config (the fair PPO-from-scratch comparison).
+baseline_config: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+
+# Optional PPO fine-tuning config applied on top of the warm-start checkpoint
+# (scripts/training/train_ppo_with_pretrained_policy.py).
+finetuning_config: configs/training/ppo/expert_ppo_issue_576_br06_v4_overnight_safety_warmstart.yaml
+
+# Dataset split/leakage contract that the comparison must preserve.
+split_contract: docs/context/policy_search/contracts/oracle_imitation_dataset_split.md

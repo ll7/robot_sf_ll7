@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/pedestrian_prior_extraction_manifest.v1.json",
+  "title": "Robot SF External Pedestrian-Prior Extraction Manifest v1",
+  "description": "Metadata-only staging/preflight manifest describing how a pedestrian-prior extraction run would consume a license-compatible external trajectory dataset (ETH/UCY, SDD, or SocNavBench-derived): the external source type, provenance fields, the prior parameters the run intends to emit, and the authored-vs-dataset-backed separation. It declares the extraction PLAN only. It ingests no external data, stores no raw trajectories, and makes NO calibrated- or representative-prior claim until extraction_status is 'dataset-backed' with accepted provenance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "extraction_status",
+    "description",
+    "source",
+    "prior_parameters",
+    "authored_separation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "pedestrian_prior_extraction_manifest.v1"
+    },
+    "manifest_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extraction_status": {
+      "description": "Lifecycle state of the extraction plan. 'blocked-external-input': a valid plan awaiting license-compatible staged data; 'proxy-only': schema/smoke run on a proxy fixture, never dataset-backed; 'dataset-backed': license-compatible external data has been staged and provenance accepted.",
+      "enum": ["blocked-external-input", "proxy-only", "dataset-backed"]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "description": "Allowed external source family for pedestrian-prior extraction.",
+          "enum": ["eth_ucy", "sdd", "socnavbench"]
+        },
+        "external_data_asset_id": {
+          "description": "Optional pointer to the canonical external-data asset id in scripts/tools/manage_external_data.py.",
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "prior_parameters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "units", "value_status"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "units": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value_status": {
+            "enum": ["proxy-placeholder", "pending", "dataset-backed"]
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "authored_separation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["separation"],
+      "properties": {
+        "separation": {
+          "enum": ["enforced", "not-enforced"]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source_id": {
+          "type": "string"
+        },
+        "source_uri": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "citation": {
+          "type": "string"
+        },
+        "access_date": {
+          "type": "string"
+        },
+        "checksum": {
+          "type": "string"
+        },
+        "staging_manifest": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

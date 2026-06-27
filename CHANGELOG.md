@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **fail-closed readiness check for false-positive actor-injection replay inputs** (#3300),
+  the acceptance dimension PR #3271 closed out of #2927 as *unavailable*. New pure module
+  `robot_sf/benchmark/false_positive_injection_readiness.py` exposes
+  `check_false_positive_injection_readiness(spec)`, which validates a replay-condition spec's injected
+  actor inputs (reusing the canonical `ObservationPerturbationSpec` for shape rules rather than
+  re-deriving them) and its provenance fields (scenario, seed, planner mode, perturbation family,
+  execution mode). It returns an explicit `ready` / `not_available` / `blocked` verdict so a malformed
+  or unavailable false-positive condition fails closed with an actionable blocker list instead of
+  silently passing. A thin CLI `scripts/benchmark/check_false_positive_injection_readiness.py` runs the
+  check on a YAML/JSON spec and exits non-zero (3) when blocked. This is a bounded readiness/contract
+  slice only — it does not run a replay campaign, change sensor semantics, or make any benchmark or
+  safety claim.
 * Added a **fail-closed release-readiness / claim-audit preflight checklist** for research-package
   releases (#3081). New module `robot_sf/benchmark/release_preflight.py` evaluates a declarative
   checklist (`load_release_preflight_checklist` + `evaluate_release_preflight`) that maps issue
@@ -29,7 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   composes existing contracts (`release_protocol`, `benchmark_row_claim`) rather than duplicating
   them, and is complementary to the package-level `research/package_registry` preflight (#3057).
   Synthetic tests cover each fail-closed path plus a smoke check of the shipped checklist.
-
 * Added a **real-trajectory ingestion and artifact-staging contract** (#3065): a dataset-agnostic,
   bring-your-own-dataset (BYO) manifest schema plus a fail-closed preflight checker. New package
   `robot_sf/data_ingestion/` defines the JSON Schema
@@ -45,7 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`scripts/tools/check_real_trajectory_manifest.py`). Contract-only: no external dataset is
   downloaded, copied, committed, or claimed as real-world validation. See
   `docs/context/issue_3065_real_trajectory_ingestion_contract.md`.
-
 * Added a **read-only capability inventory / preflight** for the learned probabilistic graph
   predictor v1 lane (#2844). New module
   `robot_sf/benchmark/learned_predictor_capability_inventory.py` enumerates the *code-level*

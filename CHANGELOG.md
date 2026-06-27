@@ -21,6 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   slice only: it collects no traces, publishes no artifacts, submits no jobs, and makes no training
   readiness claim (the checked-in example is intentionally not training-ready). See
   `docs/context/issue_2655_oracle_trace_uri_registry.md`.
+* Added a **read-only heavy forecast-model family inventory / preflight** for the offline
+  prediction study (#2845). New pure module `robot_sf/research/forecast_heavy_model_inventory.py`
+  documents the candidate heavy predictor families (transformer, AgentFormer-like, CVAE,
+  diffusion) with qualitative literature-derived planning estimates of compute cost, inference
+  latency, uncertainty quality, and repository integration burden; probes that the
+  offline-evaluation surfaces an experiment would touch are importable (the forecast
+  metrics/calibration/conformal/dataset/batch/baseline surfaces; fail-closed on the required
+  ones); and reports the minimum-offline-experiment prerequisites (a staged held-out dataset, a
+  heavy-model→`ForecastBatch` adapter, a CPU runtime budget, the study report, plus external
+  dependency/checkpoint decisions) as explicit blockers, rolled up into a `ready`/`blocked`
+  minimum-experiment status. Thin CLI
+  `scripts/research/check_forecast_heavy_model_inventory.py` (`--json`/`--list`) and study report
+  `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
+  runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
+  (`evidence_tier` stays blocked → analysis_only).
 * Added a metadata-only measurement/intake-manifest checker for autonomous micromobility vehicle
   (AMV) actuation latency and rider-coupling response (#3283). New module
   `robot_sf/benchmark/actuation_latency_measurement_manifest.py` exposes

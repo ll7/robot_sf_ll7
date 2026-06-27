@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **diagnostic readiness/preflight checker for AMV actuation-envelope calibration inputs**
+  (#1559). New module `robot_sf/benchmark/amv_calibration_readiness.py` exposes
+  `assess_amv_calibration_readiness` / `assess_amv_calibration_readiness_from_config`, which inspect a
+  candidate calibrated-actuation profile (e.g. the
+  `configs/benchmarks/issue_1586_calibrated_actuation_profile_skeleton_v0.yaml` skeleton) and report
+  `ready` vs `blocked`, **fail-closed**. It closes a real gap: the existing
+  `synthetic_actuation.validate_actuation_profile_claim_boundary` checks only that provenance fields
+  are *present and non-empty*, so the placeholder skeleton (`source_id: "pending-#1585"`,
+  `measurement_date: "pending"`, …) passes structural validation while remaining unfit for use. The
+  readiness checker additionally flags placeholder/pending provenance, missing fields, tracking-issue
+  `source_uri`s, synthetic-vs-calibrated conflation, and the proxy-vs-hardware source distinction. CLI
+  `scripts/benchmark/check_amv_calibration_readiness.py` prints a JSON report and exits non-zero when
+  blocked. **Claim boundary:** paper-facing AMV actuation use stays **blocked** — `paper_facing_allowed`
+  is True only for a hardware/official-spec source class (a real trace #2000 or official spec), never
+  for the accepted #1585 proxy. This change does **not** calibrate from data, tune envelope values, or
+  run any campaign.
 * Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
   traces routed through the `amv-calibration` external-data path (#2415). New schema
   `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
+  surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
+  `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware
+  near-miss requires: a finite positive `dt`, a `(T,2)` `robot_pos`/`robot_vel` with at least two
+  frames, and a `(T,K,2)` `peds_pos`) and `compute_ttc_near_miss_diagnostic`, which counts steps
+  whose minimum projected TTC falls below a threshold and reports the worst closing speed under
+  distinct `near_miss_ttc__*` keys. It reuses the existing TTC convention from
+  `time_to_collision_min` and the canonical pedestrian-velocity primitive. This is **additive and
+  diagnostic-only**: it does **not** modify the canonical distance-based `near_misses` metric, wire
+  anything into SNQI or any scoring path, calibrate the threshold (the default
+  `DIAGNOSTIC_TTC_THRESHOLD_S` is an explicit uncalibrated placeholder, `decision-required` per
+  #3700), or assert any safety result. The diagnostic fails closed — raising `NearMissTtcInputError`
+  rather than returning zeros — when the timing/velocity inputs are missing or invalid. Tests cover
+  fast-closing vs. opening synthetic trajectories, the fail-closed contract for missing timing
+  fields, and that the canonical `near_misses` output is unchanged.
 * Added a read-only diagnostic inventory / fail-closed preflight for **conflicting "canonical" SNQI
   weight sets** (#3723). New module `robot_sf/benchmark/snqi/weights_inventory.py` discovers every
   known SNQI weight source — the code default `recompute_snqi_weights("canonical")` plus the shipped

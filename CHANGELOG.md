@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a metadata-only measurement/intake-manifest checker for autonomous micromobility vehicle
+  (AMV) actuation latency and rider-coupling response (#3283). New module
+  `robot_sf/benchmark/actuation_latency_measurement_manifest.py` exposes
+  `check_amv_actuation_latency_measurement_manifest`, which validates an
+  `amv_actuation_latency_measurement_manifest.v1` manifest (declared sensor channels, per-channel
+  sampling rate, time synchronization, provenance, and the synthetic-vs-measured separation)
+  against the canonical command-response latency and rider-coupling quantity contract and reports
+  missing channels, synchronization/provenance/separation blockers, and whether a measured-value
+  claim is yet allowed. The checker **collects no data, fabricates nothing, and makes no
+  measured-value or calibrated-actuation claim** (`evidence_boundary:
+  measurement_intake_plan_only_no_measured_value_claim`); a `measured` claim is gated behind
+  accepted provenance, while `blocked-external-input` (the default, matching issue #3283's
+  external-data block) and `synthetic-only` manifests cannot assert measured values, and a
+  `synthetic-only` manifest declaring a measured source is rejected as boundary conflation. It also
+  proposes the latency and rider-coupling fields a future measured AMV actuation profile would
+  expose, extending the synthetic actuation-envelope schema in
+  `robot_sf/benchmark/synthetic_actuation.py` without promoting placeholders into calibration
+  evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
+  manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
+  protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
+
 * Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
   campaign can verify its input prerequisites before execution (#3078). New manifest
   `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario

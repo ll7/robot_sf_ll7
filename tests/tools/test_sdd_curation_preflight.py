@@ -164,14 +164,27 @@ def test_dataset_backed_with_bad_probe_is_not_promotable(tmp_path: Path) -> None
     assert report["output_classification"] == sdd_curation_preflight.OUTPUT_BLOCKED
 
 
-def test_cli_require_benchmark_ready_fails_closed_when_unstaged(tmp_path: Path, capsys) -> None:
+def test_cli_require_benchmark_ready_fails_closed_when_unstaged(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
     """The CLI exits non-zero under --require-benchmark-ready when SDD is not staged.
 
-    Uses the real canonical manifest resolution (no SDD staged in CI), so this also asserts the
-    end-to-end fail-closed default on this checkout.
+    Forces the unstaged staging gate so the assertion is deterministic regardless of the local
+    machine's SDD staging state, while still exercising the real CLI parse/probe/exit-code path.
     """
     annotations = tmp_path / "annotations.txt"
     _write_sdd_fixture(annotations)
+    monkeypatch.setattr(
+        manage_external_data,
+        "resolve_sdd_scenario_prior_mode",
+        lambda *, manifest_path=None: {
+            "mode": manage_external_data.SDD_MODE_PROXY,
+            "dataset_backed": False,
+            "availability": {"state": "missing"},
+            "reason": "SDD is not staged.",
+            "staging_dir": str(tmp_path),
+        },
+    )
     exit_code = sdd_curation_preflight.main(
         [
             "--annotation",

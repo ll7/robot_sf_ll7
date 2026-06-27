@@ -26,6 +26,25 @@ class LearnedRiskLaunchPacketError(ValueError):
     """Raised when a learned-risk launch packet fails validation."""
 
 
+def sha256_file(path: Path) -> str:
+    """Return the lowercase hex SHA-256 digest of a file streamed in chunks.
+
+    Shared by the launch-packet and trace-manifest validators so both compute
+    artifact checksums identically.
+
+    Args:
+        path: File to digest.
+
+    Returns:
+        Lowercase hex SHA-256 string.
+    """
+    sha256 = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(8192):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
 def load_launch_packet(config_path: Path) -> dict[str, Any]:
     """Load a learned-risk launch packet YAML file.
 
@@ -282,11 +301,7 @@ def _validate_checksum(
     if not isinstance(expected, str) or not expected.strip():
         errors.append(f"checksums missing SHA-256 entry for {path_text}")
         return
-    sha256 = hashlib.sha256()
-    with open(local_path, "rb") as f:
-        while chunk := f.read(8192):
-            sha256.update(chunk)
-    actual = sha256.hexdigest()
+    actual = sha256_file(local_path)
     if actual != expected.strip().lower():
         errors.append(f"checksum mismatch for {path_text}: expected {expected}, got {actual}")
 
@@ -320,5 +335,6 @@ def _validate_trace_fixtures(
 __all__ = [
     "LearnedRiskLaunchPacketError",
     "load_launch_packet",
+    "sha256_file",
     "validate_launch_packet",
 ]

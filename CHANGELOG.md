@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-<<<<<<< HEAD
 * Added a **fail-closed curation readiness preflight** for SDD-derived benchmark scenarios (#1126).
   Issue #1126 curates the first real Stanford Drone Dataset (SDD) benchmark scenario set, but stays
   blocked on licensed external data (#1497/#2413). The new `scripts/tools/sdd_curation_preflight.py`

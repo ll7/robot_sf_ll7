@@ -59,7 +59,7 @@ def _ready_manifest() -> dict[str, object]:
             "near_miss": "present",
             "low_progress": "present",
         },
-        "checksums": {stress: "a" * 64, full: "b" * 64},
+        "checksums": {stress: "a" * 64, full: "b" * 64, baseline: "c" * 64},
         "retrieval_status": "available",
     }
 
@@ -143,6 +143,58 @@ def test_missing_required_split_is_blocked(tmp_path: Path) -> None:
 
     assert report["training_readiness_decision"] == DECISION_BLOCKED
     assert any("full_matrix" in blocker for blocker in report["blockers"])
+
+
+def test_baseline_without_checksum_is_blocked(tmp_path: Path) -> None:
+    """A concrete baseline URI without a recorded digest fails closed, like traces."""
+    manifest = _ready_manifest()
+    baseline = manifest["baseline_artifact_uri"]
+    del manifest["checksums"][baseline]
+
+    report = validate_trace_manifest(_write_manifest(tmp_path, manifest))
+
+    assert report["training_readiness_decision"] == DECISION_BLOCKED
+    assert any("SHA-256" in blocker and baseline in blocker for blocker in report["blockers"])
+
+
+def test_durable_uri_with_output_segment_is_not_a_hard_error(tmp_path: Path) -> None:
+    """A durable URI carrying an 'output' path segment is accepted, not crashed.
+
+    Only worktree-local (non-durable) pointers must raise; a durable scheme may
+    legitimately include an 'output' segment.
+    """
+    durable_output = "wandb-artifact://robot-sf/learned-risk/output/traces:v1"
+    manifest = _ready_manifest()
+    manifest["trace_artifacts"] = [durable_output]
+    manifest["checksums"] = {
+        durable_output: "d" * 64,
+        manifest["baseline_artifact_uri"]: "c" * 64,
+    }
+
+    report = validate_trace_manifest(_write_manifest(tmp_path, manifest))
+
+    assert report["training_readiness_decision"] == DECISION_READY
+
+
+def test_malformed_yaml_raises_structural_error(tmp_path: Path) -> None:
+    """Invalid YAML is a structural error (CLI exit 2), not a raw traceback."""
+    path = tmp_path / "manifest.yaml"
+    path.write_text("schema_version: [unterminated\n", encoding="utf-8")
+
+    with pytest.raises(LearnedRiskTraceManifestError, match="valid YAML"):
+        validate_trace_manifest(path)
+
+
+def test_non_list_split_ids_fails_closed(tmp_path: Path) -> None:
+    """A non-list split_ids value fails closed with a blocker, never a crash."""
+    manifest = _ready_manifest()
+    manifest["split_ids"] = 5
+
+    report = validate_trace_manifest(_write_manifest(tmp_path, manifest))
+
+    assert report["training_readiness_decision"] == DECISION_BLOCKED
+    assert report["split_ids"] == []
+    assert any("split_ids" in blocker for blocker in report["blockers"])
 
 
 def test_wrong_schema_version_raises(tmp_path: Path) -> None:

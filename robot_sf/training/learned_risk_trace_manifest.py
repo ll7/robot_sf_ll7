@@ -72,7 +72,10 @@ def load_trace_manifest(config_path: Path) -> dict[str, Any]:
     """
     if not config_path.is_file():
         raise LearnedRiskTraceManifestError(f"trace manifest is not a file: {config_path}")
-    payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    try:
+        payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise LearnedRiskTraceManifestError(f"trace manifest is not valid YAML: {exc}") from exc
     if not isinstance(payload, dict):
         raise LearnedRiskTraceManifestError("trace manifest must be a YAML mapping")
     return payload
@@ -109,7 +112,10 @@ def validate_trace_manifest(
     # Resolvability checks: violations are fail-closed blockers, not hard errors.
     blockers: list[str] = []
     baseline_uri = manifest.get("baseline_artifact_uri")
-    _check_artifact_uri("baseline_artifact_uri", baseline_uri, blockers)
+    # The baseline is a durable artifact too: require a recorded digest so the
+    # training run can verify the baseline bytes it retrieves, matching the
+    # trace-artifact and local-fixture checks.
+    _check_artifact_uri("baseline_artifact_uri", baseline_uri, blockers, checksums=checksums)
 
     trace_artifacts = manifest.get("trace_artifacts")
     if not isinstance(trace_artifacts, list) or not trace_artifacts:
@@ -138,7 +144,9 @@ def validate_trace_manifest(
         "candidate_id": manifest["candidate_id"],
         "trace_schema_version": manifest["trace_schema_version"],
         "baseline_artifact_uri": baseline_uri,
-        "split_ids": list(manifest.get("split_ids") or []),
+        "split_ids": (
+            list(manifest.get("split_ids")) if isinstance(manifest.get("split_ids"), list) else []
+        ),
         "label_availability": _normalized_labels(label_availability),
         "training_ready": not blockers,
         "training_readiness_decision": decision,
@@ -210,11 +218,15 @@ def _check_artifact_uri(
         blockers.append(f"{key} must be a non-empty durable artifact URI")
         return
     text = value.strip()
-    if "output" in Path(text).parts:
-        raise LearnedRiskTraceManifestError(
-            f"{key} must not depend on worktree-local output: {text}"
-        )
     if not text.startswith(_DURABLE_URI_PREFIXES):
+        # Only a non-durable pointer can be a worktree-local output path. A durable
+        # URI may legitimately carry an "output" path segment (e.g.
+        # s3://bucket/output/traces.jsonl), so the local-output guard must run only
+        # after the durable-scheme check, not before it.
+        if "output" in Path(text).parts:
+            raise LearnedRiskTraceManifestError(
+                f"{key} must not depend on worktree-local output: {text}"
+            )
         blockers.append(f"{key} must use a durable URI scheme {_DURABLE_URI_PREFIXES}: {text}")
         return
     if _is_placeholder(text):

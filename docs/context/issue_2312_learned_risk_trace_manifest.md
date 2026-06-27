@@ -9,8 +9,9 @@ Predecessor preflight: [`issue_2273_learned_risk_trace_preflight.md`](issue_2273
 
 This change adds the **durable trace manifest + baseline-artifact-URI contract** and a
 **fail-closed validator** that #1472 learned-risk training can call before it runs. It does
-**not** materialize traces, copy external data, run training, or submit SLURM. The trace bytes are
-produced by the #1472 / #2441 SLURM runs; the manifest and validator are buildable now.
+**not** materialize traces, copy external data, run training, or submit SLURM (Simple Linux Utility
+for Resource Management) jobs. The trace bytes are produced by the #1472 / #2441 SLURM runs; the
+manifest and validator are buildable now.
 
 This closes the `Training trace manifest -> missing` gap recorded in the #2273 preflight: there is
 now a tracked manifest and a mechanical readiness check, rather than only a launch packet plus a

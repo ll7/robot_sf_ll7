@@ -1,0 +1,202 @@
+"""Tests for the crossing-conflict predictive retraining launch preflight."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+import yaml
+
+from robot_sf.training.predictive_retrain_preflight import (
+    PredictiveRetrainPreflightError,
+    validate_retrain_preflight,
+)
+from scripts.validation.validate_predictive_retrain_preflight import main as validate_cli_main
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REAL_CONFIG = (
+    _REPO_ROOT
+    / "configs"
+    / "training"
+    / "predictive"
+    / "predictive_crossing_conflict_weighted_issue_3254.yaml"
+)
+
+
+def _base_config(tmp_path: Path) -> dict[str, object]:
+    """Build a minimal, internally consistent pipeline config in ``tmp_path``.
+
+    Referenced data prerequisites are created as files so the preflight's
+    existence checks pass; the config dir is ``tmp_path``.
+    """
+    (tmp_path / "scenarios.yaml").write_text("- name: a\n", encoding="utf-8")
+    (tmp_path / "hard_seeds.yaml").write_text("a: [1, 2]\n", encoding="utf-8")
+    (tmp_path / "planner_grid.yaml").write_text("variants: []\n", encoding="utf-8")
+    (tmp_path / "weighting.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "weighting": {
+                    "rule": "repeat_hardcase_rows",
+                    "hardcase_family": "crossing_conflict",
+                    "hardcase_repeat": 8,
+                    "shuffle_seed": 3214,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "model_family": "predictive_ego_v1",
+        "experiment": {"run_id": "demo_crossing_conflict"},
+        "output": {"root": "output/tmp/predictive_planner/pipeline"},
+        "scenarios": {
+            "scenario_matrix": "scenarios.yaml",
+            "hard_seed_manifest": "hard_seeds.yaml",
+            "planner_grid": "planner_grid.yaml",
+        },
+        "base_collection": {"ego_conditioning": True},
+        "hardcase_collection": {"ego_conditioning": True},
+        "mixing": {"weighting_spec": "weighting.yaml"},
+        "training": {
+            "model_id": "demo_crossing_conflict_xl_ego",
+            "epochs": 400,
+            "max_val_ade": 1.0,
+            "max_val_fde": 1.8,
+        },
+        "evaluation": {"workers": 1, "horizon": 120, "dt": 0.1},
+    }
+
+
+def _write_config(tmp_path: Path, config: dict[str, object]) -> Path:
+    path = tmp_path / "pipeline.yaml"
+    path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def test_real_crossing_conflict_config_passes() -> None:
+    """The committed #3254 launch config validates against the repo tree."""
+    report = validate_retrain_preflight(_REAL_CONFIG, repo_root=_REPO_ROOT)
+    assert report["status"] == "valid"
+    assert report["run_id"] == "predictive_crossing_conflict_weighted_issue_3254"
+    assert report["feature_compatibility"]["ego_conditioning"] is True
+    assert report["mixing"]["weighting_rule"] == "repeat_hardcase_rows"
+    assert report["mixing"]["hardcase_family"] == "crossing_conflict"
+
+
+def test_minimal_config_passes(tmp_path: Path) -> None:
+    """A complete synthetic config with present prerequisites validates."""
+    path = _write_config(tmp_path, _base_config(tmp_path))
+    report = validate_retrain_preflight(path, repo_root=tmp_path)
+    assert report["status"] == "valid"
+    assert report["output_root"] == "output/tmp/predictive_planner/pipeline"
+
+
+def test_missing_scenario_reference_fails(tmp_path: Path) -> None:
+    """A non-existent data prerequisite is rejected."""
+    config = _base_config(tmp_path)
+    config["scenarios"]["hard_seed_manifest"] = "does_not_exist.yaml"  # type: ignore[index]
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="hard_seed_manifest does not exist"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_ego_conditioning_mismatch_fails(tmp_path: Path) -> None:
+    """Mismatched base/hard-case ego conditioning breaks the feature-width contract."""
+    config = _base_config(tmp_path)
+    config["hardcase_collection"] = {"ego_conditioning": False}
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="ego_conditioning"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_model_family_mismatch_fails(tmp_path: Path) -> None:
+    """Mismatched collection model families are rejected as a lineage hazard."""
+    config = _base_config(tmp_path)
+    config["hardcase_collection"] = {"ego_conditioning": True, "model_family": "other_family"}
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="model families must match"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_unsupported_weighting_rule_fails(tmp_path: Path) -> None:
+    """A weighting rule the dataset builder would reject fails closed here too."""
+    config = _base_config(tmp_path)
+    (tmp_path / "weighting.yaml").write_text(
+        yaml.safe_dump(
+            {"weighting": {"rule": "made_up_rule", "hardcase_family": "x", "hardcase_repeat": 2}}
+        ),
+        encoding="utf-8",
+    )
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="unsupported weighting rule"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_missing_trajectory_gate_fails(tmp_path: Path) -> None:
+    """The trajectory gate (val_ade/val_fde) must stay present and positive."""
+    config = _base_config(tmp_path)
+    del config["training"]["max_val_fde"]  # type: ignore[attr-defined]
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="max_val_fde"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_missing_evaluation_block_fails(tmp_path: Path) -> None:
+    """A config without an evaluation block is rejected."""
+    config = _base_config(tmp_path)
+    del config["evaluation"]
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="evaluation must be a mapping"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_missing_output_root_fails(tmp_path: Path) -> None:
+    """An empty output root is rejected (output discipline)."""
+    config = _base_config(tmp_path)
+    config["output"] = {"root": ""}
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="root must be a non-empty string"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_aggregates_multiple_errors(tmp_path: Path) -> None:
+    """All independent failures surface in one error message."""
+    config = _base_config(tmp_path)
+    config["experiment"] = {}
+    config["output"] = {"root": ""}
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError) as exc_info:
+        validate_retrain_preflight(path, repo_root=tmp_path)
+    message = str(exc_info.value)
+    assert "run_id must be a non-empty string" in message
+    assert "root must be a non-empty string" in message
+
+
+def test_cli_returns_zero_on_valid_real_config(capsys: pytest.CaptureFixture[str]) -> None:
+    """CLI exits 0 and prints a report for the committed config."""
+    code = validate_cli_main(
+        ["--config", str(_REAL_CONFIG), "--repo-root", str(_REPO_ROOT), "--json"]
+    )
+    assert code == 0
+    payload = capsys.readouterr().out
+    assert '"status": "valid"' in payload
+
+
+def test_cli_returns_two_on_invalid_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """CLI exits 2 and emits an invalid report for a broken config."""
+    config = _base_config(tmp_path)
+    config["scenarios"]["scenario_matrix"] = "missing.yaml"  # type: ignore[index]
+    path = _write_config(tmp_path, config)
+    code = validate_cli_main(["--config", str(path), "--repo-root", str(tmp_path), "--json"])
+    assert code == 2
+    assert '"status": "invalid"' in capsys.readouterr().out
+
+
+def test_config_must_be_mapping(tmp_path: Path) -> None:
+    """A non-mapping YAML document is rejected."""
+    path = tmp_path / "pipeline.yaml"
+    path.write_text("- just\n- a\n- list\n", encoding="utf-8")
+    with pytest.raises(PredictiveRetrainPreflightError, match="config must be a YAML mapping"):
+        validate_retrain_preflight(path, repo_root=tmp_path)

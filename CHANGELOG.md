@@ -23,6 +23,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does **not** collect traces, calibrate any envelope value, copy private data, run a campaign, or
   edit any paper/dissertation claim.
 
+* Added a **diagnostic readiness/preflight checker for AMV actuation-envelope calibration inputs**
+  (#1559). New module `robot_sf/benchmark/amv_calibration_readiness.py` exposes
+  `assess_amv_calibration_readiness` / `assess_amv_calibration_readiness_from_config`, which inspect a
+  candidate calibrated-actuation profile (e.g. the
+  `configs/benchmarks/issue_1586_calibrated_actuation_profile_skeleton_v0.yaml` skeleton) and report
+  `ready` vs `blocked`, **fail-closed**. It closes a real gap: the existing
+  `synthetic_actuation.validate_actuation_profile_claim_boundary` checks only that provenance fields
+  are *present and non-empty*, so the placeholder skeleton (`source_id: "pending-#1585"`,
+  `measurement_date: "pending"`, …) passes structural validation while remaining unfit for use. The
+  readiness checker additionally flags placeholder/pending provenance, missing fields, tracking-issue
+  `source_uri`s, synthetic-vs-calibrated conflation, and the proxy-vs-hardware source distinction. CLI
+  `scripts/benchmark/check_amv_calibration_readiness.py` prints a JSON report and exits non-zero when
+  blocked. **Claim boundary:** paper-facing AMV actuation use stays **blocked** — `paper_facing_allowed`
+  is True only for a hardware/official-spec source class (a real trace #2000 or official spec), never
+  for the accepted #1585 proxy. This change does **not** calibrate from data, tune envelope values, or
+  run any campaign.
 * Added a **durable learned-risk training trace manifest contract and fail-closed validator**
   (#2312, parent #1472). New module `robot_sf/training/learned_risk_trace_manifest.py` exposes
   `validate_trace_manifest`, which checks a `learned-risk-trace-manifest.v1` YAML (durable baseline
@@ -39,7 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs). Shared checksum logic was promoted to `sha256_file()` in
   `robot_sf/training/learned_risk_launch_packet.py`. See
   `docs/context/issue_2312_learned_risk_trace_manifest.md`.
-
 * Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
   The local-artifact preflight blocklist
   (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`

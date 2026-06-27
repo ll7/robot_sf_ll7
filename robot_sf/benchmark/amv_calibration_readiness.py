@@ -24,6 +24,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
@@ -107,8 +108,12 @@ def _source_uri_is_tracking_issue(provenance: Mapping[str, Any]) -> bool:
     source_uri = provenance.get("source_uri")
     if not isinstance(source_uri, str):
         return False
-    lowered = source_uri.strip().lower()
-    return "github.com" in lowered and "/issues/" in lowered
+    parsed = urlparse(source_uri.strip().lower())
+    # Anchor the host check to the parsed netloc (stripping any userinfo/port) rather than a
+    # substring scan, so a path like ``https://evil.example/github.com/issues/`` is not matched.
+    host = parsed.netloc.rsplit("@", 1)[-1].split(":", 1)[0]
+    is_github = host == "github.com" or host.endswith(".github.com")
+    return is_github and "/issues/" in parsed.path
 
 
 def _classify_source(provenance: Mapping[str, Any]) -> str:

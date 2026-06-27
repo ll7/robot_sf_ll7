@@ -130,6 +130,15 @@ def test_source_uri_tracking_issue_is_blocked() -> None:
     assert any("tracking issue" in reason for reason in readiness.blocking_reasons)
 
 
+def test_source_uri_host_is_parsed_not_substring_matched() -> None:
+    """A non-GitHub host with 'github.com' in its path is not treated as a tracking issue."""
+    provenance = _real_proxy_provenance()
+    provenance["source_uri"] = "https://example.com/github.com/issues/1585.pdf"
+    readiness = assess_amv_calibration_readiness(_calibrated_profile(provenance=provenance))
+    assert readiness.status == "ready"
+    assert not any("tracking issue" in reason for reason in readiness.blocking_reasons)
+
+
 @pytest.mark.parametrize("bad_input", [None, "not-a-mapping", 42, []])
 def test_non_mapping_input_is_blocked(bad_input) -> None:
     """Any non-mapping profile fails closed instead of raising."""

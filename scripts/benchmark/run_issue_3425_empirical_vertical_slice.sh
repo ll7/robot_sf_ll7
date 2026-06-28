@@ -17,7 +17,7 @@ cd "$REPO_ROOT"
 
 CAMPAIGN_CONFIG="${CAMPAIGN_CONFIG:-configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml}"
 RESEARCH_MANIFEST="${RESEARCH_MANIFEST:-configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml}"
-CAMPAIGN_ID="${CAMPAIGN_ID:-issue3425_empirical_vertical_slice}"
+CAMPAIGN_ID="${CAMPAIGN_ID:-issue_3425_empirical_vertical_slice}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-output/benchmarks/issue_3425_empirical_vertical_slice_smoke}"
 PACKET_DIR="${PACKET_DIR:-output/research_campaign_packets/issue_3425_empirical_vertical_slice}"
 

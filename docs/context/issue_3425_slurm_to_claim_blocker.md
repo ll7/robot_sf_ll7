@@ -40,7 +40,7 @@ Run the bounded empirical vertical-slice packet on a SLURM-capable host/account 
 repository submission policy. The public packet is:
 
 ```bash
-scripts/benchmark/run_issue3425_empirical_vertical_slice.sh
+scripts/benchmark/run_issue_3425_empirical_vertical_slice.sh
 ```
 
 By default the script only generates the research campaign packet and camera-ready preflight
@@ -72,13 +72,13 @@ durable pointer status, compact summary path, and the final decision (`promote`,
 This slice must not promote planner rankings or paper-facing claims until the result is classified
 with open prerequisites visible:
 
-- #3724: collision and near-miss semantics freeze is still represented by open PR #3775 at the time
-  this packet was prepared.
-- #3482: `EpisodeEventLedger.v1` and comparator tooling are merged, but the durable frozen-trace
-  backfill/application remains open.
-- #3723 and #3699: Social Navigation Quality Index (SNQI) weights and normalization semantics remain
-  decision-required.
-- #3725: classic density-tier parameterization remains open; this packet avoids density-tier
+- Issue #3724: collision and near-miss semantics freeze is still represented by open PR #3775 at
+  the time this packet was prepared.
+- Issue #3482: `EpisodeEventLedger.v1` and comparator tooling are merged, but the durable
+  frozen-trace backfill/application remains open.
+- Issues #3723 and #3699: Social Navigation Quality Index (SNQI) weights and normalization
+  semantics remain decision-required.
+- Issue #3725: classic density-tier parameterization remains open; this packet avoids density-tier
   conclusions rather than resolving it.
 
 Treat any completed run as `smoke` evidence at most until these gates are resolved or explicitly

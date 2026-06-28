@@ -101,11 +101,11 @@ outputs:
   local_root: output/benchmarks/issue_3425_empirical_vertical_slice_smoke
   disposable: true
   required_paths:
-    - issue3425_empirical_vertical_slice/preflight/validate_config.json
-    - issue3425_empirical_vertical_slice/preflight/preview_scenarios.json
-    - issue3425_empirical_vertical_slice/campaign_manifest.json
-    - issue3425_empirical_vertical_slice/reports/campaign_table.csv
-    - issue3425_empirical_vertical_slice/reports/campaign_summary.json
+    - issue_3425_empirical_vertical_slice/preflight/validate_config.json
+    - issue_3425_empirical_vertical_slice/preflight/preview_scenarios.json
+    - issue_3425_empirical_vertical_slice/campaign_manifest.json
+    - issue_3425_empirical_vertical_slice/reports/campaign_table.csv
+    - issue_3425_empirical_vertical_slice/reports/campaign_summary.json
 
 durable_evidence:
   plan:
@@ -128,7 +128,7 @@ durable_evidence:
 validation:
   commands:
     - uv run python scripts/validation/run_research_campaign_manifest.py configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml --output-dir output/research_campaign_packets/issue_3425_empirical_vertical_slice
-    - uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml --campaign-id issue3425_empirical_vertical_slice --output-root output/benchmarks/issue_3425_empirical_vertical_slice_smoke --mode preflight
+    - uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml --campaign-id issue_3425_empirical_vertical_slice --output-root output/benchmarks/issue_3425_empirical_vertical_slice_smoke --mode preflight
     - uv run pytest tests/benchmark/test_issue_3425_empirical_vertical_slice.py -q
   dry_run: required before private submission
   expected_result: >

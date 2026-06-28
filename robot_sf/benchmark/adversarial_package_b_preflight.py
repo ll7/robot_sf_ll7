@@ -147,11 +147,11 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     warnings: list[str] = []
     checks: dict[str, bool] = {}
 
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"Manifest file not found: {_repo_relative(manifest_path, root)}")
+
     try:
         payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        payload = None
-        blockers.append(f"manifest missing: {_repo_relative(manifest_path, root)}")
     except yaml.YAMLError as exc:
         payload = None
         blockers.append(f"manifest YAML could not be parsed: {exc}")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.adversarial_package_b_preflight import preflight_package_b_manifest
@@ -102,6 +103,14 @@ def test_preflight_fails_closed_for_missing_budget_seed_and_provenance(tmp_path:
     assert any("budget_grid" in blocker for blocker in result.blockers)
     assert any("repeated_seeds" in blocker for blocker in result.blockers)
     assert any("paper_facing_success_claims" in blocker for blocker in result.blockers)
+
+
+def test_preflight_raises_filenotfound_for_missing_manifest(tmp_path: Path) -> None:
+    """Missing manifest path raises before producing cascading blockers."""
+    manifest = tmp_path / "configs/adversarial/missing_package_b_manifest.yaml"
+
+    with pytest.raises(FileNotFoundError, match="Manifest file not found"):
+        preflight_package_b_manifest(manifest, repo_root=tmp_path)
 
 
 def test_preflight_blocks_missing_inputs_and_output_paths(tmp_path: Path) -> None:

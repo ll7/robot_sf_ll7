@@ -377,6 +377,43 @@ def test_resolve_campaign_roots_discovers_slurm_output_container(tmp_path: Path)
     assert ignored not in roots
 
 
+def test_resolve_campaign_roots_filters_campaign_id_on_root_name(tmp_path: Path) -> None:
+    """Campaign-id filters should not match unrelated parent directory names."""
+
+    container = tmp_path / "issue1554_parent_only"
+    _campaign(
+        container / "s20_h500",
+        seed_count=20,
+        goal_snqi=0.75,
+        orca_snqi=0.45,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=10,
+    )
+
+    with pytest.raises(FileNotFoundError, match="No seed-sufficiency campaign reports"):
+        resolve_campaign_roots(campaign_output_roots=[container], campaign_ids=["issue1554"])
+
+
+def test_resolve_campaign_roots_deduplicates_equivalent_paths(tmp_path: Path) -> None:
+    """Direct roots with different spellings should resolve to one campaign."""
+
+    campaign = _campaign(
+        tmp_path / "issue1554_s20_h500",
+        seed_count=20,
+        goal_snqi=0.75,
+        orca_snqi=0.45,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=10,
+    )
+    duplicate = campaign / ".." / campaign.name
+
+    roots = resolve_campaign_roots(campaign_roots=[campaign, duplicate])
+
+    assert roots == [campaign]
+
+
 def test_main_accepts_campaign_output_root(tmp_path: Path) -> None:
     """CLI feeds discovered S20/H500 roots through existing analysis path."""
 

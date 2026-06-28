@@ -166,7 +166,7 @@ def _discover_campaign_roots(output_root: Path, *, campaign_ids: list[str]) -> l
         candidates = [
             root
             for root in candidates
-            if any(campaign_id in str(root) for campaign_id in campaign_ids)
+            if any(campaign_id in root.name for campaign_id in campaign_ids)
         ]
     if not candidates:
         id_note = f" matching campaign id(s) {campaign_ids}" if campaign_ids else ""
@@ -186,12 +186,12 @@ def _has_seed_reports(root: Path) -> bool:
 
 
 def _dedupe_paths(paths: list[Path]) -> list[Path]:
-    """Deduplicate paths while preserving deterministic order."""
+    """Deduplicate equivalent paths while preserving deterministic order."""
 
-    seen: set[str] = set()
+    seen: set[Path] = set()
     unique: list[Path] = []
     for path in sorted(paths, key=str):
-        key = str(path)
+        key = path.resolve()
         if key in seen:
             continue
         seen.add(key)
@@ -860,14 +860,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--campaign-root",
         type=Path,
         action="append",
-        default=[],
+        default=None,
         help="Campaign root containing reports/seed_* artifacts. Repeat for multiple schedules.",
     )
     parser.add_argument(
         "--campaign-output-root",
         type=Path,
         action="append",
-        default=[],
+        default=None,
         help=(
             "Slurm/output container to scan for campaign roots with reports/"
             "seed_variability_by_scenario.json. Repeatable."
@@ -876,7 +876,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--campaign-id",
         action="append",
-        default=[],
+        default=None,
         help="Optional substring filter for campaign roots discovered under --campaign-output-root.",
     )
     parser.add_argument("--output-dir", type=Path, required=True, help="Output report directory.")

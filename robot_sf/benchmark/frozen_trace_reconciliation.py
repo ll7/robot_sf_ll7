@@ -18,6 +18,24 @@ FROZEN_TRACE_RECONCILIATION_SCHEMA = "frozen_trace_event_reconciliation.v1"
 _EVENT_BLOCKS = ("exact_events", "surrogate_events")
 
 
+def _coerce_identifier(value: Any, *, default: str = "unknown") -> str:
+    """Return a stable string identifier while preserving valid falsy values."""
+
+    if value is None:
+        return default
+    text = str(value)
+    return text if text else default
+
+
+def _first_present_identifier(*values: Any, default: str = "unknown") -> str:
+    """Return the first non-``None`` identifier candidate as a stable string."""
+
+    for value in values:
+        if value is not None:
+            return _coerce_identifier(value, default=default)
+    return default
+
+
 def _ledger_from_row(row: Mapping[str, Any]) -> Mapping[str, Any]:
     """Return the existing event ledger carried by a frozen row."""
 
@@ -40,15 +58,14 @@ def _episode_key(row: Mapping[str, Any], ledger: Mapping[str, Any]) -> str:
         Pipe-delimited episode identity string.
     """
 
-    scenario_id = ledger.get("scenario_id") or row.get("scenario_id") or "unknown"
-    concrete_case_id = (
-        ledger.get("concrete_case_id")
-        or row.get("concrete_case_id")
-        or row.get("episode_id")
-        or "unknown"
+    scenario_id = _first_present_identifier(ledger.get("scenario_id"), row.get("scenario_id"))
+    concrete_case_id = _first_present_identifier(
+        ledger.get("concrete_case_id"), row.get("concrete_case_id"), row.get("episode_id")
     )
-    seed = ledger.get("seed") if ledger.get("seed") is not None else row.get("seed", "unknown")
-    planner = ledger.get("planner") or row.get("planner") or row.get("algo") or "unknown"
+    seed = _coerce_identifier(
+        ledger.get("seed") if ledger.get("seed") is not None else row.get("seed")
+    )
+    planner = _first_present_identifier(ledger.get("planner"), row.get("planner"), row.get("algo"))
     return f"{scenario_id}|{concrete_case_id}|{seed}|{planner}"
 
 

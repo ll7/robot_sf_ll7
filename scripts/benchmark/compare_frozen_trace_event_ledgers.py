@@ -54,7 +54,10 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
                 continue
-            payload = json.loads(line)
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as err:
+                raise ValueError(f"{path}:{line_number}: invalid JSON: {err}") from err
             if not isinstance(payload, dict):
                 raise ValueError(f"{path}:{line_number}: expected JSON object")
             rows.append(payload)
@@ -66,7 +69,10 @@ def _read_artifact_manifest(path: Path | None) -> list[dict[str, Any]]:
 
     if path is None:
         return []
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as err:
+        raise ValueError(f"invalid JSON in artifact manifest {path}: {err}") from err
     artifacts = payload.get("artifacts") if isinstance(payload, dict) else payload
     if not isinstance(artifacts, list):
         raise ValueError("artifact manifest must be a JSON list or object with an artifacts list")

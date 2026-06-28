@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.frozen_trace_reconciliation import (
     FROZEN_TRACE_RECONCILIATION_SCHEMA,
     build_frozen_trace_reconciliation_report,
@@ -211,6 +213,41 @@ def test_added_and_removed_rows_mark_consuming_artifacts_affected() -> None:
             "affected_removed_row_count": 1,
         }
     ]
+
+
+def test_episode_keys_preserve_valid_falsy_identifiers() -> None:
+    """Episode pairing keys should preserve valid falsy identifiers like zero."""
+
+    row = _ledger_row("unused")
+    ledger = row["event_ledger"]
+    ledger["scenario_id"] = 0
+    ledger["concrete_case_id"] = 0
+    ledger["seed"] = 0
+    ledger["planner"] = 0
+
+    report = build_frozen_trace_reconciliation_report([row], [row])
+
+    assert report["unchanged_rows"] == [{"episode_key": "0|0|0|0"}]
+
+
+def test_cli_jsonl_parse_error_names_path_and_line(tmp_path: Path) -> None:
+    """Malformed JSONL input errors should identify the path and line."""
+
+    path = tmp_path / "bad.jsonl"
+    path.write_text('{"ok": true}\n{"broken":\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"bad\.jsonl:2: invalid JSON"):
+        _MODULE._read_jsonl(path)
+
+
+def test_cli_manifest_parse_error_names_path(tmp_path: Path) -> None:
+    """Malformed artifact manifests should identify the path."""
+
+    path = tmp_path / "bad_manifest.json"
+    path.write_text('{"artifacts": [', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"invalid JSON in artifact manifest .*bad_manifest\.json"):
+        _MODULE._read_artifact_manifest(path)
 
 
 def test_cli_writes_frozen_reconciliation_report(tmp_path: Path) -> None:

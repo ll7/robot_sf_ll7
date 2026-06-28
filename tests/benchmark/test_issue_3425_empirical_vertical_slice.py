@@ -43,6 +43,11 @@ def test_issue_3425_campaign_config_pins_small_baseline_safe_slice() -> None:
         ("orca", "orca", "baseline-safe"),
     ]
     assert all(planner.planner_group == "core" for planner in cfg.planners)
+    assert {planner.key: planner.socnav_missing_prereq_policy for planner in cfg.planners} == {
+        "goal": "fail-fast",
+        "social_force": "fail-fast",
+        "orca": "fail-fast",
+    }
 
 
 def test_issue_3425_campaign_resolves_3x3x3_matrix() -> None:

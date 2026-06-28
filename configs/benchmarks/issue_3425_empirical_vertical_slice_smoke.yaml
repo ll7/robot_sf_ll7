@@ -70,4 +70,4 @@ planners:
     algo: orca
     planner_group: core
     benchmark_profile: baseline-safe
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast

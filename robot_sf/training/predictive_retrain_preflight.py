@@ -36,6 +36,12 @@ _REQUIRED_SCENARIO_REFERENCES = (
 
 # Evaluation keys the pipeline reads when wiring final eval / hard-seed campaign.
 _REQUIRED_EVALUATION_KEYS = ("workers", "horizon", "dt")
+_EXPECTED_BASELINE_MODEL_ID = "predictive_proxy_selected_v1"
+_EXPECTED_PROVENANCE_KEYS = (
+    "checkpoint_path",
+    "checkpoint_provenance_path",
+    "hard_seed_evaluation_summary",
+)
 
 
 class PredictiveRetrainPreflightError(ValueError):
@@ -86,7 +92,8 @@ def validate_retrain_preflight(
     feature_contract = _validate_feature_compatibility(config, errors)
     mixing = _validate_mixing(config, config_dir, errors)
     training = _validate_training(config, errors)
-    evaluation = _validate_evaluation(config, errors)
+    evaluation = _validate_evaluation(config, config_dir, root, errors)
+    provenance = _validate_provenance(config, root, errors)
     output_root = _validate_output(config, errors)
 
     if errors:
@@ -105,6 +112,7 @@ def validate_retrain_preflight(
         "mixing": mixing,
         "training": training,
         "evaluation": evaluation,
+        "provenance": provenance,
         "output_root": output_root,
     }
 
@@ -284,14 +292,118 @@ def _validate_training(config: dict[str, Any], errors: list[str]) -> dict[str, A
     return {"model_id": model_id}
 
 
-def _validate_evaluation(config: dict[str, Any], errors: list[str]) -> dict[str, Any] | None:
+def _validate_evaluation(
+    config: dict[str, Any],
+    config_dir: Path,
+    repo_root: Path,
+    errors: list[str],
+) -> dict[str, Any] | None:
     evaluation = _require_mapping(config, "evaluation", errors)
     if evaluation is None:
         return None
     for key in _REQUIRED_EVALUATION_KEYS:
         if key not in evaluation:
-            errors.append(f"evaluation.{key} is required")
-    return {"keys": sorted(k for k in _REQUIRED_EVALUATION_KEYS if k in evaluation)}
+            errors.append(f"evaluation.{key} required")
+
+    baseline_model_id = _require_non_empty_string(evaluation, "baseline_model_id", errors)
+    if baseline_model_id and baseline_model_id != _EXPECTED_BASELINE_MODEL_ID:
+        errors.append(
+            "evaluation.baseline_model_id must be "
+            f"{_EXPECTED_BASELINE_MODEL_ID!r} for issue #3254 lineage"
+        )
+
+    algo_config_path = _validate_evaluation_algo_config(
+        evaluation=evaluation,
+        config_dir=config_dir,
+        expected_model_id=baseline_model_id,
+        errors=errors,
+    )
+    _validate_registry_model_id(repo_root, baseline_model_id, errors)
+
+    return {
+        "keys": sorted(k for k in _REQUIRED_EVALUATION_KEYS if k in evaluation),
+        "baseline_model_id": baseline_model_id,
+        "baseline_algo_config": str(algo_config_path) if algo_config_path is not None else None,
+    }
+
+
+def _validate_evaluation_algo_config(
+    *,
+    evaluation: dict[str, Any],
+    config_dir: Path,
+    expected_model_id: Any,
+    errors: list[str],
+) -> Path | None:
+    value = evaluation.get("baseline_algo_config")
+    if not isinstance(value, str) or not value.strip():
+        errors.append("evaluation.baseline_algo_config must be non-empty path string")
+        return None
+    path = _resolve_path(value, config_dir)
+    if not path.is_file():
+        errors.append(f"evaluation.baseline_algo_config does not exist: {value}")
+        return None
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        errors.append(f"evaluation.baseline_algo_config must be YAML mapping: {value}")
+        return path
+    config_model_id = payload.get("predictive_model_id")
+    if expected_model_id and config_model_id != expected_model_id:
+        errors.append(
+            "evaluation.baseline_algo_config predictive_model_id must match "
+            f"evaluation.baseline_model_id: {config_model_id!r} != {expected_model_id!r}"
+        )
+    return path
+
+
+def _validate_registry_model_id(repo_root: Path, model_id: Any, errors: list[str]) -> None:
+    if not model_id:
+        return
+    registry_path = repo_root / "model" / "registry.yaml"
+    if not registry_path.is_file():
+        errors.append(f"model registry missing for evaluation baseline: {registry_path}")
+        return
+    payload = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    models = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(models, list):
+        errors.append(f"model registry missing models list: {registry_path}")
+        return
+    if not any(isinstance(model, dict) and model.get("model_id") == model_id for model in models):
+        errors.append(f"evaluation.baseline_model_id not found in model registry: {model_id}")
+
+
+def _validate_provenance(
+    config: dict[str, Any],
+    repo_root: Path,
+    errors: list[str],
+) -> dict[str, Any] | None:
+    provenance = _require_mapping(config, "provenance", errors)
+    if provenance is None:
+        return None
+
+    resolved: dict[str, str] = {}
+    missing_artifacts: list[str] = []
+    for key in _EXPECTED_PROVENANCE_KEYS:
+        value = provenance.get(key)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"provenance.{key} must be non-empty path string")
+            continue
+        path = _resolve_path(value, repo_root)
+        resolved[key] = str(path)
+        if not path.exists():
+            missing_artifacts.append(str(path))
+
+    status = provenance.get("status")
+    if status != "expected_missing_until_training":
+        errors.append(
+            "provenance.status must be 'expected_missing_until_training' for "
+            "prepare-only issue #3254 preflight"
+        )
+
+    return {
+        "status": status,
+        "paths": resolved,
+        "missing_artifacts": missing_artifacts,
+    }
 
 
 def _validate_output(config: dict[str, Any], errors: list[str]) -> str | None:

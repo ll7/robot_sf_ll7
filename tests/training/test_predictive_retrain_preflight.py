@@ -32,6 +32,16 @@ def _base_config(tmp_path: Path) -> dict[str, object]:
     (tmp_path / "scenarios.yaml").write_text("- name: a\n", encoding="utf-8")
     (tmp_path / "hard_seeds.yaml").write_text("a: [1, 2]\n", encoding="utf-8")
     (tmp_path / "planner_grid.yaml").write_text("variants: []\n", encoding="utf-8")
+    (tmp_path / "algo.yaml").write_text(
+        "predictive_model_id: predictive_proxy_selected_v1\n",
+        encoding="utf-8",
+    )
+    registry_dir = tmp_path / "model"
+    registry_dir.mkdir()
+    (registry_dir / "registry.yaml").write_text(
+        yaml.safe_dump({"models": [{"model_id": "predictive_proxy_selected_v1"}]}),
+        encoding="utf-8",
+    )
     (tmp_path / "weighting.yaml").write_text(
         yaml.safe_dump(
             {
@@ -49,6 +59,12 @@ def _base_config(tmp_path: Path) -> dict[str, object]:
         "model_family": "predictive_ego_v1",
         "experiment": {"run_id": "demo_crossing_conflict"},
         "output": {"root": "output/tmp/predictive_planner/pipeline"},
+        "provenance": {
+            "status": "expected_missing_until_training",
+            "checkpoint_path": "output/tmp/predictive_planner/pipeline/training/demo/predictive_model.pt",
+            "checkpoint_provenance_path": "output/tmp/predictive_planner/pipeline/training/demo/checkpoint_provenance.json",
+            "hard_seed_evaluation_summary": "output/tmp/predictive_planner/pipeline/evaluation/demo_hard_seeds/summary.json",
+        },
         "scenarios": {
             "scenario_matrix": "scenarios.yaml",
             "hard_seed_manifest": "hard_seeds.yaml",
@@ -63,7 +79,13 @@ def _base_config(tmp_path: Path) -> dict[str, object]:
             "max_val_ade": 1.0,
             "max_val_fde": 1.8,
         },
-        "evaluation": {"workers": 1, "horizon": 120, "dt": 0.1},
+        "evaluation": {
+            "baseline_model_id": "predictive_proxy_selected_v1",
+            "baseline_algo_config": "algo.yaml",
+            "workers": 1,
+            "horizon": 120,
+            "dt": 0.1,
+        },
     }
 
 
@@ -81,6 +103,9 @@ def test_real_crossing_conflict_config_passes() -> None:
     assert report["feature_compatibility"]["ego_conditioning"] is True
     assert report["mixing"]["weighting_rule"] == "repeat_hardcase_rows"
     assert report["mixing"]["hardcase_family"] == "crossing_conflict"
+    assert report["evaluation"]["baseline_model_id"] == "predictive_proxy_selected_v1"
+    assert report["provenance"]["status"] == "expected_missing_until_training"
+    assert len(report["provenance"]["missing_artifacts"]) == 3
 
 
 def test_minimal_config_passes(tmp_path: Path) -> None:
@@ -148,6 +173,101 @@ def test_missing_evaluation_block_fails(tmp_path: Path) -> None:
     path = _write_config(tmp_path, config)
     with pytest.raises(PredictiveRetrainPreflightError, match="evaluation must be a mapping"):
         validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_missing_baseline_algo_config_fails(tmp_path: Path) -> None:
+    """Evaluation must name an explicit algo config; no implicit fallback."""
+    config = _base_config(tmp_path)
+    config["evaluation"]["baseline_algo_config"] = "missing.yaml"  # type: ignore[index]
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="baseline_algo_config"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_baseline_algo_config_must_match_lineage(tmp_path: Path) -> None:
+    """Baseline algo config must point at the expected predictive v1 model."""
+    config = _base_config(tmp_path)
+    (tmp_path / "algo.yaml").write_text(
+        "predictive_model_id: predictive_proxy_selected_v2_full\n",
+        encoding="utf-8",
+    )
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="predictive_model_id"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_missing_provenance_block_fails(tmp_path: Path) -> None:
+    """Expected checkpoint/provenance paths are required even before training."""
+    config = _base_config(tmp_path)
+    del config["provenance"]
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="provenance must be a mapping"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_missing_required_evaluation_key_fails(tmp_path: Path) -> None:
+    """Evaluation block must include runner settings pipeline expects."""
+    config = _base_config(tmp_path)
+    del config["evaluation"]["horizon"]  # type: ignore[index]
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="evaluation.horizon required"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_baseline_model_id_must_be_issue_3254_lineage(tmp_path: Path) -> None:
+    """Baseline lineage is pinned to predictive_proxy_selected_v1."""
+    config = _base_config(tmp_path)
+    config["evaluation"]["baseline_model_id"] = "predictive_proxy_selected_v2_full"  # type: ignore[index]
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="baseline_model_id"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_baseline_algo_config_must_be_mapping(tmp_path: Path) -> None:
+    """Algo config path must load as a YAML mapping."""
+    config = _base_config(tmp_path)
+    (tmp_path / "algo.yaml").write_text("- not\n- mapping\n", encoding="utf-8")
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="YAML mapping"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_baseline_registry_must_have_models_list(tmp_path: Path) -> None:
+    """Registry has to expose a models list for baseline lineage lookup."""
+    config = _base_config(tmp_path)
+    (tmp_path / "model" / "registry.yaml").write_text("version: 1\n", encoding="utf-8")
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="models list"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_baseline_registry_must_contain_model_id(tmp_path: Path) -> None:
+    """Baseline model id must be present in the registry."""
+    config = _base_config(tmp_path)
+    (tmp_path / "model" / "registry.yaml").write_text(
+        yaml.safe_dump({"models": [{"model_id": "other"}]}),
+        encoding="utf-8",
+    )
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError, match="not found in model registry"):
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_provenance_fields_and_status_are_required(tmp_path: Path) -> None:
+    """Expected output artifacts are declared and labelled prepare-only."""
+    config = _base_config(tmp_path)
+    config["provenance"] = {
+        "status": "available",
+        "checkpoint_path": "",
+        "checkpoint_provenance_path": "prov.json",
+    }
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError) as exc_info:
+        validate_retrain_preflight(path, repo_root=tmp_path)
+    message = str(exc_info.value)
+    assert "provenance.checkpoint_path" in message
+    assert "provenance.hard_seed_evaluation_summary" in message
+    assert "expected_missing_until_training" in message
 
 
 def test_missing_output_root_fails(tmp_path: Path) -> None:

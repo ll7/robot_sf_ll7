@@ -1,0 +1,136 @@
+schema_version: research-campaign-manifest.v0.1
+campaign:
+  id: issue_3425_empirical_vertical_slice_smoke
+  parent_issue: 3425
+  purpose: >
+    Small seed-bounded baseline-safe planner comparison used to exercise the
+    SLURM-to-claim finalizer chain without promoting planner-ranking claims.
+  evidence_tier: smoke-readiness
+  claim_boundary: >
+    Launch/readiness packet only. A completed run may become smoke evidence
+    after the approved SLURM route records submission, finalizer, durable
+    pointer, reconciled bridge output, compact summary, and explicit claim
+    decision. It is not nominal benchmark or paper-facing evidence while metric
+    prerequisites #3724, #3482, #3723, #3699, and #3725 remain unresolved or
+    uncaveated.
+
+scenario_suite:
+  matrix_path: configs/scenarios/classic_interactions_francis2023.yaml
+  campaign_config: configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml
+  selection_policy: >
+    Use explicit Francis 2023 single-pedestrian scenarios, not classic
+    density-tier rows, so issue #3725 density-parameterization cleanup is not a
+    hidden prerequisite for this smoke route.
+  scenario_ids:
+    - francis2023_blind_corner
+    - francis2023_intersection_no_gesture
+    - francis2023_pedestrian_obstruction
+  suite_hash_policy: >
+    Submit from a clean public worktree at the PR merge commit or a newer
+    commit that preserves this config; record git SHA and config checksum in
+    the submission manifest.
+
+planners:
+  rows:
+    - planner_id: goal
+      adapter_mode: native
+      config_path: null
+      benchmark_profile: baseline-safe
+      expected_availability: available
+    - planner_id: social_force
+      adapter_mode: native
+      config_path: null
+      benchmark_profile: baseline-safe
+      expected_availability: available
+    - planner_id: orca
+      adapter_mode: adapter
+      config_path: null
+      benchmark_profile: baseline-safe
+      expected_availability: dependency-gated
+      caveat: Requires rvo2 availability on the execution host; otherwise the row must fail closed.
+
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seeds:
+    - 111
+    - 112
+    - 113
+  repeat_policy: one episode per scenario/planner/seed row
+
+metrics:
+  ids:
+    - success
+    - collisions
+    - near_misses
+    - min_clearance_m
+    - snqi
+  semantics_blockers:
+    - issue: 3724
+      reason: Collision and near-miss semantics are being frozen in PR #3775.
+    - issue: 3482
+      reason: Frozen-trace event-ledger backfill remains open for paper-facing reuse.
+    - issue: 3723
+      reason: Canonical Social Navigation Quality Index weight set is decision-required.
+    - issue: 3699
+      reason: Social Navigation Quality Index normalization semantics are decision-required.
+    - issue: 3725
+      reason: Classic density-tier semantics remain open; this slice avoids density-tier claims.
+
+row_status_policy:
+  allowed_values:
+    - successful_evidence
+    - diagnostic_only
+    - fallback
+    - degraded
+    - not_available
+    - failed
+    - blocked
+  success_values:
+    - successful_evidence
+  fail_closed_values:
+    - not_available
+    - failed
+    - blocked
+  caveat: >
+    Fallback, degraded, failed, blocked, and not-available rows stay visible in
+    the compact table and never count as successful evidence.
+
+outputs:
+  local_root: output/benchmarks/issue_3425_empirical_vertical_slice_smoke
+  disposable: true
+  required_paths:
+    - issue3425_empirical_vertical_slice/preflight/validate_config.json
+    - issue3425_empirical_vertical_slice/preflight/preview_scenarios.json
+    - issue3425_empirical_vertical_slice/campaign_manifest.json
+    - issue3425_empirical_vertical_slice/reports/campaign_table.csv
+    - issue3425_empirical_vertical_slice/reports/campaign_summary.json
+
+durable_evidence:
+  plan:
+    kind: tracked_context_evidence_plus_external_pointer
+    path: docs/context/evidence/issue_3425_empirical_vertical_slice/README.md
+    required_before_claim: true
+    local_output_boundary: >
+      Keep raw output under output/ until finalizer classification. Promote
+      only compact summary files, checksums, and durable artifact pointers. Do
+      not commit raw episode JSONL, videos, checkpoints, or cluster logs.
+  accepted_pointer_schemes:
+    - wandb
+    - s3
+    - gs
+    - https
+  finalizer_gate: >
+    Run scripts/validation/preflight_slurm_finalizer.py with the queue,
+    submission manifest, and finalizer manifest before interpreting results.
+
+validation:
+  commands:
+    - uv run python scripts/validation/run_research_campaign_manifest.py configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml --output-dir output/research_campaign_packets/issue_3425_empirical_vertical_slice
+    - uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml --campaign-id issue3425_empirical_vertical_slice --output-root output/benchmarks/issue_3425_empirical_vertical_slice_smoke --mode preflight
+    - uv run pytest tests/benchmark/test_issue_3425_empirical_vertical_slice.py -q
+  dry_run: required before private submission
+  expected_result: >
+    Manifest packet and camera-ready preflight load the 3 scenario x 3 planner x
+    3 seed smoke matrix without executing benchmark episodes locally.

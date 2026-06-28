@@ -36,21 +36,28 @@ from this machine would violate the issue contract.
 
 ## Smallest External Action
 
-Run the vertical slice from a SLURM-capable host/account that can satisfy the repository submission
-policy:
+Run the bounded empirical vertical-slice packet on a SLURM-capable host/account that can satisfy the
+repository submission policy. The public packet is:
 
 ```bash
-uv run python scripts/validation/run_research_campaign_manifest.py \
-  configs/benchmarks/research_campaign_manifest.example.yaml \
-  --output-dir output/research_campaign_packets/issue_3425_preflight
+scripts/benchmark/run_issue3425_empirical_vertical_slice.sh
 ```
 
-Then choose a tiny campaign whose expected runtime and artifact set are acceptable for cluster
-execution, submit through the approved wrapper or queue workflow, and run the existing finalizer and
-reconciliation tools:
+By default the script only generates the research campaign packet and camera-ready preflight
+artifacts. The approved private execution route should call it from a clean public worktree with
+`RUN_CAMPAIGN=1` after duplicate, queue, branch, commit, and local-machine submission checks pass.
+The public campaign inputs are:
+
+- `configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml`
+- `configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml`
+
+The slice intentionally uses three explicit Francis 2023 single-pedestrian scenarios, the `eval`
+seed set `[111, 112, 113]`, and baseline-safe planners `goal`, `social_force`, and `orca`. This
+avoids classic density-tier claims while issue #3725 remains open.
+
+After execution, run the existing finalizer and reconciliation tools:
 
 ```bash
-scripts/dev/sbatch_use_max_time.sh <public-safe-cluster-script.sl>
 uv run python scripts/tools/slurm_job_finalize.py <finalizer args>
 uv run python scripts/tools/reconcile_slurm_evidence.py <reconciliation args>
 ```
@@ -59,6 +66,23 @@ The public follow-up should record only public-safe fields: issue, campaign id, 
 launcher/config path, public partition/cluster class when allowed, job id, finalizer manifest path,
 durable pointer status, compact summary path, and the final decision (`promote`,
 `keep diagnostic`, `block`, or `stop`).
+
+## Metric And Claim Gate
+
+This slice must not promote planner rankings or paper-facing claims until the result is classified
+with open prerequisites visible:
+
+- #3724: collision and near-miss semantics freeze is still represented by open PR #3775 at the time
+  this packet was prepared.
+- #3482: `EpisodeEventLedger.v1` and comparator tooling are merged, but the durable frozen-trace
+  backfill/application remains open.
+- #3723 and #3699: Social Navigation Quality Index (SNQI) weights and normalization semantics remain
+  decision-required.
+- #3725: classic density-tier parameterization remains open; this packet avoids density-tier
+  conclusions rather than resolving it.
+
+Treat any completed run as `smoke` evidence at most until these gates are resolved or explicitly
+caveated in the final decision.
 
 ## Local Readiness Gate (shared-PC-safe)
 

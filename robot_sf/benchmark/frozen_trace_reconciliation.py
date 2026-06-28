@@ -36,6 +36,11 @@ def _first_present_identifier(*values: Any, default: str = "unknown") -> str:
     return default
 
 
+def _coerce_optional_field(value: Any, *, default: str = "unknown") -> str:
+    """Return a stable string while treating only ``None`` as missing."""
+    return str(value) if value is not None else default
+
+
 def _ledger_from_row(row: Mapping[str, Any]) -> Mapping[str, Any]:
     """Return the existing event ledger carried by a frozen row."""
 
@@ -217,8 +222,8 @@ def _affected_artifacts(
             status = "unchanged"
         statuses.append(
             {
-                "artifact_id": str(artifact.get("artifact_id", "unknown")),
-                "artifact_type": str(artifact.get("artifact_type", "unknown")),
+                "artifact_id": _coerce_optional_field(artifact.get("artifact_id")),
+                "artifact_type": _coerce_optional_field(artifact.get("artifact_type")),
                 "status": status,
                 "consumes_event_fields": sorted(consumed_fields),
                 "affected_event_fields": affected_fields,
@@ -243,8 +248,8 @@ def _affected_artifact_summary(
     total = 0
 
     for artifact in affected_artifacts:
-        artifact_type = str(artifact.get("artifact_type", "unknown"))
-        status = str(artifact.get("status", "unknown"))
+        artifact_type = _coerce_optional_field(artifact.get("artifact_type"))
+        status = _coerce_optional_field(artifact.get("status"))
         total += 1
         by_status[status] = by_status.get(status, 0) + 1
         type_counts = by_type.setdefault(artifact_type, {})

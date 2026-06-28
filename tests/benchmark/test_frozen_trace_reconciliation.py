@@ -232,6 +232,40 @@ def test_added_and_removed_rows_mark_consuming_artifacts_affected() -> None:
     }
 
 
+def test_artifact_summary_treats_none_as_missing_but_preserves_falsy_values() -> None:
+    """Artifact summary coercion preserves valid falsy values while handling missing fields."""
+
+    report = build_frozen_trace_reconciliation_report(
+        [_ledger_row("episode-1")],
+        [_ledger_row("episode-1", collision=True)],
+        artifact_manifest=[
+            {
+                "artifact_id": None,
+                "artifact_type": None,
+                "consumes_event_fields": ["exact_events.collision"],
+            },
+            {
+                "artifact_id": 0,
+                "artifact_type": 0,
+                "consumes_event_fields": ["exact_events.collision"],
+            },
+        ],
+    )
+
+    assert report["affected_artifacts"][0]["artifact_id"] == "unknown"
+    assert report["affected_artifacts"][0]["artifact_type"] == "unknown"
+    assert report["affected_artifacts"][1]["artifact_id"] == "0"
+    assert report["affected_artifacts"][1]["artifact_type"] == "0"
+    assert report["affected_artifact_summary"] == {
+        "total_artifacts": 2,
+        "by_type": {
+            "0": {"affected_reconciliation_required": 1},
+            "unknown": {"affected_reconciliation_required": 1},
+        },
+        "by_status": {"affected_reconciliation_required": 2},
+    }
+
+
 def test_episode_keys_preserve_valid_falsy_identifiers() -> None:
     """Episode pairing keys should preserve valid falsy identifiers like zero."""
 

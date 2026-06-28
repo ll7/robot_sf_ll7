@@ -6,7 +6,13 @@ import csv
 import json
 from typing import TYPE_CHECKING
 
-from scripts.tools.analyze_seed_sufficiency import analyze_seed_sufficiency, main
+import pytest
+
+from scripts.tools.analyze_seed_sufficiency import (
+    analyze_seed_sufficiency,
+    main,
+    resolve_campaign_roots,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -304,9 +310,11 @@ def test_headline_contract_s20_stable_and_rank_flip_labels(tmp_path: Path) -> No
     stable_contract = stable_payload["headline_rank_stability_contract"]
     flip_contract = flip_payload["headline_rank_stability_contract"]
     assert stable_contract["label"] == "stable"
+    assert stable_contract["claim_status"] == "paper_grade"
     assert stable_contract["promotion_allowed"] is True
     assert stable_contract["pairwise"][0]["rank_label"] == "stable"
     assert flip_contract["label"] == "rank_flip_detected"
+    assert flip_contract["claim_status"] == "not_statistically_distinguishable_budget"
     assert flip_contract["promotion_allowed"] is False
     assert flip_contract["pairwise"][0]["rank_label"] == "rank_flip"
     assert flip_contract["pairwise"][0]["kendall_tau"] == -1.0
@@ -333,7 +341,118 @@ def test_headline_contract_blocks_missing_durable_roots(tmp_path: Path) -> None:
 
     contract = payload["headline_rank_stability_contract"]
     assert contract["label"] == "blocked_pending_s20_s30"
+    assert contract["claim_status"] == "blocked_missing_increased_seed_rows"
     assert contract["missing_durable_roots"] == [str(tmp_path / "missing_s20")]
+
+
+def test_resolve_campaign_roots_discovers_slurm_output_container(tmp_path: Path) -> None:
+    """CLI resolver accepts a Slurm output container and campaign-id filter."""
+
+    container = tmp_path / "2026-06-issue1554-s20-h500-l40s-mem180"
+    ignored = _campaign(
+        container / "old_s10_baseline",
+        seed_count=10,
+        goal_snqi=0.7,
+        orca_snqi=0.4,
+        ci_half_width=0.04,
+        goal_successes=8,
+        orca_successes=5,
+    )
+    target = _campaign(
+        container / "issue1554_s20_h500",
+        seed_count=20,
+        goal_snqi=0.75,
+        orca_snqi=0.45,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=10,
+    )
+
+    roots = resolve_campaign_roots(
+        campaign_output_roots=[container],
+        campaign_ids=["issue1554_s20_h500"],
+    )
+
+    assert roots == [target]
+    assert ignored not in roots
+
+
+def test_resolve_campaign_roots_filters_campaign_id_on_root_name(tmp_path: Path) -> None:
+    """Campaign-id filters should not match unrelated parent directory names."""
+
+    container = tmp_path / "issue1554_parent_only"
+    _campaign(
+        container / "s20_h500",
+        seed_count=20,
+        goal_snqi=0.75,
+        orca_snqi=0.45,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=10,
+    )
+
+    with pytest.raises(FileNotFoundError, match="No seed-sufficiency campaign reports"):
+        resolve_campaign_roots(campaign_output_roots=[container], campaign_ids=["issue1554"])
+
+
+def test_resolve_campaign_roots_deduplicates_equivalent_paths(tmp_path: Path) -> None:
+    """Direct roots with different spellings should resolve to one campaign."""
+
+    campaign = _campaign(
+        tmp_path / "issue1554_s20_h500",
+        seed_count=20,
+        goal_snqi=0.75,
+        orca_snqi=0.45,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=10,
+    )
+    duplicate = campaign / ".." / campaign.name
+
+    roots = resolve_campaign_roots(campaign_roots=[campaign, duplicate])
+
+    assert roots == [campaign]
+
+
+def test_main_accepts_campaign_output_root(tmp_path: Path) -> None:
+    """CLI feeds discovered S20/H500 roots through existing analysis path."""
+
+    container = tmp_path / "slurm-output"
+    campaign = _campaign(
+        container / "issue1554_s20_h500",
+        seed_count=20,
+        goal_snqi=0.75,
+        orca_snqi=0.45,
+        ci_half_width=0.03,
+        goal_successes=18,
+        orca_successes=10,
+    )
+    exit_code = main(
+        [
+            "--campaign-output-root",
+            str(container),
+            "--campaign-id",
+            "issue1554_s20_h500",
+            "--headline-required-durable-root",
+            str(campaign),
+            "--output-dir",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads((tmp_path / "out" / "seed_sufficiency_analysis.json").read_text())
+    assert payload["campaigns"][0]["root"] == str(campaign)
+
+
+def test_resolve_campaign_roots_fails_closed_on_empty_output_root(tmp_path: Path) -> None:
+    """Empty Slurm containers fail closed instead of yielding zero-campaign evidence."""
+
+    container = tmp_path / "empty-slurm-output"
+    container.mkdir()
+
+    with pytest.raises(FileNotFoundError, match="No seed-sufficiency campaign reports"):
+        resolve_campaign_roots(campaign_output_roots=[container])
 
 
 def test_main_writes_requested_outputs(tmp_path: Path) -> None:

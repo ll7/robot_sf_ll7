@@ -14,8 +14,10 @@ is **`blocked_until_run`** until the SLURM S20/S30 campaign produces valid rows.
 ## Deliverables
 
 - Tool: `scripts/benchmark/build_s20_s30_seed_budget_bundle_issue_1554.py`
+- Archive-readiness checker: `scripts/validation/check_s20_s30_archive_readiness.py`
 - Launch packet: `configs/benchmarks/s20_s30_seed_budget_issue_1554_launch_packet.yaml`
 - Tests: `tests/benchmark/test_s20_s30_seed_budget_bundle_issue_1554.py`
+- Readiness tests: `tests/validation/test_check_s20_s30_archive_readiness.py`
 - Seed set added: `configs/benchmarks/seed_sets_v1.yaml` (`paper_eval_s30`, 111-140)
 
 ## Reused canonical statistics (no reinvention)
@@ -60,7 +62,18 @@ All inputs below are **to be confirmed by maintainer**; this note asserts no pap
 ## Status
 
 `blocked_until_run` pending the SLURM S20/S30 h500 social-navigation campaign. Run the campaign per
-the launch packet, write a canonical campaign result store, then run:
+the launch packet, write a canonical campaign result store, then run the fail-closed
+archive-readiness check:
+
+```bash
+uv run python scripts/validation/check_s20_s30_archive_readiness.py --json
+```
+
+The checker validates target claim metadata, planner rows, seed tier, required metrics, output
+locations, and missing-artifact diagnostics. A blocked result is expected until the canonical S20/S30
+result store exists.
+
+After readiness passes, build the reviewable bundle:
 
 ```bash
 uv run python scripts/benchmark/build_s20_s30_seed_budget_bundle_issue_1554.py \

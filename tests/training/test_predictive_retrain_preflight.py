@@ -232,6 +232,18 @@ def test_baseline_algo_config_must_be_mapping(tmp_path: Path) -> None:
         validate_retrain_preflight(path, repo_root=tmp_path)
 
 
+def test_invalid_baseline_algo_config_yaml_is_collected(tmp_path: Path) -> None:
+    """Invalid baseline algo YAML reported as preflight error."""
+    config = _base_config(tmp_path)
+    (tmp_path / "algo.yaml").write_text("predictive_model_id: [\n", encoding="utf-8")
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError) as exc_info:
+        validate_retrain_preflight(path, repo_root=tmp_path)
+    message = str(exc_info.value)
+    assert "evaluation.baseline_algo_config" in message
+    assert "not readable as valid YAML" in message
+
+
 def test_baseline_registry_must_have_models_list(tmp_path: Path) -> None:
     """Registry has to expose a models list for baseline lineage lookup."""
     config = _base_config(tmp_path)
@@ -239,6 +251,18 @@ def test_baseline_registry_must_have_models_list(tmp_path: Path) -> None:
     path = _write_config(tmp_path, config)
     with pytest.raises(PredictiveRetrainPreflightError, match="models list"):
         validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_invalid_baseline_registry_yaml_is_collected(tmp_path: Path) -> None:
+    """Invalid model registry YAML reported as preflight error."""
+    config = _base_config(tmp_path)
+    (tmp_path / "model" / "registry.yaml").write_text("models: [\n", encoding="utf-8")
+    path = _write_config(tmp_path, config)
+    with pytest.raises(PredictiveRetrainPreflightError) as exc_info:
+        validate_retrain_preflight(path, repo_root=tmp_path)
+    message = str(exc_info.value)
+    assert "model registry" in message
+    assert "not readable as valid YAML" in message
 
 
 def test_baseline_registry_must_contain_model_id(tmp_path: Path) -> None:

@@ -342,7 +342,13 @@ def _validate_evaluation_algo_config(
     if not path.is_file():
         errors.append(f"evaluation.baseline_algo_config does not exist: {value}")
         return None
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    payload = _load_yaml_mapping_for_preflight(
+        path,
+        label=f"evaluation.baseline_algo_config {value}",
+        errors=errors,
+    )
+    if payload is None:
+        return path
     if not isinstance(payload, dict):
         errors.append(f"evaluation.baseline_algo_config must be YAML mapping: {value}")
         return path
@@ -362,13 +368,41 @@ def _validate_registry_model_id(repo_root: Path, model_id: Any, errors: list[str
     if not registry_path.is_file():
         errors.append(f"model registry missing for evaluation baseline: {registry_path}")
         return
-    payload = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    payload = _load_yaml_mapping_for_preflight(
+        registry_path,
+        label="model registry",
+        errors=errors,
+    )
+    if payload is None:
+        return
     models = payload.get("models") if isinstance(payload, dict) else None
     if not isinstance(models, list):
         errors.append(f"model registry missing models list: {registry_path}")
         return
     if not any(isinstance(model, dict) and model.get("model_id") == model_id for model in models):
         errors.append(f"evaluation.baseline_model_id not found in model registry: {model_id}")
+
+
+def _load_yaml_mapping_for_preflight(
+    path: Path,
+    *,
+    label: str,
+    errors: list[str],
+) -> dict[str, Any] | None:
+    """Load referenced YAML mapping while preserving preflight error aggregation.
+
+    Returns:
+        Parsed mapping, or ``None`` when read/parse/type validation fails.
+    """
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        errors.append(f"{label} is not readable as valid YAML: {exc}")
+        return None
+    if not isinstance(payload, dict):
+        errors.append(f"{label} must be YAML mapping")
+        return None
+    return payload
 
 
 def _validate_provenance(

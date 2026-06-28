@@ -230,6 +230,36 @@ def _affected_artifacts(
     return statuses
 
 
+def _affected_artifact_summary(
+    affected_artifacts: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Summarize affected artifact statuses by artifact type and overall.
+
+    Returns:
+        JSON-serializable status counts for quick review.
+    """
+    by_type: dict[str, dict[str, int]] = {}
+    by_status: dict[str, int] = {}
+    total = 0
+
+    for artifact in affected_artifacts:
+        artifact_type = str(artifact.get("artifact_type", "unknown"))
+        status = str(artifact.get("status", "unknown"))
+        total += 1
+        by_status[status] = by_status.get(status, 0) + 1
+        type_counts = by_type.setdefault(artifact_type, {})
+        type_counts[status] = type_counts.get(status, 0) + 1
+
+    return {
+        "total_artifacts": total,
+        "by_type": {
+            artifact_type: dict(sorted(status_counts.items()))
+            for artifact_type, status_counts in sorted(by_type.items())
+        },
+        "by_status": dict(sorted(by_status.items())),
+    }
+
+
 def build_frozen_trace_reconciliation_report(
     old_rows: Iterable[Mapping[str, Any]],
     new_rows: Iterable[Mapping[str, Any]],
@@ -257,6 +287,12 @@ def build_frozen_trace_reconciliation_report(
         {"episode_key": key, "event_fields": _event_field_names(old_index[key])}
         for key in removed_keys
     ]
+    affected_artifacts = _affected_artifacts(
+        artifact_manifest,
+        changed_rows,
+        added_rows,
+        removed_rows,
+    )
     return {
         "schema_version": FROZEN_TRACE_RECONCILIATION_SCHEMA,
         "summary": {
@@ -275,12 +311,8 @@ def build_frozen_trace_reconciliation_report(
         "unchanged_rows": unchanged_rows,
         "added_rows": added_rows,
         "removed_rows": removed_rows,
-        "affected_artifacts": _affected_artifacts(
-            artifact_manifest,
-            changed_rows,
-            added_rows,
-            removed_rows,
-        ),
+        "affected_artifacts": affected_artifacts,
+        "affected_artifact_summary": _affected_artifact_summary(affected_artifacts),
         "semantics": {
             "input_contract": "existing EpisodeEventLedger.v1 rows only",
             "benchmark_semantics_changed": False,

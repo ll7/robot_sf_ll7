@@ -147,6 +147,18 @@ def test_report_counts_event_deltas_and_affected_artifact_status() -> None:
     assert statuses["claim:collision-free"]["affected_removed_row_count"] == 0
     assert statuses["table:safety-summary"]["status"] == "affected_reconciliation_required"
     assert statuses["figure:near-miss"]["status"] == "unchanged_by_event_delta"
+    assert report["affected_artifact_summary"] == {
+        "total_artifacts": 3,
+        "by_type": {
+            "claim": {"affected_reconciliation_required": 1},
+            "figure": {"unchanged_by_event_delta": 1},
+            "table": {"affected_reconciliation_required": 1},
+        },
+        "by_status": {
+            "affected_reconciliation_required": 2,
+            "unchanged_by_event_delta": 1,
+        },
+    }
 
 
 def test_added_and_removed_rows_mark_consuming_artifacts_affected() -> None:
@@ -213,6 +225,11 @@ def test_added_and_removed_rows_mark_consuming_artifacts_affected() -> None:
             "affected_removed_row_count": 1,
         }
     ]
+    assert report["affected_artifact_summary"] == {
+        "total_artifacts": 1,
+        "by_type": {"claim": {"affected_reconciliation_required": 1}},
+        "by_status": {"affected_reconciliation_required": 1},
+    }
 
 
 def test_episode_keys_preserve_valid_falsy_identifiers() -> None:

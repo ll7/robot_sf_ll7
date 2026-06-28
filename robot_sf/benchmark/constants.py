@@ -19,9 +19,13 @@ from __future__ import annotations
 EPISODE_SCHEMA_VERSION: str = "v1"
 
 # --- Distance thresholds (meters) ---
-# Current implementation: aligned with existing tests and historical behavior
-# - Collision threshold: 0.25m (distance strictly below => collision)
-# - Near-miss threshold: 0.50m (inclusive upper bound is exclusive in code logic)
+# Current implementation: aligned with existing tests and historical behavior.
+# - Pedestrian collision / near-miss benchmark safety metrics use surface
+#   clearance; see robot_sf.benchmark.thresholds.default_threshold_profile().
+# - COLLISION_DIST remains the center-distance threshold for wall/agent
+#   collision predicates and legacy geometric diagnostics.
+# - NEAR_MISS_DIST is the upper threshold for clearance-based pedestrian
+#   near-misses and legacy center-distance diagnostics.
 #
 # NOTE: Research.md suggested 0.35m collision / 0.60m near-miss thresholds
 # but reverting to 0.25/0.50 for test compatibility. Consider gradual migration

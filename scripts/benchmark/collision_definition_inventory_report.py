@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """Preflight report for the two collision/near-miss definitions (issue #3724).
 
-The benchmark metric (``robot_sf/benchmark/metrics.py``) classifies collision and
-near-miss events with a radius-aware *clearance* rule, while the SNQI proxy and
-policy-search validation paths (``robot_sf/gym_env/snqi_proxy.py``,
-``scripts/validation/policy_search_common.py``) use the *raw center distance*
-against the named constants. The two regimes label the same geometry differently
-across a wide band (see issue #3724).
+The benchmark metric (``robot_sf/benchmark/metrics.py``), SNQI proxy, and
+policy-search validation helpers classify safety-facing near-miss events with a
+radius-aware *clearance* rule. This report keeps the legacy raw center-distance
+regime visible as a named diagnostic because the two regimes label the same
+geometry differently across a wide band (see issue #3724).
 
 This report is **diagnostic only**: it inventories where the two regimes diverge
 over a deterministic synthetic center-distance sweep, prints a human-readable
 summary, and optionally writes a JSON payload. It does **not** change any
-threshold, metric, proxy, or validation behavior, and it does **not** choose a
-canonical definition (that remains ``decision-required`` on issue #3724).
+threshold, metric, proxy, or validation behavior.
 
 With ``--fail-on-divergence`` the command exits non-zero when the regimes
 disagree (fail-closed), so it can be wired into a preflight gate that must stay
-aware of the inconsistency until it is resolved.
+aware of the diagnostic center-distance regime.
 
 Usage::
 
@@ -46,10 +44,9 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 CLAIM_BOUNDARY = (
-    "diagnostic_only: inventories where the clearance-based benchmark metric and the "
-    "center-distance proxy/validation paths label collision/near-miss differently. It does "
-    "not change thresholds, metrics, the proxy, or validation, and does not choose a canonical "
-    "definition (decision-required, issue #3724)."
+    "diagnostic_only: inventories where the safety-facing clearance regime and legacy "
+    "center-distance diagnostic regime label collision/near-miss differently. It does "
+    "not change thresholds, metrics, proxy, or validation behavior."
 )
 
 

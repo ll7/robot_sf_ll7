@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 import pytest
+import yaml
 
 from robot_sf.benchmark import baseline_stats
 from robot_sf.benchmark import cli as benchmark_cli
@@ -240,6 +241,35 @@ def test_cli_validate_config_success(tmp_path: Path, capsys):
     report = json.loads(captured.out)
     assert report["num_scenarios"] == 2
     assert report["errors"] == []
+
+
+def test_cli_validate_config_marker_spawn_zero_density_is_not_empty_scene(tmp_path: Path, capsys):
+    """Marker-spawned zero-density scenarios must not validate as empty scenes."""
+    matrix_path = tmp_path / "matrix.yaml"
+    scenarios = [
+        {
+            "name": "marker_spawn",
+            "map_file": "marker.svg",
+            "simulation_config": {"max_episode_steps": 100, "ped_density": 0.0},
+            "metadata": {
+                "archetype": "bottleneck",
+                "density": "low",
+                "spawn_mode": "markers",
+                "density_advisory": "zero_baseline_route_spawn",
+            },
+        }
+    ]
+    with matrix_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump({"scenarios": scenarios}, f)
+
+    rc = cli_main(["validate-config", "--matrix", str(matrix_path)])
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    report = json.loads(captured.out)
+    warning_messages = [warning["warning"] for warning in report["warnings"]]
+    assert "ped_density=0.0 means no pedestrians spawn" not in warning_messages
+    assert not any("ped_density outside recommended" in msg for msg in warning_messages)
 
 
 def test_cli_validate_config_errors(tmp_path: Path, capsys):

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ from typing import Any
 import pandas as pd
 import yaml
 
-from scripts.tools.campaign_result_store import validate_result_store
+from scripts.tools.campaign_result_store import read_parquet_frame, validate_result_store
 
 SCHEMA_VERSION = "s20-s30-archive-readiness.v1"
 DEFAULT_PACKET_PATH = Path("configs/benchmarks/s20_s30_seed_budget_issue_1554_launch_packet.yaml")
@@ -147,7 +148,7 @@ def build_report(
     metric_coverage: dict[str, bool] = dict.fromkeys(contract.required_metrics, False)
     row_status_counts: dict[str, int] = {}
     if not missing_files and store_validation.ok:
-        episodes = pd.read_parquet(contract.result_store / "episodes.parquet")
+        episodes = read_parquet_frame(contract.result_store / "episodes.parquet")
         planner_seed_coverage = _planner_seed_coverage(
             episodes, contract.planner_rows, primary_seeds
         )
@@ -244,12 +245,21 @@ def _planner_seed_coverage(
     coverage: dict[str, Any] = {}
     for planner in planners:
         planner_rows = episodes[episodes["planner"].astype(str) == planner]
-        present_seeds = sorted({int(seed) for seed in planner_rows["seed"].dropna().tolist()})
+        present_seed_values: list[int] = []
+        skipped_seed_count = 0
+        for raw_seed in planner_rows["seed"].tolist():
+            seed = _finite_int_seed(raw_seed)
+            if seed is None:
+                skipped_seed_count += 1
+                continue
+            present_seed_values.append(seed)
+        present_seeds = sorted(set(present_seed_values))
         missing = [seed for seed in required_seeds if seed not in present_seeds]
         coverage[planner] = {
             "present_seed_count": len([seed for seed in required_seeds if seed in present_seeds]),
             "required_seed_count": len(required_seeds),
             "missing_primary_seeds": missing,
+            "skipped_non_finite_seed_count": skipped_seed_count,
         }
     return coverage
 
@@ -271,6 +281,12 @@ def _coverage_diagnostics(
 ) -> list[str]:
     diagnostics: list[str] = []
     for planner, coverage in planner_seed_coverage.items():
+        skipped_seed_count = int(coverage.get("skipped_non_finite_seed_count", 0))
+        if skipped_seed_count:
+            diagnostics.append(
+                f"planner {planner!r} skipped non-finite/unparseable seed values: "
+                f"{skipped_seed_count}"
+            )
         missing = coverage["missing_primary_seeds"]
         if missing:
             diagnostics.append(f"planner {planner!r} missing primary S20 seeds: {missing}")
@@ -292,6 +308,20 @@ def _required_mapping(payload: dict[str, Any], key: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{key} must be a mapping")
     return value
+
+
+def _finite_int_seed(value: Any) -> int | None:
+    """Return integer seed when value is finite and parseable, else ``None``."""
+
+    if pd.isna(value):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return int(numeric)
 
 
 def _required_str(payload: dict[str, Any], key: str) -> str:

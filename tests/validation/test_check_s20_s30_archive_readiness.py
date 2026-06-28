@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from scripts.tools.campaign_result_store import write_result_store
@@ -203,6 +204,63 @@ def test_fail_closed_rows_and_missing_metrics_block_readiness(tmp_path: Path) ->
     assert (
         "missing required metric columns: ['time_to_goal_norm']"
         in report["missing_artifact_diagnostics"]
+    )
+
+
+def test_archive_reader_uses_campaign_result_store_parquet_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Readiness uses shared result-store parquet reader instead of pandas directly."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo)
+    write_result_store(
+        repo / "store",
+        _complete_rows(),
+        study_id="issue_1554_test",
+        command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
+    )
+    calls: list[Path] = []
+    original = readiness.read_parquet_frame
+
+    def _recording_reader(path: Path):
+        calls.append(path)
+        return original(path)
+
+    monkeypatch.setattr(readiness, "read_parquet_frame", _recording_reader)
+
+    assert readiness.build_report(packet, repo)["status"] == readiness.READY
+    assert calls == [repo / "store" / "episodes.parquet"]
+
+
+def test_non_finite_seed_cells_are_reported_and_block_readiness(tmp_path: Path) -> None:
+    """Invalid seed cells are counted explicitly instead of silently disappearing."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo)
+    write_result_store(
+        repo / "store",
+        _complete_rows(),
+        study_id="issue_1554_test",
+        command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
+    )
+    episodes_path = repo / "store" / "episodes.parquet"
+    episodes = readiness.read_parquet_frame(episodes_path)
+    episodes["seed"] = episodes["seed"].astype(float)
+    episodes.loc[0, "seed"] = float("inf")
+    episodes.to_parquet(episodes_path, index=False)
+
+    report = readiness.build_report(packet, repo)
+
+    assert report["status"] == readiness.BLOCKED
+    goal_coverage = report["planner_seed_coverage"]["goal"]
+    assert goal_coverage["skipped_non_finite_seed_count"] == 1
+    assert 111 in goal_coverage["missing_primary_seeds"]
+    assert any(
+        "skipped non-finite/unparseable seed values: 1" in item
+        for item in report["missing_artifact_diagnostics"]
     )
 
 

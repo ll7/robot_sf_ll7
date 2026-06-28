@@ -23,7 +23,14 @@ def _write_seed_sets(path: Path) -> Path:
     return path
 
 
-def _write_packet(path: Path, repo_root: Path, *, result_store: str = "store") -> Path:
+def _write_packet(
+    path: Path,
+    repo_root: Path,
+    *,
+    result_store: str = "store",
+    seed_sets_path: str | None = None,
+    full_campaign_in_this_issue: object = False,
+) -> Path:
     seed_sets = _write_seed_sets(repo_root / "seed_sets.yaml")
     payload = {
         "schema_version": "s20-s30-seed-budget-launch-packet.v1",
@@ -47,7 +54,7 @@ def _write_packet(path: Path, repo_root: Path, *, result_store: str = "store") -
         "methodology_reference": "docs/context/issue_1545_power_aware_seed_budget_planning.md",
         "seed_policy": {
             "mode": "seed-set",
-            "seed_sets_path": seed_sets.relative_to(repo_root).as_posix(),
+            "seed_sets_path": seed_sets_path or seed_sets.relative_to(repo_root).as_posix(),
             "primary_seed_set": "paper_eval_s20",
             "escalation_seed_set": "paper_eval_s30",
             "escalate_to_s30_when": "rank flip observed",
@@ -70,7 +77,7 @@ def _write_packet(path: Path, repo_root: Path, *, result_store: str = "store") -
             "bundle": ["bundle/bundle.json", "bundle/BUNDLE.md"],
         },
         "execution_boundary": {
-            "full_campaign_in_this_issue": False,
+            "full_campaign_in_this_issue": full_campaign_in_this_issue,
             "submit_slurm_from_this_issue": False,
             "bundle_status_until_run": "blocked_until_run",
         },
@@ -210,3 +217,49 @@ def test_json_cli_output_is_parseable(tmp_path: Path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == readiness.SCHEMA_VERSION
     assert payload["status"] == readiness.BLOCKED
+
+
+def test_packet_paths_must_stay_inside_repo_root(tmp_path: Path) -> None:
+    """Launch-packet paths cannot traverse outside the repository root."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo, seed_sets_path="../seed_sets.yaml")
+
+    assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2
+
+
+def test_result_store_member_paths_must_be_relative(tmp_path: Path) -> None:
+    """Expected result-store members cannot escape the result-store directory."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo)
+    payload = yaml.safe_load(packet.read_text(encoding="utf-8"))
+    payload["expected_artifacts"]["result_store_required_files"][0] = "../episodes.parquet"
+    packet.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2
+
+
+def test_execution_boundary_requires_actual_booleans(tmp_path: Path) -> None:
+    """String booleans in launch-packet execution boundaries are malformed."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo, full_campaign_in_this_issue="false")
+
+    assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2
+
+
+def test_seed_tiers_must_be_unique_integers(tmp_path: Path) -> None:
+    """Duplicate or non-integer seed tiers are malformed instead of coerced."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo)
+    seeds = yaml.safe_load((repo / "seed_sets.yaml").read_text(encoding="utf-8"))
+    seeds["paper_eval_s20"][0] = seeds["paper_eval_s20"][1]
+    (repo / "seed_sets.yaml").write_text(yaml.safe_dump(seeds, sort_keys=False), encoding="utf-8")
+
+    assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2

@@ -110,14 +110,16 @@ def parse_contract(
         planner_rows=tuple(planner_rows),
         primary_seed_set=_required_str(seed_policy, "primary_seed_set"),
         escalation_seed_set=_required_str(seed_policy, "escalation_seed_set"),
-        seed_sets_path=repo_root / _required_str(seed_policy, "seed_sets_path"),
-        result_store=raw_store if raw_store.is_absolute() else repo_root / raw_store,
+        seed_sets_path=_resolve_repo_path(repo_root, _required_str(seed_policy, "seed_sets_path")),
+        result_store=_resolve_repo_path(repo_root, raw_store),
         required_result_store_files=tuple(raw_files),
-        bundle_outputs=tuple(
-            (Path(p) if Path(p).is_absolute() else repo_root / p) for p in raw_bundle
+        bundle_outputs=tuple(_resolve_repo_path(repo_root, p) for p in raw_bundle),
+        full_campaign_in_this_issue=_required_bool(
+            execution_boundary, "full_campaign_in_this_issue"
         ),
-        full_campaign_in_this_issue=bool(execution_boundary.get("full_campaign_in_this_issue")),
-        submit_slurm_from_this_issue=bool(execution_boundary.get("submit_slurm_from_this_issue")),
+        submit_slurm_from_this_issue=_required_bool(
+            execution_boundary, "submit_slurm_from_this_issue"
+        ),
         bundle_status_until_run=_required_str(execution_boundary, "bundle_status_until_run"),
     )
 
@@ -222,15 +224,16 @@ def _int_seed_list(payload: dict[str, Any], key: str, *, expected_count: int) ->
     seeds = payload.get(key)
     if not isinstance(seeds, list) or len(seeds) != expected_count:
         raise ValueError(f"{key} must define exactly {expected_count} seeds")
-    try:
-        return [int(seed) for seed in seeds]
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{key} must contain integer seeds") from exc
+    if any(type(seed) is not int for seed in seeds):
+        raise ValueError(f"{key} must contain integer seeds")
+    if len(set(seeds)) != expected_count:
+        raise ValueError(f"{key} must contain {expected_count} unique seeds")
+    return list(seeds)
 
 
 def _result_store_file_status(contract: PacketContract) -> dict[str, bool]:
     return {
-        rel_path: (contract.result_store / rel_path).is_file()
+        rel_path: (contract.result_store / _validate_relative_path(rel_path)).is_file()
         for rel_path in contract.required_result_store_files
     }
 
@@ -303,6 +306,37 @@ def _required_str_list(payload: dict[str, Any], key: str) -> list[str]:
     if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
         raise ValueError(f"{key} must be a non-empty string list")
     return value
+
+
+def _required_bool(payload: dict[str, Any], key: str) -> bool:
+    value = payload.get(key)
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be a boolean")
+    return value
+
+
+def _resolve_repo_path(repo_root: Path, raw_path: str | Path) -> Path:
+    """Resolve a launch-packet path and require it to stay inside repo root."""
+
+    path = Path(raw_path)
+    if ".." in path.parts:
+        raise ValueError(f"path traversal is not allowed: {raw_path}")
+    resolved_root = repo_root.resolve()
+    resolved = path.resolve() if path.is_absolute() else (resolved_root / path).resolve()
+    try:
+        resolved.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ValueError(f"path must stay within repository root: {raw_path}") from exc
+    return resolved
+
+
+def _validate_relative_path(raw_path: str) -> Path:
+    """Validate result-store member paths before joining them under the store root."""
+
+    path = Path(raw_path)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"result-store file path must be relative and contained: {raw_path}")
+    return path
 
 
 def _render_text(report: dict[str, Any]) -> str:

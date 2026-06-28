@@ -997,6 +997,8 @@ def test_optuna_candidate_sampler_is_deterministic_and_feedback_capable(
     tmp_path: Path,
 ) -> None:
     """Optuna-backed sampling should be deterministic and accept scored feedback."""
+
+    pytest.importorskip("optuna")
     template = tmp_path / "template.yaml"
     search_space = tmp_path / "space.yaml"
     _write_template(template)
@@ -1414,6 +1416,8 @@ def test_seed_sensitivity_rejects_non_integral_replay_seeds(tmp_path: Path) -> N
 
 def test_sampler_comparison_synthetic_smoke(tmp_path: Path) -> None:
     """Comparison helper should run random, coordinate, and optuna samplers."""
+
+    pytest.importorskip("optuna")
     template = tmp_path / "template.yaml"
     search_space = tmp_path / "space.yaml"
     _write_template(template)

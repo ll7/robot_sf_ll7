@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
@@ -193,10 +193,6 @@ from robot_sf.planner.adaptive_proxemic_selector import (
     AdaptiveProxemicSelectorAdapter,
     build_adaptive_proxemic_selector_config,
 )
-from robot_sf.planner.crowdnav_height import (
-    CrowdNavHeightAdapter,
-    build_crowdnav_height_config,
-)
 from robot_sf.planner.gap_prediction import (
     GapAwarePredictionAdapter,
     build_gap_prediction_config,
@@ -282,10 +278,6 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
     TrivialReferencePlannerAdapter,
 )
-from robot_sf.planner.sonic_crowdnav import (
-    SonicCrowdNavAdapter,
-    build_sonic_crowdnav_config,
-)
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
 from robot_sf.planner.topology_guided_local_policy import (
     TopologyGuidedHybridRulePlannerAdapter,
@@ -295,6 +287,126 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+@dataclass(frozen=True)
+class _CrowdNavHeightConfigFallback:
+    """Lightweight config used when tests monkeypatch the optional adapter."""
+
+    repo_root: Path = Path("output/repos/CrowdNav_HEIGHT")
+    model_dir: Path = Path("output/external_checkpoints/crowdnav_height_extracted/HEIGHT/HEIGHT")
+    checkpoint_name: str = "237800.pt"
+    device: str = "cpu"
+    max_linear_speed: float = 0.5
+    max_angular_speed: float = 1.0
+
+
+@dataclass(frozen=True)
+class _SonicCrowdNavConfigFallback:
+    """Lightweight config used when tests monkeypatch the optional adapter."""
+
+    repo_root: Path = Path("output/repos/SoNIC-Social-Nav")
+    model_name: str = "SoNIC_GST"
+    checkpoint_name: str = "05207.pt"
+    device: str = "cpu"
+    max_linear_speed: float = 1.0
+    max_angular_speed: float = 1.0
+
+
+CrowdNavHeightAdapter: Any | None = None
+build_crowdnav_height_config: Any | None = None
+SonicCrowdNavAdapter: Any | None = None
+build_sonic_crowdnav_config: Any | None = None
+
+
+def _fallback_crowdnav_height_config(data: dict[str, Any] | None) -> _CrowdNavHeightConfigFallback:
+    """Build config without importing torch-backed CrowdNav module.
+
+    Returns:
+        _CrowdNavHeightConfigFallback: Minimal adapter config.
+    """
+
+    payload = data or {}
+    max_linear_speed = float(payload.get("max_linear_speed", 0.5))
+    max_angular_speed = float(payload.get("max_angular_speed", 1.0))
+    if max_linear_speed < 0.0 or max_angular_speed < 0.0:
+        raise ValueError("max_linear_speed and max_angular_speed must be non-negative")
+    return _CrowdNavHeightConfigFallback(
+        repo_root=Path(str(payload.get("repo_root", _CrowdNavHeightConfigFallback.repo_root))),
+        model_dir=Path(str(payload.get("model_dir", _CrowdNavHeightConfigFallback.model_dir))),
+        checkpoint_name=str(
+            payload.get("checkpoint_name", _CrowdNavHeightConfigFallback.checkpoint_name)
+        ),
+        device=str(payload.get("device", "cpu")).strip() or "cpu",
+        max_linear_speed=max_linear_speed,
+        max_angular_speed=max_angular_speed,
+    )
+
+
+def _crowdnav_height_symbols() -> tuple[Any, Any]:
+    """Return CrowdNav HEIGHT adapter/config builder, importing torch-backed code lazily."""
+
+    global CrowdNavHeightAdapter, build_crowdnav_height_config
+    if CrowdNavHeightAdapter is None:
+        from robot_sf.planner.crowdnav_height import (  # noqa: PLC0415
+            CrowdNavHeightAdapter as _CrowdNavHeightAdapter,
+        )
+        from robot_sf.planner.crowdnav_height import (  # noqa: PLC0415
+            build_crowdnav_height_config as _build_crowdnav_height_config,
+        )
+
+        CrowdNavHeightAdapter = _CrowdNavHeightAdapter
+        build_crowdnav_height_config = _build_crowdnav_height_config
+    builder = build_crowdnav_height_config or _fallback_crowdnav_height_config
+    return CrowdNavHeightAdapter, builder
+
+
+def _fallback_sonic_crowdnav_config(data: dict[str, Any] | None) -> _SonicCrowdNavConfigFallback:
+    """Build SoNIC config without importing the torch-backed module.
+
+    Returns:
+        _SonicCrowdNavConfigFallback: Minimal adapter config.
+    """
+
+    payload = data or {}
+    max_linear_speed = float(payload.get("max_linear_speed", 1.0))
+    max_angular_speed = float(payload.get("max_angular_speed", 1.0))
+    if max_linear_speed < 0.0 or max_angular_speed < 0.0:
+        raise ValueError("max_linear_speed and max_angular_speed must be non-negative")
+    return _SonicCrowdNavConfigFallback(
+        repo_root=Path(str(payload.get("repo_root", _SonicCrowdNavConfigFallback.repo_root))),
+        model_name=str(payload.get("model_name", _SonicCrowdNavConfigFallback.model_name)).strip()
+        or _SonicCrowdNavConfigFallback.model_name,
+        checkpoint_name=str(
+            payload.get("checkpoint_name", _SonicCrowdNavConfigFallback.checkpoint_name)
+        ).strip()
+        or _SonicCrowdNavConfigFallback.checkpoint_name,
+        device=str(payload.get("device", "cpu")).strip() or "cpu",
+        max_linear_speed=max_linear_speed,
+        max_angular_speed=max_angular_speed,
+    )
+
+
+def _sonic_crowdnav_symbols() -> tuple[Any, Any]:
+    """Return SoNIC adapter/config builder, importing torch-backed code lazily.
+
+    Returns:
+        tuple[Any, Any]: Adapter class and config-builder callable.
+    """
+
+    global SonicCrowdNavAdapter, build_sonic_crowdnav_config
+    if SonicCrowdNavAdapter is None:
+        from robot_sf.planner.sonic_crowdnav import (  # noqa: PLC0415
+            SonicCrowdNavAdapter as _SonicCrowdNavAdapter,
+        )
+        from robot_sf.planner.sonic_crowdnav import (  # noqa: PLC0415
+            build_sonic_crowdnav_config as _build_sonic_crowdnav_config,
+        )
+
+        SonicCrowdNavAdapter = _SonicCrowdNavAdapter
+        build_sonic_crowdnav_config = _build_sonic_crowdnav_config
+    builder = build_sonic_crowdnav_config or _fallback_sonic_crowdnav_config
+    return SonicCrowdNavAdapter, builder
 
 
 _SOCNAV_ALGO_KEYS = {
@@ -1657,8 +1769,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             if algo_key in guarded_root
             else str(algo_config.get("model_name", "GST_predictor_rand"))
         )
-        sonic_adapter = SonicCrowdNavAdapter(
-            config=build_sonic_crowdnav_config(
+        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+        sonic_adapter = sonic_adapter_cls(
+            config=sonic_config_builder(
                 {
                     **algo_config,
                     "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
@@ -1820,12 +1933,15 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
         )
     elif algo_key in {"crowdnav_height"}:
-        adapter = CrowdNavHeightAdapter(config=build_crowdnav_height_config(algo_config))
+        crowdnav_adapter_cls, crowdnav_config_builder = _crowdnav_height_symbols()
+        adapter = crowdnav_adapter_cls(config=crowdnav_config_builder(algo_config))
     elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
-        adapter = SonicCrowdNavAdapter(config=build_sonic_crowdnav_config(algo_config))
+        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+        adapter = sonic_adapter_cls(config=sonic_config_builder(algo_config))
     elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
-        adapter = SonicCrowdNavAdapter(
-            config=build_sonic_crowdnav_config(
+        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+        adapter = sonic_adapter_cls(
+            config=sonic_config_builder(
                 {
                     **algo_config,
                     "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
@@ -1839,8 +1955,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         "gensafe_gst_predictor_rand",
         "gst_predictor_rand",
     }:
-        adapter = SonicCrowdNavAdapter(
-            config=build_sonic_crowdnav_config(
+        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+        adapter = sonic_adapter_cls(
+            config=sonic_config_builder(
                 {
                     **algo_config,
                     "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),

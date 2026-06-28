@@ -166,7 +166,7 @@ def test_marker_spawn_density_zero_semantics() -> None:
             assert tier["ped_density"] == 0.0, entry["config"]
             assert tier["density_advisory"] == ZERO_DENSITY_ADVISORY, entry["config"]
             marker_tiers += 1
-    assert marker_tiers > 0, "expected at least one marker-spawn tier"
+    assert marker_tiers > 0, "expected at least one marker-spawn tier in the density index"
 
 
 def test_summary_counts_match_recomputation() -> None:

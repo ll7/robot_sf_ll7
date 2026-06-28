@@ -1276,9 +1276,7 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                 )
 
         metadata = scenario.get("metadata")
-        if not isinstance(metadata, Mapping):
-            metadata = {}
-        spawn_mode = metadata.get("spawn_mode")
+        spawn_mode = metadata.get("spawn_mode") if isinstance(metadata, Mapping) else None
         density = sim_cfg.get("ped_density")
         if density is not None:
             try:

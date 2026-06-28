@@ -170,7 +170,7 @@ def test_owner_import_failures_fail_closed(monkeypatch: pytest.MonkeyPatch) -> N
     """Broken owner modules should make sources blocked, not crash the inventory CLI."""
 
     def broken_import_module(module_name: str) -> object:
-        raise RuntimeError(f"{module_name} unavailable")
+        raise ImportError(f"{module_name} unavailable")
 
     monkeypatch.setattr(readiness.importlib, "import_module", broken_import_module)
 

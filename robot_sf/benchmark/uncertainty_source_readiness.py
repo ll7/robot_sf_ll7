@@ -82,7 +82,7 @@ def _discover_condition_builders() -> frozenset[str]:
         module = importlib.import_module(
             "scripts.analysis.run_scenario_belief_uncertainty_diagnostic_issue_2546"
         )
-    except Exception:
+    except (ImportError, SyntaxError):
         logger.exception("Failed to import uncertainty diagnostic owner for readiness discovery")
         return frozenset()
     return frozenset(name for name in dir(module) if name.startswith("_condition_"))
@@ -95,7 +95,7 @@ def _discover_scenario_hooks() -> frozenset[str]:
         module = importlib.import_module(
             "scripts.validation.run_scenario_belief_episode_safety_issue_3471"
         )
-    except Exception:
+    except (ImportError, SyntaxError):
         logger.exception("Failed to import episode safety owner for readiness discovery")
         return frozenset()
     return frozenset(

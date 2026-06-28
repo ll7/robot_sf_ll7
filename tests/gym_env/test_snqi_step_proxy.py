@@ -29,13 +29,16 @@ def test_snqi_proxy_reports_near_miss_and_force_exposure() -> None:
     metrics = proxy.compute_step_metrics(
         _simulator(
             (0.0, 0.0),
-            ped_pos=[(0.30, 0.0), (2.0, 0.0)],
+            ped_pos=[(1.50, 0.0), (2.0, 0.0)],
             ped_forces=[(3.0, 0.0), (0.1, 0.0)],
         ),
         dt=0.1,
     )
 
     assert metrics["near_misses"] == 1.0
+    assert metrics["min_distance"] == 1.5
+    assert metrics["min_clearance"] == 0.10000000000000009
+    assert metrics["center_distance_near_miss_diagnostic"] == 0.0
     assert metrics["force_exceed_events"] == 1.0
     assert metrics["comfort_exposure"] == 0.5
     assert metrics["jerk_mean"] == 0.0
@@ -59,12 +62,28 @@ def test_snqi_proxy_uses_ped_position_override_without_reading_simulator_ped_pos
     metrics = proxy.compute_step_metrics(
         SimulatorWithGuardedPedPos(),
         dt=0.1,
-        ped_positions_override=np.array([[0.30, 0.0], [2.0, 0.0]], dtype=float),
+        ped_positions_override=np.array([[1.50, 0.0], [2.0, 0.0]], dtype=float),
     )
 
     assert metrics["near_misses"] == 1.0
+    assert metrics["center_distance_near_miss_diagnostic"] == 0.0
     assert metrics["force_exceed_events"] == 1.0
     assert metrics["comfort_exposure"] == 0.5
+
+
+def test_snqi_proxy_names_center_distance_band_as_diagnostic_only() -> None:
+    """Raw center-distance bands are no longer safety-facing near-miss metrics."""
+    proxy = StepSNQIProxy()
+    proxy.prime(_simulator((0.0, 0.0)))
+
+    metrics = proxy.compute_step_metrics(
+        _simulator((0.0, 0.0), ped_pos=[(0.30, 0.0)]),
+        dt=0.1,
+    )
+
+    assert metrics["near_misses"] == 0.0
+    assert metrics["min_clearance"] < 0.0
+    assert metrics["center_distance_near_miss_diagnostic"] == 1.0
 
 
 def test_snqi_proxy_accumulates_running_jerk_mean() -> None:

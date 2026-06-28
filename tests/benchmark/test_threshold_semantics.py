@@ -19,6 +19,8 @@ def test_default_threshold_profile_freezes_clearance_as_safety_metric() -> None:
     assert profile["center_distance_collision_definition"] == (
         "center_distance_m < collision_distance_m"
     )
+    assert profile["snqi_proxy_pedestrian_metric"] == "surface_clearance_m"
+    assert profile["policy_search_near_miss_metric"] == "surface_clearance_m"
 
 
 def test_legacy_missing_threshold_profile_names_center_distance_as_diagnostic() -> None:
@@ -30,3 +32,5 @@ def test_legacy_missing_threshold_profile_names_center_distance_as_diagnostic() 
     assert profile["pedestrian_collision_definition"] == (
         "center_distance_m < collision_distance_m"
     )
+    assert profile["snqi_proxy_pedestrian_metric"] == "legacy_center_distance_m"
+    assert profile["policy_search_near_miss_metric"] == "legacy_center_distance_m"

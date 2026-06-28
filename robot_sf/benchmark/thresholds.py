@@ -31,6 +31,8 @@ def default_threshold_profile() -> dict[str, Any]:
         "near_miss_definition": "0 <= min_clearance_m < near_miss_distance_m",
         "center_distance_pedestrian_role": "geometric_diagnostic_only",
         "center_distance_collision_definition": "center_distance_m < collision_distance_m",
+        "snqi_proxy_pedestrian_metric": "surface_clearance_m",
+        "policy_search_near_miss_metric": "surface_clearance_m",
         "near_miss_speed_dependence": "disabled_distance_only",
         "candidate_speed_dependent_variants": [
             "relative_speed_weighted",
@@ -57,6 +59,8 @@ def legacy_missing_threshold_profile() -> dict[str, Any]:
         "near_miss_definition": "collision_distance_m <= center_distance_m < near_miss_distance_m",
         "center_distance_pedestrian_role": "legacy_geometric_diagnostic",
         "center_distance_collision_definition": "center_distance_m < collision_distance_m",
+        "snqi_proxy_pedestrian_metric": "legacy_center_distance_m",
+        "policy_search_near_miss_metric": "legacy_center_distance_m",
         "near_miss_speed_dependence": "disabled_distance_only",
         "inferred_for_missing_metric_parameters": True,
         "sources": {

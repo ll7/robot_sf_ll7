@@ -12,6 +12,8 @@ import numpy as np
 _DEFAULT_COLLISION_DIST = 0.25
 _DEFAULT_NEAR_MISS_DIST = 0.50
 _DEFAULT_COMFORT_FORCE_THRESHOLD = 2.0
+_DEFAULT_ROBOT_RADIUS = 1.0
+_DEFAULT_PED_RADIUS = 0.4
 _SNQI_THRESHOLD_CACHE: tuple[float, float, float] | None = None
 
 
@@ -142,6 +144,44 @@ def resolve_snqi_thresholds() -> tuple[float, float, float]:
     return _SNQI_THRESHOLD_CACHE
 
 
+def _coerce_positive_float(value: Any, default: float) -> float:
+    """Return ``value`` as a positive finite float, otherwise ``default``."""
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    return numeric if np.isfinite(numeric) and numeric > 0.0 else default
+
+
+def _resolve_robot_radius(simulator: Any) -> float:
+    """Resolve robot footprint radius from simulator metadata when available.
+
+    Returns:
+        Positive robot radius in meters.
+    """
+    direct = getattr(simulator, "robot_radius", None)
+    if direct is not None:
+        return _coerce_positive_float(direct, _DEFAULT_ROBOT_RADIUS)
+    robots = getattr(simulator, "robots", None)
+    if robots:
+        config = getattr(robots[0], "config", None)
+        return _coerce_positive_float(getattr(config, "radius", None), _DEFAULT_ROBOT_RADIUS)
+    return _DEFAULT_ROBOT_RADIUS
+
+
+def _resolve_ped_radius(simulator: Any) -> float:
+    """Resolve pedestrian footprint radius from simulator metadata when available.
+
+    Returns:
+        Positive pedestrian radius in meters.
+    """
+    direct = getattr(simulator, "ped_radius", None)
+    if direct is not None:
+        return _coerce_positive_float(direct, _DEFAULT_PED_RADIUS)
+    config = getattr(simulator, "config", None)
+    return _coerce_positive_float(getattr(config, "ped_radius", None), _DEFAULT_PED_RADIUS)
+
+
 def compute_snqi_step_proxies(
     *,
     simulator: Any,
@@ -178,10 +218,16 @@ def compute_snqi_step_proxies(
     ped_pos = coerce_xy_rows(ped_pos_source)
 
     near_misses = 0.0
+    min_distance = float("nan")
+    min_clearance = float("nan")
+    center_distance_near_miss_diagnostic = 0.0
     if ped_pos.size > 0:
         deltas = ped_pos[:, :2] - robot_pos
-        min_dist = float(np.linalg.norm(deltas, axis=1).min())
-        near_misses = 1.0 if d_coll <= min_dist < d_near else 0.0
+        min_distance = float(np.linalg.norm(deltas, axis=1).min())
+        radius_sum = _resolve_robot_radius(simulator) + _resolve_ped_radius(simulator)
+        min_clearance = min_distance - radius_sum
+        near_misses = 1.0 if 0.0 <= min_clearance < d_near else 0.0
+        center_distance_near_miss_diagnostic = 1.0 if d_coll <= min_distance < d_near else 0.0
 
     ped_forces = coerce_xy_rows(
         getattr(simulator, "last_ped_forces", np.zeros((0, 2), dtype=float))
@@ -212,6 +258,9 @@ def compute_snqi_step_proxies(
 
     return {
         "near_misses": float(near_misses),
+        "min_distance": float(min_distance),
+        "min_clearance": float(min_clearance),
+        "center_distance_near_miss_diagnostic": float(center_distance_near_miss_diagnostic),
         "force_exceed_events": float(force_exceed_events),
         "comfort_exposure": float(comfort_exposure),
         "jerk_mean": float(jerk_mean),

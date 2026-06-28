@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import robot_sf.benchmark.uncertainty_source_readiness as readiness
 from robot_sf.benchmark.uncertainty_source_readiness import (
     UNCERTAINTY_SOURCE_READINESS_SCHEMA,
     UncertaintySourceRunSpec,
@@ -134,6 +135,58 @@ def test_inventory_requires_at_least_one_source() -> None:
 
     with pytest.raises(ValueError, match="at least one uncertainty source"):
         build_uncertainty_source_readiness_inventory([])
+
+
+def test_inventory_reuses_discovered_symbols_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inventory discovery should happen once per report, not once per source."""
+
+    calls = {"builders": 0, "hooks": 0}
+
+    def discover_builders() -> frozenset[str]:
+        calls["builders"] += 1
+        return frozenset(
+            {
+                "_condition_existence_degraded",
+                "_condition_visibility_limited",
+                "_condition_covariance_inflated",
+                "_condition_class_probability",
+            }
+        )
+
+    def discover_hooks() -> frozenset[str]:
+        calls["hooks"] += 1
+        return frozenset({"build_belief_for_mode"})
+
+    monkeypatch.setattr(readiness, "_discover_condition_builders", discover_builders)
+    monkeypatch.setattr(readiness, "_discover_scenario_hooks", discover_hooks)
+
+    report = build_uncertainty_source_readiness_inventory()
+
+    assert report["ready_sources"] == ["existence_degraded"]
+    assert calls == {"builders": 1, "hooks": 1}
+
+
+def test_owner_import_failures_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Broken owner modules should make sources blocked, not crash the inventory CLI."""
+
+    def broken_import_module(module_name: str) -> object:
+        raise RuntimeError(f"{module_name} unavailable")
+
+    monkeypatch.setattr(readiness.importlib, "import_module", broken_import_module)
+
+    report = build_uncertainty_source_readiness_inventory(
+        [
+            UncertaintySourceRunSpec(
+                source="synthetic",
+                condition_builder="_condition_existence_degraded",
+                scenario_hook="build_belief_for_mode",
+            )
+        ]
+    )
+
+    assert report["all_sources_ready"] is False
+    assert report["blocked_sources"] == ["synthetic"]
+    assert report["sources"][0]["missing"] == ["condition_builder", "scenario_hook"]
 
 
 def test_cli_reports_inventory_and_can_fail_on_blocked(capsys: pytest.CaptureFixture[str]) -> None:

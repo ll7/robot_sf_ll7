@@ -10,10 +10,13 @@ and surrogate output fields required for a per-source episode-level contrast?
 from __future__ import annotations
 
 import importlib
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 UNCERTAINTY_SOURCE_READINESS_SCHEMA = "uncertainty_source_readiness.v1"
+
+logger = logging.getLogger(__name__)
 
 _GENERALIZATION_SURROGATE_OUTPUTS = frozenset(
     {
@@ -75,18 +78,26 @@ def _missing_expected_outputs(spec: UncertaintySourceRunSpec) -> list[str]:
 def _discover_condition_builders() -> frozenset[str]:
     """Return condition-builder symbols present in the #2546 diagnostic owner."""
 
-    module = importlib.import_module(
-        "scripts.analysis.run_scenario_belief_uncertainty_diagnostic_issue_2546"
-    )
+    try:
+        module = importlib.import_module(
+            "scripts.analysis.run_scenario_belief_uncertainty_diagnostic_issue_2546"
+        )
+    except Exception:
+        logger.exception("Failed to import uncertainty diagnostic owner for readiness discovery")
+        return frozenset()
     return frozenset(name for name in dir(module) if name.startswith("_condition_"))
 
 
 def _discover_scenario_hooks() -> frozenset[str]:
     """Return episode scenario hook symbols present in the #3471 runner owner."""
 
-    module = importlib.import_module(
-        "scripts.validation.run_scenario_belief_episode_safety_issue_3471"
-    )
+    try:
+        module = importlib.import_module(
+            "scripts.validation.run_scenario_belief_episode_safety_issue_3471"
+        )
+    except Exception:
+        logger.exception("Failed to import episode safety owner for readiness discovery")
+        return frozenset()
     return frozenset(
         {"build_belief_for_mode"} if hasattr(module, "build_belief_for_mode") else set()
     )
@@ -169,7 +180,16 @@ def build_uncertainty_source_readiness_inventory(
     if not specs:
         raise ValueError("at least one uncertainty source spec is required")
 
-    rows = [classify_uncertainty_source_readiness(spec) for spec in specs]
+    known_condition_builders = _discover_condition_builders()
+    known_scenario_hooks = _discover_scenario_hooks()
+    rows = [
+        classify_uncertainty_source_readiness(
+            spec,
+            known_condition_builders=known_condition_builders,
+            known_scenario_hooks=known_scenario_hooks,
+        )
+        for spec in specs
+    ]
     ready_sources = sorted(row["source"] for row in rows if row["status"] == "ready")
     blocked_sources = sorted(row["source"] for row in rows if row["status"] == "blocked")
 

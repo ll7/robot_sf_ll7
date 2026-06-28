@@ -22,7 +22,7 @@ that must be inventoried explicitly, not as proof that the final canonical SNQI 
 Any older optimization or validation notes for this file are legacy context until the maintainer
 resolves the canonical-weight decision.
 
-## Known Provenance Conflict (issue #3723)
+## Known Provenance Conflict (Issue #3723)
 
 > **Status:** unresolved, `decision-required`. The "canonical" label is currently attached to more
 > than one disagreeing weight set, so which weights produce a given planner ranking depends on the
@@ -43,7 +43,7 @@ The code default (collision-dominant) and `model/snqi_canonical_weights_v1.json`
 both claim or imply "canonical" yet can yield different rankings. The raw-vs-normalized scale split
 overlaps issue #3699.
 
-## Mixed Normalization Basis (issue #3699)
+## Mixed Normalization Basis (Issue #3699)
 
 > **Status:** unresolved, `decision-required`. SNQI currently mixes raw, unbounded penalty terms
 > (`time`, `comfort`) with baseline-normalized penalty terms (`collisions`, `near`, `force_exceed`,

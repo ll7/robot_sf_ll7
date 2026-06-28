@@ -124,6 +124,81 @@ def analyze_seed_sufficiency(
     return payload
 
 
+def resolve_campaign_roots(
+    *,
+    campaign_roots: list[Path] | None = None,
+    campaign_output_roots: list[Path] | None = None,
+    campaign_ids: list[str] | None = None,
+) -> list[Path]:
+    """Resolve direct and container roots into campaign roots with seed reports."""
+
+    roots: list[Path] = []
+    roots.extend(campaign_roots or [])
+    ids = [campaign_id.strip() for campaign_id in (campaign_ids or []) if campaign_id.strip()]
+    for output_root in campaign_output_roots or []:
+        roots.extend(_discover_campaign_roots(output_root, campaign_ids=ids))
+    roots = _dedupe_paths(roots)
+    if not roots:
+        raise FileNotFoundError(
+            "No campaign roots supplied or discovered. Pass --campaign-root for exact roots, "
+            "or --campaign-output-root for a Slurm/output container containing reports/"
+            "seed_variability_by_scenario.json."
+        )
+    return roots
+
+
+def _discover_campaign_roots(output_root: Path, *, campaign_ids: list[str]) -> list[Path]:
+    """Find campaign roots beneath a Slurm/output container, failing closed if absent."""
+
+    if not output_root.exists():
+        raise FileNotFoundError(f"Campaign output root does not exist: {output_root}")
+    if _has_seed_reports(output_root):
+        candidates = [output_root]
+    else:
+        candidates = sorted(
+            {
+                path.parent.parent
+                for path in output_root.rglob("reports/seed_variability_by_scenario.json")
+                if path.is_file()
+            }
+        )
+    if campaign_ids:
+        candidates = [
+            root
+            for root in candidates
+            if any(campaign_id in str(root) for campaign_id in campaign_ids)
+        ]
+    if not candidates:
+        id_note = f" matching campaign id(s) {campaign_ids}" if campaign_ids else ""
+        raise FileNotFoundError(
+            f"No seed-sufficiency campaign reports found under {output_root}{id_note}. "
+            "Expected reports/seed_variability_by_scenario.json and "
+            "reports/seed_episode_rows.csv from the completed S20/S30 campaign."
+        )
+    return candidates
+
+
+def _has_seed_reports(root: Path) -> bool:
+    """Return whether a path already looks like a campaign root."""
+
+    reports = root / "reports"
+    return (reports / "seed_variability_by_scenario.json").is_file()
+
+
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    """Deduplicate paths while preserving deterministic order."""
+
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for path in sorted(paths, key=str):
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
+
+
 def _load_campaign(root: Path, *, metrics: tuple[str, ...]) -> dict[str, Any]:
     """Load the report artifacts used by the analysis."""
 
@@ -363,6 +438,7 @@ def _build_headline_contract(
         "schema_version": "headline-rank-stability-contract.v1",
         "contract_scope": "headline_rank_stability_ci_preflight",
         "label": labels[0],
+        "claim_status": _headline_claim_status(labels),
         "labels": labels,
         "source_roots": source_roots,
         "seed_counts": [campaign["seed_count"] for campaign in campaigns],
@@ -442,6 +518,18 @@ def _headline_labels(
     if labels:
         return labels
     return ["rank_flip_detected" if rank_flipped else "stable"]
+
+
+def _headline_claim_status(labels: list[str]) -> str:
+    """Map contract labels to paper-facing claim status."""
+
+    if "blocked_pending_s20_s30" in labels:
+        return "blocked_missing_increased_seed_rows"
+    if "row_status_exclusions_present" in labels:
+        return "blocked_non_promotable_rows"
+    if labels[0] == "rank_flip_detected":
+        return "not_statistically_distinguishable_budget"
+    return "paper_grade"
 
 
 def _headline_caveats(
@@ -772,8 +860,24 @@ def _build_parser() -> argparse.ArgumentParser:
         "--campaign-root",
         type=Path,
         action="append",
-        required=True,
+        default=[],
         help="Campaign root containing reports/seed_* artifacts. Repeat for multiple schedules.",
+    )
+    parser.add_argument(
+        "--campaign-output-root",
+        type=Path,
+        action="append",
+        default=[],
+        help=(
+            "Slurm/output container to scan for campaign roots with reports/"
+            "seed_variability_by_scenario.json. Repeatable."
+        ),
+    )
+    parser.add_argument(
+        "--campaign-id",
+        action="append",
+        default=[],
+        help="Optional substring filter for campaign roots discovered under --campaign-output-root.",
     )
     parser.add_argument("--output-dir", type=Path, required=True, help="Output report directory.")
     parser.add_argument(
@@ -814,8 +918,13 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _build_parser().parse_args(argv)
     metrics = tuple(args.metrics) if args.metrics else DEFAULT_METRICS
+    campaign_roots = resolve_campaign_roots(
+        campaign_roots=args.campaign_root,
+        campaign_output_roots=args.campaign_output_root,
+        campaign_ids=args.campaign_id,
+    )
     payload = analyze_seed_sufficiency(
-        args.campaign_root,
+        campaign_roots,
         args.output_dir,
         metrics=metrics,
         rank_metric=args.rank_metric,

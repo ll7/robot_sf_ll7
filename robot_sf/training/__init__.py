@@ -1,77 +1,61 @@
-"""Training utilities shared across CLI workflows."""
+"""Training utilities shared across CLI workflows.
 
-from .hardware_probe import collect_hardware_profile
-from .imitation_analysis import analyze_imitation_results
-from .imitation_config import (
-    BehaviouralCloningConfig,
-    ConvergenceCriteria,
-    EvaluationSchedule,
-    ExpertTrainingConfig,
-    PPOFineTuneConfig,
-    TrajectoryCollectionConfig,
-)
-from .multi_extractor_analysis import (
-    convergence_timestep,
-    generate_figures,
-    load_eval_history,
-    sample_efficiency_ratio,
-    summarize_metric,
-)
-from .multi_extractor_models import (
-    ExtractorConfigurationProfile,
-    ExtractorRunRecord,
-    HardwareProfile,
-    TrainingRunSummary,
-)
-from .multi_extractor_paths import (
-    DEFAULT_TMP_ROOT,
-    ENV_TMP_OVERRIDE,
-    make_extractor_directory,
-    make_run_directory,
-    resolve_base_output_root,
-    summary_paths,
-)
-from .multi_extractor_summary import write_summary_artifacts
-from .runtime_helpers import (
-    DEFAULT_RAY_RUNTIME_ENV_EXCLUDES,
-    append_jsonl_record,
-    resolve_ray_runtime_env,
-)
-from .scenario_sampling import (
-    ScenarioSampler,
-    ScenarioSwitchingEnv,
-    scenario_id_from_definition,
-)
+The package initializer keeps re-exports lazy so benchmark and scenario-loader
+imports do not pull optional analysis or torch-backed training dependencies.
+"""
 
-__all__ = [
-    "DEFAULT_RAY_RUNTIME_ENV_EXCLUDES",
-    "DEFAULT_TMP_ROOT",
-    "ENV_TMP_OVERRIDE",
-    "BehaviouralCloningConfig",
-    "ConvergenceCriteria",
-    "EvaluationSchedule",
-    "ExpertTrainingConfig",
-    "ExtractorConfigurationProfile",
-    "ExtractorRunRecord",
-    "HardwareProfile",
-    "PPOFineTuneConfig",
-    "ScenarioSampler",
-    "ScenarioSwitchingEnv",
-    "TrainingRunSummary",
-    "TrajectoryCollectionConfig",
-    "analyze_imitation_results",
-    "append_jsonl_record",
-    "collect_hardware_profile",
-    "convergence_timestep",
-    "generate_figures",
-    "load_eval_history",
-    "make_extractor_directory",
-    "make_run_directory",
-    "resolve_base_output_root",
-    "resolve_ray_runtime_env",
-    "sample_efficiency_ratio",
-    "scenario_id_from_definition",
-    "summarize_metric",
-    "summary_paths",
-    "write_summary_artifacts",
-]
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
+
+_LAZY_EXPORTS = {
+    "DEFAULT_RAY_RUNTIME_ENV_EXCLUDES": ("robot_sf.training.runtime_helpers",),
+    "DEFAULT_TMP_ROOT": ("robot_sf.training.multi_extractor_paths",),
+    "ENV_TMP_OVERRIDE": ("robot_sf.training.multi_extractor_paths",),
+    "BehaviouralCloningConfig": ("robot_sf.training.imitation_config",),
+    "ConvergenceCriteria": ("robot_sf.training.imitation_config",),
+    "EvaluationSchedule": ("robot_sf.training.imitation_config",),
+    "ExpertTrainingConfig": ("robot_sf.training.imitation_config",),
+    "ExtractorConfigurationProfile": ("robot_sf.training.multi_extractor_models",),
+    "ExtractorRunRecord": ("robot_sf.training.multi_extractor_models",),
+    "HardwareProfile": ("robot_sf.training.multi_extractor_models",),
+    "PPOFineTuneConfig": ("robot_sf.training.imitation_config",),
+    "ScenarioSampler": ("robot_sf.training.scenario_sampling",),
+    "ScenarioSwitchingEnv": ("robot_sf.training.scenario_sampling",),
+    "TrainingRunSummary": ("robot_sf.training.multi_extractor_models",),
+    "TrajectoryCollectionConfig": ("robot_sf.training.imitation_config",),
+    "analyze_imitation_results": ("robot_sf.training.imitation_analysis",),
+    "append_jsonl_record": ("robot_sf.training.runtime_helpers",),
+    "collect_hardware_profile": ("robot_sf.training.hardware_probe",),
+    "convergence_timestep": ("robot_sf.training.multi_extractor_analysis",),
+    "generate_figures": ("robot_sf.training.multi_extractor_analysis",),
+    "load_eval_history": ("robot_sf.training.multi_extractor_analysis",),
+    "make_extractor_directory": ("robot_sf.training.multi_extractor_paths",),
+    "make_run_directory": ("robot_sf.training.multi_extractor_paths",),
+    "resolve_base_output_root": ("robot_sf.training.multi_extractor_paths",),
+    "resolve_ray_runtime_env": ("robot_sf.training.runtime_helpers",),
+    "sample_efficiency_ratio": ("robot_sf.training.multi_extractor_analysis",),
+    "scenario_id_from_definition": ("robot_sf.training.scenario_sampling",),
+    "summary_paths": ("robot_sf.training.multi_extractor_paths",),
+    "summarize_metric": ("robot_sf.training.multi_extractor_analysis",),
+    "write_summary_artifacts": ("robot_sf.training.multi_extractor_summary",),
+}
+
+__all__ = list(_LAZY_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve compatibility re-exports without eager optional imports.
+
+    Returns:
+        Any: Exported symbol loaded from its owner module.
+    """
+
+    try:
+        (module_name,) = _LAZY_EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+    value = getattr(import_module(module_name), name)
+    globals()[name] = value
+    return value

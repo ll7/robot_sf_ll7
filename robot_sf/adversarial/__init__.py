@@ -1,5 +1,7 @@
 """Programmable adversarial scenario search helpers."""
 
+from typing import TYPE_CHECKING, Any
+
 from robot_sf.adversarial.batch_certification import (
     ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA,
     BatchCertification,
@@ -57,13 +59,26 @@ from robot_sf.adversarial.scenario_manifest import (
     validate_manifest_payload,
     write_manifest_yaml,
 )
-from robot_sf.adversarial.search import run_adversarial_search
 from robot_sf.adversarial.seed_sensitivity import (
     SeedSensitivityPerturbation,
     SeedSensitivityReplay,
     SeedSensitivitySummary,
     run_seed_sensitivity,
 )
+
+if TYPE_CHECKING:
+    from robot_sf.adversarial.search import run_adversarial_search
+
+
+def __getattr__(name: str) -> Any:
+    """Load heavyweight adversarial search dependencies only when requested."""
+
+    if name == "run_adversarial_search":
+        from robot_sf.adversarial.search import run_adversarial_search  # noqa: PLC0415
+
+        return run_adversarial_search
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA",

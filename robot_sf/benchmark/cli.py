@@ -1275,6 +1275,10 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                     "/simulation_config/max_episode_steps",
                 )
 
+        metadata = scenario.get("metadata")
+        if not isinstance(metadata, Mapping):
+            metadata = {}
+        spawn_mode = metadata.get("spawn_mode")
         density = sim_cfg.get("ped_density")
         if density is not None:
             try:
@@ -1286,14 +1290,15 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                         f"ped_density must be >= 0 (got {density_val})",
                         "/simulation_config/ped_density",
                     )
-                if density_val == 0:
+                marker_placeholder_density = density_val == 0 and spawn_mode == "markers"
+                if density_val == 0 and not marker_placeholder_density:
                     warn(
                         idx,
                         scenario_id,
                         "ped_density=0.0 means no pedestrians spawn",
                         "/simulation_config/ped_density",
                     )
-                if not 0.02 <= density_val <= 0.08:
+                if not marker_placeholder_density and not 0.02 <= density_val <= 0.08:
                     warn(
                         idx,
                         scenario_id,

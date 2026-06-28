@@ -9,6 +9,7 @@ scenarios:
     archetype: bottleneck
     label: real-world-inspired double sequential bottleneck
     density: high
+    spawn_mode: markers
     density_advisory: zero_baseline_route_spawn
     flow: bi
     groups: 0.0

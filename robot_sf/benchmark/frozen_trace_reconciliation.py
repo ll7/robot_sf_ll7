@@ -137,9 +137,17 @@ def _changed_and_unchanged_rows(
     return changed_rows, unchanged_rows
 
 
+def _event_field_names(events: Mapping[str, bool]) -> list[str]:
+    """Return sorted event field names present on one frozen ledger row."""
+
+    return sorted(events)
+
+
 def _affected_artifacts(
     artifact_manifest: Iterable[Mapping[str, Any]],
     changed_rows: Iterable[Mapping[str, Any]],
+    added_rows: Iterable[Mapping[str, Any]],
+    removed_rows: Iterable[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     """Classify declared claim/table/figure artifacts by changed consumed event fields.
 
@@ -152,20 +160,41 @@ def _affected_artifacts(
         for row in changed_rows
         if isinstance(row.get("changed_event_fields"), list)
     ]
-    all_changed_fields = set().union(*changed_fields_by_row) if changed_fields_by_row else set()
+    added_fields_by_row = [
+        set(row.get("event_fields", ()))
+        for row in added_rows
+        if isinstance(row.get("event_fields"), list)
+    ]
+    removed_fields_by_row = [
+        set(row.get("event_fields", ()))
+        for row in removed_rows
+        if isinstance(row.get("event_fields"), list)
+    ]
+    all_delta_fields = set().union(
+        *changed_fields_by_row,
+        *added_fields_by_row,
+        *removed_fields_by_row,
+    )
+    has_row_delta = bool(changed_fields_by_row or added_fields_by_row or removed_fields_by_row)
     statuses: list[dict[str, Any]] = []
     for artifact in artifact_manifest:
         consumed = artifact.get("consumes_event_fields", ())
         consumed_fields = (
             {str(field) for field in consumed} if isinstance(consumed, list) else set()
         )
-        affected_fields = sorted(consumed_fields & all_changed_fields)
+        affected_fields = sorted(consumed_fields & all_delta_fields)
         affected_row_count = sum(
             1 for row_fields in changed_fields_by_row if row_fields & consumed_fields
         )
+        affected_added_row_count = sum(
+            1 for row_fields in added_fields_by_row if row_fields & consumed_fields
+        )
+        affected_removed_row_count = sum(
+            1 for row_fields in removed_fields_by_row if row_fields & consumed_fields
+        )
         if affected_fields:
             status = "affected_reconciliation_required"
-        elif all_changed_fields:
+        elif has_row_delta:
             status = "unchanged_by_event_delta"
         else:
             status = "unchanged"
@@ -177,6 +206,8 @@ def _affected_artifacts(
                 "consumes_event_fields": sorted(consumed_fields),
                 "affected_event_fields": affected_fields,
                 "affected_changed_row_count": affected_row_count,
+                "affected_added_row_count": affected_added_row_count,
+                "affected_removed_row_count": affected_removed_row_count,
             }
         )
     return statuses
@@ -201,6 +232,14 @@ def build_frozen_trace_reconciliation_report(
     changed_rows, unchanged_rows = _changed_and_unchanged_rows(old_index, new_index)
     added_keys = sorted(set(new_index) - set(old_index))
     removed_keys = sorted(set(old_index) - set(new_index))
+    added_rows = [
+        {"episode_key": key, "event_fields": _event_field_names(new_index[key])}
+        for key in added_keys
+    ]
+    removed_rows = [
+        {"episode_key": key, "event_fields": _event_field_names(old_index[key])}
+        for key in removed_keys
+    ]
     return {
         "schema_version": FROZEN_TRACE_RECONCILIATION_SCHEMA,
         "summary": {
@@ -217,9 +256,14 @@ def build_frozen_trace_reconciliation_report(
         "new_event_counts": _event_counts(new_index),
         "changed_rows": changed_rows,
         "unchanged_rows": unchanged_rows,
-        "added_rows": [{"episode_key": key} for key in added_keys],
-        "removed_rows": [{"episode_key": key} for key in removed_keys],
-        "affected_artifacts": _affected_artifacts(artifact_manifest, changed_rows),
+        "added_rows": added_rows,
+        "removed_rows": removed_rows,
+        "affected_artifacts": _affected_artifacts(
+            artifact_manifest,
+            changed_rows,
+            added_rows,
+            removed_rows,
+        ),
         "semantics": {
             "input_contract": "existing EpisodeEventLedger.v1 rows only",
             "benchmark_semantics_changed": False,

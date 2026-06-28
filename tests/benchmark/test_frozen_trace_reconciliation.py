@@ -140,8 +140,77 @@ def test_report_counts_event_deltas_and_affected_artifact_status() -> None:
 
     statuses = {row["artifact_id"]: row for row in report["affected_artifacts"]}
     assert statuses["claim:collision-free"]["status"] == "affected_reconciliation_required"
+    assert statuses["claim:collision-free"]["affected_changed_row_count"] == 1
+    assert statuses["claim:collision-free"]["affected_added_row_count"] == 0
+    assert statuses["claim:collision-free"]["affected_removed_row_count"] == 0
     assert statuses["table:safety-summary"]["status"] == "affected_reconciliation_required"
     assert statuses["figure:near-miss"]["status"] == "unchanged_by_event_delta"
+
+
+def test_added_and_removed_rows_mark_consuming_artifacts_affected() -> None:
+    """Added or removed frozen rows still require artifact reconciliation."""
+
+    report = build_frozen_trace_reconciliation_report(
+        [_ledger_row("removed-episode", collision=True)],
+        [_ledger_row("added-episode", collision=True)],
+        artifact_manifest=[
+            {
+                "artifact_id": "claim:collision-count",
+                "artifact_type": "claim",
+                "consumes_event_fields": ["exact_events.collision"],
+            }
+        ],
+    )
+
+    assert report["summary"]["changed_row_count"] == 0
+    assert report["summary"]["added_row_count"] == 1
+    assert report["summary"]["removed_row_count"] == 1
+    assert report["added_rows"] == [
+        {
+            "episode_key": "scenario-a|added-episode|7|demo",
+            "event_fields": [
+                "exact_events.collision",
+                "exact_events.goal_reached",
+                "exact_events.invalid_run",
+                "exact_events.timeout",
+                "surrogate_events.clearance_breach",
+                "surrogate_events.late_evasive",
+                "surrogate_events.near_miss",
+                "surrogate_events.occlusion_near_miss",
+                "surrogate_events.oscillation",
+                "surrogate_events.ttc_breach",
+            ],
+        }
+    ]
+    assert report["removed_rows"] == [
+        {
+            "episode_key": "scenario-a|removed-episode|7|demo",
+            "event_fields": [
+                "exact_events.collision",
+                "exact_events.goal_reached",
+                "exact_events.invalid_run",
+                "exact_events.timeout",
+                "surrogate_events.clearance_breach",
+                "surrogate_events.late_evasive",
+                "surrogate_events.near_miss",
+                "surrogate_events.occlusion_near_miss",
+                "surrogate_events.oscillation",
+                "surrogate_events.ttc_breach",
+            ],
+        }
+    ]
+    assert report["affected_artifacts"] == [
+        {
+            "artifact_id": "claim:collision-count",
+            "artifact_type": "claim",
+            "status": "affected_reconciliation_required",
+            "consumes_event_fields": ["exact_events.collision"],
+            "affected_event_fields": ["exact_events.collision"],
+            "affected_changed_row_count": 0,
+            "affected_added_row_count": 1,
+            "affected_removed_row_count": 1,
+        }
+    ]
 
 
 def test_cli_writes_frozen_reconciliation_report(tmp_path: Path) -> None:

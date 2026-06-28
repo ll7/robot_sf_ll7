@@ -147,6 +147,18 @@ def test_report_counts_event_deltas_and_affected_artifact_status() -> None:
     assert statuses["claim:collision-free"]["affected_removed_row_count"] == 0
     assert statuses["table:safety-summary"]["status"] == "affected_reconciliation_required"
     assert statuses["figure:near-miss"]["status"] == "unchanged_by_event_delta"
+    assert report["affected_artifact_summary"] == {
+        "total_artifacts": 3,
+        "by_type": {
+            "claim": {"affected_reconciliation_required": 1},
+            "figure": {"unchanged_by_event_delta": 1},
+            "table": {"affected_reconciliation_required": 1},
+        },
+        "by_status": {
+            "affected_reconciliation_required": 2,
+            "unchanged_by_event_delta": 1,
+        },
+    }
 
 
 def test_added_and_removed_rows_mark_consuming_artifacts_affected() -> None:
@@ -213,6 +225,45 @@ def test_added_and_removed_rows_mark_consuming_artifacts_affected() -> None:
             "affected_removed_row_count": 1,
         }
     ]
+    assert report["affected_artifact_summary"] == {
+        "total_artifacts": 1,
+        "by_type": {"claim": {"affected_reconciliation_required": 1}},
+        "by_status": {"affected_reconciliation_required": 1},
+    }
+
+
+def test_artifact_summary_treats_none_as_missing_but_preserves_falsy_values() -> None:
+    """Artifact summary coercion preserves valid falsy values while handling missing fields."""
+
+    report = build_frozen_trace_reconciliation_report(
+        [_ledger_row("episode-1")],
+        [_ledger_row("episode-1", collision=True)],
+        artifact_manifest=[
+            {
+                "artifact_id": None,
+                "artifact_type": None,
+                "consumes_event_fields": ["exact_events.collision"],
+            },
+            {
+                "artifact_id": 0,
+                "artifact_type": 0,
+                "consumes_event_fields": ["exact_events.collision"],
+            },
+        ],
+    )
+
+    assert report["affected_artifacts"][0]["artifact_id"] == "unknown"
+    assert report["affected_artifacts"][0]["artifact_type"] == "unknown"
+    assert report["affected_artifacts"][1]["artifact_id"] == "0"
+    assert report["affected_artifacts"][1]["artifact_type"] == "0"
+    assert report["affected_artifact_summary"] == {
+        "total_artifacts": 2,
+        "by_type": {
+            "0": {"affected_reconciliation_required": 1},
+            "unknown": {"affected_reconciliation_required": 1},
+        },
+        "by_status": {"affected_reconciliation_required": 2},
+    }
 
 
 def test_episode_keys_preserve_valid_falsy_identifiers() -> None:

@@ -36,6 +36,11 @@ def _first_present_identifier(*values: Any, default: str = "unknown") -> str:
     return default
 
 
+def _coerce_optional_field(value: Any, *, default: str = "unknown") -> str:
+    """Return a stable string while treating only ``None`` as missing."""
+    return str(value) if value is not None else default
+
+
 def _ledger_from_row(row: Mapping[str, Any]) -> Mapping[str, Any]:
     """Return the existing event ledger carried by a frozen row."""
 
@@ -217,8 +222,8 @@ def _affected_artifacts(
             status = "unchanged"
         statuses.append(
             {
-                "artifact_id": str(artifact.get("artifact_id", "unknown")),
-                "artifact_type": str(artifact.get("artifact_type", "unknown")),
+                "artifact_id": _coerce_optional_field(artifact.get("artifact_id")),
+                "artifact_type": _coerce_optional_field(artifact.get("artifact_type")),
                 "status": status,
                 "consumes_event_fields": sorted(consumed_fields),
                 "affected_event_fields": affected_fields,
@@ -228,6 +233,36 @@ def _affected_artifacts(
             }
         )
     return statuses
+
+
+def _affected_artifact_summary(
+    affected_artifacts: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Summarize affected artifact statuses by artifact type and overall.
+
+    Returns:
+        JSON-serializable status counts for quick review.
+    """
+    by_type: dict[str, dict[str, int]] = {}
+    by_status: dict[str, int] = {}
+    total = 0
+
+    for artifact in affected_artifacts:
+        artifact_type = _coerce_optional_field(artifact.get("artifact_type"))
+        status = _coerce_optional_field(artifact.get("status"))
+        total += 1
+        by_status[status] = by_status.get(status, 0) + 1
+        type_counts = by_type.setdefault(artifact_type, {})
+        type_counts[status] = type_counts.get(status, 0) + 1
+
+    return {
+        "total_artifacts": total,
+        "by_type": {
+            artifact_type: dict(sorted(status_counts.items()))
+            for artifact_type, status_counts in sorted(by_type.items())
+        },
+        "by_status": dict(sorted(by_status.items())),
+    }
 
 
 def build_frozen_trace_reconciliation_report(
@@ -257,6 +292,12 @@ def build_frozen_trace_reconciliation_report(
         {"episode_key": key, "event_fields": _event_field_names(old_index[key])}
         for key in removed_keys
     ]
+    affected_artifacts = _affected_artifacts(
+        artifact_manifest,
+        changed_rows,
+        added_rows,
+        removed_rows,
+    )
     return {
         "schema_version": FROZEN_TRACE_RECONCILIATION_SCHEMA,
         "summary": {
@@ -275,12 +316,8 @@ def build_frozen_trace_reconciliation_report(
         "unchanged_rows": unchanged_rows,
         "added_rows": added_rows,
         "removed_rows": removed_rows,
-        "affected_artifacts": _affected_artifacts(
-            artifact_manifest,
-            changed_rows,
-            added_rows,
-            removed_rows,
-        ),
+        "affected_artifacts": affected_artifacts,
+        "affected_artifact_summary": _affected_artifact_summary(affected_artifacts),
         "semantics": {
             "input_contract": "existing EpisodeEventLedger.v1 rows only",
             "benchmark_semantics_changed": False,

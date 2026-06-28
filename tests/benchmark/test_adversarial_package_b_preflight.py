@@ -104,6 +104,18 @@ def test_preflight_fails_closed_for_missing_budget_seed_and_provenance(tmp_path:
     assert any("paper_facing_success_claims" in blocker for blocker in result.blockers)
 
 
+def test_preflight_fails_closed_for_missing_manifest(tmp_path: Path) -> None:
+    """Missing manifest path returns a structured blocker instead of running anything."""
+    manifest = tmp_path / "configs/adversarial/missing_package_b_manifest.yaml"
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["schema_version"] is False
+    assert any("manifest missing" in blocker for blocker in result.blockers)
+
+
 def test_preflight_blocks_missing_inputs_and_output_paths(tmp_path: Path) -> None:
     """Missing local inputs or wrong output roots cannot pass readiness."""
     manifest = _base_manifest(tmp_path)

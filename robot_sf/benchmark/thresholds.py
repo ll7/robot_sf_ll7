@@ -51,7 +51,7 @@ def legacy_missing_threshold_profile() -> dict[str, Any]:
         "collision_distance_m": float(COLLISION_DIST),
         "near_miss_distance_m": float(NEAR_MISS_DIST),
         "comfort_force_threshold": float(COMFORT_FORCE_THRESHOLD),
-        "pedestrian_safety_metric": "surface_clearance_m",
+        "pedestrian_safety_metric": "center_distance_m",
         "pedestrian_collision_definition": "center_distance_m < collision_distance_m",
         "wall_agent_collision_definition": "center_distance_m < collision_distance_m",
         "near_miss_definition": "collision_distance_m <= center_distance_m < near_miss_distance_m",

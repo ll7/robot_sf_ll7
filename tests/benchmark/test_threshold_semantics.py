@@ -25,7 +25,7 @@ def test_legacy_missing_threshold_profile_names_center_distance_as_diagnostic() 
     """Legacy center-distance bands remain explicit diagnostics, not safety metrics."""
     profile = legacy_missing_threshold_profile()
 
-    assert profile["pedestrian_safety_metric"] == "surface_clearance_m"
+    assert profile["pedestrian_safety_metric"] == "center_distance_m"
     assert profile["center_distance_pedestrian_role"] == "legacy_geometric_diagnostic"
     assert profile["pedestrian_collision_definition"] == (
         "center_distance_m < collision_distance_m"

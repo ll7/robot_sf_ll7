@@ -3,9 +3,9 @@
 
 
 This guide explains how to recompute, optimize, and analyze Social Navigation Quality Index
-(SNQI) weights. SNQI is secondary diagnostic evidence in this repository, not the primary safety
-ranking; see [weights_provenance.md](weights_provenance.md) before treating a weight file as
-canonical.
+(SNQI) weights. SNQI is secondary diagnostic evidence in this repository, not the primary
+safety ranking; see [weights_provenance.md](weights_provenance.md) before treating a weight
+file as canonical.
 
 ## Contents
 - [Contents](#contents)
@@ -13,6 +13,7 @@ canonical.
   - [Inline SNQI during benchmark run](#inline-snqi-during-benchmark-run)
 - [Standalone SNQI CLI](#standalone-snqi-cli)
 - [Overview](#overview)
+- [Governance Preflight](#governance-preflight)
   - [Normalization Rationale (Median / p95)](#normalization-rationale-median--p95)
   - [Clamping and Outliers](#clamping-and-outliers)
 - [Installation (uv)](#installation-uv)
@@ -103,9 +104,9 @@ The standalone CLI uses **canonical method names** that match the implementation
 
 - **`canonical`** (default): current implementation-default weights
   (`w_success=1.0`, `w_time=0.8`, `w_collisions=2.0`, etc.). This method name is preserved for
-  compatibility, but the repository has an unresolved governance conflict between
-  canonical-labeled sources; it is not proof that a final benchmark-canonical weight set has been
-    chosen.
+  compatibility, but the repository still has an unresolved governance conflict between
+  canonical-labeled sources; this is not proof that a final benchmark-canonical weight set has
+  been chosen.
 - **`balanced`**: Equal weights across all components
 - **`optimized`**: Adaptive weights based on baseline statistics
 
@@ -127,7 +128,7 @@ uv run robot_sf_bench run \
 
 When both files are provided, each episode record includes `metrics.snqi` computed with the
 supplied weights and median/p95 clamping for baseline-normalized terms. Missing baseline entries
-currently fall back to neutral (0) contribution; use the governance preflight below when that
+currently fall back to a neutral (0) contribution; use the governance preflight below when that
 behavior should fail closed. See the naming note above for `w_near` vs `w_near_misses`.
 
 End-to-end (baseline stats + run):
@@ -192,10 +193,10 @@ uv run python scripts/validation/check_snqi_governance.py
 uv run python scripts/validation/check_snqi_governance.py --allow-current-blockers --json
 ```
 
-The preflight is secondary diagnostic evidence only. It does not choose canonical weights, change
-normalization, change `compute_snqi` output, or make SNQI the primary safety ranking. Collision and
-near-miss safety semantics remain surface-clearance-facing; center-distance variants should be named
-as diagnostics when used.
+The preflight is secondary diagnostic evidence only. It does not choose canonical weights,
+change normalization, change `compute_snqi` output, or make SNQI the primary safety ranking.
+Collision and near-miss safety semantics remain surface-clearance-facing; center-distance
+variants should be named as diagnostics when used.
 
 ### Normalization Rationale (Median / p95)
 Chosen for stability + robustness:

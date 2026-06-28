@@ -1,83 +1,64 @@
 # SNQI Weights Artifact Provenance
 
-**Purpose**: Document the provenance, validation, and lifecycle management of SNQI weight artifacts.
+**Purpose**: Document the current Social Navigation Quality Index (SNQI) weight artifact
+provenance, validation status, and lifecycle guidance.
 
 ## Overview
 
-The Social Navigation Quality Index (SNQI) uses weighted composite scoring to evaluate robot navigation performance. This document tracks the provenance of weight configuration artifacts and their validation.
+SNQI uses a weighted composite score to summarize robot navigation performance. This document
+records the current weight-file situation and the fail-closed diagnostics that keep unresolved
+governance issues visible. The current checks are secondary diagnostic evidence only: they do not
+choose canonical weights, change `compute_snqi`, or make SNQI a primary safety ranking.
 
 ## Current Artifacts
 
-### v1 Canonical Weights (`model/snqi_canonical_weights_v1.json`)
+### v1 Canonical-Labeled Weights (`model/snqi_canonical_weights_v1.json`)
 
-**Source**: Research team optimization study
-**Date**: 2025-01-02  
-**Method**: Multi-objective optimization with Pareto analysis
-**Validation**: Tested against 500 baseline episodes across 5 scenarios
-**Status**: Production ready
+**Current status**: unresolved diagnostic input, not a final canonical decision.
 
-```json
-{
-  "version": "v1",
-  "metadata": {
-    "creation_date": "2025-01-02",
-    "method": "optimized",
-    "validation_episodes": 500,
-    "notes": "Optimized for balanced safety-efficiency trade-offs"
-  },
-  "weights": {
-    "safety": 0.4,
-    "efficiency": 0.3,
-    "comfort": 0.3
-  },
-  "sub_weights": {
-    "safety": {
-      "collision_rate": 0.6,
-      "near_miss_rate": 0.4
-    },
-    "efficiency": {
-      "path_efficiency": 0.7,
-      "time_efficiency": 0.3
-    },
-    "comfort": {
-      "jerk": 0.4,
-      "acceleration": 0.3,
-      "force_discomfort": 0.3
-    }
-  }
-}
-```
+The filename carries a canonical label, but issue #3723 documents that it conflicts with the
+`recompute_snqi_weights("canonical")` code default. Treat this file as an existing weight artifact
+that must be inventoried explicitly, not as proof that the final canonical SNQI weights are settled.
+Any older optimization or validation notes for this file are legacy context until the maintainer
+resolves the canonical-weight decision.
 
-## Known Provenance Conflict (issue #3723)
+## Known Provenance Conflict (Issue #3723)
 
-> **Status:** unresolved — `decision-required`. The "canonical" label is currently
-> attached to **more than one disagreeing weight set**, so which weights produce a
-> given planner ranking depends on which path is loaded. Choosing the single source
-> of truth is a maintainer decision and is **out of scope** for the diagnostic
-> described below.
+> **Status:** unresolved, `decision-required`. The "canonical" label is currently attached to more
+> than one disagreeing weight set, so which weights produce a given planner ranking depends on the
+> path loaded. Choosing a single source of truth is a maintainer decision and is out of scope for the
+> diagnostic checks described below.
 
-Conflicting sets that exist today:
+Conflicting sets exist today:
 
 | Source | Designation | Dominant term | Scale |
 | --- | --- | --- | --- |
 | `recompute_snqi_weights("canonical")` (code default) | canonical | `w_collisions` (2.0) | raw |
 | `model/snqi_canonical_weights_v1.json` | canonical | `w_jerk` (3.0) | raw |
 | `configs/benchmarks/snqi_weights_camera_ready_v1.json` | versioned | `w_jerk` (3.0) | raw |
-| `configs/benchmarks/snqi_weights_camera_ready_v2.json` | versioned | `w_time` | normalized (sum ≈ 1) |
-| `configs/benchmarks/snqi_weights_camera_ready_v3.json` | versioned | `w_near` | normalized (sum ≈ 1) |
+| `configs/benchmarks/snqi_weights_camera_ready_v2.json` | versioned | `w_time` | normalized, sum about 1 |
+| `configs/benchmarks/snqi_weights_camera_ready_v3.json` | versioned | `w_near` | normalized, sum about 1 |
 
-The code default (collision-dominant) and `model/snqi_canonical_weights_v1.json`
-(jerk-dominant) both claim "canonical" yet yield different rankings; the
-raw-vs-normalized scale split overlaps with #3699.
+The code default (collision-dominant) and `model/snqi_canonical_weights_v1.json` (jerk-dominant)
+both claim or imply "canonical" yet can yield different rankings. The raw-vs-normalized scale split
+overlaps issue #3699.
 
-### Fail-closed provenance preflight (read-only diagnostic)
+## Mixed Normalization Basis (Issue #3699)
 
-Until a canonical set is designated, a read-only inventory/preflight surfaces these
-conflicts instead of letting them stay silent. It **does not** change scoring,
-re-tune weights, or pick a winner.
+> **Status:** unresolved, `decision-required`. SNQI currently mixes raw, unbounded penalty terms
+> (`time`, `comfort`) with baseline-normalized penalty terms (`collisions`, `near`, `force_exceed`,
+> `jerk`). The diagnostic checks make that visible and fail closed, but they do not choose between
+> normalizing the raw terms and documenting a bounded raw-term asymmetry.
+
+## Diagnostics
+
+### Weight-Provenance Inventory
+
+Until a canonical set is designated, the read-only inventory/preflight surfaces conflicts instead
+of letting them stay silent. It does not change scoring, re-tune weights, or pick a winner.
 
 ```bash
-# Human-readable inventory + conflicts; exits non-zero (2) on a blocking conflict.
+# Human-readable inventory + conflicts; exits non-zero (2) on blocking conflict.
 uv run python -m robot_sf.benchmark.snqi.cli inventory
 
 # Machine-readable report; inspection mode never fails.
@@ -89,103 +70,57 @@ Programmatic use:
 ```python
 from robot_sf.benchmark.snqi import preflight_snqi_weight_sets
 
-# Raises SNQIWeightProvenanceError on a blocking (error-severity) conflict.
+# Raises SNQIWeightProvenanceError on a blocking error-severity conflict.
 report = preflight_snqi_weight_sets(strict=True)
 ```
 
 Implementation: `robot_sf/benchmark/snqi/weights_inventory.py`; guard tests in
 `tests/test_snqi_weights_inventory.py`.
 
-## Weight Selection Methodology
+### Normalization Inventory
 
-### 1. Multi-Objective Optimization Process
-- **Input**: Baseline performance across safety, efficiency, comfort metrics
-- **Process**: Pareto frontier analysis with stakeholder preference elicitation
-- **Output**: Weight vectors that maximize discriminative power while respecting domain constraints
+The normalization inventory reports which SNQI terms are raw, which are baseline-normalized, and
+which terms are unbounded. It can fail closed while the mixed basis remains unresolved.
 
-### 2. Validation Criteria
-- **Coverage**: Weights tested on ≥500 episodes across diverse scenarios
-- **Stability**: SNQI rankings consistent across random seeds
-- **Sensitivity**: Weight perturbations don't cause rank inversions for clearly different algorithms
-- **Domain Alignment**: Results align with expert judgments in navigation quality
-
-### 3. Approval Process
-- Research team review and validation
-- Performance testing on holdout scenarios
-- Documentation of assumptions and limitations
-- Versioned release with metadata
-
-## Using Weight Artifacts
-
-### Programmatic Access
-```python
-from robot_sf.benchmark.snqi.types import SNQIWeights
-
-# Load canonical weights
-weights = SNQIWeights.from_file("model/snqi_canonical_weights_v1.json")
-
-# Access individual weights
-safety_weight = weights.get_weight("safety")
-collision_weight = weights.get_sub_weight("safety", "collision_rate")
-```
-
-### CLI Usage
 ```bash
-# Use canonical weights for aggregation
-robot_sf_bench aggregate --in episodes.jsonl --out summary.json \
-  --snqi-weights model/snqi_canonical_weights_v1.json
-
-# Recompute SNQI with custom weights during aggregation
-robot_sf_bench aggregate --in episodes.jsonl --out summary.json \
-  --snqi-weights custom_weights.json
+uv run python scripts/benchmark/snqi_normalization_inventory_report.py --fail-on-mixed-scale
 ```
 
-## Artifact Lifecycle
+Implementation: `robot_sf/benchmark/snqi/normalization_inventory.py`; guard tests in
+`tests/benchmark/test_snqi_normalization_inventory.py`.
 
-### Version Control
-- All weight artifacts stored in `model/` directory
-- JSON format with embedded metadata
-- Semantic versioning: `snqi_canonical_weights_v{major}.json`
-- Git tracking for full provenance
+### Combined Governance Preflight
 
-### Updates and Deprecation
-1. **New Research**: Create new version file (`v2`, `v3`, etc.)
-2. **Validation**: Test new weights against established baselines
-3. **Migration**: Update default references in code/configs
-4. **Deprecation**: Mark old versions as deprecated in metadata
-5. **Removal**: Archive deprecated weights after 2+ major versions
+Use this check when a workflow needs one fail-closed gate for the current SNQI governance state. It
+combines the weight-provenance inventory (#3723) with the normalization-basis inventory (#3699).
+It is secondary diagnostic evidence only: it does not choose canonical weights, change
+`compute_snqi`, or make SNQI a primary safety ranking.
 
-### Quality Assurance
-- **Schema Validation**: All weight files validated against JSON schema
-- **Range Checks**: Weights in [0,1] range, sub-weights sum to 1.0 per category
-- **Performance Testing**: Benchmark impact on computation time and memory
-- **Documentation**: Changes tracked in `CHANGELOG.md`
+```bash
+# Exits non-zero while the current governance blockers remain unresolved.
+uv run python scripts/validation/check_snqi_governance.py
+
+# Inspection mode keeps the same report but returns success for exploratory use.
+uv run python scripts/validation/check_snqi_governance.py --allow-current-blockers --json
+```
+
+Implementation: `scripts/validation/check_snqi_governance.py`; guard tests in
+`tests/benchmark/test_snqi_governance_preflight.py`.
+
+## Lifecycle Guidance
+
+Future SNQI weight changes should be versioned and should state whether they are diagnostic,
+experimental, or canonical. A future canonical decision should update this file, the relevant JSON
+artifact metadata, and the fail-closed tests so that only one canonical source is accepted.
+
+Do not rename, remove, or reinterpret existing weight files silently. If a file is deprecated, leave
+an explicit migration note that names the replacement, the evidence that supports it, and the
+benchmark comparability impact.
 
 ## Troubleshooting
 
-### Common Issues
-1. **Missing Weight File**: Check `model/` directory and file permissions
-2. **Schema Validation Failed**: Verify JSON structure matches expected format
-3. **Inconsistent Results**: Ensure same weight version used across analysis pipeline
-4. **Performance Degradation**: Check for weight file corruption or network latency
-
-### Validation Commands
-```bash
-# Validate weight file format
-python -c "from robot_sf.benchmark.snqi.types import SNQIWeights; SNQIWeights.from_file('model/snqi_canonical_weights_v1.json'); print('Valid')"
-
-# Test SNQI computation
-robot_sf_bench aggregate --in test_episodes.jsonl --out /dev/null \
-  --snqi-weights model/snqi_canonical_weights_v1.json
-```
-
-## Contact and Support
-
-For questions about weight artifact provenance or to propose new weight configurations:
-- Technical Issues: Check `docs/snqi-weight-tools/README.md`  
-- Research Questions: Reference original optimization study documentation
-- Process Questions: Review this provenance document
-
----
-**Last Updated**: 2025-01-19  
-**Next Review**: 2025-04-01
+- If a workflow fails on issue #3723, inspect the weight-provenance inventory and decide whether the
+  workflow needs inspection mode or a maintainer-approved canonical-weight decision.
+- If a workflow fails on issue #3699, inspect the normalization inventory and decide whether the
+  workflow needs inspection mode or a maintainer-approved normalization remedy.
+- Do not use either unresolved diagnostic as proof of a primary safety ranking.

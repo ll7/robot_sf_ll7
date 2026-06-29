@@ -244,7 +244,7 @@ def _certification_gaps(entries: list[dict[str, Any]]) -> tuple[list[str], list[
             missing.append(archive_id)
             continue
         status = _certification_status(certification)
-        if status and status not in _PASSING_CERTIFICATION_STATUSES:
+        if status is None or status not in _PASSING_CERTIFICATION_STATUSES:
             invalid.append(archive_id)
     return missing, invalid
 
@@ -266,16 +266,22 @@ def _certification_status(value: Any) -> str | None:
         Lowercase certification status when available, otherwise ``None``.
     """
 
+    if isinstance(value, bool):
+        return "passed" if value else "failed"
     if isinstance(value, str):
         return value.strip().lower() or None
     if isinstance(value, dict):
         for key in ("status", "verdict", "classification", "result"):
-            raw_status = value.get(key)
+            if key not in value:
+                continue
+            raw_status = value[key]
+            if isinstance(raw_status, bool):
+                return "passed" if raw_status else "failed"
             if isinstance(raw_status, str) and raw_status.strip():
                 return raw_status.strip().lower()
+            if raw_status is None or (isinstance(raw_status, str) and not raw_status.strip()):
+                return "failed"
         return "certified" if value else None
-    if isinstance(value, bool):
-        return "passed" if value else "failed"
     return None
 
 

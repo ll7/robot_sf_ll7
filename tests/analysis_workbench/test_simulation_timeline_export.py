@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from scripts.analysis.export_trace_timeline_issue_1646 import (
+from robot_sf.analysis_workbench.simulation_timeline import (
     SIMULATION_TIMELINE_SCHEMA_FILE,
     SIMULATION_TIMELINE_SCHEMA_VERSION,
     build_simulation_timeline,

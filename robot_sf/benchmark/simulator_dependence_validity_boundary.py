@@ -169,7 +169,11 @@ def _append_axis_coverage_reasons(
     if not isinstance(axes, list):
         missing_inputs.append("study_summary.rank_stability.axes")
         return
-    observed = {str(axis.get("axis")) for axis in axes if isinstance(axis, Mapping)}
+    observed = {
+        str(axis.get("axis"))
+        for axis in axes
+        if isinstance(axis, Mapping) and axis.get("axis") is not None
+    }
     missing_axes = sorted(str(axis) for axis in expected_axes if str(axis) not in observed)
     if missing_axes:
         no_claim_reasons.append("missing_expected_axes:" + ",".join(missing_axes))
@@ -195,7 +199,8 @@ def _append_manifest_reasons(
 def _append_boundary_reasons(
     study_summary: Mapping[str, Any], boundary_violations: list[str]
 ) -> None:
-    boundary = str(study_summary.get("claim_boundary", ""))
+    boundary_value = study_summary.get("claim_boundary")
+    boundary = str(boundary_value) if boundary_value is not None else ""
     for phrase in REQUIRED_CLAIM_BOUNDARY_PHRASES:
         if phrase not in boundary:
             boundary_violations.append(f"claim_boundary_missing:{phrase}")

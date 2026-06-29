@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--summary",
-        default=DEFAULT_SUMMARY,
+        default=None,
         help="Promoted fidelity-sensitivity summary JSON.",
     )
     parser.add_argument(
@@ -56,7 +56,8 @@ def main() -> int:
     """CLI entry point."""
 
     args = parse_args()
-    summary = load_json_mapping(REPO_ROOT / args.summary)
+    summary_path = args.summary or DEFAULT_SUMMARY
+    summary = load_json_mapping(REPO_ROOT / summary_path)
     manifest_check = (
         load_json_mapping(REPO_ROOT / args.manifest_check) if args.manifest_check else None
     )

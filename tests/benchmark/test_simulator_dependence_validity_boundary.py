@@ -115,6 +115,40 @@ def test_manifest_check_failure_prevents_claim_ready() -> None:
     assert "manifest_check_not_passing" in packet["no_claim_reasons"]
 
 
+def test_none_claim_boundary_is_normalized_not_stringified() -> None:
+    """An explicit None claim_boundary must not coerce to the literal 'None' string."""
+
+    summary = _full_scope_summary()
+    summary["claim_boundary"] = None
+    packet = build_simulator_dependence_decision(
+        summary,
+        manifest_check={"passes": True, "axis_count": 2},
+        expected_axes=["integration_timestep", "observation_noise"],
+    )
+
+    assert packet["decision"] == DECISION_NO_CLAIM
+    assert packet["boundary_violations"] == [
+        "claim_boundary_missing:not benchmark evidence",
+        "claim_boundary_missing:not simulator-realism evidence",
+        "claim_boundary_missing:not sim-to-real evidence",
+        "claim_boundary_missing:not paper-facing evidence",
+    ]
+
+
+def test_none_axis_name_does_not_satisfy_expected_axis() -> None:
+    """A null axis name must not coerce to 'None' and mask a missing expected axis."""
+
+    summary = _full_scope_summary()
+    summary["rank_stability"]["axes"] = [{"axis": None}, {"axis": "integration_timestep"}]
+    packet = build_simulator_dependence_decision(
+        summary,
+        expected_axes=["integration_timestep", "None"],
+    )
+
+    assert packet["decision"] == DECISION_NO_CLAIM
+    assert "missing_expected_axes:None" in packet["no_claim_reasons"]
+
+
 def test_non_mapping_json_loader_rejects_payload(tmp_path: Path) -> None:
     """Loader raises a clear error when JSON is not an object."""
 

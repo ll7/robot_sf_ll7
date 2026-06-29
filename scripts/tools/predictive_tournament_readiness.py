@@ -3,16 +3,15 @@
 
 The epic #3215 runs three hard-case levers concurrently as a tournament -- Selection
 (#3204), Authority (#3213), and Model (#3214) -- under a shared benchmark protocol, then
-synthesizes a single decision. The full campaign is SLURM/GPU-gated and needs maintainer
-budget pre-authorization, so this helper deliberately does **not** submit jobs, run the
-tournament, or rank arms.
+synthesizes a single decision. The full campaign is SLURM/GPU-gated; this helper
+deliberately does **not** submit jobs, run the tournament, or rank arms.
 
 Instead it answers a narrow, repeatable question: *are the local prerequisites in place to
 launch each arm?* For every arm and for the shared protocol it inventories the expected
 configs, harness scripts, and output path, then classifies the arm as ``ready`` (all local
 prerequisites present) or ``blocked`` (one or more missing). The report is presence-only and
-fail-closed: it never marks the tournament itself authorized to run, because that remains
-gated on the open child issues and the maintainer-set overnight SLURM budget.
+fail-closed: it never marks tournament execution authorized, even when local
+prerequisites are present.
 
 Example:
     uv run python scripts/tools/predictive_tournament_readiness.py
@@ -40,12 +39,12 @@ SHARED_PROTOCOL_PATHS: tuple[Path, ...] = (
 )
 
 # The tournament run is gated on more than local files: the three child bets must be ready
-# and the maintainer must pre-authorize a bounded overnight SLURM/GPU budget. These are
+# and any compute submission must happen outside this read-only helper. These are
 # standing run blockers recorded so a "prerequisites ready" report is never mistaken for
 # "authorized to launch".
 RUN_GATES: tuple[str, ...] = (
     "child bets #3204 / #3213 / #3214 must reach their own decision rules",
-    "maintainer must pre-authorize a bounded overnight SLURM/GPU budget (#3144 capacity policy)",
+    "compute submission must happen outside this read-only helper under #3144 capacity policy",
     "Autonomous Usage Stop Guard must permit unattended execution",
 )
 
@@ -107,12 +106,14 @@ ARMS: tuple[ArmSpec, ...] = (
         ),
         required_paths=(
             Path(
-                "configs/training/predictive/"
-                "predictive_crossing_conflict_hardcase_mixing_issue_3214.yaml"
+                "configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml"
             ),
         ),
         expected_output_path=Path("output/tmp/predictive_planner/campaigns/tournament_model"),
-        notes="Retraining itself consumes the overnight GPU budget; only the config is checked here.",
+        notes=(
+            "Checks the frozen #3254 weighted crossing-conflict config for the #3214 "
+            "model arm; retraining itself remains compute-gated."
+        ),
     ),
 )
 

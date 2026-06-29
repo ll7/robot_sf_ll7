@@ -79,6 +79,70 @@ SAME_SEED_PATH_FIELDS = (
 
 _GATE_CONTINUE = "continue"
 
+_READINESS_COMMAND_TEMPLATE = (
+    "uv run python scripts/validation/validate_predictive_v2_comparison_readiness.py "
+    "--json --contract configs/training/predictive/predictive_ego_features_contract_v1.yaml "
+    "--coupling-gate <closed-loop-coupling-gate.json> --revised-hypothesis-recorded"
+)
+
+_PUBLIC_SURFACE_SNAPSHOT: tuple[dict[str, str], ...] = (
+    {
+        "surface": "issue_1543_negative_obstacle_audit",
+        "issue": "#1543",
+        "status": "completed",
+        "source": "docs/context/issue_1543_predictive_v2_negative_audit.md",
+        "signal": (
+            "Obstacle-feature prerequisite was negative: predictive success 0.1014 "
+            "vs baseline 0.1304; hard-seed success 0.0000 for both variants."
+        ),
+    },
+    {
+        "surface": "issue_1897_planner_coupling_gate",
+        "issue": "#1897",
+        "status": "completed_failed_gate",
+        "source": "docs/context/issue_1897_predictive_coupling_gate_preflight.md",
+        "signal": (
+            "Revised planner-side coupling gate did not improve closed-loop success; "
+            "baseline_like and phase_coupled_sequence_gate both recorded global and "
+            "hard success 0.0000."
+        ),
+    },
+    {
+        "surface": "issue_2275_predictive_v2_fate",
+        "issue": "#2275",
+        "status": "completed_stop_decision",
+        "source": "docs/context/issue_2275_predictive_v2_fate.md",
+        "signal": "Selected stop_old_predictive_v2_expansion until a new coupling/objective gate passes.",
+    },
+    {
+        "surface": "issue_2916_same_seed_coupling_gate",
+        "issue": "#2916",
+        "status": "completed_public_issue_closed",
+        "source": "https://github.com/ll7/robot_sf_ll7/issues/2916",
+        "signal": (
+            "Public issue is closed, but no committed gate artifact is supplied to this "
+            "readiness command by default; the packet therefore remains fail-closed."
+        ),
+    },
+    {
+        "surface": "issue_2902_live_same_seed_forecast_replay_gate",
+        "issue": "#2902",
+        "status": "completed_public_issue_closed",
+        "source": "https://github.com/ll7/robot_sf_ll7/issues/2902",
+        "signal": (
+            "Public issue is closed with launch-packet tier evidence; it is not a direct "
+            "go artifact for the #1490 four-way predictive-v2 comparison."
+        ),
+    },
+    {
+        "surface": "issue_1505_old_data_row_preflight_child",
+        "issue": "#1505",
+        "status": "completed_public_issue_closed",
+        "source": "https://github.com/ll7/robot_sf_ll7/issues/1505",
+        "signal": "Old data-row preflight child is closed and should not be used as a fresh queue target.",
+    },
+)
+
 
 class PredictiveV2ComparisonReadinessError(Exception):
     """Raised when the comparison contract cannot be loaded or parsed."""
@@ -315,6 +379,98 @@ def _check_blocked_slurm_gate(
     return STATUS_PASSED, []
 
 
+def _surface_status(repo_root: Path) -> list[dict[str, Any]]:
+    """Return public issue/doc surfaces used by the decision packet."""
+    surfaces: list[dict[str, Any]] = []
+    for entry in _PUBLIC_SURFACE_SNAPSHOT:
+        item: dict[str, Any] = dict(entry)
+        source = entry["source"]
+        if source.startswith("docs/"):
+            item["source_exists"] = (repo_root / source).exists()
+        else:
+            item["source_exists"] = None
+        surfaces.append(item)
+    return surfaces
+
+
+def _decision_packet(
+    *,
+    overall: str,
+    stage_report: dict[str, dict[str, Any]],
+    contract_path: Path,
+    repo_root: Path,
+    coupling_gate_path: Path | None,
+    revised_hypothesis_recorded: bool,
+) -> dict[str, Any]:
+    """Build fail-closed #1490 decision packet from readiness status.
+
+    Returns:
+        Structured decision packet with public status surfaces and go/no-go fields.
+    """
+    gate_passed = stage_report["blocked_slurm_gate"]["status"] == STATUS_PASSED
+    metadata_ready = all(
+        payload["status"] == STATUS_PASSED
+        for name, payload in stage_report.items()
+        if name != "blocked_slurm_gate"
+    )
+    no_go_reasons = [
+        message
+        for message in stage_report["blocked_slurm_gate"]["messages"]
+        if stage_report["blocked_slurm_gate"]["status"] != STATUS_PASSED
+    ]
+    if not metadata_ready:
+        no_go_reasons.append("comparison metadata is incomplete; see failed readiness stages")
+
+    recommendation = "go" if overall == "ready" else "no_go"
+    next_action = (
+        "run_bounded_same_seed_comparison_from_recorded_gate"
+        if recommendation == "go"
+        else "do_not_submit_compute; keep #1490 deferred until a committed closed-loop gate artifact is supplied"
+    )
+    return {
+        "schema": "predictive_v2_same_seed_decision_packet.v1",
+        "issue": "#1490",
+        "public_surface_snapshot_date": "2026-06-29",
+        "decision": recommendation,
+        "go_no_go_recommendation": recommendation,
+        "next_action": next_action,
+        "completed_or_running_jobs": _surface_status(repo_root),
+        "evidence_gap": {
+            "status": "cleared" if gate_passed and metadata_ready else "open",
+            "missing_or_blocking_inputs": no_go_reasons,
+            "required_before_compute": [
+                "committed closed-loop same-seed coupling gate artifact with recommendation 'continue'",
+                "explicit maintainer-recorded revised predictive-v2 coupling/objective hypothesis",
+                "durable artifact plan for any downstream Slurm or GPU run",
+            ],
+        },
+        "candidate_queue_entry": {
+            "lane": "predictive-v2 same-seed ego/obstacle conditioning comparison",
+            "resource": "slurm_or_gpu_after_gate",
+            "current_state": "ready_for_bounded_launch" if recommendation == "go" else "deferred_blocked",
+            "submission_authorized_by_this_packet": False,
+            "candidate_issue": "#1505" if recommendation == "go" else "#1490",
+        },
+        "cost_risk": {
+            "local_readiness_cost": "low",
+            "compute_cost_if_gate_clears": "medium_high_training_and_same_seed_evaluation",
+            "risk": [
+                "reopening the old four-way matrix without new coupling evidence repeats known negative path",
+                "open-loop ADE/FDE improvements are insufficient without closed-loop success/progress/safety movement",
+                "missing durable artifacts would make the comparison non-reproducible",
+            ],
+        },
+        "exact_command_if_go": _READINESS_COMMAND_TEMPLATE if recommendation == "go" else None,
+        "exact_readiness_command_to_clear_gate": _READINESS_COMMAND_TEMPLATE,
+        "inputs": {
+            "contract": str(contract_path),
+            "repo_root": str(repo_root),
+            "coupling_gate": str(coupling_gate_path) if coupling_gate_path else None,
+            "revised_hypothesis_recorded": revised_hypothesis_recorded,
+        },
+    }
+
+
 def validate_predictive_v2_comparison_readiness(
     contract_path: Path,
     repo_root: Path,
@@ -370,7 +526,7 @@ def validate_predictive_v2_comparison_readiness(
     else:
         overall = "ready"
 
-    return {
+    report = {
         "status": overall,
         "issue": "#1490",
         "child_issue": "#1504",
@@ -383,3 +539,12 @@ def validate_predictive_v2_comparison_readiness(
             "required_variants": sorted(REQUIRED_VARIANTS),
         },
     }
+    report["decision_packet"] = _decision_packet(
+        overall=overall,
+        stage_report=stage_report,
+        contract_path=contract_path,
+        repo_root=repo_root,
+        coupling_gate_path=coupling_gate_path,
+        revised_hypothesis_recorded=revised_hypothesis_recorded,
+    )
+    return report

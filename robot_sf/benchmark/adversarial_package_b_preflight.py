@@ -215,12 +215,19 @@ def _registry_includes_package_b_manifest(
     if not registry_path.is_file():
         return False
 
-    payload = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    try:
+        payload = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return False
     if not isinstance(payload, dict):
         return False
 
     expected_manifest = _repo_relative(manifest_path, repo_root)
-    for package in payload.get("packages", []):
+    packages = payload.get("packages")
+    if not isinstance(packages, list):
+        return False
+
+    for package in packages:
         if not isinstance(package, dict):
             continue
         if package.get("id") != "package_b_adversarial":

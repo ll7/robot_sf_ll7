@@ -191,6 +191,7 @@ def test_preflight_fails_closed_when_registry_drops_package_b_manifest(tmp_path:
     [
         None,
         ["not-a-package-map"],
+        {"packages": None},
         {"packages": ["not-a-package-map"]},
         {
             "packages": [
@@ -215,6 +216,20 @@ def test_preflight_fails_closed_for_malformed_registry_provenance(
         registry.unlink()
     else:
         registry.write_text(yaml.safe_dump(registry_payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["research_package_registry_includes_manifest"] is False
+    assert any("research package registry" in blocker for blocker in result.blockers)
+
+
+def test_preflight_fails_closed_for_invalid_registry_yaml(tmp_path: Path) -> None:
+    """Corrupt registry YAML blocks before benchmark execution."""
+    manifest = _base_manifest(tmp_path)
+    registry = tmp_path / "configs/research/research_package_registry_issue_3057.yaml"
+    registry.write_text("packages:\n  - id: [unterminated\n", encoding="utf-8")
 
     result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
 

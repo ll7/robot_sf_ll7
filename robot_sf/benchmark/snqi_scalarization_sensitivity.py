@@ -9,6 +9,7 @@ does not change SNQI definitions, benchmark metrics, or claim status.
 from __future__ import annotations
 
 import csv
+import hashlib
 import html
 import json
 import math
@@ -370,6 +371,7 @@ def build_scalarization_sensitivity_report(
     planner_key: str = "planner_key",
     fallback_planner_key: str = "planner",
     sweep_factors: Sequence[float] = DEFAULT_SWEEP_FACTORS,
+    input_provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a SNQI scalarization-sensitivity and Pareto-front report.
 
@@ -454,6 +456,7 @@ def build_scalarization_sensitivity_report(
             "planners": len(grouped),
             "episodes": sum(len(rows) for rows in grouped.values()),
             "sweep_factors": [float(factor) for factor in sweep_factors],
+            "provenance": dict(input_provenance or {}),
         },
         "base_snqi_order": base_order,
         "constraints_first_order": constraints_order,
@@ -559,6 +562,15 @@ def load_baseline_mapping(path: Path | None) -> dict[str, dict[str, float]]:
             "p95": float(entry.get("p95", entry.get("med", 1.0))),
         }
     return baseline
+
+
+def input_file_provenance(path: Path | None) -> dict[str, str | None]:
+    """Return path and SHA-256 provenance for an optional diagnostic input file."""
+
+    if path is None:
+        return {"path": None, "sha256": None}
+    data = path.read_bytes()
+    return {"path": str(path), "sha256": hashlib.sha256(data).hexdigest()}
 
 
 def format_markdown(report: Mapping[str, Any]) -> str:
@@ -1023,6 +1035,7 @@ __all__ = [
     "classify_scalarization_sensitivity_inputs",
     "format_markdown",
     "format_pareto_svg",
+    "input_file_provenance",
     "load_baseline_mapping",
     "load_jsonl",
     "load_weight_mapping",

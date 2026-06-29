@@ -67,6 +67,48 @@ def test_missing_arm_config_fails_closed_with_path_diagnostic(tmp_path: Path) ->
     assert report["diagnostics"][0]["path"] == "configs/algos/hardcase_authority/absent.yaml"
 
 
+def test_missing_benchmark_grid_fails_closed_without_config_mismatch(tmp_path: Path) -> None:
+    """Unavailable grid inputs should remain ordinary missing inputs, not arm drift."""
+    repo_root = Path.cwd()
+    payload = _load_manifest(repo_root)
+    payload["benchmark_grid"] = "configs/benchmarks/absent_authority_grid.yaml"
+    manifest = _write_manifest(tmp_path, payload)
+
+    report = check_maneuver_authority_sweep_manifest(manifest, repo_root=repo_root)
+
+    assert report["status"] == MANIFEST_STATUS_MISSING
+    assert {
+        "code": "missing_benchmark_grid",
+        "field": "benchmark_grid",
+        "path": "configs/benchmarks/absent_authority_grid.yaml",
+        "arm": None,
+    } in report["diagnostics"]
+    assert not any(
+        diagnostic["code"] == "algo_config_mismatch" for diagnostic in report["diagnostics"]
+    )
+
+
+def test_arm_config_must_match_referenced_grid_variant(tmp_path: Path) -> None:
+    """Sweep arm metadata should fail closed when it drifts from the benchmark grid."""
+    repo_root = Path.cwd()
+    payload = _load_manifest(repo_root)
+    payload["arms"][1]["algo_config"] = payload["arms"][0]["algo_config"]
+    manifest = _write_manifest(tmp_path, payload)
+
+    report = check_maneuver_authority_sweep_manifest(manifest, repo_root=repo_root)
+
+    assert report["status"] == MANIFEST_STATUS_MALFORMED
+    assert {
+        "arm": "high_angular",
+        "code": "algo_config_mismatch",
+        "grid_variant": "high_angular",
+        "expected": (
+            "configs/algos/hardcase_authority/prediction_planner_authority_high_angular.yaml"
+        ),
+        "actual": ("configs/algos/hardcase_authority/prediction_planner_authority_baseline.yaml"),
+    } in report["diagnostics"]
+
+
 def test_malformed_arm_metadata_fails_closed(tmp_path: Path) -> None:
     """Sweep arms without action/turn/adapter metadata should fail closed."""
     repo_root = Path.cwd()

@@ -22,6 +22,7 @@ _REQUIRED_ARM_METADATA = (
 _REQUIRED_ADAPTER_FIELDS = ("command_space", "robot_kinematics", "execution_mode")
 _REQUIRED_OUTPUT_FIELDS = ("campaign_root", "campaign_summary", "campaign_report")
 _MALFORMED_CODES = {
+    "algo_config_mismatch",
     "duplicate_arm_name",
     "invalid_action_lattice_metadata",
     "invalid_arm",
@@ -116,19 +117,19 @@ def _validate_repo_path(
     return relative
 
 
-def _grid_variant_names(repo_root: Path, grid_path: str | None) -> set[str]:
-    """Return declared grid variant names, or an empty set when unavailable."""
+def _grid_variants_by_name(repo_root: Path, grid_path: str | None) -> dict[str, dict[str, Any]]:
+    """Return declared grid variants keyed by name, or an empty mapping when unavailable."""
     if grid_path is None:
-        return set()
+        return {}
     path = repo_root / grid_path
     if not path.exists():
-        return set()
+        return {}
     payload = _load_yaml(path)
     variants = payload.get("variants", []) if isinstance(payload, dict) else []
     return {
-        str(variant.get("name"))
+        str(variant["name"]): variant
         for variant in variants
-        if isinstance(variant, dict) and variant.get("name")
+        if isinstance(variant, dict) and isinstance(variant.get("name"), str) and variant["name"]
     }
 
 
@@ -265,11 +266,11 @@ def _validate_shared_paths(
     payload: dict[str, Any],
     repo_root: Path,
     diagnostics: list[dict[str, Any]],
-) -> set[str]:
+) -> dict[str, dict[str, Any]]:
     """Validate shared manifest paths.
 
     Returns:
-        Known variant names from the referenced benchmark grid, or an empty set.
+        Known variants from the referenced benchmark grid keyed by name, or an empty mapping.
     """
     grid_path = _validate_repo_path(
         repo_root=repo_root,
@@ -285,7 +286,7 @@ def _validate_shared_paths(
         code="missing_hard_seed_manifest",
         diagnostics=diagnostics,
     )
-    return _grid_variant_names(repo_root, grid_path)
+    return _grid_variants_by_name(repo_root, grid_path)
 
 
 def _validate_arm_identity(
@@ -313,7 +314,7 @@ def _validate_grid_variant(
     *,
     arm: dict[str, Any],
     arm_name: str,
-    grid_variants: set[str],
+    grid_variants: dict[str, dict[str, Any]],
     diagnostics: list[dict[str, Any]],
 ) -> Any:
     """Validate the declared grid variant.
@@ -329,6 +330,31 @@ def _validate_grid_variant(
             _diagnostic("unknown_grid_variant", arm=arm_name, grid_variant=grid_variant)
         )
     return grid_variant
+
+
+def _validate_grid_variant_config(
+    *,
+    arm: dict[str, Any],
+    arm_name: str,
+    grid_variant: Any,
+    grid_variants: dict[str, dict[str, Any]],
+    diagnostics: list[dict[str, Any]],
+) -> None:
+    """Validate that manifest arm config matches the referenced benchmark-grid variant."""
+    if not isinstance(grid_variant, str) or grid_variant not in grid_variants:
+        return
+    grid_algo_config = grid_variants[grid_variant].get("algo_config")
+    arm_algo_config = arm.get("algo_config")
+    if isinstance(grid_algo_config, str) and arm_algo_config != grid_algo_config:
+        diagnostics.append(
+            _diagnostic(
+                "algo_config_mismatch",
+                arm=arm_name,
+                grid_variant=grid_variant,
+                expected=grid_algo_config,
+                actual=arm_algo_config,
+            )
+        )
 
 
 def _report_arm(arm: dict[str, Any], arm_name: str, grid_variant: Any) -> dict[str, Any]:
@@ -347,7 +373,7 @@ def _report_arm(arm: dict[str, Any], arm_name: str, grid_variant: Any) -> dict[s
 def _validate_arms(
     payload: dict[str, Any],
     repo_root: Path,
-    grid_variants: set[str],
+    grid_variants: dict[str, dict[str, Any]],
     diagnostics: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Validate all sweep arms.
@@ -373,7 +399,7 @@ def _validate_arms(
         )
         if arm_name is None:
             continue
-        _validate_repo_path(
+        algo_config = _validate_repo_path(
             repo_root=repo_root,
             path_value=arm.get("algo_config"),
             field="algo_config",
@@ -387,6 +413,14 @@ def _validate_arms(
             grid_variants=grid_variants,
             diagnostics=diagnostics,
         )
+        if algo_config is not None and (repo_root / algo_config).exists():
+            _validate_grid_variant_config(
+                arm=arm,
+                arm_name=arm_name,
+                grid_variant=grid_variant,
+                grid_variants=grid_variants,
+                diagnostics=diagnostics,
+            )
         _validate_arm_metadata(arm, arm_name, diagnostics)
         report_arms.append(_report_arm(arm, arm_name, grid_variant))
     return report_arms

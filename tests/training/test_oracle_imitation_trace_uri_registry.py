@@ -17,6 +17,9 @@ from robot_sf.training.oracle_trace_uri_registry import (
 from scripts.validation.validate_oracle_trace_uri_registry import main as validate_cli_main
 
 EXAMPLE_REGISTRY = Path("configs/training/ppo_imitation/oracle_trace_uri_registry_example.yaml")
+ISSUE_1470_REGISTRY = Path(
+    "configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml"
+)
 
 
 def _write_registry(tmp_path: Path, registry: dict[str, object]) -> Path:
@@ -210,6 +213,40 @@ def test_example_registry_fails_training_ready_gate() -> None:
     """The checked-in example must not pass the strict training-ready gate yet."""
     with pytest.raises(OracleTraceUriRegistryError, match="not resolvable"):
         validate_trace_uri_registry(EXAMPLE_REGISTRY, require_training_ready=True)
+
+
+def test_issue_1470_registry_is_valid_but_not_training_ready() -> None:
+    """Issue #1470 packet records tracked train evidence while keeping strict gate closed."""
+    report = validate_trace_uri_registry(ISSUE_1470_REGISTRY)
+
+    assert report["status"] == "valid"
+    assert report["dataset_id"] == "issue_1397_oracle_imitation_v1"
+    assert report["training_ready"] is False
+    assert report["splits"]["train"] == ["train__issue1470_job12911_tracked_mirror"]
+    assert report["retrieval_status"]["train__issue1470_job12911_tracked_mirror"] == "resolvable"
+    assert (
+        report["retrieval_status"]["validation__issue1470_missing_durable_trace_uri"] == "blocked"
+    )
+    assert (
+        report["retrieval_status"]["evaluation__issue1470_missing_durable_trace_uri"] == "blocked"
+    )
+
+
+def test_issue_1470_registry_fails_training_ready_gate() -> None:
+    """Strict downstream gate fails closed until validation/evaluation URIs are durable."""
+    with pytest.raises(OracleTraceUriRegistryError, match="not resolvable: evaluation, validation"):
+        validate_trace_uri_registry(ISSUE_1470_REGISTRY, require_training_ready=True)
+
+
+def test_issue_1470_registry_cli_reports_fail_closed_state() -> None:
+    """CLI exposes the #1470 readiness packet without Slurm or data generation."""
+    assert validate_cli_main(["--config", str(ISSUE_1470_REGISTRY), "--json"]) == 0
+    assert (
+        validate_cli_main(
+            ["--config", str(ISSUE_1470_REGISTRY), "--json", "--require-training-ready"]
+        )
+        == 2
+    )
 
 
 def test_load_registry_malformed_yaml_raises_registry_error(tmp_path: Path) -> None:

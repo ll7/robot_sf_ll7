@@ -23,7 +23,25 @@ def _write_file(path: Path, text: str = "placeholder\n") -> None:
 def _base_manifest(repo_root: Path) -> Path:
     _write_file(repo_root / "configs/scenarios/templates/crossing_ttc.yaml")
     _write_file(repo_root / "configs/adversarial/crossing_ttc_space.yaml")
-    _write_file(repo_root / "scripts/tools/compare_adversarial_samplers.py")
+    _write_file(
+        repo_root / "scripts/tools/compare_adversarial_samplers.py",
+        """
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class SamplerComparisonRow:
+    first_failure_iteration: int | None
+    best_valid_objective: float | None
+    invalid_candidate_rate: float
+    replay_success_rate: float | None
+    certified_valid_failure_count: int
+    replayable_valid_failure_count: int
+    fallback_candidate_count: int
+    degraded_candidate_count: int
+    held_out_family_yield: float | None
+""",
+    )
     manifest = repo_root / "configs/adversarial/issue_3079_package_b_budget_matched.yaml"
     manifest.parent.mkdir(parents=True, exist_ok=True)
     manifest.write_text(
@@ -85,6 +103,7 @@ def test_committed_package_b_manifest_preflights_without_running_benchmark() -> 
     assert result.blocked is False
     assert result.metadata["budget_grid"] == [16, 32, 64]
     assert result.metadata["repeated_seeds"] == [1101, 2202, 3303]
+    assert "held_out_family_yield" in result.metadata["runner_reporting_fields"]
     assert result.metadata["output_artifacts"] == {
         "output_dir": "output/adversarial/issue_3079_package_b",
         "report_json": "output/adversarial/issue_3079_package_b/report.json",
@@ -113,6 +132,63 @@ def test_preflight_fails_closed_for_missing_budget_seed_and_provenance(tmp_path:
     assert any("repeated_seeds" in blocker for blocker in result.blockers)
     assert any("paper_facing_success_claims" in blocker for blocker in result.blockers)
     assert any("output_artifacts" in blocker for blocker in result.blockers)
+
+
+def test_preflight_blocks_runner_output_schema_drift(tmp_path: Path) -> None:
+    """Manifest reporting fields must be emitted by runner row schema."""
+    manifest = _base_manifest(tmp_path)
+    (tmp_path / "scripts/tools/compare_adversarial_samplers.py").write_text(
+        """
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class SamplerComparisonRow:
+    first_failure_iteration: int | None
+    best_valid_objective: float | None
+""",
+        encoding="utf-8",
+    )
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["runner_emits_reporting_contract"] is False
+    assert any("SamplerComparisonRow missing" in blocker for blocker in result.blockers)
+
+
+def test_preflight_blocks_missing_runner_output_schema_target(tmp_path: Path) -> None:
+    """Missing runner files block both path existence and static schema checks."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["runner"] = "scripts/tools/missing_compare_adversarial_samplers.py"
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["runner_exists"] is False
+    assert result.checks["runner_emits_reporting_contract"] is False
+    assert any("runner must point" in blocker for blocker in result.blockers)
+    assert any("schema target is missing" in warning for warning in result.warnings)
+
+
+def test_preflight_blocks_unparseable_runner_output_schema(tmp_path: Path) -> None:
+    """Runner schema parse failures block readiness without importing runner."""
+    manifest = _base_manifest(tmp_path)
+    (tmp_path / "scripts/tools/compare_adversarial_samplers.py").write_text(
+        "def broken(:\n",
+        encoding="utf-8",
+    )
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["runner_emits_reporting_contract"] is False
+    assert any("could not be parsed" in warning for warning in result.warnings)
 
 
 def test_preflight_blocks_example_command_seed_drift(tmp_path: Path) -> None:

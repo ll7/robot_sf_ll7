@@ -406,7 +406,7 @@ def build_preflight_manifest(plan: ReactivityReplayRunPlan) -> dict[str, Any]:
 def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
     """Build a :class:`ReactivityReplayRunPlan` from a launch-packet mapping (e.g. parsed YAML).
 
-    Expected shape (only the listed keys are read; extras are ignored)::
+    Expected shape (only the listed keys are read; other extras are ignored)::
 
         planners: [goal, orca, social_force]
         scenario_set: configs/scenarios/sets/classic_crossing_subset.yaml
@@ -417,8 +417,19 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
         replay:
           is_trajectory_playback: false
           limitation: "..."              # defaults to the canonical REPLAY_LIMITATION
+        rank_stability_analysis:         # required post-run analysis contract (fails closed)
+          paired_seed_resampling: true
+          required_metrics: [collision_rate, near_miss_rate, min_separation_m]
+          rank_metric: collision_rate
+          seed_sufficiency_gate_command: "uv run python scripts/tools/seed_sufficiency_gate.py ..."
+          replay_limitation_required: true
+          claim_boundary: "No paper-facing claim until post-run ..."
         min_planners: 3                  # optional override
         min_seeds: 20                    # optional override
+
+    The packet parses with ``rank_stability_analysis`` defaulting to an empty mapping when absent,
+    but the manifest then preflights as ``blocked`` because the contract check fails closed (see
+    :func:`_check_rank_stability_analysis`).
 
     Returns:
         ReactivityReplayRunPlan: The parsed run plan.

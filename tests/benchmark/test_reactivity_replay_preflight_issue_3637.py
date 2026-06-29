@@ -168,6 +168,25 @@ def test_incomplete_rank_stability_analysis_blocks():
     assert _checks_by_name(plan)["rank_stability_analysis"] is False
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("required_metrics", ["collision_rate"]),
+        ("rank_metric", "unlisted_metric"),
+        ("paired_seed_resampling", False),
+        ("seed_sufficiency_gate_command", "uv run python scripts/tools/some_other_gate.py"),
+        ("replay_limitation_required", False),
+        ("claim_boundary", "rank stability looks good"),
+    ],
+)
+def test_each_rank_stability_field_fails_closed(field, value):
+    """Breaking any single fail-closed analysis field blocks the preflight."""
+    analysis = _rank_stability_analysis()
+    analysis[field] = value
+    plan = _ready_plan(rank_stability_analysis=analysis)
+    assert _checks_by_name(plan)["rank_stability_analysis"] is False
+
+
 def test_short_horizon_blocks():
     """A horizon below the contrast-registration floor blocks."""
     assert _checks_by_name(_ready_plan(horizon=50))["horizon"] is False

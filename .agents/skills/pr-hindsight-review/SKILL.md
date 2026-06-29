@@ -67,6 +67,22 @@ For each reviewed PR, collect and report:
 - `blocked_or_inconclusive`: hindsight packet lacks enough evidence to classify progress without
   more source inspection or maintainer input.
 
+### Relationship to originally-requested routing labels
+Issue #3795 first named a routing-judgment set (`evidence_yielding`, `useful_readiness`,
+`readiness_treadmill`, `duplicate_or_overlapping`, `too_low_priority`, `needs_successor`). The
+maintainer's follow-up scope (full / partial / duplicate / bounded-remainder successor handling)
+made a progress-disposition taxonomy the primary axis, so the verdicts above replace those labels
+while preserving their judgments:
+
+- `evidence_yielding` maps to `complete_progress` or `partial_existing_parent` (state the durable
+  proof, contract, or artifact in `routing_value`).
+- `useful_readiness` is a `complete_progress`/`partial_existing_parent` verdict whose value is
+  readiness rather than new evidence; record that nature in `routing_value`/`routing_cost`.
+- `readiness_treadmill` and `needs_successor` are kept verbatim.
+- `duplicate_or_overlapping` maps to `duplicate_or_redundant`.
+- `too_low_priority` is not a separate verdict; record a "correct work, but routing priority was too
+  low" judgment in `routing_cost` alongside the chosen progress verdict.
+
 ## Successor Issue Packet
 When the verdict is `needs_successor`, include a draft successor issue packet without posting it by
 default. The packet must include:

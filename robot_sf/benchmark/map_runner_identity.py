@@ -14,6 +14,10 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
+from robot_sf.benchmark.tracking_precision_contract import (
+    normalize_tracking_precision_spec,
+    tracking_precision_hash,
+)
 from robot_sf.benchmark.utils import _config_hash
 
 
@@ -66,7 +70,7 @@ def _select_seeds(
     return [0]
 
 
-def _scenario_identity_payload(  # noqa: PLR0913
+def _scenario_identity_payload(  # noqa: C901,PLR0913
     scenario: dict[str, Any],
     *,
     algo: str,
@@ -79,6 +83,7 @@ def _scenario_identity_payload(  # noqa: PLR0913
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_simulation_step_trace: bool = False,
@@ -111,6 +116,10 @@ def _scenario_identity_payload(  # noqa: PLR0913
     if bool(noise_spec["enabled"]):
         payload["observation_noise_profile"] = str(noise_spec["profile"])
         payload["observation_noise_hash"] = observation_noise_hash(noise_spec)
+    tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
+    if bool(tracking_precision_spec["enabled"]):
+        payload["tracking_precision"] = tracking_precision_spec
+        payload["tracking_precision_hash"] = tracking_precision_hash(tracking_precision_spec)
     if synthetic_actuation_profile is not None:
         payload["synthetic_actuation_profile"] = dict(synthetic_actuation_profile)
     if latency_stress_profile is not None:

@@ -182,6 +182,10 @@ from robot_sf.benchmark.scenario_belief_policy_hook import (
 )
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
+from robot_sf.benchmark.tracking_precision_contract import (
+    normalize_tracking_precision_spec,
+    tracking_precision_hash,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -2230,6 +2234,7 @@ def _run_map_episode(  # noqa: PLR0913
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
@@ -2262,6 +2267,7 @@ def _run_map_episode(  # noqa: PLR0913
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
         observation_noise=observation_noise,
+        tracking_precision=tracking_precision,
         synthetic_actuation_profile=synthetic_actuation_profile,
         latency_stress_profile=latency_stress_profile,
         record_planner_decision_trace=record_planner_decision_trace,
@@ -2320,6 +2326,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_simulation_step_trace: bool = False,
@@ -2352,6 +2359,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     suite_key = _suite_key(scenario_path)
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
+    tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
+    tracking_precision_spec_hash = tracking_precision_hash(tracking_precision_spec)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
     latency_profile = _load_latency_stress_profile(latency_stress_profile)
     latency_metadata_dt = float(dt) if dt is not None and float(dt) > 0.0 else 0.1
@@ -2557,6 +2566,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "preflight": preflight,
             "observation_noise": noise_spec,
             "observation_noise_hash": noise_hash,
+            "tracking_precision": tracking_precision_spec,
+            "tracking_precision_hash": tracking_precision_spec_hash,
             "metrics": summarize_collision_metrics([]),
             "latency_stress_profile": (
                 latency_profile.to_metadata(dt=latency_metadata_dt)
@@ -2637,6 +2648,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     benchmark_track=benchmark_track,
                     track_schema_version=track_schema_version,
                     observation_noise=noise_spec,
+                    tracking_precision=tracking_precision_spec,
                     synthetic_actuation_profile=(
                         actuation_profile.to_metadata() if actuation_profile is not None else None
                     ),
@@ -2666,6 +2678,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ped_impact_radius_m=ped_impact_radius_m,
         ped_impact_window_steps=ped_impact_window_steps,
         noise_spec=noise_spec,
+        tracking_precision_spec=tracking_precision_spec,
         batch_observation_mode=batch_observation_mode,
         observation_level=observation_level,
         benchmark_track=benchmark_track,
@@ -2733,6 +2746,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         benchmark_profile=benchmark_profile,
         noise_spec=noise_spec,
         noise_hash=noise_hash,
+        tracking_precision_spec=tracking_precision_spec,
+        tracking_precision_hash=tracking_precision_spec_hash,
         active_observation_mode=active_observation_mode,
         active_observation_level=active_observation_level,
         actuation_profile_metadata=(

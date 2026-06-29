@@ -55,6 +55,10 @@ CONFIG_OPEN_LOOP = "configs/research/forecast_baseline_comparison_issue_2915.yam
 CONFIG_CLOSED_LOOP = "configs/research/forecast_risk_coupling_issue_2916.yaml"
 # Live observation perturbation replay entry point (#2777).
 SCRIPT_OBSERVATION_REPLAY = "scripts/benchmark/run_observation_noise_envelope.py"
+DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT = (
+    "docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13"
+)
+DEFAULT_CLOSED_LOOP_OUTPUT_ROOT = "output/issue_2916_coupling_gate"
 
 # Required code entry points shared by every arm.  Each maps to a coordination
 # stage named in the issue's verified entry points.
@@ -191,18 +195,22 @@ def _collect_seed_plan(repo_root: Path) -> list[int]:
 def _collect_output_roots(repo_root: Path) -> list[str]:
     """Return declared output/evidence roots from the coordination configs.
 
-    Only the open-loop config (#2915) declares an ``output`` block today; the
-    coupling runner (#2916) writes through the canonical campaign result store.
-    Local ``output/`` paths are not durable evidence; durable results must point
-    at tracked evidence, a manifest, or an approved external artifact URI.
+    Package C spans three stages. The open-loop config (#2915) declares its
+    evidence directory in YAML, while observation replay (#2777) and closed-loop
+    coupling (#2916) expose default runner roots. Local ``output/`` paths are
+    not durable evidence; durable results must point at tracked evidence, a
+    manifest, or an approved external artifact URI.
     """
-    roots: list[str] = []
+    roots: list[str] = [
+        DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
+        DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
+    ]
     open_loop = _load_yaml(repo_root / CONFIG_OPEN_LOOP)
     output = open_loop.get("output", {})
     if isinstance(output, dict):
         evidence_dir = output.get("evidence_dir")
         if isinstance(evidence_dir, str):
-            roots.append(evidence_dir)
+            roots.insert(0, evidence_dir)
     return roots
 
 

@@ -1,0 +1,40 @@
+schema_version: amv_calibration_source_manifest.v1
+manifest_id: issue_1585_amv_calibration_source_provenance
+issue: 1585
+source_status: blocked-external-input
+source_type: unknown
+source_uri: https://github.com/ll7/robot_sf_ll7/issues/1585
+license: unavailable
+license_status: unknown
+claim_boundary: hardware-calibrated
+blocked_reason: >-
+  No accepted hardware command-response trace, official platform/controller specification,
+  or maintainer-reviewed source is available for calibrated AMV actuation evidence.
+blocker_issues:
+  - 1585
+  - 2000
+calibration_fields:
+  - name: max_linear_accel_m_s2
+    support_status: missing
+    units: m/s^2
+    reason: No hardware-calibrated or official-spec source has been accepted.
+  - name: max_linear_decel_m_s2
+    support_status: missing
+    units: m/s^2
+    reason: No hardware-calibrated or official-spec source has been accepted.
+  - name: max_yaw_rate_rad_s
+    support_status: missing
+    units: rad/s
+    reason: No hardware-calibrated or official-spec source has been accepted.
+  - name: max_angular_accel_rad_s2
+    support_status: missing
+    units: rad/s^2
+    reason: No hardware-calibrated or official-spec source has been accepted.
+  - name: latency_mode
+    support_status: missing
+    units: mode
+    reason: No measured command-response latency source has been accepted.
+  - name: update_mode
+    support_status: missing
+    units: mode
+    reason: No measured controller update-rate source has been accepted.

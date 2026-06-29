@@ -71,6 +71,18 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _clean_str(value: Any) -> str:
+    """Coerce a manifest scalar to a stripped string, treating ``None`` as empty.
+
+    A bare ``str(None)`` yields the literal ``"None"``, which would otherwise
+    pass downstream non-empty checks and let a ``null`` YAML field masquerade as
+    a present value. Returning ``""`` for ``None`` keeps the checker fail-closed.
+    """
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
 def _load_manifest(path: Path) -> dict[str, Any]:
     """Load manifest YAML, raising ManifestError on non-mapping documents."""
     if not path.exists():
@@ -176,9 +188,9 @@ def _check_command_contract(
         report.issues.append(f"{prefix} must be mapping")
         return
 
-    contract_id = str(contract.get("id", "")).strip()
-    stage = str(contract.get("stage", "")).strip()
-    command = str(contract.get("command", "")).strip()
+    contract_id = _clean_str(contract.get("id"))
+    stage = _clean_str(contract.get("stage"))
+    command = _clean_str(contract.get("command"))
     executes_benchmark = contract.get("executes_benchmark_campaign")
     allowed_here = contract.get("allowed_in_readiness_check")
 
@@ -215,7 +227,7 @@ def _check_command_contract(
 
 def _check_outputs(outputs: dict[str, Any], report: ReadinessReport) -> None:
     """Verify declared output location is safe and disposable."""
-    local_root = str(outputs.get("local_root", "")).strip()
+    local_root = _clean_str(outputs.get("local_root"))
     if not local_root:
         report.issues.append("outputs.local_root is required")
         return
@@ -232,7 +244,7 @@ def _check_durable_evidence(durable_evidence: dict[str, Any], report: ReadinessR
         report.issues.append("durable_evidence.plan must be mapping")
         return
 
-    rel_path = str(plan.get("path", "")).strip()
+    rel_path = _clean_str(plan.get("path"))
     if not rel_path:
         report.issues.append("durable_evidence.plan.path is required")
     elif PurePosixPath(rel_path).parts[:1] == ("output",):

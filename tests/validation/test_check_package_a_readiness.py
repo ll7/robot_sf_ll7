@@ -196,6 +196,28 @@ def test_manifest_error_on_missing_section(tmp_path: Path) -> None:
         checker.check_readiness(manifest_path, repo_root=tmp_path)
 
 
+def test_fails_closed_on_null_durable_evidence_path(tmp_path: Path) -> None:
+    """A null durable-evidence path must not be coerced to a valid string."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["durable_evidence"]["plan"]["path"] = None
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any("durable_evidence.plan.path is required" in issue for issue in report.issues)
+
+
+def test_fails_closed_on_null_contract_id(tmp_path: Path) -> None:
+    """A null command-contract id must not be coerced to the string 'None'."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["command_contracts"]["contracts"][0]["id"] = None
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any(".id is required" in issue for issue in report.issues)
+
+
 def test_manifest_error_on_non_mapping_section(tmp_path: Path) -> None:
     """A required section that is not a mapping fails closed with ManifestError."""
     manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)

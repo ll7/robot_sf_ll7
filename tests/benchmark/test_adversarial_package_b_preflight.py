@@ -259,6 +259,23 @@ def test_preflight_blocks_directory_valued_output_artifact_report(tmp_path: Path
     )
 
 
+def test_preflight_blocks_file_valued_output_artifact_dir(tmp_path: Path) -> None:
+    """The declared output_dir path must not already be an existing file."""
+    manifest = _base_manifest(tmp_path)
+    output_dir = tmp_path / "output/adversarial/issue_3079_package_b"
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    output_dir.write_text("not a directory\n", encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["output_artifacts_output_dir_directory_or_future"] is False
+    assert any(
+        "output_dir must be a directory or future path" in blocker for blocker in result.blockers
+    )
+
+
 def test_preflight_blocks_symlinked_output_artifact_report(tmp_path: Path) -> None:
     """The declared report_json path must not be a symlink."""
     manifest = _base_manifest(tmp_path)

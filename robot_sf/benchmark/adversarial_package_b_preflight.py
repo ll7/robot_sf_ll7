@@ -178,6 +178,13 @@ def _report_path_inside_output_dir(report_json: Path | None, output_dir: Path | 
     return resolved_report != resolved_dir and resolved_report.is_relative_to(resolved_dir)
 
 
+def _output_dir_is_directory_or_future(output_dir: Path | None) -> bool:
+    """Return true when output_dir is either absent or an existing directory."""
+    if output_dir is None:
+        return False
+    return not output_dir.exists() or output_dir.is_dir()
+
+
 def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path = Path("configs/adversarial/issue_3079_package_b_budget_matched.yaml"),
     *,
@@ -304,6 +311,12 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     checks["output_artifacts_output_dir_declared"] = artifact_output_dir is not None
     if not checks["output_artifacts_output_dir_declared"]:
         blockers.append("output_artifacts.output_dir must be a non-empty path")
+
+    checks["output_artifacts_output_dir_directory_or_future"] = _output_dir_is_directory_or_future(
+        artifact_output_dir
+    )
+    if not checks["output_artifacts_output_dir_directory_or_future"]:
+        blockers.append("output_artifacts.output_dir must be a directory or future path")
 
     checks["output_artifacts_report_json_declared"] = artifact_report_json is not None
     if not checks["output_artifacts_report_json_declared"]:

@@ -7,6 +7,15 @@ This packet summarizes retrieved S20 (20-seed) job artifacts for issue #1554, ke
 - Status: `diagnostic_only`
 - Boundary: diagnostic-only evidence-gap packet; no full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim edits, and no S20/S30 claim promotion
 
+## Next Slurm Go/No-Go
+
+- claim_promotion: `no_go`
+- s20_archive_readiness: `run_fail_closed_checker_before_claim`
+- s30_submission_from_issue_3798: `not_authorized_here`
+- s30_escalation_status: `defer_until_claim_owner_authorizes_escalation`
+- compute_submission: `not_authorized`
+- next_valid_step: `run archive-readiness checker and decide S30 only in a separately authorized lane`
+
 ## Retrieved Artifacts
 
 - Artifact root: `/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-l40s-mem180/13175`

@@ -52,6 +52,7 @@ class TermScaling:
         weight_name: Weight coefficient key (e.g. ``"w_time"``).
         metric_key: Episode-metric key consumed for this term.
         scaling: One of :data:`SCALING_RAW` or :data:`SCALING_BASELINE_NORMALIZED`.
+        measurement_basis: Native unit or normalization basis for the post-scaling value.
         sign: ``+1`` for the reward term (success), ``-1`` for penalty terms.
         bounded: Whether this term's post-scaling contribution is bounded.
         default: Value substituted when ``metric_key`` is absent from metrics
@@ -63,6 +64,7 @@ class TermScaling:
     weight_name: str
     metric_key: str
     scaling: str
+    measurement_basis: str
     sign: int
     bounded: bool
     default: float
@@ -89,6 +91,7 @@ class TermScaling:
             "weight_name": self.weight_name,
             "metric_key": self.metric_key,
             "scaling": self.scaling,
+            "measurement_basis": self.measurement_basis,
             "normalization_status": self.normalization_status,
             "sign": self.sign,
             "is_penalty": self.is_penalty,
@@ -109,6 +112,7 @@ SNQI_TERM_SCALING: tuple[TermScaling, ...] = (
         weight_name="w_success",
         metric_key="success",
         scaling=SCALING_RAW,
+        measurement_basis="raw 0/1 episode success indicator",
         sign=+1,
         bounded=True,
         default=0.0,
@@ -119,6 +123,7 @@ SNQI_TERM_SCALING: tuple[TermScaling, ...] = (
         weight_name="w_time",
         metric_key="time_to_goal_norm",
         scaling=SCALING_RAW,
+        measurement_basis="raw time-to-goal ratio",
         sign=-1,
         bounded=False,
         default=1.0,
@@ -129,6 +134,7 @@ SNQI_TERM_SCALING: tuple[TermScaling, ...] = (
         weight_name="w_collisions",
         metric_key="collisions",
         scaling=SCALING_BASELINE_NORMALIZED,
+        measurement_basis="baseline-relative median/p95 clamped value",
         sign=-1,
         bounded=True,
         default=0.0,
@@ -139,6 +145,7 @@ SNQI_TERM_SCALING: tuple[TermScaling, ...] = (
         weight_name="w_near",
         metric_key="near_misses",
         scaling=SCALING_BASELINE_NORMALIZED,
+        measurement_basis="baseline-relative median/p95 clamped value",
         sign=-1,
         bounded=True,
         default=0.0,
@@ -149,6 +156,7 @@ SNQI_TERM_SCALING: tuple[TermScaling, ...] = (
         weight_name="w_comfort",
         metric_key="comfort_exposure",
         scaling=SCALING_RAW,
+        measurement_basis="raw accumulated comfort-exposure value",
         sign=-1,
         bounded=False,
         default=0.0,
@@ -159,6 +167,7 @@ SNQI_TERM_SCALING: tuple[TermScaling, ...] = (
         weight_name="w_force_exceed",
         metric_key="force_exceed_events",
         scaling=SCALING_BASELINE_NORMALIZED,
+        measurement_basis="baseline-relative median/p95 clamped value",
         sign=-1,
         bounded=True,
         default=0.0,
@@ -169,6 +178,7 @@ SNQI_TERM_SCALING: tuple[TermScaling, ...] = (
         weight_name="w_jerk",
         metric_key="jerk_mean",
         scaling=SCALING_BASELINE_NORMALIZED,
+        measurement_basis="baseline-relative median/p95 clamped value",
         sign=-1,
         bounded=True,
         default=0.0,
@@ -311,11 +321,14 @@ def format_normalization_report(inventory: NormalizationInventory) -> str:
         A multi-line string suitable for preflight / CLI output.
     """
     lines = ["SNQI per-term normalization inventory (issue #3699)"]
-    header = f"  {'term':<13}{'scaling':<22}{'bounded':<9}metric_key"
+    header = f"  {'term':<13}{'scaling':<22}{'bounded':<9}{'metric_key':<24}basis"
     lines.append(header)
     for term in inventory.terms:
         bounded = "yes" if term.bounded else "NO"
-        lines.append(f"  {term.term:<13}{term.scaling:<22}{bounded:<9}{term.metric_key}")
+        lines.append(
+            f"  {term.term:<13}{term.scaling:<22}{bounded:<9}"
+            f"{term.metric_key:<24}{term.measurement_basis}"
+        )
     lines.append(f"  mixed_scale            : {inventory.mixed_scale}")
     lines.append(
         "  raw penalty terms      : "

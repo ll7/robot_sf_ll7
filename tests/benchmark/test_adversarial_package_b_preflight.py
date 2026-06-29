@@ -59,6 +59,10 @@ def _base_manifest(repo_root: Path) -> Path:
                     "held_out_family_yield": "not_evaluated_narrow_archive_caveat",
                     "paper_facing_success_claims": "forbidden",
                 },
+                "output_artifacts": {
+                    "output_dir": "output/adversarial/issue_3079_package_b",
+                    "report_json": "output/adversarial/issue_3079_package_b/report.json",
+                },
                 "example_command": (
                     "uv run python scripts/tools/compare_adversarial_samplers.py "
                     "--package-b-budget-grid --seed 1101 --seed 2202 --seed 3303 "
@@ -81,6 +85,10 @@ def test_committed_package_b_manifest_preflights_without_running_benchmark() -> 
     assert result.blocked is False
     assert result.metadata["budget_grid"] == [16, 32, 64]
     assert result.metadata["repeated_seeds"] == [1101, 2202, 3303]
+    assert result.metadata["output_artifacts"] == {
+        "output_dir": "output/adversarial/issue_3079_package_b",
+        "report_json": "output/adversarial/issue_3079_package_b/report.json",
+    }
     assert result.metadata["does_not_execute_benchmark"] is True
     assert result.metadata["does_not_submit_slurm_or_gpu"] is True
 
@@ -92,6 +100,7 @@ def test_preflight_fails_closed_for_missing_budget_seed_and_provenance(tmp_path:
     del payload["budget_grid"]
     payload["repeated_seeds"] = []
     payload["explicit_exclusions"] = {}
+    del payload["output_artifacts"]
     manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
 
     result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
@@ -103,6 +112,7 @@ def test_preflight_fails_closed_for_missing_budget_seed_and_provenance(tmp_path:
     assert any("budget_grid" in blocker for blocker in result.blockers)
     assert any("repeated_seeds" in blocker for blocker in result.blockers)
     assert any("paper_facing_success_claims" in blocker for blocker in result.blockers)
+    assert any("output_artifacts" in blocker for blocker in result.blockers)
 
 
 def test_preflight_blocks_example_command_seed_drift(tmp_path: Path) -> None:
@@ -210,6 +220,26 @@ def test_preflight_blocks_missing_inputs_and_output_paths(tmp_path: Path) -> Non
     assert result.checks["search_space_exists"] is False
     assert result.checks["output_dir_under_issue_path"] is False
     assert result.checks["out_json_under_issue_path"] is False
+
+
+def test_preflight_blocks_output_artifact_command_drift(tmp_path: Path) -> None:
+    """Declared output artifacts must match executable example paths."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["output_artifacts"] = {
+        "output_dir": "output/adversarial/issue_3079_package_b/declared",
+        "report_json": "output/adversarial/issue_3079_package_b/declared/report.json",
+    }
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["output_artifacts_output_dir_under_issue_path"] is True
+    assert result.checks["output_artifacts_report_json_under_issue_path"] is True
+    assert result.checks["example_command_matches_output_artifacts"] is False
+    assert any("output paths must match output_artifacts" in blocker for blocker in result.blockers)
 
 
 def test_package_b_preflight_cli_writes_report_and_returns_nonzero_on_blocker(

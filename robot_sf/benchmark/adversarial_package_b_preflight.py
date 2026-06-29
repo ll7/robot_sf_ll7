@@ -158,6 +158,13 @@ def _under_output_prefix(path: Path | None, repo_root: Path) -> bool:
     return rel == Path(".") or bool(rel.parts)
 
 
+def _same_resolved_path(left: Path | None, right: Path | None) -> bool:
+    """Return true when both optional paths resolve to the same filesystem path."""
+    if left is None or right is None:
+        return False
+    return left.resolve() == right.resolve()
+
+
 def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path = Path("configs/adversarial/issue_3079_package_b_budget_matched.yaml"),
     *,
@@ -272,6 +279,47 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if not checks["status_diagnostic"]:
         blockers.append("status must stay diagnostic_local_nominal")
 
+    output_artifacts = payload.get("output_artifacts")
+    checks["output_artifacts_mapping"] = isinstance(output_artifacts, dict)
+    if not isinstance(output_artifacts, dict):
+        blockers.append("output_artifacts must be a mapping")
+        output_artifacts = {}
+
+    artifact_output_dir = _resolve_repo_path(root, output_artifacts.get("output_dir"))
+    artifact_report_json = _resolve_repo_path(root, output_artifacts.get("report_json"))
+
+    checks["output_artifacts_output_dir_declared"] = artifact_output_dir is not None
+    if not checks["output_artifacts_output_dir_declared"]:
+        blockers.append("output_artifacts.output_dir must be a non-empty path")
+
+    checks["output_artifacts_report_json_declared"] = artifact_report_json is not None
+    if not checks["output_artifacts_report_json_declared"]:
+        blockers.append("output_artifacts.report_json must be a non-empty path")
+
+    checks["output_artifacts_output_dir_under_issue_path"] = _under_output_prefix(
+        artifact_output_dir, root
+    )
+    if not checks["output_artifacts_output_dir_under_issue_path"]:
+        blockers.append(
+            f"output_artifacts.output_dir must be under {EXPECTED_OUTPUT_PREFIX.as_posix()}"
+        )
+
+    checks["output_artifacts_report_json_under_issue_path"] = _under_output_prefix(
+        artifact_report_json, root
+    )
+    if not checks["output_artifacts_report_json_under_issue_path"]:
+        blockers.append(
+            f"output_artifacts.report_json must be under {EXPECTED_OUTPUT_PREFIX.as_posix()}"
+        )
+
+    checks["output_artifacts_report_json_in_output_dir"] = (
+        artifact_output_dir is not None
+        and artifact_report_json is not None
+        and artifact_report_json.resolve().is_relative_to(artifact_output_dir.resolve())
+    )
+    if not checks["output_artifacts_report_json_in_output_dir"]:
+        blockers.append("output_artifacts.report_json must be inside output_artifacts.output_dir")
+
     example_command = payload.get("example_command")
     checks["example_command_declared"] = isinstance(example_command, str) and bool(
         example_command.strip()
@@ -315,6 +363,12 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if not checks["out_json_under_issue_path"]:
         blockers.append(f"--out-json must stay under {EXPECTED_OUTPUT_PREFIX.as_posix()}")
 
+    checks["example_command_matches_output_artifacts"] = _same_resolved_path(
+        output_dir, artifact_output_dir
+    ) and _same_resolved_path(out_json, artifact_report_json)
+    if not checks["example_command_matches_output_artifacts"]:
+        blockers.append("example_command output paths must match output_artifacts metadata")
+
     metadata = {
         "issue": EXPECTED_ISSUE,
         "budget_grid": list(budgets),
@@ -324,6 +378,14 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         "runner": _repo_relative(runner_path, root) if runner_path else None,
         "output_dir": _repo_relative(output_dir, root) if output_dir else None,
         "out_json": _repo_relative(out_json, root) if out_json else None,
+        "output_artifacts": {
+            "output_dir": _repo_relative(artifact_output_dir, root)
+            if artifact_output_dir
+            else None,
+            "report_json": _repo_relative(artifact_report_json, root)
+            if artifact_report_json
+            else None,
+        },
         "claim_scope": payload.get("claim_scope"),
         "status": payload.get("status"),
         "does_not_execute_benchmark": True,

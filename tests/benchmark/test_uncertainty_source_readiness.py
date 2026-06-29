@@ -212,6 +212,22 @@ def test_owner_resolution_defensive_branches(monkeypatch) -> None:
     assert "resolved" in evidence
 
 
+def test_owner_resolution_handles_dynamic_syntax_error(monkeypatch) -> None:
+    """Dynamic owner import reports syntax errors instead of crashing."""
+
+    monkeypatch.setattr(readiness, "_module_source_path", lambda _module_name: None)
+
+    def raise_syntax_error(_module_name: str) -> types.ModuleType:
+        raise SyntaxError("broken dynamic module")
+
+    monkeypatch.setattr(readiness.importlib, "import_module", raise_syntax_error)
+
+    present, evidence = readiness._resolve_owner("_issue_3557_broken_dynamic:Thing")
+
+    assert not present
+    assert "cannot import" in evidence
+
+
 def test_static_path_and_target_helpers_cover_edge_cases() -> None:
     """Static helpers support packages and ignore non-binding targets."""
 

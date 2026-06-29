@@ -247,7 +247,7 @@ def _resolve_owner(owner: str | None) -> tuple[bool, str]:
     # Fallback for extension modules or generated modules without a source file.
     try:
         module = importlib.import_module(module_name)
-    except ImportError as exc:
+    except (ImportError, SyntaxError) as exc:
         return False, f"cannot import {module_name}: {exc}"
     if not hasattr(module, attribute):
         return False, f"{module_name} has no attribute {attribute!r}"

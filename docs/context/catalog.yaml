@@ -2342,6 +2342,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/decision_packet.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/README.md
     status: evidence
     freshness: evidence

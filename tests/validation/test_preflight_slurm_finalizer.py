@@ -161,9 +161,7 @@ def test_ready_when_queue_issue_recorded_as_string(tmp_path: Path) -> None:
     report = gate.preflight(**inputs)
 
     assert report["ready"] is True
-    traceability = next(
-        c for c in report["checks"] if c["name"] == "issue_traceability_matches"
-    )
+    traceability = next(c for c in report["checks"] if c["name"] == "issue_traceability_matches")
     assert traceability["status"] == "ready"
 
 

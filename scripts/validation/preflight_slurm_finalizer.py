@@ -337,11 +337,7 @@ def _check_issue_traceability(inputs: LoadedInputs) -> PreflightCheck:
     # an int and drops bools/blanks, keeping this check consistent with
     # ``reconcile_slurm_evidence`` instead of over-blocking string-encoded issues.
     queue_issues = sorted(
-        {
-            coerced
-            for entry in inputs.queue
-            if (coerced := _coerce_seed(entry.issue)) is not None
-        }
+        {coerced for entry in inputs.queue if (coerced := _coerce_seed(entry.issue)) is not None}
     )
     finalizer_issues = sorted(
         {

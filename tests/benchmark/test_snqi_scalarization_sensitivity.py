@@ -13,6 +13,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     build_scalarization_sensitivity_report,
     classify_scalarization_sensitivity_inputs,
     format_pareto_svg,
+    input_file_provenance,
     load_jsonl,
     write_diagnostic_artifacts,
 )
@@ -261,6 +262,25 @@ def test_artifact_writer_creates_report_ready_files(tmp_path: Path) -> None:
     assert "safe-slow" in svg
 
 
+def test_report_records_input_provenance_for_auditable_weight_sweeps(tmp_path: Path) -> None:
+    """Report payload can carry input hashes without changing SNQI semantics."""
+
+    weights_path = tmp_path / "weights.json"
+    weights_path.write_text(json.dumps(_weights(), sort_keys=True), encoding="utf-8")
+
+    report = build_scalarization_sensitivity_report(
+        _episodes(),
+        weights=_weights(),
+        baseline=_baseline(),
+        sweep_factors=[1.0],
+        input_provenance={"weights": input_file_provenance(weights_path)},
+    )
+
+    provenance = report["inputs"]["provenance"]["weights"]
+    assert provenance["path"] == str(weights_path)
+    assert len(provenance["sha256"]) == 64
+
+
 def test_load_jsonl_rejects_non_object_records(tmp_path: Path) -> None:
     """JSONL loader fails closed on non-object records."""
 
@@ -327,6 +347,9 @@ def test_cli_writes_scalarization_artifacts(tmp_path: Path, capsys) -> None:
     assert Path(stdout["csv"]).exists()
     assert Path(stdout["markdown"]).exists()
     assert Path(stdout["svg"]).exists()
+    payload = json.loads(Path(stdout["json"]).read_text(encoding="utf-8"))
+    assert payload["inputs"]["provenance"]["weights"]["path"] == str(weights_path)
+    assert len(payload["inputs"]["provenance"]["weights"]["sha256"]) == 64
 
 
 def test_cli_preflight_only_blocks_invalid_inputs(tmp_path: Path, capsys) -> None:

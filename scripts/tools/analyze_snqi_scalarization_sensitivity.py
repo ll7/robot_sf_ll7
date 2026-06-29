@@ -18,6 +18,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     SENSITIVITY_PREFLIGHT_READY,
     build_scalarization_sensitivity_report,
     classify_scalarization_sensitivity_inputs,
+    input_file_provenance,
     load_baseline_mapping,
     load_jsonl,
     load_weight_mapping,
@@ -87,6 +88,11 @@ def main(argv: list[str] | None = None) -> int:
         planner_key=args.planner_key,
         fallback_planner_key=args.fallback_planner_key,
         sweep_factors=args.sweep_factors,
+        input_provenance={
+            "episodes": input_file_provenance(args.episodes),
+            "weights": input_file_provenance(args.weights),
+            "baseline": input_file_provenance(args.baseline),
+        },
     )
     artifacts = write_diagnostic_artifacts(report, args.output_dir)
     print(

@@ -94,8 +94,8 @@ def validate_retrain_preflight(
     mixing = _validate_mixing(config, config_dir, errors)
     training = _validate_training(config, errors)
     evaluation = _validate_evaluation(config, config_dir, root, errors)
-    provenance = _validate_provenance(config, root, errors)
     output_root = _validate_output(config, errors)
+    provenance = _validate_provenance(config, root, errors, output_root=output_root)
 
     if errors:
         joined = "\n- ".join(errors)
@@ -410,6 +410,8 @@ def _validate_provenance(
     config: dict[str, Any],
     repo_root: Path,
     errors: list[str],
+    *,
+    output_root: str | None = None,
 ) -> dict[str, Any] | None:
     provenance = _require_mapping(config, "provenance", errors)
     if provenance is None:
@@ -417,6 +419,11 @@ def _validate_provenance(
 
     resolved: dict[str, str] = {}
     missing_artifacts: list[str] = []
+    resolved_output_root = (
+        _resolve_path(output_root, repo_root)
+        if isinstance(output_root, str) and output_root
+        else None
+    )
     for key in _EXPECTED_PROVENANCE_KEYS:
         value = provenance.get(key)
         if not isinstance(value, str) or not value.strip():
@@ -424,6 +431,10 @@ def _validate_provenance(
             continue
         path = _resolve_path(value, repo_root)
         resolved[key] = str(path)
+        if resolved_output_root is not None and not _is_relative_to(path, resolved_output_root):
+            errors.append(
+                f"provenance.{key} must resolve under output.root {output_root!r}: {value}"
+            )
         if not path.exists():
             missing_artifacts.append(str(path))
 
@@ -439,6 +450,14 @@ def _validate_provenance(
         "paths": resolved,
         "missing_artifacts": missing_artifacts,
     }
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 def _validate_output(config: dict[str, Any], errors: list[str]) -> str | None:

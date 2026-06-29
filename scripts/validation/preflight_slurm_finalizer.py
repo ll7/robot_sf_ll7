@@ -67,6 +67,7 @@ from scripts.tools.reconcile_slurm_evidence import (  # noqa: E402
     FinalizerReport,
     ManifestJob,
     QueueEntry,
+    _coerce_seed,
     _load_finalizer_report,
     load_queue,
     load_submission_manifests,
@@ -330,19 +331,23 @@ def _check_finalizer_linkage(inputs: LoadedInputs) -> PreflightCheck:
 
 def _check_issue_traceability(inputs: LoadedInputs) -> PreflightCheck:
     """Require queue and finalizer issue numbers to agree when both are present."""
+    # Normalize via the canonical coercion so the gate reads issue numbers
+    # exactly as the reconciler does. ``QueueEntry.issue`` is ``str | int | None``
+    # (a queue may record ``issue: "3425"``); ``_coerce_seed`` maps both forms to
+    # an int and drops bools/blanks, keeping this check consistent with
+    # ``reconcile_slurm_evidence`` instead of over-blocking string-encoded issues.
     queue_issues = sorted(
         {
-            int(entry.issue)
+            coerced
             for entry in inputs.queue
-            if isinstance(entry.issue, int) and not isinstance(entry.issue, bool)
+            if (coerced := _coerce_seed(entry.issue)) is not None
         }
     )
     finalizer_issues = sorted(
         {
-            int(finalizer.issue_number)
+            coerced
             for finalizer in inputs.finalizers
-            if isinstance(finalizer.issue_number, int)
-            and not isinstance(finalizer.issue_number, bool)
+            if (coerced := _coerce_seed(finalizer.issue_number)) is not None
         }
     )
 

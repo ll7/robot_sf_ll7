@@ -148,6 +148,25 @@ def test_blocks_when_issue_traceability_mismatches(tmp_path: Path) -> None:
     assert "align queue and finalizer issue numbers" in blocker["remediation"]
 
 
+def test_ready_when_queue_issue_recorded_as_string(tmp_path: Path) -> None:
+    """A string-encoded queue issue (``issue: "3425"``) still matches the finalizer.
+
+    ``QueueEntry.issue`` is ``str | int | None``; the gate must coerce it exactly
+    like ``reconcile_slurm_evidence`` rather than treating a string as a missing
+    issue number and over-blocking.
+    """
+    inputs = _ready_inputs(tmp_path)
+    _write_queue(inputs["queue_path"], issue="3425")  # type: ignore[arg-type]
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is True
+    traceability = next(
+        c for c in report["checks"] if c["name"] == "issue_traceability_matches"
+    )
+    assert traceability["status"] == "ready"
+
+
 def test_blocks_when_queue_issue_traceability_missing(tmp_path: Path) -> None:
     """Missing queue issue metadata blocks public handoff traceability."""
     queue = tmp_path / "queue.yaml"

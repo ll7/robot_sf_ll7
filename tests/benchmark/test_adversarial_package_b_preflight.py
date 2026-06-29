@@ -242,6 +242,37 @@ def test_preflight_blocks_output_artifact_command_drift(tmp_path: Path) -> None:
     assert any("output paths must match output_artifacts" in blocker for blocker in result.blockers)
 
 
+def test_preflight_blocks_directory_valued_output_artifact_report(tmp_path: Path) -> None:
+    """The declared report_json path must not already be an existing directory."""
+    manifest = _base_manifest(tmp_path)
+    report_path = tmp_path / "output/adversarial/issue_3079_package_b/report.json"
+    report_path.mkdir(parents=True)
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["output_artifacts_report_json_in_output_dir"] is False
+    assert any("report_json must be inside output_artifacts.output_dir" in blocker for blocker in result.blockers)
+
+
+def test_preflight_blocks_symlinked_output_artifact_report(tmp_path: Path) -> None:
+    """The declared report_json path must not be a symlink."""
+    manifest = _base_manifest(tmp_path)
+    report_path = tmp_path / "output/adversarial/issue_3079_package_b/report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    target = tmp_path / "output/adversarial/issue_3079_package_b/real_report.json"
+    target.write_text("{}", encoding="utf-8")
+    report_path.symlink_to(target)
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["output_artifacts_report_json_in_output_dir"] is False
+    assert any("report_json must be inside output_artifacts.output_dir" in blocker for blocker in result.blockers)
+
+
 def test_package_b_preflight_cli_writes_report_and_returns_nonzero_on_blocker(
     tmp_path: Path,
 ) -> None:

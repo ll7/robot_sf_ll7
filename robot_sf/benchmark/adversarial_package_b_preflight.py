@@ -165,6 +165,19 @@ def _same_resolved_path(left: Path | None, right: Path | None) -> bool:
     return left.resolve() == right.resolve()
 
 
+def _report_path_inside_output_dir(report_json: Path | None, output_dir: Path | None) -> bool:
+    """Return true when report_json is a future or file-valued path inside output_dir."""
+    if report_json is None or output_dir is None:
+        return False
+    if report_json.is_symlink():
+        return False
+    if report_json.exists() and not report_json.is_file():
+        return False
+    resolved_report = report_json.resolve(strict=False)
+    resolved_dir = output_dir.resolve(strict=False)
+    return resolved_report != resolved_dir and resolved_report.is_relative_to(resolved_dir)
+
+
 def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path = Path("configs/adversarial/issue_3079_package_b_budget_matched.yaml"),
     *,
@@ -312,10 +325,8 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
             f"output_artifacts.report_json must be under {EXPECTED_OUTPUT_PREFIX.as_posix()}"
         )
 
-    checks["output_artifacts_report_json_in_output_dir"] = (
-        artifact_output_dir is not None
-        and artifact_report_json is not None
-        and artifact_report_json.resolve().is_relative_to(artifact_output_dir.resolve())
+    checks["output_artifacts_report_json_in_output_dir"] = _report_path_inside_output_dir(
+        artifact_report_json, artifact_output_dir
     )
     if not checks["output_artifacts_report_json_in_output_dir"]:
         blockers.append("output_artifacts.report_json must be inside output_artifacts.output_dir")

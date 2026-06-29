@@ -35,6 +35,12 @@ def _initial_feasibility_totals() -> FeasibilityTotals:
         "sum_abs_delta_angular": 0.0,
         "max_abs_delta_linear": 0.0,
         "max_abs_delta_angular": 0.0,
+        "ammv_commands_evaluated": 0,
+        "ammv_episode_count": 0,
+        "ammv_feasible_episode_count": 0,
+        "ammv_tip_over_episode_count": 0,
+        "ammv_curvature_violation_count": 0,
+        "ammv_min_stability_margin": float("inf"),
     }
 
 

@@ -30,6 +30,7 @@ def _write_packet(
     *,
     result_store: str = "store",
     seed_sets_path: str | None = None,
+    metadata_overrides: dict[str, object] | None = None,
     full_campaign_in_this_issue: object = False,
     submit_slurm_from_this_issue: object = False,
 ) -> Path:
@@ -84,6 +85,10 @@ def _write_packet(
             "bundle_status_until_run": "blocked_until_run",
         },
     }
+    if metadata_overrides:
+        for dotted_key, value in metadata_overrides.items():
+            section, key = dotted_key.split(".", maxsplit=1)
+            payload[section][key] = value
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
     return path
 
@@ -130,8 +135,17 @@ def test_complete_archive_metadata_and_store_pass(tmp_path: Path) -> None:
 
     assert report["status"] == readiness.READY
     assert "no full benchmark campaign run" in report["claim_boundary"]
+    assert report["target_claim_metadata"]["status"] == "to_be_confirmed_by_maintainer"
+    assert report["target_claim_metadata"]["expected_status"] == "to_be_confirmed_by_maintainer"
+    assert (
+        "No S20/S30 paper-facing claim exists."
+        in report["target_claim_metadata"]["no_claim_statement"]
+    )
     assert report["seed_tier"]["primary_seed_count"] == 20
     assert report["seed_tier"]["escalation_seed_count"] == 30
+    assert report["seed_tier"]["mode"] == "seed-set"
+    assert report["seed_tier"]["claim_gate_seed_tier"] == "s20_then_s30_if_rankflip"
+    assert report["seed_tier"]["escalate_to_s30_when"] == "rank flip observed"
     assert report["metric_coverage"] == {
         "success": True,
         "collisions": True,
@@ -177,6 +191,62 @@ def test_malformed_archive_packet_returns_malformed_exit(tmp_path: Path) -> None
     )
 
     assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2
+
+
+def test_missing_no_claim_statement_is_malformed(tmp_path: Path) -> None:
+    """Paper-facing archive packets must explicitly preserve no-claim wording."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo)
+    payload = yaml.safe_load(packet.read_text(encoding="utf-8"))
+    payload.pop("no_claim_statement")
+    packet.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2
+
+
+def test_claim_and_seed_tier_metadata_drift_blocks_readiness(tmp_path: Path) -> None:
+    """Claim-gate and seed-tier drift is a blocked archive state, not paper-ready."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(
+        repo / "packet.yaml",
+        repo,
+        metadata_overrides={
+            "claim_map_gate.status": "established",
+            "seed_policy.mode": "inline",
+            "claim_map_gate.seed_tier": "s30_required",
+            "seed_policy.escalate_to_s30_when": "maintainer asks",
+        },
+    )
+    write_result_store(
+        repo / "store",
+        _complete_rows(),
+        study_id="issue_1554_test",
+        command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
+        analysis={"seed_resampling_rank_flip": {"rank_flip_observed": False}},
+    )
+
+    report = readiness.build_report(packet, repo)
+
+    assert report["status"] == readiness.BLOCKED
+    assert any(
+        "claim_map_gate.status must remain" in item
+        for item in report["missing_artifact_diagnostics"]
+    )
+    assert any(
+        "seed_policy.mode must remain" in item for item in report["missing_artifact_diagnostics"]
+    )
+    assert any(
+        "claim_map_gate.seed_tier must remain" in item
+        for item in report["missing_artifact_diagnostics"]
+    )
+    assert any(
+        "escalate_to_s30_when must describe rank-flip" in item
+        for item in report["missing_artifact_diagnostics"]
+    )
 
 
 def test_fail_closed_rows_and_missing_metrics_block_readiness(tmp_path: Path) -> None:

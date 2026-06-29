@@ -11,8 +11,10 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.frozen_trace_reconciliation import (
+    FROZEN_TRACE_MISSING_EXPORT_SCHEMA,
     FROZEN_TRACE_RECONCILIATION_SCHEMA,
     build_frozen_trace_reconciliation_report,
+    build_missing_frozen_trace_export_report,
 )
 
 SCRIPT_PATH = (
@@ -69,6 +71,12 @@ def _ledger_row(
             "provenance": {"source": "fixture"},
         },
     }
+
+
+def _raw_ledger_row(episode_id: str, *, collision: bool = False) -> dict:
+    """Build a raw durable EpisodeEventLedger.v1 row."""
+
+    return _ledger_row(episode_id, collision=collision)["event_ledger"]
 
 
 def test_report_counts_event_deltas_and_affected_artifact_status() -> None:
@@ -159,6 +167,99 @@ def test_report_counts_event_deltas_and_affected_artifact_status() -> None:
             "unchanged_by_event_delta": 1,
         },
     }
+
+
+def test_raw_durable_event_ledger_rows_are_comparable() -> None:
+    """Frozen durable exports can carry raw EpisodeEventLedger.v1 rows."""
+
+    report = build_frozen_trace_reconciliation_report(
+        [_raw_ledger_row("episode-1")],
+        [_raw_ledger_row("episode-1", collision=True)],
+    )
+
+    assert report["summary"]["old_row_count"] == 1
+    assert report["summary"]["new_row_count"] == 1
+    assert report["summary"]["changed_row_count"] == 1
+    assert report["old_event_counts"]["exact_events.collision"] == 0
+    assert report["new_event_counts"]["exact_events.collision"] == 1
+
+
+def test_metric_semantics_export_without_ledger_payload_is_not_comparable() -> None:
+    """Metric-semantics exports name the ledger but do not carry event booleans."""
+
+    semantics_export = {
+        "schema_version": "event_ledger_reconciliation_export.v1",
+        "episode_id": "episode-1",
+        "scenario_id": "scenario-a",
+        "seed": 7,
+        "planner": "demo",
+        "software_commit": "abc123",
+        "event_ledger_schema_version": "EpisodeEventLedger.v1",
+        "reconciliation_table": {"rows": []},
+    }
+
+    with pytest.raises(ValueError, match="metric-semantics exports"):
+        build_frozen_trace_reconciliation_report([semantics_export], [semantics_export])
+
+
+def test_missing_export_report_marks_artifacts_not_evaluable() -> None:
+    """Missing durable exports produce a blocker report without inventing row counts."""
+
+    report = build_missing_frozen_trace_export_report(
+        missing_exports=[
+            {
+                "label": "0.0.2-before",
+                "path": "docs/context/evidence/missing-before.jsonl",
+                "required_contract": "EpisodeEventLedger.v1 exact/surrogate event JSONL",
+            },
+            {
+                "label": "0.0.2-after",
+                "path": "docs/context/evidence/missing-after.jsonl",
+                "required_contract": "EpisodeEventLedger.v1 exact/surrogate event JSONL",
+            },
+        ],
+        artifact_manifest=[
+            {
+                "artifact_id": "table:safety-summary",
+                "artifact_type": "table",
+                "consumes_event_fields": ["exact_events.collision"],
+            }
+        ],
+        old_label="0.0.2-before",
+        new_label="0.0.2-after",
+    )
+
+    assert report["schema_version"] == FROZEN_TRACE_MISSING_EXPORT_SCHEMA
+    assert report["status"] == "blocked_missing_durable_event_ledger_exports"
+    assert report["summary"] == {
+        "old_label": "0.0.2-before",
+        "new_label": "0.0.2-after",
+        "old_row_count": None,
+        "new_row_count": None,
+        "changed_row_count": None,
+        "unchanged_row_count": None,
+        "added_row_count": None,
+        "removed_row_count": None,
+        "missing_export_count": 2,
+    }
+    assert report["affected_artifacts"] == [
+        {
+            "artifact_id": "table:safety-summary",
+            "artifact_type": "table",
+            "status": "not_evaluable_missing_event_ledger_export",
+            "consumes_event_fields": ["exact_events.collision"],
+            "affected_event_fields": [],
+            "affected_changed_row_count": None,
+            "affected_added_row_count": None,
+            "affected_removed_row_count": None,
+        }
+    ]
+    assert report["affected_artifact_summary"] == {
+        "total_artifacts": 1,
+        "by_type": {"table": {"not_evaluable_missing_event_ledger_export": 1}},
+        "by_status": {"not_evaluable_missing_event_ledger_export": 1},
+    }
+    assert report["semantics"]["claim_promotion"] == "none"
 
 
 def test_added_and_removed_rows_mark_consuming_artifacts_affected() -> None:
@@ -350,3 +451,59 @@ def test_cli_writes_frozen_reconciliation_report(tmp_path: Path) -> None:
     report = json.loads(out_path.read_text(encoding="utf-8"))
     assert report["summary"]["changed_row_count"] == 1
     assert report["affected_artifacts"][0]["status"] == "affected_reconciliation_required"
+
+
+def test_cli_can_write_missing_export_diagnostic(tmp_path: Path) -> None:
+    """CLI can document missing durable frozen exports without fabricating comparison data."""
+
+    manifest_path = tmp_path / "artifact_manifest.json"
+    out_path = tmp_path / "missing_export_report.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "artifacts": [
+                    {
+                        "artifact_id": "claim:collision-count",
+                        "artifact_type": "claim",
+                        "consumes_event_fields": ["exact_events.collision"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "--old-ledgers",
+            str(tmp_path / "missing-before.jsonl"),
+            "--new-ledgers",
+            str(tmp_path / "missing-after.jsonl"),
+            "--artifact-manifest",
+            str(manifest_path),
+            "--out",
+            str(out_path),
+            "--old-label",
+            "0.0.2-before",
+            "--new-label",
+            "0.0.2-after",
+            "--diagnose-missing-exports",
+        ],
+        check=False,
+        cwd=SCRIPT_PATH.parents[2],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads(out_path.read_text(encoding="utf-8"))
+    assert report["schema_version"] == FROZEN_TRACE_MISSING_EXPORT_SCHEMA
+    assert report["status"] == "blocked_missing_durable_event_ledger_exports"
+    assert report["summary"]["missing_export_count"] == 2
+    assert report["affected_artifact_summary"] == {
+        "total_artifacts": 1,
+        "by_type": {"claim": {"not_evaluable_missing_event_ledger_export": 1}},
+        "by_status": {"not_evaluable_missing_event_ledger_export": 1},
+    }

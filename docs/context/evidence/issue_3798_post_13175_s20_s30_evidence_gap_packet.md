@@ -54,9 +54,9 @@ This packet summarizes retrieved S20 (20-seed) job artifacts for issue #1554, ke
 
 ## Validation Commands
 
-- `uv run python scripts/validation/extract_s20_s30_evidence_gap_packet.py --artifact-root /home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-l40s-mem180/13175 --job-id 13175 --markdown`
-  - Print this diagnostic packet from retrieved job metadata without submitting Slurm or editing claims.
+- `uv run python scripts/validation/extract_s20_s30_evidence_gap_packet.py --packet-fixture docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json --markdown`
+  - Print this diagnostic packet from tracked metadata without submitting Slurm, requiring ignored output, or editing claims.
 - `uv run pytest tests/validation/test_extract_s20_s30_evidence_gap_packet.py`
-  - Fixture proof for present and missing retrieved-artifact metadata.
+  - Fixture proof for present, missing, and tracked packet metadata.
 - `uv run python scripts/validation/check_s20_s30_archive_readiness.py --json`
   - Fail-closed archive-readiness check; remains the claim gate for a canonical result store.

@@ -17,6 +17,9 @@ from typing import Any
 SCHEMA_VERSION = "s20-s30-evidence-gap-packet.v1"
 DEFAULT_JOB_ID = "13175"
 DEFAULT_ARTIFACT_ROOT = Path("output/issue1554-s20-h500-l40s-mem180/13175")
+DEFAULT_PACKET_FIXTURE = Path(
+    "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json"
+)
 CLAIM_BOUNDARY = (
     "diagnostic-only evidence-gap packet; no full benchmark campaign run, no "
     "Slurm/GPU submission, no paper/dissertation claim edits, and no S20/S30 "
@@ -105,6 +108,19 @@ def build_packet(artifact_root: Path, *, job_id: str = DEFAULT_JOB_ID) -> dict[s
             },
         ],
     }
+    return packet
+
+
+def load_packet_fixture(packet_fixture: Path) -> dict[str, Any]:
+    """Load a compact tracked packet fixture for hosts without raw output artifacts."""
+
+    packet = _load_json(packet_fixture)
+    if packet.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError(f"{packet_fixture} schema_version must be {SCHEMA_VERSION!r}")
+    if packet.get("job_id") != DEFAULT_JOB_ID:
+        raise ValueError(f"{packet_fixture} job_id must be {DEFAULT_JOB_ID!r}")
+    if packet.get("claim_boundary") != CLAIM_BOUNDARY:
+        raise ValueError(f"{packet_fixture} claim boundary drifted")
     return packet
 
 
@@ -296,6 +312,11 @@ def _sha256(path: Path) -> str:
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact-root", type=Path, default=DEFAULT_ARTIFACT_ROOT)
+    parser.add_argument(
+        "--packet-fixture",
+        type=Path,
+        help="Tracked compact packet JSON used when ignored raw artifacts are unavailable.",
+    )
     parser.add_argument("--job-id", default=DEFAULT_JOB_ID)
     parser.add_argument("--markdown", action="store_true", help="Print a Markdown packet.")
     parser.add_argument("--json", action="store_true", help="Print the packet JSON.")
@@ -307,7 +328,11 @@ def main(argv: list[str] | None = None) -> int:
     """Run the diagnostic packet extractor CLI."""
 
     args = _parse_args(argv)
-    packet = build_packet(args.artifact_root, job_id=args.job_id)
+    packet = (
+        load_packet_fixture(args.packet_fixture)
+        if args.packet_fixture is not None
+        else build_packet(args.artifact_root, job_id=args.job_id)
+    )
     rendered = (
         json.dumps(packet, indent=2, sort_keys=True) if args.json else render_markdown(packet)
     )

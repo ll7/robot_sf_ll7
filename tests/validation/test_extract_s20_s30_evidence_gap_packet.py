@@ -135,3 +135,22 @@ def test_dry_run_command_prints_markdown_packet(tmp_path: Path, capsys) -> None:
     assert (
         "uv run python scripts/validation/check_s20_s30_archive_readiness.py --json" in captured.out
     )
+
+
+def test_tracked_packet_fixture_renders_without_raw_artifacts(capsys) -> None:
+    """Tracked packet fixture keeps public proof independent of ignored output."""
+
+    exit_code = extractor.main(
+        [
+            "--packet-fixture",
+            "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json",
+            "--markdown",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Status: `diagnostic_only`" in captured.out
+    assert "File count: 56" in captured.out
+    assert "requiring ignored output" in captured.out
+    assert "no paper/dissertation claim edits" in captured.out

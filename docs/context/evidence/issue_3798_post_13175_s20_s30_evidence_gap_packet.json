@@ -1,0 +1,127 @@
+{
+  "schema_version": "s20-s30-evidence-gap-packet.v1",
+  "job_id": "13175",
+  "status": "diagnostic_only",
+  "claim_boundary": "diagnostic-only evidence-gap packet; no full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim edits, and no S20/S30 claim promotion",
+  "artifact_root": "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-l40s-mem180/13175",
+  "retrieved_artifacts": {
+    "file_count": 56,
+    "total_bytes": 185111675,
+    "missing_required_metadata_files": []
+  },
+  "campaign": {
+    "campaign_id": "issue1554_s20_h500_l40s_mem180_20260628",
+    "config_name": "paper_experiment_matrix_v1_scenario_horizons_h500_s20",
+    "started_at_utc": "2026-06-28T18:25:45.459248Z",
+    "finished_at_utc": "2026-06-28T20:03:01.128441Z",
+    "git_commit": "38f921fe374bc954ccc8932bfb055fc021c5b528",
+    "git_branch": "slurm-issue-1554-s20-h500-l40s-mem180-20260628",
+    "seed_set": "paper_eval_s20",
+    "resolved_seed_count": 20,
+    "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+    "scenario_matrix_hash": "8609d0192098"
+  },
+  "coverage_snapshot": {
+    "planner_rows": [],
+    "planner_count": 9,
+    "episode_rows": 8640,
+    "seed_count": 20,
+    "seeds": [
+      111,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120,
+      121,
+      122,
+      123,
+      124,
+      125,
+      126,
+      127,
+      128,
+      129,
+      130
+    ],
+    "planners": [
+      "goal",
+      "hybrid_rule_v3_fast_progress_static_escape",
+      "orca",
+      "ppo",
+      "prediction_planner",
+      "sacadrl",
+      "scenario_adaptive_hybrid_orca_v1",
+      "social_force",
+      "socnav_sampling"
+    ]
+  },
+  "promotable_review_files": [
+    {
+      "path": "campaign_manifest.json",
+      "bytes": 20775,
+      "sha256": "0dda7ab427c798a2fb018c5c196be698efddc6934fd9c32e7c92ab806ebe44bb",
+      "promotion_scope": "small metadata/report surface only; diagnostic evidence, not a claim upgrade"
+    },
+    {
+      "path": "run_meta.json",
+      "bytes": 4469,
+      "sha256": "69b40d3e29d3617c4ac1a04abcd0c9819658b3ee41c196f6612fc5ec2a352c96",
+      "promotion_scope": "small metadata/report surface only; diagnostic evidence, not a claim upgrade"
+    },
+    {
+      "path": "reports/campaign_table.csv",
+      "bytes": 2745,
+      "sha256": "8382e741fdfae6e7835eaf2f6e8a4ec56d1d4e5ae17cdd070409cecf08841368",
+      "promotion_scope": "small metadata/report surface only; diagnostic evidence, not a claim upgrade"
+    },
+    {
+      "path": "reports/campaign_table_core.md",
+      "bytes": 742,
+      "sha256": "8dc9ab25142a0d8e6b796f14793caf2fd33463070729e6bb0ba773002a62b2f0",
+      "promotion_scope": "small metadata/report surface only; diagnostic evidence, not a claim upgrade"
+    },
+    {
+      "path": "reports/campaign_table_experimental.md",
+      "bytes": 1323,
+      "sha256": "54fe6c5cf3ba4e579b1e02ccdf118d2f839f5483974988b04a50032ca4f11383",
+      "promotion_scope": "small metadata/report surface only; diagnostic evidence, not a claim upgrade"
+    },
+    {
+      "path": "reports/snqi_diagnostics.md",
+      "bytes": 2495,
+      "sha256": "6a7fae8df44ecc2c2b36a5206e741cfb7ab8ec876e29b08f6e31f7545b6c5fc0",
+      "promotion_scope": "small metadata/report surface only; diagnostic evidence, not a claim upgrade"
+    },
+    {
+      "path": "reports/statistical_sufficiency.json",
+      "bytes": 421732,
+      "sha256": "f9ee5c46121dc39a8fa0e647240258e575a2dcad15e712b2695b60b713652385",
+      "promotion_scope": "small metadata/report surface only; diagnostic evidence, not a claim upgrade"
+    }
+  ],
+  "claim_blockers": [
+    "The retrieved job is S20 only; S30 remains an escalation path, not executed evidence.",
+    "Artifacts live under ignored worktree output and are not yet a canonical campaign result store.",
+    "Archive-readiness still depends on the fail-closed result-store checker before any claim promotion.",
+    "No dissertation, paper, ranking, safety, or significance claim is edited by this packet."
+  ],
+  "validation_commands": [
+    {
+      "command": "uv run python scripts/validation/extract_s20_s30_evidence_gap_packet.py --packet-fixture docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json --markdown",
+      "purpose": "Print this diagnostic packet from tracked metadata without submitting Slurm, requiring ignored output, or editing claims."
+    },
+    {
+      "command": "uv run pytest tests/validation/test_extract_s20_s30_evidence_gap_packet.py",
+      "purpose": "Fixture proof for present, missing, and tracked packet metadata."
+    },
+    {
+      "command": "uv run python scripts/validation/check_s20_s30_archive_readiness.py --json",
+      "purpose": "Fail-closed archive-readiness check; remains the claim gate for a canonical result store."
+    }
+  ]
+}

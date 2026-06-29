@@ -102,6 +102,21 @@ def test_ready_source_cannot_use_tracking_issue_uri() -> None:
     assert any("tracking issue" in blocker for blocker in report.blockers)
 
 
+def test_ready_source_cannot_use_tracking_pr_or_discussion_uri() -> None:
+    """GitHub PR and discussion URLs are tracking threads, not source artifacts."""
+    for tracking_uri in (
+        "https://github.com/ll7/robot_sf_ll7/pull/3794",
+        "https://github.com/ll7/robot_sf_ll7/discussions/12",
+    ):
+        manifest = _ready_manifest()
+        manifest["source_uri"] = tracking_uri
+
+        report = check_amv_calibration_source_manifest(manifest)
+
+        assert report.source_status == SOURCE_STATUS_BLOCKED_EXTERNAL, tracking_uri
+        assert any("source artifact" in blocker for blocker in report.blockers), tracking_uri
+
+
 def test_proxy_source_ready_does_not_allow_hardware_calibration_claim() -> None:
     """Accepted platform-class proxy source stays outside hardware-calibrated claims."""
     manifest = _ready_manifest()

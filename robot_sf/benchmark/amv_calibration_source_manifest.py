@@ -229,7 +229,10 @@ def _source_metadata_blockers(metadata: Mapping[str, Any]) -> list[str]:
     if source_status == SOURCE_STATUS_READY and source_uri is None:
         blockers.append("ready source requires source_uri")
     if source_status == SOURCE_STATUS_READY and _source_uri_is_tracking_issue(source_uri):
-        blockers.append("ready source_uri must point at a source artifact, not a tracking issue")
+        blockers.append(
+            "ready source_uri must point at a source artifact, "
+            "not a tracking issue, pull request, or discussion"
+        )
     if source_status == SOURCE_STATUS_READY and source_type == SOURCE_TYPE_UNKNOWN:
         blockers.append("ready source requires source_type other than unknown")
     blockers.extend(_license_blockers(metadata))
@@ -413,11 +416,19 @@ def _sequence_of_ints(value: Any) -> bool:
     )
 
 
+_GITHUB_TRACKING_PATH_SEGMENTS = ("/issues/", "/pull/", "/pulls/", "/discussions/")
+
+
 def _source_uri_is_tracking_issue(source_uri: str | None) -> bool:
-    """Return whether a URI points at a GitHub issue instead of a source artifact."""
+    """Return whether a URI points at a GitHub tracking thread, not a source artifact.
+
+    GitHub issue, pull request, and discussion URLs all reference tracking
+    conversations rather than a durable calibration source, so none of them may
+    back a ``ready`` source.
+    """
     if source_uri is None:
         return False
     parsed = urlparse(source_uri.strip().lower())
     host = parsed.netloc.rsplit("@", 1)[-1].split(":", 1)[0]
     is_github = host == "github.com" or host.endswith(".github.com")
-    return is_github and "/issues/" in parsed.path
+    return is_github and any(segment in parsed.path for segment in _GITHUB_TRACKING_PATH_SEGMENTS)

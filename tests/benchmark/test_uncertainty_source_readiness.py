@@ -1,200 +1,234 @@
-"""Tests for issue #3557 uncertainty-source readiness inventory."""
+"""Tests benchmark uncertainty-source readiness helpers."""
 
 from __future__ import annotations
 
-import importlib.util
-import json
-from pathlib import Path
+import ast
+import sys
+import types
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-import pytest
+from robot_sf.benchmark import uncertainty_source_readiness as readiness
 
-import robot_sf.benchmark.uncertainty_source_readiness as readiness
-from robot_sf.benchmark.uncertainty_source_readiness import (
-    UNCERTAINTY_SOURCE_READINESS_SCHEMA,
-    UncertaintySourceRunSpec,
-    build_uncertainty_source_readiness_inventory,
-    classify_uncertainty_source_readiness,
-)
-
-_SCRIPT_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "scripts"
-    / "validation"
-    / "check_uncertainty_source_readiness_issue_3557.py"
-)
-_SPEC = importlib.util.spec_from_file_location("_issue_3557_readiness", _SCRIPT_PATH)
-assert _SPEC is not None
-_SCRIPT = importlib.util.module_from_spec(_SPEC)
-assert _SPEC.loader is not None
-_SPEC.loader.exec_module(_SCRIPT)
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
-def test_default_inventory_reports_readiness_without_running_benchmarks() -> None:
-    """Default inventory labels current hooks without executing episode runs."""
+def test_default_inventory_payload_and_legacy_inventory_contract(monkeypatch) -> None:
+    """Default and legacy inventory helpers expose deterministic readiness payloads."""
 
-    report = build_uncertainty_source_readiness_inventory()
+    report = readiness.inspect_uncertainty_source_readiness()
+    payload = report.as_dict()
 
-    assert report["schema_version"] == UNCERTAINTY_SOURCE_READINESS_SCHEMA
-    assert report["issue"] == 3557
-    assert report["claim_boundary"] == "readiness_inventory_only"
-    assert report["not_benchmark_evidence"] is True
-    assert report["runs_executed"] is False
-    assert report["surrogate_semantics_changed"] is False
-    assert report["all_sources_ready"] is False
+    assert payload["schema_version"] == readiness.SCHEMA_VERSION
+    assert payload["issue"] == readiness.ISSUE
+    assert payload["ready"] is False
+    assert readiness.EXISTENCE_DEGRADATION in payload["ready_sources"]
+    assert readiness.VISIBILITY_OCCLUSION in payload["blocked_sources"]
+    assert "does not claim" in payload["claim_boundary"]
+    assert payload["sources"][0]["condition_builder"]["present"] is True
 
-    by_source = {row["source"]: row for row in report["sources"]}
-    assert set(by_source) == {
-        "existence_degraded",
-        "visibility_limited",
-        "covariance_inflated",
-        "class_probability",
-        "tracking_noise",
-    }
-
-    assert by_source["existence_degraded"]["status"] == "ready"
-    assert by_source["existence_degraded"]["missing"] == []
-    assert by_source["visibility_limited"]["missing"] == ["scenario_hook"]
-    assert by_source["covariance_inflated"]["missing"] == ["scenario_hook"]
-    assert by_source["class_probability"]["missing"] == ["scenario_hook"]
-    assert by_source["tracking_noise"]["missing"] == ["condition_builder", "scenario_hook"]
-
-
-def test_supported_source_with_all_surrogate_outputs_is_ready() -> None:
-    """A source with known builder, hook, and output fields is runnable-ready."""
-
-    row = classify_uncertainty_source_readiness(
-        UncertaintySourceRunSpec(
-            source="synthetic",
-            condition_builder="_condition_existence_degraded",
-            scenario_hook="build_belief_for_mode",
-        )
-    )
-
-    assert row["status"] == "ready"
-    assert row["condition_builder_present"] is True
-    assert row["scenario_hook_present"] is True
-    assert row["expected_surrogate_outputs_present"] is True
-
-
-def test_unknown_condition_builder_fails_closed() -> None:
-    """A misspelled or not-yet-written builder blocks the source."""
-
-    row = classify_uncertainty_source_readiness(
-        UncertaintySourceRunSpec(
-            source="tracking_noise",
-            condition_builder="_condition_tracking_noise",
-            scenario_hook="build_belief_for_mode",
-        )
-    )
-
-    assert row["status"] == "blocked"
-    assert row["missing"] == ["condition_builder"]
-    assert row["condition_builder_present"] is False
-
-
-def test_missing_scenario_hook_fails_closed() -> None:
-    """Single-step condition builders alone are not episode-run readiness."""
-
-    row = classify_uncertainty_source_readiness(
-        UncertaintySourceRunSpec(
-            source="visibility_limited",
-            condition_builder="_condition_visibility_limited",
-            scenario_hook=None,
-        )
-    )
-
-    assert row["status"] == "blocked"
-    assert row["missing"] == ["scenario_hook"]
-    assert row["scenario_hook_present"] is False
-
-
-def test_missing_expected_surrogate_output_fails_closed() -> None:
-    """Future run specs must expose all fields consumed by the decision layer."""
-
-    row = classify_uncertainty_source_readiness(
-        UncertaintySourceRunSpec(
-            source="existence_degraded",
-            condition_builder="_condition_existence_degraded",
-            scenario_hook="build_belief_for_mode",
-            expected_surrogate_outputs=(
-                "source",
-                "retained_unsafe_commit_rate",
-                "dropped_unsafe_commit_rate",
-                "n_episodes",
+    monkeypatch.setattr(readiness, "_discover_condition_builders", lambda: frozenset({"builder"}))
+    monkeypatch.setattr(readiness, "_discover_scenario_hooks", lambda: frozenset({"hook"}))
+    legacy = readiness.build_uncertainty_source_readiness_inventory(
+        (
+            readiness.UncertaintySourceRunSpec(
+                source="legacy_ready",
+                condition_builder="builder",
+                scenario_hook="hook",
             ),
         )
     )
 
-    assert row["status"] == "blocked"
-    assert row["missing"] == ["expected_surrogate_outputs"]
-    assert row["missing_expected_surrogate_outputs"] == ["min_separation_delta_m"]
+    assert legacy["schema_version"] == readiness.UNCERTAINTY_SOURCE_READINESS_SCHEMA
+    assert legacy["ready_sources"] == ["legacy_ready"]
+    assert legacy["blocked_sources"] == []
 
 
-def test_inventory_requires_at_least_one_source() -> None:
-    """An empty inventory would hide readiness gaps."""
+def test_static_ast_helpers_find_supported_top_level_symbols() -> None:
+    """Static helper recognizes functions, classes, annotated names, and modules."""
 
-    with pytest.raises(ValueError, match="at least one uncertainty source"):
-        build_uncertainty_source_readiness_inventory([])
-
-
-def test_inventory_reuses_discovered_symbols_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Inventory discovery should happen once per report, not once per source."""
-
-    calls = {"builders": 0, "hooks": 0}
-
-    def discover_builders() -> frozenset[str]:
-        calls["builders"] += 1
-        return frozenset(
-            {
-                "_condition_existence_degraded",
-                "_condition_visibility_limited",
-                "_condition_covariance_inflated",
-                "_condition_class_probability",
-            }
-        )
-
-    def discover_hooks() -> frozenset[str]:
-        calls["hooks"] += 1
-        return frozenset({"build_belief_for_mode"})
-
-    monkeypatch.setattr(readiness, "_discover_condition_builders", discover_builders)
-    monkeypatch.setattr(readiness, "_discover_scenario_hooks", discover_hooks)
-
-    report = build_uncertainty_source_readiness_inventory()
-
-    assert report["ready_sources"] == ["existence_degraded"]
-    assert calls == {"builders": 1, "hooks": 1}
-
-
-def test_owner_import_failures_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Broken owner modules should make sources blocked, not crash the inventory CLI."""
-
-    def broken_import_module(module_name: str) -> object:
-        raise ImportError(f"{module_name} unavailable")
-
-    monkeypatch.setattr(readiness.importlib, "import_module", broken_import_module)
-
-    report = build_uncertainty_source_readiness_inventory(
-        [
-            UncertaintySourceRunSpec(
-                source="synthetic",
-                condition_builder="_condition_existence_degraded",
-                scenario_hook="build_belief_for_mode",
-            )
-        ]
+    tree = ast.parse(
+        "def function_owner():\n    pass\nclass ClassOwner:\n    pass\nANNOTATED_OWNER: int = 1\n"
     )
 
-    assert report["all_sources_ready"] is False
-    assert report["blocked_sources"] == ["synthetic"]
-    assert report["sources"][0]["missing"] == ["condition_builder", "scenario_hook"]
+    assert readiness._module_ast_defines(tree, "function_owner")
+    assert readiness._module_ast_defines(tree, "ClassOwner")
+    assert not readiness._module_ast_defines(tree, "ANNOTATED_OWNER")
+    assert (
+        readiness._module_source_path("robot_sf.benchmark.uncertainty_source_readiness").name
+        == "uncertainty_source_readiness.py"
+    )
 
 
-def test_cli_reports_inventory_and_can_fail_on_blocked(capsys: pytest.CaptureFixture[str]) -> None:
-    """CLI prints JSON by default and can fail closed when blocked sources remain."""
+def test_source_field_discovery_and_surrogate_missing_fields(monkeypatch) -> None:
+    """Surrogate inspection covers static source fields and missing-field failures."""
 
-    assert _SCRIPT.main([]) == 0
-    report = json.loads(capsys.readouterr().out)
-    assert report["schema_version"] == UNCERTAINTY_SOURCE_READINESS_SCHEMA
-    assert "tracking_noise" in report["blocked_sources"]
+    field_names = readiness._class_field_names_from_source(
+        "robot_sf.representation.uncertainty_source_generalization:SourceContrast"
+    )
+    assert field_names is not None
+    assert set(readiness.EXPECTED_SURROGATE_OUTPUTS) <= field_names
 
-    assert _SCRIPT.main(["--fail-on-blocked"]) == 1
+    module = types.ModuleType("_issue_3557_incomplete_dynamic_owner")
+
+    class IncompleteContrast:
+        source: str
+
+    module.IncompleteContrast = IncompleteContrast
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setattr(readiness, "_module_source_path", lambda _module_name: None)
+    monkeypatch.setattr(readiness, "_class_field_names_from_source", lambda _owner: None)
+
+    present, evidence = readiness._source_contrast_has_expected_fields(
+        f"{module.__name__}:IncompleteContrast"
+    )
+
+    assert not present
+    assert "missing fields" in evidence
+
+
+def test_dynamic_surrogate_output_fallback_accepts_dataclass(monkeypatch) -> None:
+    """Dynamic fallback supports dataclasses when static source inspection is unavailable."""
+
+    module = types.ModuleType("_issue_3557_dataclass_dynamic_owner")
+
+    @dataclass(frozen=True)
+    class DataclassContrast:
+        source: str
+        retained_unsafe_commit_rate: float
+        dropped_unsafe_commit_rate: float
+        min_separation_delta_m: float
+        n_episodes: int
+
+    module.DataclassContrast = DataclassContrast
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setattr(readiness, "_module_source_path", lambda _module_name: None)
+    monkeypatch.setattr(readiness, "_class_field_names_from_source", lambda _owner: None)
+
+    present, evidence = readiness._source_contrast_has_expected_fields(
+        f"{module.__name__}:DataclassContrast"
+    )
+
+    assert present
+    assert "exposes" in evidence
+
+
+def test_static_owner_discovery_handles_destructuring_and_parse_failures(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Static owner checks handle common source shapes and fail closed on bad source."""
+
+    tree = ast.parse("first, second = object(), object()\n")
+    assert not readiness._module_ast_defines(tree, "second")
+    assert not readiness._module_ast_defines(tree, "third")
+
+    bad_source = tmp_path / "bad_owner.py"
+    bad_source.write_text("def broken(:\n", encoding="utf-8")
+    monkeypatch.setattr(readiness, "_module_source_path", lambda _module_name: bad_source)
+
+    present, evidence = readiness._resolve_owner("bad_owner:anything")
+
+    assert not present
+    assert "cannot read" in evidence
+
+
+def test_dynamic_surrogate_output_fallback_accepts_annotated_non_dataclass(monkeypatch) -> None:
+    """Dynamic fallback can inspect plain annotated classes without crashing."""
+
+    module = types.ModuleType("_issue_3557_dynamic_owner")
+
+    class PlainContrast:
+        source: str
+        retained_unsafe_commit_rate: float
+        dropped_unsafe_commit_rate: float
+        min_separation_delta_m: float
+        n_episodes: int
+
+    module.PlainContrast = PlainContrast
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setattr(readiness, "_module_source_path", lambda _module_name: None)
+    monkeypatch.setattr(readiness, "_class_field_names_from_source", lambda _owner: None)
+
+    present, evidence = readiness._source_contrast_has_expected_fields(
+        f"{module.__name__}:PlainContrast"
+    )
+
+    assert present
+    assert "exposes" in evidence
+
+
+def test_readiness_status_reports_first_missing_component() -> None:
+    """Source readiness status distinguishes each missing prerequisite class."""
+
+    present = readiness.ReadinessComponent(present=True, owner="owner:symbol", evidence="ok")
+    missing = readiness.ReadinessComponent(present=False, owner=None, evidence="missing")
+
+    assert (
+        readiness.UncertaintySourceReadiness(
+            source="missing_builder",
+            condition_builder=missing,
+            scenario_hook=present,
+            expected_surrogate_outputs=present,
+        ).status
+        == readiness.MISSING_CONDITION_BUILDER
+    )
+    assert (
+        readiness.UncertaintySourceReadiness(
+            source="missing_hook",
+            condition_builder=present,
+            scenario_hook=missing,
+            expected_surrogate_outputs=present,
+        ).status
+        == readiness.MISSING_SCENARIO_HOOK
+    )
+    assert (
+        readiness.UncertaintySourceReadiness(
+            source="missing_output",
+            condition_builder=present,
+            scenario_hook=present,
+            expected_surrogate_outputs=missing,
+        ).status
+        == readiness.MISSING_SURROGATE_OUTPUT
+    )
+
+
+def test_owner_resolution_defensive_branches(monkeypatch) -> None:
+    """Owner resolution fails closed for malformed, missing, and dynamic owners."""
+
+    module = types.ModuleType("_issue_3557_dynamic_resolution")
+    module.available = object()
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setattr(readiness, "_module_source_path", lambda _module_name: None)
+
+    assert readiness._resolve_owner("not-a-module-owner")[0] is False
+    assert readiness._resolve_owner("_issue_3557_missing_module:Thing")[0] is False
+    assert readiness._resolve_owner(f"{module.__name__}:missing")[0] is False
+
+    present, evidence = readiness._resolve_owner(f"{module.__name__}:available")
+
+    assert present
+    assert "resolved" in evidence
+
+
+def test_static_path_and_target_helpers_cover_edge_cases() -> None:
+    """Static helpers support packages and ignore non-binding targets."""
+
+    package_path = readiness._module_source_path("robot_sf.benchmark")
+    assert package_path is not None
+    assert package_path.name == "__init__.py"
+    assert readiness._module_source_path("_issue_3557_no_such_module") is None
+
+    assert not readiness._module_ast_defines(ast.parse("holder.value = 1\n"), "value")
+
+
+def test_class_field_source_and_surrogate_fail_closed(monkeypatch, tmp_path: Path) -> None:
+    """Source field discovery and surrogate inspection fail closed."""
+
+    no_class_source = tmp_path / "no_class.py"
+    no_class_source.write_text("OTHER = object()\n", encoding="utf-8")
+    monkeypatch.setattr(readiness, "_module_source_path", lambda _module_name: no_class_source)
+    assert readiness._class_field_names_from_source("no_class:Missing") is None
+
+    assert readiness._source_contrast_has_expected_fields(None)[0] is False

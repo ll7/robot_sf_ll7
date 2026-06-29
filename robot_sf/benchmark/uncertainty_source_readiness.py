@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import ast
 import importlib
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -237,8 +237,8 @@ def _resolve_owner(owner: str | None) -> tuple[bool, str]:
     source_path = _module_source_path(module_name)
     if source_path is not None:
         try:
-            tree = ast.parse(source_path.read_text())
-        except OSError as exc:
+            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError) as exc:
             return False, f"cannot read {source_path}: {exc}"
         if not _module_ast_defines(tree, attribute):
             return False, f"{module_name} has no top-level attribute {attribute!r}"
@@ -275,19 +275,12 @@ def _module_ast_defines(tree: ast.Module, attribute: str) -> bool:
     """Return whether a module AST defines a top-level symbol.
 
     Returns:
-        True when a function, class, or assignment defines ``attribute``.
+        True when a function or class defines ``attribute``.
     """
 
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
             if node.name == attribute:
-                return True
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == attribute:
-                    return True
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            if node.target.id == attribute:
                 return True
     return False
 
@@ -304,8 +297,8 @@ def _class_field_names_from_source(owner: str) -> set[str] | None:
     if source_path is None:
         return None
     try:
-        tree = ast.parse(source_path.read_text())
-    except OSError:
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
         return None
     for node in tree.body:
         if isinstance(node, ast.ClassDef) and node.name == attribute:
@@ -330,8 +323,14 @@ def _source_contrast_has_expected_fields(owner: str | None) -> tuple[bool, str]:
     field_names = _class_field_names_from_source(owner)
     if field_names is None:
         module_name, _separator, attribute = owner.partition(":")
-        contrast_type = getattr(importlib.import_module(module_name), attribute)
-        field_names = {field.name for field in fields(contrast_type)}
+        try:
+            contrast_type = getattr(importlib.import_module(module_name), attribute)
+            if is_dataclass(contrast_type):
+                field_names = {field.name for field in fields(contrast_type)}
+            else:
+                field_names = set(getattr(contrast_type, "__annotations__", {}))
+        except (AttributeError, ImportError, TypeError) as exc:
+            return False, f"cannot dynamically inspect {owner}: {exc}"
     missing = sorted(set(EXPECTED_SURROGATE_OUTPUTS) - field_names)
     if missing:
         return False, f"{owner} missing fields {missing}"

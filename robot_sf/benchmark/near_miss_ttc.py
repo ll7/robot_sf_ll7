@@ -49,7 +49,7 @@ metric so this diagnostic stays consistent with the repository's TTC definition:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -113,6 +113,41 @@ class NearMissTtcReadiness:
     n_steps: int = 0
     n_peds: int = 0
     dt: float = float("nan")
+
+
+@dataclass(frozen=True)
+class NearMissTtcDecisionPacket:
+    """Read-only TTC near-miss diagnostic decision packet.
+
+    The packet summarizes whether the existing opt-in diagnostic can be
+    evaluated for a trajectory and what the result can and cannot support. It
+    intentionally carries no threshold recommendation and does not replace the
+    canonical distance-based near-miss metric.
+    """
+
+    issue: str
+    evidence_status: str
+    diagnostic_status: str
+    available_inputs: tuple[str, ...]
+    unsupported_cases: tuple[str, ...]
+    cannot_claim: tuple[str, ...]
+    readiness: NearMissTtcReadiness
+    diagnostic: dict[str, float | str] = field(default_factory=dict)
+    threshold_s: float = DIAGNOSTIC_TTC_THRESHOLD_S
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-safe packet representation."""
+        return {
+            "issue": self.issue,
+            "evidence_status": self.evidence_status,
+            "diagnostic_status": self.diagnostic_status,
+            "available_inputs": list(self.available_inputs),
+            "unsupported_cases": list(self.unsupported_cases),
+            "cannot_claim": list(self.cannot_claim),
+            "readiness": _json_safe_value(asdict(self.readiness)),
+            "diagnostic": _json_safe_value(dict(self.diagnostic)),
+            "threshold_s": _json_safe_value(self.threshold_s),
+        }
 
 
 def _as_float_array(value: object) -> np.ndarray | None:
@@ -360,10 +395,176 @@ def compute_ttc_near_miss_diagnostic(
     return base_result
 
 
+def build_ttc_near_miss_decision_packet(
+    data: EpisodeData,
+    *,
+    t_thr: float = DIAGNOSTIC_TTC_THRESHOLD_S,
+    issue: str = "#3808",
+) -> NearMissTtcDecisionPacket:
+    """Build a read-only TTC near-miss diagnostic decision packet.
+
+    The packet consumes the issue #3700 diagnostic surface without mutating the
+    trajectory or canonical benchmark metrics. Unsupported inputs are reported
+    fail-closed instead of converted to a zero near-miss result.
+
+    Returns
+    -------
+    NearMissTtcDecisionPacket
+        Structured diagnostic-only packet for review handoff.
+    """
+
+    readiness = near_miss_ttc_input_readiness(data)
+    available_inputs = _describe_available_ttc_inputs(readiness)
+    cannot_claim = (
+        "no canonical near-miss metric replacement",
+        "no calibrated TTC threshold or severity weighting choice",
+        "no planner comparison, benchmark ranking, or paper/dissertation claim",
+    )
+
+    if not readiness.ready:
+        return NearMissTtcDecisionPacket(
+            issue=issue,
+            evidence_status="diagnostic-only",
+            diagnostic_status="unsupported-inputs",
+            available_inputs=available_inputs,
+            unsupported_cases=tuple(readiness.reasons),
+            cannot_claim=cannot_claim,
+            readiness=readiness,
+            threshold_s=t_thr,
+        )
+
+    diagnostic = compute_ttc_near_miss_diagnostic(data, t_thr=t_thr)
+    status = str(diagnostic["near_miss_ttc__status"])
+    unsupported_cases = _describe_unsupported_ttc_cases(status)
+
+    return NearMissTtcDecisionPacket(
+        issue=issue,
+        evidence_status="diagnostic-only",
+        diagnostic_status=status,
+        available_inputs=available_inputs,
+        unsupported_cases=unsupported_cases,
+        cannot_claim=cannot_claim,
+        readiness=readiness,
+        diagnostic=diagnostic,
+        threshold_s=float(diagnostic["near_miss_ttc__threshold_s"]),
+    )
+
+
+def render_ttc_near_miss_decision_packet_markdown(packet: NearMissTtcDecisionPacket) -> str:
+    """Render a compact Markdown decision packet for review or issue handoff.
+
+    Returns
+    -------
+    str
+        Markdown packet text.
+    """
+
+    lines = [
+        "# TTC Near-Miss Diagnostic Decision Packet",
+        "",
+        f"- Issue: `{packet.issue}`",
+        f"- Evidence status: `{packet.evidence_status}`",
+        f"- Diagnostic status: `{packet.diagnostic_status}`",
+        f"- Threshold inspected: `{packet.threshold_s}` seconds",
+        "",
+        "## Available Diagnostic Inputs",
+        *_bullet_lines(packet.available_inputs),
+        "",
+        "## Unsupported Cases",
+        *_bullet_lines(packet.unsupported_cases),
+        "",
+        "## Cannot Claim Before Canonical Metric Change",
+        *_bullet_lines(packet.cannot_claim),
+    ]
+    if packet.diagnostic:
+        lines.extend(["", "## Diagnostic Values"])
+        lines.extend(
+            f"- `{key}`: `{value}`"
+            for key, value in sorted(packet.diagnostic.items(), key=lambda item: item[0])
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _describe_available_ttc_inputs(readiness: NearMissTtcReadiness) -> tuple[str, ...]:
+    """Describe the timing and trajectory inputs visible to the packet.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Human-readable input availability lines.
+    """
+
+    inputs = [
+        f"dt inspected: {readiness.dt}",
+        f"trajectory frames inspected: {readiness.n_steps}",
+        f"pedestrians inspected: {readiness.n_peds}",
+    ]
+    if readiness.ready:
+        inputs.append("robot position, robot velocity, and pedestrian position arrays are usable")
+    return tuple(inputs)
+
+
+def _describe_unsupported_ttc_cases(status: str) -> tuple[str, ...]:
+    """Describe cases this diagnostic cannot support as TTC near-miss evidence.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Human-readable unsupported-case lines.
+    """
+
+    cases = [
+        "static distance-only proximity remains covered only by canonical near_misses",
+        "trajectory-free aggregate metrics cannot be reinterpreted as TTC evidence",
+    ]
+    if status == "no-pedestrians":
+        cases.append("no pedestrian pairs were available for TTC evaluation")
+    elif status == "no-approaching-pairs":
+        cases.append("opening or non-converging pairs do not support TTC near-miss counts")
+    return tuple(cases)
+
+
+def _bullet_lines(items: tuple[str, ...]) -> list[str]:
+    """Format tuple content as Markdown bullets.
+
+    Returns
+    -------
+    list[str]
+        Markdown bullet lines.
+    """
+
+    if not items:
+        return ["- none"]
+    return [f"- {item}" for item in items]
+
+
+def _json_safe_value(value: object) -> object:
+    """Convert packet values to strict JSON-compatible primitives.
+
+    Returns
+    -------
+    object
+        Value with non-finite floats replaced by ``None``.
+    """
+
+    if isinstance(value, float):
+        return value if np.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe_value(item) for item in value]
+    return value
+
+
 __all__ = [
     "DIAGNOSTIC_TTC_THRESHOLD_S",
+    "NearMissTtcDecisionPacket",
     "NearMissTtcInputError",
     "NearMissTtcReadiness",
+    "build_ttc_near_miss_decision_packet",
     "compute_ttc_near_miss_diagnostic",
     "near_miss_ttc_input_readiness",
+    "render_ttc_near_miss_decision_packet_markdown",
 ]

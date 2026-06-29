@@ -38,6 +38,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 STATUS_PASSED = "passed"
 STATUS_FAILED = "failed"
 STATUS_BLOCKED = "blocked"
+_KNOWN_BLOCKER_STATUSES = frozenset({STATUS_BLOCKED, "resolved", "diagnostic"})
 
 DEFAULT_CONFIG = Path("configs/research/predictive_checkpoint_proxy_v1.yaml")
 DEFAULT_REGISTRY = Path("model/registry.yaml")
@@ -84,9 +85,66 @@ def _check_config(config: Any, config_path: Path) -> tuple[str, list[str]]:
     summary_contract = config.get("proxy_summary_contract")
     if summary_contract is not None and not isinstance(summary_contract, dict):
         errors.append("proxy_summary_contract must be a mapping when provided")
+    errors.extend(_validate_known_blocker_schema(config.get("known_blockers")))
     if errors:
         return STATUS_FAILED, errors
     return STATUS_PASSED, []
+
+
+def _validate_known_blocker_schema(known_blockers: Any) -> list[str]:
+    """Validate optional known-blocker metadata in the readiness contract."""
+    if known_blockers is None:
+        return []
+    if not isinstance(known_blockers, list):
+        return ["known_blockers must be a list when provided"]
+
+    errors: list[str] = []
+    for index, blocker in enumerate(known_blockers):
+        if not isinstance(blocker, dict):
+            errors.append(f"known_blockers[{index}] must be a mapping")
+            continue
+        blocker_id = blocker.get("id")
+        blocker_status = blocker.get("status")
+        if not isinstance(blocker_id, str) or not blocker_id:
+            errors.append(f"known_blockers[{index}] missing id")
+        if blocker_status not in _KNOWN_BLOCKER_STATUSES:
+            errors.append(
+                f"known_blockers[{index}] status must be one of {sorted(_KNOWN_BLOCKER_STATUSES)}"
+            )
+    return errors
+
+
+def _check_known_blockers(config: dict[str, Any]) -> tuple[str, list[str], list[dict[str, Any]]]:
+    """Expose configured known blocker status as a fail-closed report section."""
+    blockers = config.get("known_blockers") or []
+    if not isinstance(blockers, list):
+        return STATUS_FAILED, ["known_blockers must be a list"], []
+
+    normalized: list[dict[str, Any]] = []
+    messages: list[str] = []
+    failed = False
+    blocked = False
+    for index, blocker in enumerate(blockers):
+        if not isinstance(blocker, dict):
+            failed = True
+            messages.append(f"known_blockers[{index}] must be a mapping")
+            continue
+        blocker_id = str(blocker.get("id", "unnamed"))
+        status = blocker.get("status")
+        if status not in _KNOWN_BLOCKER_STATUSES:
+            failed = True
+            messages.append(f"known_blockers[{index}] has unsupported status: {status}")
+            continue
+        normalized.append(dict(blocker))
+        if status == STATUS_BLOCKED:
+            blocked = True
+            messages.append(f"known blocker remains blocked: {blocker_id}")
+
+    if failed:
+        return STATUS_FAILED, messages, normalized
+    if blocked:
+        return STATUS_BLOCKED, messages, normalized
+    return STATUS_PASSED, messages, normalized
 
 
 def _check_hard_seed_fixture(fixture_path: Path) -> tuple[str, list[str]]:
@@ -301,6 +359,14 @@ def check_readiness(
             "status": summary_status,
             "messages": summary_messages,
             "summary": summary_payload,
+        }
+
+    if cfg:
+        blocker_status, blocker_messages, blocker_payload = _check_known_blockers(cfg)
+        prerequisites["known_blockers"] = {
+            "status": blocker_status,
+            "messages": blocker_messages,
+            "blockers": blocker_payload,
         }
 
     errors: list[str] = []

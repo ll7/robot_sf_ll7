@@ -120,6 +120,7 @@ from robot_sf.benchmark.map_runner_observations import (
 )
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
+from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptive_proxemic_builder
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
@@ -189,10 +190,6 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.planner.adaptive_proxemic_selector import (
-    AdaptiveProxemicSelectorAdapter,
-    build_adaptive_proxemic_selector_config,
-)
 from robot_sf.planner.gap_prediction import (
     GapAwarePredictionAdapter,
     build_gap_prediction_config,
@@ -1012,6 +1009,10 @@ _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
         _adapter_policy_builders.LIDAR_SOCIAL_FORCE_KEYS,
         _adapter_policy_builders.build_lidar_social_force,
     ),
+    **dict.fromkeys(
+        _adaptive_proxemic_builder.ADAPTIVE_PROXEMIC_SELECTOR_KEYS,
+        _adaptive_proxemic_builder.build,
+    ),
     **dict.fromkeys(_safety_barrier_builder.ADAPTER_ALGO_KEYS, _safety_barrier_builder.build),
 }
 
@@ -1114,38 +1115,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
-        )
-
-    if algo_key in {"adaptive_proxemic_selector_v0", "adaptive_proxemic_selector_v1"}:
-        selector_algo_config = dict(algo_config)
-        selector_algo_config.setdefault(
-            "selector_version",
-            "v1" if algo_key == "adaptive_proxemic_selector_v1" else "v0",
-        )
-        selector_config = build_adaptive_proxemic_selector_config(selector_algo_config)
-        adapter = AdaptiveProxemicSelectorAdapter(config=selector_config)
-        meta["adaptive_proxemic_selector"] = {
-            "status": "enabled",
-            "selector_version": selector_config.selector_version,
-            "diagnostic_only": bool(selector_config.diagnostic_only),
-            "claim_boundary": selector_config.claim_boundary,
-            "profile_sources": [
-                selector_config.profiles[name].source_candidate
-                for name in ("conservative", "neutral", "open")
-            ],
-        }
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=selector_algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="AdaptiveProxemicSelectorAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations=(
-                "diagnostic-only selector over fixed proxemic profiles; "
-                "not benchmark or comfort evidence"
-            ),
         )
 
     if algo_key == "topology_guided_hybrid_rule_v0":

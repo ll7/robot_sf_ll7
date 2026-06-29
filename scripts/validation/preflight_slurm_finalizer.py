@@ -30,6 +30,8 @@ What it checks (each maps to an acceptance criterion of #3425):
   public issue/PR traceability.
 * ``durable_pointer_present`` — every *successful* finalizer carries a durable
   pointer (the "durable pointers missing" fail-closed case).
+* ``required_artifacts_complete`` — every *successful* finalizer reports all
+  required artifacts present before a durable pointer can unblock a claim.
 * ``claim_boundary_present`` — every finalizer carries a claim boundary so the
   downstream summary/claim decision stays inside an explicit boundary.
 * ``evidence_root_present`` — advisory: the compact evidence root exists so the
@@ -460,6 +462,58 @@ def _check_durable_pointer(inputs: LoadedInputs) -> PreflightCheck:
     )
 
 
+def _check_required_artifacts_complete(inputs: LoadedInputs) -> PreflightCheck:
+    """Require successful finalizers to report complete required artifacts."""
+    successful = [
+        finalizer
+        for finalizer in inputs.finalizers
+        if finalizer.classification in _SUCCESS_CLASSIFICATIONS
+    ]
+    if not inputs.finalizers:
+        return PreflightCheck(
+            name="required_artifacts_complete",
+            status=_SKIPPED,
+            severity=_REQUIRED,
+            detail="no finalizer records to inspect",
+            remediation="resolve finalizer_manifests_present first",
+        )
+    if not successful:
+        return PreflightCheck(
+            name="required_artifacts_complete",
+            status=_READY,
+            severity=_REQUIRED,
+            detail="no successful finalizers require complete artifact status yet",
+        )
+
+    incomplete = sorted(
+        f"{finalizer.job_id}({finalizer.artifact_status})"
+        for finalizer in successful
+        if finalizer.artifact_status != "all_required_present"
+    )
+    if incomplete:
+        return PreflightCheck(
+            name="required_artifacts_complete",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=(
+                "successful finalizer(s) do not report all required artifacts present: "
+                f"{', '.join(incomplete)}"
+            ),
+            remediation=(
+                "rerun or repair the finalizer inputs until successful records carry "
+                "artifact_status=all_required_present, or reclassify the job as blocked/"
+                "incomplete before claim handoff"
+            ),
+        )
+
+    return PreflightCheck(
+        name="required_artifacts_complete",
+        status=_READY,
+        severity=_REQUIRED,
+        detail="every successful finalizer reports all required artifacts present",
+    )
+
+
 def _check_claim_boundary(inputs: LoadedInputs) -> PreflightCheck:
     """Require every finalizer to carry a claim boundary."""
     if not inputs.finalizers:
@@ -547,6 +601,7 @@ def preflight(
         _check_finalizer_linkage(inputs),
         _check_issue_traceability(inputs),
         _check_durable_pointer(inputs),
+        _check_required_artifacts_complete(inputs),
         _check_claim_boundary(inputs),
         _check_evidence_root(evidence_root),
     ]

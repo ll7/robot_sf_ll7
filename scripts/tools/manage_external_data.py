@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fnmatch
 import hashlib
 import json
 import os
@@ -538,6 +539,125 @@ def stage_asset(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
     return manifest
+
+
+def _pattern_is_literal(pattern: str) -> bool:
+    """Return whether a required-path pattern has no glob magic characters."""
+    return not any(char in pattern for char in ("*", "?", "["))
+
+
+def _manifest_text_field(manifest: dict[str, Any], field: str) -> str | None:
+    """Return non-empty manifest text field or ``None``."""
+    value = manifest.get(field)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
+
+
+def _provenance_paths_cover_requirements(asset: AssetSpec, matched_paths: list[Any]) -> bool:
+    """Return whether manifest matched paths satisfy every required path group.
+
+    A manifest is only ready when each required group has at least one matched path that
+    actually corresponds to a declared pattern, so an unrelated or partial non-empty list
+    cannot pass the fail-closed gate. Literal patterns require an exact (or path-prefixed)
+    match; glob patterns fall back to ``fnmatch`` coverage since the concrete matched path
+    cannot be reversed back to the pattern reliably.
+    """
+    candidates = {path for path in matched_paths if isinstance(path, str) and path.strip()}
+    if not candidates:
+        return False
+    for requirements in _required_groups(asset).values():
+        literal_patterns = [r.pattern for r in requirements if _pattern_is_literal(r.pattern)]
+        glob_patterns = [r.pattern for r in requirements if not _pattern_is_literal(r.pattern)]
+        satisfied = any(
+            candidate == pattern or candidate.startswith(f"{pattern}/")
+            for candidate in candidates
+            for pattern in literal_patterns
+        ) or any(
+            fnmatch.fnmatch(candidate, pattern)
+            for candidate in candidates
+            for pattern in glob_patterns
+        )
+        if not satisfied:
+            return False
+    return True
+
+
+def _missing_provenance_metadata(asset: AssetSpec, manifest: dict[str, Any]) -> list[str]:
+    """Return missing required provenance metadata fields."""
+    missing: list[str] = []
+    if manifest.get("asset_id") != asset.asset_id:
+        missing.append("asset_id")
+    for field in ("source_url", "license_note", "tree_sha256"):
+        if not _manifest_text_field(manifest, field):
+            missing.append(field)
+
+    sample_files = manifest.get("sample_files")
+    has_sample_checksum = isinstance(sample_files, list) and any(
+        isinstance(sample, dict) and _manifest_text_field(sample, "sha256")
+        for sample in sample_files
+    )
+    if not has_sample_checksum:
+        missing.append("sample_files[].sha256")
+
+    matched_paths = manifest.get("matched_required_paths")
+    if not isinstance(matched_paths, list) or not _provenance_paths_cover_requirements(
+        asset, matched_paths
+    ):
+        missing.append("matched_required_paths")
+    return missing
+
+
+def check_provenance_manifest(asset_id: str, manifest_path: Path) -> dict[str, Any]:
+    """Validate bounded provenance metadata for a staged external asset manifest."""
+    asset = _get_asset(asset_id)
+    path = manifest_path.expanduser().resolve()
+    report: dict[str, Any] = {
+        "schema": "robot_sf_external_data_provenance_readiness.v1",
+        "asset_id": asset.asset_id,
+        "manifest_path": str(path),
+        "ok": False,
+        "status": "missing_manifest",
+        "missing_metadata": [],
+    }
+    if not path.is_file():
+        report["action"] = (
+            "Manifest file missing; run stage after official local asset acquisition."
+        )
+        return report
+
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        report["status"] = "invalid_json"
+        report["action"] = f"Manifest JSON invalid: {exc}"
+        return report
+    if not isinstance(manifest, dict):
+        report["status"] = "invalid_json"
+        report["action"] = "Manifest JSON invalid: root value must be a JSON object."
+        return report
+
+    missing = _missing_provenance_metadata(asset, manifest)
+
+    report["missing_metadata"] = missing
+    report["source_url"] = manifest.get("source_url")
+    report["license_note"] = manifest.get("license_note")
+    report["tree_sha256"] = manifest.get("tree_sha256")
+    report["matched_required_paths"] = manifest.get("matched_required_paths", [])
+    if missing:
+        report["status"] = "incomplete_metadata"
+        report["action"] = (
+            "Provenance manifest is not ready: fill official source URI, license boundary, "
+            "aggregate checksum, sample file checksum, and matched asset paths."
+        )
+        return report
+
+    report["ok"] = True
+    report["status"] = "ready"
+    report["action"] = (
+        "Provenance manifest has required source, license, checksum, and path metadata."
+    )
+    return report
 
 
 def download_asset(asset_id: str) -> None:
@@ -1333,6 +1453,17 @@ def parse_args() -> argparse.Namespace:
     )
     stage_parser.add_argument("--manifest-out", type=Path)
 
+    provenance_parser = subparsers.add_parser(
+        "provenance-check", help="Check staged asset provenance manifest metadata."
+    )
+    provenance_parser.add_argument("asset_id")
+    provenance_parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="Manifest path. Defaults to output/external_data/manifests/<asset>.provenance.json.",
+    )
+
     download_parser = subparsers.add_parser(
         "download", help="Download only approved direct assets."
     )
@@ -1448,6 +1579,22 @@ def _handle_stage(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_provenance_check(args: argparse.Namespace) -> int:
+    """Handle provenance-check subcommand."""
+    manifest_path = args.manifest or DEFAULT_MANIFEST_DIR / f"{args.asset_id}.provenance.json"
+    payload = check_provenance_manifest(args.asset_id, manifest_path)
+    if args.json:
+        _print_json(payload)
+    else:
+        print(f"{payload['asset_id']}: provenance {payload['status']}")
+        print(f" action: {payload['action']}")
+        if payload["missing_metadata"]:
+            print(" missing metadata:")
+            for field in payload["missing_metadata"]:
+                print(f" - {field}")
+    return 0 if payload["ok"] else 2
+
+
 def _handle_download(args: argparse.Namespace) -> int:
     """Handle the download subcommand."""
     download_asset(args.asset_id)
@@ -1520,6 +1667,7 @@ def main() -> int:
         "explain": _handle_explain,
         "check": _handle_check,
         "stage": _handle_stage,
+        "provenance-check": _handle_provenance_check,
         "download": _handle_download,
         "sdd-plan": _handle_sdd_plan,
         "sdd-preflight": _handle_sdd_preflight,

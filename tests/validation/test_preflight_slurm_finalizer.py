@@ -57,6 +57,7 @@ def _write_finalizer(
     issue: int = 3425,
     job_id: str = "12345",
     classification: str = "success",
+    artifact_status: str = "all_required_present",
     durable_uri: str | None = "wandb://entity/project/run",
     claim_boundary: str | None = "smoke evidence only",
 ) -> Path:
@@ -66,7 +67,7 @@ def _write_finalizer(
         "issue_number": issue,
         "job_id": job_id,
         "classification": classification,
-        "artifact_status": "all_required_present",
+        "artifact_status": artifact_status,
     }
     if durable_uri is not None:
         payload["durable_uri"] = durable_uri
@@ -104,6 +105,7 @@ def test_ready_when_all_inputs_present(tmp_path: Path) -> None:
     assert report["input_errors"] == []
     statuses = {check["name"]: check["status"] for check in report["checks"]}
     assert statuses["durable_pointer_present"] == "ready"
+    assert statuses["required_artifacts_complete"] == "ready"
     assert statuses["finalizer_manifest_linkage"] == "ready"
     assert statuses["claim_boundary_present"] == "ready"
 
@@ -134,6 +136,24 @@ def test_blocks_when_durable_pointer_is_worktree_local(tmp_path: Path) -> None:
     blocker = next(b for b in report["blockers"] if b["check"] == "durable_pointer_present")
     assert "non-durable or local artifact pointer" in blocker["detail"]
     assert "worktree-local" in blocker["remediation"]
+
+
+def test_blocks_when_successful_finalizer_has_incomplete_required_artifacts(
+    tmp_path: Path,
+) -> None:
+    """A durable URI cannot unblock success when required artifacts are incomplete."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(
+        tmp_path / "finalizer.json",
+        artifact_status="required_missing",
+    )
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "required_artifacts_complete")
+    assert "12345(required_missing)" in blocker["detail"]
+    assert "artifact_status=all_required_present" in blocker["remediation"]
 
 
 def test_blocks_when_manifest_linkage_missing(tmp_path: Path) -> None:
@@ -255,6 +275,7 @@ def test_non_success_finalizer_does_not_require_durable_pointer(tmp_path: Path) 
 
     statuses = {check["name"]: check["status"] for check in report["checks"]}
     assert statuses["durable_pointer_present"] == "ready"
+    assert statuses["required_artifacts_complete"] == "ready"
 
 
 def test_malformed_finalizer_is_input_error(tmp_path: Path) -> None:

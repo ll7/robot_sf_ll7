@@ -105,6 +105,66 @@ def test_preflight_fails_closed_for_missing_budget_seed_and_provenance(tmp_path:
     assert any("paper_facing_success_claims" in blocker for blocker in result.blockers)
 
 
+def test_preflight_blocks_example_command_seed_drift(tmp_path: Path) -> None:
+    """The executable seed plan must match manifest repeated_seeds."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--package-b-budget-grid --seed 1101 --seed 2202 --seed 4404 "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["example_command_repeated_seeds"] is False
+    assert any("example_command --seed values" in blocker for blocker in result.blockers)
+
+
+def test_preflight_blocks_example_command_without_package_b_budget_grid(tmp_path: Path) -> None:
+    """The example command must opt into the fixed package-B budget grid."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--budget 16 --budget 32 --budget 64 --seed 1101 --seed 2202 --seed 3303 "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["example_command_uses_package_b_grid"] is False
+    assert any("--package-b-budget-grid" in blocker for blocker in result.blockers)
+
+
+def test_preflight_warns_for_malformed_example_command_seed_args(tmp_path: Path) -> None:
+    """Malformed command seed flags are warnings plus fail-closed blockers."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--package-b-budget-grid --seed not-an-int --seed "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json --seed"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.checks["example_command_repeated_seeds"] is False
+    assert any("non-integer --seed value" in warning for warning in result.warnings)
+    assert any("--seed without value" in warning for warning in result.warnings)
+
+
 def test_preflight_raises_filenotfound_for_missing_manifest(tmp_path: Path) -> None:
     """Missing manifest path raises before producing cascading blockers."""
     manifest = tmp_path / "configs/adversarial/missing_package_b_manifest.yaml"

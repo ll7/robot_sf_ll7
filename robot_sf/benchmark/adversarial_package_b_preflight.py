@@ -186,17 +186,14 @@ def _output_dir_is_directory_or_future(output_dir: Path | None) -> bool:
     return not output_dir.exists() or output_dir.is_dir()
 
 
-def _runner_row_fields(runner_path: Path | None) -> tuple[frozenset[str], str | None]:
+def _runner_row_fields(runner_path: Path | None) -> frozenset[str]:
     """Return static SamplerComparisonRow fields without importing or running runner."""
     if runner_path is None:
-        return frozenset(), "runner output schema target is not declared"
+        raise FileNotFoundError("runner output schema target is not declared")
     if not runner_path.is_file():
-        return frozenset(), f"runner output schema target is missing: {runner_path}"
+        raise FileNotFoundError(f"runner output schema target is missing: {runner_path}")
 
-    try:
-        module = ast.parse(runner_path.read_text(encoding="utf-8"), filename=str(runner_path))
-    except (OSError, SyntaxError) as exc:
-        return frozenset(), f"runner output schema could not be parsed: {exc}"
+    module = ast.parse(runner_path.read_text(encoding="utf-8"), filename=str(runner_path))
 
     for node in module.body:
         if isinstance(node, ast.ClassDef) and node.name == "SamplerComparisonRow":
@@ -205,9 +202,9 @@ def _runner_row_fields(runner_path: Path | None) -> tuple[frozenset[str], str | 
                 for item in node.body
                 if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
             }
-            return frozenset(fields), None
+            return frozenset(fields)
 
-    return frozenset(), "runner output schema missing SamplerComparisonRow dataclass"
+    raise ValueError("runner output schema missing SamplerComparisonRow dataclass")
 
 
 def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
@@ -297,9 +294,11 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if missing_reporting:
         blockers.append(f"reporting_contract missing required fields: {missing_reporting}")
 
-    runner_row_fields, runner_schema_warning = _runner_row_fields(runner_path)
-    if runner_schema_warning:
-        warnings.append(runner_schema_warning)
+    try:
+        runner_row_fields = _runner_row_fields(runner_path)
+    except (OSError, SyntaxError, ValueError) as exc:
+        runner_row_fields = frozenset()
+        warnings.append(f"runner output schema could not be parsed: {exc}")
     missing_runner_fields = sorted(reporting_contract - runner_row_fields)
     checks["runner_emits_reporting_contract"] = not missing_runner_fields
     if missing_runner_fields:

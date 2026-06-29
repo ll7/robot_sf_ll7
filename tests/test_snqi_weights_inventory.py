@@ -117,6 +117,13 @@ def test_conflicting_canonical_sources_detected_fail_closed(tmp_path):
     repo = _make_fixture_repo(tmp_path, model_jerk_dominant=True)
     report = build_inventory_report(repo)
 
+    summary = report.to_dict()["source_summary"]
+    assert summary["registered_source_count"] == 5
+    assert summary["discovered_shipped_source_count"] == 4
+    assert summary["unregistered_shipped_source_count"] == 0
+    assert summary["canonical_declaring_sources"] == ["code_default", "model_canonical_v1"]
+    assert summary["blocking_conflict_kinds"] == ["canonical_direction_conflict"]
+
     direction_conflicts = [c for c in report.conflicts if c.kind == "canonical_direction_conflict"]
     assert direction_conflicts, "expected a canonical direction conflict"
     assert set(direction_conflicts[0].sources) == {"code_default", "model_canonical_v1"}
@@ -225,6 +232,16 @@ def test_unregistered_shipped_weight_file_reported_fail_closed(tmp_path):
     assert len(unregistered) == 1
     assert unregistered[0].relpath == "configs/benchmarks/snqi_weights_experimental_v9.json"
     assert unregistered[0].available
+
+    summary = report.to_dict()["source_summary"]
+    assert summary["registered_source_count"] == 5
+    assert summary["discovered_shipped_source_count"] == 5
+    assert summary["unregistered_shipped_source_count"] == 1
+    assert summary["unregistered_shipped_sources"] == [unregistered[0].name]
+    assert summary["blocking_conflict_kinds"] == [
+        "canonical_direction_conflict",
+        "unregistered_shipped_weight_source",
+    ]
 
     conflicts = [c for c in report.conflicts if c.kind == "unregistered_shipped_weight_source"]
     assert conflicts

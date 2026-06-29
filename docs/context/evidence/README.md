@@ -120,6 +120,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_2557_replica_readiness_packet_2026-06-29/`: diagnostic-only
+  fixed-seed queue-fill replica readiness packet for Issue #2557. It records the
+  public tracked completed/running status, retrieved compact evidence, remaining
+  artifact-promotion gap, no-new-Slurm recommendation, cost/risk, and exact
+  local packet command without promoting benchmark or paper-facing claims.
 - `issue_3484_feasibility_diagnostics/`: reserved location for small dry-run
   manifests and follow-up summaries for universally-failing scenario-family
   feasibility diagnostics. Outputs from

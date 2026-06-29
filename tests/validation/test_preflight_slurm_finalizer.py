@@ -123,6 +123,19 @@ def test_blocks_when_durable_pointer_missing(tmp_path: Path) -> None:
     assert "durable" in durable_blocker["remediation"]
 
 
+def test_blocks_when_durable_pointer_is_worktree_local(tmp_path: Path) -> None:
+    """A successful finalizer cannot use worktree-local output as durable proof."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(tmp_path / "finalizer.json", durable_uri="output/job_12345/finalizer.json")
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "durable_pointer_present")
+    assert "non-durable or local artifact pointer" in blocker["detail"]
+    assert "worktree-local" in blocker["remediation"]
+
+
 def test_blocks_when_manifest_linkage_missing(tmp_path: Path) -> None:
     """A finalizer whose job id has no manifest job fails closed on linkage."""
     inputs = _ready_inputs(tmp_path)

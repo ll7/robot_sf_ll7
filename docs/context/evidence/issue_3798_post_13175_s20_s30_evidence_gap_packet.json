@@ -123,5 +123,13 @@
       "command": "uv run python scripts/validation/check_s20_s30_archive_readiness.py --json",
       "purpose": "Fail-closed archive-readiness check; remains the claim gate for a canonical result store."
     }
-  ]
+  ],
+  "next_slurm_go_no_go": {
+    "claim_promotion": "no_go",
+    "s20_archive_readiness": "run_fail_closed_checker_before_claim",
+    "s30_submission_from_issue_3798": "not_authorized_here",
+    "s30_escalation_status": "defer_until_claim_owner_authorizes_escalation",
+    "compute_submission": "not_authorized",
+    "next_valid_step": "run archive-readiness checker and decide S30 only in a separately authorized lane"
+  }
 }

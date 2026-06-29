@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -50,6 +51,13 @@ if TYPE_CHECKING:
 _SIMPLEX_TOL = 1e-3
 # Tolerance when comparing normalized weight *directions* across sources.
 _DIRECTION_TOL = 1e-6
+
+# Bounded shipped-file discovery. Keep this intentionally narrow so generated
+# reports or unrelated schemas do not become provenance inputs.
+_SHIPPED_WEIGHT_FILE_GLOBS = (
+    "model/*snqi*weight*.json",
+    "configs/**/*snqi*weight*.json",
+)
 
 
 @dataclass(frozen=True)
@@ -105,6 +113,47 @@ WEIGHT_SOURCES: tuple[WeightSourceSpec, ...] = (
         declares_canonical=False,
     ),
 )
+
+
+def _source_name_from_relpath(relpath: str) -> str:
+    """Build a stable diagnostic source name for an unregistered shipped file.
+
+    Returns:
+        Source name safe for JSON reports and deterministic comparisons.
+    """
+    stem = relpath.removesuffix(".json")
+    return "unregistered_" + re.sub(r"[^a-zA-Z0-9]+", "_", stem).strip("_").lower()
+
+
+def discover_shipped_weight_source_specs(repo_root: Path) -> list[WeightSourceSpec]:
+    """Discover shipped SNQI weight JSON files under bounded source directories.
+
+    Registered files keep their explicit names and canonical declarations. Matching files that are
+    not in :data:`WEIGHT_SOURCES` are returned as ``unregistered_shipped_json`` records so the
+    inventory reports every discovered shipped weight file instead of silently relying on the static
+    registry.
+
+    Returns:
+        Shipped JSON source specs, including registered files and any unregistered matches.
+    """
+    registered_by_path = {spec.relpath: spec for spec in WEIGHT_SOURCES if spec.relpath is not None}
+    discovered: dict[str, WeightSourceSpec] = dict(registered_by_path)
+
+    for pattern in _SHIPPED_WEIGHT_FILE_GLOBS:
+        for path in repo_root.glob(pattern):
+            if not path.is_file():
+                continue
+            relpath = path.relative_to(repo_root).as_posix()
+            if relpath in discovered:
+                continue
+            discovered[relpath] = WeightSourceSpec(
+                name=_source_name_from_relpath(relpath),
+                kind="unregistered_shipped_json",
+                relpath=relpath,
+                declares_canonical="canonical" in relpath.lower(),
+            )
+
+    return [discovered[relpath] for relpath in sorted(discovered)]
 
 
 @dataclass
@@ -290,20 +339,23 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
 
 
 def inventory_weight_sets(repo_root: Path | None = None) -> list[WeightSetRecord]:
-    """Discover and load every registered SNQI weight set.
+    """Discover and load registered and bounded shipped SNQI weight sets.
 
     Args:
         repo_root: Repository root used to resolve shipped JSON paths. Defaults
             to :func:`get_repository_root`.
 
     Returns:
-        One :class:`WeightSetRecord` per entry in :data:`WEIGHT_SOURCES`, in
-        registry order. Sources that fail to load are returned with
+        One :class:`WeightSetRecord` per registered or discovered shipped source, with the
+        code-default source first and shipped files in path order. Sources that fail to load are
+        returned with
         ``available=False`` and a populated ``load_error`` (fail-closed: a
         missing/broken file is surfaced, not silently skipped).
     """
     root = (repo_root or get_repository_root()).resolve()
-    return [_build_record(spec, root) for spec in WEIGHT_SOURCES]
+    shipped = discover_shipped_weight_source_specs(root)
+    specs = [spec for spec in WEIGHT_SOURCES if spec.relpath is None] + shipped
+    return [_build_record(spec, root) for spec in specs]
 
 
 def _directions_disagree(a: dict[str, float], b: dict[str, float]) -> bool:
@@ -420,6 +472,30 @@ def _duplicate_label_conflicts(
     return conflicts
 
 
+def _unregistered_weight_source_conflicts(
+    records: list[WeightSetRecord],
+) -> list[WeightProvenanceConflict]:
+    """Fail closed when shipped SNQI weight files are absent from the provenance registry.
+
+    Returns:
+        Error conflict when unregistered shipped weight sources are present, otherwise empty list.
+    """
+    unregistered = [r for r in records if r.kind == "unregistered_shipped_json"]
+    if not unregistered:
+        return []
+    return [
+        WeightProvenanceConflict(
+            kind="unregistered_shipped_weight_source",
+            severity="error",
+            sources=[r.name for r in unregistered],
+            detail=(
+                "discovered shipped SNQI weight JSON files not listed in WEIGHT_SOURCES; "
+                "register or explicitly exclude them before treating provenance inventory complete."
+            ),
+        )
+    ]
+
+
 def detect_conflicts(records: list[WeightSetRecord]) -> list[WeightProvenanceConflict]:
     """Detect provenance conflicts among discovered weight sets.
 
@@ -447,6 +523,7 @@ def detect_conflicts(records: list[WeightSetRecord]) -> list[WeightProvenanceCon
     conflicts: list[WeightProvenanceConflict] = []
     conflicts += _canonical_load_error_conflicts(canonical)
     conflicts += _canonical_direction_conflicts(loaded_canonical)
+    conflicts += _unregistered_weight_source_conflicts(records)
     conflicts += _scale_split_conflicts(loaded)
     conflicts += _duplicate_label_conflicts(loaded)
 
@@ -504,6 +581,7 @@ __all__ = [
     "WeightSourceSpec",
     "build_inventory_report",
     "detect_conflicts",
+    "discover_shipped_weight_source_specs",
     "inventory_weight_sets",
     "preflight_snqi_weight_sets",
 ]

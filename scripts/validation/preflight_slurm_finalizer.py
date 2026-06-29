@@ -78,6 +78,14 @@ SCHEMA_VERSION = "slurm-finalizer-preflight.v1"
 # Finalizer classifications that mean the job produced final artifacts and is
 # therefore expected to carry a durable pointer before a claim can be made.
 _SUCCESS_CLASSIFICATIONS = {"success"}
+_DURABLE_POINTER_PREFIXES = (
+    "wandb://",
+    "https://",
+    "http://",
+    "s3://",
+    "gs://",
+    "dvc://",
+)
 
 # The readiness gate makes no research claim; it only reports whether the inputs
 # for the vertical slice are present and provenance-complete.
@@ -422,6 +430,26 @@ def _check_durable_pointer(inputs: LoadedInputs) -> PreflightCheck:
             remediation=(
                 "promote each job's artifacts to a durable store (wandb/s3/gs/dvc/https) and "
                 "record the durable URI in the finalizer manifest before claiming"
+            ),
+        )
+    local_only = sorted(
+        f"{finalizer.job_id}: {finalizer.durable_pointer}"
+        for finalizer in successful
+        if finalizer.durable_pointer is not None
+        and not finalizer.durable_pointer.startswith(_DURABLE_POINTER_PREFIXES)
+    )
+    if local_only:
+        return PreflightCheck(
+            name="durable_pointer_present",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=(
+                "successful finalizer(s) use non-durable or local artifact pointer(s): "
+                f"{', '.join(local_only)}"
+            ),
+            remediation=(
+                "replace worktree-local artifact paths with durable wandb, http(s), s3, gs, "
+                "or dvc URI before claim decision handoff"
             ),
         )
     return PreflightCheck(

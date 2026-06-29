@@ -210,3 +210,26 @@ def test_detect_conflicts_is_deterministic(tmp_path):
     severities = [c.severity for c in detect_conflicts(records)]
     # errors must precede warnings/info
     assert severities == sorted(severities, key={"error": 0, "warning": 1, "info": 2}.get)
+
+
+def test_unregistered_shipped_weight_file_reported_fail_closed(tmp_path):
+    """Bounded discovery reports shipped SNQI weight files missing from the registry."""
+    repo = _make_fixture_repo(tmp_path)
+    _write_weights(
+        tmp_path / "configs/benchmarks/snqi_weights_experimental_v9.json",
+        _CODE_DEFAULT,
+    )
+
+    report = build_inventory_report(repo)
+    unregistered = [r for r in report.records if r.kind == "unregistered_shipped_json"]
+    assert len(unregistered) == 1
+    assert unregistered[0].relpath == "configs/benchmarks/snqi_weights_experimental_v9.json"
+    assert unregistered[0].available
+
+    conflicts = [c for c in report.conflicts if c.kind == "unregistered_shipped_weight_source"]
+    assert conflicts
+    assert conflicts[0].severity == "error"
+    assert conflicts[0].sources == [unregistered[0].name]
+    assert report.has_blocking_conflict
+    with pytest.raises(SNQIWeightProvenanceError, match="unregistered_shipped_weight_source"):
+        preflight_snqi_weight_sets(repo, strict=True)

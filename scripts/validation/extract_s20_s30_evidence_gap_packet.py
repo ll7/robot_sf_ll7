@@ -90,6 +90,10 @@ def build_packet(artifact_root: Path, *, job_id: str = DEFAULT_JOB_ID) -> dict[s
             "planners": seed_episode_rows["planners"],
         },
         "claim_blockers": _claim_blockers(campaign_rows, seed_episode_rows, missing_files),
+        "next_slurm_go_no_go": _next_slurm_go_no_go(
+            missing_files=missing_files,
+            seed_count=len(seed_episode_rows["seeds"]),
+        ),
         "validation_commands": [
             {
                 "command": (
@@ -121,6 +125,11 @@ def load_packet_fixture(packet_fixture: Path) -> dict[str, Any]:
         raise ValueError(f"{packet_fixture} job_id must be {DEFAULT_JOB_ID!r}")
     if packet.get("claim_boundary") != CLAIM_BOUNDARY:
         raise ValueError(f"{packet_fixture} claim boundary drifted")
+    go_no_go = packet.get("next_slurm_go_no_go", {})
+    if go_no_go.get("claim_promotion") != "no_go":
+        raise ValueError(f"{packet_fixture} claim_promotion must remain no_go")
+    if go_no_go.get("s30_submission_from_issue_3798") != "not_authorized_here":
+        raise ValueError(f"{packet_fixture} must not authorize S30 submission from issue #3798")
     return packet
 
 
@@ -141,16 +150,29 @@ def render_markdown(packet: dict[str, Any]) -> str:
         f"- Status: `{packet['status']}`",
         f"- Boundary: {packet['claim_boundary']}",
         "",
-        "## Retrieved Artifacts",
-        "",
-        f"- Artifact root: `{packet['artifact_root']}`",
-        f"- File count: {packet['retrieved_artifacts']['file_count']}",
-        f"- Total bytes: {packet['retrieved_artifacts']['total_bytes']}",
-        f"- Missing required metadata files: {packet['retrieved_artifacts']['missing_required_metadata_files'] or 'none'}",
-        "",
-        "## Campaign Metadata",
+        "## Next Slurm Go/No-Go",
         "",
     ]
+    for key, value in packet["next_slurm_go_no_go"].items():
+        lines.append(f"- {key}: `{value}`")
+    lines.extend(
+        [
+            "",
+            "## Retrieved Artifacts",
+            "",
+            f"- Artifact root: `{packet['artifact_root']}`",
+            f"- File count: {packet['retrieved_artifacts']['file_count']}",
+            f"- Total bytes: {packet['retrieved_artifacts']['total_bytes']}",
+            (
+                "- Missing required metadata files: "
+                f"{packet['retrieved_artifacts']['missing_required_metadata_files'] or 'none'}"
+            ),
+            "",
+            "## Campaign Metadata",
+            "",
+        ]
+    )
+
     for key, value in packet["campaign"].items():
         lines.append(f"- {key}: `{value}`")
     lines.extend(
@@ -238,6 +260,34 @@ def _claim_blockers(
             "At least one campaign table row is not `ok`; row status needs fail-closed review."
         )
     return blockers
+
+
+def _next_slurm_go_no_go(*, missing_files: list[str], seed_count: int) -> dict[str, str]:
+    """Return the diagnostic-only next-action decision for the packet."""
+
+    if missing_files:
+        archive_readiness = "blocked_missing_retrieved_metadata"
+        s30_status = "not_ready_missing_s20_metadata"
+        next_step = "recover required retrieved metadata before considering any escalation"
+    elif seed_count < 20:
+        archive_readiness = "blocked_incomplete_s20_seed_coverage"
+        s30_status = "not_ready_incomplete_s20"
+        next_step = "reconcile S20 seed coverage before considering any escalation"
+    else:
+        archive_readiness = "run_fail_closed_checker_before_claim"
+        s30_status = "defer_until_claim_owner_authorizes_escalation"
+        next_step = (
+            "run archive-readiness checker and decide S30 only in a separately authorized lane"
+        )
+
+    return {
+        "claim_promotion": "no_go",
+        "s20_archive_readiness": archive_readiness,
+        "s30_submission_from_issue_3798": "not_authorized_here",
+        "s30_escalation_status": s30_status,
+        "compute_submission": "not_authorized",
+        "next_valid_step": next_step,
+    }
 
 
 def _read_campaign_table(path: Path) -> list[dict[str, str]]:

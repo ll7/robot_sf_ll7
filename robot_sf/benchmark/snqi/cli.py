@@ -383,6 +383,7 @@ def create_parser() -> argparse.ArgumentParser:
     # Weight-set provenance inventory subcommand (read-only diagnostic)
     inventory_parser = subparsers.add_parser(
         "inventory",
+        aliases=["weights-inventory"],
         help="Inventory SNQI weight sets and report provenance conflicts (read-only)",
     )
     inventory_parser.add_argument(
@@ -424,7 +425,7 @@ def main() -> int:
         return cmd_recompute_weights(args)
     elif args.command == "ablation":
         return cmd_ablation_analysis(args)
-    elif args.command == "inventory":
+    elif args.command in {"inventory", "weights-inventory"}:
         return cmd_inventory_weights(args)
     else:
         return 1

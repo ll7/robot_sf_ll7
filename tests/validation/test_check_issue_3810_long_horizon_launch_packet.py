@@ -34,7 +34,10 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["planner_count"] >= 10
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
-    assert 13175 in summary["blocking_jobs"]
+    assert summary["blocking_jobs"] == []
+    assert summary["job_13175_state"] == "analyzed"
+    assert summary["issue_3810_duplicate_status"] == "none_found"
+    assert summary["go_no_go"] == "go_after_submit_host_live_checks"
 
 
 def test_issue_3810_packet_rejects_authorized_submit() -> None:
@@ -48,6 +51,45 @@ def test_issue_3810_packet_rejects_authorized_submit() -> None:
         assert "compute submit must be false" in str(exc)
     else:
         raise AssertionError("packet should reject compute submission authorization")
+
+
+def test_issue_3810_packet_rejects_stale_analyzed_job_blocker() -> None:
+    """A reconciled analyzed job must not stay as a submission blocker."""
+    packet = _load_packet()
+    packet["launch_packet"]["blocking_jobs"] = [13175]
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "13175" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale job 13175 blocker")
+
+
+def test_issue_3810_packet_rejects_missing_go_no_go_status() -> None:
+    """The packet must say what local decision command is safe to run."""
+    packet = _load_packet()
+    packet["launch_packet"].pop("go_no_go")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "go_no_go" in str(exc)
+    else:
+        raise AssertionError("packet should require go/no-go status")
+
+
+def test_issue_3810_packet_rejects_null_go_no_go_command() -> None:
+    """An explicit null decision command must fail closed, not coerce to 'None'."""
+    packet = _load_packet()
+    packet["launch_packet"]["go_no_go"]["exact_local_decision_command"] = None
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "exact local decision command missing" in str(exc)
+    else:
+        raise AssertionError("packet should reject a null local decision command")
 
 
 def test_issue_3810_packet_rejects_horizon_only_claim_boundary() -> None:

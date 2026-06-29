@@ -183,13 +183,15 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         go_no_go.get("local_submission_status") == "no_submit_current_machine",
         "local submission status must remain no-submit",
     )
+    exact_cmd = go_no_go.get("exact_local_decision_command")
     _require(
         "check_issue_3810_long_horizon_launch_packet.py"
-        in str(go_no_go.get("exact_local_decision_command", "")),
+        in (str(exact_cmd) if exact_cmd is not None else ""),
         "exact local decision command missing",
     )
+    slurm_status = go_no_go.get("slurm_command_status")
     _require(
-        "Not safe to freeze" in str(go_no_go.get("slurm_command_status", "")),
+        "Not safe to freeze" in (str(slurm_status) if slurm_status is not None else ""),
         "slurm command status must explain why final submit command is not frozen",
     )
 

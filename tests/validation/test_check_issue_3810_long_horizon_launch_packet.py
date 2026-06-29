@@ -79,6 +79,19 @@ def test_issue_3810_packet_rejects_missing_go_no_go_status() -> None:
         raise AssertionError("packet should require go/no-go status")
 
 
+def test_issue_3810_packet_rejects_null_go_no_go_command() -> None:
+    """An explicit null decision command must fail closed, not coerce to 'None'."""
+    packet = _load_packet()
+    packet["launch_packet"]["go_no_go"]["exact_local_decision_command"] = None
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "exact local decision command missing" in str(exc)
+    else:
+        raise AssertionError("packet should reject a null local decision command")
+
+
 def test_issue_3810_packet_rejects_horizon_only_claim_boundary() -> None:
     """The packet keeps the multi-factor comparison caveat mandatory."""
     packet = _load_packet()

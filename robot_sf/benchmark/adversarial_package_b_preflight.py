@@ -121,6 +121,33 @@ def _extract_output_paths(
     return output_dir, out_json, warnings
 
 
+def _extract_repeated_seed_args(command: str) -> tuple[tuple[int, ...], list[str]]:
+    warnings: list[str] = []
+    try:
+        tokens = shlex.split(command)
+    except ValueError as exc:
+        warnings.append(f"example_command could not shlex: {exc}")
+        return (), warnings
+
+    seed_args: list[int] = []
+    for index, token in enumerate(tokens):
+        if token == "--seed":
+            if index + 1 >= len(tokens):
+                warnings.append("example_command has --seed without value")
+                continue
+            seed_value = tokens[index + 1]
+        elif token.startswith("--seed="):
+            seed_value = token.removeprefix("--seed=")
+        else:
+            continue
+
+        try:
+            seed_args.append(int(seed_value))
+        except ValueError:
+            warnings.append(f"example_command has non-integer --seed value: {seed_value!r}")
+    return tuple(seed_args), warnings
+
+
 def _under_output_prefix(path: Path | None, repo_root: Path) -> bool:
     if path is None:
         return False
@@ -264,9 +291,20 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         blockers.append("example_command must use --package-b-budget-grid")
 
     for seed in seeds:
-        checks[f"example_command_seed_{seed}"] = f"--seed {seed}" in example_command
+        checks[f"example_command_seed_{seed}"] = (
+            f"--seed {seed}" in example_command or f"--seed={seed}" in example_command
+        )
         if not checks[f"example_command_seed_{seed}"]:
             blockers.append(f"example_command missing --seed {seed}")
+
+    command_seeds, seed_warnings = _extract_repeated_seed_args(example_command)
+    warnings.extend(seed_warnings)
+    checks["example_command_repeated_seeds"] = command_seeds == seeds
+    if not checks["example_command_repeated_seeds"]:
+        blockers.append(
+            "example_command --seed values must exactly match repeated_seeds "
+            f"{list(seeds)}, got {list(command_seeds)}"
+        )
 
     output_dir, out_json, output_warnings = _extract_output_paths(example_command, root)
     warnings.extend(output_warnings)
@@ -281,6 +319,7 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         "issue": EXPECTED_ISSUE,
         "budget_grid": list(budgets),
         "repeated_seeds": list(seeds),
+        "example_command_repeated_seeds": list(command_seeds),
         "samplers": list(samplers),
         "runner": _repo_relative(runner_path, root) if runner_path else None,
         "output_dir": _repo_relative(output_dir, root) if output_dir else None,

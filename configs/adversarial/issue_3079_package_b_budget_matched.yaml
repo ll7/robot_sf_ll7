@@ -28,6 +28,9 @@ explicit_exclusions:
   learned_failure_proposal_issue_2921: stretch_out_of_scope_until_base_comparison_succeeds
   held_out_family_yield: not_evaluated_narrow_archive_caveat
   paper_facing_success_claims: forbidden
+output_artifacts:
+  output_dir: output/adversarial/issue_3079_package_b
+  report_json: output/adversarial/issue_3079_package_b/report.json
 example_command: >
   uv run python scripts/tools/compare_adversarial_samplers.py
   --package-b-budget-grid

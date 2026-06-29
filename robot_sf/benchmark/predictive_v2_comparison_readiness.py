@@ -447,7 +447,9 @@ def _decision_packet(
         "candidate_queue_entry": {
             "lane": "predictive-v2 same-seed ego/obstacle conditioning comparison",
             "resource": "slurm_or_gpu_after_gate",
-            "current_state": "ready_for_bounded_launch" if recommendation == "go" else "deferred_blocked",
+            "current_state": "ready_for_bounded_launch"
+            if recommendation == "go"
+            else "deferred_blocked",
             "submission_authorized_by_this_packet": False,
             "candidate_issue": "#1505" if recommendation == "go" else "#1490",
         },

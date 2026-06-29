@@ -37,6 +37,10 @@ campaign:
       Sustained progress or throughput under non-clearing pedestrian demand,
       not binary terminal goal reach.
   row_status_policy:
+    # Forward-looking row-status vocabulary for a future submitted campaign.
+    # With no_submit: true and evidence_tier launch-packet-only, this packet
+    # produces no rows and asserts no successful_evidence today.
+    applies_when: future_submitted_campaign_only
     allowed_values:
       - successful_evidence
       - diagnostic_only

@@ -29,9 +29,10 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
     """The opt-in family is a valid scenario matrix for existing runner tooling."""
 
     rc = cli_main(["validate-config", "--matrix", str(SCENARIO_SET)])
-    report = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
 
-    assert rc == 0
+    assert rc == 0, captured.out + captured.err
+    report = json.loads(captured.out)
     assert report["num_scenarios"] == 3
     assert report["source"]["schema_version"] == "robot_sf.scenario_matrix.v1"
     assert report["summary"]["archetypes"] == {"sustained_flow_t_intersection": 3}

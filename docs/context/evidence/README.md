@@ -120,6 +120,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/`: checker packet over
+  the merged #3207 bounded actual fidelity-sensitivity slice. Classifies the current evidence as
+  `no_claim` / `not_benchmark_evidence` because the slice is not full fixed scope and rank evidence
+  is non-identifiable (`primary_metric_zero_variance`). Does not run a simulator study or promote a
+  simulator-dependence, simulator-realism, sim-to-real, paper-facing, or dissertation claim.
 - `issue_2557_replica_readiness_packet_2026-06-29/`: diagnostic-only
   fixed-seed queue-fill replica readiness packet for Issue #2557. It records the
   public tracked completed/running status, retrieved compact evidence, remaining

@@ -59,6 +59,39 @@ class PedestrianMetric:
     value: float
 
 
+@dataclass(frozen=True, slots=True)
+class ControlTraceReadiness:
+    """Readiness diagnostic for per-pedestrian control-trace metric extraction."""
+
+    status: str
+    metric_key: str
+    pedestrian_count: int
+    step_count: int
+    archetype_counts: dict[str, int]
+    blockers: tuple[str, ...]
+
+    @property
+    def ready(self) -> bool:
+        """Return true when the trace can feed the per-archetype metric harness."""
+
+        return self.status == "ready"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a stable JSON-serializable diagnostic payload."""
+
+        return {
+            "schema_version": HETEROGENEOUS_POPULATION_METRICS_SCHEMA,
+            "source": "pedestrian_control_trace",
+            "metric_key": self.metric_key,
+            "status": self.status,
+            "ready": self.ready,
+            "pedestrian_count": self.pedestrian_count,
+            "step_count": self.step_count,
+            "archetype_counts": dict(sorted(self.archetype_counts.items())),
+            "blockers": list(self.blockers),
+        }
+
+
 def cvar(values: Sequence[float], alpha: float, *, higher_is_safer: bool) -> float:
     """Return the CVaR (mean of the worst ``alpha`` tail) of a metric.
 
@@ -77,6 +110,80 @@ def cvar(values: Sequence[float], alpha: float, *, higher_is_safer: bool) -> flo
     k = max(1, math.ceil(alpha * arr.size))
     tail = arr[:k] if higher_is_safer else arr[-k:]
     return float(np.mean(tail))
+
+
+def assess_control_trace_readiness(
+    control_trace: Mapping[str, Any],
+    metric_key: str,
+) -> ControlTraceReadiness:
+    """Assess whether a control trace has the fields required for per-archetype metrics.
+
+    The readiness check is intentionally non-raising so orchestration code can emit a
+    blocked diagnostic packet. Metric extraction still raises through
+    ``pedestrian_metric_observations_from_control_trace`` when a caller tries to use
+    an incomplete trace.
+
+    Returns:
+        Readiness diagnostic with coverage counts and fail-closed blockers.
+    """
+
+    normalized_metric_key = str(metric_key).strip()
+    blockers: list[str] = []
+    pedestrian_count = 0
+    step_count = 0
+    archetype_counts: dict[str, int] = {}
+
+    if not normalized_metric_key:
+        blockers.append("metric_key must be non-empty")
+
+    try:
+        pedestrians = _control_trace_pedestrians(control_trace)
+    except ValueError as exc:
+        blockers.append(str(exc))
+        return ControlTraceReadiness(
+            status="blocked",
+            metric_key=normalized_metric_key,
+            pedestrian_count=0,
+            step_count=0,
+            archetype_counts={},
+            blockers=tuple(blockers),
+        )
+
+    pedestrian_count = len(pedestrians)
+    for pedestrian_index, pedestrian in enumerate(pedestrians):
+        if not isinstance(pedestrian, Mapping):
+            blockers.append(f"control_trace.pedestrians[{pedestrian_index}] must be mapping")
+            continue
+
+        try:
+            archetype = _control_trace_archetype(pedestrian, pedestrian_index)
+        except ValueError as exc:
+            blockers.append(str(exc))
+        else:
+            archetype_counts[archetype] = archetype_counts.get(archetype, 0) + 1
+
+        if not normalized_metric_key:
+            continue
+
+        try:
+            values = _control_trace_metric_values(
+                pedestrian,
+                pedestrian_index,
+                normalized_metric_key,
+            )
+        except (TypeError, ValueError) as exc:
+            blockers.append(str(exc))
+        else:
+            step_count += int(values.size)
+
+    return ControlTraceReadiness(
+        status="ready" if not blockers else "blocked",
+        metric_key=normalized_metric_key,
+        pedestrian_count=pedestrian_count,
+        step_count=step_count,
+        archetype_counts=archetype_counts,
+        blockers=tuple(blockers),
+    )
 
 
 def per_archetype_metrics(
@@ -308,7 +415,9 @@ def mean_matched_heterogeneity_effect(
 
 __all__ = [
     "HETEROGENEOUS_POPULATION_METRICS_SCHEMA",
+    "ControlTraceReadiness",
     "PedestrianMetric",
+    "assess_control_trace_readiness",
     "cvar",
     "mean_matched_heterogeneity_effect",
     "pedestrian_metric_observations_from_control_trace",

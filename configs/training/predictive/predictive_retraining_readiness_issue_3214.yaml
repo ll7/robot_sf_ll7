@@ -1,0 +1,49 @@
+# Issue #3214 hard-case predictive retraining readiness decision packet.
+#
+# Scope boundary: public static readiness only. This packet does not submit Slurm/GPU compute,
+# run a full benchmark campaign, publish a retrained checkpoint, or edit paper/dissertation claims.
+schema_version: predictive-retraining-readiness.v1
+issue: "#3214"
+candidate_id: crossing_conflict_weighted_predictive_retraining
+scope: decision_packet_only
+claim_boundary: >
+  Public decision packet only: no Slurm or GPU submission, no full benchmark campaign run, no
+  retrained checkpoint publication, and no paper or dissertation claim edit.
+
+inputs:
+  weighting_spec: configs/training/predictive/predictive_crossing_conflict_hardcase_mixing_issue_3214.yaml
+  pipeline_config: configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml
+  followup_issue: "#3254"
+
+prior_result:
+  status: verified_negative
+  evidence_status: diagnostic negative result only; not benchmark, leaderboard, or paper claim
+  source_issue: "#3254"
+  source_pr: "#3515"
+  observed_success_rate: 0.087
+  gate_min_success_rate: 0.30
+  conclusion: >
+    The crossing-conflict weighted predictive retrain improved trajectory-prediction accuracy but
+    did not clear closed-loop policy gates. Treat further same-packet retraining as blocked until a
+    public control-law-side change exists.
+
+launch_decision:
+  state: blocked_until_control_law_change
+  compute_submit_allowed: false
+  fail_closed_on_missing: true
+  required_before_rerun:
+    - control_law_change_config
+    - updated_public_config_or_pr
+    - checkpoint_provenance_plan
+    - hard_seed_evaluation_plan
+
+commands:
+  local_readiness_check: >
+    uv run python scripts/training/check_predictive_retraining_readiness.py
+    --packet configs/training/predictive/predictive_retraining_readiness_issue_3214.yaml
+
+out_of_scope:
+  - full benchmark campaign run
+  - Slurm or GPU submission
+  - model checkpoint promotion
+  - paper or dissertation claim edits

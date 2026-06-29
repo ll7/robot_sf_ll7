@@ -31,7 +31,9 @@ and honestly labeled before any compute is spent.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.reactivity_ablation import (
@@ -80,6 +82,7 @@ class ReactivityReplayRunPlan:
     arm_seeds: dict[str, tuple[int, ...]]
     scenario_set: str
     horizon: int
+    scenario_set_sha256: str | None = None
     replay_is_trajectory_playback: bool = REPLAY_IS_TRAJECTORY_PLAYBACK
     replay_limitation: str = REPLAY_LIMITATION
     min_planners: int = MIN_PLANNERS
@@ -208,6 +211,49 @@ def _check_horizon(plan: ReactivityReplayRunPlan) -> CheckResult:
     )
 
 
+def _check_scenario_set_digest(plan: ReactivityReplayRunPlan) -> CheckResult:
+    """Validate supplied scenario-set digest so launch packets fail closed on drift.
+
+    Returns:
+        CheckResult: ``scenario_set_sha256`` check outcome.
+    """
+    expected = (plan.scenario_set_sha256 or "").strip().lower()
+    if not expected:
+        return CheckResult(
+            name="scenario_set_sha256",
+            passed=True,
+            detail="no scenario_set_sha256 supplied; drift guard not enforced",
+        )
+    if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
+        return CheckResult(
+            name="scenario_set_sha256",
+            passed=False,
+            detail="scenario_set_sha256 must be a 64-character lowercase hex SHA-256 digest",
+        )
+
+    scenario_path = Path(plan.scenario_set)
+    if not scenario_path.is_absolute():
+        scenario_path = Path(__file__).resolve().parents[2] / scenario_path
+    if not scenario_path.is_file():
+        return CheckResult(
+            name="scenario_set_sha256",
+            passed=False,
+            detail=f"scenario_set file not found for digest check: {plan.scenario_set}",
+        )
+
+    actual = hashlib.sha256(scenario_path.read_bytes()).hexdigest()
+    ok = actual == expected
+    return CheckResult(
+        name="scenario_set_sha256",
+        passed=ok,
+        detail=(
+            f"scenario_set digest matches {expected}"
+            if ok
+            else f"scenario_set digest mismatch: expected {expected}, got {actual}"
+        ),
+    )
+
+
 def _check_replay_limitation(plan: ReactivityReplayRunPlan) -> CheckResult:
     """Replay is force-off (not trajectory playback) and the limitation note is present.
 
@@ -234,6 +280,7 @@ _CHECKS = (
     _check_paired_seeds,
     _check_seed_budget,
     _check_horizon,
+    _check_scenario_set_digest,
     _check_replay_limitation,
 )
 
@@ -271,6 +318,7 @@ def build_preflight_manifest(plan: ReactivityReplayRunPlan) -> dict[str, Any]:
             "planners": list(plan.planners),
             "arms": {arm: list(seeds) for arm, seeds in plan.arm_seeds.items()},
             "scenario_set": plan.scenario_set,
+            "scenario_set_sha256": plan.scenario_set_sha256,
             "horizon": plan.horizon,
             "min_planners": plan.min_planners,
             "min_seeds": plan.min_seeds,
@@ -326,6 +374,7 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
     scenario_set = packet.get("scenario_set")
     if not isinstance(scenario_set, str) or not scenario_set.strip():
         raise ValueError("packet 'scenario_set' must be a non-empty string")
+    scenario_set_sha256 = _resolve_scenario_set_sha256(packet)
 
     horizon = packet.get("horizon")
     if not isinstance(horizon, int) or isinstance(horizon, bool):
@@ -354,6 +403,7 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
         arm_seeds=arm_seeds,
         scenario_set=scenario_set,
         horizon=horizon,
+        scenario_set_sha256=scenario_set_sha256,
         replay_is_trajectory_playback=is_playback,
         replay_limitation=limitation,
         **overrides,
@@ -389,6 +439,18 @@ def _resolve_arm_seeds(packet: dict[str, Any]) -> dict[str, tuple[int, ...]]:
     seeds = _as_seed_tuple(shared, "packet 'seeds'")
     # Paired by construction: both arms run the identical seed set (common random numbers).
     return dict.fromkeys(REACTIVITY_ARMS, seeds)
+
+
+def _resolve_scenario_set_sha256(packet: dict[str, Any]) -> str | None:
+    """Return optional packet scenario-set checksum.
+
+    Returns:
+        Optional SHA-256 hex digest supplied by the launch packet.
+    """
+    scenario_set_sha256 = packet.get("scenario_set_sha256")
+    if scenario_set_sha256 is not None and not isinstance(scenario_set_sha256, str):
+        raise ValueError("packet 'scenario_set_sha256' must be a string when present")
+    return scenario_set_sha256
 
 
 __all__ = [

@@ -6,6 +6,7 @@ and the thin CLI. No benchmark execution, no rank-stability interpretation.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -187,6 +188,30 @@ def test_shipped_packet_preflights_ready():
     packet = yaml.safe_load(SHIPPED_PACKET.read_text(encoding="utf-8"))
     manifest = build_preflight_manifest(run_plan_from_packet(packet))
     assert manifest["status"] == "ready", manifest["blocking_issues"]
+
+
+def test_scenario_set_checksum_mismatch_blocks(tmp_path):
+    """A supplied scenario-set checksum fails closed when the file drifts."""
+    scenario_set = tmp_path / "scenario_set.yaml"
+    scenario_set.write_text("scenarios: []\n", encoding="utf-8")
+
+    manifest = build_preflight_manifest(
+        _ready_plan(scenario_set=str(scenario_set), scenario_set_sha256="0" * 64)
+    )
+
+    assert manifest["status"] == "blocked"
+    assert any(issue.startswith("scenario_set_sha256:") for issue in manifest["blocking_issues"])
+
+
+def test_scenario_set_checksum_match_passes(tmp_path):
+    """A supplied scenario-set checksum passes when it matches the named file."""
+    scenario_set = tmp_path / "scenario_set.yaml"
+    scenario_set.write_text("scenarios: []\n", encoding="utf-8")
+    digest = hashlib.sha256(scenario_set.read_bytes()).hexdigest()
+
+    checks = check_run_plan(_ready_plan(scenario_set=str(scenario_set), scenario_set_sha256=digest))
+
+    assert {c.name: c.passed for c in checks}["scenario_set_sha256"] is True
 
 
 def test_shipped_packet_checksum_matches_scenario_set():

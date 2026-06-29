@@ -141,6 +141,27 @@ def test_packet_marks_old_generated_outputs_stale(tmp_path: Path) -> None:
     assert packet["summary"]["readiness"] == "blocked_stale_outputs"
 
 
+def test_packet_marks_non_dict_json_required_artifact_missing(tmp_path: Path) -> None:
+    """A structurally wrong JSON artifact (list/primitive) fails closed without crashing."""
+
+    root = tmp_path / "outputs"
+    _write_present_outputs(root, generated_at="2026-06-29T10:00:00+00:00")
+    # Overwrite a required JSON artifact with a non-object payload.
+    (root / "result.json").write_text(json.dumps([1, 2, 3]) + "\n", encoding="utf-8")
+
+    packet = mod.build_packet([root], now=mod._parse_datetime("2026-06-29T11:00:00+00:00"))
+
+    assert packet["summary"]["readiness"] == "blocked_missing_outputs"
+    report = next(
+        artifact
+        for root_summary in packet["roots"]
+        for artifact in root_summary["artifacts"]
+        if artifact["key"] == "headline_report_json"
+    )
+    assert report["status"] == "missing"
+    assert "expected object" in report["detail"]
+
+
 def test_cli_writes_json_and_markdown_packet(tmp_path: Path, capsys: Any) -> None:
     """CLI writes the reconciliation packet files without requiring campaign execution."""
 

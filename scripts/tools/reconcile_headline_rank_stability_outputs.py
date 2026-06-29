@@ -168,9 +168,16 @@ def _inspect_artifact(
     parse_error: str | None = None
     if spec.json_kind:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            loaded = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             parse_error = f"invalid JSON: {exc}"
+        else:
+            if isinstance(loaded, dict):
+                payload = loaded
+            else:
+                # Fail closed on a structurally wrong artifact (list/primitive) so a later
+                # ``payload.get(...)`` cannot raise an uncaught AttributeError.
+                parse_error = f"invalid JSON: expected object, got {type(loaded).__name__}"
 
     artifact_time = _artifact_time(path, payload)
     stale = bool(fresh_after and artifact_time and artifact_time < fresh_after)

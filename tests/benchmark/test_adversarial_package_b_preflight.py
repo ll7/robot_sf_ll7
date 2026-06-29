@@ -20,7 +20,28 @@ def _write_file(path: Path, text: str = "placeholder\n") -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _write_research_package_registry(repo_root: Path) -> None:
+    _write_file(
+        repo_root / "configs/research/research_package_registry_issue_3057.yaml",
+        yaml.safe_dump(
+            {
+                "packages": [
+                    {
+                        "id": "package_b_adversarial",
+                        "issue": 3079,
+                        "required_artifacts": [
+                            "configs/adversarial/issue_3079_package_b_budget_matched.yaml"
+                        ],
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+    )
+
+
 def _base_manifest(repo_root: Path) -> Path:
+    _write_research_package_registry(repo_root)
     _write_file(repo_root / "configs/scenarios/templates/crossing_ttc.yaml")
     _write_file(repo_root / "configs/adversarial/crossing_ttc_space.yaml")
     _write_file(
@@ -104,6 +125,10 @@ def test_committed_package_b_manifest_preflights_without_running_benchmark() -> 
     assert result.metadata["budget_grid"] == [16, 32, 64]
     assert result.metadata["repeated_seeds"] == [1101, 2202, 3303]
     assert "held_out_family_yield" in result.metadata["runner_reporting_fields"]
+    assert (
+        result.metadata["research_package_registry"]
+        == "configs/research/research_package_registry_issue_3057.yaml"
+    )
     assert result.metadata["output_artifacts"] == {
         "output_dir": "output/adversarial/issue_3079_package_b",
         "report_json": "output/adversarial/issue_3079_package_b/report.json",
@@ -132,6 +157,71 @@ def test_preflight_fails_closed_for_missing_budget_seed_and_provenance(tmp_path:
     assert any("repeated_seeds" in blocker for blocker in result.blockers)
     assert any("paper_facing_success_claims" in blocker for blocker in result.blockers)
     assert any("output_artifacts" in blocker for blocker in result.blockers)
+
+
+def test_preflight_fails_closed_when_registry_drops_package_b_manifest(tmp_path: Path) -> None:
+    """Package-B provenance must stay discoverable from the research package registry."""
+    manifest = _base_manifest(tmp_path)
+    registry = tmp_path / "configs/research/research_package_registry_issue_3057.yaml"
+    registry.write_text(
+        yaml.safe_dump(
+            {
+                "packages": [
+                    {
+                        "id": "package_b_adversarial",
+                        "issue": 3079,
+                        "required_artifacts": [],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["research_package_registry_includes_manifest"] is False
+    assert any("research package registry" in blocker for blocker in result.blockers)
+
+
+@pytest.mark.parametrize(
+    "registry_payload",
+    [
+        None,
+        ["not-a-package-map"],
+        {"packages": ["not-a-package-map"]},
+        {
+            "packages": [
+                {
+                    "id": "package_b_adversarial",
+                    "issue": 9999,
+                    "required_artifacts": [
+                        "configs/adversarial/issue_3079_package_b_budget_matched.yaml"
+                    ],
+                }
+            ]
+        },
+    ],
+)
+def test_preflight_fails_closed_for_malformed_registry_provenance(
+    tmp_path: Path, registry_payload: object
+) -> None:
+    """Malformed registry provenance blocks before benchmark execution."""
+    manifest = _base_manifest(tmp_path)
+    registry = tmp_path / "configs/research/research_package_registry_issue_3057.yaml"
+    if registry_payload is None:
+        registry.unlink()
+    else:
+        registry.write_text(yaml.safe_dump(registry_payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["research_package_registry_includes_manifest"] is False
+    assert any("research package registry" in blocker for blocker in result.blockers)
 
 
 def test_preflight_blocks_runner_output_schema_drift(tmp_path: Path) -> None:

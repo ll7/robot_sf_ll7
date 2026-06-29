@@ -198,3 +198,35 @@ def test_tracked_packet_rejects_issue_3798_s30_submit_authorization(tmp_path: Pa
         assert "must not authorize S30 submission" in str(exc)
     else:
         raise AssertionError("S30 authorization drift should fail closed")
+
+
+def test_tracked_packet_rejects_stale_planner_count(tmp_path: Path) -> None:
+    """Tracked packet fixture must fail closed if summary counts drift."""
+
+    packet = extractor.load_packet_fixture(extractor.DEFAULT_PACKET_FIXTURE)
+    packet["coverage_snapshot"]["planner_count"] += 1
+    fixture = tmp_path / "stale-planner-count.json"
+    fixture.write_text(json.dumps(packet), encoding="utf-8")
+
+    try:
+        extractor.load_packet_fixture(fixture)
+    except ValueError as exc:
+        assert "planner_count must match listed planners" in str(exc)
+    else:
+        raise AssertionError("stale planner count should fail closed")
+
+
+def test_tracked_packet_rejects_claim_promoting_review_file(tmp_path: Path) -> None:
+    """Promotable review files stay diagnostic and checksum-backed."""
+
+    packet = extractor.load_packet_fixture(extractor.DEFAULT_PACKET_FIXTURE)
+    packet["promotable_review_files"][0]["promotion_scope"] = "paper claim upgrade"
+    fixture = tmp_path / "claim-promoting-review-file.json"
+    fixture.write_text(json.dumps(packet), encoding="utf-8")
+
+    try:
+        extractor.load_packet_fixture(fixture)
+    except ValueError as exc:
+        assert "promotable review file promoted a claim" in str(exc)
+    else:
+        raise AssertionError("claim-promoting review file should fail closed")

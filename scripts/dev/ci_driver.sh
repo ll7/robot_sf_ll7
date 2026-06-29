@@ -231,6 +231,7 @@ run_phase() {
       uvx ty check . --exit-zero
       ;;
     test)
+      "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh"
       "$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples
       ;;
     examples-smoke)

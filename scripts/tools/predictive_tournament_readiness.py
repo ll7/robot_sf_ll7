@@ -32,6 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # config builder, and the portfolio scenario set used as the map-runner gate.
 SHARED_PROTOCOL_PATHS: tuple[Path, ...] = (
     Path("configs/benchmarks/predictive_hard_seeds_v1.yaml"),
+    Path("configs/benchmarks/predictive_sweep_planner_grid_v1.yaml"),
     Path("scripts/validation/run_predictive_success_campaign.py"),
     Path("scripts/tools/campaign_result_store.py"),
     Path("robot_sf/benchmark/predictive_planner_config.py"),
@@ -76,6 +77,7 @@ ARMS: tuple[ArmSpec, ...] = (
         ),
         required_paths=(
             Path("scripts/research/analyze_predictive_checkpoint_proxy.py"),
+            Path("configs/research/predictive_checkpoint_proxy_v1.yaml"),
             Path("configs/benchmarks/predictive_hard_seeds_v1.yaml"),
         ),
         expected_output_path=Path("output/tmp/predictive_planner/campaigns/tournament_selection"),
@@ -105,6 +107,7 @@ ARMS: tuple[ArmSpec, ...] = (
             "under the shared protocol."
         ),
         required_paths=(
+            Path("configs/training/predictive/predictive_retraining_readiness_issue_3214.yaml"),
             Path(
                 "configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml"
             ),
@@ -221,6 +224,11 @@ def _component_to_dict(component: ComponentReadiness) -> dict:
         "display_name": component.display_name,
         "status": component.status,
         "paths": [{"path": p.path, "exists": p.exists} for p in component.paths],
+        "expected_configs": [p.path for p in component.paths if p.path.startswith("configs/")],
+        "blockers": [
+            {"path": path, "reason": "required prerequisite path is missing"}
+            for path in component.missing_paths
+        ],
         "missing_paths": component.missing_paths,
         "description": component.description,
     }
@@ -228,6 +236,7 @@ def _component_to_dict(component: ComponentReadiness) -> dict:
         payload["child_issue"] = component.child_issue
     if component.expected_output_path is not None:
         payload["expected_output_path"] = component.expected_output_path
+        payload["expected_output_paths"] = [component.expected_output_path]
     if component.notes:
         payload["notes"] = component.notes
     return payload

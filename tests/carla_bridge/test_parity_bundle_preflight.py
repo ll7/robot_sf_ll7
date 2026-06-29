@@ -18,6 +18,8 @@ from robot_sf_carla_bridge.cli import preflight_carla_parity_bundle_main
 from robot_sf_carla_bridge.export import write_export_records
 from robot_sf_carla_bridge.parity_bundle_preflight import (
     PREFLIGHT_SCHEMA_VERSION,
+    READINESS_MANIFEST_SCHEMA_VERSION,
+    check_native_aligned_bundle_manifest_readiness,
     check_parity_bundle_readiness,
     evaluate_payload_metadata,
 )
@@ -80,6 +82,24 @@ def _write_manifest(tmp_path: Path, *payloads: dict, subdir: str = "exports") ->
     output_dir = tmp_path / subdir
     write_export_records(records, output_dir)
     return output_dir / "manifest.json"
+
+
+def _write_readiness_manifest(tmp_path: Path, entries: list[dict]) -> Path:
+    """Write issue #1491 readiness manifest beside synthetic export bundles."""
+
+    manifest = tmp_path / "carla_parity_readiness.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": READINESS_MANIFEST_SCHEMA_VERSION,
+                "bundle_id": "issue-1491-unit",
+                "issue": 1491,
+                "scenarios": entries,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return manifest
 
 
 # --- pure metadata checker -------------------------------------------------------------------
@@ -236,6 +256,99 @@ def test_check_parity_bundle_readiness_never_claims_parity(tmp_path: Path) -> No
     assert "does not assert native↔aligned metric parity" in report["claim_boundary"]
 
 
+def test_native_aligned_readiness_manifest_reports_ready(tmp_path: Path) -> None:
+    """Issue #1491 manifest ready only when native and aligned entries pass static checks."""
+
+    native_manifest = _write_manifest(tmp_path, _valid_payload("native_a"), subdir="native")
+    aligned_manifest = _write_manifest(tmp_path, _valid_payload("aligned_a"), subdir="aligned")
+    readiness_manifest = _write_readiness_manifest(
+        tmp_path,
+        [
+            {
+                "scenario_id": "native_a",
+                "mode": "native",
+                "manifest": native_manifest.relative_to(tmp_path).as_posix(),
+            },
+            {
+                "scenario_id": "aligned_a",
+                "mode": "aligned",
+                "manifest": aligned_manifest.relative_to(tmp_path).as_posix(),
+            },
+        ],
+    )
+
+    report = check_native_aligned_bundle_manifest_readiness(
+        readiness_manifest,
+        output_dir=tmp_path / "parity_out",
+    )
+
+    assert report["status"] == "ready"
+    assert report["readiness_manifest_schema_version"] == READINESS_MANIFEST_SCHEMA_VERSION
+    assert report["issue"] == 1491
+    assert report["ready_count"] == 2
+    assert {row["readiness_mode"] for row in report["scenarios"]} == {"native", "aligned"}
+    assert "does not assert native↔aligned metric parity" in report["claim_boundary"]
+
+
+def test_native_aligned_readiness_manifest_blocks_missing_mode(tmp_path: Path) -> None:
+    """A manifest without both native and aligned coverage fails closed."""
+
+    native_manifest = _write_manifest(tmp_path, _valid_payload("native_a"), subdir="native")
+    readiness_manifest = _write_readiness_manifest(
+        tmp_path,
+        [
+            {
+                "scenario_id": "native_a",
+                "mode": "native",
+                "manifest": native_manifest.relative_to(tmp_path).as_posix(),
+            }
+        ],
+    )
+
+    report = check_native_aligned_bundle_manifest_readiness(readiness_manifest)
+
+    assert report["status"] == "not-ready"
+    assert report["ready_count"] == 1
+    assert any("missing mode coverage: aligned" in reason for reason in report["blocking_reasons"])
+
+
+def test_native_aligned_readiness_manifest_blocks_missing_export_manifest(tmp_path: Path) -> None:
+    """Missing declared T0 export manifest is reported as a scenario blocker."""
+
+    native_manifest = _write_manifest(tmp_path, _valid_payload("native_a"), subdir="native")
+    readiness_manifest = _write_readiness_manifest(
+        tmp_path,
+        [
+            {
+                "scenario_id": "native_a",
+                "mode": "native",
+                "manifest": native_manifest.relative_to(tmp_path).as_posix(),
+            },
+            {"scenario_id": "aligned_a", "mode": "aligned", "manifest": "aligned/manifest.json"},
+        ],
+    )
+
+    report = check_native_aligned_bundle_manifest_readiness(readiness_manifest)
+
+    assert report["status"] == "not-ready"
+    assert report["ready_count"] == 1
+    assert any("export manifest file not found" in reason for reason in report["blocking_reasons"])
+
+
+def test_native_aligned_readiness_manifest_blocks_missing_readiness_manifest(
+    tmp_path: Path,
+) -> None:
+    """Absent issue #1491 readiness manifest produces explicit not-ready report."""
+
+    report = check_native_aligned_bundle_manifest_readiness(tmp_path / "missing.json")
+
+    assert report["status"] == "not-ready"
+    assert report["scenario_count"] == 1
+    assert any(
+        "readiness manifest file not found" in reason for reason in report["blocking_reasons"]
+    )
+
+
 # --- CLI -------------------------------------------------------------------------------------
 
 
@@ -247,6 +360,38 @@ def test_cli_reports_ready_and_exits_zero(tmp_path: Path, capsys: pytest.Capture
     )
     assert exit_code == 0
     report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "ready"
+
+
+def test_cli_accepts_native_aligned_readiness_manifest(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """The CLI checks an issue #1491 readiness manifest without CARLA."""
+    native_manifest = _write_manifest(tmp_path, _valid_payload("native_a"), subdir="native")
+    aligned_manifest = _write_manifest(tmp_path, _valid_payload("aligned_a"), subdir="aligned")
+    readiness_manifest = _write_readiness_manifest(
+        tmp_path,
+        [
+            {
+                "scenario_id": "native_a",
+                "mode": "native",
+                "manifest": native_manifest.relative_to(tmp_path).as_posix(),
+            },
+            {
+                "scenario_id": "aligned_a",
+                "mode": "aligned",
+                "manifest": aligned_manifest.relative_to(tmp_path).as_posix(),
+            },
+        ],
+    )
+
+    exit_code = preflight_carla_parity_bundle_main(
+        ["--readiness-manifest", str(readiness_manifest), "--json"]
+    )
+
+    assert exit_code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["readiness_manifest_schema_version"] == READINESS_MANIFEST_SCHEMA_VERSION
     assert report["status"] == "ready"
 
 

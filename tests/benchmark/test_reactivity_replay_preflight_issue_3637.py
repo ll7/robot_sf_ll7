@@ -19,6 +19,8 @@ from robot_sf.benchmark.reactivity_replay_preflight import (
     DIAGNOSTIC_SEED_COUNT,
     MIN_RANK_STABILITY_SEEDS,
     PREFLIGHT_SCHEMA,
+    RANK_STABILITY_GATE_COMMAND,
+    REQUIRED_RANK_STABILITY_METRICS,
     ReactivityReplayRunPlan,
     build_preflight_manifest,
     check_run_plan,
@@ -46,6 +48,22 @@ def _ready_seeds() -> tuple[int, ...]:
     return tuple(range(101, 101 + MIN_RANK_STABILITY_SEEDS))
 
 
+def _rank_stability_analysis() -> dict[str, object]:
+    """Return required post-run analysis-contract metadata."""
+    return {
+        "paired_seed_resampling": True,
+        "required_metrics": list(REQUIRED_RANK_STABILITY_METRICS),
+        "rank_metric": REQUIRED_RANK_STABILITY_METRICS[0],
+        "seed_sufficiency_gate_command": (
+            f"uv run python {RANK_STABILITY_GATE_COMMAND} --input-json <frozen_gate_input.json>"
+        ),
+        "replay_limitation_required": True,
+        "claim_boundary": (
+            "No paper-facing claim until post-run seed-sufficiency gate and claim-card review."
+        ),
+    }
+
+
 def _ready_plan(**overrides) -> ReactivityReplayRunPlan:
     """A plan that passes every precondition unless overridden."""
     seeds = _ready_seeds()
@@ -54,6 +72,7 @@ def _ready_plan(**overrides) -> ReactivityReplayRunPlan:
         "arm_seeds": dict.fromkeys(REACTIVITY_ARMS, seeds),
         "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
         "horizon": 300,
+        "rank_stability_analysis": _rank_stability_analysis(),
     }
     base.update(overrides)
     return ReactivityReplayRunPlan(**base)
@@ -81,6 +100,7 @@ def test_manifest_always_carries_replay_limitation():
     assert limitation["is_trajectory_playback"] is False
     assert "not pre-recorded trajectory playback" in limitation["note"].lower()
     assert "rank stability" in manifest["claim_boundary"].lower()
+    assert manifest["plan"]["rank_stability_analysis"]["paired_seed_resampling"] is True
 
 
 def test_too_few_planners_blocks():
@@ -133,6 +153,21 @@ def test_missing_limitation_note_blocks():
     assert _checks_by_name(plan)["replay_limitation"] is False
 
 
+def test_missing_rank_stability_analysis_blocks():
+    """Missing post-run analysis contract blocks the preflight."""
+    plan = _ready_plan(rank_stability_analysis={})
+    assert _checks_by_name(plan)["rank_stability_analysis"] is False
+
+
+def test_incomplete_rank_stability_analysis_blocks():
+    """Analysis contract must name metrics, gate command, replay caveat, and claim boundary."""
+    analysis = _rank_stability_analysis()
+    analysis["required_metrics"] = ["collision_rate"]
+    analysis["paired_seed_resampling"] = False
+    plan = _ready_plan(rank_stability_analysis=analysis)
+    assert _checks_by_name(plan)["rank_stability_analysis"] is False
+
+
 def test_short_horizon_blocks():
     """A horizon below the contrast-registration floor blocks."""
     assert _checks_by_name(_ready_plan(horizon=50))["horizon"] is False
@@ -145,6 +180,7 @@ def test_run_plan_from_packet_shared_seeds_are_paired():
         "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
         "horizon": 300,
         "seeds": list(range(101, 121)),
+        "rank_stability_analysis": _rank_stability_analysis(),
     }
     plan = run_plan_from_packet(packet)
     assert set(plan.arm_seeds) == set(REACTIVITY_ARMS)

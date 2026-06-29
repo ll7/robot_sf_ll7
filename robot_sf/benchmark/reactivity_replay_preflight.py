@@ -56,6 +56,12 @@ MIN_RANK_STABILITY_SEEDS = 20
 #: The #3573 diagnostic small matrix used 4 seeds; a paper-grade plan must strictly exceed it.
 DIAGNOSTIC_SEED_COUNT = 4
 
+#: Metrics that must be preserved for the post-run rank-stability gate.
+REQUIRED_RANK_STABILITY_METRICS = ("collision_rate", "near_miss_rate", "min_separation_m")
+
+#: Canonical post-run gate command family. Packets may add arguments but must route here.
+RANK_STABILITY_GATE_COMMAND = "scripts/tools/seed_sufficiency_gate.py"
+
 
 @dataclass(frozen=True, slots=True)
 class ReactivityReplayRunPlan:
@@ -74,6 +80,8 @@ class ReactivityReplayRunPlan:
         replay_is_trajectory_playback: Whether the replay arm is pre-recorded trajectory playback.
             Must be ``False`` for this ablation (live force-off, not playback).
         replay_limitation: Human-readable limitation note that must accompany every artifact.
+        rank_stability_analysis: Plan-level post-run analysis contract metadata. This is not a
+            measured result and does not claim rank stability.
         min_planners: Override for the planner-count floor (defaults to :data:`MIN_PLANNERS`).
         min_seeds: Override for the seed-count floor (defaults to :data:`MIN_RANK_STABILITY_SEEDS`).
     """
@@ -85,6 +93,7 @@ class ReactivityReplayRunPlan:
     scenario_set_sha256: str | None = None
     replay_is_trajectory_playback: bool = REPLAY_IS_TRAJECTORY_PLAYBACK
     replay_limitation: str = REPLAY_LIMITATION
+    rank_stability_analysis: dict[str, Any] = field(default_factory=dict)
     min_planners: int = MIN_PLANNERS
     min_seeds: int = MIN_RANK_STABILITY_SEEDS
     #: Minimum horizon for the contrast to register (diagnostic family observation, #3573).
@@ -254,6 +263,57 @@ def _check_scenario_set_digest(plan: ReactivityReplayRunPlan) -> CheckResult:
     )
 
 
+def _check_rank_stability_analysis(plan: ReactivityReplayRunPlan) -> CheckResult:
+    """Validate the declared post-run rank-stability analysis contract.
+
+    Returns:
+        CheckResult: ``rank_stability_analysis`` check outcome.
+    """
+    analysis = plan.rank_stability_analysis
+    if not analysis:
+        return CheckResult(
+            name="rank_stability_analysis",
+            passed=False,
+            detail="rank_stability_analysis metadata must be present in launch packet",
+        )
+
+    metrics = analysis.get("required_metrics")
+    metric_set = set(metrics) if isinstance(metrics, list) else set()
+    missing_metrics = sorted(set(REQUIRED_RANK_STABILITY_METRICS) - metric_set)
+    rank_metric = analysis.get("rank_metric")
+    gate_command = str(analysis.get("seed_sufficiency_gate_command") or "")
+    claim_boundary = str(analysis.get("claim_boundary") or "").lower()
+    paired_resampling = analysis.get("paired_seed_resampling") is True
+    replay_caveat_required = analysis.get("replay_limitation_required") is True
+
+    failures: list[str] = []
+    if missing_metrics:
+        failures.append(f"missing required_metrics: {', '.join(missing_metrics)}")
+    if not isinstance(rank_metric, str) or rank_metric not in metric_set:
+        failures.append("rank_metric must be one of required_metrics")
+    if not paired_resampling:
+        failures.append("paired_seed_resampling must be true")
+    if RANK_STABILITY_GATE_COMMAND not in gate_command:
+        failures.append(
+            f"seed_sufficiency_gate_command must route through {RANK_STABILITY_GATE_COMMAND}"
+        )
+    if not replay_caveat_required:
+        failures.append("replay_limitation_required must be true")
+    if "no paper-facing" not in claim_boundary or "post-run" not in claim_boundary:
+        failures.append("claim_boundary must state no paper-facing claim until post-run review")
+
+    return CheckResult(
+        name="rank_stability_analysis",
+        passed=not failures,
+        detail=(
+            "post-run rank-stability contract declared: paired seed resampling, required metrics, "
+            "seed-sufficiency gate, replay caveat, and no-paper-claim boundary"
+            if not failures
+            else "; ".join(failures)
+        ),
+    )
+
+
 def _check_replay_limitation(plan: ReactivityReplayRunPlan) -> CheckResult:
     """Replay is force-off (not trajectory playback) and the limitation note is present.
 
@@ -281,6 +341,7 @@ _CHECKS = (
     _check_seed_budget,
     _check_horizon,
     _check_scenario_set_digest,
+    _check_rank_stability_analysis,
     _check_replay_limitation,
 )
 
@@ -320,6 +381,7 @@ def build_preflight_manifest(plan: ReactivityReplayRunPlan) -> dict[str, Any]:
             "scenario_set": plan.scenario_set,
             "scenario_set_sha256": plan.scenario_set_sha256,
             "horizon": plan.horizon,
+            "rank_stability_analysis": dict(plan.rank_stability_analysis),
             "min_planners": plan.min_planners,
             "min_seeds": plan.min_seeds,
         },
@@ -391,6 +453,7 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
     limitation = replay.get("limitation", REPLAY_LIMITATION)
     if not isinstance(limitation, str):
         raise ValueError("packet 'replay.limitation' must be a string")
+    analysis = _resolve_rank_stability_analysis(packet)
 
     overrides: dict[str, Any] = {}
     if "min_planners" in packet:
@@ -406,6 +469,7 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
         scenario_set_sha256=scenario_set_sha256,
         replay_is_trajectory_playback=is_playback,
         replay_limitation=limitation,
+        rank_stability_analysis=dict(analysis),
         **overrides,
     )
 
@@ -453,12 +517,22 @@ def _resolve_scenario_set_sha256(packet: dict[str, Any]) -> str | None:
     return scenario_set_sha256
 
 
+def _resolve_rank_stability_analysis(packet: dict[str, Any]) -> dict[str, Any]:
+    """Return optional rank-stability analysis metadata from the launch packet."""
+    analysis = packet.get("rank_stability_analysis", {})
+    if not isinstance(analysis, dict):
+        raise ValueError("packet 'rank_stability_analysis' must be a mapping when present")
+    return dict(analysis)
+
+
 __all__ = [
     "DIAGNOSTIC_SEED_COUNT",
     "ISSUE",
     "MIN_PLANNERS",
     "MIN_RANK_STABILITY_SEEDS",
     "PREFLIGHT_SCHEMA",
+    "RANK_STABILITY_GATE_COMMAND",
+    "REQUIRED_RANK_STABILITY_METRICS",
     "CheckResult",
     "ReactivityReplayRunPlan",
     "build_preflight_manifest",

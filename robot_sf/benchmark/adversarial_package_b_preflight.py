@@ -35,6 +35,7 @@ EXPECTED_REPORTING_FIELDS = frozenset(
     }
 )
 EXPECTED_OUTPUT_PREFIX = Path("output/adversarial/issue_3079_package_b")
+RESEARCH_PACKAGE_REGISTRY = Path("configs/research/research_package_registry_issue_3057.yaml")
 FORBIDDEN_COMMAND_TOKENS = frozenset({"sbatch", "srun", "slurm", "wandb", "paper", "dissertation"})
 
 
@@ -207,6 +208,38 @@ def _runner_row_fields(runner_path: Path | None) -> frozenset[str]:
     raise ValueError("runner output schema missing SamplerComparisonRow dataclass")
 
 
+def _registry_includes_package_b_manifest(
+    registry_path: Path, manifest_path: Path, repo_root: Path
+) -> bool:
+    """Return true when the research package registry points at this manifest."""
+    if not registry_path.is_file():
+        return False
+
+    try:
+        payload = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+
+    expected_manifest = _repo_relative(manifest_path, repo_root)
+    packages = payload.get("packages")
+    if not isinstance(packages, list):
+        return False
+
+    for package in packages:
+        if not isinstance(package, dict):
+            continue
+        if package.get("id") != "package_b_adversarial":
+            continue
+        if package.get("issue") != EXPECTED_ISSUE:
+            return False
+        artifacts = _as_str_tuple(package.get("required_artifacts"))
+        return expected_manifest in artifacts
+
+    return False
+
+
 def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path = Path("configs/adversarial/issue_3079_package_b_budget_matched.yaml"),
     *,
@@ -246,6 +279,15 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     checks["issue"] = payload.get("issue") == EXPECTED_ISSUE
     if not checks["issue"]:
         blockers.append(f"issue must be {EXPECTED_ISSUE}")
+
+    registry_path = root / RESEARCH_PACKAGE_REGISTRY
+    checks["research_package_registry_includes_manifest"] = _registry_includes_package_b_manifest(
+        registry_path, manifest_path, root
+    )
+    if not checks["research_package_registry_includes_manifest"]:
+        blockers.append(
+            "research package registry must list the Package B manifest as a required artifact"
+        )
 
     runner_path = _resolve_repo_path(root, payload.get("runner"))
     checks["runner_exists"] = bool(runner_path and runner_path.is_file())
@@ -434,6 +476,7 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         "repeated_seeds": list(seeds),
         "example_command_repeated_seeds": list(command_seeds),
         "samplers": list(samplers),
+        "research_package_registry": _repo_relative(registry_path, root),
         "runner": _repo_relative(runner_path, root) if runner_path else None,
         "runner_reporting_fields": sorted(runner_row_fields),
         "output_dir": _repo_relative(output_dir, root) if output_dir else None,

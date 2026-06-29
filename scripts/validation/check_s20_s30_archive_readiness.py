@@ -135,6 +135,7 @@ def build_report(
     primary_seeds, escalation_seeds = _load_seed_tiers(contract)
 
     diagnostics: list[str] = []
+    diagnostics.extend(_execution_boundary_diagnostics(contract))
     result_store_files = _result_store_file_status(contract)
     missing_files = [path for path, present in result_store_files.items() if not present]
     if missing_files:
@@ -300,6 +301,21 @@ def _coverage_diagnostics(
     }
     if invalid_statuses:
         diagnostics.append(f"fail-closed/non-promotable row statuses present: {invalid_statuses}")
+    return diagnostics
+
+
+def _execution_boundary_diagnostics(contract: PacketContract) -> list[str]:
+    """Return fail-closed diagnostics for packet boundaries outside this issue slice."""
+
+    diagnostics: list[str] = []
+    if contract.full_campaign_in_this_issue:
+        diagnostics.append(
+            "execution_boundary.full_campaign_in_this_issue must be false for archive-readiness"
+        )
+    if contract.submit_slurm_from_this_issue:
+        diagnostics.append(
+            "execution_boundary.submit_slurm_from_this_issue must be false for archive-readiness"
+        )
     return diagnostics
 
 

@@ -114,6 +114,16 @@ def test_oracle_failure_after_route_and_actor_free_checks_classifies_dynamic_blo
             ),
             ("oracle_solved", "extended_time_solved"),
         ),
+        (
+            ScenarioFailureDiagnostics(
+                family="bottleneck",
+                route_feasible=True,
+                actor_free_solved=True,
+                extended_time_solved=None,
+                oracle_solved=False,
+            ),
+            ("extended_time_solved",),
+        ),
     ],
 )
 def test_missing_required_diagnostics_fail_closed(

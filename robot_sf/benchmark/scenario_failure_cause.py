@@ -163,6 +163,18 @@ def _classify_verdict(
             [],
         )
 
+    return _classify_after_feasibility(diagnostics)
+
+
+def _classify_after_feasibility(
+    diagnostics: ScenarioFailureDiagnostics,
+) -> tuple[ScenarioFailureVerdict, str, list[str]]:
+    """Classify the time/oracle stage after route and actor-free checks pass.
+
+    Returns:
+        Verdict string, human-readable rationale, and missing diagnostic names.
+    """
+
     if diagnostics.extended_time_solved is True:
         return (
             VERDICT_TIME_LIMITED,
@@ -184,6 +196,13 @@ def _classify_verdict(
             VERDICT_PLANNER_LIMITED,
             "Privileged/oracle trajectory solved the family while evaluated planners did not.",
             [],
+        )
+
+    if diagnostics.extended_time_solved is None:
+        return _indeterminate(
+            "extended-time diagnostic is required to separate a deadlock from a time-limited row "
+            "when the oracle does not solve with actors",
+            ["extended_time_solved"],
         )
 
     return (

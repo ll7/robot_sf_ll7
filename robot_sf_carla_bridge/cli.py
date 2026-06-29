@@ -30,7 +30,10 @@ from robot_sf_carla_bridge.export import (
     resolve_export_manifest_payload_paths,
     write_export_records,
 )
-from robot_sf_carla_bridge.parity_bundle_preflight import check_parity_bundle_readiness
+from robot_sf_carla_bridge.parity_bundle_preflight import (
+    check_native_aligned_bundle_manifest_readiness,
+    check_parity_bundle_readiness,
+)
 from robot_sf_carla_bridge.replay_smoke import (
     T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION,
     build_t1_oracle_replay_smoke_setup,
@@ -430,16 +433,32 @@ def preflight_carla_parity_bundle_main(argv: list[str] | None = None) -> int:
         help="T0 export manifest JSON path; repeat for multiple candidate scenarios.",
     )
     parser.add_argument(
+        "--readiness-manifest",
+        metavar="PATH",
+        help=(
+            "Issue #1491 native/aligned readiness manifest declaring the intended scenario "
+            "export manifests."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         help="Intended parity-bundle output directory (checked for safety; never created).",
     )
     parser.add_argument("--json", action="store_true", help="Print a machine-readable report.")
     args = parser.parse_args(argv)
 
-    if not args.manifest:
-        parser.error("at least one --manifest is required")
+    if args.readiness_manifest and args.manifest:
+        parser.error("--readiness-manifest cannot be combined with --manifest")
+    if not args.readiness_manifest and not args.manifest:
+        parser.error("at least one --manifest or --readiness-manifest is required")
 
-    report = check_parity_bundle_readiness(args.manifest, output_dir=args.output_dir)
+    if args.readiness_manifest:
+        report = check_native_aligned_bundle_manifest_readiness(
+            args.readiness_manifest,
+            output_dir=args.output_dir,
+        )
+    else:
+        report = check_parity_bundle_readiness(args.manifest, output_dir=args.output_dir)
     exit_code = 0 if report["status"] == "ready" else 1
     if args.json:
         sys.stdout.write(f"{json.dumps(report, sort_keys=True)}\n")

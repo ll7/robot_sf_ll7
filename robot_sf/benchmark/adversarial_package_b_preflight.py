@@ -7,6 +7,7 @@ submits jobs, or interprets falsification yield.
 
 from __future__ import annotations
 
+import ast
 import json
 import shlex
 from dataclasses import dataclass
@@ -185,6 +186,28 @@ def _output_dir_is_directory_or_future(output_dir: Path | None) -> bool:
     return not output_dir.exists() or output_dir.is_dir()
 
 
+def _runner_row_fields(runner_path: Path | None) -> tuple[frozenset[str], str | None]:
+    """Return static SamplerComparisonRow fields without importing or running runner."""
+    if runner_path is None or not runner_path.is_file():
+        return frozenset(), None
+
+    try:
+        module = ast.parse(runner_path.read_text(encoding="utf-8"), filename=str(runner_path))
+    except (OSError, SyntaxError) as exc:
+        return frozenset(), f"runner output schema could not be parsed: {exc}"
+
+    for node in module.body:
+        if isinstance(node, ast.ClassDef) and node.name == "SamplerComparisonRow":
+            fields = {
+                item.target.id
+                for item in node.body
+                if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
+            }
+            return frozenset(fields), None
+
+    return frozenset(), "runner output schema missing SamplerComparisonRow dataclass"
+
+
 def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path = Path("configs/adversarial/issue_3079_package_b_budget_matched.yaml"),
     *,
@@ -271,6 +294,17 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     checks["reporting_contract"] = not missing_reporting
     if missing_reporting:
         blockers.append(f"reporting_contract missing required fields: {missing_reporting}")
+
+    runner_row_fields, runner_schema_warning = _runner_row_fields(runner_path)
+    if runner_schema_warning:
+        warnings.append(runner_schema_warning)
+    missing_runner_fields = sorted(reporting_contract - runner_row_fields)
+    checks["runner_emits_reporting_contract"] = not missing_runner_fields
+    if missing_runner_fields:
+        blockers.append(
+            "runner SamplerComparisonRow missing reporting_contract fields: "
+            f"{missing_runner_fields}"
+        )
 
     exclusions = payload.get("explicit_exclusions")
     checks["explicit_exclusions_mapping"] = isinstance(exclusions, dict)
@@ -400,6 +434,7 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         "example_command_repeated_seeds": list(command_seeds),
         "samplers": list(samplers),
         "runner": _repo_relative(runner_path, root) if runner_path else None,
+        "runner_reporting_fields": sorted(runner_row_fields),
         "output_dir": _repo_relative(output_dir, root) if output_dir else None,
         "out_json": _repo_relative(out_json, root) if out_json else None,
         "output_artifacts": {

@@ -146,8 +146,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
 
     _require(
-        launch_packet.get("decision") == "blocked_until_private_slurm_go",
-        "decision must block submit",
+        launch_packet.get("decision") == "ready_after_live_queue_and_duplicate_check",
+        "decision must require live queue and duplicate checks",
     )
     _require(
         launch_packet.get("compute_submit_authorized") is False, "compute submit must be false"
@@ -155,7 +155,43 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         launch_packet.get("slurm_job_id") == "not_submitted", "slurm job must be not_submitted"
     )
-    _require(13175 in (launch_packet.get("blocking_jobs") or []), "job 13175 blocker missing")
+    blocking_jobs = launch_packet.get("blocking_jobs")
+    _require(isinstance(blocking_jobs, list), "blocking_jobs must be a list")
+    _require(13175 not in blocking_jobs, "analyzed job 13175 must not remain blocking")
+
+    ledger = _require_mapping(launch_packet, "ledger_reconciliation")
+    _require(
+        ledger.get("job_13175_state") == "analyzed",
+        "job 13175 reconciliation must be analyzed",
+    )
+    _require(
+        ledger.get("issue_3810_duplicate_status") == "none_found",
+        "issue #3810 duplicate status must be none_found",
+    )
+    running_related_jobs = ledger.get("running_related_jobs")
+    _require(
+        isinstance(running_related_jobs, list),
+        "running_related_jobs must be listed",
+    )
+
+    go_no_go = _require_mapping(launch_packet, "go_no_go")
+    _require(
+        go_no_go.get("recommendation") == "go_after_submit_host_live_checks",
+        "go/no-go recommendation must require submit-host live checks",
+    )
+    _require(
+        go_no_go.get("local_submission_status") == "no_submit_current_machine",
+        "local submission status must remain no-submit",
+    )
+    _require(
+        "check_issue_3810_long_horizon_launch_packet.py"
+        in str(go_no_go.get("exact_local_decision_command", "")),
+        "exact local decision command missing",
+    )
+    _require(
+        "Not safe to freeze" in str(go_no_go.get("slurm_command_status", "")),
+        "slurm command status must explain why final submit command is not frozen",
+    )
 
     route = _require_mapping(launch_packet, "route")
     _require(
@@ -217,7 +253,10 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "planner_count": len(planner_rows),
         "compute_submit_authorized": launch_packet["compute_submit_authorized"],
         "slurm_job_id": launch_packet["slurm_job_id"],
-        "blocking_jobs": launch_packet["blocking_jobs"],
+        "blocking_jobs": blocking_jobs,
+        "job_13175_state": ledger["job_13175_state"],
+        "issue_3810_duplicate_status": ledger["issue_3810_duplicate_status"],
+        "go_no_go": go_no_go["recommendation"],
     }
 
 

@@ -425,6 +425,58 @@ def test_preflight_blocks_base_config_policy_objective_drift(tmp_path: Path) -> 
     assert any("base_config.objective" in blocker for blocker in result.blockers)
 
 
+def test_preflight_blocks_example_command_sampler_drift(tmp_path: Path) -> None:
+    """Executable sampler plan must not narrow the manifest sampler set."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--package-b-budget-grid --seed 1101 --seed 2202 --seed 3303 "
+        "--sampler random --sampler coordinate "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["example_command_sampler_set"] is False
+    assert any("example_command --sampler values" in blocker for blocker in result.blockers)
+
+
+def test_preflight_blocks_example_command_base_config_drift(tmp_path: Path) -> None:
+    """Executable input metadata must not drift from the manifest base_config."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    _write_file(tmp_path / "configs/scenarios/templates/doorway.yaml")
+    _write_file(tmp_path / "configs/adversarial/doorway_space.yaml")
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--scenario-template configs/scenarios/templates/doorway.yaml "
+        "--search-space configs/adversarial/doorway_space.yaml "
+        "--policy orca --objective nearest_collision "
+        "--package-b-budget-grid --seed 1101 --seed 2202 --seed 3303 "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["example_command_scenario_template"] is False
+    assert result.checks["example_command_search_space"] is False
+    assert result.checks["example_command_policy"] is False
+    assert result.checks["example_command_objective"] is False
+    assert any("example_command --scenario-template" in blocker for blocker in result.blockers)
+    assert any("example_command --search-space" in blocker for blocker in result.blockers)
+    assert any("example_command --policy" in blocker for blocker in result.blockers)
+    assert any("example_command --objective" in blocker for blocker in result.blockers)
+
+
 def test_preflight_blocks_output_artifact_command_drift(tmp_path: Path) -> None:
     """Declared output artifacts must match executable example paths."""
     manifest = _base_manifest(tmp_path)

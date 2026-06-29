@@ -130,7 +130,33 @@ def load_packet_fixture(packet_fixture: Path) -> dict[str, Any]:
         raise ValueError(f"{packet_fixture} claim_promotion must remain no_go")
     if go_no_go.get("s30_submission_from_issue_3798") != "not_authorized_here":
         raise ValueError(f"{packet_fixture} must not authorize S30 submission from issue #3798")
+    _validate_packet_freshness(packet_fixture, packet)
     return packet
+
+
+def _validate_packet_freshness(packet_fixture: Path, packet: dict[str, Any]) -> None:
+    """Fail closed when tracked packet metadata no longer supports its own summary."""
+
+    coverage = packet.get("coverage_snapshot", {})
+    planners = coverage.get("planners", [])
+    if coverage.get("planner_count") != len(planners):
+        raise ValueError(f"{packet_fixture} planner_count must match listed planners")
+    if coverage.get("seed_count") != len(coverage.get("seeds", [])):
+        raise ValueError(f"{packet_fixture} seed_count must match listed seeds")
+
+    required_review_paths = set(PROMOTABLE_REVIEW_FILES)
+    observed_review_paths = {item.get("path") for item in packet.get("promotable_review_files", [])}
+    missing_review_paths = sorted(required_review_paths - observed_review_paths)
+    if missing_review_paths:
+        raise ValueError(
+            f"{packet_fixture} missing promotable review files: {missing_review_paths}"
+        )
+
+    for item in packet.get("promotable_review_files", []):
+        if not item.get("sha256"):
+            raise ValueError(f"{packet_fixture} promotable review file missing sha256")
+        if "not a claim upgrade" not in item.get("promotion_scope", ""):
+            raise ValueError(f"{packet_fixture} promotable review file promoted a claim")
 
 
 def render_markdown(packet: dict[str, Any]) -> str:

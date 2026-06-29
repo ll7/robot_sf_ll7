@@ -23,6 +23,20 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     assert report["weights"]["has_blocking_conflict"] is True
     assert report["normalization"]["mixed_scale"] is True
     assert set(report["normalization"]["raw_penalty_terms"]) == {"time", "comfort"}
+    blocker_3699 = next(
+        blocker for blocker in report["blockers"] if blocker["kind"] == "mixed_normalization_basis"
+    )
+    status_by_term = {
+        entry["term"]: entry["normalization_status"] for entry in blocker_3699["mixed_inputs"]
+    }
+    assert status_by_term == {
+        "time": "raw_unbounded",
+        "collisions": "baseline_normalized_bounded",
+        "near": "baseline_normalized_bounded",
+        "comfort": "raw_unbounded",
+        "force_exceed": "baseline_normalized_bounded",
+        "jerk": "baseline_normalized_bounded",
+    }
 
 
 def test_governance_main_fails_closed_but_allows_inspection(tmp_path: Path) -> None:

@@ -1,0 +1,42 @@
+# Oracle-imitation trace artifact-promotion readiness packet for issue #1470.
+#
+# This packet records the merged, small tracked trace evidence from Slurm job 12911 while keeping
+# the downstream imitation-training gate fail-closed. Only the train split has a repository-tracked
+# local mirror; validation/evaluation still need durable raw-trace artifact URIs before training can
+# consume the dataset line.
+#
+# Validate base packet:
+#   uv run python scripts/validation/validate_oracle_trace_uri_registry.py \
+#     --config configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml --json
+# Validate strict downstream gate (expected to fail until all splits are resolvable):
+#   uv run python scripts/validation/validate_oracle_trace_uri_registry.py \
+#     --config configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml \
+#     --json --require-training-ready
+schema_version: oracle-trace-uri-registry.v1
+dataset_id: issue_1397_oracle_imitation_v1
+source_issue: 1470
+related_issues: [2441, 2655]
+claim_boundary: >
+  Artifact-promotion readiness packet only. The train trace mirror is compact tracked evidence from
+  job 12911; this is not final NPZ dataset evidence, not imitation-training evidence, and not
+  benchmark or paper-facing planner evidence.
+traces:
+  - split: train
+    trace_id: train__issue1470_job12911_tracked_mirror
+    uri: artifact://robot_sf_ll7/docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/train_trace_jsonl:v1
+    sha256: 7a5246f69b2b939e72beb07d63102592ca3f8400f1ad4c7c2c1fac63c3a80270
+    retrieval_status: resolvable
+    local_mirror: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+    source_manifest: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/oracle_imitation/issue1470_train_candidate_traces/oracle_candidate_trace_manifest.json
+  - split: validation
+    trace_id: validation__issue1470_missing_durable_trace_uri
+    uri: wandb-artifact://robot-sf/oracle-imitation/issue1470-validation:pending
+    sha256: pending
+    retrieval_status: blocked
+    blocker: "No concrete durable validation raw-trace URI is recorded for issue #1470."
+  - split: evaluation
+    trace_id: evaluation__issue1470_missing_durable_trace_uri
+    uri: wandb-artifact://robot-sf/oracle-imitation/issue1470-evaluation:pending
+    sha256: pending
+    retrieval_status: blocked
+    blocker: "No concrete durable evaluation raw-trace URI is recorded for issue #1470."

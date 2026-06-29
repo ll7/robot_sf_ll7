@@ -188,8 +188,10 @@ def _output_dir_is_directory_or_future(output_dir: Path | None) -> bool:
 
 def _runner_row_fields(runner_path: Path | None) -> tuple[frozenset[str], str | None]:
     """Return static SamplerComparisonRow fields without importing or running runner."""
-    if runner_path is None or not runner_path.is_file():
-        return frozenset(), None
+    if runner_path is None:
+        return frozenset(), "runner output schema target is not declared"
+    if not runner_path.is_file():
+        return frozenset(), f"runner output schema target is missing: {runner_path}"
 
     try:
         module = ast.parse(runner_path.read_text(encoding="utf-8"), filename=str(runner_path))

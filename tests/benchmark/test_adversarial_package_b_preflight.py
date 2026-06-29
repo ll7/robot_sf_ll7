@@ -158,6 +158,23 @@ class SamplerComparisonRow:
     assert any("SamplerComparisonRow missing" in blocker for blocker in result.blockers)
 
 
+def test_preflight_blocks_missing_runner_output_schema_target(tmp_path: Path) -> None:
+    """Missing runner files block both path existence and static schema checks."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["runner"] = "scripts/tools/missing_compare_adversarial_samplers.py"
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["runner_exists"] is False
+    assert result.checks["runner_emits_reporting_contract"] is False
+    assert any("runner must point" in blocker for blocker in result.blockers)
+    assert any("schema target is missing" in warning for warning in result.warnings)
+
+
 def test_preflight_blocks_unparseable_runner_output_schema(tmp_path: Path) -> None:
     """Runner schema parse failures block readiness without importing runner."""
     manifest = _base_manifest(tmp_path)

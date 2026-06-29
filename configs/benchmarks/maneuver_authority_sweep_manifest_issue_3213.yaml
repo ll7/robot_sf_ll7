@@ -1,0 +1,117 @@
+schema_version: maneuver-authority-sweep-manifest.v1
+issue: 3213
+benchmark_grid: configs/benchmarks/predictive_hardcase_authority_grid_issue_3213.yaml
+hard_seed_manifest: configs/benchmarks/predictive_hard_seeds_v1.yaml
+default_output_root: output/benchmarks/issue_3213_maneuver_authority
+scope_note: >
+  Metadata-only preflight for the bounded maneuver-authority sweep slice. This
+  manifest declares sweep arms and expected output locations only; it does not
+  run the campaign, submit Slurm/GPU work, or interpret success changes.
+arms:
+  - name: baseline
+    grid_variant: baseline
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_baseline.yaml
+    action_lattice:
+      candidate_speed_count: 5
+      heading_delta_count: 7
+      near_field_speed_count: 4
+      near_field_heading_delta_count: 8
+    turn_authority:
+      max_angular_speed: 1.2
+      heading_delta_count: 7
+      near_field_heading_delta_count: 8
+    kinematic_adapter:
+      command_space: unicycle_vw
+      robot_kinematics: differential_drive
+      execution_mode: adapter
+      planner_family: prediction_planner
+    expected_outputs:
+      campaign_root: output/benchmarks/issue_3213_maneuver_authority/baseline
+      campaign_summary: output/benchmarks/issue_3213_maneuver_authority/baseline/campaign_summary.json
+      campaign_report: output/benchmarks/issue_3213_maneuver_authority/baseline/campaign_report.md
+  - name: high_angular
+    grid_variant: high_angular
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_high_angular.yaml
+    action_lattice:
+      candidate_speed_count: 5
+      heading_delta_count: 9
+      near_field_speed_count: 4
+      near_field_heading_delta_count: 8
+    turn_authority:
+      max_angular_speed: 1.8
+      heading_delta_count: 9
+      near_field_heading_delta_count: 8
+    kinematic_adapter:
+      command_space: unicycle_vw
+      robot_kinematics: differential_drive
+      execution_mode: adapter
+      planner_family: prediction_planner
+    expected_outputs:
+      campaign_root: output/benchmarks/issue_3213_maneuver_authority/high_angular
+      campaign_summary: output/benchmarks/issue_3213_maneuver_authority/high_angular/campaign_summary.json
+      campaign_report: output/benchmarks/issue_3213_maneuver_authority/high_angular/campaign_report.md
+  - name: dense_lattice
+    grid_variant: dense_lattice
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_dense_lattice.yaml
+    action_lattice:
+      candidate_speed_count: 7
+      heading_delta_count: 9
+      near_field_speed_count: 4
+      near_field_heading_delta_count: 8
+    turn_authority:
+      max_angular_speed: 1.2
+      heading_delta_count: 9
+      near_field_heading_delta_count: 8
+    kinematic_adapter:
+      command_space: unicycle_vw
+      robot_kinematics: differential_drive
+      execution_mode: adapter
+      planner_family: prediction_planner
+    expected_outputs:
+      campaign_root: output/benchmarks/issue_3213_maneuver_authority/dense_lattice
+      campaign_summary: output/benchmarks/issue_3213_maneuver_authority/dense_lattice/campaign_summary.json
+      campaign_report: output/benchmarks/issue_3213_maneuver_authority/dense_lattice/campaign_report.md
+  - name: nearfield_turn
+    grid_variant: nearfield_turn
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_nearfield_turn.yaml
+    action_lattice:
+      candidate_speed_count: 5
+      heading_delta_count: 7
+      near_field_speed_count: 4
+      near_field_heading_delta_count: 11
+    turn_authority:
+      max_angular_speed: 1.2
+      heading_delta_count: 7
+      near_field_heading_delta_count: 11
+      near_field_speed_cap: 0.8
+    kinematic_adapter:
+      command_space: unicycle_vw
+      robot_kinematics: differential_drive
+      execution_mode: adapter
+      planner_family: prediction_planner
+    expected_outputs:
+      campaign_root: output/benchmarks/issue_3213_maneuver_authority/nearfield_turn
+      campaign_summary: output/benchmarks/issue_3213_maneuver_authority/nearfield_turn/campaign_summary.json
+      campaign_report: output/benchmarks/issue_3213_maneuver_authority/nearfield_turn/campaign_report.md
+  - name: combined_max_authority
+    grid_variant: combined_max_authority
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_combined_max_authority.yaml
+    action_lattice:
+      candidate_speed_count: 7
+      heading_delta_count: 9
+      near_field_speed_count: 4
+      near_field_heading_delta_count: 11
+    turn_authority:
+      max_angular_speed: 1.8
+      heading_delta_count: 9
+      near_field_heading_delta_count: 11
+      near_field_speed_cap: 0.8
+    kinematic_adapter:
+      command_space: unicycle_vw
+      robot_kinematics: differential_drive
+      execution_mode: adapter
+      planner_family: prediction_planner
+    expected_outputs:
+      campaign_root: output/benchmarks/issue_3213_maneuver_authority/combined_max_authority
+      campaign_summary: output/benchmarks/issue_3213_maneuver_authority/combined_max_authority/campaign_summary.json
+      campaign_report: output/benchmarks/issue_3213_maneuver_authority/combined_max_authority/campaign_report.md

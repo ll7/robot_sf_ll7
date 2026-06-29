@@ -1,0 +1,67 @@
+# Issue #3813 sustained-flow launch packet.
+#
+# Launch packet only. It defines the no-submit, fail-closed first campaign
+# shape for continuous-spawn sustained-flow scenarios. It does not submit
+# compute work, run a benchmark, or establish a dissertation/paper claim.
+schema_version: research-campaign-manifest.v0.1
+campaign:
+  id: issue_3813_sustained_flow_scaffold_v0
+  parent_issue: 3813
+  purpose: >-
+    Prepare an opt-in sustained-flow scenario family where continuous
+    pedestrian demand should structurally remove the wait-it-out exploit.
+  evidence_tier: launch-packet-only
+  claim_boundary: >-
+    Launch packet only. The referenced scenario matrix is a pre-benchmark
+    scaffold. It is not sustained-flow benchmark evidence until continuous
+    pedestrian respawn, sustained-progress metrics, and interaction-exposure
+    diagnostics are implemented and validated.
+  scenario_suite:
+    matrix_path: configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml
+    contract_path: configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml
+    scope: opt_in_sustained_flow_t_intersection_scaffold
+    scenario_ids:
+      - issue_3813_sustained_flow_t_intersection_light
+      - issue_3813_sustained_flow_t_intersection_medium
+      - issue_3813_sustained_flow_t_intersection_heavy
+    max_episode_steps: 600
+    suite_hash_policy: record_sha256_before_run
+  metrics:
+    ids:
+      - sustained_progress_rate_m_per_s
+      - interaction_exposure_share
+      - min_clearance_m
+      - time_in_conflict_s
+    denominator_policy: report_per_planner_scenario_seed_denominators
+    success_boundary: >-
+      Sustained progress or throughput under non-clearing pedestrian demand,
+      not binary terminal goal reach.
+  row_status_policy:
+    # Forward-looking row-status vocabulary for a future submitted campaign.
+    # With no_submit: true and evidence_tier launch-packet-only, this packet
+    # produces no rows and asserts no successful_evidence today.
+    applies_when: future_submitted_campaign_only
+    allowed_values:
+      - successful_evidence
+      - diagnostic_only
+      - fallback
+      - degraded
+      - not_available
+      - failed
+      - blocked
+    success_values:
+      - successful_evidence
+    fail_closed_values:
+      - not_available
+      - failed
+      - blocked
+    fallback_policy: >-
+      Fallback, degraded, missing continuous-spawn runtime support, missing
+      sustained-progress metric, or low interaction-exposure sanity checks stay
+      visible as limitations and cannot count as successful evidence.
+  no_submit: true
+  out_of_scope:
+    - full benchmark campaign run
+    - Slurm or GPU submission
+    - paper or dissertation claim edits
+    - planner ranking interpretation

@@ -91,6 +91,50 @@ def test_issue_3810_packet_rejects_null_list_fields_cleanly() -> None:
         raise AssertionError("packet should reject a null metrics.ids list")
 
 
+def test_issue_3810_packet_rejects_blank_matrix_path() -> None:
+    """A blank scenario matrix path must not pass the repo-relative check."""
+    packet = _load_packet()
+    packet["scenario_suite"]["matrix_path"] = ""
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "scenario matrix must be repo-relative" in str(exc)
+    else:
+        raise AssertionError("packet should reject a blank scenario matrix path")
+
+
+def test_issue_3810_packet_rejects_missing_campaign_id() -> None:
+    """A missing campaign id fails closed instead of escaping as KeyError."""
+    packet = _load_packet()
+    packet["campaign"].pop("id", None)
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "campaign.id required" in str(exc)
+    else:
+        raise AssertionError("packet should reject a missing campaign id")
+
+
+def test_issue_3810_packet_cli_returns_2_on_malformed_packet(tmp_path) -> None:
+    """The CLI converts a malformed packet into a clean exit 2, not a traceback."""
+    bad_packet = tmp_path / "bad_packet.yaml"
+    bad_packet.write_text("schema_version: research-campaign-manifest.v0.1\n", encoding="utf-8")
+
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "--packet", str(bad_packet), "--json"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2, completed.stderr
+    assert "error:" in completed.stderr
+    assert "Traceback" not in completed.stderr
+
+
 def test_issue_3810_packet_cli_json() -> None:
     """The command-line validator emits a compact JSON pass summary."""
     completed = subprocess.run(

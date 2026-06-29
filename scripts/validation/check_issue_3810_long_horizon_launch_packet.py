@@ -47,6 +47,10 @@ def _load_packet(path: Path) -> dict[str, Any]:
 
 
 def _path_is_repo_relative(value: str) -> bool:
+    # A blank value normalizes to "." via PurePosixPath, which would wrongly pass
+    # as repo-relative; treat empty/whitespace as not a valid repo path.
+    if not value or not value.strip():
+        return False
     path = PurePosixPath(value)
     return not path.is_absolute() and ".." not in path.parts
 
@@ -77,6 +81,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
     _require(packet.get("schema_version") == "research-campaign-manifest.v0.1", "unexpected schema")
     _require(campaign.get("parent_issue") == 3810, "campaign.parent_issue must be 3810")
+    _require(bool(str(campaign.get("id") or "").strip()), "campaign.id required")
     _require(
         campaign.get("evidence_tier") == "launch-packet-only", "evidence tier must be launch-only"
     )
@@ -228,7 +233,9 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(sys.argv[1:] if argv is None else argv)
     try:
         summary = validate_packet(_load_packet(args.packet))
-    except (OSError, PacketError, yaml.YAMLError) as exc:
+    except (OSError, PacketError, yaml.YAMLError, KeyError, TypeError, AttributeError) as exc:
+        # KeyError/TypeError/AttributeError backstop: a malformed packet must
+        # always fail closed with a clear error, never an unhandled traceback.
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.json:

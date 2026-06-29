@@ -244,9 +244,21 @@ launch_packet:
       Private preflight and route checks may run read-only. The submit wrapper
       must not be invoked until issue #3810 has an explicit go decision and job
       13175 has been reconciled.
+  materialized_config:
+    # The runnable h600 campaign config does not exist yet and is intentionally
+    # not added by this launch-packet PR. It is generated downstream by applying
+    # config_patch (base_config + required_overrides) and written to a disposable
+    # output/ path; promote it into tracked configs/ only when the actual run is
+    # prepared. campaign_command resolves ${MATERIALIZED_H600_CONFIG} to this
+    # generated path, so it deliberately does not cite a tracked config that does
+    # not exist yet.
+    target_path: output/benchmarks/issue_3810_comprehensive_h600_snqi/config/issue_3810_comprehensive_h600_snqi.yaml
+    materialize_policy: generated_from_config_patch_before_run
+    promote_policy: promote_to_tracked_configs_only_at_run_preparation
   campaign_command: >
+    MATERIALIZED_H600_CONFIG=output/benchmarks/issue_3810_comprehensive_h600_snqi/config/issue_3810_comprehensive_h600_snqi.yaml
     uv run python scripts/tools/run_camera_ready_benchmark.py
-    --config configs/benchmarks/issue_3810_comprehensive_h600_snqi.yaml
+    --config "${MATERIALIZED_H600_CONFIG}"
     --campaign-id issue_3810_comprehensive_h600_snqi
     --output-root output/benchmarks/issue_3810_comprehensive_h600_snqi
   config_patch:

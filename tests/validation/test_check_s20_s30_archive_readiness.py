@@ -31,6 +31,7 @@ def _write_packet(
     result_store: str = "store",
     seed_sets_path: str | None = None,
     full_campaign_in_this_issue: object = False,
+    submit_slurm_from_this_issue: object = False,
 ) -> Path:
     seed_sets = _write_seed_sets(repo_root / "seed_sets.yaml")
     payload = {
@@ -79,7 +80,7 @@ def _write_packet(
         },
         "execution_boundary": {
             "full_campaign_in_this_issue": full_campaign_in_this_issue,
-            "submit_slurm_from_this_issue": False,
+            "submit_slurm_from_this_issue": submit_slurm_from_this_issue,
             "bundle_status_until_run": "blocked_until_run",
         },
     }
@@ -308,6 +309,50 @@ def test_execution_boundary_requires_actual_booleans(tmp_path: Path) -> None:
     packet = _write_packet(repo / "packet.yaml", repo, full_campaign_in_this_issue="false")
 
     assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2
+
+
+def test_full_campaign_boundary_blocks_complete_archive_readiness(tmp_path: Path) -> None:
+    """Archive readiness cannot pass when packet moves campaign execution into this issue."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo, full_campaign_in_this_issue=True)
+    write_result_store(
+        repo / "store",
+        _complete_rows(),
+        study_id="issue_1554_test",
+        command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
+    )
+
+    report = readiness.build_report(packet, repo)
+
+    assert report["status"] == readiness.BLOCKED
+    assert (
+        "execution_boundary.full_campaign_in_this_issue must be false for archive-readiness"
+        in report["missing_artifact_diagnostics"]
+    )
+
+
+def test_slurm_submission_boundary_blocks_complete_archive_readiness(tmp_path: Path) -> None:
+    """Archive readiness cannot pass when packet authorizes Slurm submission in this issue."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo, submit_slurm_from_this_issue=True)
+    write_result_store(
+        repo / "store",
+        _complete_rows(),
+        study_id="issue_1554_test",
+        command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
+    )
+
+    report = readiness.build_report(packet, repo)
+
+    assert report["status"] == readiness.BLOCKED
+    assert (
+        "execution_boundary.submit_slurm_from_this_issue must be false for archive-readiness"
+        in report["missing_artifact_diagnostics"]
+    )
 
 
 def test_seed_tiers_must_be_unique_integers(tmp_path: Path) -> None:

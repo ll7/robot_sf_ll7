@@ -299,6 +299,24 @@ def _row_for_model_id(
 ) -> dict[str, Any]:
     """Classify a config that references a model registry id."""
     entry = registry.get(model_id)
+    if entry is not None and bool(entry.get("local_only")):
+        return {
+            "config_path": config_path,
+            "classification": "retired_local_only",
+            "decision": "retired_until_durable_artifact_recovered",
+            "surface": "local_only_registry",
+            "model_id": model_id,
+            "registry_entry": {
+                "model_id": model_id,
+                "local_path": entry.get("local_path"),
+                "replacement_model_id": entry.get("replacement_model_id"),
+            },
+            "claim_boundary": "not benchmark evidence; retired local-only artifact",
+            "action": (
+                "Config references an explicit local-only retired registry entry; recover a "
+                "durable artifact with checksum before benchmark use, or keep retired."
+            ),
+        }
     if entry is not None and _is_durable_registry_entry(entry):
         return {
             "config_path": config_path,

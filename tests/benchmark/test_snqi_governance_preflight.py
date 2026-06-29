@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.validation.check_snqi_governance import build_governance_report, main
 
 REPO_ROOT = Path(__file__).parents[2]
@@ -42,6 +44,20 @@ def test_governance_main_fails_closed_but_allows_inspection(tmp_path: Path) -> N
         )
         == 0
     )
+
+
+def test_governance_text_lists_per_term_normalization_status(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Human preflight output lists raw and baseline-normalized term statuses."""
+    assert main(["--repo-root", str(REPO_ROOT), "--allow-current-blockers"]) == 0
+
+    out = capsys.readouterr().out
+    assert "Term normalization status:" in out
+    assert "time (time_to_goal_norm, w_time): raw_unbounded" in out
+    assert "comfort (comfort_exposure, w_comfort): raw_unbounded" in out
+    assert "collisions (collisions, w_collisions): baseline_normalized_bounded" in out
+    assert "jerk (jerk_mean, w_jerk): baseline_normalized_bounded" in out
 
 
 def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> None:

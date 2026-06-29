@@ -67,6 +67,22 @@ def test_packet_separates_resolved_checks_owner_decisions_and_claim_notes() -> N
     assert disposition["claim_boundary_notes"] == ["diagnostic only"]
 
 
+def test_packet_reports_diagnostic_clear_when_no_blockers() -> None:
+    """A clear governance report yields no owner decisions and a clear status."""
+    clear_report = _synthetic_governance_report()
+    clear_report["status"] = "passed"
+    clear_report["blockers"] = []
+
+    packet = build_packet(clear_report)
+
+    assert packet["packet_status"] == "diagnostic_clear"
+    assert packet["remaining_owner_decisions"] == []
+    assert packet["summary"]["remaining_owner_decision_count"] == 0
+    for disposition in packet["issue_dispositions"]:
+        assert disposition["current_status"] == "diagnostic-clear"
+        assert disposition["remaining_owner_decisions"] == []
+
+
 def test_render_markdown_keeps_sections_explicit() -> None:
     """Generated Markdown has reviewable sections for the disposition packet."""
     packet = build_packet(_synthetic_governance_report())

@@ -128,7 +128,50 @@ def test_blocked_when_checkpoint_local_path_is_directory(tmp_path):
     ckpt = report["prerequisites"]["checkpoint_artifacts"]
     assert ckpt["status"] == "blocked"
     assert ckpt["mapping"]["resolvable_count"] == 0
+    assert ckpt["mapping"]["blocked_by_status"] == {"not_checkpoint_file": 1}
+    assert ckpt["mapping"]["candidates"][0]["status"] == "not_checkpoint_file"
+    assert ckpt["mapping"]["candidates"][0]["reason"] == "local_path resolves to a directory"
     assert report["status"] == "blocked"
+
+
+def test_blocked_mapping_classifies_invalid_local_path(tmp_path):
+    """A predictive registry entry without local_path is an explicit blocked mapping row."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    models = [{"model_id": "predictive_missing_path", "tags": ["predictive"]}]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    assert report["status"] == "blocked"
+    assert ckpt["mapping"]["blocked_by_status"] == {"invalid_local_path": 1}
+    assert ckpt["mapping"]["candidates"][0]["status"] == "invalid_local_path"
+    assert ckpt["mapping"]["candidates"][0]["artifact_scope"] == "invalid"
+
+
+def test_blocked_mapping_classifies_worktree_local_output_artifact(tmp_path):
+    """A missing output/ checkpoint is reported as worktree-local, not durable evidence."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    models = [
+        {
+            "model_id": "predictive_output_tmp",
+            "local_path": "output/tmp/predictive/run/checkpoint.pt",
+            "tags": ["predictive"],
+        }
+    ]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    candidate = ckpt["mapping"]["candidates"][0]
+    assert report["status"] == "blocked"
+    assert ckpt["mapping"]["blocked_by_status"] == {"missing_local_path": 1}
+    assert candidate["status"] == "missing_local_path"
+    assert candidate["artifact_scope"] == "worktree_local_output"
+    assert candidate["resolved_path"].endswith("output/tmp/predictive/run/checkpoint.pt")
 
 
 def test_blocked_when_too_few_checkpoints_resolve(tmp_path):
@@ -142,6 +185,7 @@ def test_blocked_when_too_few_checkpoints_resolve(tmp_path):
     mapping = ckpt["mapping"]
     assert mapping["candidate_count"] == 6  # the ppo entry is excluded
     assert mapping["resolvable_count"] == 2
+    assert mapping["blocked_by_status"] == {"missing_local_path": 4}
     # Absent checkpoints are surfaced by model_id for actionable triage.
     assert any("predictive_absent_0" in m for m in ckpt["messages"])
 

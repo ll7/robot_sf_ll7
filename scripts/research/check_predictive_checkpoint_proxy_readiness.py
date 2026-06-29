@@ -167,6 +167,56 @@ def _resolve_local_path(local_path: Any, repo_root: Path) -> Path | None:
     return candidate
 
 
+def _artifact_scope(local_path: Any, resolved: Path | None, repo_root: Path) -> str:
+    """Classify whether a registry path names durable or worktree-local storage."""
+    if not isinstance(local_path, str) or not local_path:
+        return "invalid"
+
+    path = Path(local_path)
+    if path.parts and path.parts[0] == "output":
+        return "worktree_local_output"
+
+    if resolved is not None:
+        try:
+            relative = resolved.resolve().relative_to(repo_root.resolve())
+        except ValueError:
+            return "external_or_absolute"
+        if relative.parts and relative.parts[0] == "output":
+            return "worktree_local_output"
+        return "repo_relative"
+
+    return "unknown"
+
+
+def _checkpoint_mapping_entry(model_id: str, local_path: Any, repo_root: Path) -> dict[str, Any]:
+    """Build one fail-closed checkpoint mapping row without selecting any checkpoint."""
+    resolved = _resolve_local_path(local_path, repo_root)
+    scope = _artifact_scope(local_path, resolved, repo_root)
+
+    if resolved is None:
+        status = "invalid_local_path"
+        reason = "local_path missing or not a non-empty string"
+    elif resolved.is_file():
+        status = "present"
+        reason = "regular file resolves locally"
+    elif resolved.is_dir():
+        status = "not_checkpoint_file"
+        reason = "local_path resolves to a directory"
+    else:
+        status = "missing_local_path"
+        reason = "local_path does not resolve to a regular file"
+
+    return {
+        "model_id": model_id,
+        "local_path": local_path,
+        "resolved_path": str(resolved) if resolved is not None else None,
+        "artifact_scope": scope,
+        "status": status,
+        "reason": reason,
+        "present": status == "present",
+    }
+
+
 def _check_checkpoint_artifacts(
     registry: dict[str, dict[str, Any]],
     *,
@@ -189,25 +239,21 @@ def _check_checkpoint_artifacts(
         if tag not in tags:
             continue
         local_path = entry.get("local_path")
-        resolved = _resolve_local_path(local_path, repo_root)
-        # Only a regular file counts as a resolvable checkpoint: a mis-registered local_path
-        # pointing at a directory must not let the preflight report ready (fail-closed).
-        present = bool(resolved and resolved.is_file())
-        candidates.append(
-            {
-                "model_id": model_id,
-                "local_path": local_path,
-                "present": present,
-            }
-        )
+        candidates.append(_checkpoint_mapping_entry(model_id, local_path, repo_root))
 
     candidates.sort(key=lambda item: str(item["model_id"]))
     resolvable = [c for c in candidates if c["present"]]
+    blocked_by_status: dict[str, int] = {}
+    for candidate in candidates:
+        if candidate["present"]:
+            continue
+        blocked_by_status[candidate["status"]] = blocked_by_status.get(candidate["status"], 0) + 1
     mapping = {
         "registry_tag": registry_tag,
         "min_resolvable_checkpoints": min_resolvable,
         "candidate_count": len(candidates),
         "resolvable_count": len(resolvable),
+        "blocked_by_status": blocked_by_status,
         "candidates": candidates,
     }
 
@@ -218,12 +264,12 @@ def _check_checkpoint_artifacts(
             mapping,
         )
     if len(resolvable) < min_resolvable:
-        absent = [c["model_id"] for c in candidates if not c["present"]]
+        absent = [f"{c['model_id']} ({c['status']})" for c in candidates if not c["present"]]
         return (
             STATUS_BLOCKED,
             [
                 f"only {len(resolvable)} of {len(candidates)} '{registry_tag}' checkpoints resolve "
-                f"locally; need >= {min_resolvable}. Absent local_path for: {', '.join(absent)}"
+                f"locally; need >= {min_resolvable}. Blocked local_path entries: {', '.join(absent)}"
             ],
             mapping,
         )

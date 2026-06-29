@@ -96,8 +96,7 @@ def _validation_commands(manifest_path: str) -> tuple[str, ...]:
     """
     quoted_path = shlex.quote(manifest_path)
     return (
-        "uv run python scripts/tools/preflight_adversarial_package_b.py "
-        f"--manifest {quoted_path}",
+        f"uv run python scripts/tools/preflight_adversarial_package_b.py --manifest {quoted_path}",
         "uv run python scripts/tools/prepare_package_b_post_readiness_gap_packet.py "
         f"--manifest {quoted_path} "
         "--output output/adversarial/issue_3079_package_b/post_readiness_gap_packet.json",

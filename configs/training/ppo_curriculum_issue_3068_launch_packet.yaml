@@ -215,7 +215,7 @@ queue_hint:
     requires_slurm_submit: false
     required_checks:
       missing_script:
-        command: test -f /home/luttkule/git/robot_sf_ll7-private-ops/auxme/SLURM/issue_791_reward_curriculum.sl
+        command: test -f /home/luttkule/git/robot_sf_ll7-private-ops/auxme/SLURM/issue_791_reward_curriculum.sl  # allow-abs-path: private-ops SLURM routing target (lives outside this repo)
         expected: script exists on submit host before any future submission
       missing_config:
         command: test -f configs/training/ppo/ablations/expert_ppo_issue_3068_curriculum_full_surface_scout_12m_env22.yaml

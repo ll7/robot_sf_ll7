@@ -199,7 +199,7 @@ durable_evidence:
   retention_paths:
     compact_review_bundle: docs/context/evidence/issue_3810_long_horizon_snqi/
     external_artifact_pointer: wandb-or-release-artifact-required-before-claim
-    private_ops_ledger: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/jobs.yaml
+    private_ops_ledger: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/jobs.yaml  # allow-abs-path: private-ops routing
   local_output_boundary: >
     Keep raw episode JSONL, videos, Slurm logs, model caches, and checkpoints out
     of git. Promote only compact summaries, checksums, and durable artifact
@@ -219,10 +219,10 @@ launch_packet:
   blocking_jobs:
     - 13175
   route:
-    private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops
-    queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh
-    route_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh
-    submit_wrapper: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh
+    private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops  # allow-abs-path: private-ops routing
+    queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh  # allow-abs-path: private-ops routing
+    route_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh  # allow-abs-path: private-ops routing
+    submit_wrapper: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh  # allow-abs-path: private-ops routing
     submit_policy: no_submit_until_decision_packet_go
   preflight:
     public_manifest_check: >
@@ -234,8 +234,8 @@ launch_packet:
       --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml
       --json
     private_ops_dry_run: >
-      ROBOT_SF_PRIVATE_OPS=/home/luttkule/git/robot_sf_ll7-private-ops
-      /home/luttkule/git/robot_sf_ll7-private-ops/ops/preflight/run_preflight.sh
+      ROBOT_SF_PRIVATE_OPS="$HOME/git/robot_sf_ll7-private-ops"
+      "$HOME/git/robot_sf_ll7-private-ops/ops/preflight/run_preflight.sh"
       --cluster licca
       --route-id decision-packet-only
       --public-repo "$PWD"

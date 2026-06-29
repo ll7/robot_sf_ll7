@@ -14,6 +14,7 @@ from pathlib import Path
 
 from robot_sf.training.predictive_retrain_preflight import (
     PredictiveRetrainPreflightError,
+    build_retrain_decision_packet,
     validate_retrain_preflight,
 )
 
@@ -31,12 +32,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Repository root used to resolve relative paths.",
     )
     parser.add_argument("--json", action="store_true", help="Emit a JSON validation report.")
+    parser.add_argument(
+        "--decision-packet",
+        action="store_true",
+        help="Emit the no-submit training readiness decision packet.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     """Validate a predictive retraining launch config; return a shell-friendly code."""
     args = build_arg_parser().parse_args(argv)
+    if args.decision_packet:
+        packet = build_retrain_decision_packet(args.config, repo_root=args.repo_root)
+        print(json.dumps(packet, indent=2, sort_keys=True))
+        return 0
+
     try:
         report = validate_retrain_preflight(args.config, repo_root=args.repo_root)
     except PredictiveRetrainPreflightError as exc:

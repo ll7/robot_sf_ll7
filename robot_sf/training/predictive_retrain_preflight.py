@@ -42,6 +42,7 @@ _EXPECTED_PROVENANCE_KEYS = (
     "checkpoint_provenance_path",
     "hard_seed_evaluation_summary",
 )
+_PROVENANCE_PRETRAINING_STATUS = "expected_missing_until_training"
 
 
 class PredictiveRetrainPreflightError(ValueError):
@@ -447,8 +448,160 @@ def _validate_output(config: dict[str, Any], errors: list[str]) -> str | None:
     return _require_non_empty_string(output, "root", errors)
 
 
+def build_retrain_decision_packet(
+    config_path: Path | str,
+    *,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Summarize no-submit training readiness from static preflight metadata.
+
+    The packet is deliberately read-only: it maps the #3254 preflight to a
+    launch decision, blockers, expected costs, and validation proof without
+    collecting data, training, submitting a job, or asserting model quality.
+
+    Returns:
+        JSON-serializable decision packet for the dry-run CLI.
+    """
+    root = (repo_root or Path.cwd()).resolve()
+    config_path = _resolve_path(config_path, root)
+    try:
+        config = load_pipeline_config(config_path)
+    except PredictiveRetrainPreflightError as exc:
+        return _decision_packet(
+            config_path=config_path,
+            decision="missing_preflight_metadata",
+            preflight_status="missing",
+            blockers=[str(exc)],
+            validation_proof=[],
+        )
+
+    missing_metadata = _missing_preflight_metadata(config)
+    if missing_metadata:
+        return _decision_packet(
+            config_path=config_path,
+            config=config,
+            decision="missing_preflight_metadata",
+            preflight_status="missing",
+            blockers=missing_metadata,
+            validation_proof=[_validation_command(config_path, root)],
+        )
+
+    try:
+        preflight_report = validate_retrain_preflight(config_path, repo_root=root)
+    except PredictiveRetrainPreflightError as exc:
+        return _decision_packet(
+            config_path=config_path,
+            config=config,
+            decision="blocked",
+            preflight_status="invalid",
+            blockers=[str(exc)],
+            validation_proof=[_validation_command(config_path, root)],
+        )
+
+    return _decision_packet(
+        config_path=config_path,
+        config=config,
+        decision="ready",
+        preflight_status="valid",
+        blockers=[],
+        validation_proof=[_validation_command(config_path, root)],
+        preflight_report=preflight_report,
+    )
+
+
+def _missing_preflight_metadata(config: dict[str, Any]) -> list[str]:
+    """Return missing decision-critical metadata without running validation."""
+    blockers: list[str] = []
+    provenance = config.get("provenance")
+    if not isinstance(provenance, dict):
+        return ["provenance metadata block is missing"]
+    for key in _EXPECTED_PROVENANCE_KEYS:
+        value = provenance.get(key)
+        if not isinstance(value, str) or not value.strip():
+            blockers.append(f"provenance.{key} is missing")
+    if provenance.get("status") != _PROVENANCE_PRETRAINING_STATUS:
+        blockers.append(
+            f"provenance.status must be {_PROVENANCE_PRETRAINING_STATUS!r} "
+            "before training evidence exists"
+        )
+    return blockers
+
+
+def _decision_packet(
+    *,
+    config_path: Path,
+    decision: str,
+    preflight_status: str,
+    blockers: list[str],
+    validation_proof: list[str],
+    config: dict[str, Any] | None = None,
+    preflight_report: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the stable JSON shape used by tests and the dry-run CLI.
+
+    Returns:
+        JSON-serializable packet containing decision, blockers, and proof.
+    """
+    experiment = config.get("experiment", {}) if config else {}
+    training = config.get("training", {}) if config else {}
+    base_collection = config.get("base_collection", {}) if config else {}
+    hardcase_collection = config.get("hardcase_collection", {}) if config else {}
+    mixing = config.get("mixing", {}) if config else {}
+    evaluation = config.get("evaluation", {}) if config else {}
+    output = config.get("output", {}) if config else {}
+
+    packet = {
+        "schema_version": "predictive_retrain_decision_packet.v1",
+        "issue": 3801,
+        "parent_issue": 3254,
+        "parent_pr": 3784,
+        "config_path": str(config_path),
+        "run_id": experiment.get("run_id"),
+        "decision": decision,
+        "preflight_status": preflight_status,
+        "submitted": False,
+        "claim_boundary": config.get("claim_boundary") if config else None,
+        "blockers": blockers,
+        "expected_missing_outputs": (
+            ((preflight_report.get("provenance") or {}).get("missing_artifacts") or [])
+            if preflight_report
+            else []
+        ),
+        "expected_costs": {
+            "training_epochs": training.get("epochs"),
+            "base_seeds_per_scenario": base_collection.get("seeds_per_scenario"),
+            "hardcase_seeds_per_scenario": hardcase_collection.get("seeds_per_scenario"),
+            "hardcase_repeat": (
+                (preflight_report.get("mixing") or {}).get("hardcase_repeat")
+                if preflight_report
+                else mixing.get("hardcase_repeat")
+            ),
+            "evaluation_workers": evaluation.get("workers"),
+            "evaluation_horizon": evaluation.get("horizon"),
+            "output_root": output.get("root"),
+        },
+        "validation_proof": validation_proof,
+        "out_of_scope": [
+            "no full benchmark campaign run",
+            "no Slurm/GPU submission",
+            "no paper/dissertation claim edits",
+        ],
+    }
+    if preflight_report is not None:
+        packet["preflight_report"] = preflight_report
+    return packet
+
+
+def _validation_command(config_path: Path, repo_root: Path) -> str:
+    return (
+        "uv run python scripts/validation/validate_predictive_retrain_preflight.py "
+        f"--config {config_path} --repo-root {repo_root} --json"
+    )
+
+
 __all__ = [
     "PredictiveRetrainPreflightError",
+    "build_retrain_decision_packet",
     "load_pipeline_config",
     "validate_retrain_preflight",
 ]

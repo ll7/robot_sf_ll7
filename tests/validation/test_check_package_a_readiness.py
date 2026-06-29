@@ -196,6 +196,16 @@ def test_manifest_error_on_missing_section(tmp_path: Path) -> None:
         checker.check_readiness(manifest_path, repo_root=tmp_path)
 
 
+def test_manifest_error_on_non_mapping_section(tmp_path: Path) -> None:
+    """A required section that is not a mapping fails closed with ManifestError."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["seed_plan"] = ["not", "a", "mapping"]
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    with pytest.raises(checker.ManifestError):
+        checker.check_readiness(manifest_path, repo_root=tmp_path)
+
+
 def test_cli_json_exit_code_not_ready(tmp_path: Path) -> None:
     """CLI returns exit 1 JSON status not_ready when prerequisites are missing."""
     manifest_path = _synthetic_manifest(tmp_path, create_inputs=False)

@@ -81,6 +81,11 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     missing_sections = [section for section in REQUIRED_SECTIONS if section not in manifest]
     if missing_sections:
         raise ManifestError(f"Manifest missing required sections: {sorted(missing_sections)}")
+    non_mapping = [
+        section for section in REQUIRED_SECTIONS if not isinstance(manifest[section], dict)
+    ]
+    if non_mapping:
+        raise ManifestError(f"Manifest sections must be mappings: {sorted(non_mapping)}")
     return manifest
 
 

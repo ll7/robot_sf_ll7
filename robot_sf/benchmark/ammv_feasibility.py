@@ -17,6 +17,7 @@ a deliberate follow-up; this evaluator is pure and side-effect free.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -133,6 +134,7 @@ def evaluate_command_feasibility(
         "schema_version": AMMV_FEASIBILITY_SCHEMA,
         "evidence_kind": "diagnostic_proxy",
         "proxy_kind": "internal_non_hardware",
+        "status": "available",
         "n_commands": int(v.shape[0]),
         "min_stability_margin": min_margin,
         "tip_over_violation": bool(tip_over_steps),
@@ -143,8 +145,69 @@ def evaluate_command_feasibility(
     }
 
 
+def _fail_closed_artifact_payload(reason: str, *, n_commands: int = 0) -> dict[str, Any]:
+    """Return a non-hardware diagnostic payload that cannot be mistaken for feasible evidence."""
+    return {
+        "schema_version": AMMV_FEASIBILITY_SCHEMA,
+        "evidence_kind": "diagnostic_proxy",
+        "proxy_kind": "internal_non_hardware",
+        "status": "missing_inputs",
+        "reason": reason,
+        "n_commands": int(n_commands),
+        "min_stability_margin": None,
+        "tip_over_violation": True,
+        "n_tip_over_steps": None,
+        "rollover_event": "AMMV_FEASIBILITY_INPUTS_MISSING",
+        "n_curvature_violations": None,
+        "feasible": False,
+    }
+
+
+def evaluate_artifact_command_feasibility(
+    commands: Sequence[Mapping[str, Any]] | object,
+    *,
+    params: AmmvFeasibilityParams | None = None,
+) -> dict[str, Any]:
+    """Evaluate AMMV feasibility from per-step artifact command payloads.
+
+    The map-runner artifact surface stores normalized selected actions as mappings with
+    ``linear_velocity`` and ``angular_velocity`` fields. Missing or holonomic-only command payloads
+    fail closed because the three-wheeled proxy cannot infer yaw-rate feasibility from ``vx/vy``.
+
+    Returns:
+        Versioned ``ammv_feasibility.v1`` diagnostic telemetry marked ``internal_non_hardware``.
+    """
+
+    if not isinstance(commands, Sequence) or isinstance(commands, (str, bytes)):
+        return _fail_closed_artifact_payload("commands must be a sequence of mappings")
+    if not commands:
+        return _fail_closed_artifact_payload("commands sequence is empty")
+
+    velocities: list[float] = []
+    turn_rates: list[float] = []
+    for idx, command in enumerate(commands):
+        if not isinstance(command, Mapping):
+            return _fail_closed_artifact_payload(
+                f"command {idx} is not a mapping",
+                n_commands=len(velocities),
+            )
+        if "linear_velocity" not in command or "angular_velocity" not in command:
+            return _fail_closed_artifact_payload(
+                f"command {idx} lacks linear_velocity/angular_velocity",
+                n_commands=len(velocities),
+            )
+        velocities.append(float(command["linear_velocity"]))
+        turn_rates.append(float(command["angular_velocity"]))
+
+    try:
+        return evaluate_command_feasibility(velocities, turn_rates, params=params)
+    except (TypeError, ValueError) as exc:
+        return _fail_closed_artifact_payload(str(exc), n_commands=len(velocities))
+
+
 __all__ = [
     "AMMV_FEASIBILITY_SCHEMA",
     "AmmvFeasibilityParams",
+    "evaluate_artifact_command_feasibility",
     "evaluate_command_feasibility",
 ]

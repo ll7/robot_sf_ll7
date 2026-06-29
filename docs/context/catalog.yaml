@@ -2580,3 +2580,7 @@ entries:
     freshness: evidence
     area: benchmark_evidence
     legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence

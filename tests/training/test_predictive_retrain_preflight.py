@@ -9,6 +9,7 @@ import yaml
 
 from robot_sf.training.predictive_retrain_preflight import (
     PredictiveRetrainPreflightError,
+    build_retrain_decision_packet,
     validate_retrain_preflight,
 )
 from scripts.validation.validate_predictive_retrain_preflight import main as validate_cli_main
@@ -344,3 +345,65 @@ def test_config_must_be_mapping(tmp_path: Path) -> None:
     path.write_text("- just\n- a\n- list\n", encoding="utf-8")
     with pytest.raises(PredictiveRetrainPreflightError, match="config must be a YAML mapping"):
         validate_retrain_preflight(path, repo_root=tmp_path)
+
+
+def test_decision_packet_ready_from_valid_preflight(tmp_path: Path) -> None:
+    """A valid prepare-only config becomes a no-submit ready packet."""
+    path = _write_config(tmp_path, _base_config(tmp_path))
+
+    packet = build_retrain_decision_packet(path, repo_root=tmp_path)
+
+    assert packet["schema_version"] == "predictive_retrain_decision_packet.v1"
+    assert packet["decision"] == "ready"
+    assert packet["preflight_status"] == "valid"
+    assert packet["submitted"] is False
+    assert packet["blockers"] == []
+    assert len(packet["expected_missing_outputs"]) == 3
+    assert packet["expected_costs"]["training_epochs"] == 400
+    assert packet["expected_costs"]["output_root"] == "output/tmp/predictive_planner/pipeline"
+    assert "no Slurm/GPU submission" in packet["out_of_scope"]
+    assert packet["preflight_report"]["status"] == "valid"
+
+
+def test_decision_packet_blocks_invalid_preflight(tmp_path: Path) -> None:
+    """Invalid static preflight is reported as blocked, not submitted."""
+    config = _base_config(tmp_path)
+    config["scenarios"]["planner_grid"] = "missing.yaml"  # type: ignore[index]
+    path = _write_config(tmp_path, config)
+
+    packet = build_retrain_decision_packet(path, repo_root=tmp_path)
+
+    assert packet["decision"] == "blocked"
+    assert packet["preflight_status"] == "invalid"
+    assert packet["submitted"] is False
+    assert "planner_grid" in packet["blockers"][0]
+
+
+def test_decision_packet_reports_missing_preflight_metadata(tmp_path: Path) -> None:
+    """Missing provenance metadata has its own status before full validation."""
+    config = _base_config(tmp_path)
+    del config["provenance"]
+    path = _write_config(tmp_path, config)
+
+    packet = build_retrain_decision_packet(path, repo_root=tmp_path)
+
+    assert packet["decision"] == "missing_preflight_metadata"
+    assert packet["preflight_status"] == "missing"
+    assert packet["submitted"] is False
+    assert packet["blockers"] == ["provenance metadata block is missing"]
+
+
+def test_decision_packet_cli_is_no_submit_dry_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """CLI decision-packet mode emits JSON and keeps submission false."""
+    path = _write_config(tmp_path, _base_config(tmp_path))
+
+    code = validate_cli_main(
+        ["--config", str(path), "--repo-root", str(tmp_path), "--decision-packet"]
+    )
+
+    assert code == 0
+    output = capsys.readouterr().out
+    assert '"decision": "ready"' in output
+    assert '"submitted": false' in output

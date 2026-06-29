@@ -161,6 +161,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `gh-pr-merger` | atomic | verification | yes | no | no | none | Guarded PR merger; merges merge-ready PRs after verifying label, CI status, branch protection, and preflight checks. |
 | `gh-pr-opener` | atomic | context | yes | no | no | none | Open a conservative Robot SF PR with scope verification, freshness checks, and artifact discipline. |
 | `goal-pr-review` | orchestrator | verification | yes | no | no | `implementation-verification`, `pr-ready-check`, `gh-pr-comment-fixer`, `review-benchmark-change`, `gh-issue-creator`, `context-note-maintainer` | Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof, resolves review threads, and applies merge-ready; not for merging. |
+| `pr-hindsight-review` | analysis | analysis | no | no | no | none | Review merged PRs after the fact to decide whether autonomous routing produced useful progress, partial coverage, duplicate coverage, or a successor slice. |
 
 ### Research Iteration
 
@@ -210,6 +211,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `issue-to-pr` | `gh-issue-autopilot` |
 | `parent-to-child-issue` | `issue-splitter` |
 | `pr-merger` | `gh-pr-merger` |
+| `pr-retrospective` | `pr-hindsight-review` |
 | `pr-review-runner` | `goal-pr-review` |
 | `proof-policy` | `quality-playbook` |
 | `quality-strategy` | `quality-playbook` |

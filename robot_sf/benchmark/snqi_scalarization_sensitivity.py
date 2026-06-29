@@ -23,7 +23,19 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 SCALARIZATION_SENSITIVITY_SCHEMA = "snqi_scalarization_sensitivity.v1"
+SCALARIZATION_SENSITIVITY_PREFLIGHT_SCHEMA = "snqi_scalarization_sensitivity_preflight.v1"
 DEFAULT_SWEEP_FACTORS: tuple[float, ...] = (0.0, 0.25, 0.5, 1.0, 1.5, 2.0)
+SENSITIVITY_PREFLIGHT_READY = "ready"
+SENSITIVITY_PREFLIGHT_BLOCKED = "blocked"
+SENSITIVITY_PREFLIGHT_MALFORMED = "malformed"
+REQUIRED_SENSITIVITY_METRICS = (
+    "success",
+    "time_to_goal_norm",
+    "collisions",
+    "near_misses",
+    "comfort_exposure",
+)
+OPTIONAL_SENSITIVITY_METRICS = ("force_exceed_events", "jerk_mean")
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +46,320 @@ class DiagnosticArtifacts:
     csv_path: Path
     markdown_path: Path
     svg_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class SensitivityPreflightIssue:
+    """One fail-closed readiness issue for scalarization-sensitivity inputs."""
+
+    code: str
+    severity: str
+    message: str
+
+    def as_dict(self) -> dict[str, str]:
+        """Return a JSON-ready issue row."""
+        return {
+            "code": self.code,
+            "severity": self.severity,
+            "message": self.message,
+        }
+
+
+@dataclass(slots=True)
+class _SensitivityPreflightState:
+    issues: list[SensitivityPreflightIssue]
+    malformed: bool
+    grouped: dict[str, list[Mapping[str, Any]]]
+    coverage: dict[str, set[tuple[str, str]]]
+    scenario_horizons: set[tuple[str, str]]
+
+    @classmethod
+    def empty(cls) -> _SensitivityPreflightState:
+        return cls(
+            issues=[],
+            malformed=False,
+            grouped={},
+            coverage={},
+            scenario_horizons=set(),
+        )
+
+    def add_issue(self, code: str, severity: str, message: str) -> None:
+        self.issues.append(SensitivityPreflightIssue(code, severity, message))
+        if severity == SENSITIVITY_PREFLIGHT_MALFORMED:
+            self.malformed = True
+
+
+def classify_scalarization_sensitivity_inputs(
+    records: Sequence[Mapping[str, Any]],
+    *,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Mapping[str, float]],
+    planner_key: str = "planner_key",
+    fallback_planner_key: str = "planner",
+    scenario_key: str = "scenario_id",
+    horizon_key: str = "horizon",
+    min_planners: int = 2,
+) -> dict[str, Any]:
+    """Classify whether SNQI scalarization-sensitivity inputs are ready.
+
+    This is a blocker/readiness preflight only. It intentionally avoids exporting
+    sensitivity artifacts or making decision-reversal claims.
+
+    Returns:
+        JSON-ready readiness report with ``ready``, ``blocked``, or ``malformed`` status.
+    """
+
+    state = _SensitivityPreflightState.empty()
+    records = _validate_preflight_inputs(state, records, weights, baseline)
+    _collect_preflight_records(
+        state, records, planner_key, fallback_planner_key, scenario_key, horizon_key
+    )
+    missing_cells = _add_global_preflight_issues(state, records, min_planners)
+    _add_pareto_preflight_issues(state, weights, baseline, min_planners)
+    return _format_preflight_report(state, records, missing_cells)
+
+
+def _validate_preflight_inputs(
+    state: _SensitivityPreflightState,
+    records: Sequence[Mapping[str, Any]],
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Mapping[str, float]],
+) -> Sequence[Mapping[str, Any]]:
+    if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
+        state.add_issue(
+            "records_not_sequence",
+            SENSITIVITY_PREFLIGHT_MALFORMED,
+            "records must be a sequence of mapping objects",
+        )
+        records = []
+    if not isinstance(weights, Mapping):
+        state.add_issue(
+            "weights_not_mapping",
+            SENSITIVITY_PREFLIGHT_MALFORMED,
+            "weights must be a mapping keyed by SNQI component",
+        )
+    if not isinstance(baseline, Mapping):
+        state.add_issue(
+            "baseline_not_mapping",
+            SENSITIVITY_PREFLIGHT_MALFORMED,
+            "baseline must be a mapping keyed by normalized metric",
+        )
+
+    if isinstance(weights, Mapping):
+        missing_weights = [name for name in WEIGHT_NAMES if name not in weights]
+        if missing_weights:
+            state.add_issue(
+                "missing_snqi_weights",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                "missing SNQI weights: " + ", ".join(missing_weights),
+            )
+    return records
+
+
+def _collect_preflight_records(
+    state: _SensitivityPreflightState,
+    records: Sequence[Mapping[str, Any]],
+    planner_key: str,
+    fallback_planner_key: str,
+    scenario_key: str,
+    horizon_key: str,
+) -> None:
+    for index, record in enumerate(records, start=1):
+        if not isinstance(record, Mapping):
+            state.add_issue(
+                "record_not_mapping",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                f"record {index} must be a mapping",
+            )
+            continue
+        _collect_preflight_record(
+            state,
+            index,
+            record,
+            planner_key,
+            fallback_planner_key,
+            scenario_key,
+            horizon_key,
+        )
+
+
+def _collect_preflight_record(
+    state: _SensitivityPreflightState,
+    index: int,
+    record: Mapping[str, Any],
+    planner_key: str,
+    fallback_planner_key: str,
+    scenario_key: str,
+    horizon_key: str,
+) -> None:
+    planner = _preflight_planner(record, planner_key, fallback_planner_key)
+    if planner in (None, ""):
+        state.add_issue(
+            "missing_planner",
+            SENSITIVITY_PREFLIGHT_MALFORMED,
+            f"record {index} is missing planner identity",
+        )
+        return
+
+    scenario = _get_nested(record, scenario_key)
+    horizon = _get_nested(record, horizon_key)
+    if horizon in (None, ""):
+        horizon = _get_nested(record, "scenario_horizon")
+    if scenario in (None, "") or horizon in (None, ""):
+        state.add_issue(
+            "missing_scenario_horizon",
+            SENSITIVITY_PREFLIGHT_BLOCKED,
+            f"record {index} lacks scenario-horizon evidence",
+        )
+        return
+
+    _add_metric_preflight_issues(state, index, _metrics(record))
+    planner_name = str(planner)
+    scenario_horizon = (str(scenario), str(horizon))
+    state.grouped.setdefault(planner_name, []).append(record)
+    state.scenario_horizons.add(scenario_horizon)
+    state.coverage.setdefault(planner_name, set()).add(scenario_horizon)
+
+
+def _preflight_planner(
+    record: Mapping[str, Any], planner_key: str, fallback_planner_key: str
+) -> Any:
+    planner = _get_nested(record, planner_key)
+    if planner in (None, ""):
+        planner = _get_nested(record, fallback_planner_key)
+    if planner in (None, ""):
+        planner = _get_nested(record, "scenario_params.algo")
+    return planner
+
+
+def _add_metric_preflight_issues(
+    state: _SensitivityPreflightState, index: int, metrics: Mapping[str, Any]
+) -> None:
+    for metric in REQUIRED_SENSITIVITY_METRICS:
+        if metric not in metrics:
+            state.add_issue(
+                "missing_required_term",
+                SENSITIVITY_PREFLIGHT_BLOCKED,
+                f"record {index} is missing SNQI term {metric!r}",
+            )
+        elif not _is_finite_metric(metrics.get(metric)):
+            state.add_issue(
+                "non_finite_required_term",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                f"record {index} has non-finite SNQI term {metric!r}",
+            )
+
+    for metric in OPTIONAL_SENSITIVITY_METRICS:
+        if metric in metrics and not _is_finite_metric(metrics.get(metric)):
+            state.add_issue(
+                "non_finite_optional_term",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                f"record {index} has non-finite SNQI term {metric!r}",
+            )
+
+
+def _add_global_preflight_issues(
+    state: _SensitivityPreflightState,
+    records: Sequence[Mapping[str, Any]],
+    min_planners: int,
+) -> dict[str, list[tuple[str, str]]]:
+    if not records:
+        state.add_issue(
+            "no_records",
+            SENSITIVITY_PREFLIGHT_BLOCKED,
+            "no episode records available for scalarization-sensitivity preflight",
+        )
+    if len(state.grouped) < min_planners:
+        state.add_issue(
+            "insufficient_planners",
+            SENSITIVITY_PREFLIGHT_BLOCKED,
+            f"at least {min_planners} planners are required for rank and Pareto diagnostics",
+        )
+
+    missing_cells = {
+        planner: sorted(state.scenario_horizons - seen)
+        for planner, seen in sorted(state.coverage.items())
+        if state.scenario_horizons - seen
+    }
+    if missing_cells:
+        state.add_issue(
+            "non_rectangular_planner_table",
+            SENSITIVITY_PREFLIGHT_BLOCKED,
+            "planner table must cover the same scenario-horizon cells for every planner",
+        )
+    if not state.scenario_horizons:
+        state.add_issue(
+            "no_valid_scenario_horizon",
+            SENSITIVITY_PREFLIGHT_BLOCKED,
+            "no valid scenario-horizon evidence was found",
+        )
+    return missing_cells
+
+
+def _add_pareto_preflight_issues(
+    state: _SensitivityPreflightState,
+    weights: Mapping[str, float],
+    baseline: Mapping[str, Mapping[str, float]],
+    min_planners: int,
+) -> None:
+    if len(state.grouped) < min_planners or state.malformed:
+        return
+    try:
+        snqi_scores = _planner_snqi_scores(state.grouped, weights, baseline)
+        constraints = {
+            planner: _constraints_first_endpoint(rows) for planner, rows in state.grouped.items()
+        }
+        rows = _planner_rows(
+            snqi_scores,
+            constraints,
+            _rank_order(snqi_scores, higher_is_better=True),
+            _rank_order(
+                {
+                    planner: endpoint["constraints_first_score"]
+                    for planner, endpoint in constraints.items()
+                },
+                higher_is_better=True,
+            ),
+        )
+        _pareto_points(rows)
+    except (TypeError, ValueError, KeyError) as exc:
+        state.add_issue(
+            "pareto_prerequisite_error",
+            SENSITIVITY_PREFLIGHT_MALFORMED,
+            f"could not derive Pareto prerequisites: {exc}",
+        )
+
+
+def _format_preflight_report(
+    state: _SensitivityPreflightState,
+    records: Sequence[Mapping[str, Any]],
+    missing_cells: Mapping[str, Sequence[tuple[str, str]]],
+) -> dict[str, Any]:
+    status = SENSITIVITY_PREFLIGHT_READY
+    if state.malformed:
+        status = SENSITIVITY_PREFLIGHT_MALFORMED
+    elif state.issues:
+        status = SENSITIVITY_PREFLIGHT_BLOCKED
+
+    return {
+        "schema_version": SCALARIZATION_SENSITIVITY_PREFLIGHT_SCHEMA,
+        "issue": 3653,
+        "status": status,
+        "ready": status == SENSITIVITY_PREFLIGHT_READY,
+        "planners": sorted(state.grouped),
+        "planner_count": len(state.grouped),
+        "record_count": len(records),
+        "scenario_horizon_count": len(state.scenario_horizons),
+        "missing_planner_cells": {
+            planner: [{"scenario": cell[0], "horizon": cell[1]} for cell in cells]
+            for planner, cells in missing_cells.items()
+        },
+        "issues": [issue.as_dict() for issue in state.issues],
+        "claim_boundary": (
+            "Readiness preflight only; no SNQI weight changes, no scalarization export, "
+            "no benchmark campaign run, and no decision-reversal claim."
+        ),
+    }
 
 
 def build_scalarization_sensitivity_report(
@@ -647,6 +973,15 @@ def _metric_float(metrics: Mapping[str, Any], key: str, default: float) -> float
     return number if math.isfinite(number) else default
 
 
+def _is_finite_metric(value: Any) -> bool:
+    if isinstance(value, bool):
+        return True
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
 def _mean(values: Iterable[float]) -> float:
     clean = [float(value) for value in values if math.isfinite(float(value))]
     if not clean:
@@ -675,9 +1010,17 @@ def _padded_domain(values: Sequence[float]) -> tuple[float, float]:
 
 __all__ = [
     "DEFAULT_SWEEP_FACTORS",
+    "OPTIONAL_SENSITIVITY_METRICS",
+    "REQUIRED_SENSITIVITY_METRICS",
+    "SCALARIZATION_SENSITIVITY_PREFLIGHT_SCHEMA",
     "SCALARIZATION_SENSITIVITY_SCHEMA",
+    "SENSITIVITY_PREFLIGHT_BLOCKED",
+    "SENSITIVITY_PREFLIGHT_MALFORMED",
+    "SENSITIVITY_PREFLIGHT_READY",
     "DiagnosticArtifacts",
+    "SensitivityPreflightIssue",
     "build_scalarization_sensitivity_report",
+    "classify_scalarization_sensitivity_inputs",
     "format_markdown",
     "format_pareto_svg",
     "load_baseline_mapping",

@@ -49,7 +49,12 @@ class NearParityComparison:
 
 @dataclass(frozen=True, slots=True)
 class PromotionThresholds:
-    """Minimum effect size for a measurable near-parity improvement/regression."""
+    """Minimum effect size for a measurable near-parity improvement/regression.
+
+    ``min_improvement`` must be strictly positive: a zero minimum effect size collapses the
+    regression and improvement boundaries onto exact equality and would mislabel a no-difference
+    comparison as ``stop``.
+    """
 
     min_improvement: float = 0.02
 
@@ -109,8 +114,8 @@ def _validate_inputs(comparison: NearParityComparison, thresholds: PromotionThre
         ("safety_improvement", "efficiency_improvement"),
     )
     require_finite_fields("thresholds", thresholds, ("min_improvement",))
-    if thresholds.min_improvement < 0.0:
-        raise ValueError("thresholds.min_improvement must be non-negative")
+    if thresholds.min_improvement <= 0.0:
+        raise ValueError("thresholds.min_improvement must be positive")
 
 
 def _decide(c: NearParityComparison, t: PromotionThresholds) -> tuple[str, str]:

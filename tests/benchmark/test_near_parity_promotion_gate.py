@@ -131,11 +131,16 @@ def test_non_finite_inputs_fail_closed_before_verdict() -> None:
         classify_near_parity_promotion(_comparison(safety_improvement=math.nan))
 
 
-def test_negative_threshold_is_rejected() -> None:
-    """Invalid threshold configuration fails before any promotable verdict."""
+@pytest.mark.parametrize("min_improvement", [-0.01, 0.0])
+def test_non_positive_threshold_is_rejected(min_improvement: float) -> None:
+    """Invalid threshold configuration fails before any verdict.
+
+    A zero threshold is rejected because it would collapse the regression and improvement
+    boundaries onto exact equality and mislabel a no-difference comparison as ``stop``.
+    """
 
     with pytest.raises(ValueError, match="min_improvement"):
         classify_near_parity_promotion(
             _comparison(safety_improvement=0.05),
-            PromotionThresholds(min_improvement=-0.01),
+            PromotionThresholds(min_improvement=min_improvement),
         )

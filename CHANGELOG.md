@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Added a **diagnostic missing-export blocker report** for frozen-trace `EpisodeEventLedger.v1`
+  before/after reconciliation (#3482). New `build_missing_frozen_trace_export_report`
+  (`robot_sf/benchmark/frozen_trace_reconciliation.py`) emits a
+  `frozen_trace_event_export_blocker.v1` report with null comparison counts and per-artifact
+  `not_evaluable_missing_event_ledger_export` statuses, and the comparator CLI
+  (`scripts/benchmark/compare_frozen_trace_event_ledgers.py`) gains `--diagnose-missing-exports`
+  to write that report when one or both durable exports are absent. The reconciliation guard was
+  also tightened so a metric-semantics export that only names `EpisodeEventLedger.v1` (without the
+  durable exact/surrogate event payload) fails closed instead of being treated as comparable. This
+  is **diagnostic-only**: it promotes no benchmark claim and invents no old/new event counts; the
+  durable frozen 0.0.2 before/after rerun/backfill remains the open blocker under #3482.
 * Added a read-only **readiness preflight for proxy-based predictive-planner checkpoint selection**
   (#3204). New config `configs/research/predictive_checkpoint_proxy_v1.yaml` declares the inputs the
   merged proxy-vs-ADE analyzer (`scripts/research/analyze_predictive_checkpoint_proxy.py`, #3307)

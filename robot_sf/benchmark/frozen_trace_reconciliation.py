@@ -14,6 +14,7 @@ from typing import Any
 from robot_sf.benchmark.event_ledger import EPISODE_EVENT_LEDGER_SCHEMA_VERSION
 
 FROZEN_TRACE_RECONCILIATION_SCHEMA = "frozen_trace_event_reconciliation.v1"
+FROZEN_TRACE_MISSING_EXPORT_SCHEMA = "frozen_trace_event_export_blocker.v1"
 
 _EVENT_BLOCKS = ("exact_events", "surrogate_events")
 
@@ -50,6 +51,12 @@ def _ledger_from_row(row: Mapping[str, Any]) -> Mapping[str, Any]:
         else row.get("event_ledger")
     )
     if not isinstance(ledger, Mapping):
+        if row.get("event_ledger_schema_version") == EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
+            raise ValueError(
+                "frozen reconciliation rows must carry event_ledger exact/surrogate event "
+                "values; metric-semantics exports only name EpisodeEventLedger.v1 and cannot "
+                "be compared without the durable ledger payload"
+            )
         raise ValueError("frozen reconciliation rows must contain event_ledger")
     if ledger.get("schema_version") != EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
         raise ValueError("frozen reconciliation rows must contain EpisodeEventLedger.v1 payloads")
@@ -265,6 +272,72 @@ def _affected_artifact_summary(
     }
 
 
+def _missing_export_artifacts(
+    artifact_manifest: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return artifact statuses when no durable event-ledger export can be compared."""
+
+    statuses: list[dict[str, Any]] = []
+    for artifact in artifact_manifest:
+        consumed = artifact.get("consumes_event_fields", ())
+        consumed_fields = (
+            {str(field) for field in consumed} if isinstance(consumed, list) else set()
+        )
+        statuses.append(
+            {
+                "artifact_id": _coerce_optional_field(artifact.get("artifact_id")),
+                "artifact_type": _coerce_optional_field(artifact.get("artifact_type")),
+                "status": "not_evaluable_missing_event_ledger_export",
+                "consumes_event_fields": sorted(consumed_fields),
+                "affected_event_fields": [],
+                "affected_changed_row_count": None,
+                "affected_added_row_count": None,
+                "affected_removed_row_count": None,
+            }
+        )
+    return statuses
+
+
+def build_missing_frozen_trace_export_report(
+    *,
+    missing_exports: Iterable[Mapping[str, Any]],
+    artifact_manifest: Iterable[Mapping[str, Any]] = (),
+    old_label: str = "old",
+    new_label: str = "new",
+) -> dict[str, Any]:
+    """Build a diagnostic report when durable event-ledger exports are unavailable.
+
+    Returns:
+        JSON-serializable blocker report with null comparison counts.
+    """
+
+    missing_export_rows = [dict(export) for export in missing_exports]
+    affected_artifacts = _missing_export_artifacts(artifact_manifest)
+    return {
+        "schema_version": FROZEN_TRACE_MISSING_EXPORT_SCHEMA,
+        "status": "blocked_missing_durable_event_ledger_exports",
+        "summary": {
+            "old_label": old_label,
+            "new_label": new_label,
+            "old_row_count": None,
+            "new_row_count": None,
+            "changed_row_count": None,
+            "unchanged_row_count": None,
+            "added_row_count": None,
+            "removed_row_count": None,
+            "missing_export_count": len(missing_export_rows),
+        },
+        "missing_exports": missing_export_rows,
+        "affected_artifacts": affected_artifacts,
+        "affected_artifact_summary": _affected_artifact_summary(affected_artifacts),
+        "semantics": {
+            "input_contract": "durable EpisodeEventLedger.v1 rows with exact/surrogate events",
+            "benchmark_semantics_changed": False,
+            "claim_promotion": "none",
+        },
+    }
+
+
 def build_frozen_trace_reconciliation_report(
     old_rows: Iterable[Mapping[str, Any]],
     new_rows: Iterable[Mapping[str, Any]],
@@ -327,6 +400,8 @@ def build_frozen_trace_reconciliation_report(
 
 
 __all__ = [
+    "FROZEN_TRACE_MISSING_EXPORT_SCHEMA",
     "FROZEN_TRACE_RECONCILIATION_SCHEMA",
     "build_frozen_trace_reconciliation_report",
+    "build_missing_frozen_trace_export_report",
 ]

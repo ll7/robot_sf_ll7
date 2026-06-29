@@ -11,6 +11,7 @@ from typing import Any
 
 from robot_sf.benchmark.frozen_trace_reconciliation import (
     build_frozen_trace_reconciliation_report,
+    build_missing_frozen_trace_export_report,
 )
 
 
@@ -42,6 +43,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--new-label", default="new", help="Label for the new frozen input.")
     parser.add_argument(
         "--out", required=True, type=Path, help="Output reconciliation report JSON."
+    )
+    parser.add_argument(
+        "--diagnose-missing-exports",
+        action="store_true",
+        help=(
+            "Write a diagnostic blocker report instead of reading inputs when one or both "
+            "expected durable event-ledger exports are absent."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -82,10 +91,48 @@ def _read_artifact_manifest(path: Path | None) -> list[dict[str, Any]]:
     return artifacts
 
 
+def _missing_export_inputs(args: argparse.Namespace) -> list[dict[str, str]]:
+    """Return missing old/new durable export inputs for diagnostic reporting."""
+
+    missing: list[dict[str, str]] = []
+    for label, path in (
+        (args.old_label, args.old_ledgers),
+        (args.new_label, args.new_ledgers),
+    ):
+        if not path.exists():
+            missing.append(
+                {
+                    "label": str(label),
+                    "path": str(path),
+                    "required_contract": (
+                        "JSONL rows carrying EpisodeEventLedger.v1 exact_events and "
+                        "surrogate_events"
+                    ),
+                }
+            )
+    return missing
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
 
     args = _parse_args(argv)
+    missing_exports = _missing_export_inputs(args)
+    if args.diagnose_missing_exports and missing_exports:
+        report = build_missing_frozen_trace_export_report(
+            missing_exports=missing_exports,
+            artifact_manifest=_read_artifact_manifest(args.artifact_manifest),
+            old_label=args.old_label,
+            new_label=args.new_label,
+        )
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(
+            "wrote frozen event-ledger missing-export diagnostic "
+            f"{args.out} ({len(missing_exports)} missing exports)"
+        )
+        return 0
+
     report = build_frozen_trace_reconciliation_report(
         _read_jsonl(args.old_ledgers),
         _read_jsonl(args.new_ledgers),

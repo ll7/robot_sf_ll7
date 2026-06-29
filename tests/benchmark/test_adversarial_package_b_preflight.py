@@ -125,6 +125,25 @@ def test_preflight_blocks_example_command_seed_drift(tmp_path: Path) -> None:
     assert any("example_command --seed values" in blocker for blocker in result.blockers)
 
 
+def test_preflight_accepts_equals_form_example_command_seed_args(tmp_path: Path) -> None:
+    """The seed parser should mirror argparse's --seed=value spelling."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--package-b-budget-grid --seed=1101 --seed=2202 --seed=3303 "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is True
+    assert result.checks["example_command_repeated_seeds"] is True
+    assert result.metadata["example_command_repeated_seeds"] == [1101, 2202, 3303]
+
+
 def test_preflight_blocks_example_command_without_package_b_budget_grid(tmp_path: Path) -> None:
     """The example command must opt into the fixed package-B budget grid."""
     manifest = _base_manifest(tmp_path)

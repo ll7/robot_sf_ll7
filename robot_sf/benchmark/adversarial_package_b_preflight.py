@@ -131,15 +131,20 @@ def _extract_repeated_seed_args(command: str) -> tuple[tuple[int, ...], list[str
 
     seed_args: list[int] = []
     for index, token in enumerate(tokens):
-        if token != "--seed":
+        if token == "--seed":
+            if index + 1 >= len(tokens):
+                warnings.append("example_command has --seed without value")
+                continue
+            seed_value = tokens[index + 1]
+        elif token.startswith("--seed="):
+            seed_value = token.removeprefix("--seed=")
+        else:
             continue
-        if index + 1 >= len(tokens):
-            warnings.append("example_command has --seed without value")
-            continue
+
         try:
-            seed_args.append(int(tokens[index + 1]))
+            seed_args.append(int(seed_value))
         except ValueError:
-            warnings.append(f"example_command has non-integer --seed value: {tokens[index + 1]!r}")
+            warnings.append(f"example_command has non-integer --seed value: {seed_value!r}")
     return tuple(seed_args), warnings
 
 
@@ -286,7 +291,9 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         blockers.append("example_command must use --package-b-budget-grid")
 
     for seed in seeds:
-        checks[f"example_command_seed_{seed}"] = f"--seed {seed}" in example_command
+        checks[f"example_command_seed_{seed}"] = (
+            f"--seed {seed}" in example_command or f"--seed={seed}" in example_command
+        )
         if not checks[f"example_command_seed_{seed}"]:
             blockers.append(f"example_command missing --seed {seed}")
 

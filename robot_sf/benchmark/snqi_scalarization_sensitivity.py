@@ -322,7 +322,7 @@ def _add_pareto_preflight_issues(
             ),
         )
         _pareto_points(rows)
-    except (TypeError, ValueError, KeyError) as exc:
+    except (AttributeError, TypeError, ValueError, KeyError) as exc:
         state.add_issue(
             "pareto_prerequisite_error",
             SENSITIVITY_PREFLIGHT_MALFORMED,

@@ -199,6 +199,21 @@ def test_preflight_malformed_for_non_finite_term() -> None:
     assert any(issue["code"] == "non_finite_required_term" for issue in report["issues"])
 
 
+def test_preflight_malformed_for_non_mapping_baseline_value() -> None:
+    """A baseline metric value that is not a mapping is classified malformed, not crashed."""
+    baseline = _baseline()
+    baseline["collisions"] = 1.0  # scalar instead of {"med": ..., "p95": ...}
+
+    report = classify_scalarization_sensitivity_inputs(
+        _preflight_episodes(),
+        weights=_weights(),
+        baseline=baseline,
+    )
+
+    assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "pareto_prerequisite_error" for issue in report["issues"])
+
+
 def test_report_exports_decision_disagreement_and_weight_reversals() -> None:
     """Sensitivity report exposes rank disagreement and scalarization reversals."""
 

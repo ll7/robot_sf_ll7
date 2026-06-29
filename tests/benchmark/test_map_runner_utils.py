@@ -2690,6 +2690,14 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(feasibility, dict)
     assert "projection_rate" in feasibility
     assert "infeasible_rate" in feasibility
+    ammv_feasibility = algo_md.get("ammv_feasibility")
+    assert isinstance(ammv_feasibility, dict)
+    assert ammv_feasibility["schema_version"] == "ammv_feasibility.v1"
+    assert ammv_feasibility["proxy_kind"] == "internal_non_hardware"
+    assert ammv_feasibility["min_stability_margin"] is not None
+    assert isinstance(ammv_feasibility["tip_over_violation"], bool)
+    assert ammv_feasibility["n_curvature_violations"] >= 0
+    assert isinstance(ammv_feasibility["feasible"], bool)
 
 
 def test_run_map_episode_closes_env_when_reset_fails(monkeypatch: pytest.MonkeyPatch) -> None:

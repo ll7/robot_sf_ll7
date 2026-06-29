@@ -291,3 +291,20 @@ def test_decision_packet_renders_markdown_and_json_safe_dict():
     assert "# TTC Near-Miss Diagnostic Decision Packet" in markdown
     assert "Cannot Claim Before Canonical Metric Change" in markdown
     assert "no planner comparison, benchmark ranking, or paper/dissertation claim" in markdown
+
+
+def test_decision_packet_json_safe_dict_handles_numpy_scalars():
+    """Decision packet JSON conversion handles NumPy scalar values."""
+    packet = build_ttc_near_miss_decision_packet(_slow_opening_episode(), t_thr=1.0)
+    packet.diagnostic["numpy_nan"] = np.float32(np.nan)
+    packet.diagnostic["numpy_float"] = np.float64(1.25)
+    packet.diagnostic["numpy_int"] = np.int64(3)
+    packet.diagnostic["bool_flag"] = True
+
+    payload = packet.to_dict()
+
+    json.dumps(payload, allow_nan=False)
+    assert payload["diagnostic"]["numpy_nan"] is None
+    assert payload["diagnostic"]["numpy_float"] == 1.25
+    assert payload["diagnostic"]["numpy_int"] == 3
+    assert payload["diagnostic"]["bool_flag"] is True

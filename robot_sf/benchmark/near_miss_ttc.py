@@ -547,8 +547,13 @@ def _json_safe_value(value: object) -> object:
         Value with non-finite floats replaced by ``None``.
     """
 
-    if isinstance(value, float):
-        return value if np.isfinite(value) else None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (float, np.floating)):
+        float_value = float(value)
+        return float_value if np.isfinite(float_value) else None
+    if isinstance(value, (int, np.integer)):
+        return int(value)
     if isinstance(value, dict):
         return {key: _json_safe_value(item) for key, item in value.items()}
     if isinstance(value, list):

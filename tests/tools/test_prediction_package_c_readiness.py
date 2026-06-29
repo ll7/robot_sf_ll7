@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 
 from scripts.tools.prediction_package_c_readiness import (
     ARMS,
+    DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
+    DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
     REQUIRED_CODE,
     REQUIRED_CONFIGS,
     assess_package_c_readiness,
@@ -67,7 +69,11 @@ def test_all_arms_blocked_when_inputs_present_but_no_coupling_store(tmp_path: Pa
     assert report["overall_status"] == "blocked"
     assert [arm["status"] for arm in report["arms"]] == ["blocked"] * len(ARMS)
     assert report["seed_plan"] == [111, 2868]
-    assert report["output_roots"] == ["docs/context/evidence/issue_2915"]
+    assert report["output_roots"] == [
+        "docs/context/evidence/issue_2915",
+        DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
+        DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
+    ]
     # The named blocker references the #2916 coupling gate, not a vague reason.
     assert all("#2916" in arm["blockers"][0] for arm in report["arms"])
 
@@ -153,3 +159,8 @@ def test_real_repo_preflight_is_wired_and_fails_closed() -> None:
     assert all(arm["missing_inputs"] == [] for arm in report["arms"])
     # The real seed plan is the same-seed union declared by #2915 and #2916.
     assert report["seed_plan"] == [111, 2868]
+    assert report["output_roots"] == [
+        "docs/context/evidence/issue_2915_forecast_baselines_2026-06-20",
+        DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
+        DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
+    ]

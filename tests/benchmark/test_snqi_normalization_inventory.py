@@ -155,6 +155,11 @@ def test_to_dict_is_json_serializable_and_self_consistent():
     assert encoded["mixed_scale"] is True
     assert set(encoded["raw_penalty_terms"]) == {"time", "comfort"}
     assert encoded["is_consistent"] is False
+    status_by_term = {term["term"]: term["normalization_status"] for term in encoded["terms"]}
+    assert status_by_term["success"] == "raw_bounded"
+    assert status_by_term["time"] == "raw_unbounded"
+    assert status_by_term["comfort"] == "raw_unbounded"
+    assert status_by_term["collisions"] == "baseline_normalized_bounded"
 
 
 def test_format_report_is_human_readable():

@@ -73,6 +73,15 @@ class TermScaling:
         """Whether this term subtracts from the SNQI composite."""
         return self.sign < 0
 
+    @property
+    def normalization_status(self) -> str:
+        """Compact diagnostic status for preflight reports."""
+        if self.scaling == SCALING_BASELINE_NORMALIZED:
+            return (
+                "baseline_normalized_bounded" if self.bounded else "baseline_normalized_unbounded"
+            )
+        return "raw_bounded" if self.bounded else "raw_unbounded"
+
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable view of this term."""
         return {
@@ -80,6 +89,7 @@ class TermScaling:
             "weight_name": self.weight_name,
             "metric_key": self.metric_key,
             "scaling": self.scaling,
+            "normalization_status": self.normalization_status,
             "sign": self.sign,
             "is_penalty": self.is_penalty,
             "bounded": self.bounded,

@@ -132,6 +132,13 @@ def _print_text_report(report: dict[str, Any]) -> None:
         f"raw_penalty_terms={', '.join(normalization['raw_penalty_terms']) or 'none'}; "
         f"unbounded_terms={', '.join(normalization['unbounded_terms']) or 'none'}"
     )
+    print("Term normalization status:")
+    for term in normalization["terms"]:
+        role = "penalty" if term["is_penalty"] else "reward"
+        print(
+            f"  - {term['term']} ({term['metric_key']}, {term['weight_name']}): "
+            f"{term['normalization_status']}; role={role}; note={term['note']}"
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:

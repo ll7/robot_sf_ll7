@@ -110,14 +110,14 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
     _require("dependency_gated" in expected_availability, "dependency-gated rows must be explicit")
 
-    metric_ids = set(metrics.get("ids", []))
+    metric_ids = set(metrics.get("ids") or [])
     _require("snqi" in metric_ids, "SNQI metric required")
     _require("interaction_exposure_share" in metric_ids, "interaction exposure metric required")
     _require("timeout_rate" in metric_ids, "timeout metric required")
     _require("max_steps_share" in metric_ids, "max-steps share metric required")
 
-    success_values = set(row_status_policy.get("success_values", []))
-    fail_closed_values = set(row_status_policy.get("fail_closed_values", []))
+    success_values = set(row_status_policy.get("success_values") or [])
+    fail_closed_values = set(row_status_policy.get("fail_closed_values") or [])
     _require(success_values == {"successful_evidence"}, "only successful_evidence may count")
     _require(
         {"not_available", "failed", "blocked"} <= fail_closed_values, "fail-closed statuses missing"
@@ -128,7 +128,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     local_root = str(outputs.get("local_root", ""))
     _require(local_root.startswith("output/"), "outputs.local_root must be under output/")
     _require(outputs.get("disposable") is True, "outputs must be disposable local output")
-    required_paths = set(outputs.get("required_paths", []))
+    required_paths = set(outputs.get("required_paths") or [])
     _require(REQUIRED_OUTPUTS <= required_paths, "required outputs missing issue #3810 artifacts")
 
     durable_plan = _require_mapping(durable_evidence, "plan")
@@ -150,7 +150,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         launch_packet.get("slurm_job_id") == "not_submitted", "slurm job must be not_submitted"
     )
-    _require(13175 in launch_packet.get("blocking_jobs", []), "job 13175 blocker missing")
+    _require(13175 in (launch_packet.get("blocking_jobs") or []), "job 13175 blocker missing")
 
     route = _require_mapping(launch_packet, "route")
     _require(
@@ -186,14 +186,14 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
 
     report = _require_mapping(launch_packet, "horizon_sensitivity_report")
-    report_fields = set(report.get("required_fields", []))
+    report_fields = set(report.get("required_fields") or [])
     _require(REQUIRED_REPORT_FIELDS <= report_fields, "horizon report fields missing")
     _require(
         "not_horizon_only" in str(report.get("required_caveat", "")), "comparison caveat missing"
     )
 
     exposure = _require_mapping(launch_packet, "wait_it_out_guard")
-    exposure_fields = set(exposure.get("required_episode_fields", []))
+    exposure_fields = set(exposure.get("required_episode_fields") or [])
     _require(REQUIRED_EXPOSURE_FIELDS <= exposure_fields, "interaction exposure fields missing")
     _require(
         exposure.get("low_exposure_success_status") == "diagnostic_only",

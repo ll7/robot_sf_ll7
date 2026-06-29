@@ -78,6 +78,19 @@ def test_issue_3810_packet_rejects_low_exposure_success_evidence() -> None:
         raise AssertionError("packet should reject low-exposure success evidence")
 
 
+def test_issue_3810_packet_rejects_null_list_fields_cleanly() -> None:
+    """Explicit-null list fields fail closed with PacketError, not TypeError."""
+    packet = _load_packet()
+    packet["metrics"]["ids"] = None
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "SNQI metric required" in str(exc)
+    else:
+        raise AssertionError("packet should reject a null metrics.ids list")
+
+
 def test_issue_3810_packet_cli_json() -> None:
     """The command-line validator emits a compact JSON pass summary."""
     completed = subprocess.run(

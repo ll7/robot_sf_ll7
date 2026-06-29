@@ -101,6 +101,9 @@ def test_present_job_artifact_metadata_builds_diagnostic_packet(tmp_path: Path) 
     assert packet["coverage_snapshot"]["seed_count"] == 2
     assert packet["coverage_snapshot"]["planners"] == ["goal", "orca"]
     assert packet["retrieved_artifacts"]["missing_required_metadata_files"] == []
+    assert packet["next_slurm_go_no_go"]["claim_promotion"] == "no_go"
+    assert packet["next_slurm_go_no_go"]["s30_submission_from_issue_3798"] == "not_authorized_here"
+    assert packet["next_slurm_go_no_go"]["s30_escalation_status"] == "not_ready_incomplete_s20"
     assert "no paper/dissertation claim edits" in packet["claim_boundary"]
     assert any(
         item["path"] == "campaign_manifest.json" for item in packet["promotable_review_files"]
@@ -119,6 +122,13 @@ def test_missing_job_artifact_metadata_fails_closed(tmp_path: Path) -> None:
         "campaign_manifest.json" in packet["retrieved_artifacts"]["missing_required_metadata_files"]
     )
     assert packet["coverage_snapshot"]["episode_rows"] == 0
+    assert (
+        packet["next_slurm_go_no_go"]["s20_archive_readiness"]
+        == "blocked_missing_retrieved_metadata"
+    )
+    assert (
+        packet["next_slurm_go_no_go"]["s30_escalation_status"] == "not_ready_missing_s20_metadata"
+    )
 
 
 def test_dry_run_command_prints_markdown_packet(tmp_path: Path, capsys) -> None:
@@ -151,6 +161,40 @@ def test_tracked_packet_fixture_renders_without_raw_artifacts(capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "Status: `diagnostic_only`" in captured.out
+    assert "claim_promotion: `no_go`" in captured.out
+    assert "s30_escalation_status: `defer_until_claim_owner_authorizes_escalation`" in captured.out
     assert "File count: 56" in captured.out
     assert "requiring ignored output" in captured.out
     assert "no paper/dissertation claim edits" in captured.out
+
+
+def test_tracked_packet_rejects_claim_promotion_go(tmp_path: Path) -> None:
+    """Tracked packet fixture must fail closed if it authorizes claim promotion."""
+
+    packet = extractor.load_packet_fixture(extractor.DEFAULT_PACKET_FIXTURE)
+    packet["next_slurm_go_no_go"]["claim_promotion"] = "go"
+    fixture = tmp_path / "claim-go.json"
+    fixture.write_text(json.dumps(packet), encoding="utf-8")
+
+    try:
+        extractor.load_packet_fixture(fixture)
+    except ValueError as exc:
+        assert "claim_promotion must remain no_go" in str(exc)
+    else:
+        raise AssertionError("claim promotion drift should fail closed")
+
+
+def test_tracked_packet_rejects_issue_3798_s30_submit_authorization(tmp_path: Path) -> None:
+    """Issue #3798 packet must not silently become a Slurm submission authorization."""
+
+    packet = extractor.load_packet_fixture(extractor.DEFAULT_PACKET_FIXTURE)
+    packet["next_slurm_go_no_go"]["s30_submission_from_issue_3798"] = "authorized"
+    fixture = tmp_path / "s30-authorized.json"
+    fixture.write_text(json.dumps(packet), encoding="utf-8")
+
+    try:
+        extractor.load_packet_fixture(fixture)
+    except ValueError as exc:
+        assert "must not authorize S30 submission" in str(exc)
+    else:
+        raise AssertionError("S30 authorization drift should fail closed")

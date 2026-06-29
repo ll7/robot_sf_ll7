@@ -118,7 +118,8 @@ def _print_text_report(report: dict[str, Any]) -> None:
         role = "penalty" if term["is_penalty"] else "reward"
         print(
             f" - {term['term']} ({term['metric_key']}, {term['weight_name']}): "
-            f"{term['normalization_status']}; role={role}; note={term['note']}"
+            f"{term['normalization_status']}; role={role}; "
+            f"basis={term['measurement_basis']}; note={term['note']}"
         )
 
 

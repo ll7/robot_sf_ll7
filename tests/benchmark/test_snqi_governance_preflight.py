@@ -55,8 +55,11 @@ def test_governance_text_lists_per_term_normalization_status(
     out = capsys.readouterr().out
     assert "Term normalization status:" in out
     assert "time (time_to_goal_norm, w_time): raw_unbounded" in out
+    assert "basis=raw time-to-goal ratio" in out
     assert "comfort (comfort_exposure, w_comfort): raw_unbounded" in out
+    assert "basis=raw accumulated comfort-exposure value" in out
     assert "collisions (collisions, w_collisions): baseline_normalized_bounded" in out
+    assert "basis=baseline-relative median/p95 clamped value" in out
     assert "jerk (jerk_mean, w_jerk): baseline_normalized_bounded" in out
 
 

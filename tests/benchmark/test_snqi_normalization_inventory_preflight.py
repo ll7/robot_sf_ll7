@@ -63,6 +63,12 @@ def test_preflight_reports_mixed_basis_without_changing_snqi_output() -> None:
     assert status_by_term["time"] == "raw_unbounded"
     assert status_by_term["comfort"] == "raw_unbounded"
     assert status_by_term["collisions"] == "baseline_normalized_bounded"
+    basis_by_term = {
+        term["term"]: term["measurement_basis"] for term in report["normalization"]["terms"]
+    }
+    assert basis_by_term["time"] == "raw time-to-goal ratio"
+    assert basis_by_term["comfort"] == "raw accumulated comfort-exposure value"
+    assert basis_by_term["collisions"] == "baseline-relative median/p95 clamped value"
 
 
 def test_preflight_main_fails_closed_but_allows_inspection(tmp_path) -> None:
@@ -85,8 +91,11 @@ def test_preflight_text_lists_each_term_status(capsys: pytest.CaptureFixture[str
 
     assert "Term normalization status:" in out
     assert "time (time_to_goal_norm, w_time): raw_unbounded" in out
+    assert "basis=raw time-to-goal ratio" in out
     assert "comfort (comfort_exposure, w_comfort): raw_unbounded" in out
+    assert "basis=raw accumulated comfort-exposure value" in out
     assert "collisions (collisions, w_collisions): baseline_normalized_bounded" in out
+    assert "basis=baseline-relative median/p95 clamped value" in out
     assert "jerk (jerk_mean, w_jerk): baseline_normalized_bounded" in out
 
 

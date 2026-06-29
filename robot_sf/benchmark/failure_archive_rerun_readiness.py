@@ -161,9 +161,7 @@ def classify_failure_archive_rerun_readiness(
     if archive_id_overlap:
         blockers.append(f"archive_id_overlap:{len(archive_id_overlap)}")
     if overlap.get("scenario_family_overlap_count", 0):
-        blockers.append(
-            f"scenario_family_overlap:{overlap['scenario_family_overlap_count']}"
-        )
+        blockers.append(f"scenario_family_overlap:{overlap['scenario_family_overlap_count']}")
     if overlap.get("seed_overlap_count", 0):
         blockers.append(f"seed_overlap:{overlap['seed_overlap_count']}")
 

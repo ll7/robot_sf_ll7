@@ -24,7 +24,13 @@ _spec.loader.exec_module(mod)
 _HARD_SEED_FIXTURE = "configs/benchmarks/predictive_hard_seeds_v1.yaml"
 
 
-def _write_config(root: Path, *, min_resolvable: int = 2, min_epochs: int = 4) -> Path:
+def _write_config(
+    root: Path,
+    *,
+    min_resolvable: int = 2,
+    min_epochs: int = 4,
+    known_blockers: list[dict[str, str]] | None = None,
+) -> Path:
     """Write a minimal but valid readiness contract pointing at the real hard-seed fixture."""
     config = {
         "schema_version": "predictive-checkpoint-proxy-readiness.v1",
@@ -39,6 +45,8 @@ def _write_config(root: Path, *, min_resolvable: int = 2, min_epochs: int = 4) -
             "min_success_spread": 1.0e-9,
         },
     }
+    if known_blockers is not None:
+        config["known_blockers"] = known_blockers
     path = root / "proxy_config.yaml"
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     return path
@@ -190,6 +198,62 @@ def test_blocked_when_summary_not_a_mapping(tmp_path):
     summary_check = report["prerequisites"]["proxy_training_summary"]
     assert summary_check["status"] == "failed"
     assert any("JSON object" in m for m in summary_check["messages"])
+
+
+def test_blocked_when_known_blocker_configured(tmp_path):
+    """Configured known blockers are surfaced and keep preflight fail-closed."""
+    config = _write_config(
+        tmp_path,
+        min_resolvable=2,
+        min_epochs=2,
+        known_blockers=[
+            {
+                "id": "degenerate_hardcase_proxy_probe_v1",
+                "status": "blocked",
+                "revival_condition": "provide a non-degenerate proxy summary",
+            }
+        ],
+    )
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    summary = _write_summary(tmp_path, enabled=True, pairs=[(1.0, 0.1), (0.8, 0.4)])
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=summary,
+    )
+    blockers = report["prerequisites"]["known_blockers"]
+    assert report["status"] == "blocked"
+    assert blockers["status"] == "blocked"
+    assert blockers["blockers"][0]["id"] == "degenerate_hardcase_proxy_probe_v1"
+
+
+def test_ready_when_known_blocker_resolved(tmp_path):
+    """Resolved known blockers stay in the map without blocking readiness."""
+    config = _write_config(
+        tmp_path,
+        min_resolvable=2,
+        min_epochs=2,
+        known_blockers=[
+            {
+                "id": "degenerate_hardcase_proxy_probe_v1",
+                "status": "resolved",
+                "revival_condition": "non-degenerate proxy summary supplied",
+            }
+        ],
+    )
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    summary = _write_summary(tmp_path, enabled=True, pairs=[(1.0, 0.1), (0.8, 0.4)])
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=summary,
+    )
+    blockers = report["prerequisites"]["known_blockers"]
+    assert report["status"] == "ready"
+    assert blockers["status"] == "passed"
+    assert blockers["blockers"][0]["status"] == "resolved"
 
 
 def test_ready_when_inputs_present_and_summary_has_spread(tmp_path):

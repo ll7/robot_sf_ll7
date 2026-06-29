@@ -48,6 +48,11 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
         0.05,
         0.08,
     ]
+    # spawn_rate_per_min is the demand-parameterization knob that spans the
+    # light/medium/heavy tiers, so pin it alongside ped_density.
+    assert [
+        scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"] for scenario in scenarios
+    ] == [6.0, 12.0, 18.0]
 
     for scenario in scenarios:
         metadata = scenario["metadata"]

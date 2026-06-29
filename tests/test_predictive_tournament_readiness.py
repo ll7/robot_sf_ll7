@@ -122,6 +122,26 @@ def test_arms_cover_the_three_named_bets() -> None:
     assert {arm.child_issue for arm in ARMS} == {3204, 3213, 3214}
 
 
+def test_model_arm_uses_frozen_weighted_training_config() -> None:
+    """Model arm follows #3215's #3214 -> #3254 frozen config handoff."""
+    model = next(arm for arm in ARMS if arm.arm_id == "model")
+
+    assert [path.as_posix() for path in model.required_paths] == [
+        "configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml"
+    ]
+    assert model.child_issue == 3214
+    assert "#3254" in model.notes
+
+
+def test_run_gates_preserve_read_only_boundary_without_stale_budget_blocker() -> None:
+    """Live issue says budget was decided; helper still cannot submit compute."""
+    gate_text = "\n".join(RUN_GATES)
+
+    assert "pre-authorize" not in gate_text
+    assert "outside this read-only helper" in gate_text
+    assert "Autonomous Usage Stop Guard" in gate_text
+
+
 def test_render_text_runs_and_mentions_status(tmp_path: Path) -> None:
     """The text renderer produces output and surfaces the prerequisite status."""
     _stage_all_prerequisites(tmp_path)

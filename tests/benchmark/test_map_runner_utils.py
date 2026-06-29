@@ -234,16 +234,29 @@ def test_parse_algo_config_rejects_local_output_model_path(tmp_path: Path) -> No
         _parse_algo_config(str(cfg_path))
 
 
-def test_parse_algo_config_reports_blocked_local_artifact_follow_up() -> None:
-    """Known blockers should fail with the artifact-promotion follow-up visible."""
-    with pytest.raises(ValueError) as exc_info:
-        _parse_algo_config("configs/baselines/drl_vo_default.yaml")
+def test_retired_local_only_baseline_config_parses_and_fails_closed_at_resolution() -> None:
+    """Retired local-only baselines (issue #1764) parse but resolve fail-closed.
 
-    message = str(exc_info.value)
-    assert "https://github.com/ll7/robot_sf_ll7/issues/1764" in message
-    assert "DRL-VO default checkpoint" in message
-    assert "unavailable local artifact" in message
-    assert "decision=unavailable_recover_or_retire" in message
+    After issue #1764 the DRL-VO default baseline no longer carries a local
+    ``model_path``; it points at an explicit ``local_only: true`` registry id.
+    Config parsing must therefore succeed (the local-artifact preflight no longer
+    flags it), while the local-only registry entry keeps benchmark use fail-closed
+    by design: it declares a ``not_for_benchmark`` claim boundary and resolves to a
+    machine-local path that is absent in clean worktrees and CI.
+    """
+    from robot_sf.models.registry import get_registry_entry, resolve_model_path
+
+    config = _parse_algo_config("configs/baselines/drl_vo_default.yaml")
+    model_id = config["model_id"]
+    assert model_id == "retired_drl_vo_default_local_only"
+    assert "model_path" not in config
+
+    entry = get_registry_entry(model_id)
+    assert entry.get("local_only") is True
+    assert entry["benchmark_promotion"]["claim_boundary"] == "not_for_benchmark"
+
+    with pytest.raises(FileNotFoundError, match="local-only"):
+        resolve_model_path(model_id, allow_download=False)
 
 
 def test_build_policy_rejects_sac_default_local_output_model_path() -> None:

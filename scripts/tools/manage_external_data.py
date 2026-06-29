@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fnmatch
 import hashlib
 import json
 import os
@@ -540,12 +541,46 @@ def stage_asset(
     return manifest
 
 
+def _pattern_is_literal(pattern: str) -> bool:
+    """Return whether a required-path pattern has no glob magic characters."""
+    return not any(char in pattern for char in ("*", "?", "["))
+
+
 def _manifest_text_field(manifest: dict[str, Any], field: str) -> str | None:
     """Return non-empty manifest text field or ``None``."""
     value = manifest.get(field)
     if not isinstance(value, str) or not value.strip():
         return None
     return value.strip()
+
+
+def _provenance_paths_cover_requirements(asset: AssetSpec, matched_paths: list[Any]) -> bool:
+    """Return whether manifest matched paths satisfy every required path group.
+
+    A manifest is only ready when each required group has at least one matched path that
+    actually corresponds to a declared pattern, so an unrelated or partial non-empty list
+    cannot pass the fail-closed gate. Literal patterns require an exact (or path-prefixed)
+    match; glob patterns fall back to ``fnmatch`` coverage since the concrete matched path
+    cannot be reversed back to the pattern reliably.
+    """
+    candidates = {path for path in matched_paths if isinstance(path, str) and path.strip()}
+    if not candidates:
+        return False
+    for requirements in _required_groups(asset).values():
+        literal_patterns = [r.pattern for r in requirements if _pattern_is_literal(r.pattern)]
+        glob_patterns = [r.pattern for r in requirements if not _pattern_is_literal(r.pattern)]
+        satisfied = any(
+            candidate == pattern or candidate.startswith(f"{pattern}/")
+            for candidate in candidates
+            for pattern in literal_patterns
+        ) or any(
+            fnmatch.fnmatch(candidate, pattern)
+            for candidate in candidates
+            for pattern in glob_patterns
+        )
+        if not satisfied:
+            return False
+    return True
 
 
 def _missing_provenance_metadata(asset: AssetSpec, manifest: dict[str, Any]) -> list[str]:
@@ -565,8 +600,10 @@ def _missing_provenance_metadata(asset: AssetSpec, manifest: dict[str, Any]) -> 
     if not has_sample_checksum:
         missing.append("sample_files[].sha256")
 
-    required_paths = manifest.get("matched_required_paths")
-    if not isinstance(required_paths, list) or not required_paths:
+    matched_paths = manifest.get("matched_required_paths")
+    if not isinstance(matched_paths, list) or not _provenance_paths_cover_requirements(
+        asset, matched_paths
+    ):
         missing.append("matched_required_paths")
     return missing
 
@@ -594,6 +631,10 @@ def check_provenance_manifest(asset_id: str, manifest_path: Path) -> dict[str, A
     except json.JSONDecodeError as exc:
         report["status"] = "invalid_json"
         report["action"] = f"Manifest JSON invalid: {exc}"
+        return report
+    if not isinstance(manifest, dict):
+        report["status"] = "invalid_json"
+        report["action"] = "Manifest JSON invalid: root value must be a JSON object."
         return report
 
     missing = _missing_provenance_metadata(asset, manifest)

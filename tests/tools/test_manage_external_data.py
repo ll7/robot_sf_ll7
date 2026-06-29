@@ -286,6 +286,62 @@ def test_socnavbench_eth_provenance_check_fails_missing_metadata(
     assert expected_missing in report["missing_metadata"]
 
 
+def test_provenance_check_fails_closed_on_non_dict_json(tmp_path: Path) -> None:
+    """A manifest whose JSON root is not an object must fail closed, not crash."""
+    manifest_path = tmp_path / "socnavbench-s3dis-eth.provenance.json"
+    manifest_path.write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+
+    report = manage_external_data.check_provenance_manifest("socnavbench-s3dis-eth", manifest_path)
+
+    assert report["ok"] is False
+    assert report["status"] == "invalid_json"
+
+
+def test_provenance_check_rejects_incomplete_path_coverage(tmp_path: Path) -> None:
+    """A non-empty matched-path list that misses a required group must not pass."""
+    manifest_path = tmp_path / "socnavbench-s3dis-eth.provenance.json"
+    manifest = {
+        "schema": "robot_sf_external_data_manifest.v1",
+        "asset_id": "socnavbench-s3dis-eth",
+        "source_url": "https://github.com/CMU-TBD/SocNavBench",
+        "license_note": "External licensed data not redistributed by Robot SF.",
+        "tree_sha256": "0" * 64,
+        "sample_files": [{"path": "sd3dis/example", "sha256": "1" * 64}],
+        # Only the traversible group is present; the required ETH mesh group is missing.
+        "matched_required_paths": [
+            "sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+        ],
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = manage_external_data.check_provenance_manifest("socnavbench-s3dis-eth", manifest_path)
+
+    assert report["ok"] is False
+    assert report["status"] == "incomplete_metadata"
+    assert "matched_required_paths" in report["missing_metadata"]
+
+
+def test_provenance_check_rejects_unrelated_matched_paths(tmp_path: Path) -> None:
+    """An unrelated non-empty matched-path list must not satisfy the readiness gate."""
+    manifest_path = tmp_path / "socnavbench-s3dis-eth.provenance.json"
+    manifest = {
+        "schema": "robot_sf_external_data_manifest.v1",
+        "asset_id": "socnavbench-s3dis-eth",
+        "source_url": "https://github.com/CMU-TBD/SocNavBench",
+        "license_note": "External licensed data not redistributed by Robot SF.",
+        "tree_sha256": "0" * 64,
+        "sample_files": [{"path": "sd3dis/example", "sha256": "1" * 64}],
+        "matched_required_paths": ["totally/unrelated/path"],
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = manage_external_data.check_provenance_manifest("socnavbench-s3dis-eth", manifest_path)
+
+    assert report["ok"] is False
+    assert report["status"] == "incomplete_metadata"
+    assert "matched_required_paths" in report["missing_metadata"]
+
+
 def test_cli_provenance_check_reports_missing_socnavbench_eth_metadata(tmp_path: Path) -> None:
     """CLI provenance-check reports incomplete ETH metadata with nonzero exit."""
     manifest_path = tmp_path / "socnavbench-s3dis-eth.provenance.json"

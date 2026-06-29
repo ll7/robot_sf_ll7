@@ -13,6 +13,8 @@ import pathlib
 import pytest
 
 from robot_sf.benchmark.orca_residual_lane_readiness import (
+    ISSUE_1475_LOCAL_PREFLIGHT_COMMANDS,
+    ISSUE_1475_REQUIRED_SMOKE_EVIDENCE_FIELDS,
     LANE_BLOCKERS,
     LANE_ROUTES,
     REQUIRED_CANDIDATE_IDS,
@@ -159,6 +161,48 @@ def test_diagnostics_contract_reuses_canonical_owner(tmp_path: pathlib.Path) -> 
     _write_synthetic_lane(tmp_path)
     report = assess_lane_readiness(tmp_path, validate_packet=False)
     assert report["required_diagnostics_contract"] == list(REQUIRED_ORCA_RESIDUAL_DIAGNOSTICS)
+
+
+def test_issue_1475_decision_packet_is_read_only_and_fail_closed(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Issue #1475 packet exposes smoke-readiness gates without allowing submission."""
+    _write_synthetic_lane(tmp_path)
+
+    report = assess_lane_readiness(tmp_path, validate_packet=False)
+
+    packet = report["issue_1475_decision_packet"]
+    assert packet["issue"] == 1475
+    assert packet["task_class"] == "orca_residual_bc_smoke_decision_packet"
+    assert packet["decision_status"] == "ready_for_single_smoke_handoff"
+    assert packet["submission_allowed_from_this_checker"] is False
+    assert packet["run_nominal"] is False
+    assert packet["nominal_escalation_gate"]["allowed_by_packet"] is False
+    assert packet["required_smoke_evidence_fields"] == list(
+        ISSUE_1475_REQUIRED_SMOKE_EVIDENCE_FIELDS
+    )
+    assert packet["local_preflight_commands"] == list(ISSUE_1475_LOCAL_PREFLIGHT_COMMANDS)
+    assert any(
+        "required smoke evidence fields present" in gate
+        for gate in packet["nominal_escalation_gate"]["required_before_nominal"]
+    )
+
+
+def test_issue_1475_decision_packet_reflects_incomplete_local_surface(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Missing local scaffolding makes the #1475 packet incomplete, not runnable."""
+    _write_synthetic_lane(tmp_path)
+    (tmp_path / "scripts/validation/run_policy_search_candidate.py").unlink()
+
+    report = assess_lane_readiness(tmp_path, validate_packet=False)
+
+    packet = report["issue_1475_decision_packet"]
+    assert report["overall_status"] == "prerequisites_incomplete"
+    assert packet["decision_status"] == "local_packet_incomplete"
+    assert packet["submission_allowed_from_this_checker"] is False
+    assert packet["run_nominal"] is False
+    assert packet["local_blockers"] == report["errors"]
 
 
 def test_real_repo_lane_is_blocked_on_followup() -> None:

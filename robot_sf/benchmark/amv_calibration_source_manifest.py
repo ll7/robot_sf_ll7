@@ -271,6 +271,17 @@ def _blocked_state_blockers(manifest: Mapping[str, Any], source_status: str) -> 
     return blockers
 
 
+def _missing_calibration_fields_report() -> tuple[AmvCalibrationFieldReport, ...]:
+    """Return the fail-closed report for an absent or malformed ``calibration_fields`` list."""
+    return (
+        AmvCalibrationFieldReport(
+            name="<manifest>",
+            support_status=FIELD_STATUS_MISSING,
+            blockers=("calibration_fields must be a non-empty list",),
+        ),
+    )
+
+
 def _check_calibration_fields(
     raw_fields: Any,
     allowed_fields: set[str],
@@ -280,22 +291,12 @@ def _check_calibration_fields(
     Returns:
         Per-field support reports.
     """
-    if not isinstance(raw_fields, Sequence) or isinstance(raw_fields, (str, bytes)):
-        return (
-            AmvCalibrationFieldReport(
-                name="<manifest>",
-                support_status=FIELD_STATUS_MISSING,
-                blockers=("calibration_fields must be a non-empty list",),
-            ),
-        )
-    if not raw_fields:
-        return (
-            AmvCalibrationFieldReport(
-                name="<manifest>",
-                support_status=FIELD_STATUS_MISSING,
-                blockers=("calibration_fields must be a non-empty list",),
-            ),
-        )
+    if (
+        not isinstance(raw_fields, Sequence)
+        or isinstance(raw_fields, (str, bytes))
+        or not raw_fields
+    ):
+        return _missing_calibration_fields_report()
 
     reports: list[AmvCalibrationFieldReport] = []
     seen: set[str] = set()

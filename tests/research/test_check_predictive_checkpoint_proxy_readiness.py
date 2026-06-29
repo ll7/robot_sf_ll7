@@ -174,6 +174,42 @@ def test_blocked_mapping_classifies_worktree_local_output_artifact(tmp_path):
     assert candidate["resolved_path"].endswith("output/tmp/predictive/run/checkpoint.pt")
 
 
+def test_blocked_mapping_surfaces_public_release_metadata(tmp_path):
+    """A release-backed checkpoint remains blocked until local, but provenance is mapped."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    models = [
+        {
+            "model_id": "predictive_release_backed",
+            "local_path": "output/tmp/predictive/run/checkpoint.pt",
+            "tags": ["predictive"],
+            "github_release": {
+                "repo": "ll7/robot_sf_ll7",
+                "tag": "artifact/models-2026-05-registry-v1",
+                "asset_name": "predictive_release_backed.pt",
+                "url": "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.pt",
+                "sha256": "a" * 64,
+                "size_bytes": 123,
+                "metadata_asset": "predictive_release_backed-metadata.json",
+            },
+        }
+    ]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    candidate = ckpt["mapping"]["candidates"][0]
+    public_artifact = candidate["public_artifact"]
+    assert report["status"] == "blocked"
+    assert ckpt["mapping"]["public_artifacts_by_status"] == {"declared": 1}
+    assert candidate["status"] == "missing_local_path"
+    assert public_artifact["status"] == "declared"
+    assert public_artifact["source"] == "github_release"
+    assert public_artifact["asset_name"] == "predictive_release_backed.pt"
+    assert public_artifact["sha256"] == "a" * 64
+
+
 def test_blocked_when_too_few_checkpoints_resolve(tmp_path):
     """Fewer locally-resolvable checkpoints than the minimum fails closed (mapping metadata)."""
     config = _write_config(tmp_path, min_resolvable=6)

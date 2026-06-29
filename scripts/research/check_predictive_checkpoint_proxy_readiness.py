@@ -188,8 +188,33 @@ def _artifact_scope(local_path: Any, resolved: Path | None, repo_root: Path) -> 
     return "unknown"
 
 
-def _checkpoint_mapping_entry(model_id: str, local_path: Any, repo_root: Path) -> dict[str, Any]:
+def _public_artifact_metadata(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return durable public artifact metadata declared in the model registry."""
+    release = entry.get("github_release")
+    if not isinstance(release, dict):
+        return {"status": "missing", "source": None}
+
+    required = ("repo", "tag", "asset_name", "url", "sha256", "size_bytes")
+    missing = [key for key in required if release.get(key) in (None, "")]
+    return {
+        "status": "declared" if not missing else "incomplete",
+        "source": "github_release",
+        "repo": release.get("repo"),
+        "tag": release.get("tag"),
+        "asset_name": release.get("asset_name"),
+        "url": release.get("url"),
+        "sha256": release.get("sha256"),
+        "size_bytes": release.get("size_bytes"),
+        "metadata_asset": release.get("metadata_asset"),
+        "missing_fields": missing,
+    }
+
+
+def _checkpoint_mapping_entry(
+    model_id: str, entry: dict[str, Any], repo_root: Path
+) -> dict[str, Any]:
     """Build one fail-closed checkpoint mapping row without selecting any checkpoint."""
+    local_path = entry.get("local_path")
     resolved = _resolve_local_path(local_path, repo_root)
     scope = _artifact_scope(local_path, resolved, repo_root)
 
@@ -211,6 +236,7 @@ def _checkpoint_mapping_entry(model_id: str, local_path: Any, repo_root: Path) -
         "local_path": local_path,
         "resolved_path": str(resolved) if resolved is not None else None,
         "artifact_scope": scope,
+        "public_artifact": _public_artifact_metadata(entry),
         "status": status,
         "reason": reason,
         "present": status == "present",
@@ -238,13 +264,17 @@ def _check_checkpoint_artifacts(
         tags = {str(t).strip().lower() for t in (entry.get("tags") or [])}
         if tag not in tags:
             continue
-        local_path = entry.get("local_path")
-        candidates.append(_checkpoint_mapping_entry(model_id, local_path, repo_root))
+        candidates.append(_checkpoint_mapping_entry(model_id, entry, repo_root))
 
     candidates.sort(key=lambda item: str(item["model_id"]))
     resolvable = [c for c in candidates if c["present"]]
     blocked_by_status: dict[str, int] = {}
+    public_artifacts_by_status: dict[str, int] = {}
     for candidate in candidates:
+        artifact_status = str(candidate["public_artifact"]["status"])
+        public_artifacts_by_status[artifact_status] = (
+            public_artifacts_by_status.get(artifact_status, 0) + 1
+        )
         if candidate["present"]:
             continue
         blocked_by_status[candidate["status"]] = blocked_by_status.get(candidate["status"], 0) + 1
@@ -254,6 +284,7 @@ def _check_checkpoint_artifacts(
         "candidate_count": len(candidates),
         "resolvable_count": len(resolvable),
         "blocked_by_status": blocked_by_status,
+        "public_artifacts_by_status": public_artifacts_by_status,
         "candidates": candidates,
     }
 

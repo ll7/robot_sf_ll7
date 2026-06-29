@@ -152,6 +152,28 @@ def _extract_repeated_seed_args(command: str) -> tuple[tuple[int, ...], list[str
     return tuple(seed_args), warnings
 
 
+def _extract_option_values(command: str, option: str) -> tuple[tuple[str, ...], list[str]]:
+    """Return all values passed to a repeatable argparse option."""
+    warnings: list[str] = []
+    try:
+        tokens = shlex.split(command)
+    except ValueError as exc:
+        warnings.append(f"example_command could not be parsed by shlex: {exc}")
+        return (), warnings
+
+    values: list[str] = []
+    prefix = f"{option}="
+    for index, token in enumerate(tokens):
+        if token == option:
+            if index + 1 >= len(tokens):
+                warnings.append(f"example_command has {option} without value")
+                continue
+            values.append(tokens[index + 1])
+        elif token.startswith(prefix):
+            values.append(token.removeprefix(prefix))
+    return tuple(values), warnings
+
+
 def _under_output_prefix(path: Path | None, repo_root: Path) -> bool:
     if path is None:
         return False
@@ -457,6 +479,56 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
             "example_command --seed values must exactly match repeated_seeds "
             f"{list(seeds)}, got {list(command_seeds)}"
         )
+
+    command_samplers, sampler_warnings = _extract_option_values(example_command, "--sampler")
+    warnings.extend(sampler_warnings)
+    checks["example_command_sampler_set"] = not command_samplers or command_samplers == samplers
+    if not checks["example_command_sampler_set"]:
+        blockers.append(
+            "example_command --sampler values must be absent or exactly match samplers "
+            f"{list(samplers)}, got {list(command_samplers)}"
+        )
+
+    command_scenario_templates, scenario_warnings = _extract_option_values(
+        example_command, "--scenario-template"
+    )
+    warnings.extend(scenario_warnings)
+    checks["example_command_scenario_template"] = not command_scenario_templates or tuple(
+        _resolve_repo_path(root, value) for value in command_scenario_templates
+    ) == (_resolve_repo_path(root, base_config.get("scenario_template")),)
+    if not checks["example_command_scenario_template"]:
+        blockers.append(
+            "example_command --scenario-template must be absent or match "
+            "base_config.scenario_template"
+        )
+
+    command_search_spaces, search_space_warnings = _extract_option_values(
+        example_command, "--search-space"
+    )
+    warnings.extend(search_space_warnings)
+    checks["example_command_search_space"] = not command_search_spaces or tuple(
+        _resolve_repo_path(root, value) for value in command_search_spaces
+    ) == (_resolve_repo_path(root, base_config.get("search_space")),)
+    if not checks["example_command_search_space"]:
+        blockers.append(
+            "example_command --search-space must be absent or match base_config.search_space"
+        )
+
+    command_policies, policy_warnings = _extract_option_values(example_command, "--policy")
+    warnings.extend(policy_warnings)
+    checks["example_command_policy"] = not command_policies or command_policies == (
+        str(base_config.get("policy")),
+    )
+    if not checks["example_command_policy"]:
+        blockers.append("example_command --policy must be absent or match base_config.policy")
+
+    command_objectives, objective_warnings = _extract_option_values(example_command, "--objective")
+    warnings.extend(objective_warnings)
+    checks["example_command_objective"] = not command_objectives or command_objectives == (
+        str(base_config.get("objective")),
+    )
+    if not checks["example_command_objective"]:
+        blockers.append("example_command --objective must be absent or match base_config.objective")
 
     output_dir, out_json, output_warnings = _extract_output_paths(example_command, root)
     warnings.extend(output_warnings)

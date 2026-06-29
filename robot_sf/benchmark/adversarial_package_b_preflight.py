@@ -21,6 +21,8 @@ MANIFEST_SCHEMA_VERSION = "adversarial-package-b-comparison.v1"
 EXPECTED_ISSUE = 3079
 EXPECTED_BUDGETS = (16, 32, 64)
 EXPECTED_SAMPLERS = ("random", "coordinate", "optuna")
+EXPECTED_POLICY = "goal"
+EXPECTED_OBJECTIVE = "worst_case_snqi"
 EXPECTED_REPORTING_FIELDS = frozenset(
     {
         "first_failure_iteration",
@@ -306,12 +308,13 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         if not checks[f"{key}_exists"]:
             blockers.append(f"base_config.{key} must point at an existing repository file")
 
-    for key in ("policy", "objective"):
-        checks[f"{key}_declared"] = isinstance(base_config.get(key), str) and bool(
-            base_config.get(key).strip()
-        )
-        if not checks[f"{key}_declared"]:
-            blockers.append(f"base_config.{key} must be a non-empty string")
+    checks["policy_expected"] = base_config.get("policy") == EXPECTED_POLICY
+    if not checks["policy_expected"]:
+        blockers.append(f"base_config.policy must be {EXPECTED_POLICY!r}")
+
+    checks["objective_expected"] = base_config.get("objective") == EXPECTED_OBJECTIVE
+    if not checks["objective_expected"]:
+        blockers.append(f"base_config.objective must be {EXPECTED_OBJECTIVE!r}")
 
     budgets = _as_int_tuple(payload.get("budget_grid"))
     checks["budget_grid"] = budgets == EXPECTED_BUDGETS
@@ -476,6 +479,10 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         "repeated_seeds": list(seeds),
         "example_command_repeated_seeds": list(command_seeds),
         "samplers": list(samplers),
+        "base_config": {
+            "policy": base_config.get("policy"),
+            "objective": base_config.get("objective"),
+        },
         "research_package_registry": _repo_relative(registry_path, root),
         "runner": _repo_relative(runner_path, root) if runner_path else None,
         "runner_reporting_fields": sorted(runner_row_fields),

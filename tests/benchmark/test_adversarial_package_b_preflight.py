@@ -125,6 +125,10 @@ def test_committed_package_b_manifest_preflights_without_running_benchmark() -> 
     assert result.metadata["budget_grid"] == [16, 32, 64]
     assert result.metadata["repeated_seeds"] == [1101, 2202, 3303]
     assert "held_out_family_yield" in result.metadata["runner_reporting_fields"]
+    assert result.metadata["base_config"] == {
+        "policy": "goal",
+        "objective": "worst_case_snqi",
+    }
     assert (
         result.metadata["research_package_registry"]
         == "configs/research/research_package_registry_issue_3057.yaml"
@@ -401,6 +405,24 @@ def test_preflight_blocks_missing_inputs_and_output_paths(tmp_path: Path) -> Non
     assert result.checks["search_space_exists"] is False
     assert result.checks["output_dir_under_issue_path"] is False
     assert result.checks["out_json_under_issue_path"] is False
+
+
+def test_preflight_blocks_base_config_policy_objective_drift(tmp_path: Path) -> None:
+    """Package-B local metadata must stay bound to the intended policy and objective."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["base_config"]["policy"] = "orca"
+    payload["base_config"]["objective"] = "nearest_collision"
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["policy_expected"] is False
+    assert result.checks["objective_expected"] is False
+    assert any("base_config.policy" in blocker for blocker in result.blockers)
+    assert any("base_config.objective" in blocker for blocker in result.blockers)
 
 
 def test_preflight_blocks_output_artifact_command_drift(tmp_path: Path) -> None:

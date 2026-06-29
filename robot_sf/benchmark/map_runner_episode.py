@@ -17,6 +17,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     infer_execution_mode_from_counts,
     resolve_learned_checkpoint_observation_contract,
 )
+from robot_sf.benchmark.ammv_feasibility import evaluate_artifact_command_feasibility
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
 from robot_sf.benchmark.map_runner_actions import (
@@ -556,6 +557,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         previous_trace_ped_pos: np.ndarray | None = None
         previous_trace_heading = _observation_heading(obs)
         robot_headings: list[float] = []
+        ammv_command_actions: list[dict[str, Any]] = []
         view_integrity: dict[str, Any] | None = None
         for step_idx in range(horizon_val):
             policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
@@ -609,6 +611,8 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 )
                 policy_command = actuation_step.applied_command
                 current_command = actuation_step.applied_command
+            selected_action_payload = _command_action_payload(policy_command)
+            ammv_command_actions.append(selected_action_payload)
             if step_is_native:
                 # Policy already outputs native env actions (e.g. delta velocities);
                 # skip the absolute→delta conversion done by _policy_command_to_env_action.
@@ -658,7 +662,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 )
                 planner_payload: dict[str, Any] = {
                     "event": "step",
-                    "selected_action": _command_action_payload(policy_command),
+                    "selected_action": selected_action_payload,
                 }
                 if actuation_step is not None:
                     planner_payload["amv"] = {
@@ -953,6 +957,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             impact["status"] = "not_applicable"
             impact["adapter_fraction"] = 0.0
     _finalize_feasibility_metadata(algo_meta)
+    algo_meta["ammv_feasibility"] = evaluate_artifact_command_feasibility(ammv_command_actions)
     if isinstance(planner_runtime_snapshot, dict):
         algo_meta["planner_runtime"] = planner_runtime_snapshot
     if record_planner_decision_trace:

@@ -2489,6 +2489,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2557_replica_readiness_packet_2026-06-29/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2557_replica_readiness_packet_2026-06-29/packet.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2749_observation_noise_diagnostics
     status: evidence
     freshness: evidence

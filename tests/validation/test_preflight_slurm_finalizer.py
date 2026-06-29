@@ -136,6 +136,44 @@ def test_blocks_when_manifest_linkage_missing(tmp_path: Path) -> None:
     assert "finalizer_manifest_linkage" in blocker_names
 
 
+def test_blocks_when_issue_traceability_mismatches(tmp_path: Path) -> None:
+    """Queue/finalizer issue mismatch blocks public issue traceability."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(tmp_path / "finalizer.json", issue=9999)
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "issue_traceability_matches")
+    assert "align queue and finalizer issue numbers" in blocker["remediation"]
+
+
+def test_blocks_when_queue_issue_traceability_missing(tmp_path: Path) -> None:
+    """Missing queue issue metadata blocks public handoff traceability."""
+    queue = tmp_path / "queue.yaml"
+    queue.write_text(
+        yaml.safe_dump(
+            {
+                "entries": [
+                    {"id": "slice_a", "seeds": [101], "status": "completed"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    inputs = {
+        "queue_path": queue,
+        "submission_manifests": [_write_manifest(tmp_path / "manifest.yaml")],
+        "finalizer_manifests": [_write_finalizer(tmp_path / "finalizer.json")],
+    }
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "issue_traceability_matches")
+    assert "queue entries do not record an issue number" in blocker["detail"]
+
+
 def test_blocks_when_claim_boundary_missing(tmp_path: Path) -> None:
     """A finalizer without a claim boundary fails closed."""
     inputs = _ready_inputs(tmp_path)

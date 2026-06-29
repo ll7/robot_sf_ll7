@@ -26,6 +26,8 @@ What it checks (each maps to an acceptance criterion of #3425):
   and carries the expected finalization schema and a job id.
 * ``finalizer_manifest_linkage`` — every finalizer ``job_id`` resolves to a
   submission-manifest job (the "manifest linkage missing" fail-closed case).
+* ``issue_traceability_matches`` — queue/finalizer issue numbers agree for
+  public issue/PR traceability.
 * ``durable_pointer_present`` — every *successful* finalizer carries a durable
   pointer (the "durable pointers missing" fail-closed case).
 * ``claim_boundary_present`` — every finalizer carries a claim boundary so the
@@ -326,6 +328,64 @@ def _check_finalizer_linkage(inputs: LoadedInputs) -> PreflightCheck:
     )
 
 
+def _check_issue_traceability(inputs: LoadedInputs) -> PreflightCheck:
+    """Require queue and finalizer issue numbers to agree when both are present."""
+    queue_issues = sorted(
+        {
+            int(entry.issue)
+            for entry in inputs.queue
+            if isinstance(entry.issue, int) and not isinstance(entry.issue, bool)
+        }
+    )
+    finalizer_issues = sorted(
+        {
+            int(finalizer.issue_number)
+            for finalizer in inputs.finalizers
+            if isinstance(finalizer.issue_number, int)
+            and not isinstance(finalizer.issue_number, bool)
+        }
+    )
+
+    if not inputs.queue or not inputs.finalizers:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_SKIPPED,
+            severity=_REQUIRED,
+            detail="queue or finalizer records missing",
+            remediation="resolve queue_present and finalizer_manifests_present first",
+        )
+    if not queue_issues:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail="queue entries do not record an issue number",
+            remediation="record issue number in submission queue entries before public handoff",
+        )
+    if not finalizer_issues:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail="finalizer records do not record an issue number",
+            remediation="record issue_number in finalizer manifest before public handoff",
+        )
+    if queue_issues != finalizer_issues:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=f"queue issue(s) {queue_issues} differ from finalizer issue(s) {finalizer_issues}",
+            remediation="align queue and finalizer issue numbers before claim decision handoff",
+        )
+    return PreflightCheck(
+        name="issue_traceability_matches",
+        status=_READY,
+        severity=_REQUIRED,
+        detail=f"queue/finalizer issue traceability matches issue(s) {queue_issues}",
+    )
+
+
 def _check_durable_pointer(inputs: LoadedInputs) -> PreflightCheck:
     """Require every successful finalizer to carry a durable pointer."""
     successful = [
@@ -456,6 +516,7 @@ def preflight(
         _check_submission_manifests(submission_manifests, inputs),
         _check_finalizer_present(finalizer_manifests, inputs),
         _check_finalizer_linkage(inputs),
+        _check_issue_traceability(inputs),
         _check_durable_pointer(inputs),
         _check_claim_boundary(inputs),
         _check_evidence_root(evidence_root),

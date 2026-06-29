@@ -1,0 +1,301 @@
+# Issue #3810 long-horizon Social Navigation Quality Index (SNQI) launch packet.
+#
+# This is a no-submit decision packet, not benchmark evidence. It converts the
+# live issue decisions into a reviewable Slurm launch, analysis, and retention
+# contract. Do not submit from this packet until the private Slurm decision
+# packet is marked go and job 13175 has been reconciled.
+schema_version: research-campaign-manifest.v0.1
+campaign:
+  id: issue_3810_comprehensive_h600_snqi_recalibration
+  parent_issue: 3810
+  purpose: >
+    Prepare a comprehensive 600-step long-horizon benchmark campaign with
+    Social Navigation Quality Index recalibration and an interaction-exposure
+    diagnostic guard for wait-it-out successes.
+  evidence_tier: launch-packet-only
+  claim_boundary: >
+    Launch packet only. This packet defines a fail-closed campaign and analysis
+    contract for a future comprehensive h600 run. It does not run a benchmark,
+    submit Slurm work, recalibrate SNQI weights, change paper/dissertation
+    claims, or establish horizon sensitivity. The eventual report must frame the
+    comparison as prior scoped short-horizon versus new comprehensive
+    long-horizon, because scenario scope, seed budget, planner roster, and
+    horizon all change.
+
+scenario_suite:
+  matrix_path: configs/scenarios/classic_interactions_francis2023.yaml
+  scope: all_scenarios_in_matrix
+  scenario_ids:
+    - all_from_configs/scenarios/classic_interactions_francis2023.yaml
+  max_episode_steps: 600
+  suite_hash_policy: record_sha256_before_run
+  comparison_boundary: >
+    New comprehensive h600 surface supersedes the old scoped h100 release
+    comparison target. Reports must not describe ranking movement as caused by
+    horizon alone.
+
+planners:
+  inclusion_policy: >
+    Include every planner row available to the canonical benchmark runner from
+    the public config and readiness registry. Candidate, dependency-gated,
+    adapter, fallback, degraded, failed, and unavailable rows remain visible but
+    cannot count as benchmark-strength success evidence.
+  inventory_sources:
+    - configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml
+    - robot_sf/benchmark/algorithm_readiness.py
+  rows:
+    - planner_id: prediction_planner
+      adapter_mode: native
+      config_path: configs/algos/prediction_planner_camera_ready.yaml
+      benchmark_profile: experimental
+      expected_availability: preflight_required
+    - planner_id: goal
+      adapter_mode: native
+      config_path: null
+      benchmark_profile: baseline-safe
+      expected_availability: available
+    - planner_id: social_force
+      adapter_mode: native
+      config_path: null
+      benchmark_profile: baseline-safe
+      expected_availability: available
+    - planner_id: orca
+      adapter_mode: adapter
+      config_path: null
+      benchmark_profile: baseline-safe
+      expected_availability: dependency_gated
+    - planner_id: ppo
+      adapter_mode: native
+      config_path: configs/baselines/ppo_15m_grid_socnav.yaml
+      benchmark_profile: experimental
+      expected_availability: model_preflight_required
+    - planner_id: socnav_sampling
+      adapter_mode: adapter
+      config_path: null
+      benchmark_profile: experimental
+      expected_availability: dependency_gated
+    - planner_id: sacadrl
+      adapter_mode: adapter
+      config_path: null
+      benchmark_profile: experimental
+      expected_availability: dependency_gated
+    - planner_id: socnav_bench
+      adapter_mode: adapter
+      config_path: null
+      benchmark_profile: experimental
+      expected_availability: dependency_gated
+    - planner_id: guarded_ppo
+      adapter_mode: native
+      config_path: configs/baselines/ppo_15m_grid_socnav.yaml
+      benchmark_profile: experimental
+      expected_availability: diagnostic_only_candidate
+    - planner_id: predictive_mppi
+      adapter_mode: native
+      config_path: configs/algos/predictive_mppi_camera_ready.yaml
+      benchmark_profile: experimental
+      expected_availability: diagnostic_only_candidate
+    - planner_id: risk_dwa
+      adapter_mode: native
+      config_path: configs/algos/risk_dwa_camera_ready.yaml
+      benchmark_profile: experimental
+      expected_availability: diagnostic_only_candidate
+
+seed_policy:
+  mode: fixed-list
+  seed_set: paper_eval_s30
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seeds:
+    - 111
+    - 112
+    - 113
+    - 114
+    - 115
+    - 116
+    - 117
+    - 118
+    - 119
+    - 120
+    - 121
+    - 122
+    - 123
+    - 124
+    - 125
+    - 126
+    - 127
+    - 128
+    - 129
+    - 130
+    - 131
+    - 132
+    - 133
+    - 134
+    - 135
+    - 136
+    - 137
+    - 138
+    - 139
+    - 140
+  repeat_policy: every_planner_scenario_pair
+
+metrics:
+  ids:
+    - success_rate
+    - collision_rate
+    - near_miss_rate
+    - timeout_rate
+    - max_steps_share
+    - time_to_goal_norm
+    - snqi
+    - interaction_exposure_share
+  denominator_policy: report_per_planner_scenario_seed_denominators
+  baseline_or_weights: recompute_long_horizon_bundle_before_claim
+
+row_status_policy:
+  allowed_values:
+    - successful_evidence
+    - diagnostic_only
+    - fallback
+    - degraded
+    - not_available
+    - failed
+    - blocked
+  success_values:
+    - successful_evidence
+  fail_closed_values:
+    - not_available
+    - failed
+    - blocked
+  fallback_policy: >
+    Fallback, degraded, adapter-unavailable, candidate diagnostic-only, failed,
+    and blocked rows stay visible in denominators and reports but cannot count
+    as successful benchmark-strength evidence.
+
+outputs:
+  local_root: output/benchmarks/issue_3810_comprehensive_h600_snqi
+  disposable: true
+  required_paths:
+    - campaign_manifest.json
+    - manifest.json
+    - run_meta.json
+    - preflight/validate_config.json
+    - preflight/preview_scenarios.json
+    - preflight/planner_availability.json
+    - preflight/private_ops_route_dry_run.json
+    - reports/campaign_summary.json
+    - reports/campaign_table.csv
+    - reports/campaign_table.md
+    - reports/snqi_recalibration_inputs.json
+    - reports/snqi_recalibration_bundle.json
+    - reports/horizon_sensitivity_report.json
+    - reports/horizon_sensitivity_report.md
+    - reports/interaction_exposure_diagnostics.json
+    - reports/interaction_exposure_diagnostics.md
+
+durable_evidence:
+  plan:
+    kind: tracked_context_evidence_plus_external_pointer
+    path: docs/context/evidence/issue_3810_long_horizon_snqi/
+    required_before_claim: true
+  retention_paths:
+    compact_review_bundle: docs/context/evidence/issue_3810_long_horizon_snqi/
+    external_artifact_pointer: wandb-or-release-artifact-required-before-claim
+    private_ops_ledger: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/jobs.yaml
+  local_output_boundary: >
+    Keep raw episode JSONL, videos, Slurm logs, model caches, and checkpoints out
+    of git. Promote only compact summaries, checksums, and durable artifact
+    pointers after run completion and artifact classification.
+
+validation:
+  commands:
+    - uv run python scripts/validation/run_research_campaign_manifest.py configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml --output-dir output/research_campaign_packets/issue_3810_long_horizon_snqi
+    - uv run python scripts/validation/check_issue_3810_long_horizon_launch_packet.py --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml --json
+    - uv run pytest tests/validation/test_check_issue_3810_long_horizon_launch_packet.py -q
+  dry_run: required
+
+launch_packet:
+  decision: blocked_until_private_slurm_go
+  compute_submit_authorized: false
+  slurm_job_id: not_submitted
+  blocking_jobs:
+    - 13175
+  route:
+    private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops
+    queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh
+    route_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh
+    submit_wrapper: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh
+    submit_policy: no_submit_until_decision_packet_go
+  preflight:
+    public_manifest_check: >
+      uv run python scripts/validation/run_research_campaign_manifest.py
+      configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml
+      --output-dir output/research_campaign_packets/issue_3810_long_horizon_snqi
+    public_packet_check: >
+      uv run python scripts/validation/check_issue_3810_long_horizon_launch_packet.py
+      --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml
+      --json
+    private_ops_dry_run: >
+      ROBOT_SF_PRIVATE_OPS=/home/luttkule/git/robot_sf_ll7-private-ops
+      /home/luttkule/git/robot_sf_ll7-private-ops/ops/preflight/run_preflight.sh
+      --cluster licca
+      --route-id decision-packet-only
+      --public-repo "$PWD"
+      --output output/benchmarks/issue_3810_comprehensive_h600_snqi/preflight/private_ops_route_dry_run.json
+    no_submit_guard: >
+      Private preflight and route checks may run read-only. The submit wrapper
+      must not be invoked until issue #3810 has an explicit go decision and job
+      13175 has been reconciled.
+  campaign_command: >
+    uv run python scripts/tools/run_camera_ready_benchmark.py
+    --config configs/benchmarks/issue_3810_comprehensive_h600_snqi.yaml
+    --campaign-id issue_3810_comprehensive_h600_snqi
+    --output-root output/benchmarks/issue_3810_comprehensive_h600_snqi
+  config_patch:
+    base_config: configs/benchmarks/camera_ready_all_planners_strict_socnav.yaml
+    required_overrides:
+      horizon: 600
+      scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+      seed_set: paper_eval_s30
+      stop_on_failure: false
+      snqi_weights: output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/snqi_weights_h600.json
+      snqi_baseline: output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/snqi_baseline_h600.json
+  snqi_recalibration:
+    inputs:
+      campaign_table: output/benchmarks/issue_3810_comprehensive_h600_snqi/reports/campaign_table.csv
+      episode_records: output/benchmarks/issue_3810_comprehensive_h600_snqi/episodes/
+      source_scripts:
+        - scripts/recompute_snqi_weights.py
+        - scripts/snqi_sensitivity_analysis.py
+        - scripts/validate_snqi_scripts.py
+    required_outputs:
+      - output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/snqi_weights_h600.json
+      - output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/snqi_baseline_h600.json
+      - output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/checksums.sha256
+    checksum_policy: checksum_pin_before_claim
+    comparison_rule: within_regime_only_no_cross_regime_absolute_snqi_claim
+  horizon_sensitivity_report:
+    command: >
+      uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py
+      --long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi
+      --short-campaign-reference docs/context/evidence/prior_scoped_h100_reference
+      --output-dir output/benchmarks/issue_3810_comprehensive_h600_snqi/reports
+    required_fields:
+      - timeout_rate
+      - max_steps_share
+      - success_ranking
+      - snqi_ranking
+      - rank_inversion_persistence
+      - comparison_scope_caveat
+    required_caveat: prior_scoped_short_horizon_vs_new_comprehensive_long_horizon_not_horizon_only
+  wait_it_out_guard:
+    diagnostic_name: interaction_exposure
+    required_episode_fields:
+      - interaction_exposure_share
+      - robot_motion_share_before_first_clearance
+      - first_clearance_step
+      - low_exposure_success
+    low_exposure_success_status: diagnostic_only
+    diagnostic_contract: >
+      A successful episode with low interaction exposure is not counted as
+      benchmark-strength success until the report shows the scenario required
+      meaningful interaction. The diagnostic guards wait-it-out behavior; the
+      sustained-flow structural fix remains follow-up issue #3813.

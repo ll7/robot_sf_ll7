@@ -7,6 +7,7 @@ submit Slurm jobs, or interpret benchmark evidence.
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -88,12 +89,17 @@ def _expected_outputs(preflight: PackageBPreflightResult) -> tuple[dict[str, str
 
 
 def _validation_commands(manifest_path: str) -> tuple[str, ...]:
-    """Return commands that validate readiness before any campaign launch."""
+    """Return commands that validate readiness before any campaign launch.
+
+    The manifest path is shell-quoted so the emitted copy-paste commands stay
+    correct even if the path contains spaces or shell metacharacters.
+    """
+    quoted_path = shlex.quote(manifest_path)
     return (
         "uv run python scripts/tools/preflight_adversarial_package_b.py "
-        f"--manifest {manifest_path}",
+        f"--manifest {quoted_path}",
         "uv run python scripts/tools/prepare_package_b_post_readiness_gap_packet.py "
-        f"--manifest {manifest_path} "
+        f"--manifest {quoted_path} "
         "--output output/adversarial/issue_3079_package_b/post_readiness_gap_packet.json",
         "uv run pytest tests/benchmark/test_adversarial_package_b_gap_packet.py",
     )

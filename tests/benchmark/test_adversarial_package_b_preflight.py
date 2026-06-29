@@ -253,7 +253,10 @@ def test_preflight_blocks_directory_valued_output_artifact_report(tmp_path: Path
     assert result.ready is False
     assert result.blocked is True
     assert result.checks["output_artifacts_report_json_in_output_dir"] is False
-    assert any("report_json must be inside output_artifacts.output_dir" in blocker for blocker in result.blockers)
+    assert any(
+        "report_json must be inside output_artifacts.output_dir" in blocker
+        for blocker in result.blockers
+    )
 
 
 def test_preflight_blocks_symlinked_output_artifact_report(tmp_path: Path) -> None:
@@ -270,7 +273,10 @@ def test_preflight_blocks_symlinked_output_artifact_report(tmp_path: Path) -> No
     assert result.ready is False
     assert result.blocked is True
     assert result.checks["output_artifacts_report_json_in_output_dir"] is False
-    assert any("report_json must be inside output_artifacts.output_dir" in blocker for blocker in result.blockers)
+    assert any(
+        "report_json must be inside output_artifacts.output_dir" in blocker
+        for blocker in result.blockers
+    )
 
 
 def test_package_b_preflight_cli_writes_report_and_returns_nonzero_on_blocker(

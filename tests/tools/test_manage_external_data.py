@@ -31,6 +31,16 @@ def _write_sdd_fixture(path: Path) -> None:
     )
 
 
+def _write_socnavbench_eth_fixture(path: Path) -> None:
+    """Create a minimal SocNavBench ETH layout fixture for metadata-only tests."""
+    mesh_dir = path / "sd3dis" / "stanford_building_parser_dataset" / "mesh" / "ETH"
+    traversible_dir = path / "sd3dis" / "stanford_building_parser_dataset" / "traversibles" / "ETH"
+    mesh_dir.mkdir(parents=True, exist_ok=True)
+    traversible_dir.mkdir(parents=True, exist_ok=True)
+    (mesh_dir / "mesh.obj").write_text("# synthetic fixture, not official data\n", encoding="utf-8")
+    (traversible_dir / "data.pkl").write_bytes(b"synthetic fixture, not official data")
+
+
 def test_registry_covers_initial_required_asset_groups() -> None:
     """The first slice should cover SDD, SocNavBench, and AMV provenance assets."""
     asset_ids = {asset.asset_id for asset in manage_external_data.list_assets()}
@@ -217,6 +227,102 @@ def test_stage_writes_small_manifest_for_ignored_sdd_path(tmp_path: Path) -> Non
     assert payload["validation_command"].endswith(f"check sdd --source {source_root.resolve()}")
     assert payload["sample_files"][0]["path"] == "annotations.txt"
     assert "Pedestrian" not in json.dumps(payload)
+
+
+def test_socnavbench_eth_provenance_check_accepts_staged_manifest(tmp_path: Path) -> None:
+    """ETH provenance readiness requires source, license, checksum, and path metadata."""
+    _init_git_repo(tmp_path, gitignore="external/socnavbench/\n")
+    source_root = tmp_path / "external" / "socnavbench"
+    _write_socnavbench_eth_fixture(source_root)
+    manifest_path = tmp_path / "manifests" / "socnavbench-s3dis-eth.provenance.json"
+
+    manage_external_data.stage_asset(
+        "socnavbench-s3dis-eth",
+        source_path=source_root,
+        manifest_out=manifest_path,
+        repo_root=tmp_path,
+    )
+    report = manage_external_data.check_provenance_manifest("socnavbench-s3dis-eth", manifest_path)
+
+    assert report["ok"] is True
+    assert report["status"] == "ready"
+    assert report["missing_metadata"] == []
+    assert report["tree_sha256"]
+
+
+@pytest.mark.parametrize(
+    ("field", "expected_missing"),
+    [
+        ("source_url", "source_url"),
+        ("license_note", "license_note"),
+        ("tree_sha256", "tree_sha256"),
+        ("sample_files", "sample_files[].sha256"),
+    ],
+)
+def test_socnavbench_eth_provenance_check_fails_missing_metadata(
+    tmp_path: Path, field: str, expected_missing: str
+) -> None:
+    """ETH provenance readiness fails closed for missing URI/license/checksum metadata."""
+    manifest_path = tmp_path / "socnavbench-s3dis-eth.provenance.json"
+    manifest = {
+        "schema": "robot_sf_external_data_manifest.v1",
+        "asset_id": "socnavbench-s3dis-eth",
+        "source_url": "https://github.com/CMU-TBD/SocNavBench",
+        "license_note": "External licensed data not redistributed by Robot SF.",
+        "tree_sha256": "0" * 64,
+        "sample_files": [{"path": "sd3dis/example", "sha256": "1" * 64}],
+        "matched_required_paths": [
+            "sd3dis/stanford_building_parser_dataset/mesh/ETH",
+            "sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl",
+        ],
+    }
+    manifest.pop(field)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = manage_external_data.check_provenance_manifest("socnavbench-s3dis-eth", manifest_path)
+
+    assert report["ok"] is False
+    assert report["status"] == "incomplete_metadata"
+    assert expected_missing in report["missing_metadata"]
+
+
+def test_cli_provenance_check_reports_missing_socnavbench_eth_metadata(tmp_path: Path) -> None:
+    """CLI provenance-check reports incomplete ETH metadata with nonzero exit."""
+    manifest_path = tmp_path / "socnavbench-s3dis-eth.provenance.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "robot_sf_external_data_manifest.v1",
+                "asset_id": "socnavbench-s3dis-eth",
+                "license_note": "External licensed data not redistributed by Robot SF.",
+                "matched_required_paths": [
+                    "sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl"
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/tools/manage_external_data.py",
+            "--json",
+            "provenance-check",
+            "socnavbench-s3dis-eth",
+            "--manifest",
+            str(manifest_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "incomplete_metadata"
+    assert "source_url" in payload["missing_metadata"]
+    assert "tree_sha256" in payload["missing_metadata"]
 
 
 def test_socnavbench_control_check_accepts_wayptnav_layout(tmp_path: Path) -> None:

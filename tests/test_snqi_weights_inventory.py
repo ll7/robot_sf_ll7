@@ -20,7 +20,9 @@ from robot_sf.benchmark.snqi.compute import (
 )
 from robot_sf.benchmark.snqi.weights_inventory import (
     SNQIWeightProvenanceError,
+    WeightSetRecord,
     build_inventory_report,
+    compare_code_default_to_shipped_sources,
     detect_conflicts,
     inventory_weight_sets,
     preflight_snqi_weight_sets,
@@ -186,6 +188,75 @@ def test_duplicate_weights_distinct_label_reported(tmp_path):
     report = build_inventory_report(repo)
     dups = [c for c in report.conflicts if c.kind == "duplicate_weights_distinct_label"]
     assert any(set(c.sources) == {"model_canonical_v1", "camera_ready_v1"} for c in dups)
+
+
+def test_code_default_vs_shipped_direction_matrix(tmp_path):
+    """Every shipped source is compared against the code default."""
+    repo = _make_fixture_repo(tmp_path)
+    report = build_inventory_report(repo)
+
+    comparisons = compare_code_default_to_shipped_sources(report.records)
+    by_source = {comparison.source: comparison for comparison in comparisons}
+
+    assert set(by_source) == {
+        "model_canonical_v1",
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+    }
+    assert by_source["model_canonical_v1"].relationship == "different_direction"
+    assert by_source["model_canonical_v1"].source_dominant_term == "w_jerk"
+    assert by_source["camera_ready_v1"].relationship == "different_direction"
+    assert by_source["camera_ready_v2"].relationship == "different_direction"
+    assert by_source["camera_ready_v3"].relationship == "different_direction"
+
+    summary_comparisons = report.to_dict()["source_summary"][
+        "code_default_shipped_direction_comparisons"
+    ]
+    assert [entry["source"] for entry in summary_comparisons] == [
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+
+
+def test_zero_sum_shipped_source_reports_comparison_unavailable_reason():
+    """A loaded-but-zero-sum source is unavailable for comparison, with a reason.
+
+    Guards that comparison availability is kept distinct from source-load state:
+    a source can load successfully yet have no comparable direction (zero-sum
+    weights), and the comparison must not surface an unexplained ``unavailable``.
+    """
+    code_default = WeightSetRecord(
+        name="code_default",
+        kind="code_default",
+        relpath=None,
+        declares_canonical=False,
+        available=True,
+        weights=dict.fromkeys(WEIGHT_NAMES, 1.0),
+        weight_sum=float(len(WEIGHT_NAMES)),
+        dominant_term="w_success",
+        scale_class="raw",
+    )
+    zero_sum = WeightSetRecord(
+        name="camera_ready_zero",
+        kind="shipped_json",
+        relpath="configs/benchmarks/snqi_weights_camera_ready_zero.json",
+        declares_canonical=False,
+        available=True,  # the file loaded fine
+        weights=dict.fromkeys(WEIGHT_NAMES, 0.0),
+        weight_sum=0.0,
+        dominant_term=None,
+        scale_class=None,
+        load_error=None,  # no source-load failure
+    )
+
+    [comparison] = compare_code_default_to_shipped_sources([code_default, zero_sum])
+
+    assert comparison.relationship == "unavailable"
+    assert comparison.available is False
+    assert comparison.load_error == "no_comparable_direction"
 
 
 def test_no_blocking_conflict_when_canonical_sources_agree(tmp_path):

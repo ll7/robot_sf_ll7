@@ -89,6 +89,11 @@ def test_governance_text_lists_per_term_normalization_status(
     ) in out
     assert "dominant=w_collisions; scale=raw; sha256=" in out
     assert "dominant=w_near; scale=normalized_simplex; sha256=" in out
+    assert "Code-default vs shipped JSON directions:" in out
+    assert (
+        "model_canonical_v1 (model/snqi_canonical_weights_v1.json): "
+        "different_direction; source_dominant=w_jerk; source_scale=raw" in out
+    )
     assert "Weight provenance conflicts:" in out
     assert "error canonical_direction_conflict (code_default, model_canonical_v1)" in out
     assert "Term normalization status:" in out

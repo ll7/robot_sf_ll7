@@ -174,6 +174,19 @@ def _print_text_report(report: dict[str, Any]) -> None:
             f"sha256={fingerprint}; {status}"
         )
 
+    comparisons = report["weights"]["source_summary"]["code_default_shipped_direction_comparisons"]
+    if comparisons:
+        print("Code-default vs shipped JSON directions:")
+        for comparison in comparisons:
+            detail = (
+                f"{comparison['relationship']}; "
+                f"source_dominant={comparison['source_dominant_term']}; "
+                f"source_scale={comparison['source_scale_class']}"
+            )
+            if not comparison["available"]:
+                detail += f"; unavailable={comparison['load_error']}"
+            print(f" - {comparison['source']} ({comparison['relpath']}): {detail}")
+
     weight_conflicts = report["weights"]["conflicts"]
     if weight_conflicts:
         print("Weight provenance conflicts:")

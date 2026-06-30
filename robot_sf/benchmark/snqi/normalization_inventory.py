@@ -232,6 +232,11 @@ class TermContribution:
     signed_contribution: float
     absolute_share: float
 
+    @property
+    def exceeds_weight_bound(self) -> bool:
+        """Whether this term contributes more than its nominal weight magnitude."""
+        return abs(self.signed_contribution) > abs(self.weight)
+
     def to_dict(self) -> dict[str, object]:
         """Return JSON-serializable contribution diagnostics."""
         return {
@@ -245,6 +250,7 @@ class TermContribution:
             "weight": self.weight,
             "signed_contribution": self.signed_contribution,
             "absolute_share": self.absolute_share,
+            "exceeds_weight_bound": self.exceeds_weight_bound,
             "bounded": self.term.bounded,
             "measurement_basis": self.term.measurement_basis,
         }
@@ -299,6 +305,11 @@ def build_snqi_contribution_diagnostics(
         for c in contributions
         if c.term.is_penalty and c.term.scaling == SCALING_BASELINE_NORMALIZED
     )
+    weight_bound_exceedances = [
+        contribution.to_dict()
+        for contribution in contributions
+        if contribution.term.is_penalty and contribution.exceeds_weight_bound
+    ]
     return {
         "schema_version": "snqi_normalization_contributions.v1",
         "diagnostic_only": True,
@@ -307,6 +318,8 @@ def build_snqi_contribution_diagnostics(
         "raw_penalty_absolute_share": raw_penalty_share,
         "baseline_normalized_penalty_absolute_share": normalized_penalty_share,
         "raw_penalty_terms_dominate": raw_penalty_share > normalized_penalty_share,
+        "weight_bound_exceedances": weight_bound_exceedances,
+        "has_weight_bound_exceedance": bool(weight_bound_exceedances),
         "terms": [contribution.to_dict() for contribution in contributions],
     }
 

@@ -143,6 +143,8 @@ def test_governance_text_lists_per_term_normalization_status(
     )
     assert "Weight provenance conflicts:" in out
     assert "error canonical_direction_conflict (code_default, model_canonical_v1)" in out
+    assert "warning code_default_shipped_direction_mismatch (code_default, camera_ready_v1)" in out
+    assert "warning code_default_shipped_direction_mismatch (code_default, camera_ready_v3)" in out
     assert "Term normalization status:" in out
     assert "time (time_to_goal_norm, w_time): raw_unbounded" in out
     assert "basis=raw time-to-goal ratio" in out

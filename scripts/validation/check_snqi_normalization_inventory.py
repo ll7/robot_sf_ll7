@@ -142,6 +142,13 @@ def _print_text_report(report: dict[str, Any]) -> None:
         "baseline_normalized_penalty_terms="
         f"{', '.join(normalization['normalized_penalty_terms']) or 'none'}"
     )
+    version_contract = normalization["score_version_contract"]
+    print(
+        "Score version contract: "
+        f"{version_contract['score_version']}; "
+        f"status={version_contract['status']}; "
+        f"diagnostic_only={version_contract['diagnostic_only']}"
+    )
     print("Term normalization status:")
     for term in normalization["terms"]:
         role = "penalty" if term["is_penalty"] else "reward"

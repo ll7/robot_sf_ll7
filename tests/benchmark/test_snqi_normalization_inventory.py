@@ -16,9 +16,12 @@ from robot_sf.benchmark.snqi.compute import compute_snqi
 from robot_sf.benchmark.snqi.normalization_inventory import (
     SCALING_BASELINE_NORMALIZED,
     SCALING_RAW,
+    SNQI_LEGACY_SCORE_STATUS,
+    SNQI_LEGACY_SCORE_VERSION,
     SNQI_TERM_SCALING,
     build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
+    build_snqi_version_contract,
     format_normalization_report,
     scaled_term_value,
 )
@@ -165,6 +168,21 @@ def test_to_dict_is_json_serializable_and_self_consistent():
     assert basis_by_term["time"] == "raw time-to-goal ratio"
     assert basis_by_term["comfort"] == "raw accumulated comfort-exposure value"
     assert basis_by_term["collisions"] == "baseline-relative median/p95 clamped value"
+    assert encoded["score_version_contract"] == build_snqi_version_contract()
+
+
+def test_score_version_contract_preserves_legacy_snqi_v0_as_diagnostic_only():
+    """Issue #3699 checker labels current SNQI semantics without changing scores."""
+
+    contract = build_snqi_version_contract()
+
+    assert contract["score_version"] == SNQI_LEGACY_SCORE_VERSION == "SNQI-v0"
+    assert contract["status"] == SNQI_LEGACY_SCORE_STATUS
+    assert contract["diagnostic_only"] is True
+    assert contract["mixed_basis_preserved"] is True
+    assert contract["score_semantics_changed"] is False
+    assert contract["future_bounded_contract"] == "SNQI-v1"
+    assert contract["decision_required_issue"] == 3699
 
 
 def test_format_report_is_human_readable():
@@ -173,6 +191,7 @@ def test_format_report_is_human_readable():
     text = format_normalization_report(inv)
     assert "issue #3699" in text
     assert "basis" in text
+    assert "SNQI-v0 (legacy_mixed_basis_diagnostic_only)" in text
     assert "raw time-to-goal ratio" in text
     assert "baseline-relative median/p95 clamped value" in text
     for term in SNQI_TERM_SCALING:
@@ -211,6 +230,7 @@ def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():
     assert signed_total == pytest.approx(compute_snqi(metrics, weights, baseline_stats))
 
     contract = diagnostics["normalization_contract"]
+    version_contract = diagnostics["score_version_contract"]
     assert contract["schema_version"] == "snqi_normalization_contract.v1"
     assert contract["diagnostic_only"] is True
     assert contract["status"] == "mixed_unbounded_penalty_basis"
@@ -227,6 +247,8 @@ def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():
     assert contract["baseline_normalized_penalty_absolute_share"] == pytest.approx(0.4)
     assert contract["weight_bound_exceedance_terms"] == ["time", "comfort"]
     assert "bypass normalize_metric" in contract["reasons"][0]
+    assert version_contract["score_version"] == "SNQI-v0"
+    assert version_contract["score_semantics_changed"] is False
 
     by_term = {term["term"]: term for term in diagnostics["terms"]}
     assert by_term["time"]["scaled_value"] == pytest.approx(3.0)

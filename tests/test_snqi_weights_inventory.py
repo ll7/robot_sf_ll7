@@ -7,6 +7,7 @@ does not change any current scoring behavior.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import TYPE_CHECKING
 
@@ -102,6 +103,20 @@ def test_inventory_discovers_all_registered_sources(tmp_path):
     assert code.weights == _CODE_DEFAULT
     assert code.dominant_term == "w_collisions"
     assert code.scale_class == "raw"
+    assert (
+        code.content_sha256
+        == hashlib.sha256(
+            json.dumps(_CODE_DEFAULT, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
+
+    available_records = [r for r in records if r.available]
+    assert all(r.content_sha256 for r in available_records)
+    model = next(r for r in records if r.name == "model_canonical_v1")
+    assert (
+        model.content_sha256
+        == hashlib.sha256((repo / "model/snqi_canonical_weights_v1.json").read_bytes()).hexdigest()
+    )
 
 
 def test_code_default_matches_recompute_canonical(tmp_path):
@@ -232,6 +247,12 @@ def test_unregistered_shipped_weight_file_reported_fail_closed(tmp_path):
     assert len(unregistered) == 1
     assert unregistered[0].relpath == "configs/benchmarks/snqi_weights_experimental_v9.json"
     assert unregistered[0].available
+    assert (
+        unregistered[0].content_sha256
+        == hashlib.sha256(
+            (repo / "configs/benchmarks/snqi_weights_experimental_v9.json").read_bytes()
+        ).hexdigest()
+    )
 
     summary = report.to_dict()["source_summary"]
     assert summary["registered_source_count"] == 5

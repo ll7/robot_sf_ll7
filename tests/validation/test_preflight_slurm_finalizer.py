@@ -185,6 +185,31 @@ def test_blocks_when_issue_traceability_mismatches(tmp_path: Path) -> None:
     assert "align queue and finalizer issue numbers" in blocker["remediation"]
 
 
+def test_blocks_when_traceability_matches_wrong_expected_issue(tmp_path: Path) -> None:
+    """Consistent queue/finalizer metadata still must match issue #3425 by default."""
+    inputs = _ready_inputs(tmp_path)
+    _write_queue(inputs["queue_path"], issue=9999)
+    _write_finalizer(tmp_path / "finalizer.json", issue=9999)
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "issue_traceability_matches")
+    assert "expected issue 3425" in blocker["detail"]
+
+
+def test_allows_explicit_expected_issue_override(tmp_path: Path) -> None:
+    """The checker stays reusable when a caller intentionally targets another issue."""
+    inputs = _ready_inputs(tmp_path)
+    _write_queue(inputs["queue_path"], issue=9999)
+    _write_finalizer(tmp_path / "finalizer.json", issue=9999)
+
+    report = gate.preflight(**inputs, expected_issue=9999)
+
+    assert report["ready"] is True
+    assert report["inputs"]["expected_issue"] == 9999
+
+
 def test_ready_when_queue_issue_recorded_as_string(tmp_path: Path) -> None:
     """A string-encoded queue issue (``issue: "3425"``) still matches the finalizer.
 

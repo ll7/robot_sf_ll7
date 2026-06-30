@@ -74,7 +74,7 @@ def _coerce_positive_int(value: Any, *, field: str) -> tuple[int | None, list[st
     if isinstance(value, float):
         if value < 0:
             return None, [f"{field} must be >= 0"]
-        return int(ceil(value)), []
+        return ceil(value), []
     return None, [f"{field} must be integer-like (int/float), got {type(value).__name__}"]
 
 

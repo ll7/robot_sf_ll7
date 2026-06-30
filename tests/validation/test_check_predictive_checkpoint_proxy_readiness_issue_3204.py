@@ -86,6 +86,7 @@ def _build_config(
 
 
 def test_float_checkpoint_thresholds_and_mapping_metadata_are_surface_ready(tmp_path: Path):
+    """Float-encoded YAML thresholds and mapping/public-release metadata surface correctly."""
     repo, hard_seed, checkpoint, registry = _make_repo(tmp_path)
 
     _write_registry(
@@ -139,6 +140,7 @@ def test_float_checkpoint_thresholds_and_mapping_metadata_are_surface_ready(tmp_
 
 
 def test_missing_checkpoint_lineage_blocks_with_fail_closed_blocker_message(tmp_path: Path):
+    """Missing-checkpoint lineage produces a fail-closed blocked status with a clear message."""
     repo, hard_seed, _checkpoint, registry = _make_repo(tmp_path)
 
     _write_registry(

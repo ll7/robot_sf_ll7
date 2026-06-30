@@ -57,8 +57,10 @@ def _write_finalizer(
     issue: int = 3425,
     job_id: str = "12345",
     classification: str = "success",
+    artifact_status: str = "all_required_present",
     durable_uri: str | None = "wandb://entity/project/run",
     claim_boundary: str | None = "smoke evidence only",
+    claim_decision: str | None = "keep diagnostic",
 ) -> Path:
     """Write a finalizer manifest matching the finalization schema."""
     payload: dict = {
@@ -66,12 +68,14 @@ def _write_finalizer(
         "issue_number": issue,
         "job_id": job_id,
         "classification": classification,
-        "artifact_status": "all_required_present",
+        "artifact_status": artifact_status,
     }
     if durable_uri is not None:
         payload["durable_uri"] = durable_uri
     if claim_boundary is not None:
         payload["claim_boundary"] = claim_boundary
+    if claim_decision is not None:
+        payload["claim_decision"] = claim_decision
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
@@ -104,8 +108,10 @@ def test_ready_when_all_inputs_present(tmp_path: Path) -> None:
     assert report["input_errors"] == []
     statuses = {check["name"]: check["status"] for check in report["checks"]}
     assert statuses["durable_pointer_present"] == "ready"
+    assert statuses["required_artifacts_complete"] == "ready"
     assert statuses["finalizer_manifest_linkage"] == "ready"
     assert statuses["claim_boundary_present"] == "ready"
+    assert statuses["claim_decision_present"] == "ready"
 
 
 def test_blocks_when_durable_pointer_missing(tmp_path: Path) -> None:
@@ -123,6 +129,37 @@ def test_blocks_when_durable_pointer_missing(tmp_path: Path) -> None:
     assert "durable" in durable_blocker["remediation"]
 
 
+def test_blocks_when_durable_pointer_is_worktree_local(tmp_path: Path) -> None:
+    """A successful finalizer cannot use worktree-local output as durable proof."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(tmp_path / "finalizer.json", durable_uri="output/job_12345/finalizer.json")
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "durable_pointer_present")
+    assert "non-durable or local artifact pointer" in blocker["detail"]
+    assert "worktree-local" in blocker["remediation"]
+
+
+def test_blocks_when_successful_finalizer_has_incomplete_required_artifacts(
+    tmp_path: Path,
+) -> None:
+    """A durable URI cannot unblock success when required artifacts are incomplete."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(
+        tmp_path / "finalizer.json",
+        artifact_status="required_missing",
+    )
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "required_artifacts_complete")
+    assert "12345(required_missing)" in blocker["detail"]
+    assert "artifact_status=all_required_present" in blocker["remediation"]
+
+
 def test_blocks_when_manifest_linkage_missing(tmp_path: Path) -> None:
     """A finalizer whose job id has no manifest job fails closed on linkage."""
     inputs = _ready_inputs(tmp_path)
@@ -136,6 +173,86 @@ def test_blocks_when_manifest_linkage_missing(tmp_path: Path) -> None:
     assert "finalizer_manifest_linkage" in blocker_names
 
 
+def test_blocks_when_issue_traceability_mismatches(tmp_path: Path) -> None:
+    """Queue/finalizer issue mismatch blocks public issue traceability."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(tmp_path / "finalizer.json", issue=9999)
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "issue_traceability_matches")
+    assert "align queue and finalizer issue numbers" in blocker["remediation"]
+
+
+def test_blocks_when_traceability_matches_wrong_expected_issue(tmp_path: Path) -> None:
+    """Consistent queue/finalizer metadata still must match issue #3425 by default."""
+    inputs = _ready_inputs(tmp_path)
+    _write_queue(inputs["queue_path"], issue=9999)
+    _write_finalizer(tmp_path / "finalizer.json", issue=9999)
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "issue_traceability_matches")
+    assert "expected issue 3425" in blocker["detail"]
+
+
+def test_allows_explicit_expected_issue_override(tmp_path: Path) -> None:
+    """The checker stays reusable when a caller intentionally targets another issue."""
+    inputs = _ready_inputs(tmp_path)
+    _write_queue(inputs["queue_path"], issue=9999)
+    _write_finalizer(tmp_path / "finalizer.json", issue=9999)
+
+    report = gate.preflight(**inputs, expected_issue=9999)
+
+    assert report["ready"] is True
+    assert report["inputs"]["expected_issue"] == 9999
+
+
+def test_ready_when_queue_issue_recorded_as_string(tmp_path: Path) -> None:
+    """A string-encoded queue issue (``issue: "3425"``) still matches the finalizer.
+
+    ``QueueEntry.issue`` is ``str | int | None``; the gate must coerce it exactly
+    like ``reconcile_slurm_evidence`` rather than treating a string as a missing
+    issue number and over-blocking.
+    """
+    inputs = _ready_inputs(tmp_path)
+    _write_queue(inputs["queue_path"], issue="3425")  # type: ignore[arg-type]
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is True
+    traceability = next(c for c in report["checks"] if c["name"] == "issue_traceability_matches")
+    assert traceability["status"] == "ready"
+
+
+def test_blocks_when_queue_issue_traceability_missing(tmp_path: Path) -> None:
+    """Missing queue issue metadata blocks public handoff traceability."""
+    queue = tmp_path / "queue.yaml"
+    queue.write_text(
+        yaml.safe_dump(
+            {
+                "entries": [
+                    {"id": "slice_a", "seeds": [101], "status": "completed"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    inputs = {
+        "queue_path": queue,
+        "submission_manifests": [_write_manifest(tmp_path / "manifest.yaml")],
+        "finalizer_manifests": [_write_finalizer(tmp_path / "finalizer.json")],
+    }
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "issue_traceability_matches")
+    assert "queue entries do not record an issue number" in blocker["detail"]
+
+
 def test_blocks_when_claim_boundary_missing(tmp_path: Path) -> None:
     """A finalizer without a claim boundary fails closed."""
     inputs = _ready_inputs(tmp_path)
@@ -146,6 +263,30 @@ def test_blocks_when_claim_boundary_missing(tmp_path: Path) -> None:
     assert report["ready"] is False
     blocker_names = {blocker["check"] for blocker in report["blockers"]}
     assert "claim_boundary_present" in blocker_names
+
+
+def test_blocks_when_claim_decision_missing(tmp_path: Path) -> None:
+    """A finalizer without a bounded claim decision fails closed."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(tmp_path / "finalizer.json", claim_decision=None)
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "claim_decision_present")
+    assert "claim_decision" in blocker["remediation"]
+
+
+def test_blocks_when_claim_decision_unsupported(tmp_path: Path) -> None:
+    """A finalizer cannot invent dispositions outside the issue #3425 contract."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(tmp_path / "finalizer.json", claim_decision="publish paper claim")
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "claim_decision_present")
+    assert "unsupported claim decision" in blocker["detail"]
 
 
 def test_blocks_when_finalizer_manifest_absent(tmp_path: Path) -> None:
@@ -187,6 +328,7 @@ def test_non_success_finalizer_does_not_require_durable_pointer(tmp_path: Path) 
 
     statuses = {check["name"]: check["status"] for check in report["checks"]}
     assert statuses["durable_pointer_present"] == "ready"
+    assert statuses["required_artifacts_complete"] == "ready"
 
 
 def test_malformed_finalizer_is_input_error(tmp_path: Path) -> None:

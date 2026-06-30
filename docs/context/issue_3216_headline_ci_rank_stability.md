@@ -22,6 +22,9 @@ and the **SLURM launch packet** for the increased-seed-budget run.
 
 - Loads headline rows via `canonical_table_export.load_rows_json`
   (`--rows` or `--campaign`).
+- Supports `--dry-run` for a deterministic local preflight that exercises the
+  same report builder without campaign artifacts or Slurm submission; the fixture
+  remains diagnostic-only.
 - **Per cell**: point estimate + bootstrap/per-seed confidence interval on the
   primary metrics, with fail-closed cell status — `degraded` / `fallback` /
   `not_available` execution modes and non-success row statuses are excluded and

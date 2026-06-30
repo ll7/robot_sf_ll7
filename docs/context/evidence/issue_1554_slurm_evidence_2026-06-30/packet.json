@@ -1,0 +1,96 @@
+{
+  "claim_blockers": [
+    {
+      "job": 13198,
+      "limitations": [
+        "SNQI contract warning blocks paper-grade interpretation until analyzed.",
+        "Analyze this result before scheduling another duplicate S20/H500 planner-family run."
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "artifact_summary": {
+        "matrix_rows": 2,
+        "planner_row_status_counts": {
+          "ok": 2
+        },
+        "planner_rows": 2,
+        "warnings": []
+      },
+      "campaign": "2026-06-issue1554-best-ppo-compare-run",
+      "config": "configs/benchmarks/paper_experiment_matrix_v1_best_ppo_compare.yaml",
+      "exit_code": "0:0",
+      "finding": "Best-PPO comparison run completed and produced two ok planner rows with 144 episodes per planner. This is comparison evidence, not a paper/dissertation claim by itself.",
+      "job": 13192,
+      "limitations": [
+        "Small comparison slice only; use for queue direction, not broad planner-ranking claims."
+      ],
+      "public_commit": "182a4ebb5b44165ffc3608a3c20580fbf9e8add6",
+      "role": "comparison_run",
+      "slurm_state": "COMPLETED"
+    },
+    {
+      "artifact_summary": {
+        "matrix_rows": 9,
+        "planner_row_status_counts": {
+          "ok": 9
+        },
+        "planner_rows": 9,
+        "warnings": [
+          "SNQI contract status=fail with snqi_contract.enforcement=warn; campaign marked soft contract warning."
+        ]
+      },
+      "campaign": "2026-06-issue1554-s20-h500-split-mem180-run",
+      "config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml",
+      "exit_code": "0:0",
+      "finding": "The 180 GB split planner-family S20/H500 run completed in 01:42:35 and produced nine ok planner rows with 960 episodes per planner.",
+      "job": 13198,
+      "limitations": [
+        "SNQI contract warning blocks paper-grade interpretation until analyzed.",
+        "Analyze this result before scheduling another duplicate S20/H500 planner-family run."
+      ],
+      "public_commit": "12a188de7246aad3b9088ea76e6a25a20029f976",
+      "role": "result_matrix",
+      "slurm_state": "COMPLETED"
+    },
+    {
+      "artifact_summary": {
+        "planner_count": 8,
+        "scenario_count": 1,
+        "warnings": [],
+        "workers": 1
+      },
+      "campaign": "2026-06-issue1554-current-main-smoke-preflight",
+      "config": "configs/benchmarks/camera_ready_smoke_all_planners.yaml",
+      "exit_code": "0:0",
+      "finding": "Current-main smoke/preflight completed in 26 seconds with workers=1, one scenario, and eight planners.",
+      "job": 13203,
+      "limitations": [
+        "Smoke/preflight only; it proves launcher/config plumbing but does not replace result analysis."
+      ],
+      "public_commit": "7c1e63997c724064468f64ace698731deacf201e",
+      "role": "smoke_preflight",
+      "slurm_state": "COMPLETED"
+    }
+  ],
+  "forbidden_actions_confirmed": {
+    "artifact_deletion": false,
+    "compute_submit": false,
+    "paper_or_dissertation_claim_edits": false
+  },
+  "issue": 1554,
+  "jobs_synthesized": [
+    13192,
+    13198,
+    13203
+  ],
+  "next_slurm_queue_recommendation": "Do not enqueue another duplicate S20/H500 planner-family run yet. Analyze job 13198 first, including the soft SNQI contract warning, then submit only a targeted follow-up for an explicit analysis gap or validated config/schema unblock.",
+  "schema_version": "issue1554-slurm-evidence-packet.v1",
+  "status": "analysis_before_submit",
+  "successful_jobs": [
+    13192,
+    13198,
+    13203
+  ]
+}

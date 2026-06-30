@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 
 from scripts.tools.prediction_package_c_readiness import (
     ARMS,
+    DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
+    DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
     REQUIRED_CODE,
     REQUIRED_CONFIGS,
     assess_package_c_readiness,
@@ -67,7 +69,11 @@ def test_all_arms_blocked_when_inputs_present_but_no_coupling_store(tmp_path: Pa
     assert report["overall_status"] == "blocked"
     assert [arm["status"] for arm in report["arms"]] == ["blocked"] * len(ARMS)
     assert report["seed_plan"] == [111, 2868]
-    assert report["output_roots"] == ["docs/context/evidence/issue_2915"]
+    assert report["output_roots"] == [
+        "docs/context/evidence/issue_2915",
+        DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
+        DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
+    ]
     # The named blocker references the #2916 coupling gate, not a vague reason.
     assert all("#2916" in arm["blockers"][0] for arm in report["arms"])
 
@@ -93,6 +99,42 @@ def test_missing_config_marks_arms_missing(tmp_path: Path) -> None:
     assert report["overall_status"] == "missing"
     assert all(arm["status"] == "missing" for arm in report["arms"])
     assert all(REQUIRED_CONFIGS[1] in arm["missing_inputs"] for arm in report["arms"])
+
+
+def test_missing_seed_contract_marks_arms_missing(tmp_path: Path) -> None:
+    """A seedless open-loop config cannot satisfy the Package C same-seed plan."""
+    _write_wired_repo(tmp_path, with_coupling_store=True)
+    (tmp_path / REQUIRED_CONFIGS[0]).write_text(
+        "output:\n  evidence_dir: docs/context/evidence/issue_2915\n",
+        encoding="utf-8",
+    )
+
+    report = assess_package_c_readiness(
+        tmp_path,
+        coupling_result_store=tmp_path / "result_store",
+    )
+
+    assert report["overall_status"] == "missing"
+    assert all(arm["status"] == "missing" for arm in report["arms"])
+    assert all(f"{REQUIRED_CONFIGS[0]}::seeds" in arm["missing_inputs"] for arm in report["arms"])
+
+
+def test_mismatched_coupling_seed_marks_arms_missing(tmp_path: Path) -> None:
+    """The closed-loop seed must be part of the open-loop same-seed plan."""
+    _write_wired_repo(tmp_path, with_coupling_store=True)
+    (tmp_path / REQUIRED_CONFIGS[1]).write_text(
+        "fixture:\n  seed: 999\n",
+        encoding="utf-8",
+    )
+
+    report = assess_package_c_readiness(
+        tmp_path,
+        coupling_result_store=tmp_path / "result_store",
+    )
+
+    assert report["overall_status"] == "missing"
+    assert all(arm["status"] == "missing" for arm in report["arms"])
+    assert all("fixture.seed=999" in arm["missing_inputs"][0] for arm in report["arms"])
 
 
 def test_missing_baseline_only_marks_that_arm_missing(tmp_path: Path) -> None:
@@ -153,3 +195,8 @@ def test_real_repo_preflight_is_wired_and_fails_closed() -> None:
     assert all(arm["missing_inputs"] == [] for arm in report["arms"])
     # The real seed plan is the same-seed union declared by #2915 and #2916.
     assert report["seed_plan"] == [111, 2868]
+    assert report["output_roots"] == [
+        "docs/context/evidence/issue_2915_forecast_baselines_2026-06-20",
+        DEFAULT_OBSERVATION_REPLAY_OUTPUT_ROOT,
+        DEFAULT_CLOSED_LOOP_OUTPUT_ROOT,
+    ]

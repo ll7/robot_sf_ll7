@@ -2605,6 +2605,11 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         )
         p.add_argument("--fail-on-missing-metric", action="store_true")
         p.add_argument(
+            "--decision-preflight",
+            action="store_true",
+            help="Enable fail-closed preflight for missing or invalid normalized inputs.",
+        )
+        p.add_argument(
             "--sample",
             type=int,
             default=None,
@@ -2681,12 +2686,28 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             help="Evaluate external weights JSON mapping",
         )
         p.add_argument(
+            "--export-pareto-front",
+            action="store_true",
+            help="Export sampled Pareto frontier when strategy pareto is active.",
+        )
+        p.add_argument(
+            "--pareto-front-samples",
+            type=int,
+            default=600,
+            help="Number of Pareto frontier samples to draw when export is enabled.",
+        )
+        p.add_argument(
             "--missing-metric-max-list",
             type=int,
             default=5,
             help="Max example episode IDs per missing baseline metric",
         )
         p.add_argument("--fail-on-missing-metric", action="store_true")
+        p.add_argument(
+            "--decision-preflight",
+            action="store_true",
+            help="Enable fail-closed preflight for missing or invalid normalized inputs.",
+        )
         p.add_argument(
             "--sample",
             type=int,

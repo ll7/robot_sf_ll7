@@ -21,6 +21,8 @@ MANIFEST_SCHEMA_VERSION = "adversarial-package-b-comparison.v1"
 EXPECTED_ISSUE = 3079
 EXPECTED_BUDGETS = (16, 32, 64)
 EXPECTED_SAMPLERS = ("random", "coordinate", "optuna")
+EXPECTED_POLICY = "goal"
+EXPECTED_OBJECTIVE = "worst_case_snqi"
 EXPECTED_REPORTING_FIELDS = frozenset(
     {
         "first_failure_iteration",
@@ -148,6 +150,52 @@ def _extract_repeated_seed_args(command: str) -> tuple[tuple[int, ...], list[str
         except ValueError:
             warnings.append(f"example_command has non-integer --seed value: {seed_value!r}")
     return tuple(seed_args), warnings
+
+
+def _extract_option_values(command: str, option: str) -> tuple[tuple[str, ...], list[str]]:
+    """Return all values passed to a repeatable argparse option."""
+    warnings: list[str] = []
+    try:
+        tokens = shlex.split(command)
+    except ValueError as exc:
+        warnings.append(f"example_command could not be parsed by shlex: {exc}")
+        return (), warnings
+
+    values: list[str] = []
+    prefix = f"{option}="
+    for index, token in enumerate(tokens):
+        if token == option:
+            if index + 1 >= len(tokens):
+                warnings.append(f"example_command has {option} without value")
+                continue
+            values.append(tokens[index + 1])
+        elif token.startswith(prefix):
+            values.append(token.removeprefix(prefix))
+    return tuple(values), warnings
+
+
+def _extract_budget_grid_flags(command: str) -> tuple[int, tuple[str, ...], list[str]]:
+    """Return Package-B grid flag count and explicit budget overrides."""
+    warnings: list[str] = []
+    try:
+        tokens = shlex.split(command)
+    except ValueError as exc:
+        warnings.append(f"example_command could not be parsed by shlex: {exc}")
+        return 0, (), warnings
+
+    budget_values: list[str] = []
+    grid_flag_count = 0
+    for index, token in enumerate(tokens):
+        if token == "--package-b-budget-grid":
+            grid_flag_count += 1
+        elif token == "--budget":
+            if index + 1 >= len(tokens):
+                warnings.append("example_command has --budget without value")
+                continue
+            budget_values.append(tokens[index + 1])
+        elif token.startswith("--budget="):
+            budget_values.append(token.removeprefix("--budget="))
+    return grid_flag_count, tuple(budget_values), warnings
 
 
 def _under_output_prefix(path: Path | None, repo_root: Path) -> bool:
@@ -306,12 +354,13 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         if not checks[f"{key}_exists"]:
             blockers.append(f"base_config.{key} must point at an existing repository file")
 
-    for key in ("policy", "objective"):
-        checks[f"{key}_declared"] = isinstance(base_config.get(key), str) and bool(
-            base_config.get(key).strip()
-        )
-        if not checks[f"{key}_declared"]:
-            blockers.append(f"base_config.{key} must be a non-empty string")
+    checks["policy_expected"] = base_config.get("policy") == EXPECTED_POLICY
+    if not checks["policy_expected"]:
+        blockers.append(f"base_config.policy must be {EXPECTED_POLICY!r}")
+
+    checks["objective_expected"] = base_config.get("objective") == EXPECTED_OBJECTIVE
+    if not checks["objective_expected"]:
+        blockers.append(f"base_config.objective must be {EXPECTED_OBJECTIVE!r}")
 
     budgets = _as_int_tuple(payload.get("budget_grid"))
     checks["budget_grid"] = budgets == EXPECTED_BUDGETS
@@ -435,9 +484,19 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if forbidden_hits:
         blockers.append(f"example_command includes forbidden action tokens: {forbidden_hits}")
 
-    checks["example_command_uses_package_b_grid"] = "--package-b-budget-grid" in example_command
+    budget_grid_flag_count, command_budget_values, budget_warnings = _extract_budget_grid_flags(
+        example_command
+    )
+    warnings.extend(budget_warnings)
+    checks["example_command_uses_package_b_grid"] = budget_grid_flag_count == 1
     if not checks["example_command_uses_package_b_grid"]:
-        blockers.append("example_command must use --package-b-budget-grid")
+        blockers.append("example_command must use exactly one --package-b-budget-grid")
+    checks["example_command_has_no_budget_overrides"] = not command_budget_values
+    if not checks["example_command_has_no_budget_overrides"]:
+        blockers.append(
+            "example_command must not mix --package-b-budget-grid with explicit "
+            f"--budget overrides: {list(command_budget_values)}"
+        )
 
     for seed in seeds:
         checks[f"example_command_seed_{seed}"] = (
@@ -454,6 +513,56 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
             "example_command --seed values must exactly match repeated_seeds "
             f"{list(seeds)}, got {list(command_seeds)}"
         )
+
+    command_samplers, sampler_warnings = _extract_option_values(example_command, "--sampler")
+    warnings.extend(sampler_warnings)
+    checks["example_command_sampler_set"] = not command_samplers or command_samplers == samplers
+    if not checks["example_command_sampler_set"]:
+        blockers.append(
+            "example_command --sampler values must be absent or exactly match samplers "
+            f"{list(samplers)}, got {list(command_samplers)}"
+        )
+
+    command_scenario_templates, scenario_warnings = _extract_option_values(
+        example_command, "--scenario-template"
+    )
+    warnings.extend(scenario_warnings)
+    checks["example_command_scenario_template"] = not command_scenario_templates or tuple(
+        _resolve_repo_path(root, value) for value in command_scenario_templates
+    ) == (_resolve_repo_path(root, base_config.get("scenario_template")),)
+    if not checks["example_command_scenario_template"]:
+        blockers.append(
+            "example_command --scenario-template must be absent or match "
+            "base_config.scenario_template"
+        )
+
+    command_search_spaces, search_space_warnings = _extract_option_values(
+        example_command, "--search-space"
+    )
+    warnings.extend(search_space_warnings)
+    checks["example_command_search_space"] = not command_search_spaces or tuple(
+        _resolve_repo_path(root, value) for value in command_search_spaces
+    ) == (_resolve_repo_path(root, base_config.get("search_space")),)
+    if not checks["example_command_search_space"]:
+        blockers.append(
+            "example_command --search-space must be absent or match base_config.search_space"
+        )
+
+    command_policies, policy_warnings = _extract_option_values(example_command, "--policy")
+    warnings.extend(policy_warnings)
+    checks["example_command_policy"] = not command_policies or command_policies == (
+        str(base_config.get("policy")),
+    )
+    if not checks["example_command_policy"]:
+        blockers.append("example_command --policy must be absent or match base_config.policy")
+
+    command_objectives, objective_warnings = _extract_option_values(example_command, "--objective")
+    warnings.extend(objective_warnings)
+    checks["example_command_objective"] = not command_objectives or command_objectives == (
+        str(base_config.get("objective")),
+    )
+    if not checks["example_command_objective"]:
+        blockers.append("example_command --objective must be absent or match base_config.objective")
 
     output_dir, out_json, output_warnings = _extract_output_paths(example_command, root)
     warnings.extend(output_warnings)
@@ -476,6 +585,10 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
         "repeated_seeds": list(seeds),
         "example_command_repeated_seeds": list(command_seeds),
         "samplers": list(samplers),
+        "base_config": {
+            "policy": base_config.get("policy"),
+            "objective": base_config.get("objective"),
+        },
         "research_package_registry": _repo_relative(registry_path, root),
         "runner": _repo_relative(runner_path, root) if runner_path else None,
         "runner_reporting_fields": sorted(runner_row_fields),

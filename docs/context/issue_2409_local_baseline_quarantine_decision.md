@@ -18,9 +18,21 @@ additional artifact promotion or benchmark evidence exists in this PR.
 This is metadata-only. It does not recover checkpoints, upload artifacts, delete historical configs,
 or treat any `output/` reference as durable.
 
-## Decision
+## Issue #1764 Update (2026-06-29)
 
-All seven local-only baseline rows remain blocked/absent. The current state is:
+Issue #1764 converted the seven quarantined rows into explicit retired-local-only registry ids.
+The baseline configs no longer contain executable `output/` `model_path` references, and the local
+artifact blocklist is empty. This does not recover checkpoints, upload artifacts, run benchmarks,
+or promote any paper-facing claim.
+
+Current state: `scripts/validation/check_local_model_artifacts.py --fail-on-blocked configs/baselines
+--json` returns `[]`; `scripts/tools/plan_model_artifact_promotion.py scan --json` reports seven
+`retired_local_only` rows. Future work should recover a durable artifact with checksum or keep the
+retirement in place.
+
+## Historical Decision
+
+At the time of issue #2409, all seven local-only baseline rows remained blocked/absent:
 
 | Config | Status | Decision | #2409 classification |
 | --- | --- | --- | --- |
@@ -44,7 +56,7 @@ dependencies with actionable next actions.
   [issue_2313_local_baseline_quarantine.md](issue_2313_local_baseline_quarantine.md),
   [issue_2277_local_artifact_classification.md](issue_2277_local_artifact_classification.md), and
   [issue_1960_local_artifact_retirement.md](issue_1960_local_artifact_retirement.md).
-- Each affected baseline config row has a status: all seven are currently
+- At the time of issue #2409, each affected baseline config row had a status: all seven were
   `blocked`/`unavailable`; two are recover-or-retire candidates, and five are retire-or-rewrite
   candidates.
 - Remaining local-only dependencies fail closed through

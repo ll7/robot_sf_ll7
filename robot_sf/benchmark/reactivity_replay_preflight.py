@@ -31,7 +31,9 @@ and honestly labeled before any compute is spent.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.reactivity_ablation import (
@@ -54,6 +56,20 @@ MIN_RANK_STABILITY_SEEDS = 20
 #: The #3573 diagnostic small matrix used 4 seeds; a paper-grade plan must strictly exceed it.
 DIAGNOSTIC_SEED_COUNT = 4
 
+#: Metrics that must be preserved for the post-run rank-stability gate.
+REQUIRED_RANK_STABILITY_METRICS = ("collision_rate", "near_miss_rate", "min_separation_m")
+
+#: Canonical post-run gate command family. Packets may add arguments but must route here.
+RANK_STABILITY_GATE_COMMAND = "scripts/tools/seed_sufficiency_gate.py"
+
+#: Explicitly excluded actions for this preflight slice. These are machine-checked so a
+#: launch packet cannot be mistaken for benchmark evidence or a compute submission request.
+REQUIRED_OUT_OF_SCOPE = (
+    "no_full_benchmark_campaign",
+    "no_slurm_gpu_submission",
+    "no_paper_dissertation_claim_edits",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ReactivityReplayRunPlan:
@@ -72,6 +88,8 @@ class ReactivityReplayRunPlan:
         replay_is_trajectory_playback: Whether the replay arm is pre-recorded trajectory playback.
             Must be ``False`` for this ablation (live force-off, not playback).
         replay_limitation: Human-readable limitation note that must accompany every artifact.
+        rank_stability_analysis: Plan-level post-run analysis contract metadata. This is not a
+            measured result and does not claim rank stability.
         min_planners: Override for the planner-count floor (defaults to :data:`MIN_PLANNERS`).
         min_seeds: Override for the seed-count floor (defaults to :data:`MIN_RANK_STABILITY_SEEDS`).
     """
@@ -80,8 +98,11 @@ class ReactivityReplayRunPlan:
     arm_seeds: dict[str, tuple[int, ...]]
     scenario_set: str
     horizon: int
+    scenario_set_sha256: str | None = None
     replay_is_trajectory_playback: bool = REPLAY_IS_TRAJECTORY_PLAYBACK
     replay_limitation: str = REPLAY_LIMITATION
+    rank_stability_analysis: dict[str, Any] = field(default_factory=dict)
+    out_of_scope: tuple[str, ...] = REQUIRED_OUT_OF_SCOPE
     min_planners: int = MIN_PLANNERS
     min_seeds: int = MIN_RANK_STABILITY_SEEDS
     #: Minimum horizon for the contrast to register (diagnostic family observation, #3573).
@@ -208,6 +229,100 @@ def _check_horizon(plan: ReactivityReplayRunPlan) -> CheckResult:
     )
 
 
+def _check_scenario_set_digest(plan: ReactivityReplayRunPlan) -> CheckResult:
+    """Validate supplied scenario-set digest so launch packets fail closed on drift.
+
+    Returns:
+        CheckResult: ``scenario_set_sha256`` check outcome.
+    """
+    expected = (plan.scenario_set_sha256 or "").strip().lower()
+    if not expected:
+        return CheckResult(
+            name="scenario_set_sha256",
+            passed=True,
+            detail="no scenario_set_sha256 supplied; drift guard not enforced",
+        )
+    if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
+        return CheckResult(
+            name="scenario_set_sha256",
+            passed=False,
+            detail="scenario_set_sha256 must be a 64-character lowercase hex SHA-256 digest",
+        )
+
+    scenario_path = Path(plan.scenario_set)
+    if not scenario_path.is_absolute():
+        scenario_path = Path(__file__).resolve().parents[2] / scenario_path
+    if not scenario_path.is_file():
+        return CheckResult(
+            name="scenario_set_sha256",
+            passed=False,
+            detail=f"scenario_set file not found for digest check: {plan.scenario_set}",
+        )
+
+    actual = hashlib.sha256(scenario_path.read_bytes()).hexdigest()
+    ok = actual == expected
+    return CheckResult(
+        name="scenario_set_sha256",
+        passed=ok,
+        detail=(
+            f"scenario_set digest matches {expected}"
+            if ok
+            else f"scenario_set digest mismatch: expected {expected}, got {actual}"
+        ),
+    )
+
+
+def _check_rank_stability_analysis(plan: ReactivityReplayRunPlan) -> CheckResult:
+    """Validate the declared post-run rank-stability analysis contract.
+
+    Returns:
+        CheckResult: ``rank_stability_analysis`` check outcome.
+    """
+    analysis = plan.rank_stability_analysis
+    if not analysis:
+        return CheckResult(
+            name="rank_stability_analysis",
+            passed=False,
+            detail="rank_stability_analysis metadata must be present in launch packet",
+        )
+
+    metrics = analysis.get("required_metrics")
+    metric_set = set(metrics) if isinstance(metrics, list) else set()
+    missing_metrics = sorted(set(REQUIRED_RANK_STABILITY_METRICS) - metric_set)
+    rank_metric = analysis.get("rank_metric")
+    gate_command = str(analysis.get("seed_sufficiency_gate_command") or "")
+    claim_boundary = str(analysis.get("claim_boundary") or "").lower()
+    paired_resampling = analysis.get("paired_seed_resampling") is True
+    replay_caveat_required = analysis.get("replay_limitation_required") is True
+
+    failures: list[str] = []
+    if missing_metrics:
+        failures.append(f"missing required_metrics: {', '.join(missing_metrics)}")
+    if not isinstance(rank_metric, str) or rank_metric not in metric_set:
+        failures.append("rank_metric must be one of required_metrics")
+    if not paired_resampling:
+        failures.append("paired_seed_resampling must be true")
+    if RANK_STABILITY_GATE_COMMAND not in gate_command:
+        failures.append(
+            f"seed_sufficiency_gate_command must route through {RANK_STABILITY_GATE_COMMAND}"
+        )
+    if not replay_caveat_required:
+        failures.append("replay_limitation_required must be true")
+    if "no paper-facing" not in claim_boundary or "post-run" not in claim_boundary:
+        failures.append("claim_boundary must state no paper-facing claim until post-run review")
+
+    return CheckResult(
+        name="rank_stability_analysis",
+        passed=not failures,
+        detail=(
+            "post-run rank-stability contract declared: paired seed resampling, required metrics, "
+            "seed-sufficiency gate, replay caveat, and no-paper-claim boundary"
+            if not failures
+            else "; ".join(failures)
+        ),
+    )
+
+
 def _check_replay_limitation(plan: ReactivityReplayRunPlan) -> CheckResult:
     """Replay is force-off (not trajectory playback) and the limitation note is present.
 
@@ -228,13 +343,38 @@ def _check_replay_limitation(plan: ReactivityReplayRunPlan) -> CheckResult:
     return CheckResult(name="replay_limitation", passed=ok, detail=detail)
 
 
+def _check_out_of_scope(plan: ReactivityReplayRunPlan) -> CheckResult:
+    """Validate the non-execution / non-claim boundary travels with the packet.
+
+    Returns:
+        CheckResult: ``out_of_scope`` check outcome.
+    """
+    declared = set(plan.out_of_scope)
+    required = set(REQUIRED_OUT_OF_SCOPE)
+    missing = sorted(required - declared)
+    extras = sorted(declared - required)
+    ok = not missing
+    detail = (
+        "explicitly excludes full benchmark campaign, Slurm/GPU submission, and "
+        "paper/dissertation claim edits"
+        if ok
+        else f"missing required out_of_scope exclusions: {', '.join(missing)}"
+    )
+    if extras:
+        detail = f"{detail}; extra exclusions declared: {', '.join(extras)}"
+    return CheckResult(name="out_of_scope", passed=ok, detail=detail)
+
+
 _CHECKS = (
     _check_planner_count,
     _check_arms,
     _check_paired_seeds,
     _check_seed_budget,
     _check_horizon,
+    _check_scenario_set_digest,
+    _check_rank_stability_analysis,
     _check_replay_limitation,
+    _check_out_of_scope,
 )
 
 
@@ -271,7 +411,10 @@ def build_preflight_manifest(plan: ReactivityReplayRunPlan) -> dict[str, Any]:
             "planners": list(plan.planners),
             "arms": {arm: list(seeds) for arm, seeds in plan.arm_seeds.items()},
             "scenario_set": plan.scenario_set,
+            "scenario_set_sha256": plan.scenario_set_sha256,
             "horizon": plan.horizon,
+            "rank_stability_analysis": dict(plan.rank_stability_analysis),
+            "out_of_scope": list(plan.out_of_scope),
             "min_planners": plan.min_planners,
             "min_seeds": plan.min_seeds,
         },
@@ -290,13 +433,14 @@ def build_preflight_manifest(plan: ReactivityReplayRunPlan) -> dict[str, Any]:
             "by scripts/tools/seed_sufficiency_gate.py; 'replay' is live force-off, not trajectory "
             "playback."
         ),
+        "out_of_scope": list(plan.out_of_scope),
     }
 
 
 def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
     """Build a :class:`ReactivityReplayRunPlan` from a launch-packet mapping (e.g. parsed YAML).
 
-    Expected shape (only the listed keys are read; extras are ignored)::
+    Expected shape (only the listed keys are read; other extras are ignored)::
 
         planners: [goal, orca, social_force]
         scenario_set: configs/scenarios/sets/classic_crossing_subset.yaml
@@ -307,8 +451,19 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
         replay:
           is_trajectory_playback: false
           limitation: "..."              # defaults to the canonical REPLAY_LIMITATION
+        rank_stability_analysis:         # required post-run analysis contract (fails closed)
+          paired_seed_resampling: true
+          required_metrics: [collision_rate, near_miss_rate, min_separation_m]
+          rank_metric: collision_rate
+          seed_sufficiency_gate_command: "uv run python scripts/tools/seed_sufficiency_gate.py ..."
+          replay_limitation_required: true
+          claim_boundary: "No paper-facing claim until post-run ..."
         min_planners: 3                  # optional override
         min_seeds: 20                    # optional override
+
+    The packet parses with ``rank_stability_analysis`` defaulting to an empty mapping when absent,
+    but the manifest then preflights as ``blocked`` because the contract check fails closed (see
+    :func:`_check_rank_stability_analysis`).
 
     Returns:
         ReactivityReplayRunPlan: The parsed run plan.
@@ -326,6 +481,7 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
     scenario_set = packet.get("scenario_set")
     if not isinstance(scenario_set, str) or not scenario_set.strip():
         raise ValueError("packet 'scenario_set' must be a non-empty string")
+    scenario_set_sha256 = _resolve_scenario_set_sha256(packet)
 
     horizon = packet.get("horizon")
     if not isinstance(horizon, int) or isinstance(horizon, bool):
@@ -342,6 +498,8 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
     limitation = replay.get("limitation", REPLAY_LIMITATION)
     if not isinstance(limitation, str):
         raise ValueError("packet 'replay.limitation' must be a string")
+    analysis = _resolve_rank_stability_analysis(packet)
+    out_of_scope = _resolve_out_of_scope(packet)
 
     overrides: dict[str, Any] = {}
     if "min_planners" in packet:
@@ -354,8 +512,11 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
         arm_seeds=arm_seeds,
         scenario_set=scenario_set,
         horizon=horizon,
+        scenario_set_sha256=scenario_set_sha256,
         replay_is_trajectory_playback=is_playback,
         replay_limitation=limitation,
+        rank_stability_analysis=dict(analysis),
+        out_of_scope=out_of_scope,
         **overrides,
     )
 
@@ -391,12 +552,49 @@ def _resolve_arm_seeds(packet: dict[str, Any]) -> dict[str, tuple[int, ...]]:
     return dict.fromkeys(REACTIVITY_ARMS, seeds)
 
 
+def _resolve_scenario_set_sha256(packet: dict[str, Any]) -> str | None:
+    """Return optional packet scenario-set checksum.
+
+    Returns:
+        Optional SHA-256 hex digest supplied by the launch packet.
+    """
+    scenario_set_sha256 = packet.get("scenario_set_sha256")
+    if scenario_set_sha256 is not None and not isinstance(scenario_set_sha256, str):
+        raise ValueError("packet 'scenario_set_sha256' must be a string when present")
+    return scenario_set_sha256
+
+
+def _resolve_rank_stability_analysis(packet: dict[str, Any]) -> dict[str, Any]:
+    """Return optional rank-stability analysis metadata from the launch packet."""
+    analysis = packet.get("rank_stability_analysis", {})
+    if not isinstance(analysis, dict):
+        raise ValueError("packet 'rank_stability_analysis' must be a mapping when present")
+    return dict(analysis)
+
+
+def _resolve_out_of_scope(packet: dict[str, Any]) -> tuple[str, ...]:
+    """Return packet-level exclusions that keep preflight from implying evidence.
+
+    A missing key resolves to the empty tuple so the ``out_of_scope`` check fails
+    closed with an actionable blocked manifest (mirroring
+    ``_resolve_rank_stability_analysis``), rather than raising before manifest
+    construction. A present-but-malformed value still raises.
+    """
+    raw = packet.get("out_of_scope", [])
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise ValueError("packet 'out_of_scope' must be a list of strings when present")
+    return tuple(raw)
+
+
 __all__ = [
     "DIAGNOSTIC_SEED_COUNT",
     "ISSUE",
     "MIN_PLANNERS",
     "MIN_RANK_STABILITY_SEEDS",
     "PREFLIGHT_SCHEMA",
+    "RANK_STABILITY_GATE_COMMAND",
+    "REQUIRED_OUT_OF_SCOPE",
+    "REQUIRED_RANK_STABILITY_METRICS",
     "CheckResult",
     "ReactivityReplayRunPlan",
     "build_preflight_manifest",

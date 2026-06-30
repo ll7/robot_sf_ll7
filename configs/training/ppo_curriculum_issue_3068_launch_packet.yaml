@@ -183,36 +183,61 @@ validation_command: >
   uv run python -c "import yaml; d=yaml.safe_load(open('configs/training/ppo_curriculum_issue_3068_launch_packet.yaml')); assert d['no_training_result_claim'] is True; print('valid', d['campaign_id'])"
 execution_boundary:
   full_training_in_this_issue: false
-  submit_slurm_from_this_issue: true
+  submit_slurm_from_this_issue: false
   local_preflight_command: >
     uv run pytest tests/training/test_ppo_curriculum_launch_packet_issue_3068.py -q
   slurm_command_shape: >
-    Submit through private operations only, using public worktree that owns
-    issue-3068 launch branch. First launchable run is a full-surface scout that
-    records training-curve artifacts under issue-3068 PPO curriculum campaign,
-    but does not by itself establish full curriculum-vs-baseline final benchmark
-    claim.
+    No submission is authorized by this packet slice. A future submitter may use
+    the queue_hint route/script/resource/preflight fields below after rerunning
+    the exact validation_commands and replacing pending durable artifact aliases.
 queue_hint:
   public_issue: ll7/robot_sf_ll7#3068
-  state: ready
-  submit_ready: true
+  state: no_submit_preflight_ready
+  submit_ready: false
   review_required: false
   source: issue_3068_launch_packet
   job_class: robot_sf_gpu_training_small
   route_id: imech192:a30
+  cluster: imech192
+  partition: a30
+  qos: a30-gpu
   script: /home/luttkule/git/robot_sf_ll7-private-ops/auxme/SLURM/issue_791_reward_curriculum.sl  # allow-abs-path: private-ops SLURM routing target (lives outside this repo)
   config: configs/training/ppo/ablations/expert_ppo_issue_3068_curriculum_full_surface_scout_12m_env22.yaml
   campaign: 2026-06-issue3068-ppo-curriculum
-  cpus: 20
-  gpus: 1
-  mem_gb: 120
-  estimated_elapsed_sec: 43200
+  resources:
+    cpus: 20
+    gpus: 1
+    mem_gb: 120
+    estimated_elapsed_sec: 43200
+  preflight_proof:
+    local_only: true
+    requires_private_ops_checkout: true
+    requires_slurm_submit: false
+    required_checks:
+      missing_script:
+        command: test -f /home/luttkule/git/robot_sf_ll7-private-ops/auxme/SLURM/issue_791_reward_curriculum.sl  # allow-abs-path: private-ops SLURM routing target (lives outside this repo)
+        expected: script exists on submit host before any future submission
+      missing_config:
+        command: test -f configs/training/ppo/ablations/expert_ppo_issue_3068_curriculum_full_surface_scout_12m_env22.yaml
+        expected: public training config exists in the worktree
+      packet_contract:
+        command: uv run pytest tests/training/test_ppo_curriculum_launch_packet_issue_3068.py -q
+        expected: launch-packet contract passes without Slurm submission
   submit_args: >-
     --sbatch-arg --qos=a30-gpu --sbatch-arg --cpus-per-task=20
     --sbatch-arg --mem=120G --sbatch-arg --nice=10000
     --sbatch-arg --export=ALL,ISSUE791_TRAIN_CONFIG=configs/training/ppo/ablations/expert_ppo_issue_3068_curriculum_full_surface_scout_12m_env22.yaml,ISSUE791_WANDB_POLICY=require
-  remote_results: output/slurm/issue3068-ppo-curriculum
-  local_results: output/issue3068-ppo-curriculum
+  expected_outputs:
+    remote_results: output/slurm/issue3068-ppo-curriculum
+    local_results: output/issue3068-ppo-curriculum
+    wandb_group: issue-3068-ppo-curriculum
+    required_files:
+      - train_curve_metrics.csv
+      - checkpoint_manifest.json
+      - run_summary.json
+  validation_commands:
+    - uv run python -c "import yaml; d=yaml.safe_load(open('configs/training/ppo_curriculum_issue_3068_launch_packet.yaml')); assert d['execution_boundary']['submit_slurm_from_this_issue'] is False; assert d['queue_hint']['submit_ready'] is False; print('no-submit', d['campaign_id'])"
+    - uv run pytest tests/training/test_ppo_curriculum_launch_packet_issue_3068.py -q
   success_criteria:
     - training wrapper starts with W&B enabled
     - train-curve metrics and checkpoint manifest are written

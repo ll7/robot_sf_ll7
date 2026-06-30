@@ -2,8 +2,9 @@
 #
 # This is a no-submit decision packet, not benchmark evidence. It converts the
 # live issue decisions into a reviewable Slurm launch, analysis, and retention
-# contract. Do not submit from this packet until the private Slurm decision
-# packet is marked go and job 13175 has been reconciled.
+# contract. Do not submit from this packet on a non-Slurm machine. A
+# Slurm-capable submit host must refresh live queue state, duplicate status,
+# and worktree cleanliness before invoking the private submit wrapper.
 schema_version: research-campaign-manifest.v0.1
 campaign:
   id: issue_3810_comprehensive_h600_snqi_recalibration
@@ -196,10 +197,17 @@ durable_evidence:
     kind: tracked_context_evidence_plus_external_pointer
     path: docs/context/evidence/issue_3810_long_horizon_snqi/
     required_before_claim: true
+  machine_local_paths:
+    status: non_portable_private_ops_route_hints
+    reason: >
+      Absolute /home/luttkule private-ops paths below are machine-local
+      submit-routing references only. They are not canonical benchmark inputs
+      and must be refreshed on the Slurm-capable submit host before any submit
+      wrapper is invoked.
   retention_paths:
     compact_review_bundle: docs/context/evidence/issue_3810_long_horizon_snqi/
     external_artifact_pointer: wandb-or-release-artifact-required-before-claim
-    private_ops_ledger: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/jobs.yaml
+    private_ops_ledger: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/jobs.yaml  # allow-abs-path: private-ops routing (machine-local, non-portable)
   local_output_boundary: >
     Keep raw episode JSONL, videos, Slurm logs, model caches, and checkpoints out
     of git. Promote only compact summaries, checksums, and durable artifact
@@ -213,16 +221,109 @@ validation:
   dry_run: required
 
 launch_packet:
-  decision: blocked_until_private_slurm_go
+  decision: blocked_pending_submit_host_route_and_reconciliation
   compute_submit_authorized: false
   slurm_job_id: not_submitted
+  target_host: imech039
   blocking_jobs:
     - 13175
+  live_issue_state:
+    checked_date: "2026-06-30"
+    source: gh_issue_view_3810_labels
+    required_label: "state:running"
+    submit_blocker: true
+    resolution_required_before_submit: >
+      Issue #3810 is still marked "state:running", so a submit-host go
+      decision must first prove the active run is reconciled or no longer
+      relevant. Public packet checks must keep this as a blocker until the
+      live issue state changes and the packet is refreshed.
+  ledger_reconciliation:
+    checked_date: "2026-06-29"
+    source: private_ops_jobs_and_queue_read_only_needs_submit_host_refresh
+    job_13175_state: requires_submit_host_refresh
+    job_13175_campaign: 2026-06-issue1554-s20-h500-l40s-mem180
+    job_13175_relevance: >
+      Older #1554 lane that must be rechecked from the Slurm-capable submit host
+      before any #3810 submission. A stale public packet must not treat it as
+      reconciled without fresh private-ops evidence.
+    running_related_jobs:
+      - job_id: 13198
+        state: running
+        campaign: 2026-06-issue1554-s20-h500-split-mem180-run
+        relevance: >
+          Separate #1554 evidence-yield lane, not a #3810 duplicate. A
+          Slurm-capable submit host must still refresh live queue pressure
+          before any #3810 submission.
+    issue_3810_duplicate_status: requires_submit_host_refresh
+  go_no_go:
+    recommendation: blocked_pending_submit_host_route_and_reconciliation
+    local_submission_status: no_submit_current_machine
+    exact_local_decision_command: >-
+      uv run python scripts/validation/check_issue_3810_long_horizon_launch_packet.py
+      --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml
+      --json
+    slurm_command_status: >
+      Not safe to freeze in this public packet without live submit-host queue
+      pressure, duplicate check, clean-worktree proof, job 13175 reconciliation,
+      target-host route support, and private route selection. Do not use the
+      private submit wrapper named below until those checks return go.
+    private_ops_dry_run:
+      required_before_submit: true
+      target_host: imech039
+      evidence_path: output/benchmarks/issue_3810_comprehensive_h600_snqi/preflight/private_ops_route_dry_run.json
+      current_public_status: route_unverified
+      required_fields:
+        - target_host
+        - queue_summary_timestamp
+        - duplicate_status
+        - live_issue_state
+        - job_13175_state
+        - route_id
+        - submit_wrapper_supports_target_host
+        - owning_worktree
+        - owning_worktree_clean
+        - decision
+      decision_policy: >
+        The dry run must record decision=go before submission. If job 13175 is
+        not terminal/reconciled, if an issue #3810 duplicate exists, if the
+        owning worktree is dirty, or if the private submit wrapper lacks
+        imech039 support, the decision remains blocked.
+  interpretation_gate:
+    status: blocked_pending_active_run_retention_reconciliation
+    required_before_claim: true
+    required_before_report_publication: true
+    active_run_state: state:running
+    blockers:
+      - active_run_state
+      - retention_paths_missing
+      - route_config_provenance_incomplete
+      - snqi_recalibration_inputs_missing
+      - interaction_exposure_diagnostics_missing
+    required_evidence:
+      - private_ops_route_dry_run
+      - retained_compact_review_bundle
+      - external_artifact_pointer
+      - snqi_recalibration_bundle
+      - horizon_sensitivity_report
+      - interaction_exposure_diagnostics
+    decision_policy: >
+      The comprehensive h600 report remains analysis-blocked while issue #3810
+      is state:running or any retention, route/config provenance, Social
+      Navigation Quality Index recalibration, or interaction-exposure diagnostic
+      evidence is absent. Passing this public packet validator is not permission
+      to interpret, publish, or promote benchmark claims.
   route:
-    private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops
-    queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh
-    route_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh
-    submit_wrapper: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh
+    machine_local_paths:
+      status: non_portable_private_ops_route_hints
+      resolution_policy: >
+        Treat these absolute private-ops paths as local submit-host hints.
+        Prefer ROBOT_SF_PRIVATE_OPS or $HOME/git/robot_sf_ll7-private-ops
+        during dry-run resolution and fail closed if the submit host layout or
+        route wrapper support differs.
+    private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    route_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    submit_wrapper: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh  # allow-abs-path: private-ops routing (machine-local, non-portable)
     submit_policy: no_submit_until_decision_packet_go
   preflight:
     public_manifest_check: >
@@ -234,19 +335,32 @@ launch_packet:
       --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml
       --json
     private_ops_dry_run: >
-      ROBOT_SF_PRIVATE_OPS=/home/luttkule/git/robot_sf_ll7-private-ops
-      /home/luttkule/git/robot_sf_ll7-private-ops/ops/preflight/run_preflight.sh
+      ROBOT_SF_PRIVATE_OPS="$HOME/git/robot_sf_ll7-private-ops"
+      "$HOME/git/robot_sf_ll7-private-ops/ops/preflight/run_preflight.sh"
       --cluster licca
       --route-id decision-packet-only
       --public-repo "$PWD"
       --output output/benchmarks/issue_3810_comprehensive_h600_snqi/preflight/private_ops_route_dry_run.json
     no_submit_guard: >
       Private preflight and route checks may run read-only. The submit wrapper
-      must not be invoked until issue #3810 has an explicit go decision and job
-      13175 has been reconciled.
+      must not be invoked from this machine. It may be invoked only on a
+      Slurm-capable host after live queue, duplicate, branch, commit, and
+      cleanliness checks return go.
+  materialized_config:
+    # The runnable h600 campaign config does not exist yet and is intentionally
+    # not added by this launch-packet PR. It is generated downstream by applying
+    # config_patch (base_config + required_overrides) and written to a disposable
+    # output/ path; promote it into tracked configs/ only when the actual run is
+    # prepared. campaign_command resolves ${MATERIALIZED_H600_CONFIG} to this
+    # generated path, so it deliberately does not cite a tracked config that does
+    # not exist yet.
+    target_path: output/benchmarks/issue_3810_comprehensive_h600_snqi/config/issue_3810_comprehensive_h600_snqi.yaml
+    materialize_policy: generated_from_config_patch_before_run
+    promote_policy: promote_to_tracked_configs_only_at_run_preparation
   campaign_command: >
+    MATERIALIZED_H600_CONFIG=output/benchmarks/issue_3810_comprehensive_h600_snqi/config/issue_3810_comprehensive_h600_snqi.yaml
     uv run python scripts/tools/run_camera_ready_benchmark.py
-    --config configs/benchmarks/issue_3810_comprehensive_h600_snqi.yaml
+    --config "${MATERIALIZED_H600_CONFIG}"
     --campaign-id issue_3810_comprehensive_h600_snqi
     --output-root output/benchmarks/issue_3810_comprehensive_h600_snqi
   config_patch:
@@ -273,7 +387,11 @@ launch_packet:
     checksum_policy: checksum_pin_before_claim
     comparison_rule: within_regime_only_no_cross_regime_absolute_snqi_claim
   horizon_sensitivity_report:
-    command: uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py --long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi --short-campaign-reference docs/context/evidence/prior_scoped_h100_reference --output-dir output/benchmarks/issue_3810_comprehensive_h600_snqi/reports
+    command: >
+      uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py
+      --long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi
+      --short-campaign-reference docs/context/evidence/prior_scoped_h100_reference
+      --output-dir output/benchmarks/issue_3810_comprehensive_h600_snqi/reports
     required_fields:
       - timeout_rate
       - max_steps_share
@@ -282,14 +400,8 @@ launch_packet:
       - rank_inversion_persistence
       - comparison_scope_caveat
     required_caveat: prior_scoped_short_horizon_vs_new_comprehensive_long_horizon_not_horizon_only
-    required_outputs:
-      - reports/horizon_sensitivity_report.json
-      - reports/horizon_sensitivity_report.md
   wait_it_out_guard:
     diagnostic_name: interaction_exposure
-    command: uv run python scripts/analysis/interaction_exposure_report.py --campaign output/benchmarks/issue_3810_comprehensive_h600_snqi --output output/benchmarks/issue_3810_comprehensive_h600_snqi/reports/interaction_exposure_diagnostics.json
-    required_outputs:
-      - reports/interaction_exposure_diagnostics.json
     required_episode_fields:
       - interaction_exposure_share
       - robot_motion_share_before_first_clearance

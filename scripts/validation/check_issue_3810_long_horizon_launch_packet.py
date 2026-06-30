@@ -33,6 +33,21 @@ REQUIRED_EXPOSURE_FIELDS = {
     "first_clearance_step",
     "low_exposure_success",
 }
+REQUIRED_INTERPRETATION_GATE_EVIDENCE = {
+    "private_ops_route_dry_run",
+    "retained_compact_review_bundle",
+    "external_artifact_pointer",
+    "snqi_recalibration_bundle",
+    "horizon_sensitivity_report",
+    "interaction_exposure_diagnostics",
+}
+REQUIRED_INTERPRETATION_GATE_BLOCKERS = {
+    "active_run_state",
+    "retention_paths_missing",
+    "route_config_provenance_incomplete",
+    "snqi_recalibration_inputs_missing",
+    "interaction_exposure_diagnostics_missing",
+}
 
 
 class PacketError(ValueError):
@@ -47,6 +62,10 @@ def _load_packet(path: Path) -> dict[str, Any]:
 
 
 def _path_is_repo_relative(value: str) -> bool:
+    # A blank value normalizes to "." via PurePosixPath, which would wrongly pass
+    # as repo-relative; treat empty/whitespace as not a valid repo path.
+    if not value or not value.strip():
+        return False
     path = PurePosixPath(value)
     return not path.is_absolute() and ".." not in path.parts
 
@@ -77,6 +96,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
     _require(packet.get("schema_version") == "research-campaign-manifest.v0.1", "unexpected schema")
     _require(campaign.get("parent_issue") == 3810, "campaign.parent_issue must be 3810")
+    _require(bool(str(campaign.get("id") or "").strip()), "campaign.id required")
     _require(
         campaign.get("evidence_tier") == "launch-packet-only", "evidence tier must be launch-only"
     )
@@ -98,7 +118,10 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
     _require(seed_policy.get("seed_set") == "paper_eval_s30", "seed_set must be paper_eval_s30")
     seeds = seed_policy.get("seeds")
-    _require(isinstance(seeds, list) and len(seeds) >= 30, "packet must include all S30 seeds")
+    _require(
+        isinstance(seeds, list) and len(seeds) == 30, "packet must include exactly 30 S30 seeds"
+    )
+    _require(len(set(seeds)) == 30, "seed list must not contain duplicates")
 
     planner_rows = planners.get("rows")
     _require(isinstance(planner_rows, list) and len(planner_rows) >= 10, "planner roster too small")
@@ -110,14 +133,14 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
     _require("dependency_gated" in expected_availability, "dependency-gated rows must be explicit")
 
-    metric_ids = set(metrics.get("ids", []))
+    metric_ids = set(metrics.get("ids") or [])
     _require("snqi" in metric_ids, "SNQI metric required")
     _require("interaction_exposure_share" in metric_ids, "interaction exposure metric required")
     _require("timeout_rate" in metric_ids, "timeout metric required")
     _require("max_steps_share" in metric_ids, "max-steps share metric required")
 
-    success_values = set(row_status_policy.get("success_values", []))
-    fail_closed_values = set(row_status_policy.get("fail_closed_values", []))
+    success_values = set(row_status_policy.get("success_values") or [])
+    fail_closed_values = set(row_status_policy.get("fail_closed_values") or [])
     _require(success_values == {"successful_evidence"}, "only successful_evidence may count")
     _require(
         {"not_available", "failed", "blocked"} <= fail_closed_values, "fail-closed statuses missing"
@@ -128,7 +151,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     local_root = str(outputs.get("local_root", ""))
     _require(local_root.startswith("output/"), "outputs.local_root must be under output/")
     _require(outputs.get("disposable") is True, "outputs must be disposable local output")
-    required_paths = set(outputs.get("required_paths", []))
+    required_paths = set(outputs.get("required_paths") or [])
     _require(REQUIRED_OUTPUTS <= required_paths, "required outputs missing issue #3810 artifacts")
 
     durable_plan = _require_mapping(durable_evidence, "plan")
@@ -139,10 +162,34 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         durable_path.startswith("docs/context/evidence/"), "durable path must be context evidence"
     )
+    retention_paths = _require_mapping(durable_evidence, "retention_paths")
+    compact_review_bundle = str(retention_paths.get("compact_review_bundle", ""))
+    external_artifact_pointer = str(retention_paths.get("external_artifact_pointer", ""))
+    private_ops_ledger = str(retention_paths.get("private_ops_ledger", ""))
+    local_output_boundary = str(durable_evidence.get("local_output_boundary", ""))
+    _require(
+        compact_review_bundle == durable_path,
+        "compact review bundle must match durable evidence path",
+    )
+    _require(
+        external_artifact_pointer == "wandb-or-release-artifact-required-before-claim",
+        "external artifact pointer policy missing",
+    )
+    _require(
+        private_ops_ledger.endswith("robot_sf_ll7-private-ops/ops/jobs/jobs.yaml"),
+        "private-ops ledger path missing",
+    )
+    _require(
+        "raw episode JSONL" in local_output_boundary, "local output boundary must mention raw JSONL"
+    )
+    _require(
+        "out of git" in local_output_boundary or "out git" in local_output_boundary,
+        "local output boundary must keep raw outputs out of git",
+    )
 
     _require(
-        launch_packet.get("decision") == "blocked_until_private_slurm_go",
-        "decision must block submit",
+        launch_packet.get("decision") == "blocked_pending_submit_host_route_and_reconciliation",
+        "decision must stay blocked pending submit-host route and reconciliation",
     )
     _require(
         launch_packet.get("compute_submit_authorized") is False, "compute submit must be false"
@@ -150,7 +197,127 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         launch_packet.get("slurm_job_id") == "not_submitted", "slurm job must be not_submitted"
     )
-    _require(13175 in launch_packet.get("blocking_jobs", []), "job 13175 blocker missing")
+    _require(launch_packet.get("target_host") == "imech039", "target host must be imech039")
+    blocking_jobs = launch_packet.get("blocking_jobs")
+    _require(isinstance(blocking_jobs, list), "blocking_jobs must be a list")
+    _require(13175 in blocking_jobs, "job 13175 must block submit until reconciled")
+
+    live_issue_state = _require_mapping(launch_packet, "live_issue_state")
+    _require(
+        live_issue_state.get("required_label") == "state:running",
+        "live issue state must record state:running blocker",
+    )
+    _require(
+        live_issue_state.get("submit_blocker") is True,
+        "live issue state must block submit while running",
+    )
+    _require(
+        "reconciled" in str(live_issue_state.get("resolution_required_before_submit", "")),
+        "live issue state must require reconciliation before submit",
+    )
+
+    ledger = _require_mapping(launch_packet, "ledger_reconciliation")
+    _require(
+        ledger.get("job_13175_state") == "requires_submit_host_refresh",
+        "job 13175 reconciliation must require submit-host refresh",
+    )
+    _require(
+        ledger.get("issue_3810_duplicate_status") == "requires_submit_host_refresh",
+        "issue #3810 duplicate status must require submit-host refresh",
+    )
+    running_related_jobs = ledger.get("running_related_jobs")
+    _require(
+        isinstance(running_related_jobs, list),
+        "running_related_jobs must be listed",
+    )
+
+    go_no_go = _require_mapping(launch_packet, "go_no_go")
+    _require(
+        go_no_go.get("recommendation") == "blocked_pending_submit_host_route_and_reconciliation",
+        "go/no-go recommendation must remain blocked",
+    )
+    _require(
+        go_no_go.get("local_submission_status") == "no_submit_current_machine",
+        "local submission status must remain no-submit",
+    )
+    exact_cmd = go_no_go.get("exact_local_decision_command")
+    _require(
+        "check_issue_3810_long_horizon_launch_packet.py"
+        in (str(exact_cmd) if exact_cmd is not None else ""),
+        "exact local decision command missing",
+    )
+    slurm_status = go_no_go.get("slurm_command_status")
+    _require(
+        "Not safe to freeze" in (str(slurm_status) if slurm_status is not None else ""),
+        "slurm command status must explain why final submit command is not frozen",
+    )
+    _require(
+        "job 13175" in (str(slurm_status) if slurm_status is not None else ""),
+        "go/no-go must mention job 13175 reconciliation",
+    )
+    dry_run = _require_mapping(go_no_go, "private_ops_dry_run")
+    _require(dry_run.get("required_before_submit") is True, "private-ops dry run required")
+    _require(dry_run.get("target_host") == "imech039", "private-ops dry run host mismatch")
+    _require(
+        dry_run.get("current_public_status") == "route_unverified",
+        "private-ops dry run must be route_unverified in public packet",
+    )
+    dry_run_fields = set(dry_run.get("required_fields") or [])
+    _require(
+        {
+            "target_host",
+            "queue_summary_timestamp",
+            "duplicate_status",
+            "live_issue_state",
+            "job_13175_state",
+            "route_id",
+            "submit_wrapper_supports_target_host",
+            "owning_worktree",
+            "owning_worktree_clean",
+            "decision",
+        }
+        <= dry_run_fields,
+        "private-ops dry run fields missing",
+    )
+    _require(
+        "imech039 support" in str(dry_run.get("decision_policy", "")),
+        "private-ops dry run must gate imech039 support",
+    )
+
+    interpretation_gate = _require_mapping(launch_packet, "interpretation_gate")
+    _require(
+        interpretation_gate.get("status") == "blocked_pending_active_run_retention_reconciliation",
+        "interpretation gate must stay blocked pending active-run reconciliation",
+    )
+    _require(
+        interpretation_gate.get("required_before_claim") is True,
+        "interpretation gate must be required before claims",
+    )
+    _require(
+        interpretation_gate.get("required_before_report_publication") is True,
+        "interpretation gate must be required before report publication",
+    )
+    _require(
+        interpretation_gate.get("active_run_state") == "state:running",
+        "interpretation gate must record active run state",
+    )
+    gate_blockers = set(interpretation_gate.get("blockers") or [])
+    _require(
+        REQUIRED_INTERPRETATION_GATE_BLOCKERS <= gate_blockers,
+        "interpretation gate blockers missing",
+    )
+    gate_evidence = set(interpretation_gate.get("required_evidence") or [])
+    _require(
+        REQUIRED_INTERPRETATION_GATE_EVIDENCE <= gate_evidence,
+        "interpretation gate evidence missing",
+    )
+    gate_policy = str(interpretation_gate.get("decision_policy", ""))
+    _require(
+        "state:running" in gate_policy
+        and "not permission" in gate_policy
+        and "promote benchmark claims" in gate_policy,
+        "interpretation gate must block claim promotion",
+    )
 
     route = _require_mapping(launch_packet, "route")
     _require(
@@ -186,14 +353,14 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
 
     report = _require_mapping(launch_packet, "horizon_sensitivity_report")
-    report_fields = set(report.get("required_fields", []))
+    report_fields = set(report.get("required_fields") or [])
     _require(REQUIRED_REPORT_FIELDS <= report_fields, "horizon report fields missing")
     _require(
         "not_horizon_only" in str(report.get("required_caveat", "")), "comparison caveat missing"
     )
 
     exposure = _require_mapping(launch_packet, "wait_it_out_guard")
-    exposure_fields = set(exposure.get("required_episode_fields", []))
+    exposure_fields = set(exposure.get("required_episode_fields") or [])
     _require(REQUIRED_EXPOSURE_FIELDS <= exposure_fields, "interaction exposure fields missing")
     _require(
         exposure.get("low_exposure_success_status") == "diagnostic_only",
@@ -212,7 +379,14 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "planner_count": len(planner_rows),
         "compute_submit_authorized": launch_packet["compute_submit_authorized"],
         "slurm_job_id": launch_packet["slurm_job_id"],
-        "blocking_jobs": launch_packet["blocking_jobs"],
+        "target_host": launch_packet["target_host"],
+        "blocking_jobs": blocking_jobs,
+        "job_13175_state": ledger["job_13175_state"],
+        "issue_3810_duplicate_status": ledger["issue_3810_duplicate_status"],
+        "live_issue_state": live_issue_state["required_label"],
+        "go_no_go": go_no_go["recommendation"],
+        "private_ops_dry_run": dry_run["current_public_status"],
+        "interpretation_gate": interpretation_gate["status"],
     }
 
 
@@ -229,7 +403,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         summary = validate_packet(_load_packet(args.packet))
     except (OSError, PacketError, yaml.YAMLError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))
+        else:
+            print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(summary, indent=2, sort_keys=True))

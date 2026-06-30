@@ -25,7 +25,7 @@
 # config as non-runnable and not benchmark evidence until issue #1764 records a
 # durable source with checksum or retires the config.
 
-model_path: output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip
+model_id: retired_ppo_issue_791_horizon100_12178_local_only
 
 device: auto
 deterministic: true

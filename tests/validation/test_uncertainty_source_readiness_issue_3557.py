@@ -8,6 +8,7 @@ from scripts.validation.check_uncertainty_source_readiness_issue_3557 import (
     DEFAULT_SOURCE_SPECS,
     EXISTENCE_DEGRADATION,
     MISSING_CONDITION_BUILDER,
+    MISSING_SCENARIO_HOOK,
     MISSING_SURROGATE_OUTPUT,
     SOURCE_READY,
     TRACKING_NOISE,
@@ -30,12 +31,15 @@ def test_default_inventory_classifies_current_and_missing_sources() -> None:
         VISIBILITY_OCCLUSION,
         COVARIANCE_INFLATION,
         CLASS_PROBABILITY_AMBIGUITY,
-        TRACKING_NOISE,
     ):
-        assert by_source[source].status == MISSING_CONDITION_BUILDER
-        assert not by_source[source].condition_builder.present
+        assert by_source[source].status == MISSING_SCENARIO_HOOK
+        assert by_source[source].condition_builder.present
         assert not by_source[source].scenario_hook.present
         assert by_source[source].expected_surrogate_outputs.present
+    assert by_source[TRACKING_NOISE].status == MISSING_CONDITION_BUILDER
+    assert not by_source[TRACKING_NOISE].condition_builder.present
+    assert not by_source[TRACKING_NOISE].scenario_hook.present
+    assert by_source[TRACKING_NOISE].expected_surrogate_outputs.present
 
 
 def test_report_payload_is_inventory_not_generalization_claim() -> None:

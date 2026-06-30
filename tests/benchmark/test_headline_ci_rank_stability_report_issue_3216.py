@@ -773,3 +773,37 @@ def test_constraints_first_profile_flags_partial_metric_coverage(tmp_path) -> No
     assert packet["constraints_first_metric_gaps"] == ["collisions", "near_misses"]
     assert "constraints_first_metrics_missing" in packet["manuscript_blockers"]
     assert "constraints_first_metric_gap" in packet["s30_reasons"]
+
+
+def test_decision_packet_marks_seed_budget_reason_even_with_high_deterministic_overlap() -> None:
+    """Deterministic high-overlap fixture marks S30 local-preflight as ready and review-only."""
+    rows = [
+        _cell_row(
+            "squeeze",
+            "planner_a",
+            {
+                "snqi": [0.50, 0.51, 0.49, 0.52, 0.50] * 4,
+            },
+        ),
+        _cell_row(
+            "squeeze",
+            "planner_b",
+            {
+                "snqi": [0.49, 0.50, 0.48, 0.51, 0.49] * 4,
+            },
+        ),
+    ]
+    report = _report(
+        rows,
+        metrics=("snqi",),
+        bootstrap_samples=1000,
+        rank_metric="snqi",
+        rank_profile="snqi_diagnostic",
+        resamples=300,
+    )
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "not_required_by_local_preflight"
+    assert packet["min_seed_count"] == 20
+    assert packet["s30_reasons"] == []
+    assert not mod.decision_packet_has_blocker(packet)

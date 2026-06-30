@@ -19,6 +19,15 @@ DEFAULT_SUMMARY = (
 )
 
 
+def display_output_path(path: Path) -> str:
+    """Return a readable output path for repo-local or external packet files."""
+
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
 
@@ -69,7 +78,7 @@ def main() -> int:
     if args.out:
         out_path = write_simulator_dependence_decision(packet, REPO_ROOT / args.out)
         print(
-            f"wrote simulator-dependence validity-boundary packet: {out_path.relative_to(REPO_ROOT)}"
+            f"wrote simulator-dependence validity-boundary packet: {display_output_path(out_path)}"
         )
     else:
         print(packet["decision"])

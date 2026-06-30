@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Render deterministic TTC near-miss diagnostic decision packets.
+"""Render deterministic TTC near-miss diagnostic packets for issue #3808.
 
-The command is intentionally read-only and fixture-backed. It converts the
-issue #3700 opt-in TTC diagnostic surface into review packets for issue #3808
-without changing canonical near-miss metrics or promoting benchmark claims.
+This script is read-only and fixture-backed; it only supports local evidence
+construction and does not execute benchmarks or claim improvements.
 """
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 import json
 import sys
-from collections.abc import Callable
 
 import numpy as np
 
@@ -33,13 +32,14 @@ def _make_episode(
     dt: float = 0.1,
     robot_vel: np.ndarray | None = None,
 ) -> EpisodeData:
-    """Build a minimal synthetic episode for deterministic packet fixtures."""
+    """Build a minimal deterministic synthetic episode."""
     robot_pos = np.asarray(robot_pos, dtype=float)
     peds_pos = np.asarray(peds_pos, dtype=float)
+
     if robot_vel is None:
         if robot_pos.ndim == 2 and robot_pos.shape[0] >= 2:
-            diffs = np.diff(robot_pos, axis=0) / dt
-            robot_vel = np.vstack([diffs[:1], diffs])
+            deltas = np.diff(robot_pos, axis=0) / dt
+            robot_vel = np.vstack([deltas[:1], deltas])
         else:
             robot_vel = np.zeros_like(robot_pos)
 
@@ -55,37 +55,44 @@ def _make_episode(
 
 
 def _closing_fixture() -> EpisodeData:
-    """Fast converging robot/pedestrian pair with TTC diagnostic signal."""
-    n_steps = 6
-    robot_pos = np.zeros((n_steps, 2))
-    robot_pos[:, 0] = np.arange(n_steps) * 0.5
-    peds_pos = np.zeros((n_steps, 1, 2))
-    peds_pos[:, 0, 0] = 6.0 - np.arange(n_steps) * 0.5
-    return _make_episode(robot_pos, peds_pos)
+    """Approaching pair should produce TTC near-miss evidence (`ok`).
+
+    The robot approaches a static pedestrian and closes under the default TTC
+    threshold.
+    """
+    robot_pos = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]])
+    peds_pos = np.array(
+        [[[4.0, 0.0]], [[4.0, 0.0]], [[4.0, 0.0]], [[4.0, 0.0]]]
+    )
+    return _make_episode(robot_pos, peds_pos, dt=0.1)
 
 
 def _opening_fixture() -> EpisodeData:
-    """Diverging robot/pedestrian pair with no approaching TTC pair."""
-    n_steps = 6
-    robot_pos = np.zeros((n_steps, 2))
-    robot_pos[:, 0] = -np.arange(n_steps) * 0.2
-    peds_pos = np.zeros((n_steps, 1, 2))
-    peds_pos[:, 0, 0] = 3.0 + np.arange(n_steps) * 0.2
-    return _make_episode(robot_pos, peds_pos)
+    """Opening separation should result in no-approaching-pairs status."""
+    robot_pos = np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]])
+    peds_pos = np.array(
+        [[[-4.0, 0.0]], [[-3.0, 0.0]], [[-2.0, 0.0]], [[-1.0, 0.0]]]
+    )
+    return _make_episode(robot_pos, peds_pos, dt=0.1)
 
 
 def _missing_timing_fixture() -> EpisodeData:
-    """Valid trajectory arrays with invalid timing, which must fail closed."""
-    data = _closing_fixture()
-    data.dt = float("nan")
-    return data
+    """Malformed `dt` should produce unsupported-inputs."""
+    return _make_episode(
+        np.array([[0.0, 0.0], [1.0, 0.0]]),
+        np.array([[[4.0, 0.0]], [[4.5, 0.0]]]),
+        dt=float("nan"),
+    )
 
 
 def _unsupported_trajectory_fixture() -> EpisodeData:
-    """Malformed pedestrian trajectory shape, which must fail closed."""
-    n_steps = 6
-    robot_pos = np.zeros((n_steps, 2))
-    return _make_episode(robot_pos, np.zeros((n_steps, 2)))
+    """Malformed pedestrian trajectory shape should fail closed."""
+    n_steps = 4
+    return _make_episode(
+        robot_pos=np.zeros((n_steps, 2)),
+        # Missing pedestrian object axis, intentionally 2D instead of (T, K, 2).
+        peds_pos=np.zeros((n_steps, 2)),
+    )
 
 
 FIXTURES: dict[str, FixtureBuilder] = {
@@ -101,7 +108,7 @@ def build_packets(
     fixture: str = "all",
     threshold_s: float = DIAGNOSTIC_TTC_THRESHOLD_S,
 ) -> dict[str, NearMissTtcDecisionPacket]:
-    """Build packet(s) for one fixture or every deterministic fixture."""
+    """Build one or all deterministic near-miss packets from fixtures."""
     names = tuple(FIXTURES) if fixture == "all" else (fixture,)
     return {
         name: build_ttc_near_miss_decision_packet(FIXTURES[name](), t_thr=threshold_s)
@@ -124,12 +131,12 @@ def render_packets_markdown(packets: dict[str, NearMissTtcDecisionPacket]) -> st
 
 
 def render_packets_json(packets: dict[str, NearMissTtcDecisionPacket]) -> str:
-    """Render all selected packets as strict JSON."""
+    """Render selected packets as strict JSON."""
     payload = {
         "issue": 3808,
         "claim_boundary": (
             "diagnostic decision packet only; no canonical metric replacement, "
-            "benchmark campaign, or paper-facing claim"
+            "no benchmark campaign, and no paper-facing claim."
         ),
         "fixtures": {name: packet.to_dict() for name, packet in packets.items()},
     }
@@ -142,19 +149,19 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--fixture",
         choices=("all", *FIXTURES.keys()),
         default="all",
-        help="Synthetic fixture to render; default renders every issue #3808 fixture.",
+        help="Synthetic fixture to render. Default: all fixtures.",
     )
     parser.add_argument(
         "--threshold-s",
         type=float,
         default=DIAGNOSTIC_TTC_THRESHOLD_S,
-        help="Diagnostic TTC threshold to inspect. This is not a calibrated benchmark value.",
+        help="TTC diagnostic threshold used for this packet.",
     )
     parser.add_argument(
         "--format",
         choices=("markdown", "json"),
         default="markdown",
-        help="Output format for the dry-run packet.",
+        help="Dry-run packet output format.",
     )
     return parser.parse_args(argv)
 

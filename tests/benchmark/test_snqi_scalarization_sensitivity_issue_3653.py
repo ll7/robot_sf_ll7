@@ -269,10 +269,7 @@ def test_cli_refuses_malformed_normalized_inputs_and_writes_preflight(tmp_path: 
     assert preflight_out.exists()
     payload = json.loads(preflight_out.read_text(encoding="utf-8"))
     assert payload["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
-    assert any(
-        issue["code"] == "out_of_range_normalized_term"
-        for issue in payload["issues"]
-    )
+    assert any(issue["code"] == "out_of_range_normalized_term" for issue in payload["issues"])
     assert not out_dir.exists()
 
 

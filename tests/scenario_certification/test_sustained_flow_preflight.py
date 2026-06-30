@@ -11,7 +11,6 @@ import yaml
 
 from robot_sf.scenario_certification import sustained_flow
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCENARIO_SET = REPO_ROOT / "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"
 PREFLIGHT_SCRIPT = REPO_ROOT / "scripts/validation/preflight_sustained_flow_scenarios_issue_3813.py"

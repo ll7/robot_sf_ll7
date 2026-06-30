@@ -12,7 +12,7 @@ import json
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.metrics import EpisodeData
+from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 from robot_sf.benchmark.near_miss_ttc import (
     DIAGNOSTIC_TTC_THRESHOLD_S,
     NearMissTtcInputError,
@@ -226,6 +226,80 @@ def test_canonical_near_misses_metric_unchanged():
 
     assert before == after
     assert before > 0.0  # sanity: the canonical metric actually fired here
+
+
+def test_compute_all_metrics_omits_ttc_metric_by_default():
+    """TTC near-miss count is opt-in; default metrics keep legacy surface."""
+    data = _fast_head_on_episode()
+
+    metrics = compute_all_metrics(data, horizon=data.robot_pos.shape[0])
+
+    assert metrics["near_misses"] == 0.0
+    assert "near_misses_ttc" not in metrics
+    assert "near_miss_ttc__count" not in metrics
+
+
+def test_compute_all_metrics_emits_opt_in_ttc_count_and_keeps_legacy_metric():
+    """Opt-in TTC count flags fast approach while distance near_misses stays unchanged."""
+    data = _fast_head_on_episode()
+
+    metrics = compute_all_metrics(
+        data,
+        horizon=data.robot_pos.shape[0],
+        experimental_near_miss_ttc=True,
+        near_miss_ttc_threshold_s=1.0,
+    )
+
+    assert metrics["near_misses"] == 0.0
+    assert metrics["near_misses_ttc"] > 0.0
+    assert metrics["near_misses_ttc_status"] == "ok"
+    assert metrics["near_misses_ttc_threshold_s"] == 1.0
+    assert metrics["near_miss_ttc__count"] == metrics["near_misses_ttc"]
+
+
+def test_compute_all_metrics_ttc_contrasts_fast_and_slow_at_equal_clearance():
+    """Equal static clearance can produce different TTC risk when closing speed differs."""
+    fast = _fast_head_on_episode()
+    slow = _make_episode(
+        robot_pos=np.column_stack([np.arange(6) * 0.01, np.zeros(6)]),
+        peds_pos=np.zeros((6, 1, 2)),
+        dt=0.1,
+    )
+    slow.peds_pos[:, 0, 0] = 4.0 - np.arange(6) * 0.01
+
+    fast_metrics = compute_all_metrics(
+        fast,
+        horizon=fast.robot_pos.shape[0],
+        experimental_near_miss_ttc=True,
+        near_miss_ttc_threshold_s=1.0,
+    )
+    slow_metrics = compute_all_metrics(
+        slow,
+        horizon=slow.robot_pos.shape[0],
+        experimental_near_miss_ttc=True,
+        near_miss_ttc_threshold_s=1.0,
+    )
+
+    assert fast_metrics["near_misses"] == slow_metrics["near_misses"] == 0.0
+    assert fast_metrics["near_misses_ttc"] > 0.0
+    assert slow_metrics["near_misses_ttc"] == 0.0
+
+
+def test_compute_all_metrics_ttc_fails_closed_on_unsupported_inputs():
+    """Invalid TTC inputs expose unsupported status instead of false zero count."""
+    data = _fast_head_on_episode()
+    data.dt = 0.0
+
+    metrics = compute_all_metrics(
+        data,
+        horizon=data.robot_pos.shape[0],
+        experimental_near_miss_ttc=True,
+    )
+
+    assert metrics["near_misses"] == 0.0
+    assert "near_misses_ttc" not in metrics
+    assert metrics["near_misses_ttc_status"] == "unsupported-inputs"
+    assert any("dt" in reason for reason in metrics["near_misses_ttc_unsupported_reasons"])
 
 
 # --- Issue #3808 read-only decision packet -------------------------------------

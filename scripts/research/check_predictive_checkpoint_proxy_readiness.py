@@ -120,6 +120,7 @@ def _check_checkpoint_artifacts(
     """
     tag = registry_tag.strip().lower()
     candidates: list[dict[str, Any]] = []
+    blocked_artifacts: list[dict[str, Any]] = []
     for model_id, entry in registry.items():
         tags = {str(t).strip().lower() for t in (entry.get("tags") or [])}
         if tag not in tags:
@@ -127,13 +128,38 @@ def _check_checkpoint_artifacts(
         local_path = entry.get("local_path")
         resolved = _resolve_local_path(local_path, repo_root)
         present = bool(resolved and resolved.exists())
+        provenance = {
+            key: entry.get(key)
+            for key in (
+                "repo",
+                "tag",
+                "asset_name",
+                "url",
+                "sha256",
+                "size_bytes",
+                "public_artifact_source",
+            )
+            if entry.get(key) is not None
+        }
         candidates.append(
             {
                 "model_id": model_id,
                 "local_path": local_path,
                 "present": present,
+                "resolved_local_path": str(resolved) if resolved is not None else None,
+                "tags": sorted(tags),
+                **({"provenance": provenance} if provenance else {}),
             }
         )
+        if not present:
+            blocked_artifacts.append(
+                {
+                    "model_id": model_id,
+                    "missing_reason": "local_path_not_resolvable",
+                    "expected_local_path": str(resolved) if resolved is not None else None,
+                    **({"provenance": provenance} if provenance else {}),
+                }
+            )
 
     candidates.sort(key=lambda item: str(item["model_id"]))
     resolvable = [c for c in candidates if c["present"]]
@@ -143,6 +169,7 @@ def _check_checkpoint_artifacts(
         "candidate_count": len(candidates),
         "resolvable_count": len(resolvable),
         "candidates": candidates,
+        "blocked_artifacts": blocked_artifacts,
     }
 
     if not candidates:

@@ -241,3 +241,23 @@ def test_real_registry_predictive_checkpoints_blocked():
     # Documented current state: insufficient predictive checkpoints resolve locally.
     assert ckpt["status"] == "blocked"
     assert report["status"] == "blocked"
+
+
+def test_blocked_artifacts_payload_tracks_missing_candidates(tmp_path):
+    config = _write_config(tmp_path, min_resolvable=2)
+    registry = _write_registry(tmp_path, present_count=1, absent_count=2)
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+    )
+    blocked_artifacts = report["prerequisites"]["checkpoint_artifacts"]["mapping"][
+        "blocked_artifacts"
+    ]
+    assert len(blocked_artifacts) == 2
+    assert {item["model_id"] for item in blocked_artifacts} == {
+        "predictive_absent_0",
+        "predictive_absent_1",
+    }
+    assert all(item["missing_reason"] == "local_path_not_resolvable" for item in blocked_artifacts)
+    assert all(item["expected_local_path"] for item in blocked_artifacts)

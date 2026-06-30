@@ -73,6 +73,19 @@ def test_preflight_reports_mixed_basis_without_changing_snqi_output() -> None:
     assert basis_by_term["time"] == "raw time-to-goal ratio"
     assert basis_by_term["comfort"] == "raw accumulated comfort-exposure value"
     assert basis_by_term["collisions"] == "baseline-relative median/p95 clamped value"
+    checker = report["normalization_checker"]
+    assert checker["issue"] == 3699
+    assert checker["decision_required"] is True
+    assert checker["raw_penalty_absolute_share"] > checker["baseline_normalized_penalty_absolute_share"]
+    assert checker["normalization_contract_status"] == "mixed_unbounded_penalty_basis"
+    assert checker["weights_comparable"] is False
+    assert checker["raw_penalty_terms"] == ["time", "comfort"]
+    assert checker["baseline_normalized_penalty_terms"] == [
+        "collisions",
+        "near",
+        "force_exceed",
+        "jerk",
+    ]
     contributions = report["contributions"]
     signed_total = sum(term["signed_contribution"] for term in contributions["terms"])
     assert contributions["diagnostic_only"] is True

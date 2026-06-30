@@ -114,12 +114,38 @@ def build_normalization_preflight_report(
         "blockers": blockers,
         "normalization": inventory.to_dict(),
     }
+
+    decision_packet = {
+        "issue": 3699,
+        "decision_required": inventory.mixed_scale,
+        "assumption": (
+            "No score semantics changed; this report only exposes mixed-basis "
+            "normalization diagnostics and baseline-coverage gaps for issue #3699."
+        ),
+        "mixed_scale": inventory.mixed_scale,
+    }
+
     if metrics is not None and weights is not None:
-        report["contributions"] = build_snqi_contribution_diagnostics(
+        contributions = build_snqi_contribution_diagnostics(
             metrics,
             weights,
             baseline_stats or {},
         )
+        report["contributions"] = contributions
+        contract = contributions["normalization_contract"]
+        decision_packet.update(
+            {
+                "normalization_contract_status": contract["status"],
+                "weights_comparable": contract["weights_comparable"],
+                "raw_penalty_absolute_share": contract["raw_penalty_absolute_share"],
+                "baseline_normalized_penalty_absolute_share": contract["baseline_normalized_penalty_absolute_share"],
+                "raw_penalty_terms": contract["raw_unbounded_penalty_terms"],
+                "baseline_normalized_penalty_terms": contract["baseline_normalized_penalty_terms"],
+                "weight_bound_exceedance_terms": contract["weight_bound_exceedance_terms"],
+            }
+        )
+
+    report["normalization_checker"] = decision_packet
     return report
 
 

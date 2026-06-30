@@ -194,6 +194,29 @@ def build_governance_report(
             }
         )
 
+    normalization_checker = {
+        "issue": 3699,
+        "decision_required": True,
+        "assumption": (
+            "No score semantics changed; this report only surfaces mixed-basis "
+            "diagnostics and baseline coverage gaps for issue #3699."
+        ),
+        "mixed_scale": normalization.mixed_scale,
+        "weights_comparable": contribution_diagnostics["normalization_contract"][
+            "weights_comparable"
+        ],
+        "status": contribution_diagnostics["normalization_contract"]["status"],
+        "raw_penalty_absolute_share": contribution_diagnostics["raw_penalty_absolute_share"],
+        "baseline_normalized_penalty_absolute_share": contribution_diagnostics[
+            "baseline_normalized_penalty_absolute_share"
+        ],
+        "raw_penalty_terms_dominate": contribution_diagnostics["raw_penalty_terms_dominate"],
+        "has_weight_bound_exceedance": contribution_diagnostics["has_weight_bound_exceedance"],
+        "weight_bound_exceedance_terms": contribution_diagnostics["normalization_contract"][
+            "weight_bound_exceedance_terms"
+        ],
+    }
+
     return {
         "schema_version": "snqi_governance_preflight.v1",
         "claim_boundary": CLAIM_BOUNDARY,
@@ -202,6 +225,7 @@ def build_governance_report(
         "weights": weights.to_dict(),
         "normalization": normalization.to_dict(),
         "normalization_contributions": contribution_diagnostics,
+        "normalization_checker": normalization_checker,
     }
 
 
@@ -289,6 +313,13 @@ def _print_text_report(report: dict[str, Any]) -> None:
         f"has_weight_bound_exceedance={contributions['has_weight_bound_exceedance']}; "
         "weight_bound_exceedance_terms="
         f"{', '.join(contributions['normalization_contract']['weight_bound_exceedance_terms']) or 'none'}"
+    )
+    checker = report["normalization_checker"]
+    print(
+        "Normalization checker: "
+        f"issue={checker['issue']} decision_required={checker['decision_required']} "
+        f"weights_comparable={checker['weights_comparable']} mixed_scale={checker['mixed_scale']} "
+        f"status={checker['status']} assumption='{checker['assumption']}'"
     )
 
 

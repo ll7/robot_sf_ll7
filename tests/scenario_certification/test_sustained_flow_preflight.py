@@ -25,8 +25,7 @@ def test_expected_variants_enumerate_deterministically() -> None:
     assert tiers == ["light", "medium", "heavy"]
 
     spawn_rates = [
-        scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"]
-        for scenario in generated
+        scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"] for scenario in generated
     ]
     assert spawn_rates == [6.0, 12.0, 18.0]
 
@@ -72,4 +71,7 @@ def test_preflight_cli_outputs_json_payload() -> None:
     assert payload["schema_version"] == sustained_flow.SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION
     assert payload["conforms"] is True
     assert payload["variant_count"] == 3
-    assert payload["scenario_set"] == "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"
+    assert (
+        payload["scenario_set"]
+        == "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"
+    )

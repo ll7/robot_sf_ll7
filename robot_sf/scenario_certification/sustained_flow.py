@@ -31,6 +31,46 @@ REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE: tuple[str, ...] = (
     "interaction-exposure diagnostic sanity check",
     "scenario_cert.v1 eligibility review",
 )
+_SUSTAINED_FLOW_FAMILY = "sustained_flow_t_intersection"
+_SUSTAINED_FLOW_MAP_FILE = "../../../maps/svg_maps/classic_t_intersection.svg"
+_SUSTAINED_FLOW_MAX_EPISODE_STEPS = 600
+
+
+@dataclass(frozen=True)
+class SustainedFlowVariantSpec:
+    """Generated expected sustained-flow scenario variant definition."""
+
+    name: str
+    density_tier: str
+    ped_density: float
+    spawn_rate_per_min: float
+    seeds: tuple[int, ...]
+    map_file: str
+    max_episode_steps: int
+
+
+def iter_expected_sustained_flow_variant_specs() -> tuple[SustainedFlowVariantSpec, ...]:
+    """Generate the expected issue #3813 sustained-flow variant definitions.
+
+    This is a deterministic preflight surface, not a runtime continuous-spawn
+    implementation or benchmark-evidence generator.
+
+    Returns:
+        Expected sustained-flow scaffold variants in deterministic matrix order.
+    """
+
+    return tuple(
+        SustainedFlowVariantSpec(
+            name=f"issue_3813_{_SUSTAINED_FLOW_FAMILY}_{tier}",
+            density_tier=tier,
+            ped_density=ped_density,
+            spawn_rate_per_min=spawn_rate_per_min,
+            seeds=seeds,
+            map_file=_SUSTAINED_FLOW_MAP_FILE,
+            max_episode_steps=_SUSTAINED_FLOW_MAX_EPISODE_STEPS,
+        )
+        for tier, ped_density, spawn_rate_per_min, seeds in EXPECTED_SUSTAINED_FLOW_TIERS
+    )
 
 
 @dataclass(frozen=True)

@@ -838,6 +838,21 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
     phase_timings: dict[str, float] = {}
+    optional_defaults = {
+        "compare_normalization": False,
+        "compare_strategies": False,
+        "decision_preflight": False,
+        "decision_reversal_threshold": 0.0,
+        "export_pareto_front": False,
+        "external_weights_file": None,
+        "fail_on_missing_metric": False,
+        "missing_metric_max_list": 5,
+        "pareto_front_samples": 600,
+        "simplex": False,
+    }
+    for name, default in optional_defaults.items():
+        if not hasattr(args, name):
+            setattr(args, name, default)
 
     try:
         episodes, skipped_lines = load_episodes_data(args.episodes)
@@ -878,9 +893,12 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
 
     try:
         recomputer = SNQIWeightRecomputer(episodes, baseline)
-        recomputer.pareto_frontier_samples = max(1, int(args.pareto_front_samples))
-        recomputer.export_pareto_front = bool(args.export_pareto_front)
-        recomputer.simplex = bool(args.simplex)
+        recomputer.pareto_frontier_samples = max(
+            1,
+            int(getattr(args, "pareto_front_samples", 600)),
+        )
+        recomputer.export_pareto_front = bool(getattr(args, "export_pareto_front", False))
+        recomputer.simplex = bool(getattr(args, "simplex", False))
     except Exception as e:
         logger.exception("Failed to initialize recomputer: %s", e)
         return EXIT_RUNTIME_ERROR

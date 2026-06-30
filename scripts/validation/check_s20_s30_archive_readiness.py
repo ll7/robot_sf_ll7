@@ -156,9 +156,7 @@ def build_report(
     result_store_files = _result_store_file_status(contract)
     bundle_outputs = _bundle_output_file_status(contract)
     missing_files = [path for path, present in result_store_files.items() if not present]
-    missing_bundle_outputs = [
-        path for path, present in bundle_outputs.items() if not present
-    ]
+    missing_bundle_outputs = [path for path, present in bundle_outputs.items() if not present]
     if missing_files:
         diagnostics.append(f"missing result-store files: {missing_files}")
     if missing_bundle_outputs:

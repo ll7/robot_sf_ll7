@@ -77,10 +77,10 @@ def _write_packet(
                 "tables/manifest.json",
                 "figures/manifest.json",
             ],
-        "bundle": [
-            "output/issue_1554_s20_s30/bundle.json",
-            "output/issue_1554_s20_s30/BUNDLE.md",
-        ],
+            "bundle": [
+                "output/issue_1554_s20_s30/bundle.json",
+                "output/issue_1554_s20_s30/BUNDLE.md",
+            ],
         },
         "execution_boundary": {
             "full_campaign_in_this_issue": full_campaign_in_this_issue,
@@ -133,15 +133,9 @@ def test_complete_archive_metadata_and_store_pass(tmp_path: Path) -> None:
         command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
         analysis={"seed_resampling_rank_flip": {"rank_flip_observed": False}},
     )
-    (repo / "output/issue_1554_s20_s30/bundle.json").parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    (repo / "output/issue_1554_s20_s30/bundle.json").write_text(
-        "{}", encoding="utf-8"
-    )
-    (repo / "output/issue_1554_s20_s30/BUNDLE.md").write_text(
-        "# S20/S30 Bundle", encoding="utf-8"
-    )
+    (repo / "output/issue_1554_s20_s30/bundle.json").parent.mkdir(parents=True, exist_ok=True)
+    (repo / "output/issue_1554_s20_s30/bundle.json").write_text("{}", encoding="utf-8")
+    (repo / "output/issue_1554_s20_s30/BUNDLE.md").write_text("# S20/S30 Bundle", encoding="utf-8")
 
     report = readiness.build_report(packet, repo)
 
@@ -304,15 +298,9 @@ def test_archive_reader_uses_campaign_result_store_parquet_fallback(
         study_id="issue_1554_test",
         command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
     )
-    (repo / "output/issue_1554_s20_s30/bundle.json").parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    (repo / "output/issue_1554_s20_s30/bundle.json").write_text(
-        "{}", encoding="utf-8"
-    )
-    (repo / "output/issue_1554_s20_s30/BUNDLE.md").write_text(
-        "# S20/S30 Bundle", encoding="utf-8"
-    )
+    (repo / "output/issue_1554_s20_s30/bundle.json").parent.mkdir(parents=True, exist_ok=True)
+    (repo / "output/issue_1554_s20_s30/bundle.json").write_text("{}", encoding="utf-8")
+    (repo / "output/issue_1554_s20_s30/BUNDLE.md").write_text("# S20/S30 Bundle", encoding="utf-8")
     calls: list[Path] = []
     original = readiness.read_parquet_frame
 

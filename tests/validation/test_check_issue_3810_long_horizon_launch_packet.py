@@ -389,3 +389,62 @@ def test_issue_3810_packet_cli_json() -> None:
     assert completed.returncode == 0, completed.stderr
     assert '"compute_submit_authorized": false' in completed.stdout
     assert '"max_episode_steps": 600' in completed.stdout
+
+
+def test_issue_3810_packet_rejects_missing_validation_commands() -> None:
+    """Packet validation must include all required command markers."""
+    packet = _load_packet()
+    packet["validation"]["commands"] = [
+        "echo noop",
+    ]
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "validation.commands missing required marker" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing validation command markers")
+
+
+def test_issue_3810_packet_rejects_route_path_regression() -> None:
+    """Route commands must remain private-ops-backed until submit-host refresh."""
+    packet = _load_packet()
+    packet["launch_packet"]["route"]["queue_summary_command"] = (
+        "python scripts/dev/queue_summary.py"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "route.queue_summary_command must be absolute" in str(exc)
+    else:
+        raise AssertionError("packet should reject non-private-ops queue summary command")
+
+
+def test_issue_3810_packet_rejects_missing_snqi_inputs() -> None:
+    """SNQI recalibration inputs and scripts must be explicit and locked."""
+    packet = _load_packet()
+    packet["launch_packet"]["snqi_recalibration"].pop("inputs")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "inputs must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing SNQI inputs")
+
+
+def test_issue_3810_packet_rejects_weak_horizon_report_command() -> None:
+    """Horizon sensitivity report command must include the long/short campaign refs."""
+    packet = _load_packet()
+    packet["launch_packet"]["horizon_sensitivity_report"]["command"] = (
+        "uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py "
+        "--long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi/reports"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "horizon report command missing --short-campaign-reference" in str(exc)
+    else:
+        raise AssertionError("packet should reject incomplete horizon command")

@@ -16,6 +16,7 @@ import yaml
 from loguru import logger
 
 import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_module
+import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready._artifacts import (
@@ -39,6 +40,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _build_actuation_envelope_summary,
     _build_breakdown_rows,
     _build_scenario_amv_lookup,
+    _campaign_success_counters,
     _extract_amv_taxonomy,
     _jsonable_repo_relative,
     _load_campaign_scenarios,
@@ -88,6 +90,43 @@ def test_camera_ready_campaign_reexports_package_artifact_helpers() -> None:
         assert getattr(camera_ready_campaign_module, helper_name) is getattr(
             camera_ready_artifacts_module, helper_name
         )
+
+
+def test_camera_ready_campaign_reexports_package_run_state_helpers() -> None:
+    """Legacy camera_ready_campaign imports expose moved run-state helpers."""
+    helper_names = (
+        "_campaign_id",
+        "_campaign_success_counters",
+        "_git_context",
+        "_resolve_campaign_id",
+        "_resolve_execution_mode",
+        "_resolve_observation_noise",
+        "_resolve_path",
+        "_sanitize_git_remote",
+    )
+
+    for helper_name in helper_names:
+        assert getattr(camera_ready_campaign_module, helper_name) is getattr(
+            camera_ready_run_state_module, helper_name
+        )
+
+
+def test_campaign_success_counters_core_success_ignores_experimental_failure() -> None:
+    """Campaign success is anchored on complete successful core planners when present."""
+    counters = _campaign_success_counters(
+        [
+            {"status": "ok", "planner": {"planner_group": "core"}},
+            {"status": "not_available", "planner": {"planner_group": "experimental"}},
+        ],
+        expected_core_runs=1,
+    )
+
+    assert counters["benchmark_success"] is True
+    assert counters["benchmark_success_basis"] == "core"
+    assert counters["total_runs"] == 2
+    assert counters["successful_runs"] == 1
+    assert counters["core_total_runs"] == 1
+    assert counters["core_successful_runs"] == 1
 
 
 def test_scenario_with_kinematics_patches_copy_without_mutating_input() -> None:

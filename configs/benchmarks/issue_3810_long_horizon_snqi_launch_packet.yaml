@@ -425,17 +425,17 @@ analysis_and_retention_packet:
       status: blocked_pending_submit_host_route_and_reconciliation
       reason: "Issue remains open and job 13175 must be reconciled on Slurm host before campaign claim."
   route:
-    private_ops_repo: "/home/luttkule/git/robot_sf_ll7-private-ops"
-    queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"
-    route_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh"
-    submit_wrapper: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh"
+    private_ops_repo: "/home/luttkule/git/robot_sf_ll7-private-ops"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    route_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    submit_wrapper: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     target_host: "imech036"
   preflight:
     required: true
     route_refresh_command: >-
       ROBOT_SF_PRIVATE_OPS="$HOME/git/robot_sf_ll7-private-ops" "$HOME/git/robot_sf_ll7-private-ops/ops/preflight/run_preflight.sh"
-    queue_and_duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh --json --reason issue_3810"
-    duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh --json --target-host imech036 --issue 3810"
+    queue_and_duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh --json --reason issue_3810"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh --json --target-host imech036 --issue 3810"  # allow-abs-path: private-ops routing (machine-local, non-portable)
     manifest_validation_command: "uv run python scripts/validation/run_research_campaign_manifest.py configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml --output-dir output/research_campaign_packets/issue_3810_long_horizon_snqi"
     packet_validation_command: "uv run python scripts/validation/check_issue_3810_long_horizon_launch_packet.py --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml --json"
   expected_outputs:

@@ -444,8 +444,8 @@ def _validate_seed_analysis_report(repo_root: Path, path: Path) -> dict[str, Any
         errors.append("seed-sufficiency analysis report schema_version must be v1")
     if not isinstance(payload.get("headline_rank_stability_contract"), dict):
         errors.append("seed-sufficiency analysis report missing headline rank-stability contract")
-    if not isinstance(payload.get("rank_stability"), list):
-        errors.append("seed-sufficiency analysis report missing rank_stability rows")
+    if not isinstance(payload.get("planner_rank_stability"), list):
+        errors.append("seed-sufficiency analysis report missing planner_rank_stability rows")
     return {
         "path": _display_path(repo_root, resolved),
         "ok": not errors,

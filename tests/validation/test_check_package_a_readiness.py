@@ -298,7 +298,7 @@ def test_decision_packet_accepts_valid_local_evidence_packet(tmp_path: Path) -> 
                     "label": "diagnostic_only",
                     "promotion_allowed": False,
                 },
-                "rank_stability": [],
+                "planner_rank_stability": [],
             }
         ),
         encoding="utf-8",

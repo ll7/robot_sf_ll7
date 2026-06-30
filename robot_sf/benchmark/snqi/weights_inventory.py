@@ -77,6 +77,7 @@ class WeightSourceSpec:
     name: str
     kind: str
     relpath: str | None
+    versioned_id: str
     declares_canonical: bool
 
 
@@ -87,30 +88,35 @@ WEIGHT_SOURCES: tuple[WeightSourceSpec, ...] = (
         name="code_default",
         kind="code_default",
         relpath=None,
+        versioned_id="snqi_weights_code_default_v1",
         declares_canonical=True,
     ),
     WeightSourceSpec(
         name="model_canonical_v1",
         kind="shipped_json",
         relpath="model/snqi_canonical_weights_v1.json",
+        versioned_id="snqi_weights_model_canonical_v1",
         declares_canonical=True,
     ),
     WeightSourceSpec(
         name="camera_ready_v1",
         kind="shipped_json",
         relpath="configs/benchmarks/snqi_weights_camera_ready_v1.json",
+        versioned_id="snqi_weights_camera_ready_v1",
         declares_canonical=False,
     ),
     WeightSourceSpec(
         name="camera_ready_v2",
         kind="shipped_json",
         relpath="configs/benchmarks/snqi_weights_camera_ready_v2.json",
+        versioned_id="snqi_weights_camera_ready_v2",
         declares_canonical=False,
     ),
     WeightSourceSpec(
         name="camera_ready_v3",
         kind="shipped_json",
         relpath="configs/benchmarks/snqi_weights_camera_ready_v3.json",
+        versioned_id="snqi_weights_camera_ready_v3",
         declares_canonical=False,
     ),
 )
@@ -151,6 +157,7 @@ def discover_shipped_weight_source_specs(repo_root: Path) -> list[WeightSourceSp
                 name=_source_name_from_relpath(relpath),
                 kind="unregistered_shipped_json",
                 relpath=relpath,
+                versioned_id=_source_name_from_relpath(relpath),
                 declares_canonical="canonical" in relpath.lower(),
             )
 
@@ -164,6 +171,7 @@ class WeightSetRecord:
     name: str
     kind: str
     relpath: str | None
+    versioned_id: str
     declares_canonical: bool
     available: bool
     weights: dict[str, float] = field(default_factory=dict)
@@ -251,9 +259,22 @@ class WeightInventoryReport:
             "unavailable_source_count": len(unavailable_records),
             "blocking_conflict_count": len(blocking_conflicts),
             "registered_sources": [r.name for r in registered_records],
+            "registered_versioned_ids": [r.versioned_id for r in registered_records],
             "discovered_shipped_sources": [r.name for r in shipped_records],
+            "discovered_shipped_versioned_ids": [r.versioned_id for r in shipped_records],
             "unregistered_shipped_sources": [r.name for r in unregistered_records],
             "canonical_declaring_sources": [r.name for r in canonical_records],
+            "canonical_declaring_versioned_ids": [r.versioned_id for r in canonical_records],
+            "canonical_decision": {
+                "status": "unresolved_decision_required",
+                "issue": 3723,
+                "selected_versioned_id": None,
+                "ambiguous_unversioned_label": "canonical",
+                "message": (
+                    "No SNQI weight source is promoted as benchmark-canonical by this "
+                    "diagnostic inventory; reports should name a versioned_id explicitly."
+                ),
+            },
             "unavailable_sources": [r.name for r in unavailable_records],
             "blocking_conflict_kinds": [c.kind for c in blocking_conflicts],
             "code_default_shipped_direction_comparisons": [
@@ -285,6 +306,7 @@ class WeightInventoryReport:
                     "name": r.name,
                     "kind": r.kind,
                     "relpath": r.relpath,
+                    "versioned_id": r.versioned_id,
                     "declares_canonical": r.declares_canonical,
                     "available": r.available,
                     "weights": r.weights,
@@ -377,6 +399,7 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
         name=spec.name,
         kind=spec.kind,
         relpath=spec.relpath,
+        versioned_id=spec.versioned_id,
         declares_canonical=spec.declares_canonical,
         available=False,
     )

@@ -261,6 +261,26 @@ def _check_command_contract(
             report.missing_paths.append(rel_path)
 
 
+def _check_package_a_heldout_partition_contract(
+    repo_root: Path, command_contracts: dict[str, Any], report: ReadinessReport
+) -> None:
+    """Validate Package A held-out-family output roles without running campaigns."""
+    from scripts.tools.validate_heldout_transfer_partitions import validate_partition_manifest
+
+    contracts = command_contracts.get("contracts")
+    if not isinstance(contracts, list):
+        return
+    for index, contract in enumerate(contracts):
+        if not isinstance(contract, dict):
+            continue
+        if contract.get("id") != "heldout_family_leakage_audit":
+            continue
+        for rel_path in _required_paths(contract, f"command_contracts.contracts[{index}]"):
+            path = repo_root / rel_path
+            if path.exists() and path.name.endswith("heldout_family_transfer_partitions.yaml"):
+                report.issues.extend(validate_partition_manifest(path))
+
+
 def _check_outputs(outputs: dict[str, Any], report: ReadinessReport) -> None:
     """Verify declared output location is safe and disposable."""
     local_root = _clean_str(outputs.get("local_root"))
@@ -324,6 +344,7 @@ def check_readiness(manifest_path: Path, *, repo_root: Path | None = None) -> Re
 
     _check_paths(repo_root, manifest["frozen_protocol"], "frozen_protocol", report)
     _check_command_contracts(repo_root, manifest["command_contracts"], report)
+    _check_package_a_heldout_partition_contract(repo_root, manifest["command_contracts"], report)
     _check_outputs(manifest["outputs"], report)
     _check_durable_evidence(manifest["durable_evidence"], report)
     _check_readiness_decision(manifest["readiness_decision"], report)

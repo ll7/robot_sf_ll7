@@ -25,9 +25,11 @@ Implemented categories:
   socnavbench_path_irregularity.
 - Experimental (optional): pedestrian-impact deltas for acceleration and
   heading turn-rate near-vs-far from the robot (enabled via
-  ``compute_all_metrics(..., experimental_ped_impact=True)``), plus diagnostic
+  ``compute_all_metrics(..., experimental_ped_impact=True)``), diagnostic
   human-interaction exposure proxies (enabled via
-  ``compute_all_metrics(..., experimental_human_interaction_proxy=True)``).
+  ``compute_all_metrics(..., experimental_human_interaction_proxy=True)``), and
+  opt-in time-to-collision near-miss counts (enabled via
+  ``compute_all_metrics(..., experimental_near_miss_ttc=True)``).
 
 Missing/optional data handling:
 - Empty pedestrian sets (K=0) return 0.0 for collision counts and ``NaN`` for distances where
@@ -317,6 +319,42 @@ def _compute_robot_ped_distance_summary(data: EpisodeData) -> dict[str, float]:
         "min_clearance": float(clearances.min()),
         "mean_clearance": float(np.mean(min_clearances)),
         "robot_ped_within_5m_frac": float(np.count_nonzero(min_dists < 5.0) / step_count),
+    }
+
+
+def _compute_near_miss_ttc_metrics(
+    data: EpisodeData,
+    *,
+    t_thr: float | None,
+) -> dict[str, Any]:
+    """Return opt-in TTC near-miss metrics without changing legacy ``near_misses``.
+
+    Unsupported timing or trajectory inputs fail closed: the count key is omitted and
+    status/reason metadata explains why the TTC diagnostic could not be computed.
+    """
+    from robot_sf.benchmark.near_miss_ttc import (  # noqa: PLC0415
+        DIAGNOSTIC_TTC_THRESHOLD_S,
+        NearMissTtcInputError,
+        compute_ttc_near_miss_diagnostic,
+    )
+
+    threshold_s = DIAGNOSTIC_TTC_THRESHOLD_S if t_thr is None else float(t_thr)
+    try:
+        diagnostic = compute_ttc_near_miss_diagnostic(data, t_thr=threshold_s)
+    except NearMissTtcInputError as exc:
+        reasons = tuple(exc.readiness.reasons) if exc.readiness is not None else (str(exc),)
+        return {
+            "near_misses_ttc_status": "unsupported-inputs",
+            "near_misses_ttc_threshold_s": threshold_s,
+            "near_misses_ttc_unsupported_reasons": list(reasons),
+        }
+
+    count = float(diagnostic["near_miss_ttc__count"])
+    return {
+        **diagnostic,
+        "near_misses_ttc": count,
+        "near_misses_ttc_status": str(diagnostic["near_miss_ttc__status"]),
+        "near_misses_ttc_threshold_s": float(diagnostic["near_miss_ttc__threshold_s"]),
     }
 
 
@@ -2754,7 +2792,7 @@ METRIC_NAMES: list[str] = [
 ]
 
 
-def compute_all_metrics(  # noqa: PLR0913, PLR0915
+def compute_all_metrics(  # noqa: D417, PLR0913, PLR0915
     data: EpisodeData,
     *,
     horizon: int,
@@ -2762,8 +2800,10 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     robot_max_speed: float | None = None,
     experimental_ped_impact: bool = False,
     experimental_human_interaction_proxy: bool = False,
+    experimental_near_miss_ttc: bool = False,
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
+    near_miss_ttc_threshold_s: float | None = None,
     social_proxemic_radius_m: float = 1.2,
     human_proxy_yield_speed_mps: float = 0.15,
     control_data: EpisodeData | None = None,
@@ -2899,6 +2939,8 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values["force_gradient_norm_mean"] = force_gradient_norm_mean(data)
     values.update(rollover_stability_metrics(data))
     values.update(clear_tracking_metrics(data))
+    if experimental_near_miss_ttc:
+        values.update(_compute_near_miss_ttc_metrics(data, t_thr=near_miss_ttc_threshold_s))
     values["wall_collisions"] = values["obstacle_collision_count"]
     values["clearing_distance_min"] = clearing_distance_min(data)
     values["clearing_distance_avg"] = clearing_distance_avg(data)

@@ -9,6 +9,7 @@ blocked_until_run/diagnostic classification when the seed budget is insufficient
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -64,9 +65,11 @@ def _report(rows: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
     Returns:
         The report payload mapping.
     """
+    job_evidence = overrides.pop("job_evidence", None)
     defaults = {
         "metrics": ("snqi",),
         "rank_metric": "snqi",
+        "rank_profile": "snqi_diagnostic",
         "higher_is_better": True,
         "bootstrap_samples": 100,
         "confidence": 0.95,
@@ -76,7 +79,13 @@ def _report(rows: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
     }
     defaults.update(overrides)
     config = mod.ReportConfig(**defaults)
-    return mod.build_report(rows, config, campaign=None, rows_path="synthetic")
+    return mod.build_report(
+        rows,
+        config,
+        campaign=None,
+        rows_path="synthetic",
+        job_evidence=job_evidence,
+    )
 
 
 def test_per_cell_ci_reuses_canonical_seed_variance():
@@ -446,3 +455,168 @@ def test_dry_run_cli_can_fail_closed_invalid_rank_metric(tmp_path) -> None:
     assert '"invalid_metric_claim_count": 3' in result_text
     assert "SNQI normalization contract warning" in result_text
     assert "**Rank metric contract**: `invalid`" in markdown_text
+
+
+def _job_13198_packet(tmp_path) -> Path:
+    """Write a compact deterministic job-13198 evidence packet fixture."""
+
+    packet = {
+        "schema_version": "issue1554-slurm-evidence-packet.v1",
+        "issue": 1554,
+        "evidence": [
+            {
+                "job": 13198,
+                "campaign": "2026-06-issue1554-s20-h500-split-mem180-run",
+                "config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml",
+                "role": "result_matrix",
+                "slurm_state": "COMPLETED",
+                "exit_code": "0:0",
+                "public_commit": "12a188de7246aad3b9088ea76e6a25a20029f976",
+                "artifact_summary": {
+                    "matrix_rows": 9,
+                    "planner_rows": 9,
+                    "planner_row_status_counts": {"ok": 9},
+                    "warnings": ["SNQI contract status=fail with snqi_contract.enforcement=warn."],
+                },
+                "limitations": [
+                    "SNQI contract warning blocks paper-grade interpretation until analyzed."
+                ],
+            }
+        ],
+    }
+    path = tmp_path / "packet.json"
+    path.write_text(json.dumps(packet), encoding="utf-8")
+    return path
+
+
+def test_job_13198_packet_auto_blocks_snqi_rank_claims(tmp_path) -> None:
+    """Bound job evidence turns SNQI warning into fail-closed rank decisions."""
+
+    packet_path = _job_13198_packet(tmp_path)
+    rows = [
+        _cell_row("merging", "best", {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4}),
+        _cell_row("merging", "worst", {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4}),
+    ]
+
+    rows_path = tmp_path / "rows.json"
+    rows_path.write_text(json.dumps(rows), encoding="utf-8")
+    out_dir = tmp_path / "snqi_report"
+    exit_code = mod.main(
+        [
+            "--rows",
+            str(rows_path),
+            "--evidence-packet",
+            str(packet_path),
+            "--job-id",
+            "13198",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
+    packet = result["decision_packet"]
+    assert result["job_evidence"]["job"] == 13198
+    assert result["inputs"]["rank_metric"] == "snqi"
+    assert packet["snqi_contract_warning"] is True
+    assert packet["invalid_metric_claim_count"] == 1
+    assert "rank_metric_contract_invalid" in packet["s30_reasons"]
+    assert "**SNQI evidence status**: `diagnostic_only_contract_warning`" in (
+        out_dir / "report.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_constraints_first_profile_keeps_snqi_warning_diagnostic_only(tmp_path) -> None:
+    """Constraints-first profile binds job warning without using SNQI as rank metric."""
+
+    job_evidence = mod.load_job_evidence_packet(_job_13198_packet(tmp_path), job_id=13198)
+    rows = [
+        _cell_row(
+            "merging",
+            "best",
+            {
+                "success": [0.90, 0.91, 0.92, 0.93, 0.94] * 4,
+                "collisions": [0.02, 0.01, 0.02, 0.01, 0.02] * 4,
+                "near_misses": [0.04, 0.03, 0.04, 0.03, 0.04] * 4,
+                "snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4,
+            },
+        ),
+        _cell_row(
+            "merging",
+            "worst",
+            {
+                "success": [0.40, 0.41, 0.39, 0.42, 0.40] * 4,
+                "collisions": [0.30, 0.32, 0.31, 0.33, 0.30] * 4,
+                "near_misses": [0.20, 0.22, 0.21, 0.23, 0.20] * 4,
+                "snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4,
+            },
+        ),
+    ]
+
+    report = _report(
+        rows,
+        metrics=("success", "collisions", "near_misses", "snqi"),
+        rank_metric="success",
+        rank_profile="constraints_first",
+        job_evidence=job_evidence,
+    )
+
+    packet = report["decision_packet"]
+    assert report["inputs"]["rank_profile"] == "constraints_first"
+    assert packet["constraints_first_metric_gaps"] == []
+    assert packet["snqi_contract_warning"] is True
+    assert "snqi_contract_warning_diagnostic_only" in packet["s30_reasons"]
+    assert "rank_metric_contract_invalid" not in packet["s30_reasons"]
+
+
+def test_constraints_first_profile_blocks_missing_required_metrics(tmp_path) -> None:
+    """Constraints-first profile cannot rank headline rows lacking safety metrics."""
+
+    report = _report(
+        [
+            _cell_row("merging", "best", {"success": [0.9, 0.91, 0.92] * 7}),
+            _cell_row("merging", "worst", {"success": [0.1, 0.11, 0.12] * 7}),
+        ],
+        metrics=("success",),
+        rank_metric="success",
+        rank_profile="constraints_first",
+    )
+
+    packet = report["decision_packet"]
+    assert packet["constraints_first_metric_gaps"] == ["collisions", "near_misses"]
+    assert "constraints_first_metrics_missing" in packet["manuscript_blockers"]
+    assert "constraints_first_metric_gap" in packet["s30_reasons"]
+
+
+def test_constraints_first_profile_flags_partial_metric_coverage(tmp_path) -> None:
+    """A metric missing from any counted cell is a gap (fail-closed all-cells rule)."""
+
+    report = _report(
+        [
+            _cell_row(
+                "merging",
+                "best",
+                {
+                    "success": [0.90, 0.91, 0.92] * 7,
+                    "collisions": [0.02, 0.01, 0.02] * 7,
+                    "near_misses": [0.04, 0.03, 0.04] * 7,
+                },
+            ),
+            # Second counted cell omits the safety metrics, so cross-cell
+            # constraint comparison is incomplete: collisions/near_misses are gaps.
+            _cell_row("merging", "worst", {"success": [0.10, 0.11, 0.12] * 7}),
+        ],
+        metrics=("success", "collisions", "near_misses"),
+        rank_metric="success",
+        rank_profile="constraints_first",
+    )
+
+    packet = report["decision_packet"]
+    assert packet["constraints_first_metric_gaps"] == ["collisions", "near_misses"]
+    assert "constraints_first_metrics_missing" in packet["manuscript_blockers"]
+    assert "constraints_first_metric_gap" in packet["s30_reasons"]

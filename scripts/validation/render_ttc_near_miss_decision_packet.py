@@ -12,6 +12,7 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 
@@ -136,6 +137,16 @@ def render_packets_json(packets: dict[str, NearMissTtcDecisionPacket]) -> str:
     return json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
 
 
+def write_packet_output(text: str, output_path: Path | None) -> None:
+    """Write packet text to ``output_path`` or stdout for dry-run inspection."""
+    if output_path is None:
+        sys.stdout.write(text)
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(text, encoding="utf-8")
+
+
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -156,6 +167,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         default="markdown",
         help="Output format for the dry-run packet.",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional file path for the rendered packet. Defaults to stdout.",
+    )
     return parser.parse_args(argv)
 
 
@@ -164,9 +180,10 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(sys.argv[1:] if argv is None else argv)
     packets = build_packets(fixture=args.fixture, threshold_s=args.threshold_s)
     if args.format == "json":
-        sys.stdout.write(render_packets_json(packets))
+        rendered = render_packets_json(packets)
     else:
-        sys.stdout.write(render_packets_markdown(packets))
+        rendered = render_packets_markdown(packets)
+    write_packet_output(rendered, args.output)
     return 0
 
 

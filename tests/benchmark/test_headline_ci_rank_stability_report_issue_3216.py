@@ -457,6 +457,87 @@ def test_dry_run_cli_can_fail_closed_invalid_rank_metric(tmp_path) -> None:
     assert "**Rank metric contract**: `invalid`" in markdown_text
 
 
+def test_cli_decision_blocker_gate_fails_after_writing_report(tmp_path) -> None:
+    """Dry-run preflight can be used as a hard gate while preserving artifacts."""
+
+    out_dir = tmp_path / "blocked_report"
+
+    exit_code = mod.main(
+        [
+            "--dry-run",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--fail-on-decision-blocker",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 4
+    result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
+    assert mod.decision_packet_has_blocker(result["decision_packet"]) is True
+    assert result["decision_packet"]["s30_decision_status"] == "needs_review"
+    assert (out_dir / "report.md").is_file()
+
+
+def test_cli_decision_blocker_gate_passes_clear_local_preflight(tmp_path) -> None:
+    """S20 separable/stable fixture passes the local blocker gate."""
+
+    rows = [
+        _cell_row(
+            "merging",
+            "best",
+            {
+                "success": [0.90, 0.91, 0.92, 0.93, 0.94] * 4,
+                "collisions": [0.02, 0.01, 0.02, 0.01, 0.02] * 4,
+                "near_misses": [0.04, 0.03, 0.04, 0.03, 0.04] * 4,
+                "snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4,
+            },
+        ),
+        _cell_row(
+            "merging",
+            "worst",
+            {
+                "success": [0.10, 0.11, 0.09, 0.12, 0.10] * 4,
+                "collisions": [0.80, 0.82, 0.81, 0.83, 0.80] * 4,
+                "near_misses": [0.70, 0.72, 0.71, 0.73, 0.70] * 4,
+                "snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4,
+            },
+        ),
+    ]
+    rows_path = tmp_path / "rows.json"
+    rows_path.write_text(json.dumps(rows), encoding="utf-8")
+    out_dir = tmp_path / "clear_report"
+
+    exit_code = mod.main(
+        [
+            "--rows",
+            str(rows_path),
+            "--metrics",
+            "success",
+            "collisions",
+            "near_misses",
+            "snqi",
+            "--rank-profile",
+            "constraints_first",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--fail-on-decision-blocker",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
+    assert mod.decision_packet_has_blocker(result["decision_packet"]) is False
+    assert result["decision_packet"]["s30_decision_status"] == "not_required_by_local_preflight"
+
+
 def _job_13198_packet(tmp_path) -> Path:
     """Write a compact deterministic job-13198 evidence packet fixture."""
 

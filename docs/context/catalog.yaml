@@ -17,6 +17,22 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/reconciled_fixture_reconciliation.jsonl
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/violating_fixture_reconciliation.jsonl
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3372_occluder_timing_pilot_2026-06-22/README.md
     status: evidence
     freshness: evidence

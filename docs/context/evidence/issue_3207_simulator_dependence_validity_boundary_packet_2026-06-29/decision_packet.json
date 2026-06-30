@@ -1,10 +1,5 @@
 {
-  "boundary_violations": [
-    "claim_boundary_missing:not benchmark evidence",
-    "claim_boundary_missing:not simulator-realism evidence",
-    "claim_boundary_missing:not sim-to-real evidence",
-    "claim_boundary_missing:not paper-facing evidence"
-  ],
+  "boundary_violations": [],
   "claim_boundary": "No simulator-dependence validity-boundary claim: supplied evidence is diagnostic, incomplete, rank-non-identifiable, rank-unstable, or boundary-incomplete. Treat as not benchmark evidence, not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence.",
   "claim_ready": false,
   "decision": "no_claim",

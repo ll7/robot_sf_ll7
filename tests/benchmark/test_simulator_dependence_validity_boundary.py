@@ -16,6 +16,7 @@ from robot_sf.benchmark.simulator_dependence_validity_boundary import (
     load_json_mapping,
     write_simulator_dependence_decision,
 )
+from scripts.validation.check_simulator_dependence_validity_boundary import display_output_path
 
 
 def _full_scope_summary() -> dict[str, object]:
@@ -50,6 +51,7 @@ def test_current_issue_3207_actual_slice_is_no_claim() -> None:
     assert packet["claim_ready"] is False
     assert "study_scope_not_full_fixed_scope" in packet["no_claim_reasons"]
     assert "rank_non_identifiable:primary_metric_zero_variance" in packet["no_claim_reasons"]
+    assert packet["boundary_violations"] == []
 
 
 def test_missing_summary_fails_closed() -> None:
@@ -101,6 +103,12 @@ def test_decision_packet_json_output_is_deterministic(tmp_path: Path) -> None:
         output_path.read_text(encoding="utf-8")
         == json.dumps(packet, indent=2, sort_keys=True) + "\n"
     )
+
+
+def test_display_output_path_accepts_repo_external_paths(tmp_path: Path) -> None:
+    """CLI status formatting handles absolute output paths outside the repo."""
+
+    assert display_output_path(tmp_path / "packet.json") == str(tmp_path / "packet.json")
 
 
 def test_manifest_check_failure_prevents_claim_ready() -> None:

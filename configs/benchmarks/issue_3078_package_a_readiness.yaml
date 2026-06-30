@@ -81,7 +81,7 @@ command_contracts:
   - id: package_a_decision_packet
     stage: readiness_probe
     command: >
-      uv run python scripts/validation/check_package_a_readiness.py
+      uv run --extra analytics python scripts/validation/check_package_a_readiness.py
       --decision-packet --json
       --heldout-partition-manifest
       configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml

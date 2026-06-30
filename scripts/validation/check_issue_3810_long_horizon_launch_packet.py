@@ -144,6 +144,30 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         durable_path.startswith("docs/context/evidence/"), "durable path must be context evidence"
     )
+    retention_paths = _require_mapping(durable_evidence, "retention_paths")
+    compact_review_bundle = str(retention_paths.get("compact_review_bundle", ""))
+    external_artifact_pointer = str(retention_paths.get("external_artifact_pointer", ""))
+    private_ops_ledger = str(retention_paths.get("private_ops_ledger", ""))
+    local_output_boundary = str(durable_evidence.get("local_output_boundary", ""))
+    _require(
+        compact_review_bundle == durable_path,
+        "compact review bundle must match durable evidence path",
+    )
+    _require(
+        external_artifact_pointer == "wandb-or-release-artifact-required-before-claim",
+        "external artifact pointer policy missing",
+    )
+    _require(
+        private_ops_ledger.endswith("robot_sf_ll7-private-ops/ops/jobs/jobs.yaml"),
+        "private-ops ledger path missing",
+    )
+    _require(
+        "raw episode JSONL" in local_output_boundary, "local output boundary must mention raw JSONL"
+    )
+    _require(
+        "out of git" in local_output_boundary or "out git" in local_output_boundary,
+        "local output boundary must keep raw outputs out of git",
+    )
 
     _require(
         launch_packet.get("decision") == "blocked_pending_submit_host_route_and_reconciliation",

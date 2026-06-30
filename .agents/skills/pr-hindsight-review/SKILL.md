@@ -1,6 +1,6 @@
 ---
 name: pr-hindsight-review
-description: Review merged PRs after fact to decide whether autonomous routing produced useful progress or readiness-treadmill work.
+description: Review merged PRs after the fact to decide whether autonomous routing produced useful progress, partial coverage, duplicate coverage, or a successor slice.
 category: github-pr
 kind: analysis
 phase: analysis

@@ -201,6 +201,34 @@ def test_issue_3810_packet_rejects_blank_matrix_path() -> None:
         raise AssertionError("packet should reject a blank scenario matrix path")
 
 
+def test_issue_3810_packet_rejects_missing_retention_paths() -> None:
+    """The packet must keep durable evidence retention paths reviewable."""
+    packet = _load_packet()
+    packet["durable_evidence"].pop("retention_paths")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "retention_paths must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing retention paths")
+
+
+def test_issue_3810_packet_rejects_untracked_raw_output_policy() -> None:
+    """Raw benchmark outputs must not become the durable evidence plan."""
+    packet = _load_packet()
+    packet["durable_evidence"]["local_output_boundary"] = (
+        "Keep generated outputs as durable benchmark evidence."
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "local output boundary must mention raw JSONL" in str(exc)
+    else:
+        raise AssertionError("packet should reject weak local output boundary")
+
+
 def test_issue_3810_packet_rejects_missing_campaign_id() -> None:
     """A missing campaign id fails closed instead of escaping as KeyError."""
     packet = _load_packet()

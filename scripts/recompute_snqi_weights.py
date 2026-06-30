@@ -828,7 +828,6 @@ def _detect_invalid_normalized_metric_values(
     return issues
 
 
-
 def _detect_missing_baseline_metrics(
     episodes: list[dict[str, Any]],
     baseline_stats: dict[str, dict[str, float]],

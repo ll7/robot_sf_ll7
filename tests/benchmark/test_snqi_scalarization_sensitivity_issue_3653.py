@@ -194,8 +194,6 @@ def test_preflight_malformed_non_finite_required_input() -> None:
     assert any(issue["code"] == "non_finite_required_term" for issue in preflight["issues"])
 
 
-
-
 def test_cli_refuses_blocked_inputs_and_writes_only_preflight(tmp_path: Path) -> None:
     """Blocked inputs return exit code 2 and do not create export artifacts."""
 

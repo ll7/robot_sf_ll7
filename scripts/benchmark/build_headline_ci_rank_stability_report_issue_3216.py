@@ -820,6 +820,58 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _dry_run_rows() -> list[dict[str, Any]]:
+    """Return deterministic fixture rows for local CLI preflight.
+
+    The fixture is intentionally below the nominal seed threshold. It proves the
+    parser, CI, downgrade, and rank-stability paths execute without requiring a
+    campaign artifact or cluster submission, but it cannot promote a benchmark
+    claim.
+    """
+
+    def row(
+        scenario: str,
+        planner: str,
+        snqi_values: Sequence[float],
+        *,
+        row_status: str = "successful_evidence",
+        execution_mode: str = "nominal",
+    ) -> dict[str, Any]:
+        per_seed = [
+            {
+                "seed": 900 + index,
+                "metrics": {
+                    "success": 1.0 if value >= 0.5 else 0.0,
+                    "collisions": 0.0 if value >= 0.5 else 1.0,
+                    "near_misses": 0.0,
+                    "snqi": value,
+                },
+            }
+            for index, value in enumerate(snqi_values)
+        ]
+        return {
+            "scenario_family": scenario,
+            "planner_key": planner,
+            "row_status": row_status,
+            "execution_mode": execution_mode,
+            "per_seed": per_seed,
+        }
+
+    return [
+        row("dry_run_merging", "stable_top", [0.91, 0.92, 0.90, 0.93, 0.91]),
+        row("dry_run_merging", "stable_mid", [0.56, 0.54, 0.55, 0.57, 0.56]),
+        row("dry_run_merging", "stable_low", [0.20, 0.18, 0.21, 0.19, 0.20]),
+        row("dry_run_bottleneck", "overlap_a", [0.50, 0.55, 0.45, 0.52, 0.48]),
+        row("dry_run_bottleneck", "overlap_b", [0.51, 0.46, 0.54, 0.49, 0.53]),
+        row(
+            "dry_run_bottleneck",
+            "excluded_degraded",
+            [0.80, 0.81, 0.82, 0.83, 0.84],
+            execution_mode="degraded",
+        ),
+    ]
+
+
 def _fmt(value: Any) -> str:
     """Format a float-or-None for markdown.
 
@@ -857,6 +909,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=str,
         help="Campaign id/root; resolves to <root>/reports/headline_rows.json.",
     )
+    src.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Run deterministic built-in fixture rows through the report path. "
+            "This writes output files but does not require campaign data."
+        ),
+    )
     parser.add_argument(
         "--metrics",
         type=str,
@@ -892,6 +952,8 @@ def _resolve_rows_path(args: argparse.Namespace) -> str:
     Returns:
         Filesystem path to the rows JSON list.
     """
+    if args.dry_run:
+        return "builtin://issue3216-dry-run"
     if args.rows:
         return args.rows
     return str(Path(args.campaign) / "reports" / "headline_rows.json")
@@ -905,7 +967,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     args = parse_args(argv)
     rows_path = _resolve_rows_path(args)
-    rows = load_rows_json(rows_path)
+    rows = _dry_run_rows() if args.dry_run else load_rows_json(rows_path)
     config = ReportConfig(
         metrics=tuple(args.metrics),
         rank_metric=args.rank_metric,
@@ -916,7 +978,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         resamples=args.rank_resamples,
         rank_seed=args.rank_seed,
     )
-    report = build_report(rows, config, campaign=args.campaign, rows_path=rows_path)
+    campaign = "dry-run" if args.dry_run else args.campaign
+    report = build_report(rows, config, campaign=campaign, rows_path=rows_path)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "result.json").write_text(

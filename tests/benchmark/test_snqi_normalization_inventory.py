@@ -210,6 +210,24 @@ def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():
     assert {term["term"] for term in diagnostics["weight_bound_exceedances"]} == {"time", "comfort"}
     assert signed_total == pytest.approx(compute_snqi(metrics, weights, baseline_stats))
 
+    contract = diagnostics["normalization_contract"]
+    assert contract["schema_version"] == "snqi_normalization_contract.v1"
+    assert contract["diagnostic_only"] is True
+    assert contract["status"] == "mixed_unbounded_penalty_basis"
+    assert contract["weights_comparable"] is False
+    assert contract["decision_required_issue"] == 3699
+    assert contract["raw_unbounded_penalty_terms"] == ["time", "comfort"]
+    assert contract["baseline_normalized_penalty_terms"] == [
+        "collisions",
+        "near",
+        "force_exceed",
+        "jerk",
+    ]
+    assert contract["raw_penalty_absolute_share"] == pytest.approx(0.5)
+    assert contract["baseline_normalized_penalty_absolute_share"] == pytest.approx(0.4)
+    assert contract["weight_bound_exceedance_terms"] == ["time", "comfort"]
+    assert "bypass normalize_metric" in contract["reasons"][0]
+
     by_term = {term["term"]: term for term in diagnostics["terms"]}
     assert by_term["time"]["scaled_value"] == pytest.approx(3.0)
     assert by_term["time"]["exceeds_weight_bound"] is True
@@ -267,8 +285,10 @@ def test_report_cli_writes_contribution_diagnostics(tmp_path, capsys):
 
     assert exit_code == 0
     assert "Contribution diagnostics:" in captured.out
+    assert "Normalization contract: status=mixed_unbounded_penalty_basis" in captured.out
     assert payload["contributions"]["diagnostic_only"] is True
     assert payload["contributions"]["mixed_basis"] is True
+    assert payload["contributions"]["normalization_contract"]["weights_comparable"] is False
     signed_total = sum(term["signed_contribution"] for term in payload["contributions"]["terms"])
     assert signed_total == pytest.approx(compute_snqi(_METRICS, _WEIGHTS, _BASELINE_STATS))
 

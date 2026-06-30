@@ -165,6 +165,13 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
                 f"weight={term['weight']}; signed={term['signed_contribution']}; "
                 f"absolute_share={term['absolute_share']}"
             )
+        contract = contribution_payload["normalization_contract"]
+        print(
+            "Normalization contract: "
+            f"status={contract['status']}; "
+            f"weights_comparable={contract['weights_comparable']}; "
+            f"decision_required_issue={contract['decision_required_issue']}"
+        )
 
     if args.json_out is not None:
         payload = {"claim_boundary": CLAIM_BOUNDARY, "inventory": inventory.to_dict()}

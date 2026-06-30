@@ -206,12 +206,17 @@ def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():
     assert diagnostics["raw_penalty_terms_dominate"] is True
     assert diagnostics["raw_penalty_absolute_share"] == pytest.approx(0.5)
     assert diagnostics["baseline_normalized_penalty_absolute_share"] == pytest.approx(0.4)
+    assert diagnostics["has_weight_bound_exceedance"] is True
+    assert {term["term"] for term in diagnostics["weight_bound_exceedances"]} == {"time", "comfort"}
     assert signed_total == pytest.approx(compute_snqi(metrics, weights, baseline_stats))
 
     by_term = {term["term"]: term for term in diagnostics["terms"]}
     assert by_term["time"]["scaled_value"] == pytest.approx(3.0)
+    assert by_term["time"]["exceeds_weight_bound"] is True
     assert by_term["comfort"]["scaled_value"] == pytest.approx(2.0)
+    assert by_term["comfort"]["exceeds_weight_bound"] is True
     assert by_term["collisions"]["scaled_value"] == pytest.approx(1.0)
+    assert by_term["collisions"]["exceeds_weight_bound"] is False
     assert by_term["time"]["normalization_status"] == "raw_unbounded"
     assert by_term["collisions"]["normalization_status"] == "baseline_normalized_bounded"
 

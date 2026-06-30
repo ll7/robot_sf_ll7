@@ -42,6 +42,11 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     assert contributions["diagnostic_only"] is True
     assert contributions["mixed_basis"] is True
     assert contributions["raw_penalty_terms_dominate"] is True
+    assert contributions["has_weight_bound_exceedance"] is True
+    assert {term["term"] for term in contributions["weight_bound_exceedances"]} == {
+        "time",
+        "comfort",
+    }
     assert (
         contributions["raw_penalty_absolute_share"]
         > contributions["baseline_normalized_penalty_absolute_share"]
@@ -96,6 +101,7 @@ def test_governance_text_lists_per_term_normalization_status(
     assert "jerk (jerk_mean, w_jerk): baseline_normalized_bounded" in out
     assert "Contribution diagnostic:" in out
     assert "raw_penalty_terms_dominate=True" in out
+    assert "has_weight_bound_exceedance=True" in out
 
 
 def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> None:

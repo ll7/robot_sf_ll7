@@ -202,7 +202,8 @@ def _print_text_report(report: dict[str, Any]) -> None:
         f"raw_penalty_share={contributions['raw_penalty_absolute_share']:.3f}; "
         "baseline_normalized_penalty_share="
         f"{contributions['baseline_normalized_penalty_absolute_share']:.3f}; "
-        f"raw_penalty_terms_dominate={contributions['raw_penalty_terms_dominate']}"
+        f"raw_penalty_terms_dominate={contributions['raw_penalty_terms_dominate']}; "
+        f"has_weight_bound_exceedance={contributions['has_weight_bound_exceedance']}"
     )
 
 

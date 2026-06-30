@@ -120,6 +120,12 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_1554_slurm_evidence_2026-06-30/`: queue-decision packet over completed #1554
+Slurm jobs 13192, 13198, and 13203. Classifies job 13198 as the completed S20/H500
+result matrix to analyze before any duplicate rerun, preserves its soft SNQI contract
+warning as a paper-claim blocker, and confirms no Slurm/GPU submission, artifact
+deletion, or paper/dissertation claim edit.
+
 - `issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/`: checker packet over
   the merged #3207 bounded actual fidelity-sensitivity slice. Classifies the current evidence as
   `no_claim` / `not_benchmark_evidence` because the slice is not full fixed scope and rank evidence

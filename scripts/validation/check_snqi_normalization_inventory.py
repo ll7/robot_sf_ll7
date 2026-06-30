@@ -24,6 +24,7 @@ from robot_sf.benchmark.snqi.exit_codes import (
     EXIT_VALIDATION_ERROR,
 )
 from robot_sf.benchmark.snqi.normalization_inventory import (
+    build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
 )
 
@@ -49,10 +50,31 @@ def _load_baseline_stats(path: Path | None) -> dict[str, dict[str, float]] | Non
     return raw
 
 
+def _load_json_object(path: Path | None, *, label: str) -> dict[str, Any] | None:
+    """Load an optional JSON object for synthetic contribution diagnostics."""
+    if path is None:
+        return None
+    if not path.is_file():
+        raise ValueError(f"{label} file not found: {path}")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"could not load {label} JSON {path}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ValueError(f"{label} must be JSON object: {path}")
+    return raw
+
+
 def build_normalization_preflight_report(
     baseline_stats: dict[str, dict[str, float]] | None = None,
+    *,
+    metrics: dict[str, Any] | None = None,
+    weights: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the issue #3699 normalization inventory preflight payload."""
+    if (metrics is None) != (weights is None):
+        raise ValueError("metrics and weights must be provided together")
+
     inventory = build_snqi_normalization_inventory(baseline_stats)
     blockers: list[dict[str, Any]] = []
 
@@ -85,13 +107,20 @@ def build_normalization_preflight_report(
             }
         )
 
-    return {
+    report: dict[str, Any] = {
         "schema_version": "snqi_normalization_inventory_preflight.v1",
         "claim_boundary": CLAIM_BOUNDARY,
         "status": "failed" if blockers else "passed",
         "blockers": blockers,
         "normalization": inventory.to_dict(),
     }
+    if metrics is not None and weights is not None:
+        report["contributions"] = build_snqi_contribution_diagnostics(
+            metrics,
+            weights,
+            baseline_stats or {},
+        )
+    return report
 
 
 def _print_text_report(report: dict[str, Any]) -> None:
@@ -113,6 +142,13 @@ def _print_text_report(report: dict[str, Any]) -> None:
         "baseline_normalized_penalty_terms="
         f"{', '.join(normalization['normalized_penalty_terms']) or 'none'}"
     )
+    version_contract = normalization["score_version_contract"]
+    print(
+        "Score version contract: "
+        f"{version_contract['score_version']}; "
+        f"status={version_contract['status']}; "
+        f"diagnostic_only={version_contract['diagnostic_only']}"
+    )
     print("Term normalization status:")
     for term in normalization["terms"]:
         role = "penalty" if term["is_penalty"] else "reward"
@@ -120,6 +156,16 @@ def _print_text_report(report: dict[str, Any]) -> None:
             f" - {term['term']} ({term['metric_key']}, {term['weight_name']}): "
             f"{term['normalization_status']}; role={role}; "
             f"basis={term['measurement_basis']}; note={term['note']}"
+        )
+    if "contributions" in report:
+        contract = report["contributions"]["normalization_contract"]
+        print(
+            "Contribution contract: "
+            f"status={contract['status']}; "
+            f"weights_comparable={contract['weights_comparable']}; "
+            f"raw_penalty_share={contract['raw_penalty_absolute_share']:.6g}; "
+            "baseline_normalized_penalty_share="
+            f"{contract['baseline_normalized_penalty_absolute_share']:.6g}"
         )
 
 
@@ -130,6 +176,8 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional baseline-stats JSON for normalized-term coverage checks.",
     )
+    parser.add_argument("--metrics", type=Path, help="Optional fixture metrics JSON object.")
+    parser.add_argument("--weights", type=Path, help="Optional fixture weights JSON object.")
     parser.add_argument("--json", action="store_true", help="Emit JSON to stdout.")
     parser.add_argument("--json-out", type=Path, help="Write JSON report to this path.")
     parser.add_argument(
@@ -145,7 +193,13 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
         baseline_stats = _load_baseline_stats(args.baseline_stats)
-        report = build_normalization_preflight_report(baseline_stats)
+        metrics = _load_json_object(args.metrics, label="metrics")
+        weights = _load_json_object(args.weights, label="weights")
+        report = build_normalization_preflight_report(
+            baseline_stats,
+            metrics=metrics,
+            weights=weights,
+        )
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return EXIT_INPUT_ERROR

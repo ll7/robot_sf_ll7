@@ -34,10 +34,14 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["planner_count"] >= 10
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
-    assert summary["blocking_jobs"] == []
-    assert summary["job_13175_state"] == "analyzed"
-    assert summary["issue_3810_duplicate_status"] == "none_found"
-    assert summary["go_no_go"] == "go_after_submit_host_live_checks"
+    assert summary["target_host"] == "imech039"
+    assert summary["blocking_jobs"] == [13175]
+    assert summary["job_13175_state"] == "requires_submit_host_refresh"
+    assert summary["issue_3810_duplicate_status"] == "requires_submit_host_refresh"
+    assert summary["live_issue_state"] == "state:running"
+    assert summary["go_no_go"] == "blocked_pending_submit_host_route_and_reconciliation"
+    assert summary["private_ops_dry_run"] == "route_unverified"
+    assert summary["interpretation_gate"] == "blocked_pending_active_run_retention_reconciliation"
 
 
 def test_issue_3810_packet_rejects_authorized_submit() -> None:
@@ -53,17 +57,153 @@ def test_issue_3810_packet_rejects_authorized_submit() -> None:
         raise AssertionError("packet should reject compute submission authorization")
 
 
-def test_issue_3810_packet_rejects_stale_analyzed_job_blocker() -> None:
-    """A reconciled analyzed job must not stay as a submission blocker."""
+def test_issue_3810_packet_rejects_missing_job_13175_blocker() -> None:
+    """Job 13175 stays a blocker until submit-host reconciliation is recorded."""
     packet = _load_packet()
-    packet["launch_packet"]["blocking_jobs"] = [13175]
+    packet["launch_packet"]["blocking_jobs"] = []
 
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "13175" in str(exc)
+        assert "job 13175 must block submit" in str(exc)
     else:
-        raise AssertionError("packet should reject stale job 13175 blocker")
+        raise AssertionError("packet should reject missing job 13175 blocker")
+
+
+def test_issue_3810_packet_rejects_stale_job_13175_reconciliation() -> None:
+    """Stale analyzed state cannot unlock the public launch packet."""
+    packet = _load_packet()
+    packet["launch_packet"]["ledger_reconciliation"]["job_13175_state"] = "analyzed"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "job 13175 reconciliation must require submit-host refresh" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale job 13175 reconciliation")
+
+
+def test_issue_3810_packet_rejects_nonblocking_live_issue_state() -> None:
+    """The live state:running label remains a submit blocker."""
+    packet = _load_packet()
+    packet["launch_packet"]["live_issue_state"]["submit_blocker"] = False
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "live issue state must block submit while running" in str(exc)
+    else:
+        raise AssertionError("packet should reject a nonblocking live issue state")
+
+
+def test_issue_3810_packet_rejects_stale_target_host() -> None:
+    """The launch-packet target host must match the requested Slurm decision host."""
+    packet = _load_packet()
+    packet["launch_packet"]["target_host"] = "imech036"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "target host must be imech039" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale target host")
+
+
+def test_issue_3810_packet_rejects_stale_dry_run_target_host() -> None:
+    """The private-ops dry-run target host is guarded independently of the packet host."""
+    packet = _load_packet()
+    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech036"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "private-ops dry run host mismatch" in str(exc)
+    else:
+        raise AssertionError("packet should reject a stale dry-run target host")
+
+
+def test_issue_3810_packet_rejects_decision_policy_without_target_host_gate() -> None:
+    """The dry-run decision policy must still gate on the requested host support."""
+    packet = _load_packet()
+    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["decision_policy"] = (
+        "submission remains blocked until route support is proven."
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "private-ops dry run must gate imech039 support" in str(exc)
+    else:
+        raise AssertionError("packet should reject a decision policy missing the host gate")
+
+
+def test_issue_3810_packet_rejects_stale_live_issue_label() -> None:
+    """A packet with changed live issue state must be refreshed before submit."""
+    packet = _load_packet()
+    packet["launch_packet"]["live_issue_state"]["required_label"] = "state:ready"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "live issue state must record state:running blocker" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale live issue label")
+
+
+def test_issue_3810_packet_rejects_missing_private_ops_dry_run() -> None:
+    """The packet must name the submit-host dry-run evidence contract."""
+    packet = _load_packet()
+    packet["launch_packet"]["go_no_go"].pop("private_ops_dry_run")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "private_ops_dry_run must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing private-ops dry run")
+
+
+def test_issue_3810_packet_rejects_unblocked_interpretation_gate() -> None:
+    """The active run must stay analysis-blocking until retention reconciles."""
+    packet = _load_packet()
+    packet["launch_packet"]["interpretation_gate"]["status"] = "ready_for_claims"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "interpretation gate must stay blocked" in str(exc)
+    else:
+        raise AssertionError("packet should reject an unblocked interpretation gate")
+
+
+def test_issue_3810_packet_rejects_missing_interpretation_evidence() -> None:
+    """Report interpretation requires retained evidence and analysis inputs."""
+    packet = _load_packet()
+    packet["launch_packet"]["interpretation_gate"]["required_evidence"].remove(
+        "external_artifact_pointer"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "interpretation gate evidence missing" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing interpretation evidence")
+
+
+def test_issue_3810_packet_rejects_claim_promotion_policy() -> None:
+    """Passing the public packet must not imply benchmark claim promotion."""
+    packet = _load_packet()
+    packet["launch_packet"]["interpretation_gate"]["decision_policy"] = (
+        "Reports may be promoted after the local public packet passes."
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "interpretation gate must block claim promotion" in str(exc)
+    else:
+        raise AssertionError("packet should reject weak interpretation policy")
 
 
 def test_issue_3810_packet_rejects_missing_go_no_go_status() -> None:
@@ -144,6 +284,34 @@ def test_issue_3810_packet_rejects_blank_matrix_path() -> None:
         assert "scenario matrix must be repo-relative" in str(exc)
     else:
         raise AssertionError("packet should reject a blank scenario matrix path")
+
+
+def test_issue_3810_packet_rejects_missing_retention_paths() -> None:
+    """The packet must keep durable evidence retention paths reviewable."""
+    packet = _load_packet()
+    packet["durable_evidence"].pop("retention_paths")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "retention_paths must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing retention paths")
+
+
+def test_issue_3810_packet_rejects_untracked_raw_output_policy() -> None:
+    """Raw benchmark outputs must not become the durable evidence plan."""
+    packet = _load_packet()
+    packet["durable_evidence"]["local_output_boundary"] = (
+        "Keep generated outputs as durable benchmark evidence."
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "local output boundary must mention raw JSONL" in str(exc)
+    else:
+        raise AssertionError("packet should reject weak local output boundary")
 
 
 def test_issue_3810_packet_rejects_missing_campaign_id() -> None:

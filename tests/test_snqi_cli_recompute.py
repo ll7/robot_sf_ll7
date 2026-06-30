@@ -237,8 +237,10 @@ def test_snqi_weight_recompute_cli_exports_pareto_frontier(tmp_path: Path):
     assert first_item["discriminative_power"] >= 0.0
 
 
+
 @pytest.mark.timeout(30)
 def test_snqi_weight_recompute_cli_decision_preflight_invalid_normalized_metrics(tmp_path: Path):
+    """Non-finite normalized metrics trigger fail-closed preflight with EXIT_INPUT_ERROR."""
     episodes_path = tmp_path / "episodes.jsonl"
     baseline_path = tmp_path / "baseline.json"
     output_path = tmp_path / "recompute.json"

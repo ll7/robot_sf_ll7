@@ -57,7 +57,7 @@ def build_packet(artifact_root: Path, *, job_id: str = DEFAULT_JOB_ID) -> dict[s
         "schema_version": SCHEMA_VERSION,
         "status": "blocked_missing_retrieved_metadata" if missing_files else "diagnostic_only",
         "job_id": str(job_id),
-        "artifact_root": str(root),
+        "artifact_root": _display_path(root),
         "claim_boundary": CLAIM_BOUNDARY,
         "campaign": _campaign_metadata(manifest, run_meta),
         "retrieved_artifacts": {
@@ -113,6 +113,14 @@ def build_packet(artifact_root: Path, *, job_id: str = DEFAULT_JOB_ID) -> dict[s
         ],
     }
     return packet
+
+
+def _display_path(path: Path) -> str:
+    """Return a stable repository-relative path when possible."""
+    try:
+        return path.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def load_packet_fixture(packet_fixture: Path) -> dict[str, Any]:

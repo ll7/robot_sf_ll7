@@ -33,6 +33,21 @@ REQUIRED_EXPOSURE_FIELDS = {
     "first_clearance_step",
     "low_exposure_success",
 }
+REQUIRED_INTERPRETATION_GATE_EVIDENCE = {
+    "private_ops_route_dry_run",
+    "retained_compact_review_bundle",
+    "external_artifact_pointer",
+    "snqi_recalibration_bundle",
+    "horizon_sensitivity_report",
+    "interaction_exposure_diagnostics",
+}
+REQUIRED_INTERPRETATION_GATE_BLOCKERS = {
+    "active_run_state",
+    "retention_paths_missing",
+    "route_config_provenance_incomplete",
+    "snqi_recalibration_inputs_missing",
+    "interaction_exposure_diagnostics_missing",
+}
 
 
 class PacketError(ValueError):
@@ -144,10 +159,34 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         durable_path.startswith("docs/context/evidence/"), "durable path must be context evidence"
     )
+    retention_paths = _require_mapping(durable_evidence, "retention_paths")
+    compact_review_bundle = str(retention_paths.get("compact_review_bundle", ""))
+    external_artifact_pointer = str(retention_paths.get("external_artifact_pointer", ""))
+    private_ops_ledger = str(retention_paths.get("private_ops_ledger", ""))
+    local_output_boundary = str(durable_evidence.get("local_output_boundary", ""))
+    _require(
+        compact_review_bundle == durable_path,
+        "compact review bundle must match durable evidence path",
+    )
+    _require(
+        external_artifact_pointer == "wandb-or-release-artifact-required-before-claim",
+        "external artifact pointer policy missing",
+    )
+    _require(
+        private_ops_ledger.endswith("robot_sf_ll7-private-ops/ops/jobs/jobs.yaml"),
+        "private-ops ledger path missing",
+    )
+    _require(
+        "raw episode JSONL" in local_output_boundary, "local output boundary must mention raw JSONL"
+    )
+    _require(
+        "out of git" in local_output_boundary or "out git" in local_output_boundary,
+        "local output boundary must keep raw outputs out of git",
+    )
 
     _require(
-        launch_packet.get("decision") == "ready_after_live_queue_and_duplicate_check",
-        "decision must require live queue and duplicate checks",
+        launch_packet.get("decision") == "blocked_pending_submit_host_route_and_reconciliation",
+        "decision must stay blocked pending submit-host route and reconciliation",
     )
     _require(
         launch_packet.get("compute_submit_authorized") is False, "compute submit must be false"
@@ -155,18 +194,33 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         launch_packet.get("slurm_job_id") == "not_submitted", "slurm job must be not_submitted"
     )
+    _require(launch_packet.get("target_host") == "imech039", "target host must be imech039")
     blocking_jobs = launch_packet.get("blocking_jobs")
     _require(isinstance(blocking_jobs, list), "blocking_jobs must be a list")
-    _require(13175 not in blocking_jobs, "analyzed job 13175 must not remain blocking")
+    _require(13175 in blocking_jobs, "job 13175 must block submit until reconciled")
+
+    live_issue_state = _require_mapping(launch_packet, "live_issue_state")
+    _require(
+        live_issue_state.get("required_label") == "state:running",
+        "live issue state must record state:running blocker",
+    )
+    _require(
+        live_issue_state.get("submit_blocker") is True,
+        "live issue state must block submit while running",
+    )
+    _require(
+        "reconciled" in str(live_issue_state.get("resolution_required_before_submit", "")),
+        "live issue state must require reconciliation before submit",
+    )
 
     ledger = _require_mapping(launch_packet, "ledger_reconciliation")
     _require(
-        ledger.get("job_13175_state") == "analyzed",
-        "job 13175 reconciliation must be analyzed",
+        ledger.get("job_13175_state") == "requires_submit_host_refresh",
+        "job 13175 reconciliation must require submit-host refresh",
     )
     _require(
-        ledger.get("issue_3810_duplicate_status") == "none_found",
-        "issue #3810 duplicate status must be none_found",
+        ledger.get("issue_3810_duplicate_status") == "requires_submit_host_refresh",
+        "issue #3810 duplicate status must require submit-host refresh",
     )
     running_related_jobs = ledger.get("running_related_jobs")
     _require(
@@ -176,8 +230,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
     go_no_go = _require_mapping(launch_packet, "go_no_go")
     _require(
-        go_no_go.get("recommendation") == "go_after_submit_host_live_checks",
-        "go/no-go recommendation must require submit-host live checks",
+        go_no_go.get("recommendation") == "blocked_pending_submit_host_route_and_reconciliation",
+        "go/no-go recommendation must remain blocked",
     )
     _require(
         go_no_go.get("local_submission_status") == "no_submit_current_machine",
@@ -193,6 +247,73 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         "Not safe to freeze" in (str(slurm_status) if slurm_status is not None else ""),
         "slurm command status must explain why final submit command is not frozen",
+    )
+    _require(
+        "job 13175" in (str(slurm_status) if slurm_status is not None else ""),
+        "go/no-go must mention job 13175 reconciliation",
+    )
+    dry_run = _require_mapping(go_no_go, "private_ops_dry_run")
+    _require(dry_run.get("required_before_submit") is True, "private-ops dry run required")
+    _require(dry_run.get("target_host") == "imech039", "private-ops dry run host mismatch")
+    _require(
+        dry_run.get("current_public_status") == "route_unverified",
+        "private-ops dry run must be route_unverified in public packet",
+    )
+    dry_run_fields = set(dry_run.get("required_fields") or [])
+    _require(
+        {
+            "target_host",
+            "queue_summary_timestamp",
+            "duplicate_status",
+            "live_issue_state",
+            "job_13175_state",
+            "route_id",
+            "submit_wrapper_supports_target_host",
+            "owning_worktree",
+            "owning_worktree_clean",
+            "decision",
+        }
+        <= dry_run_fields,
+        "private-ops dry run fields missing",
+    )
+    _require(
+        "imech039 support" in str(dry_run.get("decision_policy", "")),
+        "private-ops dry run must gate imech039 support",
+    )
+
+    interpretation_gate = _require_mapping(launch_packet, "interpretation_gate")
+    _require(
+        interpretation_gate.get("status") == "blocked_pending_active_run_retention_reconciliation",
+        "interpretation gate must stay blocked pending active-run reconciliation",
+    )
+    _require(
+        interpretation_gate.get("required_before_claim") is True,
+        "interpretation gate must be required before claims",
+    )
+    _require(
+        interpretation_gate.get("required_before_report_publication") is True,
+        "interpretation gate must be required before report publication",
+    )
+    _require(
+        interpretation_gate.get("active_run_state") == "state:running",
+        "interpretation gate must record active run state",
+    )
+    gate_blockers = set(interpretation_gate.get("blockers") or [])
+    _require(
+        REQUIRED_INTERPRETATION_GATE_BLOCKERS <= gate_blockers,
+        "interpretation gate blockers missing",
+    )
+    gate_evidence = set(interpretation_gate.get("required_evidence") or [])
+    _require(
+        REQUIRED_INTERPRETATION_GATE_EVIDENCE <= gate_evidence,
+        "interpretation gate evidence missing",
+    )
+    gate_policy = str(interpretation_gate.get("decision_policy", ""))
+    _require(
+        "state:running" in gate_policy
+        and "not permission" in gate_policy
+        and "promote benchmark claims" in gate_policy,
+        "interpretation gate must block claim promotion",
     )
 
     route = _require_mapping(launch_packet, "route")
@@ -255,10 +376,14 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "planner_count": len(planner_rows),
         "compute_submit_authorized": launch_packet["compute_submit_authorized"],
         "slurm_job_id": launch_packet["slurm_job_id"],
+        "target_host": launch_packet["target_host"],
         "blocking_jobs": blocking_jobs,
         "job_13175_state": ledger["job_13175_state"],
         "issue_3810_duplicate_status": ledger["issue_3810_duplicate_status"],
+        "live_issue_state": live_issue_state["required_label"],
         "go_no_go": go_no_go["recommendation"],
+        "private_ops_dry_run": dry_run["current_public_status"],
+        "interpretation_gate": interpretation_gate["status"],
     }
 
 

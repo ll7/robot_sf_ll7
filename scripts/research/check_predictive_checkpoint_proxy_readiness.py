@@ -139,7 +139,14 @@ def _validate_blocked_artifact_schema(blocked_artifacts: Any) -> list[str]:
         return ["blocked_artifacts must be a list when provided"]
 
     errors: list[str] = []
-    required_fields = ("id", "artifact_type", "status", "storage_scope", "revival_condition")
+    required_fields = (
+        "id",
+        "artifact_type",
+        "status",
+        "storage_scope",
+        "path_pattern",
+        "revival_condition",
+    )
     for index, artifact in enumerate(blocked_artifacts):
         if not isinstance(artifact, dict):
             errors.append(f"blocked_artifacts[{index}] must be a mapping")

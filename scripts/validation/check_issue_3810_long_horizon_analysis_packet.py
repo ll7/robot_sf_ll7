@@ -96,7 +96,7 @@ def validate_packet(packet: Mapping[str, Any], *, issue: int = 3810) -> dict[str
 
     route = _require_mapping(analysis, "route")
     _require(REQUIRED_ROUTE_FIELDS <= set(route), "route field set incomplete")
-    _require(route.get("target_host") == "imech036", "target host must be imech036")
+    _require(route.get("target_host") == "imech156-u", "target host must be imech156-u")
 
     preflight = _require_mapping(analysis, "preflight")
     _require(preflight.get("required") is True, "preflight.required must be true")

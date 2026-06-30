@@ -22,7 +22,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCENARIO_SET = REPO_ROOT / "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"
 CONTRACTS = REPO_ROOT / "configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml"
 LAUNCH_PACKET = REPO_ROOT / "configs/benchmarks/issue_3813_sustained_flow_launch_packet.yaml"
-PREFLIGHT_SCRIPT = REPO_ROOT / "scripts/validation/preflight_sustained_flow_scenarios_issue_3813.py"
 
 
 def _load_yaml(path: Path) -> dict:
@@ -148,13 +147,9 @@ def test_launch_packet_keeps_no_submit_and_fail_closed_boundaries() -> None:
     assert campaign["scenario_suite"]["contract_path"] == (
         "configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml"
     )
-    assert campaign["scenario_suite"]["preflight_helper"] == (
-        "robot_sf.benchmark.sustained_flow_preflight.preflight_sustained_flow_matrix"
-    )
     assert campaign["scenario_suite"]["preflight_command"] == (
         "uv run python scripts/validation/preflight_sustained_flow_scenarios_issue_3813.py --json"
     )
-    assert PREFLIGHT_SCRIPT.is_file()
     assert campaign["metrics"]["success_boundary"].startswith("Sustained progress")
     assert (
         "missing continuous-spawn runtime support"

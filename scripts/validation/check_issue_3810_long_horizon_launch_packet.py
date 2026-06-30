@@ -19,6 +19,17 @@ REQUIRED_OUTPUTS = {
     "reports/horizon_sensitivity_report.json",
     "reports/interaction_exposure_diagnostics.json",
 }
+REQUIRED_VALIDATION_COMMAND_MARKERS = {
+    "run_research_campaign_manifest.py",
+    "check_issue_3810_long_horizon_launch_packet.py",
+    "test_check_issue_3810_long_horizon_launch_packet.py -q",
+}
+REQUIRED_ROUTE_FIELDS = {
+    "private_ops_repo",
+    "queue_summary_command",
+    "route_command",
+    "submit_wrapper",
+}
 REQUIRED_REPORT_FIELDS = {
     "timeout_rate",
     "max_steps_share",
@@ -92,6 +103,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     row_status_policy = _require_mapping(packet, "row_status_policy")
     outputs = _require_mapping(packet, "outputs")
     durable_evidence = _require_mapping(packet, "durable_evidence")
+    validation = _require_mapping(packet, "validation")
     launch_packet = _require_mapping(packet, "launch_packet")
 
     _require(packet.get("schema_version") == "research-campaign-manifest.v0.1", "unexpected schema")
@@ -153,6 +165,15 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(outputs.get("disposable") is True, "outputs must be disposable local output")
     required_paths = set(outputs.get("required_paths") or [])
     _require(REQUIRED_OUTPUTS <= required_paths, "required outputs missing issue #3810 artifacts")
+    validation_commands = validation.get("commands")
+    _require(isinstance(validation_commands, list), "validation.commands must be a list")
+    validation_command_blob = "\n".join(str(command) for command in validation_commands)
+    for marker in REQUIRED_VALIDATION_COMMAND_MARKERS:
+        _require(
+            marker in validation_command_blob,
+            f"validation.commands missing required marker: {marker}",
+        )
+    _require(validation.get("dry_run") == "required", "validation.dry_run must be required")
 
     durable_plan = _require_mapping(durable_evidence, "plan")
     durable_path = str(durable_plan.get("path", ""))
@@ -197,7 +218,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         launch_packet.get("slurm_job_id") == "not_submitted", "slurm job must be not_submitted"
     )
-    _require(launch_packet.get("target_host") == "imech156-u", "target host must be imech156-u")
+    _require(launch_packet.get("target_host") == "imech036", "target host must be imech036")
     blocking_jobs = launch_packet.get("blocking_jobs")
     _require(isinstance(blocking_jobs, list), "blocking_jobs must be a list")
     _require(13175 in blocking_jobs, "job 13175 must block submit until reconciled")
@@ -257,7 +278,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
     dry_run = _require_mapping(go_no_go, "private_ops_dry_run")
     _require(dry_run.get("required_before_submit") is True, "private-ops dry run required")
-    _require(dry_run.get("target_host") == "imech156-u", "private-ops dry run host mismatch")
+    _require(dry_run.get("target_host") == "imech036", "private-ops dry run host mismatch")
     _require(
         dry_run.get("current_public_status") == "route_unverified",
         "private-ops dry run must be route_unverified in public packet",
@@ -280,8 +301,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "private-ops dry run fields missing",
     )
     _require(
-        "imech156-u support" in str(dry_run.get("decision_policy", "")),
-        "private-ops dry run must gate imech156-u support",
+        "imech036 support" in str(dry_run.get("decision_policy", "")),
+        "private-ops dry run must gate imech036 support",
     )
 
     interpretation_gate = _require_mapping(launch_packet, "interpretation_gate")
@@ -320,6 +341,12 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
 
     route = _require_mapping(launch_packet, "route")
+    route_fields = set(route.keys())
+    _require(REQUIRED_ROUTE_FIELDS <= route_fields, "route missing required fields")
+    _require(
+        str(route.get("private_ops_repo", "")) == route.get("private_ops_repo"),
+        "route.private_ops_repo must be present",
+    )
     _require(
         str(route.get("submit_policy")) == "no_submit_until_decision_packet_go",
         "submit policy missing",
@@ -328,12 +355,43 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         str(route.get("submit_wrapper", "")).endswith("submit_and_record.sh"),
         "submit wrapper missing",
     )
+    for field in ("private_ops_repo", "queue_summary_command", "route_command", "submit_wrapper"):
+        route_path = str(route.get(field, ""))
+        _require(route_path, f"route.{field} is required")
+        _require(PurePosixPath(route_path).is_absolute(), f"route.{field} must be absolute")
+        if field == "private_ops_repo":
+            _require(
+                route_path.endswith("robot_sf_ll7-private-ops"),
+                "route.private_ops_repo must point to private-ops checkout",
+            )
+            continue
+        _require(
+            "private-ops" in route_path,
+            f"route.{field} must use private-ops script path",
+        )
 
     preflight = _require_mapping(launch_packet, "preflight")
     _require("private_ops_dry_run" in preflight, "private-ops dry-run command missing")
     _require(
         "must not be invoked" in str(preflight.get("no_submit_guard", "")),
         "no-submit guard missing",
+    )
+    _require(
+        "public_manifest_check" in preflight,
+        "preflight missing public manifest check",
+    )
+    _require(
+        "public_packet_check" in preflight,
+        "preflight missing public packet check",
+    )
+    _require(
+        "run_research_campaign_manifest.py" in str(preflight.get("public_manifest_check", "")),
+        "preflight public manifest check command missing",
+    )
+    _require(
+        "check_issue_3810_long_horizon_launch_packet.py"
+        in str(preflight.get("public_packet_check", "")),
+        "preflight public packet check command missing",
     )
 
     config_patch = _require_mapping(launch_packet, "config_patch")
@@ -342,6 +400,17 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(overrides.get("stop_on_failure") is False, "long run must keep collecting rows")
 
     snqi = _require_mapping(launch_packet, "snqi_recalibration")
+    snqi_inputs = _require_mapping(snqi, "inputs")
+    _require("campaign_table" in snqi_inputs, "SNQI campaign_table input missing")
+    _require("episode_records" in snqi_inputs, "SNQI episode_records input missing")
+    snqi_scripts = snqi.get("source_scripts") or snqi_inputs.get("source_scripts")
+    _require(isinstance(snqi_scripts, list), "SNQI source_scripts must be a list")
+    for required_script in (
+        "scripts/recompute_snqi_weights.py",
+        "scripts/snqi_sensitivity_analysis.py",
+        "scripts/validate_snqi_scripts.py",
+    ):
+        _require(required_script in snqi_scripts, f"SNQI source script missing: {required_script}")
     _require(
         str(snqi.get("checksum_policy")) == "checksum_pin_before_claim",
         "SNQI checksum policy missing",
@@ -353,6 +422,18 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
 
     report = _require_mapping(launch_packet, "horizon_sensitivity_report")
+    _require(
+        "build_horizon_timestep_denominator_report.py" in str(report.get("command", "")),
+        "horizon report command missing build_horizon_timestep_denominator_report.py",
+    )
+    _require(
+        "--long-campaign" in str(report.get("command", "")),
+        "horizon report command missing --long-campaign",
+    )
+    _require(
+        "--short-campaign-reference" in str(report.get("command", "")),
+        "horizon report command missing --short-campaign-reference",
+    )
     report_fields = set(report.get("required_fields") or [])
     _require(REQUIRED_REPORT_FIELDS <= report_fields, "horizon report fields missing")
     _require(
@@ -360,6 +441,10 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
 
     exposure = _require_mapping(launch_packet, "wait_it_out_guard")
+    _require(
+        exposure.get("diagnostic_name") == "interaction_exposure",
+        "exposure diagnostic name incorrect",
+    )
     exposure_fields = set(exposure.get("required_episode_fields") or [])
     _require(REQUIRED_EXPOSURE_FIELDS <= exposure_fields, "interaction exposure fields missing")
     _require(

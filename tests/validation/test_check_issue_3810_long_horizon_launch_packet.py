@@ -35,7 +35,7 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["planner_count"] >= 10
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
-    assert summary["target_host"] == "imech156-u"
+    assert summary["target_host"] == "imech036"
     assert summary["blocking_jobs"] == [13175]
     assert summary["job_13175_state"] == "requires_submit_host_refresh"
     assert summary["issue_3810_duplicate_status"] == "requires_submit_host_refresh"
@@ -100,12 +100,12 @@ def test_issue_3810_packet_rejects_nonblocking_live_issue_state() -> None:
 def test_issue_3810_packet_rejects_stale_target_host() -> None:
     """The launch-packet target host must match the requested Slurm decision host."""
     packet = _load_packet()
-    packet["launch_packet"]["target_host"] = "imech036"
+    packet["launch_packet"]["target_host"] = "imech156-u"
 
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "target host must be imech156-u" in str(exc)
+        assert "target host must be imech036" in str(exc)
     else:
         raise AssertionError("packet should reject stale target host")
 
@@ -113,7 +113,7 @@ def test_issue_3810_packet_rejects_stale_target_host() -> None:
 def test_issue_3810_packet_rejects_stale_dry_run_target_host() -> None:
     """The private-ops dry-run target host is guarded independently of the packet host."""
     packet = _load_packet()
-    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech036"
+    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech156-u"
 
     try:
         _MODULE.validate_packet(packet)
@@ -133,7 +133,7 @@ def test_issue_3810_packet_rejects_decision_policy_without_target_host_gate() ->
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "private-ops dry run must gate imech156-u support" in str(exc)
+        assert "private-ops dry run must gate imech036 support" in str(exc)
     else:
         raise AssertionError("packet should reject a decision policy missing the host gate")
 
@@ -389,3 +389,62 @@ def test_issue_3810_packet_cli_json() -> None:
     assert completed.returncode == 0, completed.stderr
     assert '"compute_submit_authorized": false' in completed.stdout
     assert '"max_episode_steps": 600' in completed.stdout
+
+
+def test_issue_3810_packet_rejects_missing_validation_commands() -> None:
+    """Packet validation must include all required command markers."""
+    packet = _load_packet()
+    packet["validation"]["commands"] = [
+        "echo noop",
+    ]
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "validation.commands missing required marker" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing validation command markers")
+
+
+def test_issue_3810_packet_rejects_route_path_regression() -> None:
+    """Route commands must remain private-ops-backed until submit-host refresh."""
+    packet = _load_packet()
+    packet["launch_packet"]["route"]["queue_summary_command"] = (
+        "python scripts/dev/queue_summary.py"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "route.queue_summary_command must be absolute" in str(exc)
+    else:
+        raise AssertionError("packet should reject non-private-ops queue summary command")
+
+
+def test_issue_3810_packet_rejects_missing_snqi_inputs() -> None:
+    """SNQI recalibration inputs and scripts must be explicit and locked."""
+    packet = _load_packet()
+    packet["launch_packet"]["snqi_recalibration"].pop("inputs")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "inputs must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing SNQI inputs")
+
+
+def test_issue_3810_packet_rejects_weak_horizon_report_command() -> None:
+    """Horizon sensitivity report command must include the long/short campaign refs."""
+    packet = _load_packet()
+    packet["launch_packet"]["horizon_sensitivity_report"]["command"] = (
+        "uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py "
+        "--long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi/reports"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "horizon report command missing --short-campaign-reference" in str(exc)
+    else:
+        raise AssertionError("packet should reject incomplete horizon command")

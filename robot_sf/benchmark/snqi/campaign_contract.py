@@ -38,7 +38,11 @@ def validate_snqi_normalized_inputs(
     *,
     normalized_metrics: Sequence[str] = SNQI_NORMALIZED_METRIC_NAMES,
 ) -> list[str]:
-    """Validate normalized inputs required by SNQI sensitivity diagnostics."""
+    """Validate normalized inputs required by SNQI sensitivity diagnostics.
+
+    Returns:
+        List of issue strings; empty when all required normalized inputs are present and finite.
+    """
     issues: list[str] = []
     baseline_map = baseline if isinstance(baseline, Mapping) else {}
 

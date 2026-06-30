@@ -1878,14 +1878,16 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
         baseline_for_eval, baseline_warnings = sanitize_baseline_stats(snqi_baseline)
         baseline_adjustments = len(baseline_warnings)
         warnings.extend(baseline_warnings)
-    normalized_input_issues = validate_snqi_normalized_inputs(
-        episodes=episodes,
-        baseline=baseline_for_eval,
-    )
-    if normalized_input_issues:
-        raise RuntimeError(
-            "SNQI sensitivity preflight failed: " + "; ".join(sorted(set(normalized_input_issues)))
+    if cfg.paper_facing and cfg.snqi_contract.enabled:
+        normalized_input_issues = validate_snqi_normalized_inputs(
+            episodes=episodes,
+            baseline=baseline_for_eval,
         )
+        if normalized_input_issues:
+            raise RuntimeError(
+                "SNQI sensitivity preflight failed: "
+                + "; ".join(sorted(set(normalized_input_issues)))
+            )
 
     thresholds = SnqiContractThresholds(
         rank_alignment_warn=cfg.snqi_contract.rank_alignment_warn_threshold,

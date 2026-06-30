@@ -32,22 +32,27 @@ SNQI_NORMALIZED_METRIC_NAMES = (
 )
 
 
+_VALIDATE_SNQI_MAX_ISSUES = 50
+
+
 def validate_snqi_normalized_inputs(
     episodes: Sequence[Mapping[str, Any]],
     baseline: Mapping[str, Mapping[str, float]],
     *,
     normalized_metrics: Sequence[str] = SNQI_NORMALIZED_METRIC_NAMES,
+    max_issues: int = _VALIDATE_SNQI_MAX_ISSUES,
 ) -> list[str]:
     """Validate normalized inputs required by SNQI sensitivity diagnostics.
 
     Returns:
-        List of issue strings; empty when all required normalized inputs are present and finite.
+        List of issue strings (capped at max_issues); empty when all required normalized inputs
+        are present and finite.
     """
     issues: list[str] = []
     baseline_map = baseline if isinstance(baseline, Mapping) else {}
 
     for metric in normalized_metrics:
-        entry = baseline_map.get(metric) if isinstance(baseline_map, Mapping) else None
+        entry = baseline_map.get(metric)
         if not isinstance(entry, Mapping):
             issues.append(f"baseline[{metric}] missing")
             continue
@@ -57,6 +62,9 @@ def validate_snqi_normalized_inputs(
             issues.append(f"baseline[{metric}].p95 non-finite")
 
     for index, episode in enumerate(episodes):
+        if len(issues) >= max_issues:
+            issues.append(f"... and more (truncated at {max_issues})")
+            break
         metrics = episode.get("metrics") if isinstance(episode, Mapping) else None
         if not isinstance(metrics, Mapping):
             issues.append(f"episode[{index}] metrics payload missing")

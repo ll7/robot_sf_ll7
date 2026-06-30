@@ -102,6 +102,67 @@ def test_overlapping_archive_ids_block_leakage(tmp_path: Path) -> None:
     assert "archive_id_overlap:1" in readiness.blockers
 
 
+def test_scenario_family_and_seed_overlap_is_reported_as_blockers(tmp_path: Path) -> None:
+    """Family and seed overlap metadata must be treated as leakage blockers."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=42)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_a", seed=42)],
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(source, rerun)
+
+    assert readiness.status == BLOCKED
+    assert "scenario_family_overlap:1" in readiness.blockers
+    assert "seed_overlap:1" in readiness.blockers
+    assert len(readiness.overlap_provenance["scenario_family_overlap"]) == 1
+    assert (
+        json.loads(readiness.overlap_provenance["scenario_family_overlap"][0])
+        == _entry("_", family="family_a", seed=0)["cluster_key"]
+    )
+    assert readiness.overlap_provenance["seed_overlap"] == [42]
+
+
+def test_missing_archive_payload_blocks_ready_path(tmp_path: Path) -> None:
+    """Missing archive file paths must fail closed for both source and rerun."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    missing = tmp_path / "missing.json"
+
+    readiness = classify_failure_archive_rerun_readiness(source, missing)
+
+    assert readiness.status == BLOCKED
+    assert any(
+        blocker.startswith("rerun_archive_blocked:path_missing") for blocker in readiness.blockers
+    )
+    assert not any(blocker.startswith("source_archive_blocked") for blocker in readiness.blockers)
+
+
+def test_malformed_archive_payload_fails_closed(tmp_path: Path) -> None:
+    """Malformed or non-object archives are blockers, never treated as ready."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("not-json", encoding="utf-8")
+
+    readiness = classify_failure_archive_rerun_readiness(source, malformed)
+
+    assert readiness.status == BLOCKED
+    assert any(
+        blocker.startswith("rerun_archive_blocked:unreadable") for blocker in readiness.blockers
+    )
+
+
 def test_missing_certification_metadata_blocks_rerun_archive(tmp_path: Path) -> None:
     """Every rerun archive entry must carry certification metadata."""
 

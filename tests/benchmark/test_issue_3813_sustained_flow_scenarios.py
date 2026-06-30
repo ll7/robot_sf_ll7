@@ -12,7 +12,7 @@ from robot_sf.scenario_certification.sustained_flow import (
     DEFAULT_SUSTAINED_FLOW_SCENARIO_SET,
     EXPECTED_SUSTAINED_FLOW_TIERS,
     REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE,
-    iter_expected_sustained_flow_variant_specs,
+    generate_expected_sustained_flow_scenarios,
     preflight_sustained_flow_scenario_set,
     sustained_flow_preflight_to_dict,
 )
@@ -124,15 +124,6 @@ def test_issue_3813_checked_in_matrix_matches_generated_variant_specs() -> None:
     """Generated preflight specs match the checked-in sustained-flow scaffold."""
 
     scenarios = load_scenarios(DEFAULT_SUSTAINED_FLOW_SCENARIO_SET)
-    specs = iter_expected_sustained_flow_variant_specs()
+    generated = generate_expected_sustained_flow_scenarios()
 
-    assert len(scenarios) == len(specs)
-    for scenario, spec in zip(scenarios, specs, strict=True):
-        metadata = scenario["metadata"]
-        assert scenario["name"] == spec.name
-        assert scenario["map_file"] == spec.map_file
-        assert scenario["simulation_config"]["max_episode_steps"] == spec.max_episode_steps
-        assert scenario["simulation_config"]["ped_density"] == spec.ped_density
-        assert scenario["seeds"] == list(spec.seeds)
-        assert metadata["density"] == spec.density_tier
-        assert metadata["continuous_spawn"]["spawn_rate_per_min"] == spec.spawn_rate_per_min
+    assert scenarios == generated

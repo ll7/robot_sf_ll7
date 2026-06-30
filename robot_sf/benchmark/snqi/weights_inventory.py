@@ -35,6 +35,7 @@ scaling split is tracked separately in #3699.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -169,6 +170,7 @@ class WeightSetRecord:
     weight_sum: float | None = None
     dominant_term: str | None = None
     scale_class: str | None = None
+    content_sha256: str | None = None
     load_error: str | None = None
 
     def normalized_direction(self) -> dict[str, float] | None:
@@ -255,6 +257,7 @@ class WeightInventoryReport:
                     "weight_sum": r.weight_sum,
                     "dominant_term": r.dominant_term,
                     "scale_class": r.scale_class,
+                    "content_sha256": r.content_sha256,
                     "load_error": r.load_error,
                 }
                 for r in self.records
@@ -323,6 +326,12 @@ def _finalize_record(record: WeightSetRecord) -> None:
     )
 
 
+def _weights_content_sha256(weights: dict[str, float]) -> str:
+    """Return stable fingerprint for synthetic/code-defined weight mappings."""
+    payload = json.dumps(weights, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
     """Load a single source into a :class:`WeightSetRecord` (never raises).
 
@@ -344,6 +353,7 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
         # empty baseline stats because the "canonical" method ignores them.
         weights = dict(recompute_snqi_weights({}, method="canonical").weights)
         record.weights = {k: float(weights[k]) for k in WEIGHT_NAMES}
+        record.content_sha256 = _weights_content_sha256(record.weights)
         record.available = True
         _finalize_record(record)
         return record
@@ -354,7 +364,9 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
         record.load_error = "file not found"
         return record
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw_bytes = path.read_bytes()
+        record.content_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+        raw = json.loads(raw_bytes.decode("utf-8"))
         record.weights = _extract_weights(raw)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         record.load_error = str(exc)

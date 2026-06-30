@@ -27,7 +27,7 @@ What it checks (each maps to an acceptance criterion of #3425):
 * ``finalizer_manifest_linkage`` — every finalizer ``job_id`` resolves to a
   submission-manifest job (the "manifest linkage missing" fail-closed case).
 * ``issue_traceability_matches`` — queue/finalizer issue numbers agree for
-  public issue/PR traceability.
+  public issue/PR traceability and, by default, match issue ``3425``.
 * ``durable_pointer_present`` — every *successful* finalizer carries a durable
   pointer (the "durable pointers missing" fail-closed case).
 * ``required_artifacts_complete`` — every *successful* finalizer reports all
@@ -342,7 +342,9 @@ def _check_finalizer_linkage(inputs: LoadedInputs) -> PreflightCheck:
     )
 
 
-def _check_issue_traceability(inputs: LoadedInputs) -> PreflightCheck:
+def _check_issue_traceability(
+    inputs: LoadedInputs, *, expected_issue: int | None
+) -> PreflightCheck:
     """Require queue and finalizer issue numbers to agree when both are present."""
     # Normalize via the canonical coercion so the gate reads issue numbers
     # exactly as the reconciler does. ``QueueEntry.issue`` is ``str | int | None``
@@ -391,6 +393,17 @@ def _check_issue_traceability(inputs: LoadedInputs) -> PreflightCheck:
             severity=_REQUIRED,
             detail=f"queue issue(s) {queue_issues} differ from finalizer issue(s) {finalizer_issues}",
             remediation="align queue and finalizer issue numbers before claim decision handoff",
+        )
+    if expected_issue is not None and queue_issues != [expected_issue]:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=f"queue/finalizer issue(s) {queue_issues} do not match expected issue {expected_issue}",
+            remediation=(
+                "pass --issue for the intended handoff issue or regenerate queue/finalizer "
+                "metadata for the correct issue before public claim handoff"
+            ),
         )
     return PreflightCheck(
         name="issue_traceability_matches",
@@ -630,6 +643,7 @@ def preflight(
     submission_manifests: list[Path],
     finalizer_manifests: list[Path],
     evidence_root: Path | None = None,
+    expected_issue: int | None = 3425,
     generated_at: str | None = None,
 ) -> dict:
     """Evaluate readiness of the SLURM-to-claim finalizer slice inputs.
@@ -649,7 +663,7 @@ def preflight(
         _check_submission_manifests(submission_manifests, inputs),
         _check_finalizer_present(finalizer_manifests, inputs),
         _check_finalizer_linkage(inputs),
-        _check_issue_traceability(inputs),
+        _check_issue_traceability(inputs, expected_issue=expected_issue),
         _check_durable_pointer(inputs),
         _check_required_artifacts_complete(inputs),
         _check_claim_boundary(inputs),
@@ -679,6 +693,7 @@ def preflight(
             "submission_manifests": sorted(str(path) for path in submission_manifests),
             "finalizer_manifests": sorted(str(path) for path in finalizer_manifests),
             "evidence_root": str(evidence_root) if evidence_root is not None else None,
+            "expected_issue": expected_issue,
         },
         "checks": [asdict(check) for check in checks],
         "blockers": blockers,
@@ -756,6 +771,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional compact evidence root directory (advisory check).",
     )
     parser.add_argument(
+        "--issue",
+        type=int,
+        default=3425,
+        help="Expected public issue number for queue/finalizer traceability.",
+    )
+    parser.add_argument(
         "--generated-at",
         default=None,
         help="Optional stable generated_at timestamp for reproducible machine output.",
@@ -772,6 +793,7 @@ def main(argv: list[str] | None = None) -> int:
         submission_manifests=list(args.submission_manifest),
         finalizer_manifests=list(args.finalizer_manifest),
         evidence_root=args.evidence_root,
+        expected_issue=args.issue,
         generated_at=args.generated_at,
     )
 

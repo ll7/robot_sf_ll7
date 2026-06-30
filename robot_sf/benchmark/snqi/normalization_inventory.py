@@ -42,6 +42,23 @@ NORMALIZED_UPPER = 1.0
 SNQI_LEGACY_SCORE_VERSION = "SNQI-v0"
 SNQI_LEGACY_SCORE_STATUS = "legacy_mixed_basis_diagnostic_only"
 
+# Static SNQI score-version contract. All values are immutable scalars, so a
+# shallow copy is sufficient to isolate callers from mutating the shared source.
+_SNQI_VERSION_CONTRACT: dict[str, object] = {
+    "schema_version": "snqi_score_version_contract.v1",
+    "score_version": SNQI_LEGACY_SCORE_VERSION,
+    "status": SNQI_LEGACY_SCORE_STATUS,
+    "diagnostic_only": True,
+    "mixed_basis_preserved": True,
+    "score_semantics_changed": False,
+    "decision_required_issue": 3699,
+    "future_bounded_contract": "SNQI-v1",
+    "policy": (
+        "Historical SNQI-v0 keeps the mixed raw/baseline-normalized basis for "
+        "reproducibility and must not be used as a primary safety ranking."
+    ),
+}
+
 
 def build_snqi_version_contract() -> dict[str, object]:
     """Return the current versioned SNQI normalization contract.
@@ -49,22 +66,11 @@ def build_snqi_version_contract() -> dict[str, object]:
     Issue #3699's current product decision preserves historical SNQI as a
     legacy diagnostic while deferring any bounded/recalibrated score to a
     separately versioned contract.
+
+    Returns a fresh shallow copy so callers cannot mutate the shared constant.
     """
 
-    return {
-        "schema_version": "snqi_score_version_contract.v1",
-        "score_version": SNQI_LEGACY_SCORE_VERSION,
-        "status": SNQI_LEGACY_SCORE_STATUS,
-        "diagnostic_only": True,
-        "mixed_basis_preserved": True,
-        "score_semantics_changed": False,
-        "decision_required_issue": 3699,
-        "future_bounded_contract": "SNQI-v1",
-        "policy": (
-            "Historical SNQI-v0 keeps the mixed raw/baseline-normalized basis for "
-            "reproducibility and must not be used as a primary safety ranking."
-        ),
-    }
+    return _SNQI_VERSION_CONTRACT.copy()
 
 
 @dataclass(frozen=True)

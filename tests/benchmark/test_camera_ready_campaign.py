@@ -5530,7 +5530,9 @@ def _get_comparability_path() -> str:
     return path.as_posix()
 
 
-def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(tmp_path: Path, monkeypatch) -> None:
+def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(
+    tmp_path: Path, monkeypatch
+) -> None:
     """Missing normalized SNQI metric should fail sensitivity preflight."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
     scenario_abs = (tmp_path / scenario_rel).resolve()

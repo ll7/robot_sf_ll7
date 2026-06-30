@@ -67,6 +67,7 @@ def validate_snqi_normalized_inputs(
 
     return issues
 
+
 _WEIGHT_COMPONENT_SPECS: tuple[dict[str, str], ...] = (
     {
         "weight_name": "w_success",

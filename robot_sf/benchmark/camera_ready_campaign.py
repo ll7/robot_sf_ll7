@@ -1884,10 +1884,8 @@ def run_campaign(  # noqa: C901, PLR0912, PLR0915
     )
     if normalized_input_issues:
         raise RuntimeError(
-            "SNQI sensitivity preflight failed: "
-            + "; ".join(sorted(set(normalized_input_issues)))
+            "SNQI sensitivity preflight failed: " + "; ".join(sorted(set(normalized_input_issues)))
         )
-
 
     thresholds = SnqiContractThresholds(
         rank_alignment_warn=cfg.snqi_contract.rank_alignment_warn_threshold,

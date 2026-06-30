@@ -170,6 +170,7 @@ def _print_text_report(report: dict[str, Any]) -> None:
         print(
             f"  - {record['name']} ({record['kind']}, {relpath}): "
             f"canonical={record['declares_canonical']}; "
+            f"versioned_id={record['versioned_id']}; "
             f"dominant={record['dominant_term']}; scale={record['scale_class']}; "
             f"sha256={fingerprint}; {status}"
         )

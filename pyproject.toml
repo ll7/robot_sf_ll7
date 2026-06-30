@@ -59,7 +59,7 @@ training = [
     "torch>=2.5.1",
     "scikit-learn>=1.9.0",
     "optuna>=4.9.0",
-    "tensorboard>=2.18.0",
+    "tensorboard>=2.21.0",
     "wandb>=0.18.7",
     "optuna-dashboard>=0.20.0",
 ]
@@ -88,7 +88,7 @@ viz = [
     "seaborn>=0.13.2",
 ]
 browser = [
-    "playwright>=1.56.0",
+    "playwright>=1.61.0",
 ]
 sacadrl = [
     "tensorflow>=2.15.0",

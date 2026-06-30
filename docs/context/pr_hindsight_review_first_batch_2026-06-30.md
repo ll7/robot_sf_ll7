@@ -5,7 +5,7 @@ Skill: [pr-hindsight-review](../../.agents/skills/pr-hindsight-review/SKILL.md)
 Date: 2026-06-30
 
 This note records the first read-only hindsight batch for merged PRs: [#3775](https://github.com/ll7/robot_sf_ll7/pull/3775), [#3778](https://github.com/ll7/robot_sf_ll7/pull/3778), [#3779](https://github.com/ll7/robot_sf_ll7/pull/3779), and [#3791](https://github.com/ll7/robot_sf_ll7/pull/3791).
-This documentation-only evidence and does not claim benchmark/dissertation/release progression.
+This is documentation-only evidence and does not claim benchmark/dissertation/release progression.
 
 ## Packet summaries
 
@@ -47,8 +47,8 @@ This documentation-only evidence and does not claim benchmark/dissertation/relea
 - `state`: merged
 - `merged_at`: 2026-06-28T18:44:10Z
 - `linked_issues`: [#3723](https://github.com/ll7/robot_sf_ll7/issues/3723), [#3699](https://github.com/ll7/robot_sf_ll7/issues/3699)
-- `route_source`: ready-queue autonomous documentation support after SNQI preflight
-- `scope_summary`: aligned SNQI governance documentation with existing diagnostic behavior
+- `route_source`: ready-queue autonomous documentation support after SNQI (Social Navigation Quality Index) preflight
+- `scope_summary`: aligned SNQI (Social Navigation Quality Index) governance documentation with existing diagnostic behavior
 - `successor_judgment`: `existing_parent_issue_remains_open`
 - `routing_value`: reduces guide drift; preserves user-facing semantics consistency
 - `routing_cost`: documentation-only; did not resolve canonical SNQI weight-policy source

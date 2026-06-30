@@ -163,7 +163,10 @@ def test_snqi_weight_recompute_cli_decision_preflight_missing_normalized_inputs(
     data = json.loads(output_path.read_text(encoding="utf-8"))
     assert data["status"] == "failed"
     assert data["scope"] == "snqi_recompute_preflight"
-    assert any("missing baseline normalization stats" in issue for issue in data["issues"]["invalid_baseline_stats"])
+    assert any(
+        "missing baseline normalization stats" in issue
+        for issue in data["issues"]["invalid_baseline_stats"]
+    )
 
 
 @pytest.mark.timeout(30)

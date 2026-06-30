@@ -38,6 +38,8 @@ def _write_config(
         "checkpoint_selector": {
             "registry_tag": "predictive",
             "min_resolvable_checkpoints": min_resolvable,
+            "training_run_group_field": "proxy_training_run_id",
+            "min_resolvable_training_run_checkpoints": min_resolvable,
         },
         "proxy_summary_contract": {
             "require_enabled": True,
@@ -59,7 +61,12 @@ def _write_registry(root: Path, present_count: int, absent_count: int) -> Path:
         ckpt = root / f"present_{i}.pt"
         ckpt.write_text("x", encoding="utf-8")
         models.append(
-            {"model_id": f"predictive_present_{i}", "local_path": str(ckpt), "tags": ["predictive"]}
+            {
+                "model_id": f"predictive_present_{i}",
+                "local_path": str(ckpt),
+                "tags": ["predictive"],
+                "proxy_training_run_id": "synthetic_run_a",
+            }
         )
     for i in range(absent_count):
         models.append(
@@ -67,6 +74,7 @@ def _write_registry(root: Path, present_count: int, absent_count: int) -> Path:
                 "model_id": f"predictive_absent_{i}",
                 "local_path": str(root / "missing" / f"absent_{i}.pt"),
                 "tags": ["predictive"],
+                "proxy_training_run_id": "synthetic_run_a",
             }
         )
     # A non-predictive entry that must be ignored by the selector.
@@ -224,6 +232,64 @@ def test_blocked_when_too_few_checkpoints_resolve(tmp_path):
     assert mapping["blocked_by_status"] == {"missing_local_path": 4}
     # Absent checkpoints are surfaced by model_id for actionable triage.
     assert any("predictive_absent_0" in m for m in ckpt["messages"])
+
+
+def test_blocked_when_resolvable_checkpoints_missing_training_run_group(tmp_path):
+    """Resolved checkpoints without lineage metadata cannot satisfy one-real-run contract."""
+    config = _write_config(tmp_path, min_resolvable=2)
+    models = []
+    for index in range(2):
+        checkpoint = tmp_path / f"present_without_group_{index}.pt"
+        checkpoint.write_text("x", encoding="utf-8")
+        models.append(
+            {
+                "model_id": f"predictive_without_group_{index}",
+                "local_path": str(checkpoint),
+                "tags": ["predictive"],
+            }
+        )
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    mapping = ckpt["mapping"]
+    assert report["status"] == "blocked"
+    assert ckpt["status"] == "blocked"
+    assert mapping["resolvable_count"] == 2
+    assert mapping["missing_training_run_group_metadata"] == 2
+    assert mapping["resolvable_by_training_run_group"] == {}
+    assert "training run group field" in ckpt["messages"][0]
+
+
+def test_blocked_when_resolvable_checkpoints_split_across_training_runs(tmp_path):
+    """Enough files still fail closed when no single run contributes enough checkpoints."""
+    config = _write_config(tmp_path, min_resolvable=4)
+    models = []
+    for index, group in enumerate(["run_a", "run_a", "run_b", "run_b"]):
+        checkpoint = tmp_path / f"present_{index}.pt"
+        checkpoint.write_text("x", encoding="utf-8")
+        models.append(
+            {
+                "model_id": f"predictive_present_{index}",
+                "local_path": str(checkpoint),
+                "tags": ["predictive"],
+                "proxy_training_run_id": group,
+            }
+        )
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    mapping = ckpt["mapping"]
+    assert report["status"] == "blocked"
+    assert ckpt["status"] == "blocked"
+    assert mapping["resolvable_count"] == 4
+    assert mapping["resolvable_by_training_run_group"] == {"run_a": 2, "run_b": 2}
+    assert "need >= 4" in ckpt["messages"][0]
 
 
 def test_blocked_when_proxy_summary_degenerate(tmp_path):

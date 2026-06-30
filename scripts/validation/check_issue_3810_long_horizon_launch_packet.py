@@ -389,7 +389,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "preflight public manifest check command missing",
     )
     _require(
-        "check_issue_3810_long_horizon_launch_packet.py" in str(preflight.get("public_packet_check", "")),
+        "check_issue_3810_long_horizon_launch_packet.py"
+        in str(preflight.get("public_packet_check", "")),
         "preflight public packet check command missing",
     )
 
@@ -440,7 +441,10 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
 
     exposure = _require_mapping(launch_packet, "wait_it_out_guard")
-    _require(exposure.get("diagnostic_name") == "interaction_exposure", "exposure diagnostic name incorrect")
+    _require(
+        exposure.get("diagnostic_name") == "interaction_exposure",
+        "exposure diagnostic name incorrect",
+    )
     exposure_fields = set(exposure.get("required_episode_fields") or [])
     _require(REQUIRED_EXPOSURE_FIELDS <= exposure_fields, "interaction exposure fields missing")
     _require(

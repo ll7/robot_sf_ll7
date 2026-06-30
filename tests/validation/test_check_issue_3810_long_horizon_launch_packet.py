@@ -409,7 +409,9 @@ def test_issue_3810_packet_rejects_missing_validation_commands() -> None:
 def test_issue_3810_packet_rejects_route_path_regression() -> None:
     """Route commands must remain private-ops-backed until submit-host refresh."""
     packet = _load_packet()
-    packet["launch_packet"]["route"]["queue_summary_command"] = "python scripts/dev/queue_summary.py"
+    packet["launch_packet"]["route"]["queue_summary_command"] = (
+        "python scripts/dev/queue_summary.py"
+    )
 
     try:
         _MODULE.validate_packet(packet)

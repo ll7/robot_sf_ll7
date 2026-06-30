@@ -266,3 +266,66 @@ def test_report_cli_writes_contribution_diagnostics(tmp_path, capsys):
     assert payload["contributions"]["mixed_basis"] is True
     signed_total = sum(term["signed_contribution"] for term in payload["contributions"]["terms"])
     assert signed_total == pytest.approx(compute_snqi(_METRICS, _WEIGHTS, _BASELINE_STATS))
+
+
+def _load_report_module():
+    """Import the report CLI script as a module for direct ``main()`` testing."""
+    import importlib.util
+    import pathlib
+
+    script_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "benchmark"
+        / "snqi_normalization_inventory_report.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "snqi_normalization_inventory_report", script_path
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_report_cli_rejects_bad_contribution_json(tmp_path, capsys):
+    """Malformed contribution diagnostics JSON fails closed with exit code 2."""
+    module = _load_report_module()
+    import json
+
+    metrics_path = tmp_path / "metrics.json"
+    weights_path = tmp_path / "weights.json"
+    metrics_path.write_text("{not valid", encoding="utf-8")
+    weights_path.write_text(json.dumps(_WEIGHTS), encoding="utf-8")
+
+    exit_code = module.main(["--metrics", str(metrics_path), "--weights", str(weights_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "invalid JSON input" in captured.err
+
+
+def test_report_cli_fails_closed_on_mixed_scale_checker(tmp_path, capsys):
+    """Fail-closed mixed-basis checker returns non-zero exit code."""
+    module = _load_report_module()
+    import json
+
+    metrics_path = tmp_path / "metrics.json"
+    weights_path = tmp_path / "weights.json"
+    metrics_path.write_text(json.dumps({"time_to_goal_norm": 1.0}), encoding="utf-8")
+    weights_path.write_text(json.dumps(_WEIGHTS), encoding="utf-8")
+
+    exit_code = module.main(
+        [
+            "--metrics",
+            str(metrics_path),
+            "--weights",
+            str(weights_path),
+            "--fail-on-mixed-scale",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "FAIL: SNQI penalty terms mix raw" in captured.err

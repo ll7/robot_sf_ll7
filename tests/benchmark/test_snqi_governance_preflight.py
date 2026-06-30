@@ -47,6 +47,9 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "time",
         "comfort",
     }
+    assert contributions["normalization_contract"]["status"] == "mixed_unbounded_penalty_basis"
+    assert contributions["normalization_contract"]["weights_comparable"] is False
+    assert contributions["normalization_contract"]["decision_required_issue"] == 3699
     assert (
         contributions["raw_penalty_absolute_share"]
         > contributions["baseline_normalized_penalty_absolute_share"]

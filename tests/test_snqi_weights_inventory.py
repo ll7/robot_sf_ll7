@@ -21,6 +21,7 @@ from robot_sf.benchmark.snqi.compute import (
 from robot_sf.benchmark.snqi.weights_inventory import (
     SNQIWeightProvenanceError,
     build_inventory_report,
+    compare_code_default_to_shipped_sources,
     detect_conflicts,
     inventory_weight_sets,
     preflight_snqi_weight_sets,
@@ -186,6 +187,37 @@ def test_duplicate_weights_distinct_label_reported(tmp_path):
     report = build_inventory_report(repo)
     dups = [c for c in report.conflicts if c.kind == "duplicate_weights_distinct_label"]
     assert any(set(c.sources) == {"model_canonical_v1", "camera_ready_v1"} for c in dups)
+
+
+def test_code_default_vs_shipped_direction_matrix(tmp_path):
+    """Every shipped source is compared against the code default."""
+    repo = _make_fixture_repo(tmp_path)
+    report = build_inventory_report(repo)
+
+    comparisons = compare_code_default_to_shipped_sources(report.records)
+    by_source = {comparison.source: comparison for comparison in comparisons}
+
+    assert set(by_source) == {
+        "model_canonical_v1",
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+    }
+    assert by_source["model_canonical_v1"].relationship == "different_direction"
+    assert by_source["model_canonical_v1"].source_dominant_term == "w_jerk"
+    assert by_source["camera_ready_v1"].relationship == "different_direction"
+    assert by_source["camera_ready_v2"].relationship == "different_direction"
+    assert by_source["camera_ready_v3"].relationship == "different_direction"
+
+    summary_comparisons = report.to_dict()["source_summary"][
+        "code_default_shipped_direction_comparisons"
+    ]
+    assert [entry["source"] for entry in summary_comparisons] == [
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
 
 
 def test_no_blocking_conflict_when_canonical_sources_agree(tmp_path):

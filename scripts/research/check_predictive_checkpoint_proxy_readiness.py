@@ -67,6 +67,7 @@ def _summarize_blocked_artifacts(
         "by_storage_scope": by_storage_scope,
     }
 
+
 DEFAULT_CONFIG = Path("configs/research/predictive_checkpoint_proxy_v1.yaml")
 DEFAULT_REGISTRY = Path("model/registry.yaml")
 

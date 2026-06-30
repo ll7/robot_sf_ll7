@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import json
 from pathlib import Path
 from typing import Any
 
@@ -280,3 +281,64 @@ def test_adjacent_rank_claims_mark_ci_separable() -> None:
     assert claim["higher_rank_planner"] == "best"
     assert claim["lower_rank_planner"] == "worst"
     assert claim["decision"] == "ci_separable"
+
+
+def test_main_supports_dry_run_and_writes_report(tmp_path: Path) -> None:
+    out_dir = tmp_path / "dry_run_report"
+
+    code = mod.main(
+        [
+            "--dry-run",
+            "--output-dir",
+            str(out_dir),
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    assert (out_dir / "result.json").exists()
+    assert (out_dir / "report.md").exists()
+
+
+def test_main_fail_on_decision_blocker_for_local_blocker_rows(tmp_path: Path) -> None:
+    rows = [
+        {
+            "scenario_family": "merging",
+            "planner_key": "a",
+            "row_status": "fallback",
+            "execution_mode": "degraded",
+            "per_seed": [
+                {"seed": 111, "metrics": {"snqi": 0.50}},
+            ],
+        },
+        {
+            "scenario_family": "merging",
+            "planner_key": "b",
+            "row_status": "fallback",
+            "execution_mode": "degraded",
+            "per_seed": [
+                {"seed": 111, "metrics": {"snqi": 0.49}},
+            ],
+        },
+    ]
+    rows_path = tmp_path / "rows.json"
+    rows_path.write_text(json.dumps(rows), encoding="utf-8")
+
+    code = mod.main(
+        [
+            "--rows",
+            str(rows_path),
+            "--output-dir",
+            str(tmp_path / "blocker_report"),
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "1",
+            "--fail-on-decision-blocker",
+        ]
+    )
+
+    assert code == 4

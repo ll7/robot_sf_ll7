@@ -836,41 +836,38 @@ def _fmt(value: Any) -> str:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments.
-
-    Returns:
-        Parsed argument namespace.
-    """
+    """Parse command-line arguments. Returns: Parsed argument namespace."""
     parser = argparse.ArgumentParser(
         description=(
-            "Build per-cell CI + rank-stability report for the 7x7 headline "
+            "Build per-cell CI + rank-stability report 7x7 headline "
             "planner comparison (#3216). Reuses canonical seed_variance, "
-            "fidelity_rank_stability, and canonical_table_export owners. Emits "
+            "fidelity_rank_stability, canonical_table_export owners. Emits "
             "blocked_until_run/diagnostic on insufficient seed budget; never "
             "self-certifies paper-grade."
         )
     )
     src = parser.add_mutually_exclusive_group(required=True)
-    src.add_argument("--rows", type=str, help="Path to headline comparison rows JSON list.")
+    src.add_argument("--rows", type=str, help="Path headline comparison rows JSON list.")
     src.add_argument(
         "--campaign",
         type=str,
-        help="Campaign id/root; resolves to <root>/reports/headline_rows.json.",
+        help="Campaign id/root; resolves <root>/reports/headline_rows.json.",
+    )
+    src.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Use builtin deterministic fixture rows without external files.",
     )
     parser.add_argument(
-        "--metrics",
-        type=str,
-        nargs="+",
-        default=list(DEFAULT_METRICS),
-        help="Primary metrics for per-cell CIs.",
+        "--metrics", type=str, nargs="+", default=list(DEFAULT_METRICS), help="Primary metrics per-cell CIs."
     )
     parser.add_argument(
-        "--rank-metric", type=str, default=DEFAULT_RANK_METRIC, help="Metric used for ranking."
+        "--rank-metric", type=str, default=DEFAULT_RANK_METRIC, help="Metric used ranking."
     )
     parser.add_argument(
         "--lower-is-better",
         action="store_true",
-        help="Treat the rank metric as lower-is-better (default higher-is-better).",
+        help="Treat rank metric lower-is-better (default higher-is-better).",
     )
     parser.add_argument("--bootstrap-samples", type=int, default=DEFAULT_BOOTSTRAP_SAMPLES)
     parser.add_argument("--confidence", type=float, default=DEFAULT_CONFIDENCE)
@@ -878,34 +875,98 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rank-resamples", type=int, default=DEFAULT_RANK_RESAMPLES)
     parser.add_argument("--rank-seed", type=int, default=DEFAULT_BOOTSTRAP_SEED)
     parser.add_argument(
+        "--fail-on-decision-blocker",
+        action="store_true",
+        help="Exit non-zero when report contains a local preflight blocker.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default="output/issue_3216_headline_ci/report",
-        help="Directory for result.json and report.md.",
+        help="Directory result.json report.md.",
     )
     return parser.parse_args(argv)
 
 
-def _resolve_rows_path(args: argparse.Namespace) -> str:
-    """Resolve the rows path from --rows or --campaign.
+def _dry_run_rows() -> list[dict[str, Any]]:
+    """Deterministic fallback rows for local preflight smoke tests."""
+    return [
+        {
+            "scenario_family": "merging",
+            "planner_key": "best",
+            "row_status": "successful_evidence",
+            "execution_mode": "nominal",
+            "per_seed": [
+                {"seed": 111, "metrics": {"snqi": 0.90, "success": 0.84, "collisions": 0.20, "near_misses": 0.02}},
+                {"seed": 112, "metrics": {"snqi": 0.91, "success": 0.85, "collisions": 0.20, "near_misses": 0.02}},
+                {"seed": 113, "metrics": {"snqi": 0.92, "success": 0.86, "collisions": 0.21, "near_misses": 0.02}},
+                {"seed": 114, "metrics": {"snqi": 0.93, "success": 0.83, "collisions": 0.19, "near_misses": 0.02}},
+                {"seed": 115, "metrics": {"snqi": 0.94, "success": 0.82, "collisions": 0.19, "near_misses": 0.02}},
+            ],
+        },
+        {
+            "scenario_family": "merging",
+            "planner_key": "mid",
+            "row_status": "successful_evidence",
+            "execution_mode": "nominal",
+            "per_seed": [
+                {"seed": 111, "metrics": {"snqi": 0.50, "success": 0.80, "collisions": 0.40, "near_misses": 0.10}},
+                {"seed": 112, "metrics": {"snqi": 0.49, "success": 0.79, "collisions": 0.41, "near_misses": 0.11}},
+                {"seed": 113, "metrics": {"snqi": 0.51, "success": 0.78, "collisions": 0.42, "near_misses": 0.09}},
+                {"seed": 114, "metrics": {"snqi": 0.50, "success": 0.80, "collisions": 0.41, "near_misses": 0.10}},
+                {"seed": 115, "metrics": {"snqi": 0.50, "success": 0.79, "collisions": 0.40, "near_misses": 0.10}},
+            ],
+        },
+        {
+            "scenario_family": "merging",
+            "planner_key": "worst",
+            "row_status": "successful_evidence",
+            "execution_mode": "nominal",
+            "per_seed": [
+                {"seed": 111, "metrics": {"snqi": 0.10, "success": 0.30, "collisions": 0.70, "near_misses": 0.50}},
+                {"seed": 112, "metrics": {"snqi": 0.11, "success": 0.31, "collisions": 0.71, "near_misses": 0.49}},
+                {"seed": 113, "metrics": {"snqi": 0.09, "success": 0.29, "collisions": 0.72, "near_misses": 0.52}},
+                {"seed": 114, "metrics": {"snqi": 0.12, "success": 0.28, "collisions": 0.73, "near_misses": 0.51}},
+                {"seed": 115, "metrics": {"snqi": 0.10, "success": 0.30, "collisions": 0.74, "near_misses": 0.50}},
+            ],
+        },
+    ]
 
-    Returns:
-        Filesystem path to the rows JSON list.
-    """
-    if args.rows:
+
+def _resolve_rows_path(args: argparse.Namespace) -> str:
+    """Resolve rows path from --rows --campaign."""
+    if args.dry_run:
+        return "builtin://issue3216-dry-run"
+    if args.rows is not None:
         return args.rows
     return str(Path(args.campaign) / "reports" / "headline_rows.json")
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entry point.
+def _resolve_rows(args: argparse.Namespace) -> tuple[str, list[dict[str, Any]]]:
+    """Resolve rows source and payload."""
+    if args.dry_run:
+        return _resolve_rows_path(args), _dry_run_rows()
+    return _resolve_rows_path(args), load_rows_json(_resolve_rows_path(args))
 
-    Returns:
-        Process exit code (0 on success).
-    """
+
+def decision_packet_has_blocker(report: Mapping[str, Any]) -> bool:
+    """Return whether a local preflight blocker should fail CI gate."""
+    if report["classification"] == "blocked_until_run":
+        return True
+    if report["inputs"].get("invalid_rank_metric_reason"):
+        return True
+    for claim in report.get("adjacent_rank_claims", ()):  # pragma: no branch
+        if claim.get("decision") == "not_statistically_distinguishable_budget":
+            return True
+    if report["inputs"].get("counted_cells", 0) == 0:
+        return True
+    return False
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entry point. Returns: Process exit code (0 on success)."""
     args = parse_args(argv)
-    rows_path = _resolve_rows_path(args)
-    rows = load_rows_json(rows_path)
+    rows_path, rows = _resolve_rows(args)
     config = ReportConfig(
         metrics=tuple(args.metrics),
         rank_metric=args.rank_metric,
@@ -916,7 +977,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         resamples=args.rank_resamples,
         rank_seed=args.rank_seed,
     )
+
     report = build_report(rows, config, campaign=args.campaign, rows_path=rows_path)
+
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "result.json").write_text(
@@ -928,6 +991,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"counted={report['inputs']['counted_cells']} "
         f"excluded={report['inputs']['excluded_cells']} -> {out_dir}"
     )
+
+    if args.fail_on_decision_blocker and decision_packet_has_blocker(report):
+        return 4
     return 0
 
 

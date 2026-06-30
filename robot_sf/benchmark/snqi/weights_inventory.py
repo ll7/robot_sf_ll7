@@ -600,6 +600,34 @@ def _scale_split_conflicts(loaded: list[WeightSetRecord]) -> list[WeightProvenan
     ]
 
 
+def _code_default_shipped_direction_conflicts(
+    records: list[WeightSetRecord],
+) -> list[WeightProvenanceConflict]:
+    """Warn when shipped JSON sources differ from the code-default direction.
+
+    This is diagnostic-only: versioned shipped files may intentionally differ, but the
+    preflight should make each code-default-vs-JSON divergence explicit for #3723.
+
+    Returns:
+        Warning-level conflicts for shipped JSON directions that differ from the
+        code default.
+    """
+    return [
+        WeightProvenanceConflict(
+            kind="code_default_shipped_direction_mismatch",
+            severity="warning",
+            sources=["code_default", comparison.source],
+            detail=(
+                "code-default SNQI weights and shipped JSON source "
+                f"'{comparison.source}' ({comparison.relpath}) have different "
+                "scale-independent weight directions; no canonical source is selected."
+            ),
+        )
+        for comparison in compare_code_default_to_shipped_sources(records)
+        if comparison.relationship == "different_direction"
+    ]
+
+
 def _duplicate_label_conflicts(
     loaded: list[WeightSetRecord],
 ) -> list[WeightProvenanceConflict]:
@@ -681,6 +709,7 @@ def detect_conflicts(records: list[WeightSetRecord]) -> list[WeightProvenanceCon
     conflicts += _canonical_load_error_conflicts(canonical)
     conflicts += _canonical_direction_conflicts(loaded_canonical)
     conflicts += _unregistered_weight_source_conflicts(records)
+    conflicts += _code_default_shipped_direction_conflicts(records)
     conflicts += _scale_split_conflicts(loaded)
     conflicts += _duplicate_label_conflicts(loaded)
 

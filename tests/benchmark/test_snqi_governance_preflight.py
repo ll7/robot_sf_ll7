@@ -39,6 +39,34 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "camera_ready_v3",
         "model_canonical_v1",
     ]
+    discovered_by_name = {
+        source["name"]: source for source in blocker_3723["discovered_weight_sources"]
+    }
+    assert list(discovered_by_name) == [
+        "code_default",
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    assert discovered_by_name["code_default"] == {
+        "name": "code_default",
+        "kind": "code_default",
+        "relpath": None,
+        "versioned_id": "snqi_weights_code_default_v1",
+        "declares_canonical": True,
+        "available": True,
+        "dominant_term": "w_collisions",
+        "scale_class": "raw",
+        "content_sha256": report["weights"]["records"][0]["content_sha256"],
+        "load_error": None,
+    }
+    model_source = discovered_by_name["model_canonical_v1"]
+    assert model_source["relpath"] == "model/snqi_canonical_weights_v1.json"
+    assert model_source["versioned_id"] == "snqi_weights_model_canonical_v1"
+    assert model_source["declares_canonical"] is True
+    assert model_source["dominant_term"] == "w_jerk"
+    assert model_source["content_sha256"]
     assert blocker_3723["canonical_declaring_sources"] == [
         "code_default",
         "model_canonical_v1",

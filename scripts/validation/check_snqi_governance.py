@@ -103,6 +103,21 @@ def build_governance_report(
                     "More than one SNQI source currently declares or implies "
                     "canonical status while disagreeing on weight direction."
                 ),
+                "discovered_weight_sources": [
+                    {
+                        "name": record["name"],
+                        "kind": record["kind"],
+                        "relpath": record["relpath"],
+                        "versioned_id": record["versioned_id"],
+                        "declares_canonical": record["declares_canonical"],
+                        "available": record["available"],
+                        "dominant_term": record["dominant_term"],
+                        "scale_class": record["scale_class"],
+                        "content_sha256": record["content_sha256"],
+                        "load_error": record["load_error"],
+                    }
+                    for record in weight_report["records"]
+                ],
                 "registered_sources": source_summary["registered_sources"],
                 "discovered_shipped_sources": source_summary["discovered_shipped_sources"],
                 "canonical_declaring_sources": source_summary["canonical_declaring_sources"],

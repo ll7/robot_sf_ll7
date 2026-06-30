@@ -259,6 +259,21 @@ def test_run_plan_from_packet_rejects_malformed(packet):
         run_plan_from_packet(packet)
 
 
+def test_packet_missing_out_of_scope_blocks_gracefully():
+    """A packet omitting out_of_scope fails closed via the check, not a raw ValueError."""
+    packet = {
+        "planners": list(_ready_plan().planners),
+        "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
+        "horizon": 300,
+        "seeds": list(range(101, 121)),
+        "rank_stability_analysis": _rank_stability_analysis(),
+    }
+    manifest = build_preflight_manifest(run_plan_from_packet(packet))
+    assert manifest["status"] == "blocked"
+    assert manifest["plan"]["out_of_scope"] == []
+    assert _checks_by_name(run_plan_from_packet(packet))["out_of_scope"] is False
+
+
 def test_shipped_packet_preflights_ready():
     """Regression guard: the canonical shipped launch packet must preflight as ready."""
     packet = yaml.safe_load(SHIPPED_PACKET.read_text(encoding="utf-8"))

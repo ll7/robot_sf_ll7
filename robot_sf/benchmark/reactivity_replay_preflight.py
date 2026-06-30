@@ -573,10 +573,16 @@ def _resolve_rank_stability_analysis(packet: dict[str, Any]) -> dict[str, Any]:
 
 
 def _resolve_out_of_scope(packet: dict[str, Any]) -> tuple[str, ...]:
-    """Return packet-level exclusions that keep preflight from implying evidence."""
-    raw = packet.get("out_of_scope", ())
+    """Return packet-level exclusions that keep preflight from implying evidence.
+
+    A missing key resolves to the empty tuple so the ``out_of_scope`` check fails
+    closed with an actionable blocked manifest (mirroring
+    ``_resolve_rank_stability_analysis``), rather than raising before manifest
+    construction. A present-but-malformed value still raises.
+    """
+    raw = packet.get("out_of_scope", [])
     if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
-        raise ValueError("packet 'out_of_scope' must be list strings")
+        raise ValueError("packet 'out_of_scope' must be a list of strings when present")
     return tuple(raw)
 
 

@@ -265,29 +265,24 @@ def test_decision_packet_blocks_without_evidence_surfaces() -> None:
     assert payload["forbidden_actions_confirmed"]["ranking_claim_promotion"] is False
 
 
-def test_decision_packet_accepts_valid_local_evidence_packet(tmp_path: Path) -> None:
+def test_decision_packet_accepts_valid_local_evidence_packet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Valid local evidence surfaces become diagnostic-review-ready, not a claim promotion."""
-    from scripts.tools.campaign_result_store import write_result_store
-
     result_store = tmp_path / "result-store"
-    write_result_store(
-        result_store,
-        [
-            {
-                "run_id": "package-a-smoke",
-                "episode_id": "package-a-smoke-001",
-                "planner": "orca",
-                "scenario_id": "crossing",
-                "scenario_family": "crossing",
-                "seed": 111,
-                "row_status": "diagnostic_only",
-                "artifact_uri": "wandb://robot-sf/package-a-smoke/episodes/001.jsonl",
-                "artifact_sha256": "a" * 64,
-            }
-        ],
-        study_id="issue-3078-package-a-smoke",
-        command="uv run python scripts/tools/run_camera_ready_benchmark.py --config ...",
-        source_commit="testcommit",
+    result_store.mkdir()
+
+    def _valid_result_store(repo_root: Path, path: Path) -> dict[str, object]:
+        return {
+            "path": str(path),
+            "ok": True,
+            "errors": [],
+        }
+
+    monkeypatch.setattr(
+        checker,
+        "_validate_result_store_path",
+        _valid_result_store,
     )
     seed_report = tmp_path / "seed_sufficiency_analysis.json"
     seed_report.write_text(

@@ -62,6 +62,14 @@ REQUIRED_RANK_STABILITY_METRICS = ("collision_rate", "near_miss_rate", "min_sepa
 #: Canonical post-run gate command family. Packets may add arguments but must route here.
 RANK_STABILITY_GATE_COMMAND = "scripts/tools/seed_sufficiency_gate.py"
 
+#: Explicitly excluded actions for this preflight slice. These are machine-checked so a
+#: launch packet cannot be mistaken for benchmark evidence or a compute submission request.
+REQUIRED_OUT_OF_SCOPE = (
+    "no_full_benchmark_campaign",
+    "no_slurm_gpu_submission",
+    "no_paper_dissertation_claim_edits",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ReactivityReplayRunPlan:
@@ -94,6 +102,7 @@ class ReactivityReplayRunPlan:
     replay_is_trajectory_playback: bool = REPLAY_IS_TRAJECTORY_PLAYBACK
     replay_limitation: str = REPLAY_LIMITATION
     rank_stability_analysis: dict[str, Any] = field(default_factory=dict)
+    out_of_scope: tuple[str, ...] = REQUIRED_OUT_OF_SCOPE
     min_planners: int = MIN_PLANNERS
     min_seeds: int = MIN_RANK_STABILITY_SEEDS
     #: Minimum horizon for the contrast to register (diagnostic family observation, #3573).
@@ -334,6 +343,28 @@ def _check_replay_limitation(plan: ReactivityReplayRunPlan) -> CheckResult:
     return CheckResult(name="replay_limitation", passed=ok, detail=detail)
 
 
+def _check_out_of_scope(plan: ReactivityReplayRunPlan) -> CheckResult:
+    """Validate the non-execution / non-claim boundary travels with the packet.
+
+    Returns:
+        CheckResult: ``out_of_scope`` check outcome.
+    """
+    declared = set(plan.out_of_scope)
+    required = set(REQUIRED_OUT_OF_SCOPE)
+    missing = sorted(required - declared)
+    extras = sorted(declared - required)
+    ok = not missing
+    detail = (
+        "explicitly excludes full benchmark campaign, Slurm/GPU submission, and "
+        "paper/dissertation claim edits"
+        if ok
+        else f"missing required out_of_scope exclusions: {', '.join(missing)}"
+    )
+    if extras:
+        detail = f"{detail}; extra exclusions declared: {', '.join(extras)}"
+    return CheckResult(name="out_of_scope", passed=ok, detail=detail)
+
+
 _CHECKS = (
     _check_planner_count,
     _check_arms,
@@ -343,6 +374,7 @@ _CHECKS = (
     _check_scenario_set_digest,
     _check_rank_stability_analysis,
     _check_replay_limitation,
+    _check_out_of_scope,
 )
 
 
@@ -382,6 +414,7 @@ def build_preflight_manifest(plan: ReactivityReplayRunPlan) -> dict[str, Any]:
             "scenario_set_sha256": plan.scenario_set_sha256,
             "horizon": plan.horizon,
             "rank_stability_analysis": dict(plan.rank_stability_analysis),
+            "out_of_scope": list(plan.out_of_scope),
             "min_planners": plan.min_planners,
             "min_seeds": plan.min_seeds,
         },
@@ -400,6 +433,7 @@ def build_preflight_manifest(plan: ReactivityReplayRunPlan) -> dict[str, Any]:
             "by scripts/tools/seed_sufficiency_gate.py; 'replay' is live force-off, not trajectory "
             "playback."
         ),
+        "out_of_scope": list(plan.out_of_scope),
     }
 
 
@@ -465,6 +499,7 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
     if not isinstance(limitation, str):
         raise ValueError("packet 'replay.limitation' must be a string")
     analysis = _resolve_rank_stability_analysis(packet)
+    out_of_scope = _resolve_out_of_scope(packet)
 
     overrides: dict[str, Any] = {}
     if "min_planners" in packet:
@@ -481,6 +516,7 @@ def run_plan_from_packet(packet: dict[str, Any]) -> ReactivityReplayRunPlan:
         replay_is_trajectory_playback=is_playback,
         replay_limitation=limitation,
         rank_stability_analysis=dict(analysis),
+        out_of_scope=out_of_scope,
         **overrides,
     )
 
@@ -536,6 +572,20 @@ def _resolve_rank_stability_analysis(packet: dict[str, Any]) -> dict[str, Any]:
     return dict(analysis)
 
 
+def _resolve_out_of_scope(packet: dict[str, Any]) -> tuple[str, ...]:
+    """Return packet-level exclusions that keep preflight from implying evidence.
+
+    A missing key resolves to the empty tuple so the ``out_of_scope`` check fails
+    closed with an actionable blocked manifest (mirroring
+    ``_resolve_rank_stability_analysis``), rather than raising before manifest
+    construction. A present-but-malformed value still raises.
+    """
+    raw = packet.get("out_of_scope", [])
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise ValueError("packet 'out_of_scope' must be a list of strings when present")
+    return tuple(raw)
+
+
 __all__ = [
     "DIAGNOSTIC_SEED_COUNT",
     "ISSUE",
@@ -543,6 +593,7 @@ __all__ = [
     "MIN_RANK_STABILITY_SEEDS",
     "PREFLIGHT_SCHEMA",
     "RANK_STABILITY_GATE_COMMAND",
+    "REQUIRED_OUT_OF_SCOPE",
     "REQUIRED_RANK_STABILITY_METRICS",
     "CheckResult",
     "ReactivityReplayRunPlan",

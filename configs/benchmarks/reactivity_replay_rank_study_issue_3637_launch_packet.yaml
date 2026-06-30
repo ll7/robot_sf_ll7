@@ -97,6 +97,11 @@ rank_stability_analysis:
     rank-stability evidence with the replay force-off limitation.
 
 # After preflight passes, the run + post-run analysis (OUT OF SCOPE for #3637 implementation slice):
+out_of_scope:
+- no_full_benchmark_campaign
+- no_slurm_gpu_submission
+- no_paper_dissertation_claim_edits
+
 run_command: |
   # Paired reactive-vs-replay campaign across the declared planners + seeds (real runner).
   uv run python scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py \

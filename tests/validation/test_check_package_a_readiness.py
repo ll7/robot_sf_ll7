@@ -131,6 +131,40 @@ def test_fails_closed_on_missing_heldout_input(tmp_path: Path) -> None:
     assert "configs/sets/eval_set.yaml" in report.missing_paths
 
 
+def test_fails_closed_on_invalid_heldout_partition_contract(tmp_path: Path) -> None:
+    """Package A readiness validates held-out transfer output roles."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    partition_relpath = "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+    tool_relpath = "scripts/tools/validate_heldout_transfer_partitions.py"
+    partition_path = tmp_path / partition_relpath
+    partition_path.parent.mkdir(parents=True, exist_ok=True)
+    partition_data = yaml.safe_load((REPO_ROOT / partition_relpath).read_text(encoding="utf-8"))
+    partition_data["planned_outputs"] = [
+        output
+        for output in partition_data["planned_outputs"]
+        if output.get("evidence_role") != "transfer_delta_figure"
+    ]
+    partition_path.write_text(yaml.safe_dump(partition_data, sort_keys=False), encoding="utf-8")
+    tool_path = tmp_path / tool_relpath
+    tool_path.parent.mkdir(parents=True, exist_ok=True)
+    tool_path.write_text("# fixture\n", encoding="utf-8")
+    data["command_contracts"]["contracts"].append(
+        {
+            "id": "heldout_family_leakage_audit",
+            "stage": "readiness_probe",
+            "command": "uv run python scripts/tools/validate_heldout_transfer_partitions.py x",
+            "allowed_in_readiness_check": True,
+            "executes_benchmark_campaign": False,
+            "required_paths": [tool_relpath, partition_relpath],
+        }
+    )
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any("transfer_delta_figure" in issue for issue in report.issues)
+
+
 def test_fails_closed_on_missing_seed_metadata(tmp_path: Path) -> None:
     """A seed plan missing required metadata is not_ready even if files exist."""
     manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)

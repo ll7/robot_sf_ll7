@@ -402,6 +402,62 @@ def test_ready_when_known_blocker_resolved(tmp_path):
     assert blockers["blockers"][0]["status"] == "resolved"
 
 
+def test_blocked_when_artifact_inventory_has_blocked_state(tmp_path):
+    """Configured blocked artifacts surface separately from known blocker prose."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "degenerate_hardcase_proxy_probe_v1",
+            "artifact_type": "proxy_training_summary",
+            "status": "blocked",
+            "storage_scope": "worktree_local_output",
+            "path_pattern": "output/tmp/**/hardcase_proxy_probe_v1*/**/training_summary.json",
+            "required_metadata": ["proxy.enabled=true", "proxy.history"],
+            "revival_condition": "provide non-degenerate proxy summary",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    summary = _write_summary(tmp_path, enabled=True, pairs=[(1.0, 0.1), (0.8, 0.4)])
+
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=summary,
+    )
+
+    artifacts = report["prerequisites"]["blocked_artifacts"]
+    assert report["status"] == "blocked"
+    assert artifacts["status"] == "blocked"
+    assert artifacts["artifacts"][0]["artifact_type"] == "proxy_training_summary"
+    assert any("blocked artifact" in message for message in artifacts["messages"])
+
+
+def test_failed_when_blocked_artifact_metadata_malformed(tmp_path):
+    """Artifact inventory missing required metadata fails closed before readiness claims."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "missing_status",
+            "artifact_type": "checkpoint_set",
+            "storage_scope": "worktree_local_output",
+            "revival_condition": "hydrate checkpoints",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    config_check = report["prerequisites"]["readiness_config"]
+    assert report["status"] == "blocked"
+    assert config_check["status"] == "failed"
+    assert any("blocked_artifacts[0]" in message for message in config_check["messages"])
+
+
 def test_ready_when_inputs_present_and_summary_has_spread(tmp_path):
     """All inputs resolve and the summary has non-degenerate spread -> ready (exit 0)."""
     config = _write_config(tmp_path, min_resolvable=6, min_epochs=4)

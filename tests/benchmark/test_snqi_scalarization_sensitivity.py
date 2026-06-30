@@ -213,10 +213,7 @@ def test_preflight_malformed_for_out_of_range_bounded_term() -> None:
         baseline=_baseline(),
     )
     assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
-    assert any(
-        issue["code"] == "out_of_range_normalized_term" for issue in report["issues"]
-    )
-
+    assert any(issue["code"] == "out_of_range_normalized_term" for issue in report["issues"])
 
 
 def test_preflight_malformed_for_non_mapping_baseline_value() -> None:

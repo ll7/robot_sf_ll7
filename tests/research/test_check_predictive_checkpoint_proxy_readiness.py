@@ -24,7 +24,7 @@ _spec.loader.exec_module(mod)
 _HARD_SEED_FIXTURE = "configs/benchmarks/predictive_hard_seeds_v1.yaml"
 
 
-def _write_config(root: Path, *, min_resolvable: int = 2, min_epochs: int = 4) -> Path:
+def _write_config(root: Path, *, min_resolvable: int = 2, min_epochs: int = 4, min_success_spread: float = 1.0e-9) -> Path:
     """Write a minimal but valid readiness contract pointing at the real hard-seed fixture."""
     config = {
         "schema_version": "predictive-checkpoint-proxy-readiness.v1",
@@ -36,7 +36,7 @@ def _write_config(root: Path, *, min_resolvable: int = 2, min_epochs: int = 4) -
         "proxy_summary_contract": {
             "require_enabled": True,
             "min_proxy_epochs": min_epochs,
-            "min_success_spread": 1.0e-9,
+            "min_success_spread": min_success_spread,
         },
     }
     path = root / "proxy_config.yaml"
@@ -126,6 +126,34 @@ def test_blocked_when_proxy_summary_degenerate(tmp_path):
     summary_check = report["prerequisites"]["proxy_training_summary"]
     assert summary_check["status"] == "blocked"
     assert summary_check["summary"]["verdict"] == "inconclusive"
+
+
+
+
+def test_blocked_when_proxy_summary_spread_below_contract(tmp_path):
+    """Summary spread below configured minimum fails closed."""
+    config = _write_config(
+        tmp_path,
+        min_resolvable=2,
+        min_epochs=4,
+        min_success_spread=0.05,
+    )
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    summary = _write_summary(
+        tmp_path,
+        enabled=True,
+        pairs=[(1.0, 0.10), (0.9, 0.12), (0.8, 0.11), (0.7, 0.09)],
+    )
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=summary,
+    )
+    assert report["status"] == "blocked"
+    summary_check = report["prerequisites"]["proxy_training_summary"]
+    assert summary_check["status"] == "blocked"
+    assert "below minimum" in " ".join(summary_check["messages"])
 
 
 def test_blocked_when_proxy_disabled(tmp_path):

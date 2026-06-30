@@ -170,16 +170,17 @@ def _check_proxy_summary(
     analyzer: Any,
     require_enabled: bool,
     min_proxy_epochs: int,
+    min_success_spread: float,
 ) -> tuple[str, list[str], dict[str, Any]]:
-    """Judge whether a training summary would yield a conclusive proxy-vs-ADE comparison.
+    """Judge whether training summary would yield conclusive proxy-vs-ADE comparison.
 
-    Reuses the merged analyzer so the blocked/ready boundary stays identical to the tool that
-    consumes the summary. An ``inconclusive`` verdict (e.g. the all-zero probe with no
-    hard-success spread) fails closed.
+    Reuses merged analyzer so blocked/ready boundary stays identical. An
+    ``inconclusive`` verdict (e.g. all-zero probe with no hard-success spread)
+    fails closed.
 
-    Returns:
-        tuple[str, list[str], dict[str, Any]]: status, messages, and a compact summary payload.
+    Returns: ``status``, ``messages``, and compact summary payload.
     """
+
     if not summary_path.exists():
         return STATUS_BLOCKED, [f"training summary not found: {summary_path}"], {}
     try:
@@ -190,20 +191,31 @@ def _check_proxy_summary(
     report = analyzer.analyze_summary(summary)
     verdict = report.get("verdict")
     n_epochs = int(report.get("n_proxy_epochs") or 0)
+    success_spread = report.get("success_spread")
     payload = {
         "verdict": verdict,
         "proxy_enabled": report.get("proxy_enabled"),
         "n_proxy_epochs": n_epochs,
-        "success_spread": report.get("success_spread"),
+        "success_spread": success_spread,
+        "min_success_spread": min_success_spread,
     }
 
     errors: list[str] = []
     if require_enabled and not report.get("proxy_enabled"):
-        errors.append("training summary has proxy.enabled != true")
+        errors.append("training summary proxy.enabled != true")
     if verdict == "inconclusive":
         errors.append(
-            f"analyzer verdict is inconclusive ({report.get('reason')}); "
-            "proxy and ADE selection are indistinguishable"
+            f"analyzer verdict inconclusive ({report.get('reason')}); "
+            "proxy ADE selection indistinguishable"
+        )
+    try:
+        spread = float(success_spread) if success_spread is not None else 0.0
+    except (TypeError, ValueError):
+        errors.append(f"training summary success_spread is invalid: {success_spread!r}")
+        spread = 0.0
+    if spread < min_success_spread:
+        errors.append(
+            f"proxy hard-success spread {spread:.3g} below minimum {min_success_spread:.3g}"
         )
     if n_epochs < min_proxy_epochs:
         errors.append(
@@ -286,7 +298,9 @@ def check_readiness(
             analyzer=analyzer,
             require_enabled=bool(summary_contract.get("require_enabled", True)),
             min_proxy_epochs=int(summary_contract.get("min_proxy_epochs", 6) or 6),
+            min_success_spread=float(summary_contract.get("min_success_spread", 1.0e-9) or 1.0e-9),
         )
+
         prerequisites["proxy_training_summary"] = {
             "status": summary_status,
             "messages": summary_messages,

@@ -100,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "json": str(artifacts.json_path),
                 "csv": str(artifacts.csv_path),
+                "decision_disagreement_csv": str(artifacts.decision_disagreement_csv_path),
                 "markdown": str(artifacts.markdown_path),
                 "svg": str(artifacts.svg_path),
                 "decision_disagreement_rate": report["summary"]["decision_disagreement_rate"],

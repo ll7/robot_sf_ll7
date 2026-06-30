@@ -212,6 +212,13 @@ class WeightSourceComparison:
     source_dominant_term: str | None
     source_scale_class: str | None
     available: bool
+    """Whether the direction comparison itself could be computed.
+
+    This is distinct from source-load state: a source may load successfully yet
+    still be uncomparable (e.g. empty or zero-sum weights with no meaningful
+    direction), in which case ``available`` is False and ``load_error`` carries
+    the reason.
+    """
     load_error: str | None = None
 
 
@@ -467,16 +474,28 @@ def compare_code_default_to_shipped_sources(
     for record in records:
         if record.relpath is None:
             continue
+        relationship = _direction_relationship(code_default, record)
+        comparison_available = relationship != "unavailable"
+        if record.load_error is not None:
+            # The source failed to load; surface the underlying load error.
+            load_error = record.load_error
+        elif not comparison_available:
+            # The source loaded but has no comparable direction (empty or
+            # zero-sum weights); report a comparison-level reason rather than
+            # leaving an unexplained ``unavailable`` relationship.
+            load_error = "no_comparable_direction"
+        else:
+            load_error = None
         comparisons.append(
             WeightSourceComparison(
                 source=record.name,
                 relpath=record.relpath,
-                relationship=_direction_relationship(code_default, record),
+                relationship=relationship,
                 code_default_dominant_term=code_default.dominant_term,
                 source_dominant_term=record.dominant_term,
                 source_scale_class=record.scale_class,
-                available=record.available,
-                load_error=record.load_error,
+                available=comparison_available,
+                load_error=load_error,
             )
         )
     return comparisons

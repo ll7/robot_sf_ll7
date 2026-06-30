@@ -23,6 +23,47 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     assert report["weights"]["has_blocking_conflict"] is True
     assert report["normalization"]["mixed_scale"] is True
     assert set(report["normalization"]["raw_penalty_terms"]) == {"time", "comfort"}
+    blocker_3723 = next(
+        blocker for blocker in report["blockers"] if blocker["kind"] == "weight_provenance_conflict"
+    )
+    assert blocker_3723["registered_sources"] == [
+        "code_default",
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    assert blocker_3723["discovered_shipped_sources"] == [
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    assert blocker_3723["canonical_declaring_sources"] == [
+        "code_default",
+        "model_canonical_v1",
+    ]
+    assert len(blocker_3723["blocking_conflicts"]) == 1
+    conflict = blocker_3723["blocking_conflicts"][0]
+    assert conflict["kind"] == "canonical_direction_conflict"
+    assert conflict["severity"] == "error"
+    assert conflict["sources"] == ["code_default", "model_canonical_v1"]
+    assert "dominant=w_collisions" in conflict["detail"]
+    assert "dominant=w_jerk" in conflict["detail"]
+    comparisons_by_source = {
+        comparison["source"]: comparison
+        for comparison in blocker_3723["code_default_shipped_direction_comparisons"]
+    }
+    assert set(comparisons_by_source) == {
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    }
+    assert comparisons_by_source["model_canonical_v1"]["relationship"] == "different_direction"
+    assert comparisons_by_source["model_canonical_v1"]["source_dominant_term"] == "w_jerk"
+    assert comparisons_by_source["camera_ready_v3"]["relationship"] == "different_direction"
+    assert comparisons_by_source["camera_ready_v3"]["source_dominant_term"] == "w_near"
     blocker_3699 = next(
         blocker for blocker in report["blockers"] if blocker["kind"] == "mixed_normalization_basis"
     )

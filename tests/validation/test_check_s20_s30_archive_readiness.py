@@ -77,7 +77,10 @@ def _write_packet(
                 "tables/manifest.json",
                 "figures/manifest.json",
             ],
-            "bundle": ["bundle/bundle.json", "bundle/BUNDLE.md"],
+        "bundle": [
+            "output/issue_1554_s20_s30/bundle.json",
+            "output/issue_1554_s20_s30/BUNDLE.md",
+        ],
         },
         "execution_boundary": {
             "full_campaign_in_this_issue": full_campaign_in_this_issue,
@@ -129,6 +132,15 @@ def test_complete_archive_metadata_and_store_pass(tmp_path: Path) -> None:
         study_id="issue_1554_test",
         command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
         analysis={"seed_resampling_rank_flip": {"rank_flip_observed": False}},
+    )
+    (repo / "output/issue_1554_s20_s30/bundle.json").parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    (repo / "output/issue_1554_s20_s30/bundle.json").write_text(
+        "{}", encoding="utf-8"
+    )
+    (repo / "output/issue_1554_s20_s30/BUNDLE.md").write_text(
+        "# S20/S30 Bundle", encoding="utf-8"
     )
 
     report = readiness.build_report(packet, repo)
@@ -292,6 +304,15 @@ def test_archive_reader_uses_campaign_result_store_parquet_fallback(
         study_id="issue_1554_test",
         command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
     )
+    (repo / "output/issue_1554_s20_s30/bundle.json").parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    (repo / "output/issue_1554_s20_s30/bundle.json").write_text(
+        "{}", encoding="utf-8"
+    )
+    (repo / "output/issue_1554_s20_s30/BUNDLE.md").write_text(
+        "# S20/S30 Bundle", encoding="utf-8"
+    )
     calls: list[Path] = []
     original = readiness.read_parquet_frame
 
@@ -434,5 +455,44 @@ def test_seed_tiers_must_be_unique_integers(tmp_path: Path) -> None:
     seeds = yaml.safe_load((repo / "seed_sets.yaml").read_text(encoding="utf-8"))
     seeds["paper_eval_s20"][0] = seeds["paper_eval_s20"][1]
     (repo / "seed_sets.yaml").write_text(yaml.safe_dump(seeds, sort_keys=False), encoding="utf-8")
+
+    assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2
+
+
+def test_missing_bundle_outputs_are_reported_as_blockers(tmp_path: Path) -> None:
+    """Missing declared bundle files blocks readiness as missing-artifact diagnostics."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(repo / "packet.yaml", repo)
+    write_result_store(
+        repo / "store",
+        _complete_rows(),
+        study_id="issue_1554_test",
+        command="uv run python scripts/tools/run_camera_ready_benchmark.py ...",
+        analysis={"seed_resampling_rank_flip": {"rank_flip_observed": False}},
+    )
+
+    report = readiness.build_report(packet, repo)
+    assert report["status"] == readiness.BLOCKED
+    assert report["missing_bundle_outputs"] == [
+        str((repo / "output/issue_1554_s20_s30/bundle.json").resolve()),
+        str((repo / "output/issue_1554_s20_s30/BUNDLE.md").resolve()),
+    ]
+    assert any("missing bundle outputs" in item for item in report["missing_artifact_diagnostics"])
+
+
+def test_duplicate_planner_rows_in_contract_is_malformed(tmp_path: Path) -> None:
+    """Duplicate planner rows in claim metadata is malformed and fail-closed."""
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    packet = _write_packet(
+        repo / "packet.yaml",
+        repo,
+        metadata_overrides={
+            "claim_map_gate.planner_rows_to_confirm": ["goal", "goal"],
+        },
+    )
 
     assert readiness.main(["--packet", str(packet), "--repo-root", str(repo)]) == 2

@@ -45,6 +45,7 @@ class DiagnosticArtifacts:
 
     json_path: Path
     csv_path: Path
+    decision_disagreement_csv_path: Path
     markdown_path: Path
     svg_path: Path
 
@@ -495,14 +496,18 @@ def write_diagnostic_artifacts(
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / f"{stem}.json"
     csv_path = output_dir / f"{stem}_planner_rows.csv"
+    decision_disagreement_csv_path = output_dir / f"{stem}_decision_disagreement.csv"
     markdown_path = output_dir / f"{stem}.md"
     svg_path = output_dir / f"{stem}_pareto.svg"
 
     json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     _write_planner_csv(csv_path, report)
+    _write_decision_disagreement_csv(decision_disagreement_csv_path, report)
     markdown_path.write_text(format_markdown(report), encoding="utf-8")
     svg_path.write_text(format_pareto_svg(report), encoding="utf-8")
-    return DiagnosticArtifacts(json_path, csv_path, markdown_path, svg_path)
+    return DiagnosticArtifacts(
+        json_path, csv_path, decision_disagreement_csv_path, markdown_path, svg_path
+    )
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -973,6 +978,41 @@ def _write_planner_csv(path: Path, report: Mapping[str, Any]) -> None:
         writer.writeheader()
         for row in report.get("planner_rows", []):
             writer.writerow({header: row.get(header, "") for header in headers})
+
+
+def _write_decision_disagreement_csv(path: Path, report: Mapping[str, Any]) -> None:
+    """Write the scalar-vs-constraints decision-disagreement table."""
+
+    disagreement = report.get("decision_disagreement", {})
+    rows = []
+    if isinstance(disagreement, Mapping):
+        rows.append(
+            {
+                "comparison": "base_snqi_vs_constraints_first",
+                "left_order": " > ".join(str(item) for item in disagreement.get("snqi_order", [])),
+                "right_order": " > ".join(
+                    str(item) for item in disagreement.get("constraints_first_order", [])
+                ),
+                "pairwise_reversal_count": disagreement.get("pairwise_reversal_count", ""),
+                "pairwise_disagreement_rate": disagreement.get("pairwise_disagreement_rate", ""),
+                "claim_boundary": report.get("claim_boundary", ""),
+            }
+        )
+
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "comparison",
+                "left_order",
+                "right_order",
+                "pairwise_reversal_count",
+                "pairwise_disagreement_rate",
+                "claim_boundary",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def _rank_order(scores: Mapping[str, float], *, higher_is_better: bool) -> list[str]:

@@ -285,6 +285,9 @@ def test_artifact_writer_creates_report_ready_files(tmp_path: Path) -> None:
     assert json.loads(artifacts.json_path.read_text(encoding="utf-8"))["schema_version"]
     csv_text = artifacts.csv_path.read_text(encoding="utf-8")
     assert "planner,snqi_rank,constraints_first_rank" in csv_text
+    disagreement_csv_text = artifacts.decision_disagreement_csv_path.read_text(encoding="utf-8")
+    assert "comparison,left_order,right_order,pairwise_reversal_count" in disagreement_csv_text
+    assert "base_snqi_vs_constraints_first" in disagreement_csv_text
     markdown = artifacts.markdown_path.read_text(encoding="utf-8")
     assert "not benchmark evidence" in markdown
     svg = artifacts.svg_path.read_text(encoding="utf-8")

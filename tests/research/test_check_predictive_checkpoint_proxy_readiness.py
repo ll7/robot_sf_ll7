@@ -526,3 +526,73 @@ def test_real_registry_predictive_checkpoints_blocked():
     # Documented current state: insufficient predictive checkpoints resolve locally.
     assert ckpt["status"] == "blocked"
     assert report["status"] == "blocked"
+
+
+def test_blocked_artifact_path_pattern_required(tmp_path):
+    """Blocked-artifact entry requires a path pattern to stay actionable."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "missing_path_pattern",
+            "artifact_type": "checkpoint_set",
+            "status": "blocked",
+            "storage_scope": "worktree_local_output",
+            "revival_condition": "add path pattern for blocked artifact",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    config_check = report["prerequisites"]["readiness_config"]
+    assert report["status"] == "blocked"
+    assert config_check["status"] == "failed"
+    assert any("missing path_pattern" in message for message in config_check["messages"])
+
+
+def test_checkpoint_mapping_surfaces_incomplete_public_metadata(tmp_path):
+    """Missing public release metadata stays visible in checkpoint mapping output."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["known_blockers"] = [
+        {
+            "id": "degenerate_hardcase_proxy_probe_v1",
+            "status": "resolved",
+            "revival_condition": "non-degenerate proxy summary supplied",
+        }
+    ]
+    data["blocked_artifacts"] = []
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    incomplete = [
+        {
+            "model_id": "predictive_incomplete_release",
+            "local_path": str(tmp_path / "present_incomplete.pt"),
+            "tags": ["predictive"],
+            "proxy_training_run_id": "run_a",
+            "github_release": {
+                "repo": "ll7/robot_sf_ll7",
+                "tag": "artifact/models-2026-05-registry-v1",
+                "asset_name": "predictive_incomplete_release.pt",
+            },
+        }
+    ]
+    registry = tmp_path / "registry.yaml"
+    (tmp_path / "present_incomplete.pt").write_text("x", encoding="utf-8")
+    registry.write_text(yaml.safe_dump({"version": 1, "models": incomplete}), encoding="utf-8")
+
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+    )
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    candidate = ckpt["mapping"]["candidates"][0]
+    public_artifact = candidate["public_artifact"]
+
+    assert ckpt["status"] == "passed"
+    assert public_artifact["status"] == "incomplete"
+    assert "sha256" in public_artifact["missing_fields"]

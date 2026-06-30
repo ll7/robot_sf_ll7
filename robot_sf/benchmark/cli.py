@@ -2655,7 +2655,11 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         sp: argparse._SubParsersAction[argparse.ArgumentParser],
     ) -> None:
         """Register the SNQI recompute subcommand parser."""
-        p = sp.add_parser("recompute", help="Recompute SNQI weights via predefined strategies")
+        p = sp.add_parser(
+            "recompute",
+            help="Recompute SNQI weights via predefined strategies",
+            conflict_handler="resolve",
+        )
         p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
         p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
         p.add_argument(

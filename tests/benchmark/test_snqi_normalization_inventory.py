@@ -17,6 +17,7 @@ from robot_sf.benchmark.snqi.normalization_inventory import (
     SCALING_BASELINE_NORMALIZED,
     SCALING_RAW,
     SNQI_TERM_SCALING,
+    build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
     format_normalization_report,
     scaled_term_value,
@@ -176,3 +177,40 @@ def test_format_report_is_human_readable():
     assert "baseline-relative median/p95 clamped value" in text
     for term in SNQI_TERM_SCALING:
         assert term.term in text
+
+
+def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():
+    """Contribution checker exposes mixed-basis dominance without changing score."""
+    metrics = {
+        "success": 1.0,
+        "time_to_goal_norm": 3.0,
+        "collisions": 9.0,
+        "near_misses": 9.0,
+        "comfort_exposure": 2.0,
+        "force_exceed_events": 9.0,
+        "jerk_mean": 9.0,
+    }
+    weights = {term.weight_name: 1.0 for term in SNQI_TERM_SCALING}
+    baseline_stats = {
+        "collisions": {"med": 0.0, "p95": 1.0},
+        "near_misses": {"med": 0.0, "p95": 1.0},
+        "force_exceed_events": {"med": 0.0, "p95": 1.0},
+        "jerk_mean": {"med": 0.0, "p95": 1.0},
+    }
+
+    diagnostics = build_snqi_contribution_diagnostics(metrics, weights, baseline_stats)
+    signed_total = sum(term["signed_contribution"] for term in diagnostics["terms"])
+
+    assert diagnostics["diagnostic_only"] is True
+    assert diagnostics["mixed_basis"] is True
+    assert diagnostics["raw_penalty_terms_dominate"] is True
+    assert diagnostics["raw_penalty_absolute_share"] == pytest.approx(0.5)
+    assert diagnostics["baseline_normalized_penalty_absolute_share"] == pytest.approx(0.4)
+    assert signed_total == pytest.approx(compute_snqi(metrics, weights, baseline_stats))
+
+    by_term = {term["term"]: term for term in diagnostics["terms"]}
+    assert by_term["time"]["scaled_value"] == pytest.approx(3.0)
+    assert by_term["comfort"]["scaled_value"] == pytest.approx(2.0)
+    assert by_term["collisions"]["scaled_value"] == pytest.approx(1.0)
+    assert by_term["time"]["normalization_status"] == "raw_unbounded"
+    assert by_term["collisions"]["normalization_status"] == "baseline_normalized_bounded"

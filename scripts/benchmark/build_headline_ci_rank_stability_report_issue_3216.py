@@ -116,6 +116,7 @@ class ReportConfig:
     bootstrap_seed: int = DEFAULT_BOOTSTRAP_SEED
     resamples: int = DEFAULT_RANK_RESAMPLES
     rank_seed: int = DEFAULT_BOOTSTRAP_SEED
+    invalid_rank_metric_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -545,6 +546,7 @@ def build_adjacent_rank_claims(
     *,
     rank_metric: str,
     higher_is_better: bool,
+    invalid_rank_metric_reason: str | None = None,
 ) -> list[AdjacentRankClaim]:
     """Build adjacent-rank downgrade decisions from per-cell CIs.
 
@@ -572,7 +574,12 @@ def build_adjacent_rank_claims(
             lower_stats = _metric_stats(lower_cell, rank_metric)
             if higher_stats is None or lower_stats is None:
                 continue
-            if _ci_overlap(higher_stats, lower_stats):
+            if invalid_rank_metric_reason:
+                decision = "blocked_invalid_metric"
+                rationale = (
+                    f"rank metric {rank_metric!r} is contract-invalid: {invalid_rank_metric_reason}"
+                )
+            elif _ci_overlap(higher_stats, lower_stats):
                 decision = "not_statistically_distinguishable_budget"
                 rationale = (
                     "Adjacent-rank confidence intervals overlap; downgrade any strict "
@@ -653,6 +660,8 @@ def build_decision_packet(
     cells: Sequence[CellResult],
     rank_stability: Sequence[ScenarioRankStability],
     adjacent_rank_claims: Sequence[AdjacentRankClaim],
+    *,
+    invalid_rank_metric_reason: str | None = None,
 ) -> dict[str, Any]:
     """Build a conservative manuscript/S30 decision packet."""
     counted = [cell for cell in cells if cell.counted]
@@ -669,6 +678,10 @@ def build_decision_packet(
         for claim in adjacent_rank_claims
         if claim.decision == "not_statistically_distinguishable_budget"
     ]
+    invalid_metric_claims = [
+        claim for claim in adjacent_rank_claims if claim.decision == "blocked_invalid_metric"
+    ]
+    invalid_rank_metric = bool(invalid_rank_metric_reason or invalid_metric_claims)
 
     min_seed_count = min((cell.seed_count for cell in counted), default=0)
     manuscript_blockers: list[str] = []
@@ -688,6 +701,8 @@ def build_decision_packet(
         s30_reasons.append("rank_stability_not_identifiable")
     if overlap_claims:
         s30_reasons.append("adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data")
+    manuscript_blockers.extend(["invalid_rank_metric_contract"] if invalid_rank_metric else [])
+    s30_reasons.extend(["rank_metric_contract_invalid"] if invalid_rank_metric else [])
     if unstable_rank_scenarios:
         s30_reasons.append("rank_resampling_instability_present")
 
@@ -696,7 +711,12 @@ def build_decision_packet(
     else:
         manuscript_table_status = "ready_for_table_review_no_claim_promotion"
 
-    if min_seed_count < PAPER_GRADE_MIN_SEEDS or unstable_rank_scenarios or overlap_claims:
+    if (
+        min_seed_count < PAPER_GRADE_MIN_SEEDS
+        or unstable_rank_scenarios
+        or overlap_claims
+        or invalid_rank_metric
+    ):
         s30_decision_status = "needs_review"
     elif not counted or excluded or not identifiable:
         s30_decision_status = "blocked"
@@ -714,6 +734,8 @@ def build_decision_packet(
         "identifiable_scenario_count": len(identifiable),
         "unstable_rank_scenarios": unstable_rank_scenarios,
         "adjacent_overlap_count": len(overlap_claims),
+        "invalid_metric_claim_count": len(invalid_metric_claims),
+        "invalid_rank_metric_reason": invalid_rank_metric_reason,
         "claim_boundary": (
             "Decision packet is local preflight only; no manuscript or paper claim is promoted."
         ),
@@ -757,8 +779,14 @@ def build_report(
         rank_stability,
         rank_metric=rank_metric,
         higher_is_better=higher_is_better,
+        invalid_rank_metric_reason=config.invalid_rank_metric_reason,
     )
-    decision_packet = build_decision_packet(cells, rank_stability, adjacent_rank_claims)
+    decision_packet = build_decision_packet(
+        cells,
+        rank_stability,
+        adjacent_rank_claims,
+        invalid_rank_metric_reason=config.invalid_rank_metric_reason,
+    )
     classification, rationale = classify(cells, rank_stability)
     counted = [cell for cell in cells if cell.counted]
     excluded = [cell for cell in cells if not cell.counted]
@@ -779,6 +807,7 @@ def build_report(
             "metrics": list(metrics),
             "rank_metric": rank_metric,
             "higher_is_better": higher_is_better,
+            "invalid_rank_metric_reason": config.invalid_rank_metric_reason,
         },
         "config": {
             "bootstrap_samples": config.bootstrap_samples,
@@ -786,6 +815,7 @@ def build_report(
             "bootstrap_seed": config.bootstrap_seed,
             "rank_resamples": config.resamples,
             "rank_seed": config.rank_seed,
+            "invalid_rank_metric_reason": config.invalid_rank_metric_reason,
             "paper_grade_min_seeds": PAPER_GRADE_MIN_SEEDS,
             "nominal_min_seeds": NOMINAL_MIN_SEEDS,
         },
@@ -832,6 +862,10 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"{inputs['excluded_cells']} excluded (of {inputs['row_count']} rows)"
     )
     lines.append(f"- **Rank metric**: `{inputs['rank_metric']}`")
+    if inputs.get("invalid_rank_metric_reason"):
+        lines.append(
+            f"- **Rank metric contract**: `invalid` - {inputs['invalid_rank_metric_reason']}"
+        )
     lines.append("")
     lines.append("## Canonical owners reused (not reinvented)")
     lines.append("")
@@ -1031,6 +1065,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rank-resamples", type=int, default=DEFAULT_RANK_RESAMPLES)
     parser.add_argument("--rank-seed", type=int, default=DEFAULT_BOOTSTRAP_SEED)
     parser.add_argument(
+        "--invalid-rank-metric-reason",
+        type=str,
+        default=None,
+        help=(
+            "Fail closed adjacent rank statements when the rank metric contract is invalid "
+            "(for example an SNQI contract warning/failure)."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default="output/issue_3216_headline_ci/report",
@@ -1070,6 +1113,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         bootstrap_seed=args.bootstrap_seed,
         resamples=args.rank_resamples,
         rank_seed=args.rank_seed,
+        invalid_rank_metric_reason=args.invalid_rank_metric_reason,
     )
     campaign = "dry-run" if args.dry_run else args.campaign
     report = build_report(rows, config, campaign=campaign, rows_path=rows_path)

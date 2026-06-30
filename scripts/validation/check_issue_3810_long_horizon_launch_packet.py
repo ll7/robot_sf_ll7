@@ -118,7 +118,10 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
     _require(seed_policy.get("seed_set") == "paper_eval_s30", "seed_set must be paper_eval_s30")
     seeds = seed_policy.get("seeds")
-    _require(isinstance(seeds, list) and len(seeds) >= 30, "packet must include all S30 seeds")
+    _require(
+        isinstance(seeds, list) and len(seeds) == 30, "packet must include exactly 30 S30 seeds"
+    )
+    _require(len(set(seeds)) == 30, "seed list must not contain duplicates")
 
     planner_rows = planners.get("rows")
     _require(isinstance(planner_rows, list) and len(planner_rows) >= 10, "planner roster too small")
@@ -399,10 +402,11 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(sys.argv[1:] if argv is None else argv)
     try:
         summary = validate_packet(_load_packet(args.packet))
-    except (OSError, PacketError, yaml.YAMLError, KeyError, TypeError, AttributeError) as exc:
-        # KeyError/TypeError/AttributeError backstop: a malformed packet must
-        # always fail closed with a clear error, never an unhandled traceback.
-        print(f"error: {exc}", file=sys.stderr)
+    except (OSError, PacketError, yaml.YAMLError) as exc:
+        if args.json:
+            print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))
+        else:
+            print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(summary, indent=2, sort_keys=True))

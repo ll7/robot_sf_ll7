@@ -900,7 +900,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
     try:
         episodes, skipped_lines = load_episodes_data(args.episodes)
         baseline = load_baseline_stats(args.baseline)
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.exception("Failed loading inputs: %s", e)
         return EXIT_INPUT_ERROR
     phase_timings["load_inputs"] = perf_counter() - start_perf
@@ -1013,7 +1013,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                 if s > 0:
                     external_weights = {k: (v / s) * 10.0 for k, v in external_weights.items()}
             logger.info("Loaded external weights %s", args.external_weights_file)
-        except Exception as e:
+        except (OSError, json.JSONDecodeError, ValueError) as e:
             logger.exception("Failed loading external weights: %s", e)
             return EXIT_INPUT_ERROR
 

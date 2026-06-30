@@ -197,6 +197,13 @@ durable_evidence:
     kind: tracked_context_evidence_plus_external_pointer
     path: docs/context/evidence/issue_3810_long_horizon_snqi/
     required_before_claim: true
+  machine_local_paths:
+    status: non_portable_private_ops_route_hints
+    reason: >
+      Absolute $HOME/git/robot_sf_ll7-private-ops paths below are machine-local
+      submit-routing references only. They are not canonical benchmark inputs
+      and must be refreshed on the Slurm-capable submit host before any submit
+      wrapper is invoked.
   retention_paths:
     compact_review_bundle: docs/context/evidence/issue_3810_long_horizon_snqi/
     external_artifact_pointer: wandb-or-release-artifact-required-before-claim
@@ -306,6 +313,13 @@ launch_packet:
       evidence is absent. Passing this public packet validator is not permission
       to interpret, publish, or promote benchmark claims.
   route:
+    machine_local_paths:
+      status: non_portable_private_ops_route_hints
+      resolution_policy: >
+        Treat these absolute private-ops paths as local submit-host hints.
+        Prefer ROBOT_SF_PRIVATE_OPS or $HOME/git/robot_sf_ll7-private-ops
+        during dry-run resolution and fail closed if the submit host layout or
+        route wrapper support differs.
     private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops  # allow-abs-path: private-ops routing (machine-local, non-portable)
     queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh  # allow-abs-path: private-ops routing (machine-local, non-portable)
     route_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh  # allow-abs-path: private-ops routing (machine-local, non-portable)

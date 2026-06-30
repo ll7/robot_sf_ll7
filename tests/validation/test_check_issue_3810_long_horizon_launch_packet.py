@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -286,6 +287,32 @@ def test_issue_3810_packet_rejects_blank_matrix_path() -> None:
         raise AssertionError("packet should reject a blank scenario matrix path")
 
 
+def test_issue_3810_packet_rejects_extra_seed() -> None:
+    """The fixed S30 denominator must not silently expand."""
+    packet = _load_packet()
+    packet["seed_policy"]["seeds"].append(141)
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "exactly 30 S30 seeds" in str(exc)
+    else:
+        raise AssertionError("packet should reject extra S30 seed")
+
+
+def test_issue_3810_packet_rejects_duplicate_seed() -> None:
+    """The fixed S30 denominator must not contain duplicate seeds."""
+    packet = _load_packet()
+    packet["seed_policy"]["seeds"][-1] = packet["seed_policy"]["seeds"][0]
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "seed list must not contain duplicates" in str(exc)
+    else:
+        raise AssertionError("packet should reject duplicate S30 seed")
+
+
 def test_issue_3810_packet_rejects_missing_retention_paths() -> None:
     """The packet must keep durable evidence retention paths reviewable."""
     packet = _load_packet()
@@ -341,8 +368,12 @@ def test_issue_3810_packet_cli_returns_2_on_malformed_packet(tmp_path) -> None:
     )
 
     assert completed.returncode == 2, completed.stderr
-    assert "error:" in completed.stderr
+    assert completed.stderr == ""
+    payload = json.loads(completed.stdout)
+    assert payload["ok"] is False
+    assert "campaign must be a mapping" in payload["error"]
     assert "Traceback" not in completed.stderr
+    assert "Traceback" not in completed.stdout
 
 
 def test_issue_3810_packet_cli_json() -> None:

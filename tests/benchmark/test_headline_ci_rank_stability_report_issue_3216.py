@@ -346,6 +346,35 @@ def test_decision_packet_can_clear_s30_by_local_preflight_only() -> None:
     assert "no manuscript or paper claim is promoted" in packet["claim_boundary"]
 
 
+def test_invalid_rank_metric_blocks_adjacent_claims_and_table_review() -> None:
+    """Known SNQI contract invalidity blocks planner-order statements fail-closed."""
+
+    rows = [
+        _cell_row(
+            "merging",
+            "best",
+            {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4},
+        ),
+        _cell_row(
+            "merging",
+            "worst",
+            {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4},
+        ),
+    ]
+
+    report = _report(rows, invalid_rank_metric_reason="SNQI contract status fail")
+
+    claim = report["adjacent_rank_claims"][0]
+    assert claim["decision"] == "blocked_invalid_metric"
+    assert "SNQI contract status fail" in claim["rationale"]
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "blocked"
+    assert packet["s30_decision_status"] == "needs_review"
+    assert packet["invalid_metric_claim_count"] == 1
+    assert "invalid_rank_metric_contract" in packet["manuscript_blockers"]
+    assert "rank_metric_contract_invalid" in packet["s30_reasons"]
+
+
 def test_dry_run_fixture_stays_diagnostic_and_fail_closed() -> None:
     """Built-in dry-run rows exercise CI/rank paths without paper-claim promotion."""
 
@@ -389,3 +418,31 @@ def test_dry_run_cli_writes_report_without_rows_file(tmp_path) -> None:
     assert markdown.is_file()
     assert "builtin://issue3216-dry-run" in result.read_text(encoding="utf-8")
     assert "**Classification**: `diagnostic`" in markdown.read_text(encoding="utf-8")
+
+
+def test_dry_run_cli_can_fail_closed_invalid_rank_metric(tmp_path) -> None:
+    """CLI records invalid-rank-metric decision state in deterministic dry-run."""
+
+    out_dir = tmp_path / "invalid_metric_report"
+
+    exit_code = mod.main(
+        [
+            "--dry-run",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--invalid-rank-metric-reason",
+            "SNQI normalization contract warning",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    result_text = (out_dir / "result.json").read_text(encoding="utf-8")
+    markdown_text = (out_dir / "report.md").read_text(encoding="utf-8")
+    assert '"decision": "blocked_invalid_metric"' in result_text
+    assert '"invalid_metric_claim_count": 3' in result_text
+    assert "SNQI normalization contract warning" in result_text
+    assert "**Rank metric contract**: `invalid`" in markdown_text

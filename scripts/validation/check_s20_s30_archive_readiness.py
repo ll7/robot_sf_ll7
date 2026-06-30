@@ -102,6 +102,10 @@ def parse_contract(
 
     required_metrics = _required_str_list(claim_gate, "required_metric_surface")
     planner_rows = _required_str_list(claim_gate, "planner_rows_to_confirm")
+    if len(set(required_metrics)) != len(required_metrics):
+        raise ValueError("required_metric_surface must not contain duplicates")
+    if len(set(planner_rows)) != len(planner_rows):
+        raise ValueError("planner_rows_to_confirm must not contain duplicate planner names")
     if not _required_str(claim_gate, "target_claim").strip():
         raise ValueError("claim_map_gate.target_claim must be non-empty")
     if not _required_str(claim_gate, "why_s10_insufficient").strip():
@@ -150,9 +154,13 @@ def build_report(
     diagnostics.extend(_contract_metadata_diagnostics(contract))
     diagnostics.extend(_execution_boundary_diagnostics(contract))
     result_store_files = _result_store_file_status(contract)
+    bundle_outputs = _bundle_output_file_status(contract)
     missing_files = [path for path, present in result_store_files.items() if not present]
+    missing_bundle_outputs = [path for path, present in bundle_outputs.items() if not present]
     if missing_files:
         diagnostics.append(f"missing result-store files: {missing_files}")
+    if missing_bundle_outputs:
+        diagnostics.append(f"missing bundle outputs: {missing_bundle_outputs}")
 
     store_validation = validate_result_store(contract.result_store)
     if not store_validation.ok:
@@ -214,6 +222,8 @@ def build_report(
             "bundle_outputs": [str(path) for path in contract.bundle_outputs],
         },
         "expected_result_store_files": result_store_files,
+        "expected_bundle_outputs": {str(path): present for path, present in bundle_outputs.items()},
+        "missing_bundle_outputs": missing_bundle_outputs,
         "missing_artifact_diagnostics": diagnostics,
         "execution_boundary": {
             "full_campaign_in_this_issue": contract.full_campaign_in_this_issue,
@@ -283,6 +293,10 @@ def _result_store_file_status(contract: PacketContract) -> dict[str, bool]:
         rel_path: (contract.result_store / _validate_relative_path(rel_path)).is_file()
         for rel_path in contract.required_result_store_files
     }
+
+
+def _bundle_output_file_status(contract: PacketContract) -> dict[str, bool]:
+    return {str(path): path.is_file() for path in contract.bundle_outputs}
 
 
 def _planner_seed_coverage(

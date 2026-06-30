@@ -28,6 +28,11 @@ checkpoint_selector:
   # Minimum distinct, locally-resolvable checkpoints required by the issue's
   # claim contract (">= 6 checkpoints from >= 1 real training run").
   min_resolvable_checkpoints: 6
+  # The six checkpoints must map to one real training run lineage. This field is
+  # manifest metadata only: the preflight reports missing values as blocked and
+  # does not infer lineage from model_id, path names, or release assets.
+  training_run_group_field: proxy_training_run_id
+  min_resolvable_training_run_checkpoints: 6
 
 # Candidate rollout-derived proxy signals under evaluation (documentation of
 # intent only; the analyzer consumes whatever the training summary recorded).

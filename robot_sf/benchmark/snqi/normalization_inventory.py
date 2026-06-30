@@ -217,6 +217,101 @@ def scaled_term_value(
 
 
 @dataclass(frozen=True)
+class TermContribution:
+    """Weighted SNQI component contribution for one metric row.
+
+    The signed value mirrors ``compute_snqi`` exactly: reward terms are positive
+    and penalty terms are negative. ``absolute_share`` is diagnostic only and is
+    normalized by the sum of absolute weighted contributions for the row.
+    """
+
+    term: TermScaling
+    raw_value: float | int | bool
+    scaled_value: float
+    weight: float
+    signed_contribution: float
+    absolute_share: float
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-serializable contribution diagnostics."""
+        return {
+            "term": self.term.term,
+            "weight_name": self.term.weight_name,
+            "metric_key": self.term.metric_key,
+            "scaling": self.term.scaling,
+            "normalization_status": self.term.normalization_status,
+            "raw_value": self.raw_value,
+            "scaled_value": self.scaled_value,
+            "weight": self.weight,
+            "signed_contribution": self.signed_contribution,
+            "absolute_share": self.absolute_share,
+            "bounded": self.term.bounded,
+            "measurement_basis": self.term.measurement_basis,
+        }
+
+
+def build_snqi_contribution_diagnostics(
+    metrics: dict[str, float | int | bool],
+    weights: dict[str, float],
+    baseline_stats: dict[str, dict[str, float]],
+) -> dict[str, object]:
+    """Build read-only weighted contribution diagnostics for one SNQI row.
+
+    This checker intentionally does not normalize the raw terms or alter any
+    score. It exposes how much each mixed-basis term contributes under the
+    current formula so issue #3699 can be reviewed without silently promoting a
+    normalization redesign.
+
+    Returns:
+        JSON-serializable diagnostic payload with per-term contributions and
+        aggregate raw-vs-baseline-normalized penalty shares.
+    """
+    preliminary: list[tuple[TermScaling, float | int | bool, float, float, float]] = []
+    absolute_total = 0.0
+    for term in SNQI_TERM_SCALING:
+        raw_value = metrics.get(term.metric_key, term.default)
+        scaled_value = scaled_term_value(term, metrics, baseline_stats)
+        weight = float(weights.get(term.weight_name, 1.0))
+        signed_contribution = term.sign * weight * scaled_value
+        absolute_total += abs(signed_contribution)
+        preliminary.append((term, raw_value, scaled_value, weight, signed_contribution))
+
+    contributions = [
+        TermContribution(
+            term=term,
+            raw_value=raw_value,
+            scaled_value=scaled_value,
+            weight=weight,
+            signed_contribution=signed_contribution,
+            absolute_share=(
+                abs(signed_contribution) / absolute_total if absolute_total > 0.0 else 0.0
+            ),
+        )
+        for term, raw_value, scaled_value, weight, signed_contribution in preliminary
+    ]
+    raw_penalty_share = sum(
+        c.absolute_share
+        for c in contributions
+        if c.term.is_penalty and c.term.scaling == SCALING_RAW
+    )
+    normalized_penalty_share = sum(
+        c.absolute_share
+        for c in contributions
+        if c.term.is_penalty and c.term.scaling == SCALING_BASELINE_NORMALIZED
+    )
+    return {
+        "schema_version": "snqi_normalization_contributions.v1",
+        "diagnostic_only": True,
+        "mixed_basis": bool(raw_penalty_share and normalized_penalty_share),
+        "absolute_contribution_total": absolute_total,
+        "raw_penalty_absolute_share": raw_penalty_share,
+        "baseline_normalized_penalty_absolute_share": normalized_penalty_share,
+        "raw_penalty_terms_dominate": raw_penalty_share > normalized_penalty_share,
+        "terms": [contribution.to_dict() for contribution in contributions],
+    }
+
+
+@dataclass(frozen=True)
 class NormalizationInventory:
     """Structured inventory of SNQI per-term normalization status.
 
@@ -353,7 +448,9 @@ __all__ = [
     "SCALING_RAW",
     "SNQI_TERM_SCALING",
     "NormalizationInventory",
+    "TermContribution",
     "TermScaling",
+    "build_snqi_contribution_diagnostics",
     "build_snqi_normalization_inventory",
     "format_normalization_report",
     "scaled_term_value",

@@ -9,12 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from robot_sf.benchmark.snqi.compute import (
     WEIGHT_NAMES,
@@ -39,6 +36,8 @@ _CODE_DEFAULT = {
     "w_force_exceed": 1.5,
     "w_jerk": 0.3,
 }
+
+REPO_ROOT = Path(__file__).parents[1]
 
 
 def _write_weights(path: Path, weights: dict[str, float], *, nested: bool = False) -> None:
@@ -125,6 +124,32 @@ def test_code_default_matches_recompute_canonical(tmp_path):
     code = next(r for r in inventory_weight_sets(repo) if r.name == "code_default")
     canonical = dict(recompute_snqi_weights({}, method="canonical").weights)
     assert code.weights == {k: float(canonical[k]) for k in WEIGHT_NAMES}
+
+
+def test_repo_code_default_is_reported_distinct_from_shipped_canonical_model():
+    """Guard the issue #3723 decision state without choosing canonical weights."""
+    report = build_inventory_report(REPO_ROOT)
+    records = {record.name: record for record in report.records}
+    code_default = records["code_default"]
+    model_canonical = records["model_canonical_v1"]
+
+    assert code_default.available
+    assert model_canonical.available
+    assert code_default.declares_canonical
+    assert model_canonical.declares_canonical
+    assert code_default.weights == _CODE_DEFAULT
+    assert code_default.dominant_term == "w_collisions"
+    assert model_canonical.dominant_term == "w_jerk"
+    assert code_default.normalized_direction() != model_canonical.normalized_direction()
+
+    canonical_conflicts = [
+        conflict for conflict in report.conflicts if conflict.kind == "canonical_direction_conflict"
+    ]
+    assert any(
+        conflict.severity == "error" and conflict.sources == ["code_default", "model_canonical_v1"]
+        for conflict in canonical_conflicts
+    )
+    assert report.has_blocking_conflict
 
 
 def test_conflicting_canonical_sources_detected_fail_closed(tmp_path):

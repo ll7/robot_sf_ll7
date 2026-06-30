@@ -775,8 +775,8 @@ def test_constraints_first_profile_flags_partial_metric_coverage(tmp_path) -> No
     assert "constraints_first_metric_gap" in packet["s30_reasons"]
 
 
-def test_decision_packet_marks_seed_budget_reason_even_with_high_deterministic_overlap() -> None:
-    """Deterministic high-overlap fixture marks S30 local-preflight as ready and review-only."""
+def test_decision_packet_s20_high_overlap_clears_s30_local_preflight() -> None:
+    """S20-budget high-overlap rows clear the S30 local preflight gate (no S30 reasons, no blocker)."""
     rows = [
         _cell_row(
             "squeeze",

@@ -317,6 +317,7 @@ class SNQIWeightRecomputer:
         }
         if strategy == "pareto":
             result["pareto_frontier_size"] = len(pareto_samples)
+            result["pareto_alternatives"] = pareto_samples[:5]
             if getattr(self, "export_pareto_front", False):
                 max_frontier = max(1, int(getattr(self, "pareto_frontier_max", 0)))
                 result["pareto_frontier"] = pareto_samples[:max_frontier]

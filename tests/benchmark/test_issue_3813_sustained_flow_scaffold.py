@@ -147,6 +147,9 @@ def test_launch_packet_keeps_no_submit_and_fail_closed_boundaries() -> None:
     assert campaign["scenario_suite"]["contract_path"] == (
         "configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml"
     )
+    assert campaign["scenario_suite"]["preflight_command"] == (
+        "uv run python scripts/validation/preflight_sustained_flow_scenarios_issue_3813.py --json"
+    )
     assert campaign["metrics"]["success_boundary"].startswith("Sustained progress")
     assert (
         "missing continuous-spawn runtime support"

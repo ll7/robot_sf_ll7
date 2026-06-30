@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -99,7 +100,7 @@ def test_issue_3810_packet_rejects_nonblocking_live_issue_state() -> None:
 def test_issue_3810_packet_rejects_stale_target_host() -> None:
     """The launch-packet target host must match the requested Slurm decision host."""
     packet = _load_packet()
-    packet["launch_packet"]["target_host"] = "imech039"
+    packet["launch_packet"]["target_host"] = "imech036"
 
     try:
         _MODULE.validate_packet(packet)
@@ -112,7 +113,7 @@ def test_issue_3810_packet_rejects_stale_target_host() -> None:
 def test_issue_3810_packet_rejects_stale_dry_run_target_host() -> None:
     """The private-ops dry-run target host is guarded independently of the packet host."""
     packet = _load_packet()
-    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech039"
+    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech036"
 
     try:
         _MODULE.validate_packet(packet)
@@ -286,6 +287,32 @@ def test_issue_3810_packet_rejects_blank_matrix_path() -> None:
         raise AssertionError("packet should reject a blank scenario matrix path")
 
 
+def test_issue_3810_packet_rejects_extra_seed() -> None:
+    """The fixed S30 denominator must not silently expand."""
+    packet = _load_packet()
+    packet["seed_policy"]["seeds"].append(141)
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "exactly 30 S30 seeds" in str(exc)
+    else:
+        raise AssertionError("packet should reject extra S30 seed")
+
+
+def test_issue_3810_packet_rejects_duplicate_seed() -> None:
+    """The fixed S30 denominator must not contain duplicate seeds."""
+    packet = _load_packet()
+    packet["seed_policy"]["seeds"][-1] = packet["seed_policy"]["seeds"][0]
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "seed list must not contain duplicates" in str(exc)
+    else:
+        raise AssertionError("packet should reject duplicate S30 seed")
+
+
 def test_issue_3810_packet_rejects_missing_retention_paths() -> None:
     """The packet must keep durable evidence retention paths reviewable."""
     packet = _load_packet()
@@ -341,8 +368,12 @@ def test_issue_3810_packet_cli_returns_2_on_malformed_packet(tmp_path) -> None:
     )
 
     assert completed.returncode == 2, completed.stderr
-    assert "error:" in completed.stderr
+    assert completed.stderr == ""
+    payload = json.loads(completed.stdout)
+    assert payload["ok"] is False
+    assert "campaign must be a mapping" in payload["error"]
     assert "Traceback" not in completed.stderr
+    assert "Traceback" not in completed.stdout
 
 
 def test_issue_3810_packet_cli_json() -> None:
@@ -358,3 +389,62 @@ def test_issue_3810_packet_cli_json() -> None:
     assert completed.returncode == 0, completed.stderr
     assert '"compute_submit_authorized": false' in completed.stdout
     assert '"max_episode_steps": 600' in completed.stdout
+
+
+def test_issue_3810_packet_rejects_missing_validation_commands() -> None:
+    """Packet validation must include all required command markers."""
+    packet = _load_packet()
+    packet["validation"]["commands"] = [
+        "echo noop",
+    ]
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "validation.commands missing required marker" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing validation command markers")
+
+
+def test_issue_3810_packet_rejects_route_path_regression() -> None:
+    """Route commands must remain private-ops-backed until submit-host refresh."""
+    packet = _load_packet()
+    packet["launch_packet"]["route"]["queue_summary_command"] = (
+        "python scripts/dev/queue_summary.py"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "route.queue_summary_command must be absolute" in str(exc)
+    else:
+        raise AssertionError("packet should reject non-private-ops queue summary command")
+
+
+def test_issue_3810_packet_rejects_missing_snqi_inputs() -> None:
+    """SNQI recalibration inputs and scripts must be explicit and locked."""
+    packet = _load_packet()
+    packet["launch_packet"]["snqi_recalibration"].pop("inputs")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "inputs must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing SNQI inputs")
+
+
+def test_issue_3810_packet_rejects_weak_horizon_report_command() -> None:
+    """Horizon sensitivity report command must include the long/short campaign refs."""
+    packet = _load_packet()
+    packet["launch_packet"]["horizon_sensitivity_report"]["command"] = (
+        "uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py "
+        "--long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi/reports"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "horizon report command missing --short-campaign-reference" in str(exc)
+    else:
+        raise AssertionError("packet should reject incomplete horizon command")

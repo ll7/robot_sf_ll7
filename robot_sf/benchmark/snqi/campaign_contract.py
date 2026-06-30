@@ -24,6 +24,58 @@ _STARTUP_METRIC_NAMES = (
     "jerk_mean",
 )
 
+SNQI_NORMALIZED_METRIC_NAMES = (
+    "collisions",
+    "near_misses",
+    "force_exceed_events",
+    "jerk_mean",
+)
+
+
+_VALIDATE_SNQI_MAX_ISSUES = 50
+
+
+def validate_snqi_normalized_inputs(
+    episodes: Sequence[Mapping[str, Any]],
+    baseline: Mapping[str, Mapping[str, float]],
+    *,
+    normalized_metrics: Sequence[str] = SNQI_NORMALIZED_METRIC_NAMES,
+    max_issues: int = _VALIDATE_SNQI_MAX_ISSUES,
+) -> list[str]:
+    """Validate normalized inputs required by SNQI sensitivity diagnostics.
+
+    Returns:
+        List of issue strings (capped at max_issues); empty when all required normalized inputs
+        are present and finite.
+    """
+    issues: list[str] = []
+    baseline_map = baseline if isinstance(baseline, Mapping) else {}
+
+    for metric in normalized_metrics:
+        entry = baseline_map.get(metric)
+        if not isinstance(entry, Mapping):
+            issues.append(f"baseline[{metric}] missing")
+            continue
+        if not _is_finite(entry.get("med")):
+            issues.append(f"baseline[{metric}].med non-finite")
+        if not _is_finite(entry.get("p95")):
+            issues.append(f"baseline[{metric}].p95 non-finite")
+
+    for index, episode in enumerate(episodes):
+        if len(issues) >= max_issues:
+            issues.append(f"... and more (truncated at {max_issues})")
+            break
+        metrics = episode.get("metrics") if isinstance(episode, Mapping) else None
+        if not isinstance(metrics, Mapping):
+            issues.append(f"episode[{index}] metrics payload missing")
+            continue
+        for metric in normalized_metrics:
+            if not _is_finite(metrics.get(metric)):
+                issues.append(f"episode[{index}] metrics[{metric}] non-finite")
+
+    return issues
+
+
 _WEIGHT_COMPONENT_SPECS: tuple[dict[str, str], ...] = (
     {
         "weight_name": "w_success",

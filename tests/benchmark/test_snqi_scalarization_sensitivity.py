@@ -203,6 +203,19 @@ def test_preflight_malformed_for_non_finite_term() -> None:
     assert any(issue["code"] == "non_finite_required_term" for issue in report["issues"])
 
 
+def test_preflight_malformed_for_out_of_range_bounded_term() -> None:
+    """Out-of-range bounded SNQI terms are malformed, not merely blocked."""
+    records = _preflight_episodes()
+    records[0]["metrics"]["time_to_goal_norm"] = 1.6
+    report = classify_scalarization_sensitivity_inputs(
+        records,
+        weights=_weights(),
+        baseline=_baseline(),
+    )
+    assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "out_of_range_normalized_term" for issue in report["issues"])
+
+
 def test_preflight_malformed_for_non_mapping_baseline_value() -> None:
     """A baseline metric value that is not a mapping is classified malformed, not crashed."""
     baseline = _baseline()
@@ -301,6 +314,64 @@ def test_report_export_refuses_non_finite_normalized_time_term() -> None:
         )
 
 
+def test_report_export_refuses_out_of_range_normalized_time_term() -> None:
+    """Direct report export fails closed when normalized time input is outside [0, 1]."""
+    records = _episodes()
+    records[0]["metrics"]["time_to_goal_norm"] = 1.3
+
+    with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
+        build_scalarization_sensitivity_report(
+            records,
+            weights=_weights(),
+            baseline=_baseline(),
+        )
+
+
+def test_preflight_blocks_missing_active_optional_normalized_term() -> None:
+    """Weighted optional normalized terms must be present before export."""
+
+    records = _preflight_episodes()
+    weights = _weights()
+    weights["w_jerk"] = 0.25
+
+    report = classify_scalarization_sensitivity_inputs(
+        records,
+        weights=weights,
+        baseline=_baseline(),
+    )
+
+    assert report["status"] == SENSITIVITY_PREFLIGHT_BLOCKED
+    assert any(issue["code"] == "missing_weighted_optional_term" for issue in report["issues"])
+
+
+def test_preflight_reports_non_mapping_weights_without_crashing() -> None:
+    """Non-mapping weights stay a graceful malformed report, not an AttributeError."""
+
+    report = classify_scalarization_sensitivity_inputs(
+        _preflight_episodes(),
+        weights=None,
+        baseline=_baseline(),
+    )
+
+    assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "weights_not_mapping" for issue in report["issues"])
+
+
+def test_report_export_refuses_missing_active_optional_normalized_term() -> None:
+    """Direct export fails closed instead of defaulting active optional terms to zero."""
+
+    records = _episodes()
+    weights = _weights()
+    weights["w_force_exceed"] = 0.5
+
+    with pytest.raises(ValueError, match="missing weighted SNQI term 'force_exceed_events'"):
+        build_scalarization_sensitivity_report(
+            records,
+            weights=weights,
+            baseline=_baseline(),
+        )
+
+
 def test_artifact_writer_creates_report_ready_files(tmp_path: Path) -> None:
     """Artifact writer emits report-ready JSON, CSV, Markdown, and SVG."""
 
@@ -385,7 +456,7 @@ def test_cli_writes_scalarization_artifacts(tmp_path: Path, capsys) -> None:
     """CLI writes the same report-ready artifact family."""
     episodes_path = tmp_path / "episodes.jsonl"
     episodes_path.write_text(
-        "\n".join(json.dumps(record) for record in _episodes()) + "\n",
+        "\n".join(json.dumps(record) for record in _preflight_episodes()) + "\n",
         encoding="utf-8",
     )
     weights_path = tmp_path / "weights.json"
@@ -451,6 +522,41 @@ def test_cli_preflight_only_blocks_invalid_inputs(tmp_path: Path, capsys) -> Non
     stdout = json.loads(capsys.readouterr().out)
     assert stdout["status"] == SENSITIVITY_PREFLIGHT_BLOCKED
     assert any(issue["code"] == "missing_scenario_horizon" for issue in stdout["issues"])
+
+
+def test_cli_export_blocks_invalid_inputs_before_artifacts(tmp_path: Path, capsys) -> None:
+    """Normal export path also refuses blocked preflight inputs before writing artifacts."""
+    records = _preflight_episodes()
+    records[0].pop("scenario_id")
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text(
+        "\n".join(json.dumps(record) for record in records) + "\n",
+        encoding="utf-8",
+    )
+    weights_path = tmp_path / "weights.json"
+    weights_path.write_text(json.dumps(_weights()), encoding="utf-8")
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(_baseline()), encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+
+    exit_code = scalarization_cli_main(
+        [
+            "--episodes",
+            str(episodes_path),
+            "--weights",
+            str(weights_path),
+            "--baseline",
+            str(baseline_path),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 2
+    stdout = json.loads(capsys.readouterr().out)
+    assert stdout["status"] == SENSITIVITY_PREFLIGHT_BLOCKED
+    assert any(issue["code"] == "missing_scenario_horizon" for issue in stdout["issues"])
+    assert not output_dir.exists()
 
 
 def test_baseline_loader_refuses_missing_normalized_fixture_input(tmp_path: Path) -> None:

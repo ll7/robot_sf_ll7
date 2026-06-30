@@ -51,6 +51,9 @@ For each reviewed PR, collect and report:
   `existing_parent_issue_remains_open`.
 - `routing_value`: dissertation or evidence value, stated conservatively with caveats.
 - `routing_cost`: validation, review, queue, or readiness cost noticed in hindsight.
+- `routing_lesson`: routing rule or queue heuristic hindsight suggests preserving or changing.
+- `follow_up_action`: no action, keep parent issue open, draft successor packet, or maintainer
+decision needed.
 - `verdict`: one value from the verdict taxonomy.
 - `confidence`: low, medium, or high, with the condition that would change the judgment.
 
@@ -87,13 +90,14 @@ while preserving their judgments:
 When the verdict is `needs_successor`, include a draft successor issue packet without posting it by
 default. The packet must include:
 
-- parent issue and PR reference;
-- what was already completed;
-- what remains;
-- why the remainder is dissertation- or evidence-relevant;
-- first bounded Codex implementation slice;
-- validation expectation;
-- why the slice is not duplicate completed coverage.
+- `title`: proposed successor issue title;
+- `parent`: parent issue and PR reference;
+- `completed_scope`: what was already completed;
+- `remaining_scope`: bounded work not completed by the reviewed PR;
+- `dissertation_or_evidence_relevance`: why the remainder still matters;
+- `first_implementation_slice`: first bounded Codex implementation slice;
+- `validation_expectation`: cheapest proof that would make the successor reviewable;
+- `non_duplication_rationale`: why slice is not duplicate completed coverage.
 
 Queue and scout policy should exclude completed parent issues, but it may route an explicitly named
 successor issue when the hindsight packet explains the remaining non-duplicate slice.
@@ -130,3 +134,6 @@ Return a compact `skill_run_summary.v1`-compatible summary with:
 - successor issue packets for every `needs_successor` verdict;
 - residual risks and missing evidence;
 - confirmation that default read-only restrictions were preserved.
+
+Tracked example: first-batch autonomous routing hindsight note
+[`docs/context/pr_hindsight_review_first_batch_2026-06-30.md`](../../../docs/context/pr_hindsight_review_first_batch_2026-06-30.md).

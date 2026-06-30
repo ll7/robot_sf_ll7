@@ -73,6 +73,27 @@ def test_preflight_reports_mixed_basis_without_changing_snqi_output() -> None:
     assert basis_by_term["time"] == "raw time-to-goal ratio"
     assert basis_by_term["comfort"] == "raw accumulated comfort-exposure value"
     assert basis_by_term["collisions"] == "baseline-relative median/p95 clamped value"
+    checker = report["normalization_checker"]
+    assert checker["issue"] == 3699
+    assert checker["successor_issue"] == 3978
+    assert checker["score_version"] == "SNQI-v0"
+    assert checker["status"] == "legacy_mixed_basis_diagnostic_only"
+    assert checker["diagnostic_only"] is True
+    assert checker["decision_recorded"] is True
+    assert checker["score_semantics_changed"] is False
+    assert (
+        checker["raw_penalty_absolute_share"]
+        > checker["baseline_normalized_penalty_absolute_share"]
+    )
+    assert checker["normalization_contract_status"] == "mixed_unbounded_penalty_basis"
+    assert checker["weights_comparable"] is False
+    assert checker["raw_penalty_terms"] == ["time", "comfort"]
+    assert checker["baseline_normalized_penalty_terms"] == [
+        "collisions",
+        "near",
+        "force_exceed",
+        "jerk",
+    ]
     contributions = report["contributions"]
     signed_total = sum(term["signed_contribution"] for term in contributions["terms"])
     assert contributions["diagnostic_only"] is True
@@ -91,6 +112,14 @@ def test_preflight_main_fails_closed_but_allows_inspection(tmp_path) -> None:
     assert payload["schema_version"] == "snqi_normalization_inventory_preflight.v1"
     assert payload["status"] == "failed"
     assert payload["blockers"][0]["kind"] == "mixed_normalization_basis"
+    checker = payload["normalization_checker"]
+    assert checker["normalization_contract_status"] is None
+    assert checker["weights_comparable"] is None
+    assert checker["raw_penalty_absolute_share"] is None
+    assert checker["baseline_normalized_penalty_absolute_share"] is None
+    assert checker["raw_penalty_terms"] is None
+    assert checker["baseline_normalized_penalty_terms"] is None
+    assert checker["weight_bound_exceedance_terms"] is None
 
     assert main(["--json", "--allow-mixed-basis"]) == 0
 
@@ -141,6 +170,11 @@ def test_preflight_cli_writes_synthetic_fixture_contribution_report(tmp_path, ca
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert "Contribution contract: status=mixed_unbounded_penalty_basis" in captured.out
     assert payload["status"] == "failed"
+    checker = payload["normalization_checker"]
+    assert checker["successor_issue"] == 3978
+    assert checker["score_version"] == "SNQI-v0"
+    assert checker["diagnostic_only"] is True
+    assert checker["decision_recorded"] is True
     assert payload["contributions"]["normalization_contract"]["weights_comparable"] is False
     signed_total = sum(term["signed_contribution"] for term in payload["contributions"]["terms"])
     assert signed_total == pytest.approx(

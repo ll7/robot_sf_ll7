@@ -194,18 +194,27 @@ def build_governance_report(
             }
         )
 
+    score_version_contract = normalization.score_version_contract
     normalization_checker = {
         "issue": 3699,
-        "decision_required": True,
+        "successor_issue": score_version_contract["successor_issue"],
+        "score_version": score_version_contract["score_version"],
+        "status": score_version_contract["status"],
+        "diagnostic_only": score_version_contract["diagnostic_only"],
+        "decision_recorded": True,
+        "score_semantics_changed": score_version_contract["score_semantics_changed"],
         "assumption": (
-            "No score semantics changed; this report only surfaces mixed-basis "
-            "diagnostics and baseline coverage gaps for issue #3699."
+            "No score semantics changed; SNQI-v0 intentionally preserves the "
+            "mixed-basis diagnostic contract while SNQI-v1 redesign is tracked "
+            "by issue #3978."
         ),
         "mixed_scale": normalization.mixed_scale,
         "weights_comparable": contribution_diagnostics["normalization_contract"][
             "weights_comparable"
         ],
-        "status": contribution_diagnostics["normalization_contract"]["status"],
+        "normalization_contract_status": contribution_diagnostics["normalization_contract"][
+            "status"
+        ],
         "raw_penalty_absolute_share": contribution_diagnostics["raw_penalty_absolute_share"],
         "baseline_normalized_penalty_absolute_share": contribution_diagnostics[
             "baseline_normalized_penalty_absolute_share"
@@ -317,7 +326,9 @@ def _print_text_report(report: dict[str, Any]) -> None:
     checker = report["normalization_checker"]
     print(
         "Normalization checker: "
-        f"issue={checker['issue']} decision_required={checker['decision_required']} "
+        f"issue={checker['issue']} successor_issue={checker['successor_issue']} "
+        f"score_version={checker['score_version']} diagnostic_only={checker['diagnostic_only']} "
+        f"decision_recorded={checker['decision_recorded']} "
         f"weights_comparable={checker['weights_comparable']} mixed_scale={checker['mixed_scale']} "
         f"status={checker['status']} assumption='{checker['assumption']}'"
     )

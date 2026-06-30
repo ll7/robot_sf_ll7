@@ -182,7 +182,8 @@ def test_score_version_contract_preserves_legacy_snqi_v0_as_diagnostic_only():
     assert contract["mixed_basis_preserved"] is True
     assert contract["score_semantics_changed"] is False
     assert contract["future_bounded_contract"] == "SNQI-v1"
-    assert contract["decision_required_issue"] == 3699
+    assert contract["decision_issue"] == 3699
+    assert contract["successor_issue"] == 3978
 
 
 def test_format_report_is_human_readable():
@@ -235,7 +236,8 @@ def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():
     assert contract["diagnostic_only"] is True
     assert contract["status"] == "mixed_unbounded_penalty_basis"
     assert contract["weights_comparable"] is False
-    assert contract["decision_required_issue"] == 3699
+    assert contract["decision_issue"] == 3699
+    assert contract["successor_issue"] == 3978
     assert contract["raw_unbounded_penalty_terms"] == ["time", "comfort"]
     assert contract["baseline_normalized_penalty_terms"] == [
         "collisions",

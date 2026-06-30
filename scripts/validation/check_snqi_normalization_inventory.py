@@ -114,12 +114,54 @@ def build_normalization_preflight_report(
         "blockers": blockers,
         "normalization": inventory.to_dict(),
     }
+
+    score_version_contract = inventory.score_version_contract
+    decision_packet = {
+        "issue": 3699,
+        "successor_issue": score_version_contract["successor_issue"],
+        "score_version": score_version_contract["score_version"],
+        "status": score_version_contract["status"],
+        "diagnostic_only": score_version_contract["diagnostic_only"],
+        "decision_recorded": True,
+        "score_semantics_changed": score_version_contract["score_semantics_changed"],
+        "assumption": (
+            "No score semantics changed; SNQI-v0 intentionally preserves the "
+            "mixed-basis diagnostic contract while SNQI-v1 redesign is tracked "
+            "by issue #3978."
+        ),
+        "mixed_scale": inventory.mixed_scale,
+        "normalization_contract_status": None,
+        "weights_comparable": None,
+        "raw_penalty_absolute_share": None,
+        "baseline_normalized_penalty_absolute_share": None,
+        "raw_penalty_terms": None,
+        "baseline_normalized_penalty_terms": None,
+        "weight_bound_exceedance_terms": None,
+    }
+
     if metrics is not None and weights is not None:
-        report["contributions"] = build_snqi_contribution_diagnostics(
+        contributions = build_snqi_contribution_diagnostics(
             metrics,
             weights,
             baseline_stats or {},
         )
+        report["contributions"] = contributions
+        contract = contributions["normalization_contract"]
+        decision_packet.update(
+            {
+                "normalization_contract_status": contract["status"],
+                "weights_comparable": contract["weights_comparable"],
+                "raw_penalty_absolute_share": contract["raw_penalty_absolute_share"],
+                "baseline_normalized_penalty_absolute_share": contract[
+                    "baseline_normalized_penalty_absolute_share"
+                ],
+                "raw_penalty_terms": contract["raw_unbounded_penalty_terms"],
+                "baseline_normalized_penalty_terms": contract["baseline_normalized_penalty_terms"],
+                "weight_bound_exceedance_terms": contract["weight_bound_exceedance_terms"],
+            }
+        )
+
+    report["normalization_checker"] = decision_packet
     return report
 
 

@@ -12,10 +12,9 @@ the composite's variance independently of its weight (see issue #3699).
 This module is **diagnostic only**. It does not change the SNQI formula, the
 weights, ``normalize_metric``, or any emitted score. It exposes the per-term
 scaling regime as a machine-checkable inventory so the mixed-scale condition is
-explicit and a preflight can stay aware of it. It deliberately does **not**
-choose between the two remedies (normalize the raw terms vs. clip-and-document
-the asymmetry) -- that choice is tracked as ``decision-required`` on issue #3699
-and would change emitted SNQI values, which is out of scope here.
+explicit and a preflight can stay aware of it. Issue #3699 freezes this legacy
+mixed-basis score as ``SNQI-v0``; bounded/recalibrated scoring belongs to
+successor ``SNQI-v1`` redesign in issue #3978.
 
 The term table below mirrors ``compute_snqi`` exactly; the cross-check test
 :mod:`tests.benchmark.test_snqi_normalization_inventory` reconstructs the SNQI
@@ -51,7 +50,8 @@ _SNQI_VERSION_CONTRACT: dict[str, object] = {
     "diagnostic_only": True,
     "mixed_basis_preserved": True,
     "score_semantics_changed": False,
-    "decision_required_issue": 3699,
+    "decision_issue": 3699,
+    "successor_issue": 3978,
     "future_bounded_contract": "SNQI-v1",
     "policy": (
         "Historical SNQI-v0 keeps the mixed raw/baseline-normalized basis for "
@@ -338,7 +338,8 @@ def _build_normalization_contract(
         "raw_penalty_absolute_share": raw_penalty_share,
         "baseline_normalized_penalty_absolute_share": normalized_penalty_share,
         "weight_bound_exceedance_terms": [str(entry["term"]) for entry in weight_bound_exceedances],
-        "decision_required_issue": 3699 if not comparable else None,
+        "decision_issue": 3699 if not comparable else None,
+        "successor_issue": 3978 if not comparable else None,
         "reasons": reasons,
     }
 
@@ -480,6 +481,11 @@ class NormalizationInventory:
         """Whether all penalty terms enter on a comparable, bounded basis."""
         return not self.mixed_scale and not self.unbounded_terms
 
+    @property
+    def score_version_contract(self) -> dict[str, object]:
+        """Current versioned SNQI normalization contract."""
+        return build_snqi_version_contract()
+
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable view for preflight reporting."""
         return {
@@ -491,7 +497,7 @@ class NormalizationInventory:
             "unbounded_terms": [t.term for t in self.unbounded_terms],
             "missing_baseline_coverage": [t.metric_key for t in self.missing_baseline_coverage],
             "is_consistent": self.is_consistent,
-            "score_version_contract": build_snqi_version_contract(),
+            "score_version_contract": self.score_version_contract,
         }
 
 

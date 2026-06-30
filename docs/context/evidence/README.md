@@ -126,6 +126,11 @@ result matrix to analyze before any duplicate rerun, preserves its soft SNQI con
 warning as a paper-claim blocker, and confirms no Slurm/GPU submission, artifact
 deletion, or paper/dissertation claim edit.
 
+- `issue_3798_post_13175_s20_s30_evidence_gap_packet.{md,json}`: diagnostic-only packet over
+retrieved job 13175 S20/H500 artifacts for the post-#1554 evidence gap. Names the compact
+reviewable metadata files, records that S30 remains an unexecuted escalation path, and preserves
+the no-submit/no-claim boundary for paper or dissertation use.
+
 - `issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/`: checker packet over
   the merged #3207 bounded actual fidelity-sensitivity slice. Classifies the current evidence as
   `no_claim` / `not_benchmark_evidence` because the slice is not full fixed scope and rank evidence

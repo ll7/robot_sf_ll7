@@ -336,6 +336,17 @@ def _coerce_float(value: Any) -> float | None:
     return result if math.isfinite(result) else None
 
 
+def _optional_int(value: Any) -> int | None:
+    """Coerce a value to int, returning ``None`` for null/non-integer inputs."""
+
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def build_cell_results(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -669,8 +680,13 @@ def load_job_evidence_packet(path: str | Path, *, job_id: int) -> dict[str, Any]
     """
 
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    target_job = _optional_int(job_id)
     matches = [
-        item for item in payload.get("evidence", []) if int(item.get("job", -1)) == int(job_id)
+        item
+        for item in payload.get("evidence", [])
+        if isinstance(item, Mapping)
+        and target_job is not None
+        and _optional_int(item.get("job")) == target_job
     ]
     if not matches:
         return {
@@ -708,12 +724,22 @@ def load_job_evidence_packet(path: str | Path, *, job_id: int) -> dict[str, Any]
 
 
 def _constraints_first_metric_gaps(cells: Sequence[CellResult]) -> list[str]:
-    """Return required constraints-first metrics missing from counted cells."""
+    """Return required constraints-first metrics missing from counted cells.
+
+    Constraints-first ranking compares the safety constraint metrics across the
+    full headline matrix, so a metric is only "present" when *every* counted
+    cell reports it. If a single counted cell is missing a required metric (for
+    example due to a logging failure) the cross-cell constraint comparison is
+    incomplete and the metric is flagged as a gap. With no counted cells, all
+    required metrics are gaps. This is the conservative, fail-closed reading.
+    """
 
     counted = [cell for cell in cells if cell.counted]
+    if not counted:
+        return list(CONSTRAINTS_FIRST_REQUIRED_METRICS)
     gaps: list[str] = []
     for metric in CONSTRAINTS_FIRST_REQUIRED_METRICS:
-        if any(_metric_stats(cell, metric) is not None for cell in counted):
+        if all(_metric_stats(cell, metric) is not None for cell in counted):
             continue
         gaps.append(metric)
     return gaps
@@ -733,8 +759,9 @@ def _append_packet_reasons(
 
     if overlap_claims:
         s30_reasons.append("adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data")
-    manuscript_blockers.extend(["invalid_rank_metric_contract"] if invalid_rank_metric else [])
-    s30_reasons.extend(["rank_metric_contract_invalid"] if invalid_rank_metric else [])
+    if invalid_rank_metric:
+        manuscript_blockers.append("invalid_rank_metric_contract")
+        s30_reasons.append("rank_metric_contract_invalid")
     if metric_gaps:
         manuscript_blockers.append("constraints_first_metrics_missing")
         s30_reasons.append("constraints_first_metric_gap")

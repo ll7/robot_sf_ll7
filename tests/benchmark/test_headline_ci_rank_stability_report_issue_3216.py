@@ -591,3 +591,32 @@ def test_constraints_first_profile_blocks_missing_required_metrics(tmp_path) -> 
     assert packet["constraints_first_metric_gaps"] == ["collisions", "near_misses"]
     assert "constraints_first_metrics_missing" in packet["manuscript_blockers"]
     assert "constraints_first_metric_gap" in packet["s30_reasons"]
+
+
+def test_constraints_first_profile_flags_partial_metric_coverage(tmp_path) -> None:
+    """A metric missing from any counted cell is a gap (fail-closed all-cells rule)."""
+
+    report = _report(
+        [
+            _cell_row(
+                "merging",
+                "best",
+                {
+                    "success": [0.90, 0.91, 0.92] * 7,
+                    "collisions": [0.02, 0.01, 0.02] * 7,
+                    "near_misses": [0.04, 0.03, 0.04] * 7,
+                },
+            ),
+            # Second counted cell omits the safety metrics, so cross-cell
+            # constraint comparison is incomplete: collisions/near_misses are gaps.
+            _cell_row("merging", "worst", {"success": [0.10, 0.11, 0.12] * 7}),
+        ],
+        metrics=("success", "collisions", "near_misses"),
+        rank_metric="success",
+        rank_profile="constraints_first",
+    )
+
+    packet = report["decision_packet"]
+    assert packet["constraints_first_metric_gaps"] == ["collisions", "near_misses"]
+    assert "constraints_first_metrics_missing" in packet["manuscript_blockers"]
+    assert "constraints_first_metric_gap" in packet["s30_reasons"]

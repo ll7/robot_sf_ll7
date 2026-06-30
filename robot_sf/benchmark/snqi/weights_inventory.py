@@ -202,6 +202,27 @@ class WeightProvenanceConflict:
 
 
 @dataclass
+class WeightSourceComparison:
+    """Diagnostic comparison between the code default and a shipped source."""
+
+    source: str
+    relpath: str | None
+    relationship: str
+    code_default_dominant_term: str | None
+    source_dominant_term: str | None
+    source_scale_class: str | None
+    available: bool
+    """Whether the direction comparison itself could be computed.
+
+    This is distinct from source-load state: a source may load successfully yet
+    still be uncomparable (e.g. empty or zero-sum weights with no meaningful
+    direction), in which case ``available`` is False and ``load_error`` carries
+    the reason.
+    """
+    load_error: str | None = None
+
+
+@dataclass
 class WeightInventoryReport:
     """Structured result of an SNQI weight-set inventory pass."""
 
@@ -235,6 +256,19 @@ class WeightInventoryReport:
             "canonical_declaring_sources": [r.name for r in canonical_records],
             "unavailable_sources": [r.name for r in unavailable_records],
             "blocking_conflict_kinds": [c.kind for c in blocking_conflicts],
+            "code_default_shipped_direction_comparisons": [
+                {
+                    "source": comparison.source,
+                    "relpath": comparison.relpath,
+                    "relationship": comparison.relationship,
+                    "code_default_dominant_term": comparison.code_default_dominant_term,
+                    "source_dominant_term": comparison.source_dominant_term,
+                    "source_scale_class": comparison.source_scale_class,
+                    "available": comparison.available,
+                    "load_error": comparison.load_error,
+                }
+                for comparison in compare_code_default_to_shipped_sources(self.records)
+            ],
         }
 
     def to_dict(self) -> dict:
@@ -403,6 +437,68 @@ def _directions_disagree(a: dict[str, float], b: dict[str, float]) -> bool:
         True if any component differs beyond :data:`_DIRECTION_TOL`.
     """
     return any(abs(a[k] - b[k]) > _DIRECTION_TOL for k in WEIGHT_NAMES)
+
+
+def _direction_relationship(a: WeightSetRecord, b: WeightSetRecord) -> str:
+    """Classify two records by their scale-independent weight direction.
+
+    Returns:
+        ``same_direction``, ``different_direction``, or ``unavailable``.
+    """
+    if not a.available or not b.available:
+        return "unavailable"
+    da, db = a.normalized_direction(), b.normalized_direction()
+    if da is None or db is None:
+        return "unavailable"
+    if _directions_disagree(da, db):
+        return "different_direction"
+    return "same_direction"
+
+
+def compare_code_default_to_shipped_sources(
+    records: list[WeightSetRecord],
+) -> list[WeightSourceComparison]:
+    """Compare the code-default weights against every discovered shipped JSON source.
+
+    The issue #3723 ambiguity is specifically code default versus shipped JSON. This
+    diagnostic matrix makes every shipped source explicit without choosing a canonical set.
+
+    Returns:
+        One comparison per shipped JSON source in the inventory records.
+    """
+    code_default = next((r for r in records if r.name == "code_default"), None)
+    if code_default is None:
+        return []
+
+    comparisons: list[WeightSourceComparison] = []
+    for record in records:
+        if record.relpath is None:
+            continue
+        relationship = _direction_relationship(code_default, record)
+        comparison_available = relationship != "unavailable"
+        if record.load_error is not None:
+            # The source failed to load; surface the underlying load error.
+            load_error = record.load_error
+        elif not comparison_available:
+            # The source loaded but has no comparable direction (empty or
+            # zero-sum weights); report a comparison-level reason rather than
+            # leaving an unexplained ``unavailable`` relationship.
+            load_error = "no_comparable_direction"
+        else:
+            load_error = None
+        comparisons.append(
+            WeightSourceComparison(
+                source=record.name,
+                relpath=record.relpath,
+                relationship=relationship,
+                code_default_dominant_term=code_default.dominant_term,
+                source_dominant_term=record.dominant_term,
+                source_scale_class=record.scale_class,
+                available=comparison_available,
+                load_error=load_error,
+            )
+        )
+    return comparisons
 
 
 def _canonical_load_error_conflicts(
@@ -616,8 +712,10 @@ __all__ = [
     "WeightInventoryReport",
     "WeightProvenanceConflict",
     "WeightSetRecord",
+    "WeightSourceComparison",
     "WeightSourceSpec",
     "build_inventory_report",
+    "compare_code_default_to_shipped_sources",
     "detect_conflicts",
     "discover_shipped_weight_source_specs",
     "inventory_weight_sets",

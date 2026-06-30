@@ -771,6 +771,7 @@ def _build_preflight_packet(
     args: argparse.Namespace,
     missing_info: dict[str, Any],
     baseline_issues: list[str],
+    invalid_normalized_issues: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return {
         "status": "failed",
@@ -778,6 +779,7 @@ def _build_preflight_packet(
         "issues": {
             "missing_baseline_metrics": missing_info["metrics"],
             "invalid_baseline_stats": baseline_issues,
+            "invalid_normalized_metrics": invalid_normalized_issues,
         },
         "_metadata": {
             "episodes_file": str(args.episodes),
@@ -786,6 +788,43 @@ def _build_preflight_packet(
             "invocation": "python " + " ".join(sys.argv),
         },
     }
+
+
+def _detect_invalid_normalized_metric_values(
+    episodes: list[dict[str, Any]], max_examples: int = 5
+) -> list[dict[str, Any]]:
+    """Collect episodes where normalized metrics are missing finite checks."""
+
+    issues: list[dict[str, Any]] = []
+
+    for metric in NORMALIZED_METRICS:
+        invalid_examples: list[str] = []
+        for ep in episodes:
+            metrics = ep.get("metrics", {}) or {}
+            if metric not in metrics:
+                continue
+
+            raw = metrics.get(metric)
+            try:
+                if not np.isfinite(float(raw)):
+                    invalid_examples.append(str(ep.get("id")))
+                    if len(invalid_examples) >= max_examples:
+                        break
+            except (TypeError, ValueError):
+                invalid_examples.append(str(ep.get("id")))
+                if len(invalid_examples) >= max_examples:
+                    break
+
+        if invalid_examples:
+            issues.append(
+                {
+                    "name": metric,
+                    "episode_count_with_invalid": len(invalid_examples),
+                    "example_episode_ids": invalid_examples,
+                }
+            )
+
+    return issues
 
 
 def _detect_missing_baseline_metrics(
@@ -954,6 +993,13 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
         results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
         baseline_issues = _normalize_stats_issues(baseline)
         results.setdefault("diagnostics", {})["baseline_normalization_issues"] = baseline_issues
+        invalid_metric_issues = _detect_invalid_normalized_metric_values(
+            episodes,
+            max_examples=args.missing_metric_max_list,
+        )
+        results.setdefault("diagnostics", {})["invalid_normalized_metric_values"] = (
+            invalid_metric_issues
+        )
         if missing_info["total_missing"]:
             logger.warning(
                 "Baseline missing %d metric(s) present in episodes: %s",
@@ -965,18 +1011,38 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                 "SNQI preflight detected %d baseline normalization issue(s)",
                 len(baseline_issues),
             )
-        if (missing_info["total_missing"] and args.fail_on_missing_metric) or args.decision_preflight:
+        if invalid_metric_issues:
+            logger.warning(
+                "SNQI preflight detected %d invalid normalized metric value issue(s)",
+                len(invalid_metric_issues),
+            )
+        if (
+            missing_info["total_missing"]
+            and args.fail_on_missing_metric
+            or args.decision_preflight
+        ):
             if args.decision_preflight:
                 with open(args.output, "w", encoding="utf-8") as f:
                     json.dump(
-                        _build_preflight_packet(args, missing_info, baseline_issues),
+                        _build_preflight_packet(
+                            args,
+                            missing_info,
+                            baseline_issues,
+                            invalid_metric_issues,
+                        ),
                         f,
                         indent=2,
                     )
-                logger.error("Failing due to --decision-preflight input contract check.")
+                logger.error(
+                    "Failing due to --decision-preflight input contract check."
+                )
+            if invalid_metric_issues:
+                return EXIT_INPUT_ERROR
             if args.fail_on_missing_metric:
-                logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
-            return EXIT_MISSING_METRIC_ERROR
+                logger.error(
+                    "Failing due --fail-on-missing-metric (missing baseline metrics)."
+                )
+                return EXIT_MISSING_METRIC_ERROR
         phase_timings["diagnostics"] = perf_counter() - phase_start
 
         if args.compare_normalization:

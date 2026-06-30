@@ -235,3 +235,53 @@ def test_snqi_weight_recompute_cli_exports_pareto_frontier(tmp_path: Path):
     assert strategy_result["pareto_frontier_size"] <= 10
     first_item = strategy_result["pareto_frontier"][0]
     assert first_item["discriminative_power"] >= 0.0
+
+
+@pytest.mark.timeout(30)
+def test_snqi_weight_recompute_cli_decision_preflight_invalid_normalized_metrics(tmp_path: Path):
+    episodes_path = tmp_path / "episodes.jsonl"
+    baseline_path = tmp_path / "baseline.json"
+    output_path = tmp_path / "recompute.json"
+
+    episodes = [
+        {
+            "scenario_id": "s1",
+            "metrics": {
+                "success": 1.0,
+                "time_normalized": 0.5,
+                "collisions": 0,
+                "near_misses": 1,
+                "comfort_penalty": 0.3,
+                "force_exceed_events": float("nan"),
+                "jerk_mean": 0.15,
+            },
+        },
+    ]
+    episodes_path.write_text("".join(json.dumps(ep) + "\n" for ep in episodes), encoding="utf-8")
+
+    baseline = {
+        "collisions": {"med": 0.5, "p95": 0.5},
+        "near_misses": {"med": 1.0, "p95": 1.0},
+        "force_exceed_events": {"med": 0.0, "p95": 1.0},
+        "jerk_mean": {"med": 0.1, "p95": 0.6},
+    }
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+
+    cmd = [
+        sys.executable,
+        "scripts/recompute_snqi_weights.py",
+        "--episodes",
+        str(episodes_path),
+        "--baseline",
+        str(baseline_path),
+        "--output",
+        str(output_path),
+        "--strategy",
+        "default",
+        "--decision-preflight",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=Path.cwd())
+    assert proc.returncode != 0
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    issues = data["issues"]["invalid_normalized_metrics"]
+    assert any(item["name"] == "force_exceed_events" for item in issues)

@@ -1,6 +1,6 @@
 # Issue #3207 Simulator-Dependence Validity-Boundary Packet
 
-This packet checks whether the existing #3207 fidelity-sensitivity evidence is ready to support a
+This packet checks whether existing #3207 fidelity-sensitivity evidence is ready to support a
 simulator-dependence validity-boundary claim. It does not run a simulator study or promote any
 benchmark, simulator-realism, sim-to-real, paper-facing, or dissertation claim.
 
@@ -18,11 +18,12 @@ benchmark, simulator-realism, sim-to-real, paper-facing, or dissertation claim.
 - `decision`: `no_claim`
 - `evidence_status`: `not_benchmark_evidence`
 - `claim_ready`: `false`
+- `boundary_violations`: `[]`
 
-The current actual slice is not a full fixed-scope study, and its rank evidence is non-identifiable
-because the primary metric had zero variance. The checker also records that the source summary
-`claim_boundary` does not contain the current explicit no-claim phrases, so downstream reports must
-carry those caveats before any interpretation.
+Current actual slice is not a full fixed-scope study, and its rank evidence remains
+non-identifiable because the primary metric had zero variance. The source summary now carries
+explicit no-claim phrases, but downstream reports still must treat this packet as no-claim evidence
+because the study scope and rank-identifiability gates do not pass.
 
 ## Reproduction
 

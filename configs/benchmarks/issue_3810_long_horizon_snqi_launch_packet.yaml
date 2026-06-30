@@ -281,6 +281,30 @@ launch_packet:
         not terminal/reconciled, if an issue #3810 duplicate exists, if the
         owning worktree is dirty, or if the private submit wrapper lacks
         imech039 support, the decision remains blocked.
+  interpretation_gate:
+    status: blocked_pending_active_run_retention_reconciliation
+    required_before_claim: true
+    required_before_report_publication: true
+    active_run_state: state:running
+    blockers:
+      - active_run_state
+      - retention_paths_missing
+      - route_config_provenance_incomplete
+      - snqi_recalibration_inputs_missing
+      - interaction_exposure_diagnostics_missing
+    required_evidence:
+      - private_ops_route_dry_run
+      - retained_compact_review_bundle
+      - external_artifact_pointer
+      - snqi_recalibration_bundle
+      - horizon_sensitivity_report
+      - interaction_exposure_diagnostics
+    decision_policy: >
+      The comprehensive h600 report remains analysis-blocked while issue #3810
+      is state:running or any retention, route/config provenance, Social
+      Navigation Quality Index recalibration, or interaction-exposure diagnostic
+      evidence is absent. Passing this public packet validator is not permission
+      to interpret, publish, or promote benchmark claims.
   route:
     private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops  # allow-abs-path: private-ops routing (machine-local, non-portable)
     queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh  # allow-abs-path: private-ops routing (machine-local, non-portable)

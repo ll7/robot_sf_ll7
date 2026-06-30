@@ -33,6 +33,21 @@ REQUIRED_EXPOSURE_FIELDS = {
     "first_clearance_step",
     "low_exposure_success",
 }
+REQUIRED_INTERPRETATION_GATE_EVIDENCE = {
+    "private_ops_route_dry_run",
+    "retained_compact_review_bundle",
+    "external_artifact_pointer",
+    "snqi_recalibration_bundle",
+    "horizon_sensitivity_report",
+    "interaction_exposure_diagnostics",
+}
+REQUIRED_INTERPRETATION_GATE_BLOCKERS = {
+    "active_run_state",
+    "retention_paths_missing",
+    "route_config_provenance_incomplete",
+    "snqi_recalibration_inputs_missing",
+    "interaction_exposure_diagnostics_missing",
+}
 
 
 class PacketError(ValueError):
@@ -266,6 +281,41 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "private-ops dry run must gate imech039 support",
     )
 
+    interpretation_gate = _require_mapping(launch_packet, "interpretation_gate")
+    _require(
+        interpretation_gate.get("status") == "blocked_pending_active_run_retention_reconciliation",
+        "interpretation gate must stay blocked pending active-run reconciliation",
+    )
+    _require(
+        interpretation_gate.get("required_before_claim") is True,
+        "interpretation gate must be required before claims",
+    )
+    _require(
+        interpretation_gate.get("required_before_report_publication") is True,
+        "interpretation gate must be required before report publication",
+    )
+    _require(
+        interpretation_gate.get("active_run_state") == "state:running",
+        "interpretation gate must record active run state",
+    )
+    gate_blockers = set(interpretation_gate.get("blockers") or [])
+    _require(
+        REQUIRED_INTERPRETATION_GATE_BLOCKERS <= gate_blockers,
+        "interpretation gate blockers missing",
+    )
+    gate_evidence = set(interpretation_gate.get("required_evidence") or [])
+    _require(
+        REQUIRED_INTERPRETATION_GATE_EVIDENCE <= gate_evidence,
+        "interpretation gate evidence missing",
+    )
+    gate_policy = str(interpretation_gate.get("decision_policy", ""))
+    _require(
+        "state:running" in gate_policy
+        and "not permission" in gate_policy
+        and "promote benchmark claims" in gate_policy,
+        "interpretation gate must block claim promotion",
+    )
+
     route = _require_mapping(launch_packet, "route")
     _require(
         str(route.get("submit_policy")) == "no_submit_until_decision_packet_go",
@@ -333,6 +383,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "live_issue_state": live_issue_state["required_label"],
         "go_no_go": go_no_go["recommendation"],
         "private_ops_dry_run": dry_run["current_public_status"],
+        "interpretation_gate": interpretation_gate["status"],
     }
 
 

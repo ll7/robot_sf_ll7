@@ -18,7 +18,6 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     classify_scalarization_sensitivity_inputs,
 )
 
-
 WEIGHTS = {
     "w_success": 0.19,
     "w_time": 0.09,

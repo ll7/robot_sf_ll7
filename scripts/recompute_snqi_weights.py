@@ -954,7 +954,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
     has_preflight_issues = bool(
         missing_info["total_missing"] or baseline_issues or invalid_metric_issues
     )
-    if args.decision_preflight and has_preflight_issues:
+    if getattr(args, "decision_preflight", False) and has_preflight_issues:
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(
                 _build_preflight_packet(
@@ -974,9 +974,12 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
 
     try:
         recomputer = SNQIWeightRecomputer(episodes, baseline)
-        recomputer.pareto_frontier_samples = max(1, int(args.pareto_front_samples))
-        recomputer.export_pareto_front = bool(args.export_pareto_front)
-        recomputer.simplex = bool(args.simplex)
+        recomputer.pareto_frontier_samples = max(
+            1,
+            int(getattr(args, "pareto_front_samples", recomputer.pareto_frontier_samples)),
+        )
+        recomputer.export_pareto_front = bool(getattr(args, "export_pareto_front", False))
+        recomputer.simplex = bool(getattr(args, "simplex", False))
     except Exception as e:
         logger.exception("Failed to initialize recomputer: %s", e)
         return EXIT_RUNTIME_ERROR

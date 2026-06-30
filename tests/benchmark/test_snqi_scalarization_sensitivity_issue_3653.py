@@ -234,6 +234,45 @@ def test_cli_refuses_blocked_inputs_and_writes_only_preflight(tmp_path: Path) ->
     assert not out_dir.exists()
 
 
+def test_cli_refuses_malformed_normalized_inputs_and_writes_preflight(tmp_path: Path) -> None:
+    """Malformed normalized SNQI terms remain exported artifacts off, preflight only."""
+    records = _valid_records()
+    metrics = records[0]["metrics"]
+    assert isinstance(metrics, dict)
+    metrics["time_to_goal_norm"] = 1.8
+
+    episodes, baseline, weights = _write_fixture_inputs(tmp_path, records)
+    out_dir = tmp_path / "artifacts"
+    preflight_out = tmp_path / "preflight.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/snqi_scalarization_sensitivity_export.py",
+            "--episodes",
+            str(episodes),
+            "--baseline",
+            str(baseline),
+            "--weights",
+            str(weights),
+            "--output-dir",
+            str(out_dir),
+            "--preflight-out",
+            str(preflight_out),
+        ],
+        check=False,
+        cwd=Path(__file__).resolve().parents[2],
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 2
+    assert preflight_out.exists()
+    payload = json.loads(preflight_out.read_text(encoding="utf-8"))
+    assert payload["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "out_of_range_normalized_term" for issue in payload["issues"])
+    assert not out_dir.exists()
+
+
 def test_cli_exports_report_ready_artifacts(tmp_path: Path) -> None:
     """Ready inputs write JSON, CSV, Markdown, and SVG diagnostic artifacts."""
 

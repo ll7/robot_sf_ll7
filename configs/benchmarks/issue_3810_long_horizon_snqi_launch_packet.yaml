@@ -413,3 +413,78 @@ launch_packet:
       benchmark-strength success until the report shows the scenario required
       meaningful interaction. The diagnostic guards wait-it-out behavior; the
       sustained-flow structural fix remains follow-up issue #3813.
+
+analysis_and_retention_packet:
+  enabled: true
+  scope: comprehensive_long_horizon_campaign_readiness
+  execution_contract:
+    launch_only: false
+    route_preflight_required: true
+    local_submission_allowed: false
+    decision_gate:
+      status: blocked_pending_submit_host_route_and_reconciliation
+      reason: "Issue remains open and job 13175 must be reconciled on Slurm host before campaign claim."
+  route:
+    private_ops_repo: "/home/luttkule/git/robot_sf_ll7-private-ops"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    queue_summary_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    route_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    submit_wrapper: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/submit_and_record.sh"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    target_host: "imech036"
+  preflight:
+    required: true
+    route_refresh_command: >-
+      ROBOT_SF_PRIVATE_OPS="$HOME/git/robot_sf_ll7-private-ops" "$HOME/git/robot_sf_ll7-private-ops/ops/preflight/run_preflight.sh"
+    queue_and_duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh --json --reason issue_3810"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    duplicate_check_command: "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/route_job.sh --json --target-host imech036 --issue 3810"  # allow-abs-path: private-ops routing (machine-local, non-portable)
+    manifest_validation_command: "uv run python scripts/validation/run_research_campaign_manifest.py configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml --output-dir output/research_campaign_packets/issue_3810_long_horizon_snqi"
+    packet_validation_command: "uv run python scripts/validation/check_issue_3810_long_horizon_launch_packet.py --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml --json"
+  expected_outputs:
+    local_root: "output/benchmarks/issue_3810_comprehensive_h600_snqi"
+    required_paths:
+      - preflight/private_ops_route_dry_run.json
+      - preflight/validate_config.json
+      - preflight/preview_scenarios.json
+      - preflight/planner_availability.json
+      - reports/campaign_summary.json
+      - reports/campaign_table.csv
+      - reports/campaign_table.md
+      - reports/snqi_recalibration_inputs.json
+      - reports/snqi_recalibration_bundle.json
+      - reports/horizon_sensitivity_report.json
+      - reports/horizon_sensitivity_report.md
+      - reports/interaction_exposure_diagnostics.json
+      - reports/interaction_exposure_diagnostics.md
+      - episodes/
+  retention:
+    compact_review_bundle: "docs/context/evidence/issue_3810_long_horizon_snqi/"
+    durable_manifests:
+      - "docs/context/evidence/issue_3810_long_horizon_snqi/"
+      - "docs/context/evidence/issue_3810_long_horizon_snqi/reports"
+      - "docs/context/evidence/issue_3810_long_horizon_snqi/metadata.json"
+  snqi_recalibration_inputs:
+    weights_path: "output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/snqi_weights_h600.json"
+    baseline_path: "output/benchmarks/issue_3810_comprehensive_h600_snqi/recalibration/snqi_baseline_h600.json"
+    campaign_table_path: "output/benchmarks/issue_3810_comprehensive_h600_snqi/reports/campaign_table.csv"
+    episode_records_glob: "output/benchmarks/issue_3810_comprehensive_h600_snqi/episodes/"
+    required_scripts:
+      - scripts/recompute_snqi_weights.py
+      - scripts/snqi_sensitivity_analysis.py
+      - scripts/validate_snqi_scripts.py
+  horizon_sensitivity_report:
+    command: "uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py --long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi --short-campaign-reference docs/context/evidence/prior_scoped_h100_reference --output-dir output/benchmarks/issue_3810_comprehensive_h600_snqi/reports"
+    required_scope_caveat: prior_scoped_short_horizon_vs_new_comprehensive_long_horizon_not_horizon_only
+    required_fields:
+      - timeout_rate
+      - max_steps_share
+      - success_ranking
+      - snqi_ranking
+      - rank_inversion_persistence
+      - comparison_scope_caveat
+  wait_it_out_guard:
+    diagnostic_name: interaction_exposure
+    required_episode_fields:
+      - interaction_exposure_share
+      - robot_motion_share_before_first_clearance
+      - first_clearance_step
+      - low_exposure_success
+    low_exposure_success_status: diagnostic_only

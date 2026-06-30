@@ -57,6 +57,13 @@ from robot_sf.benchmark.snqi.weights_validation import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+NORMALIZED_METRICS: tuple[str, ...] = (
+    "collisions",
+    "near_misses",
+    "force_exceed_events",
+    "jerk_mean",
+)
+
 
 def _apply_log_level(level_name: str | None) -> None:
     """Apply log level to root and module loggers from a string name.
@@ -96,6 +103,8 @@ class SNQIWeightRecomputer:
         self.baseline_stats = baseline_stats
         self.weight_names = WEIGHT_NAMES
         self.simplex = False  # toggled externally
+        self.pareto_frontier_max = 10
+        self.pareto_frontier_samples = 600
 
     def _maybe_simplex(self, weights: dict[str, float], total: float = 10.0) -> dict[str, float]:
         """TODO docstring. Document this function.
@@ -273,6 +282,7 @@ class SNQIWeightRecomputer:
         """
         logger.info("Recomputing weights with strategy: %s", strategy)
 
+        pareto_samples: list[dict[str, Any]] = []
         if strategy == "default":
             weights = self.default_weights()
         elif strategy == "balanced":
@@ -282,9 +292,10 @@ class SNQIWeightRecomputer:
         elif strategy == "efficiency_focused":
             weights = self.efficiency_focused_weights()
         elif strategy == "pareto":
-            pareto_samples = self.pareto_frontier_weights()
+            pareto_samples = self.pareto_frontier_weights(
+                n_samples=max(1, int(self.pareto_frontier_samples))
+            )
             if pareto_samples:
-                # Select the one with best balance of discriminative power and stability
                 best_sample = max(
                     pareto_samples,
                     key=lambda x: 0.6 * x["discriminative_power"] + 0.4 * x["stability"],
@@ -294,8 +305,8 @@ class SNQIWeightRecomputer:
                 weights = self.default_weights()
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
+
         weights = self._maybe_simplex(weights)
-        # Compute statistics for the selected weights
         stats = self.compute_weight_statistics(weights)
 
         result = {
@@ -304,9 +315,12 @@ class SNQIWeightRecomputer:
             "statistics": stats,
             "normalization_strategy": "median_p95",
         }
-
         if strategy == "pareto":
-            result["pareto_alternatives"] = pareto_samples[:5]  # Include top 5 alternatives
+            result["pareto_frontier_size"] = len(pareto_samples)
+            result["pareto_alternatives"] = pareto_samples[:5]
+            if getattr(self, "export_pareto_front", False):
+                max_frontier = max(1, int(getattr(self, "pareto_frontier_max", 0)))
+                result["pareto_frontier"] = pareto_samples[:max_frontier]
 
         return result
 
@@ -672,6 +686,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Treat presence of baseline-missing metrics as an error (non-zero exit)",
     )
     parser.add_argument(
+        "--decision-preflight",
+        action="store_true",
+        help="Enable fail-closed preflight for missing/invalid normalized inputs.",
+    )
+    parser.add_argument(
+        "--export-pareto-front",
+        action="store_true",
+        help="Export sampled Pareto frontier when strategy pareto is active.",
+    )
+    parser.add_argument(
+        "--pareto-front-samples",
+        type=int,
+        default=600,
+        help="Number of Pareto frontier samples to draw when export is enabled.",
+    )
+    parser.add_argument(
+        "--decision-reversal-threshold",
+        type=float,
+        default=0.0,
+        help="If >0 and compare-strategies, flag correlation pairs below this value.",
+    )
+    parser.add_argument(
         "--sample",
         type=int,
         default=None,
@@ -710,6 +746,90 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Logging verbosity (default: INFO)",
     )
     return parser.parse_args(argv)
+
+
+def _normalize_stats_issues(baseline_stats: dict[str, dict[str, float]]) -> list[str]:
+    """Collect baseline-normalization contract issues for fail-closed preflight."""
+    issues: list[str] = []
+    for metric in NORMALIZED_METRICS:
+        stats = baseline_stats.get(metric)
+        if not isinstance(stats, dict):
+            issues.append(f"{metric}: missing baseline normalization stats")
+            continue
+        for key in ("med", "p95"):
+            value = stats.get(key)
+            if not isinstance(value, int | float) or not np.isfinite(float(value)):
+                issues.append(f"{metric}: missing or non-finite {key}")
+                break
+        else:
+            med = float(stats["med"])
+            p95 = float(stats["p95"])
+            if p95 < med:
+                issues.append(f"{metric}: invalid normalization order (p95={p95} < med={med})")
+    return issues
+
+
+def _build_preflight_packet(
+    args: argparse.Namespace,
+    missing_info: dict[str, Any],
+    baseline_issues: list[str],
+    invalid_normalized_issues: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "status": "failed",
+        "scope": "snqi_recompute_preflight",
+        "issues": {
+            "missing_baseline_metrics": missing_info["metrics"],
+            "invalid_baseline_stats": baseline_issues,
+            "invalid_normalized_metrics": invalid_normalized_issues,
+        },
+        "_metadata": {
+            "episodes_file": str(args.episodes),
+            "baseline_file": str(args.baseline),
+            "seed": args.seed,
+            "invocation": "python " + " ".join(sys.argv),
+        },
+    }
+
+
+def _detect_invalid_normalized_metric_values(
+    episodes: list[dict[str, Any]], max_examples: int = 5
+) -> list[dict[str, Any]]:
+    """Collect episodes where normalized metrics are missing finite checks."""
+
+    issues: list[dict[str, Any]] = []
+
+    for metric in NORMALIZED_METRICS:
+        invalid_examples: list[str] = []
+        invalid_count = 0
+        for index, ep in enumerate(episodes):
+            metrics = ep.get("metrics", {}) or {}
+            if metric not in metrics:
+                continue
+
+            raw = metrics.get(metric)
+            try:
+                invalid = not np.isfinite(float(raw))
+            except (TypeError, ValueError):
+                invalid = True
+
+            if invalid:
+                invalid_count += 1
+                if len(invalid_examples) >= max_examples:
+                    continue
+                example_id = ep.get("scenario_id") or ep.get("id") or index
+                invalid_examples.append(str(example_id))
+
+        if invalid_examples:
+            issues.append(
+                {
+                    "name": metric,
+                    "episode_count_with_invalid": invalid_count,
+                    "example_episode_ids": invalid_examples,
+                }
+            )
+
+    return issues
 
 
 def _detect_missing_baseline_metrics(
@@ -757,28 +877,22 @@ def _detect_missing_baseline_metrics(
 
 
 def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
-    """Recompute SNQI weights from episode data and baseline stats.
-
-    Args:
-        args: Parsed CLI arguments controlling sampling, weighting, and output.
-
-    Returns:
-        Exit code (0 on success; non-zero on input/processing errors).
-    """
+    """Recompute SNQI weights from episode and baseline data."""
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
-    phase_start = start_perf
     phase_timings: dict[str, float] = {}
+
     try:
         episodes, skipped_lines = load_episodes_data(args.episodes)
         baseline = load_baseline_stats(args.baseline)
     except Exception as e:
         logger.exception("Failed loading inputs: %s", e)
         return EXIT_INPUT_ERROR
-    phase_timings["load_inputs"] = perf_counter() - phase_start
+    phase_timings["load_inputs"] = perf_counter() - start_perf
     if not episodes:
         logger.error("No episodes loaded from %s", args.episodes)
         return EXIT_INPUT_ERROR
+
     original_episode_count = len(episodes)
     if args.sample is not None and args.sample > 0 and args.sample < len(episodes):
         rng = np.random.default_rng(args.seed if args.seed is not None else 1337)
@@ -789,40 +903,106 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
             len(episodes),
             original_episode_count,
         )
+
     used_episode_count = len(episodes)
     if args.seed is not None:
         np.random.seed(args.seed)
-    # Warn on small dataset sizes which can make statistics unstable
+
     try:
         threshold = int(getattr(args, "small_dataset_threshold", 20))
     except Exception:
         threshold = 20
     if used_episode_count < threshold:
         logger.warning(
-            "Small dataset: using %d episodes (< %d). Stability and bootstrap CIs may be unreliable.",
+            "Small dataset: using %d episodes (< %d). Stability bootstrap CIs may be unreliable.",
             used_episode_count,
             threshold,
         )
+
+    results: dict[str, Any] = {}
+    phase_start = perf_counter()
+    missing_info = _detect_missing_baseline_metrics(
+        episodes,
+        baseline,
+        max_examples=args.missing_metric_max_list,
+    )
+    results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
+    baseline_issues = _normalize_stats_issues(baseline)
+    results.setdefault("diagnostics", {})["baseline_normalization_issues"] = baseline_issues
+    invalid_metric_issues = _detect_invalid_normalized_metric_values(
+        episodes,
+        max_examples=args.missing_metric_max_list,
+    )
+    results.setdefault("diagnostics", {})["invalid_normalized_metric_values"] = (
+        invalid_metric_issues
+    )
+    if missing_info["total_missing"]:
+        logger.warning(
+            "Baseline missing %d metric(s) present in episodes: %s",
+            missing_info["total_missing"],
+            ", ".join(m["name"] for m in missing_info["metrics"]),
+        )
+    if baseline_issues:
+        logger.warning(
+            "SNQI preflight detected %d baseline normalization issue(s)",
+            len(baseline_issues),
+        )
+    if invalid_metric_issues:
+        logger.warning(
+            "SNQI preflight detected %d invalid normalized metric value issue(s)",
+            len(invalid_metric_issues),
+        )
+    has_preflight_issues = bool(
+        missing_info["total_missing"] or baseline_issues or invalid_metric_issues
+    )
+    if getattr(args, "decision_preflight", False) and has_preflight_issues:
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(
+                _build_preflight_packet(
+                    args,
+                    missing_info,
+                    baseline_issues,
+                    invalid_metric_issues,
+                ),
+                f,
+                indent=2,
+            )
+        logger.error("Failing due to --decision-preflight input contract check.")
+        if invalid_metric_issues:
+            return EXIT_INPUT_ERROR
+        return EXIT_MISSING_METRIC_ERROR
+    phase_timings["missing_metric_detection"] = perf_counter() - phase_start
+
     try:
         recomputer = SNQIWeightRecomputer(episodes, baseline)
-        recomputer.simplex = bool(args.simplex)
-        external_weights: dict[str, float] | None = None
-        if args.external_weights_file is not None:
-            try:
-                with open(args.external_weights_file, encoding="utf-8") as f:
-                    raw = json.load(f)
-                if not isinstance(raw, dict):  # pragma: no cover - defensive
-                    raise ValueError("External weights file must be a JSON object")
-                external_weights = _validate_weights_mapping(raw)
-                if args.simplex:
-                    s = sum(external_weights.values())
-                    if s > 0:
-                        external_weights = {k: (v / s) * 10.0 for k, v in external_weights.items()}
-                logger.info("Loaded external weights from %s", args.external_weights_file)
-            except Exception as e:
-                logger.exception("Failed loading external weights: %s", e)
-                return EXIT_INPUT_ERROR
-        results: dict[str, Any] = {}
+        recomputer.pareto_frontier_samples = max(
+            1,
+            int(getattr(args, "pareto_front_samples", recomputer.pareto_frontier_samples)),
+        )
+        recomputer.export_pareto_front = bool(getattr(args, "export_pareto_front", False))
+        recomputer.simplex = bool(getattr(args, "simplex", False))
+    except Exception as e:
+        logger.exception("Failed to initialize recomputer: %s", e)
+        return EXIT_RUNTIME_ERROR
+
+    external_weights: dict[str, float] | None = None
+    if args.external_weights_file is not None:
+        try:
+            with open(args.external_weights_file, encoding="utf-8") as f:
+                raw = json.load(f)
+            if not isinstance(raw, dict):
+                raise ValueError("External weights file must be JSON object")
+            external_weights = _validate_weights_mapping(raw)
+            if args.simplex:
+                s = sum(external_weights.values())
+                if s > 0:
+                    external_weights = {k: (v / s) * 10.0 for k, v in external_weights.items()}
+            logger.info("Loaded external weights %s", args.external_weights_file)
+        except Exception as e:
+            logger.exception("Failed loading external weights: %s", e)
+            return EXIT_INPUT_ERROR
+
+    try:
         if args.compare_strategies:
             phase_start = perf_counter()
             all_strategies = [
@@ -835,20 +1015,30 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
             strategy_results = _compute_strategy_set(recomputer, all_strategies)
             phase_timings["strategy_comparison"] = perf_counter() - phase_start
             results["strategy_comparison"] = strategy_results
+
+            phase_start = perf_counter()
             correlations: dict[str, float] = {}
             names = list(strategy_results.keys())
-            phase_start = perf_counter()
             for i, n1 in enumerate(names):
                 for n2 in names[i + 1 :]:
                     try:
                         correlations[f"{n1}_vs_{n2}"] = recomputer.rank_correlation_analysis(
-                            strategy_results[n1]["weights"],
-                            strategy_results[n2]["weights"],
+                            strategy_results[n1]["weights"], strategy_results[n2]["weights"]
                         )
-                    except Exception as e:
-                        logger.debug("Correlation %s vs %s failed: %s", n1, n2, e)
+                    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+                        logger.debug("Correlation %s vs %s failed", n1, n2)
             results["strategy_correlations"] = correlations
+            if getattr(args, "decision_reversal_threshold", 0.0) > 0 and correlations:
+                low_pairs = [
+                    {"pair": pair, "correlation": corr}
+                    for pair, corr in correlations.items()
+                    if abs(corr) < float(args.decision_reversal_threshold)
+                ]
+                results.setdefault("decision_reversal_diagnostics", {})["low_correlations"] = (
+                    low_pairs
+                )
             phase_timings["strategy_correlations"] = perf_counter() - phase_start
+
             recommended_name, recommended_weights = _select_recommended(strategy_results)
             results["recommended_strategy"] = recommended_name
             results["recommended_weights"] = recommended_weights
@@ -857,15 +1047,21 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
             single = recomputer.recompute_with_strategy(args.strategy)
             phase_timings["single_strategy"] = perf_counter() - phase_start
             results["strategy_result"] = single
+            results["recommended_strategy"] = single["strategy"]
             results["recommended_weights"] = single["weights"]
+
+        if missing_info["total_missing"] and args.fail_on_missing_metric:
+            logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
+            return EXIT_MISSING_METRIC_ERROR
+
         if args.compare_normalization:
             phase_start = perf_counter()
             results["normalization_comparison"] = recomputer.compare_normalization_strategies(
-                results["recommended_weights"],
+                results["recommended_weights"]
             )
             phase_timings["normalization_comparison"] = perf_counter() - phase_start
-        # Bootstrap confidence intervals (optional)
-        if getattr(args, "bootstrap_samples", 0) and args.bootstrap_samples > 0:
+
+        if args.bootstrap_samples > 0:
             try:
                 phase_start = perf_counter()
                 bs_rng = np.random.default_rng(args.seed if args.seed is not None else 1234)
@@ -878,7 +1074,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                 n = len(episode_scores)
                 if n:
                     reps = args.bootstrap_samples
-                    means: list[float] = []
+                    means = []
                     for _ in range(reps):
                         idx = bs_rng.integers(0, n, size=n)
                         sample = [episode_scores[i] for i in idx]
@@ -894,27 +1090,10 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                         "ci": [lower, upper],
                         "confidence_level": float(getattr(args, "bootstrap_confidence", 0.95)),
                     }
-                phase_timings["bootstrap"] = perf_counter() - phase_start
+                    phase_timings["bootstrap"] = perf_counter() - phase_start
             except Exception as e:
                 logger.warning("Bootstrap computation failed: %s", e)
-        # Baseline missing metric diagnostics
-        phase_start = perf_counter()
-        missing_info = _detect_missing_baseline_metrics(
-            episodes,
-            baseline,
-            args.missing_metric_max_list,
-        )
-        results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
-        if missing_info["total_missing"]:
-            logger.warning(
-                "Baseline missing %d metric(s) present in episodes: %s",
-                missing_info["total_missing"],
-                ", ".join(m["name"] for m in missing_info["metrics"]),
-            )
-            if args.fail_on_missing_metric:
-                logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
-                return EXIT_MISSING_METRIC_ERROR
-        phase_timings["diagnostics"] = perf_counter() - phase_start
+
         if external_weights is not None:
             phase_start = perf_counter()
             ext_stats = recomputer.compute_weight_statistics(external_weights)
@@ -927,6 +1106,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                 ),
             }
             phase_timings["external_weights_eval"] = perf_counter() - phase_start
+
         _augment_metadata(
             results,
             args,
@@ -936,38 +1116,39 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
             original_episode_count=original_episode_count,
             used_episode_count=used_episode_count,
         )
-        # Record skipped malformed lines
         results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
-        # Record missing metric count in metadata for summary consumption
         results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info[
             "total_missing"
         ]
+
         _finalize_summary(results, args)
         if "summary" in results:
-            # Ensure key presence even if zero for contract stability
             results["summary"]["skipped_malformed_lines"] = skipped_lines
             results["summary"]["baseline_missing_metric_count"] = missing_info["total_missing"]
+
         try:
             phase_start = perf_counter()
             if args.validate:
                 validate_snqi(results, "recompute", check_finite=True)
             else:
                 assert_all_finite(results)
+            phase_timings["validation"] = perf_counter() - phase_start
         except ValueError as e:
             logger.exception("Validation failed: %s", e)
             return EXIT_VALIDATION_ERROR
-        phase_timings["validation"] = perf_counter() - phase_start
+
         phase_start = perf_counter()
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
         phase_timings["write_output"] = perf_counter() - phase_start
+
         logger.info("Results saved to %s", args.output)
-        if phase_timings:
-            timing_lines = ["Phase timings (seconds):"] + [
-                f"  {k}: {v:.4f}" for k, v in sorted(phase_timings.items())
-            ]
-            logger.info("\n%s", "\n".join(timing_lines))
+        timing_lines = ["Phase timings (seconds):"] + [
+            f"  {k}: {v:.4f}" for k, v in sorted(phase_timings.items())
+        ]
+
+        logger.info("\n%s", "\n".join(timing_lines))
         _print_summary(results, args, len(episodes))
         return EXIT_SUCCESS
     except Exception as e:

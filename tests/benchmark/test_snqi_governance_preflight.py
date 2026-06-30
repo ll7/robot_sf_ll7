@@ -39,6 +39,39 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "camera_ready_v3",
         "model_canonical_v1",
     ]
+    # Assert the raw source sequence (order + length) before keying by name so a
+    # duplicate-name regression cannot be masked by later entries overwriting earlier
+    # ones in the dict comprehension below.
+    expected_source_names = [
+        "code_default",
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    discovered_sources = blocker_3723["discovered_weight_sources"]
+    assert [source["name"] for source in discovered_sources] == expected_source_names
+    discovered_by_name = {source["name"]: source for source in discovered_sources}
+    records_by_name = {record["name"]: record for record in report["weights"]["records"]}
+    assert list(discovered_by_name) == expected_source_names
+    assert discovered_by_name["code_default"] == {
+        "name": "code_default",
+        "kind": "code_default",
+        "relpath": None,
+        "versioned_id": "snqi_weights_code_default_v1",
+        "declares_canonical": True,
+        "available": True,
+        "dominant_term": "w_collisions",
+        "scale_class": "raw",
+        "content_sha256": records_by_name["code_default"]["content_sha256"],
+        "load_error": None,
+    }
+    model_source = discovered_by_name["model_canonical_v1"]
+    assert model_source["relpath"] == "model/snqi_canonical_weights_v1.json"
+    assert model_source["versioned_id"] == "snqi_weights_model_canonical_v1"
+    assert model_source["declares_canonical"] is True
+    assert model_source["dominant_term"] == "w_jerk"
+    assert model_source["content_sha256"]
     assert blocker_3723["canonical_declaring_sources"] == [
         "code_default",
         "model_canonical_v1",
@@ -197,3 +230,49 @@ def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> 
     missing = [b for b in report["blockers"] if b["kind"] == "missing_baseline_coverage"]
     assert missing
     assert set(missing[0]["metrics"]) == {"force_exceed_events", "jerk_mean"}
+
+
+def test_governance_checker_payload_is_referenced_in_report() -> None:
+    """Normalization checker packet is included in machine-parseable report."""
+    report = build_governance_report(repo_root=REPO_ROOT)
+    checker = report["normalization_checker"]
+    assert checker["issue"] == 3699
+    assert checker["decision_required"] is True
+    assert checker["assumption"] == (
+        "No score semantics changed; this report only surfaces mixed-basis "
+        "diagnostics and baseline coverage gaps for issue #3699."
+    )
+    assert checker["mixed_scale"] is True
+    assert checker["weights_comparable"] is False
+    assert checker["status"] == "mixed_unbounded_penalty_basis"
+    assert checker["raw_penalty_terms_dominate"] is True
+    assert checker["has_weight_bound_exceedance"] is True
+    contributions = report["normalization_contributions"]
+    assert checker["raw_penalty_absolute_share"] == pytest.approx(
+        contributions["raw_penalty_absolute_share"]
+    )
+    assert checker["baseline_normalized_penalty_absolute_share"] == pytest.approx(
+        contributions["baseline_normalized_penalty_absolute_share"]
+    )
+
+
+def test_governance_report_json_exports_normalization_checker(tmp_path: Path) -> None:
+    """JSON export includes the checker packet for external consumers."""
+    out = tmp_path / "snqi_governance.json"
+    exit_code = main(
+        [
+            "--repo-root",
+            str(REPO_ROOT),
+            "--json",
+            "--json-out",
+            str(out),
+            "--allow-current-blockers",
+        ]
+    )
+    assert exit_code == 0
+    assert out.is_file()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    checker = payload["normalization_checker"]
+    assert isinstance(checker["assumption"], str)
+    assert "No score semantics changed" in checker["assumption"]
+    assert checker["decision_required"] is True

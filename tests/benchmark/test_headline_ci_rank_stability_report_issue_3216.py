@@ -538,6 +538,78 @@ def test_cli_decision_blocker_gate_passes_clear_local_preflight(tmp_path) -> Non
     assert result["decision_packet"]["s30_decision_status"] == "not_required_by_local_preflight"
 
 
+def test_decision_packet_blocks_only_s30_overlap_without_manuscript_blocker() -> None:
+    """S30 overlap downgrades still fail local blockers when manuscript table is clear."""
+    rows = [
+        _cell_row("bottleneck", "best", {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48] * 4}),
+        _cell_row("bottleneck", "mid", {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53] * 4}),
+    ]
+    report = _report(
+        rows,
+        metrics=("snqi",),
+        bootstrap_samples=1000,
+        rank_metric="snqi",
+        rank_profile="snqi_diagnostic",
+        resamples=200,
+    )
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "needs_review"
+    assert "adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data" in packet["s30_reasons"]
+    assert mod.decision_packet_has_blocker(packet) is True
+
+
+def test_cli_fail_on_blocker_triggers_when_only_s30_needs_review(tmp_path: Path) -> None:
+    """S30-only overlap downgrade in local preflight exits with blocker code."""
+    rows = [
+        {
+            "scenario_family": "bottleneck",
+            "planner_key": "best",
+            "row_status": "successful_evidence",
+            "execution_mode": "nominal",
+            "per_seed": [
+                {"seed": 100 + idx, "metrics": {"snqi": [0.50, 0.51, 0.49, 0.52, 0.48][idx % 5]}}
+                for idx in range(20)
+            ],
+        },
+        {
+            "scenario_family": "bottleneck",
+            "planner_key": "mid",
+            "row_status": "successful_evidence",
+            "execution_mode": "nominal",
+            "per_seed": [
+                {
+                    "seed": 200 + idx,
+                    "metrics": {"snqi": [0.49, 0.50, 0.48, 0.51, 0.49][idx % 5]},
+                }
+                for idx in range(20)
+            ],
+        },
+    ]
+    rows_path = tmp_path / "rows.json"
+    rows_path.write_text(json.dumps(rows), encoding="utf-8")
+    out_dir = tmp_path / "s30_blocker"
+    exit_code = mod.main(
+        [
+            "--rows",
+            str(rows_path),
+            "--metrics",
+            "snqi",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "200",
+            "--fail-on-decision-blocker",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+    assert exit_code == 4
+    packet = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))["decision_packet"]
+    assert packet["s30_decision_status"] == "needs_review"
+    assert mod.decision_packet_has_blocker(packet) is True
+
+
 def _job_13198_packet(tmp_path) -> Path:
     """Write a compact deterministic job-13198 evidence packet fixture."""
 
@@ -701,3 +773,37 @@ def test_constraints_first_profile_flags_partial_metric_coverage(tmp_path) -> No
     assert packet["constraints_first_metric_gaps"] == ["collisions", "near_misses"]
     assert "constraints_first_metrics_missing" in packet["manuscript_blockers"]
     assert "constraints_first_metric_gap" in packet["s30_reasons"]
+
+
+def test_decision_packet_s20_high_overlap_clears_s30_local_preflight() -> None:
+    """S20-budget high-overlap rows clear the S30 local preflight gate (no S30 reasons, no blocker)."""
+    rows = [
+        _cell_row(
+            "squeeze",
+            "planner_a",
+            {
+                "snqi": [0.50, 0.51, 0.49, 0.52, 0.50] * 4,
+            },
+        ),
+        _cell_row(
+            "squeeze",
+            "planner_b",
+            {
+                "snqi": [0.49, 0.50, 0.48, 0.51, 0.49] * 4,
+            },
+        ),
+    ]
+    report = _report(
+        rows,
+        metrics=("snqi",),
+        bootstrap_samples=1000,
+        rank_metric="snqi",
+        rank_profile="snqi_diagnostic",
+        resamples=300,
+    )
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "not_required_by_local_preflight"
+    assert packet["min_seed_count"] == 20
+    assert packet["s30_reasons"] == []
+    assert not mod.decision_packet_has_blocker(packet)

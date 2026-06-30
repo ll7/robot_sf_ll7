@@ -24,6 +24,7 @@ from robot_sf.benchmark.snqi.exit_codes import (
     EXIT_VALIDATION_ERROR,
 )
 from robot_sf.benchmark.snqi.normalization_inventory import (
+    build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
 )
 from robot_sf.benchmark.snqi.weights_inventory import build_inventory_report
@@ -34,6 +35,31 @@ CLAIM_BOUNDARY = (
     "change normalization, change compute_snqi output, or make SNQI a primary "
     "safety ranking."
 )
+
+CONTRIBUTION_DIAGNOSTIC_METRICS = {
+    "success": 1.0,
+    "time_to_goal_norm": 3.0,
+    "collisions": 9.0,
+    "near_misses": 9.0,
+    "comfort_exposure": 2.0,
+    "force_exceed_events": 9.0,
+    "jerk_mean": 9.0,
+}
+CONTRIBUTION_DIAGNOSTIC_WEIGHTS = {
+    "w_success": 1.0,
+    "w_time": 1.0,
+    "w_collisions": 1.0,
+    "w_near": 1.0,
+    "w_comfort": 1.0,
+    "w_force_exceed": 1.0,
+    "w_jerk": 1.0,
+}
+CONTRIBUTION_DIAGNOSTIC_BASELINE_STATS = {
+    "collisions": {"med": 0.0, "p95": 1.0},
+    "near_misses": {"med": 0.0, "p95": 1.0},
+    "force_exceed_events": {"med": 0.0, "p95": 1.0},
+    "jerk_mean": {"med": 0.0, "p95": 1.0},
+}
 
 
 def _load_baseline_stats(path: Path | None) -> dict[str, dict[str, float]] | None:
@@ -59,9 +85,16 @@ def build_governance_report(
     """Build a structured SNQI governance diagnostic report."""
     weights = build_inventory_report(repo_root)
     normalization = build_snqi_normalization_inventory(baseline_stats)
+    contribution_diagnostics = build_snqi_contribution_diagnostics(
+        CONTRIBUTION_DIAGNOSTIC_METRICS,
+        CONTRIBUTION_DIAGNOSTIC_WEIGHTS,
+        CONTRIBUTION_DIAGNOSTIC_BASELINE_STATS,
+    )
 
     blockers: list[dict[str, Any]] = []
     if weights.has_blocking_conflict:
+        weight_report = weights.to_dict()
+        source_summary = weight_report["source_summary"]
         blockers.append(
             {
                 "issue": 3723,
@@ -70,6 +103,17 @@ def build_governance_report(
                     "More than one SNQI source currently declares or implies "
                     "canonical status while disagreeing on weight direction."
                 ),
+                "registered_sources": source_summary["registered_sources"],
+                "discovered_shipped_sources": source_summary["discovered_shipped_sources"],
+                "canonical_declaring_sources": source_summary["canonical_declaring_sources"],
+                "blocking_conflicts": [
+                    conflict
+                    for conflict in weight_report["conflicts"]
+                    if conflict["severity"] == "error"
+                ],
+                "code_default_shipped_direction_comparisons": source_summary[
+                    "code_default_shipped_direction_comparisons"
+                ],
             }
         )
     if normalization.mixed_scale:
@@ -115,6 +159,7 @@ def build_governance_report(
         "blockers": blockers,
         "weights": weights.to_dict(),
         "normalization": normalization.to_dict(),
+        "normalization_contributions": contribution_diagnostics,
     }
 
 
@@ -128,6 +173,33 @@ def _print_text_report(report: dict[str, Any]) -> None:
             print(f"  - issue #{blocker['issue']} {blocker['kind']}: {blocker['detail']}")
     else:
         print("No blocking SNQI governance diagnostics detected.")
+
+    weight_records = report["weights"]["records"]
+    print("Weight sources:")
+    for record in weight_records:
+        relpath = record["relpath"] or "<code default>"
+        status = "available" if record["available"] else f"unavailable: {record['load_error']}"
+        fingerprint = record["content_sha256"] or "n/a"
+        print(
+            f"  - {record['name']} ({record['kind']}, {relpath}): "
+            f"canonical={record['declares_canonical']}; "
+            f"versioned_id={record['versioned_id']}; "
+            f"dominant={record['dominant_term']}; scale={record['scale_class']}; "
+            f"sha256={fingerprint}; {status}"
+        )
+
+    comparisons = report["weights"]["source_summary"]["code_default_shipped_direction_comparisons"]
+    if comparisons:
+        print("Code-default vs shipped JSON directions:")
+        for comparison in comparisons:
+            detail = (
+                f"{comparison['relationship']}; "
+                f"source_dominant={comparison['source_dominant_term']}; "
+                f"source_scale={comparison['source_scale_class']}"
+            )
+            if not comparison["available"]:
+                detail += f"; unavailable={comparison['load_error']}"
+            print(f" - {comparison['source']} ({comparison['relpath']}): {detail}")
 
     weight_conflicts = report["weights"]["conflicts"]
     if weight_conflicts:
@@ -143,6 +215,13 @@ def _print_text_report(report: dict[str, Any]) -> None:
         f"raw_penalty_terms={', '.join(normalization['raw_penalty_terms']) or 'none'}; "
         f"unbounded_terms={', '.join(normalization['unbounded_terms']) or 'none'}"
     )
+    version_contract = normalization["score_version_contract"]
+    print(
+        "Score version contract: "
+        f"{version_contract['score_version']}; "
+        f"status={version_contract['status']}; "
+        f"diagnostic_only={version_contract['diagnostic_only']}"
+    )
     print("Term normalization status:")
     for term in normalization["terms"]:
         role = "penalty" if term["is_penalty"] else "reward"
@@ -151,6 +230,15 @@ def _print_text_report(report: dict[str, Any]) -> None:
             f"{term['normalization_status']}; role={role}; "
             f"basis={term['measurement_basis']}; note={term['note']}"
         )
+    contributions = report["normalization_contributions"]
+    print(
+        "Contribution diagnostic: "
+        f"raw_penalty_share={contributions['raw_penalty_absolute_share']:.3f}; "
+        "baseline_normalized_penalty_share="
+        f"{contributions['baseline_normalized_penalty_absolute_share']:.3f}; "
+        f"raw_penalty_terms_dominate={contributions['raw_penalty_terms_dominate']}; "
+        f"has_weight_bound_exceedance={contributions['has_weight_bound_exceedance']}"
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:

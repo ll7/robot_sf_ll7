@@ -120,6 +120,44 @@ def test_near_miss_region_only():
     assert np.isclose(values["mean_clearance"], 0.1)
 
 
+def test_ttc_near_miss_counts_fast_approach_beyond_distance_threshold():
+    """Opt-in TTC near-miss flags a fast converging pair before distance threshold crossing."""
+    ep = _make_episode(T=3, K=1)
+    ep.dt = 1.0
+    ep.robot_pos[:, 0] = [0.0, 1.0, 2.0]
+    ep.robot_vel[:, 0] = 1.0
+    ep.peds_pos[:, 0, 0] = [6.0, 5.0, 4.0]
+
+    values = compute_all_metrics(ep, horizon=3, experimental_near_miss_ttc=True)
+
+    assert values["near_misses"] == 0.0
+    assert values["min_clearance"] == pytest.approx(0.6)
+    assert values["near_misses_ttc"] == 1.0
+    assert values["near_misses_ttc_status"] == "ok"
+    assert values["near_miss_ttc__max_closing_speed_mps"] == pytest.approx(2.0)
+    assert values["near_miss_ttc__min_ttc_s"] == pytest.approx(1.0)
+
+
+def test_ttc_near_miss_ignores_slow_drift_at_equal_clearance():
+    """Opt-in TTC near-miss separates slow drift from fast approach at equal clearance."""
+    ep = _make_episode(T=3, K=1)
+    ep.dt = 1.0
+    ep.robot_pos[:, 0] = [0.0, 0.1, 0.2]
+    ep.robot_vel[:, 0] = 0.1
+    ep.peds_pos[:, 0, 0] = 2.2
+
+    baseline = compute_all_metrics(ep, horizon=3)
+    values = compute_all_metrics(ep, horizon=3, experimental_near_miss_ttc=True)
+
+    assert "near_misses_ttc" not in baseline
+    assert values["near_misses"] == baseline["near_misses"] == 0.0
+    assert values["min_clearance"] == baseline["min_clearance"] == pytest.approx(0.6)
+    assert values["near_misses_ttc"] == 0.0
+    assert values["near_misses_ttc_status"] == "ok"
+    assert values["near_miss_ttc__max_closing_speed_mps"] == pytest.approx(0.1)
+    assert values["near_miss_ttc__min_ttc_s"] == pytest.approx(20.0)
+
+
 def test_mixed_collision_and_near_miss():
     # First two timesteps overlap (collision), next two are positive-clearance near-misses.
     """TODO docstring. Document this function."""

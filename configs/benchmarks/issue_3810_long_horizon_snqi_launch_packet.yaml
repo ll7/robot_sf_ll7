@@ -220,6 +220,16 @@ launch_packet:
   target_host: imech039
   blocking_jobs:
     - 13175
+  live_issue_state:
+    checked_date: "2026-06-30"
+    source: gh_issue_view_3810_labels
+    required_label: "state:running"
+    submit_blocker: true
+    resolution_required_before_submit: >
+      Issue #3810 is still marked "state:running", so a submit-host go
+      decision must first prove the active run is reconciled or no longer
+      relevant. Public packet checks must keep this as a blocker until the
+      live issue state changes and the packet is refreshed.
   ledger_reconciliation:
     checked_date: "2026-06-29"
     source: private_ops_jobs_and_queue_read_only_needs_submit_host_refresh
@@ -259,6 +269,7 @@ launch_packet:
         - target_host
         - queue_summary_timestamp
         - duplicate_status
+        - live_issue_state
         - job_13175_state
         - route_id
         - submit_wrapper_supports_target_host
@@ -270,6 +281,30 @@ launch_packet:
         not terminal/reconciled, if an issue #3810 duplicate exists, if the
         owning worktree is dirty, or if the private submit wrapper lacks
         imech039 support, the decision remains blocked.
+  interpretation_gate:
+    status: blocked_pending_active_run_retention_reconciliation
+    required_before_claim: true
+    required_before_report_publication: true
+    active_run_state: state:running
+    blockers:
+      - active_run_state
+      - retention_paths_missing
+      - route_config_provenance_incomplete
+      - snqi_recalibration_inputs_missing
+      - interaction_exposure_diagnostics_missing
+    required_evidence:
+      - private_ops_route_dry_run
+      - retained_compact_review_bundle
+      - external_artifact_pointer
+      - snqi_recalibration_bundle
+      - horizon_sensitivity_report
+      - interaction_exposure_diagnostics
+    decision_policy: >
+      The comprehensive h600 report remains analysis-blocked while issue #3810
+      is state:running or any retention, route/config provenance, Social
+      Navigation Quality Index recalibration, or interaction-exposure diagnostic
+      evidence is absent. Passing this public packet validator is not permission
+      to interpret, publish, or promote benchmark claims.
   route:
     private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops  # allow-abs-path: private-ops routing (machine-local, non-portable)
     queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh  # allow-abs-path: private-ops routing (machine-local, non-portable)

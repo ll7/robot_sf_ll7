@@ -23,6 +23,52 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     assert report["weights"]["has_blocking_conflict"] is True
     assert report["normalization"]["mixed_scale"] is True
     assert set(report["normalization"]["raw_penalty_terms"]) == {"time", "comfort"}
+    blocker_3723 = next(
+        blocker for blocker in report["blockers"] if blocker["kind"] == "weight_provenance_conflict"
+    )
+    assert blocker_3723["registered_sources"] == [
+        "code_default",
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    assert blocker_3723["discovered_shipped_sources"] == [
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    assert blocker_3723["canonical_declaring_sources"] == [
+        "code_default",
+        "model_canonical_v1",
+    ]
+    assert len(blocker_3723["blocking_conflicts"]) == 1
+    conflict = blocker_3723["blocking_conflicts"][0]
+    assert conflict["kind"] == "canonical_direction_conflict"
+    assert conflict["severity"] == "error"
+    assert conflict["sources"] == ["code_default", "model_canonical_v1"]
+    assert "dominant=w_collisions" in conflict["detail"]
+    assert "dominant=w_jerk" in conflict["detail"]
+    comparisons_by_source = {
+        comparison["source"]: comparison
+        for comparison in blocker_3723["code_default_shipped_direction_comparisons"]
+    }
+    assert set(comparisons_by_source) == {
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    }
+    assert comparisons_by_source["model_canonical_v1"]["relationship"] == "different_direction"
+    assert comparisons_by_source["model_canonical_v1"]["source_dominant_term"] == "w_jerk"
+    assert comparisons_by_source["camera_ready_v3"]["relationship"] == "different_direction"
+    assert comparisons_by_source["camera_ready_v3"]["source_dominant_term"] == "w_near"
+    assert report["normalization"]["score_version_contract"]["score_version"] == "SNQI-v0"
+    assert (
+        report["normalization"]["score_version_contract"]["status"]
+        == "legacy_mixed_basis_diagnostic_only"
+    )
     blocker_3699 = next(
         blocker for blocker in report["blockers"] if blocker["kind"] == "mixed_normalization_basis"
     )
@@ -37,6 +83,24 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "force_exceed": "baseline_normalized_bounded",
         "jerk": "baseline_normalized_bounded",
     }
+    contributions = report["normalization_contributions"]
+    assert contributions["schema_version"] == "snqi_normalization_contributions.v1"
+    assert contributions["diagnostic_only"] is True
+    assert contributions["mixed_basis"] is True
+    assert contributions["raw_penalty_terms_dominate"] is True
+    assert contributions["has_weight_bound_exceedance"] is True
+    assert contributions["score_version_contract"]["score_semantics_changed"] is False
+    assert {term["term"] for term in contributions["weight_bound_exceedances"]} == {
+        "time",
+        "comfort",
+    }
+    assert contributions["normalization_contract"]["status"] == "mixed_unbounded_penalty_basis"
+    assert contributions["normalization_contract"]["weights_comparable"] is False
+    assert contributions["normalization_contract"]["decision_required_issue"] == 3699
+    assert (
+        contributions["raw_penalty_absolute_share"]
+        > contributions["baseline_normalized_penalty_absolute_share"]
+    )
 
 
 def test_governance_main_fails_closed_but_allows_inspection(tmp_path: Path) -> None:
@@ -67,7 +131,31 @@ def test_governance_text_lists_per_term_normalization_status(
     assert main(["--repo-root", str(REPO_ROOT), "--allow-current-blockers"]) == 0
 
     out = capsys.readouterr().out
+    assert "Weight sources:" in out
+    assert "code_default (code_default, <code default>): canonical=True" in out
+    assert "versioned_id=snqi_weights_code_default_v1" in out
+    assert "model_canonical_v1 (shipped_json, model/snqi_canonical_weights_v1.json)" in out
+    assert "versioned_id=snqi_weights_model_canonical_v1" in out
+    assert (
+        "camera_ready_v3 (shipped_json, configs/benchmarks/snqi_weights_camera_ready_v3.json)"
+    ) in out
+    assert "versioned_id=snqi_weights_camera_ready_v3" in out
+    assert "dominant=w_collisions; scale=raw; sha256=" in out
+    assert "dominant=w_near; scale=normalized_simplex; sha256=" in out
+    assert "Code-default vs shipped JSON directions:" in out
+    assert (
+        "model_canonical_v1 (model/snqi_canonical_weights_v1.json): "
+        "different_direction; source_dominant=w_jerk; source_scale=raw" in out
+    )
+    assert "Weight provenance conflicts:" in out
+    assert "error canonical_direction_conflict (code_default, model_canonical_v1)" in out
+    assert "warning code_default_shipped_direction_mismatch (code_default, camera_ready_v1)" in out
+    assert "warning code_default_shipped_direction_mismatch (code_default, camera_ready_v3)" in out
     assert "Term normalization status:" in out
+    assert (
+        "Score version contract: SNQI-v0; "
+        "status=legacy_mixed_basis_diagnostic_only; diagnostic_only=True"
+    ) in out
     assert "time (time_to_goal_norm, w_time): raw_unbounded" in out
     assert "basis=raw time-to-goal ratio" in out
     assert "comfort (comfort_exposure, w_comfort): raw_unbounded" in out
@@ -75,6 +163,9 @@ def test_governance_text_lists_per_term_normalization_status(
     assert "collisions (collisions, w_collisions): baseline_normalized_bounded" in out
     assert "basis=baseline-relative median/p95 clamped value" in out
     assert "jerk (jerk_mean, w_jerk): baseline_normalized_bounded" in out
+    assert "Contribution diagnostic:" in out
+    assert "raw_penalty_terms_dominate=True" in out
+    assert "has_weight_bound_exceedance=True" in out
 
 
 def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> None:

@@ -266,6 +266,9 @@ def test_packet_output_argument_writes_compact_json(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert output.is_file()
-    loaded = json.loads(output.read_text(encoding="utf-8"))
+    raw = output.read_text(encoding="utf-8")
+    assert raw.endswith("\n")
+    loaded = json.loads(raw)
+    assert raw == json.dumps(loaded, indent=2, sort_keys=True) + "\n"
     assert loaded["schema_version"] == "s20-s30-evidence-gap-packet.v1"
     assert loaded["job_id"] == "13175"

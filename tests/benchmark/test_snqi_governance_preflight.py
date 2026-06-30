@@ -42,6 +42,7 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     discovered_by_name = {
         source["name"]: source for source in blocker_3723["discovered_weight_sources"]
     }
+    records_by_name = {record["name"]: record for record in report["weights"]["records"]}
     assert list(discovered_by_name) == [
         "code_default",
         "camera_ready_v1",
@@ -58,7 +59,7 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "available": True,
         "dominant_term": "w_collisions",
         "scale_class": "raw",
-        "content_sha256": report["weights"]["records"][0]["content_sha256"],
+        "content_sha256": records_by_name["code_default"]["content_sha256"],
         "load_error": None,
     }
     model_source = discovered_by_name["model_canonical_v1"]

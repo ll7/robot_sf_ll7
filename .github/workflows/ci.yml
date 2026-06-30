@@ -44,7 +44,7 @@ jobs:
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -103,7 +103,7 @@ jobs:
 
       - name: Save coverage baseline (main branch only)
         if: github.ref == 'refs/heads/main' && success()
-        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: output/coverage/.coverage-baseline.json
           key: coverage-baseline-${{ github.ref_name }}-${{ github.sha }}
@@ -123,7 +123,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -199,7 +199,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
@@ -223,7 +223,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python

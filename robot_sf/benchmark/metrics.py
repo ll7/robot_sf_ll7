@@ -2792,7 +2792,7 @@ METRIC_NAMES: list[str] = [
 ]
 
 
-def compute_all_metrics(  # noqa: D417, PLR0913, PLR0915
+def compute_all_metrics(  # noqa: PLR0913, PLR0915
     data: EpisodeData,
     *,
     horizon: int,
@@ -2824,10 +2824,18 @@ def compute_all_metrics(  # noqa: D417, PLR0913, PLR0915
             estimate near-vs-far pedestrian acceleration and turn-rate deltas.
         experimental_human_interaction_proxy: Enable optional diagnostic ``human_proxy_*`` metrics
             for mechanism reports. These are simulation proxies only.
+        experimental_near_miss_ttc: Enable the opt-in, diagnostic-only time-to-collision near-miss
+            surface (``near_misses_ttc`` plus ``near_miss_ttc__*`` status/threshold keys). The
+            legacy distance-based ``near_misses`` metric is unchanged and emitted regardless. When
+            inputs are unsupported the count key is omitted and a ``near_misses_ttc_status`` of
+            ``"unsupported-inputs"`` is reported (fail-closed, never a false zero).
         ped_impact_radius_m: Near/far distance threshold in meters used by experimental pedestrian
             impact metrics.
         ped_impact_window_steps: Trailing smoothing window length (timesteps) used by
             experimental pedestrian impact metrics.
+        near_miss_ttc_threshold_s: TTC threshold (seconds) for the opt-in near-miss count when
+            ``experimental_near_miss_ttc`` is enabled. ``None`` uses the uncalibrated diagnostic
+            placeholder ``DIAGNOSTIC_TTC_THRESHOLD_S``.
         social_proxemic_radius_m: Personal-space radius used by exploratory social acceptability
             metrics when ``experimental_ped_impact`` is enabled.
         human_proxy_yield_speed_mps: Robot speed threshold used to detect proxy yielding.
@@ -2838,7 +2846,10 @@ def compute_all_metrics(  # noqa: D417, PLR0913, PLR0915
         dict[str, Any]: Mapping from metric name (e.g., ``success``, ``force_q50``,
         ``force_gradient_norm_mean``) to the computed scalar value. When
         ``experimental_ped_impact`` is enabled, additional ``ped_impact_*`` and
-        exploratory ``social_proxemic_*`` keys are included.
+        exploratory ``social_proxemic_*`` keys are included. When
+        ``experimental_near_miss_ttc`` is enabled, opt-in ``near_misses_ttc`` and
+        ``near_miss_ttc__*`` diagnostic keys are included (diagnostic-only, not benchmark
+        evidence).
     """
     if shortest_path_len is None:
         shortest_path_len = float(np.linalg.norm(data.robot_pos[0] - data.goal))  # simple fallback

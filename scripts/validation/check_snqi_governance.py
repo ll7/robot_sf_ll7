@@ -10,6 +10,7 @@ or promote SNQI to a primary safety ranking.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import sys
@@ -149,9 +150,13 @@ def build_governance_report(
                     "raw_penalty_terms_dominate": contribution_diagnostics[
                         "raw_penalty_terms_dominate"
                     ],
-                    "weight_bound_exceedance_terms": contribution_diagnostics[
-                        "normalization_contract"
-                    ]["weight_bound_exceedance_terms"],
+                    # Deep-copy the nested list so the blocker payload does not alias the
+                    # same list object returned under report["normalization_contributions"].
+                    "weight_bound_exceedance_terms": copy.deepcopy(
+                        contribution_diagnostics["normalization_contract"][
+                            "weight_bound_exceedance_terms"
+                        ]
+                    ),
                     "normalization_contract_status": contribution_diagnostics[
                         "normalization_contract"
                     ]["status"],

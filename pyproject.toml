@@ -60,7 +60,7 @@ training = [
     "scikit-learn>=1.9.0",
     "optuna>=4.9.0",
     "tensorboard>=2.21.0",
-    "wandb>=0.18.7",
+    "wandb>=0.28.0",
     "optuna-dashboard>=0.20.0",
 ]
 docs = [

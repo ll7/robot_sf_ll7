@@ -36,6 +36,13 @@ _REQUIRED_SCENARIO_REFERENCES = (
 
 # Evaluation keys the pipeline reads when wiring final eval / hard-seed campaign.
 _REQUIRED_EVALUATION_KEYS = ("workers", "horizon", "dt")
+_EXPECTED_BASELINE_MODEL_ID = "predictive_proxy_selected_v1"
+_EXPECTED_PROVENANCE_KEYS = (
+    "checkpoint_path",
+    "checkpoint_provenance_path",
+    "hard_seed_evaluation_summary",
+)
+_PROVENANCE_PRETRAINING_STATUS = "expected_missing_until_training"
 
 
 class PredictiveRetrainPreflightError(ValueError):
@@ -86,8 +93,9 @@ def validate_retrain_preflight(
     feature_contract = _validate_feature_compatibility(config, errors)
     mixing = _validate_mixing(config, config_dir, errors)
     training = _validate_training(config, errors)
-    evaluation = _validate_evaluation(config, errors)
+    evaluation = _validate_evaluation(config, config_dir, root, errors)
     output_root = _validate_output(config, errors)
+    provenance = _validate_provenance(config, root, errors, output_root=output_root)
 
     if errors:
         joined = "\n- ".join(errors)
@@ -105,6 +113,7 @@ def validate_retrain_preflight(
         "mixing": mixing,
         "training": training,
         "evaluation": evaluation,
+        "provenance": provenance,
         "output_root": output_root,
     }
 
@@ -284,14 +293,171 @@ def _validate_training(config: dict[str, Any], errors: list[str]) -> dict[str, A
     return {"model_id": model_id}
 
 
-def _validate_evaluation(config: dict[str, Any], errors: list[str]) -> dict[str, Any] | None:
+def _validate_evaluation(
+    config: dict[str, Any],
+    config_dir: Path,
+    repo_root: Path,
+    errors: list[str],
+) -> dict[str, Any] | None:
     evaluation = _require_mapping(config, "evaluation", errors)
     if evaluation is None:
         return None
     for key in _REQUIRED_EVALUATION_KEYS:
         if key not in evaluation:
-            errors.append(f"evaluation.{key} is required")
-    return {"keys": sorted(k for k in _REQUIRED_EVALUATION_KEYS if k in evaluation)}
+            errors.append(f"evaluation.{key} required")
+
+    baseline_model_id = _require_non_empty_string(evaluation, "baseline_model_id", errors)
+    if baseline_model_id and baseline_model_id != _EXPECTED_BASELINE_MODEL_ID:
+        errors.append(
+            "evaluation.baseline_model_id must be "
+            f"{_EXPECTED_BASELINE_MODEL_ID!r} for issue #3254 lineage"
+        )
+
+    algo_config_path = _validate_evaluation_algo_config(
+        evaluation=evaluation,
+        config_dir=config_dir,
+        expected_model_id=baseline_model_id,
+        errors=errors,
+    )
+    _validate_registry_model_id(repo_root, baseline_model_id, errors)
+
+    return {
+        "keys": sorted(k for k in _REQUIRED_EVALUATION_KEYS if k in evaluation),
+        "baseline_model_id": baseline_model_id,
+        "baseline_algo_config": str(algo_config_path) if algo_config_path is not None else None,
+    }
+
+
+def _validate_evaluation_algo_config(
+    *,
+    evaluation: dict[str, Any],
+    config_dir: Path,
+    expected_model_id: Any,
+    errors: list[str],
+) -> Path | None:
+    value = evaluation.get("baseline_algo_config")
+    if not isinstance(value, str) or not value.strip():
+        errors.append("evaluation.baseline_algo_config must be non-empty path string")
+        return None
+    path = _resolve_path(value, config_dir)
+    if not path.is_file():
+        errors.append(f"evaluation.baseline_algo_config does not exist: {value}")
+        return None
+    payload = _load_yaml_mapping_for_preflight(
+        path,
+        label=f"evaluation.baseline_algo_config {value}",
+        errors=errors,
+    )
+    if payload is None:
+        return path
+    if not isinstance(payload, dict):
+        errors.append(f"evaluation.baseline_algo_config must be YAML mapping: {value}")
+        return path
+    config_model_id = payload.get("predictive_model_id")
+    if expected_model_id and config_model_id != expected_model_id:
+        errors.append(
+            "evaluation.baseline_algo_config predictive_model_id must match "
+            f"evaluation.baseline_model_id: {config_model_id!r} != {expected_model_id!r}"
+        )
+    return path
+
+
+def _validate_registry_model_id(repo_root: Path, model_id: Any, errors: list[str]) -> None:
+    if not model_id:
+        return
+    registry_path = repo_root / "model" / "registry.yaml"
+    if not registry_path.is_file():
+        errors.append(f"model registry missing for evaluation baseline: {registry_path}")
+        return
+    payload = _load_yaml_mapping_for_preflight(
+        registry_path,
+        label="model registry",
+        errors=errors,
+    )
+    if payload is None:
+        return
+    models = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(models, list):
+        errors.append(f"model registry missing models list: {registry_path}")
+        return
+    if not any(isinstance(model, dict) and model.get("model_id") == model_id for model in models):
+        errors.append(f"evaluation.baseline_model_id not found in model registry: {model_id}")
+
+
+def _load_yaml_mapping_for_preflight(
+    path: Path,
+    *,
+    label: str,
+    errors: list[str],
+) -> dict[str, Any] | None:
+    """Load referenced YAML mapping while preserving preflight error aggregation.
+
+    Returns:
+        Parsed mapping, or ``None`` when read/parse/type validation fails.
+    """
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        errors.append(f"{label} is not readable as valid YAML: {exc}")
+        return None
+    if not isinstance(payload, dict):
+        errors.append(f"{label} must be YAML mapping")
+        return None
+    return payload
+
+
+def _validate_provenance(
+    config: dict[str, Any],
+    repo_root: Path,
+    errors: list[str],
+    *,
+    output_root: str | None = None,
+) -> dict[str, Any] | None:
+    provenance = _require_mapping(config, "provenance", errors)
+    if provenance is None:
+        return None
+
+    resolved: dict[str, str] = {}
+    missing_artifacts: list[str] = []
+    resolved_output_root = (
+        _resolve_path(output_root, repo_root)
+        if isinstance(output_root, str) and output_root
+        else None
+    )
+    for key in _EXPECTED_PROVENANCE_KEYS:
+        value = provenance.get(key)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"provenance.{key} must be non-empty path string")
+            continue
+        path = _resolve_path(value, repo_root)
+        resolved[key] = str(path)
+        if resolved_output_root is not None and not _is_relative_to(path, resolved_output_root):
+            errors.append(
+                f"provenance.{key} must resolve under output.root {output_root!r}: {value}"
+            )
+        if not path.exists():
+            missing_artifacts.append(str(path))
+
+    status = provenance.get("status")
+    if status != "expected_missing_until_training":
+        errors.append(
+            "provenance.status must be 'expected_missing_until_training' for "
+            "prepare-only issue #3254 preflight"
+        )
+
+    return {
+        "status": status,
+        "paths": resolved,
+        "missing_artifacts": missing_artifacts,
+    }
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 def _validate_output(config: dict[str, Any], errors: list[str]) -> str | None:
@@ -301,8 +467,160 @@ def _validate_output(config: dict[str, Any], errors: list[str]) -> str | None:
     return _require_non_empty_string(output, "root", errors)
 
 
+def build_retrain_decision_packet(
+    config_path: Path | str,
+    *,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Summarize no-submit training readiness from static preflight metadata.
+
+    The packet is deliberately read-only: it maps the #3254 preflight to a
+    launch decision, blockers, expected costs, and validation proof without
+    collecting data, training, submitting a job, or asserting model quality.
+
+    Returns:
+        JSON-serializable decision packet for the dry-run CLI.
+    """
+    root = (repo_root or Path.cwd()).resolve()
+    config_path = _resolve_path(config_path, root)
+    try:
+        config = load_pipeline_config(config_path)
+    except PredictiveRetrainPreflightError as exc:
+        return _decision_packet(
+            config_path=config_path,
+            decision="missing_preflight_metadata",
+            preflight_status="missing",
+            blockers=[str(exc)],
+            validation_proof=[],
+        )
+
+    missing_metadata = _missing_preflight_metadata(config)
+    if missing_metadata:
+        return _decision_packet(
+            config_path=config_path,
+            config=config,
+            decision="missing_preflight_metadata",
+            preflight_status="missing",
+            blockers=missing_metadata,
+            validation_proof=[_validation_command(config_path, root)],
+        )
+
+    try:
+        preflight_report = validate_retrain_preflight(config_path, repo_root=root)
+    except PredictiveRetrainPreflightError as exc:
+        return _decision_packet(
+            config_path=config_path,
+            config=config,
+            decision="blocked",
+            preflight_status="invalid",
+            blockers=[str(exc)],
+            validation_proof=[_validation_command(config_path, root)],
+        )
+
+    return _decision_packet(
+        config_path=config_path,
+        config=config,
+        decision="ready",
+        preflight_status="valid",
+        blockers=[],
+        validation_proof=[_validation_command(config_path, root)],
+        preflight_report=preflight_report,
+    )
+
+
+def _missing_preflight_metadata(config: dict[str, Any]) -> list[str]:
+    """Return missing decision-critical metadata without running validation."""
+    blockers: list[str] = []
+    provenance = config.get("provenance")
+    if not isinstance(provenance, dict):
+        return ["provenance metadata block is missing"]
+    for key in _EXPECTED_PROVENANCE_KEYS:
+        value = provenance.get(key)
+        if not isinstance(value, str) or not value.strip():
+            blockers.append(f"provenance.{key} is missing")
+    if provenance.get("status") != _PROVENANCE_PRETRAINING_STATUS:
+        blockers.append(
+            f"provenance.status must be {_PROVENANCE_PRETRAINING_STATUS!r} "
+            "before training evidence exists"
+        )
+    return blockers
+
+
+def _decision_packet(
+    *,
+    config_path: Path,
+    decision: str,
+    preflight_status: str,
+    blockers: list[str],
+    validation_proof: list[str],
+    config: dict[str, Any] | None = None,
+    preflight_report: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the stable JSON shape used by tests and the dry-run CLI.
+
+    Returns:
+        JSON-serializable packet containing decision, blockers, and proof.
+    """
+    experiment = config.get("experiment", {}) if config else {}
+    training = config.get("training", {}) if config else {}
+    base_collection = config.get("base_collection", {}) if config else {}
+    hardcase_collection = config.get("hardcase_collection", {}) if config else {}
+    mixing = config.get("mixing", {}) if config else {}
+    evaluation = config.get("evaluation", {}) if config else {}
+    output = config.get("output", {}) if config else {}
+
+    packet = {
+        "schema_version": "predictive_retrain_decision_packet.v1",
+        "issue": 3801,
+        "parent_issue": 3254,
+        "parent_pr": 3784,
+        "config_path": str(config_path),
+        "run_id": experiment.get("run_id"),
+        "decision": decision,
+        "preflight_status": preflight_status,
+        "submitted": False,
+        "claim_boundary": config.get("claim_boundary") if config else None,
+        "blockers": blockers,
+        "expected_missing_outputs": (
+            ((preflight_report.get("provenance") or {}).get("missing_artifacts") or [])
+            if preflight_report
+            else []
+        ),
+        "expected_costs": {
+            "training_epochs": training.get("epochs"),
+            "base_seeds_per_scenario": base_collection.get("seeds_per_scenario"),
+            "hardcase_seeds_per_scenario": hardcase_collection.get("seeds_per_scenario"),
+            "hardcase_repeat": (
+                (preflight_report.get("mixing") or {}).get("hardcase_repeat")
+                if preflight_report
+                else mixing.get("hardcase_repeat")
+            ),
+            "evaluation_workers": evaluation.get("workers"),
+            "evaluation_horizon": evaluation.get("horizon"),
+            "output_root": output.get("root"),
+        },
+        "validation_proof": validation_proof,
+        "out_of_scope": [
+            "no full benchmark campaign run",
+            "no Slurm/GPU submission",
+            "no paper/dissertation claim edits",
+        ],
+    }
+    if preflight_report is not None:
+        packet["preflight_report"] = preflight_report
+    return packet
+
+
+def _validation_command(config_path: Path, repo_root: Path) -> str:
+    return (
+        "uv run python scripts/validation/validate_predictive_retrain_preflight.py "
+        f"--config {config_path} --repo-root {repo_root} --json"
+    )
+
+
 __all__ = [
     "PredictiveRetrainPreflightError",
+    "build_retrain_decision_packet",
     "load_pipeline_config",
     "validate_retrain_preflight",
 ]

@@ -1,0 +1,275 @@
+{
+  "candidate_queue_entry": {
+    "kind": "local_artifact_promotion_finalizer_audit",
+    "next_queue_item": "Run a local artifact-finalization audit against existing #2557 raw outputs or durable artifact pointers; do not submit more replicas.",
+    "state": "blocked_until_raw_artifacts_or_durable_pointers_available",
+    "submission_recommendation": "no_new_slurm_queue_fill"
+  },
+  "claim_boundary": "diagnostic-only readiness packet for issue #2557 fixed-seed queue-fill replica evidence; no Slurm submission, no benchmark-success claim, no paper or dissertation claim promotion",
+  "completed_jobs": [
+    {
+      "collision_rate": 0.08571428571428572,
+      "job_id": 12767,
+      "partition": "a30",
+      "seed": 501,
+      "snqi": 0.2639597734262396,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.9142857142857143,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/xu1ygfhp"
+    },
+    {
+      "collision_rate": 0.08571428571428572,
+      "job_id": 12768,
+      "partition": "a30",
+      "seed": 502,
+      "snqi": 0.27567270015698586,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.9142857142857143,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/usp2vcrl"
+    },
+    {
+      "collision_rate": 0.1,
+      "job_id": 12769,
+      "partition": "a30",
+      "seed": 503,
+      "snqi": 0.23130931724916692,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.9,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/pj5qb1w8"
+    },
+    {
+      "collision_rate": 0.18571428571428572,
+      "job_id": 12770,
+      "partition": "a30",
+      "seed": 504,
+      "snqi": -0.07167991627420195,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8142857142857143,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/2b6h821r"
+    },
+    {
+      "collision_rate": 0.12857142857142856,
+      "job_id": 12771,
+      "partition": "l40s",
+      "seed": 505,
+      "snqi": 0.07185670329670336,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8714285714285714,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/7t40agqo"
+    },
+    {
+      "collision_rate": 0.11428571428571428,
+      "job_id": 12772,
+      "partition": "l40s",
+      "seed": 506,
+      "snqi": 0.06731859639942352,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8857142857142857,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/76r3v1jb"
+    },
+    {
+      "collision_rate": 0.17142857142857143,
+      "job_id": 12773,
+      "partition": "l40s",
+      "seed": 507,
+      "snqi": -0.020553723778310204,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8285714285714286,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/fe3ll0gb"
+    },
+    {
+      "collision_rate": 0.08571428571428572,
+      "job_id": 12774,
+      "partition": "l40s",
+      "seed": 508,
+      "snqi": 0.21554361297015434,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.9142857142857143,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/k15wku6n"
+    },
+    {
+      "collision_rate": 0.11428571428571428,
+      "job_id": 12795,
+      "partition": "a30",
+      "seed": 517,
+      "snqi": 0.14349716883784552,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8857142857142857,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/z7mebaii"
+    },
+    {
+      "collision_rate": 0.11428571428571428,
+      "job_id": 12796,
+      "partition": "a30",
+      "seed": 518,
+      "snqi": 0.14142041917981768,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8857142857142857,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/uhyn9zop"
+    },
+    {
+      "collision_rate": 0.11428571428571428,
+      "job_id": 12797,
+      "partition": "a30",
+      "seed": 519,
+      "snqi": 0.10181672872657835,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8857142857142857,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/4fec6gh4"
+    },
+    {
+      "collision_rate": 0.11428571428571428,
+      "job_id": 12798,
+      "partition": "a30",
+      "seed": 520,
+      "snqi": 0.22804364702966212,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8857142857142857,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/sg3faqx1"
+    },
+    {
+      "collision_rate": 0.11428571428571428,
+      "job_id": 12799,
+      "partition": "l40s",
+      "seed": 521,
+      "snqi": 0.1276811659184592,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.8857142857142857,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/2rqd6n5o"
+    },
+    {
+      "collision_rate": 0.08571428571428572,
+      "job_id": 12800,
+      "partition": "l40s",
+      "seed": 522,
+      "snqi": 0.2646405051089262,
+      "status": "completed_retrieved_compact_summary",
+      "success_rate": 0.9142857142857143,
+      "wandb_url": "https://wandb.ai/ll7/robot_sf/runs/qdtlz7tk"
+    }
+  ],
+  "cost_risk": {
+    "additional_slurm_submission": "high and not authorized here; duplicates likely because issue comments report known jobs terminal",
+    "claim_promotion": "high; blocked by diagnostic status and evidence gaps",
+    "local_artifact_finalizer_audit": "moderate; needs access to retained raw output or durable artifact pointers",
+    "local_packet_generation": "low; CPU-only tracked-file read"
+  },
+  "evidence_gap": {
+    "artifact_promotion_missing": true,
+    "claim_blockers": [
+      "Tracked evidence is explicitly partial or diagnostic-only.",
+      "Some reported terminal jobs have no compact public metrics or finalizer manifest.",
+      "Recovered diagnostic rows have marginal/non-positive SNQI and elevated collisions.",
+      "No fresh live Slurm state is collected by this CPU-only packet.",
+      "No benchmark, ranking, paper, or dissertation claim should be promoted from this packet."
+    ],
+    "durable_pointer_gap": "Raw Slurm logs, checkpoints, W&B payloads, episode logs, and per-scenario evaluations are not mirrored here; compact public evidence lacks finalizer manifests or durable artifact URI pointers for every terminal job.",
+    "unpromoted_or_missing_seeds": [
+      510,
+      511,
+      512,
+      513,
+      514,
+      515,
+      516,
+      523,
+      524
+    ]
+  },
+  "generated_at": "2026-06-29T00:00:00+02:00",
+  "go_no_go": {
+    "exact_go_command": "uv run python scripts/validation/extract_issue_2557_replica_readiness_packet.py --markdown",
+    "exact_write_command": "uv run python scripts/validation/extract_issue_2557_replica_readiness_packet.py --write-json docs/context/evidence/issue_2557_replica_readiness_packet_2026-06-29/packet.json",
+    "local_public_packet": "GO",
+    "new_slurm_reason": "Known #2557 jobs are reported terminal and the next useful work is compact artifact refresh/promotion, not another queue-fill run.",
+    "new_slurm_submission": "NO-GO"
+  },
+  "issue": 2557,
+  "retrieved_evidence": {
+    "compact_aggregate": {
+      "collision_rate": 0.1153061224489796,
+      "comfort_exposure": 0.014961002716104756,
+      "count": 14,
+      "eval_episode_return": 21.800575144267647,
+      "path_efficiency": 0.8327394900614961,
+      "snqi": 0.145751907017675,
+      "success_rate": 0.8846938775510206,
+      "wall_clock_hours": 13.184484126984128
+    },
+    "compact_seed_count": 14,
+    "compact_seed_summary": "docs/context/evidence/issue_2557_reward_curriculum_partial_2026-06-08/seed_summary.json",
+    "compact_seed_summary_generated_utc": "2026-06-10T13:17:36Z",
+    "compact_seeds": [
+      501,
+      502,
+      503,
+      504,
+      505,
+      506,
+      507,
+      508,
+      517,
+      518,
+      519,
+      520,
+      521,
+      522
+    ],
+    "recovered_diagnostic_rows": [
+      {
+        "collision_rate": 0.167,
+        "issue": 3266,
+        "job_id": 13024,
+        "seed": 509,
+        "snqi": -0.0692,
+        "status": "diagnostic_manifest_recovered",
+        "success_rate_ci95": "0.831 [0.810, 0.851]"
+      },
+      {
+        "collision_rate": 0.144,
+        "issue": 2919,
+        "job_id": 12949,
+        "seed": 506,
+        "snqi": 0.0169,
+        "status": "diagnostic_manifest_recovered",
+        "success_rate_ci95": "0.851 [0.831, 0.870]"
+      },
+      {
+        "collision_rate": 0.187,
+        "issue": 3203,
+        "job_id": 12950,
+        "seed": 508,
+        "snqi": -0.1115,
+        "status": "diagnostic_manifest_recovered",
+        "success_rate_ci95": "0.810 [0.790, 0.831]"
+      }
+    ],
+    "recovered_note": "docs/context/issue_2557_recovered_diagnostic_seeds.md",
+    "recovered_note_present": true
+  },
+  "scheduler_snapshot": {
+    "latest_public_source": "GitHub issue #2557 comment 2026-06-23T15:24:03Z; all known jobs were reported terminal, with no running or pending jobs.",
+    "pending_jobs": [],
+    "running_jobs": [],
+    "terminal_job_groups": [
+      {
+        "jobs": "12769-12782",
+        "source": "issue #2557 comment 2026-06-23",
+        "status": "terminal"
+      },
+      {
+        "jobs": "12917,12931,12932",
+        "source": "issue #2557 comment 2026-06-23",
+        "status": "reached_10m_then_manifest_serialization_failed"
+      },
+      {
+        "jobs": "12916",
+        "source": "issue #2557 comment 2026-06-23",
+        "status": "diagnostic_artifacts_only_no_final_metrics"
+      }
+    ],
+    "terminal_status_basis": "issue_comment_not_live_squeue"
+  },
+  "schema_version": "issue-2557-replica-readiness-packet.v1",
+  "status": "diagnostic_only_blocked_artifact_promotion"
+}

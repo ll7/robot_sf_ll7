@@ -115,7 +115,10 @@ def test_issue_3635_campaign_manifest_distinguishes_three_belief_arms(tmp_path: 
 
 def test_issue_3635_runner_default_targets_new_family_and_applies_seed_matrix() -> None:
     """The #3556 runner default resolves the #3635 family and caller-provided seed set."""
-    assert campaign.DEFAULT_SCENARIO_SET == SCENARIO_SET.relative_to(REPO_ROOT).as_posix()
+    payload = _load_yaml(BENCHMARK_CONFIG)
+    expected_family = SCENARIO_SET.relative_to(REPO_ROOT).as_posix()
+    assert campaign.DEFAULT_SCENARIO_SET == expected_family
+    assert payload["scenario_family"] == expected_family
 
     scenarios = campaign.load_campaign_scenarios(SCENARIO_SET, [101, 102])
     assert len(scenarios) == 1

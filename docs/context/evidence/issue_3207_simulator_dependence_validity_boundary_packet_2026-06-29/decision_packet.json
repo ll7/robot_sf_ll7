@@ -1,0 +1,23 @@
+{
+  "boundary_violations": [],
+  "claim_boundary": "No simulator-dependence validity-boundary claim: supplied evidence is diagnostic, incomplete, rank-non-identifiable, rank-unstable, or boundary-incomplete. Treat as not benchmark evidence, not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence.",
+  "claim_ready": false,
+  "decision": "no_claim",
+  "evidence_status": "not_benchmark_evidence",
+  "issue": 3207,
+  "missing_inputs": [],
+  "no_claim_reasons": [
+    "study_scope_not_full_fixed_scope",
+    "rank_non_identifiable:primary_metric_zero_variance",
+    "rank_not_stably_supported",
+    "non_identifiable_axes_present"
+  ],
+  "schema_version": "simulator_dependence_validity_boundary_decision.v1",
+  "supporting_inputs": {
+    "rank_identifiability_reason": "primary_metric_zero_variance",
+    "rank_identifiable": false,
+    "rank_stable": null,
+    "scope_classification": "bounded_actual_slice",
+    "study_status": "actual_campaign_slice"
+  }
+}

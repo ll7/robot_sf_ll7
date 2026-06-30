@@ -35,10 +35,12 @@ class FailureArchiveProposalModel:
         self.search_space = search_space
         self.entries: list[dict[str, Any]] = []
         self.state = "active"
+        self.state_reason = "archive_loaded"
 
         # Load archive data
-        if not archive_path_or_data:
+        if archive_path_or_data is None:
             self.state = "blocked"
+            self.state_reason = "missing_archive"
             return
 
         try:
@@ -46,6 +48,7 @@ class FailureArchiveProposalModel:
                 path = Path(archive_path_or_data)
                 if not path.exists() or path.stat().st_size == 0:
                     self.state = "blocked"
+                    self.state_reason = "missing_or_empty_archive_file"
                     return
                 with open(path, encoding="utf-8") as f:
                     data = json.load(f)
@@ -54,24 +57,37 @@ class FailureArchiveProposalModel:
 
             if not isinstance(data, dict) or "entries" not in data:
                 self.state = "blocked"
+                self.state_reason = "malformed_archive_payload"
+                return
+
+            try:
+                failure_archive_feature_rows(data)
+            except ValueError as exc:
+                self.state = "blocked"
+                self.state_reason = f"invalid_failure_archive_schema: {exc}"
                 return
 
             raw_entries = data.get("entries", [])
             if not isinstance(raw_entries, list):
                 self.state = "blocked"
+                self.state_reason = "malformed_archive_entries"
                 return
             if not raw_entries:
                 self.state = "blocked"
+                self.state_reason = "empty_archive_entries"
                 return
             if any(
                 not isinstance(entry, dict) or not isinstance(entry.get("candidate", {}), dict)
                 for entry in raw_entries
             ):
                 self.state = "blocked"
+                self.state_reason = "missing_candidate_metadata"
                 return
             self.entries = raw_entries
+            self.state_reason = "archive_loaded"
         except (ValueError, TypeError, json.JSONDecodeError, OSError):
             self.state = "blocked"
+            self.state_reason = "archive_load_error"
 
     def get_tabular_view(self) -> list[dict[str, Any]]:
         """Build a tabular feature view from archive entries."""

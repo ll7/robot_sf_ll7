@@ -22,7 +22,7 @@ dependencies = [
     "pygame>=2.6.1",
     # Data processing
     "pandas>=2.2.3",
-    "scipy>=1.14.1",
+    "scipy>=1.17.1",
     "matplotlib>=3.9.2",
     "pillow>=10.4.0",
     "svgelements>=1.9.6",
@@ -59,8 +59,8 @@ training = [
     "torch>=2.5.1",
     "scikit-learn>=1.9.0",
     "optuna>=4.9.0",
-    "tensorboard>=2.18.0",
-    "wandb>=0.18.7",
+    "tensorboard>=2.21.0",
+    "wandb>=0.28.0",
     "optuna-dashboard>=0.20.0",
 ]
 docs = [
@@ -88,7 +88,7 @@ viz = [
     "seaborn>=0.13.2",
 ]
 browser = [
-    "playwright>=1.56.0",
+    "playwright>=1.61.0",
 ]
 sacadrl = [
     "tensorflow>=2.15.0",
@@ -610,7 +610,7 @@ markers = [
 [dependency-groups]
 dev = [
     # Development tools
-    "pytest>=8.3.3",
+    "pytest>=9.1.1",
     "pytest-cov>=6.0.0",
     "scalene>=1.5.48",
     "ruff==0.15.12",
@@ -643,6 +643,7 @@ robot-sf-check-carla = "robot_sf_carla_bridge.cli:check_carla_availability_main"
 robot-sf-catalog-carla-schemas = "robot_sf_carla_bridge.cli:catalog_carla_schemas_main"
 robot-sf-carla-t1-oracle-smoke = "robot_sf_carla_bridge.cli:replay_t1_oracle_smoke_main"
 robot-sf-carla-docker-runtime = "robot_sf_carla_bridge.cli:carla_docker_runtime_main"
+robot-sf-carla-parity-bundle-preflight = "robot_sf_carla_bridge.cli:preflight_carla_parity_bundle_main"
 robot-sf-carla-replay-diagnostics = "scripts.carla_bridge.diagnose_replay_semantics:main"
 robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
 

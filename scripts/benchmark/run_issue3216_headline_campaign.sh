@@ -63,7 +63,7 @@ check_sha() {
     echo "  DRIFT    $path"; echo "    expected $expected"; echo "    actual   $actual"; drift=1
   fi
 }
-check_sha "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml" "3bf75ebb05cc5523c33271e956b21b14749fc427fc9d986438c83d09eee8b75c"
+check_sha "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml" "249968670830c3b710e1407aecb2256d140cd1ba76294766421447bd89357f15"
 check_sha "configs/scenarios/classic_interactions_francis2023.yaml"                       "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
 check_sha "configs/policy_search/scenario_horizons_h500.yaml"                             "4da9f6eb78c98d1afdf9ac43fde1cbfcac9447edb8491520e8c51d85d3b14fce"
 check_sha "configs/benchmarks/seed_sets_v1.yaml"                                          "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"

@@ -37,11 +37,17 @@ def test_proposal_model_initialization_and_blocked_state() -> None:
     # Empty dict
     model_empty_dict = FailureArchiveProposalModel({})
     assert model_empty_dict.state == "blocked"
+    assert model_empty_dict.state_reason == "malformed_archive_payload"
+
+    entries_only = FailureArchiveProposalModel({"entries": create_synthetic_archive()["entries"]})
+    assert entries_only.state == "blocked"
+    assert entries_only.state_reason.startswith("invalid_failure_archive_schema:")
 
     # Valid dict
     archive_data = create_synthetic_archive()
     model_active = FailureArchiveProposalModel(archive_data)
     assert model_active.state == "active"
+    assert model_active.state_reason == "archive_loaded"
     assert len(model_active.entries) == 2
 
 

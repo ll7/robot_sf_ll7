@@ -18,6 +18,12 @@ claim_boundary: >
 output:
   root: output/tmp/predictive_planner/pipeline
 
+provenance:
+  status: expected_missing_until_training
+  checkpoint_path: output/tmp/predictive_planner/pipeline/training/predictive_crossing_conflict_weighted_issue_3254_xl_ego/predictive_model.pt
+  checkpoint_provenance_path: output/tmp/predictive_planner/pipeline/training/predictive_crossing_conflict_weighted_issue_3254_xl_ego/checkpoint_provenance.json
+  hard_seed_evaluation_summary: output/tmp/predictive_planner/pipeline/evaluation/predictive_crossing_conflict_weighted_issue_3254_xl_ego_hard_seeds/summary.json
+
 scenarios:
   scenario_matrix: ../../scenarios/classic_interactions.yaml
   hard_seed_manifest: ../../benchmarks/predictive_hard_seeds_v1.yaml
@@ -79,6 +85,8 @@ wandb:
     - prepare-only
 
 evaluation:
+  baseline_model_id: predictive_proxy_selected_v1
+  baseline_algo_config: ../../algos/gap_prediction_camera_ready.yaml
   workers: 1
   campaign_workers: 2
   horizon: 120

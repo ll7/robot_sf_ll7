@@ -30,6 +30,10 @@ from robot_sf_carla_bridge.export import (
     resolve_export_manifest_payload_paths,
     write_export_records,
 )
+from robot_sf_carla_bridge.parity_bundle_preflight import (
+    check_native_aligned_bundle_manifest_readiness,
+    check_parity_bundle_readiness,
+)
 from robot_sf_carla_bridge.replay_smoke import (
     T1_ORACLE_REPLAY_SMOKE_SCHEMA_VERSION,
     build_t1_oracle_replay_smoke_setup,
@@ -401,6 +405,71 @@ def carla_docker_runtime_main(argv: list[str] | None = None) -> int:
         sys.stdout.write(f"{json.dumps(status, sort_keys=True)}\n")
     else:
         sys.stdout.write(f"{status['status']}: {status['reason']}\n")
+    return exit_code
+
+
+def preflight_carla_parity_bundle_main(argv: list[str] | None = None) -> int:
+    """Run the read-only readiness preflight for the compact CARLA parity bundle.
+
+    Checks T0 export manifests, scenario fixture/provenance metadata, and the intended output
+    location without importing CARLA or running any simulation. Exits nonzero when the bundle is
+    not ready so the gate fails closed.
+
+    Returns:
+        Process-style exit code (0 when ready, 1 when not ready).
+    """
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Read-only readiness preflight for the compact CARLA native/aligned parity bundle "
+            "(#1510). Does not run CARLA or assert metric parity."
+        )
+    )
+    parser.add_argument(
+        "--manifest",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="T0 export manifest JSON path; repeat for multiple candidate scenarios.",
+    )
+    parser.add_argument(
+        "--readiness-manifest",
+        metavar="PATH",
+        help=(
+            "Issue #1491 native/aligned readiness manifest declaring the intended scenario "
+            "export manifests."
+        ),
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="Intended parity-bundle output directory (checked for safety; never created).",
+    )
+    parser.add_argument("--json", action="store_true", help="Print a machine-readable report.")
+    args = parser.parse_args(argv)
+
+    if args.readiness_manifest and args.manifest:
+        parser.error("--readiness-manifest cannot be combined with --manifest")
+    if not args.readiness_manifest and not args.manifest:
+        parser.error("at least one --manifest or --readiness-manifest is required")
+
+    if args.readiness_manifest:
+        report = check_native_aligned_bundle_manifest_readiness(
+            args.readiness_manifest,
+            output_dir=args.output_dir,
+        )
+    else:
+        report = check_parity_bundle_readiness(args.manifest, output_dir=args.output_dir)
+    exit_code = 0 if report["status"] == "ready" else 1
+    if args.json:
+        sys.stdout.write(f"{json.dumps(report, sort_keys=True)}\n")
+        return exit_code
+
+    sys.stdout.write(
+        f"parity-bundle readiness: {report['status']} "
+        f"({report['ready_count']}/{report['scenario_count']} scenarios ready)\n"
+    )
+    for reason in report["blocking_reasons"]:
+        sys.stdout.write(f"  blocked: {reason}\n")
     return exit_code
 
 

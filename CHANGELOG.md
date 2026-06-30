@@ -8,7 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Added a machine-readable known-blocker map to the proxy checkpoint-selection readiness preflight
+  (#3204). The checker now reports configured blocker IDs and revival conditions as a fail-closed
+  prerequisite without running training, selecting a checkpoint, or promoting benchmark evidence.
 
+
+* Added a **diagnostic missing-export blocker report** for frozen-trace `EpisodeEventLedger.v1`
+  before/after reconciliation (#3482). New `build_missing_frozen_trace_export_report`
+  (`robot_sf/benchmark/frozen_trace_reconciliation.py`) emits a
+  `frozen_trace_event_export_blocker.v1` report with null comparison counts and per-artifact
+  `not_evaluable_missing_event_ledger_export` statuses, and the comparator CLI
+  (`scripts/benchmark/compare_frozen_trace_event_ledgers.py`) gains `--diagnose-missing-exports`
+  to write that report when one or both durable exports are absent. The reconciliation guard was
+  also tightened so a metric-semantics export that only names `EpisodeEventLedger.v1` (without the
+  durable exact/surrogate event payload) fails closed instead of being treated as comparable. This
+  is **diagnostic-only**: it promotes no benchmark claim and invents no old/new event counts; the
+  durable frozen 0.0.2 before/after rerun/backfill remains the open blocker under #3482.
 * Added a read-only **readiness preflight for proxy-based predictive-planner checkpoint selection**
   (#3204). New config `configs/research/predictive_checkpoint_proxy_v1.yaml` declares the inputs the
   merged proxy-vs-ADE analyzer (`scripts/research/analyze_predictive_checkpoint_proxy.py`, #3307)
@@ -25,6 +40,330 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checkpoint mapping, the all-zero degenerate-spread state, `proxy.enabled=false`, the ready case,
   and CLI exit codes, plus a pin on the current blocked live-registry state (the intended revival
   signal once checkpoints hydrate).
+* Added a read-only research-package registry and preflight for the continuous
+  social-navigation research-engine epic (#3057). New module
+  `robot_sf/research/package_registry.py` exposes `load_registry` and
+  `evaluate_registry_preflight`, which read the declarative registry
+  `configs/research/research_package_registry_issue_3057.yaml` and report, for each
+  research-engine package (scenario suite v0, planner-readiness matrix, campaign-manifest
+  flow, canonical result store, and sprint packages A/B/C plus the July-2026 release),
+  which required tracked artifacts are present vs. missing and whether declared
+  prerequisite packages are satisfied. A package is reported `ready` only when every
+  required artifact exists and every prerequisite is `ready`; any missing artifact or
+  unsatisfied prerequisite **fails closed to `blocked`** with explicit gaps. The helper
+  **composes existing config/contract/issue metadata only — it makes no benchmark, metric,
+  or research claim, schedules nothing, and runs no campaign** (`claim_boundary:
+  registry/preflight metadata only`). CLI:
+  `scripts/tools/research_package_preflight.py` (Markdown or JSON, with an optional
+  `--fail-on-blocked` gate).
+* Added a **design-stage evidence-stream integration contract inventory** for issue #3293 — the
+  local, no-data slice of "design evidence integration between simulation and real-world AMV data".
+  `robot_sf/research/evidence_integration_inventory.py` enumerates the evidence streams Robot SF
+  could integrate (`simulation_trace`, `amv_command_response`, `external_pedestrian_trajectory`,
+  `pilot_fleet_operational`), separates them into `calibration` / `benchmark` / `operational`
+  categories (which use different denominators and must not be mixed), and declares the required
+  provenance + uncertainty fields per stream. A mandatory `calibration_status` field prevents any
+  synthetic/proxy envelope from silently passing as calibrated. `check_stream_metadata` (and the
+  `scripts/tools/check_evidence_integration_inventory.py` CLI: `--list` / `--check`) is a
+  **presence-only** structural check on synthetic metadata — it ingests no real data, validates no
+  field values, weights no evidence, and makes no safety/benchmark/paper-facing claim. Externally
+  blocked streams (notably AMV command-response, per the #3293 maintainer decision: <5% feasibility,
+  implementation hard-blocked) declare an explicit `blocked_until` unblock condition. Design note:
+  `docs/context/issue_3293_evidence_integration_contract_inventory.md`.
+* Added a **fail-closed readiness check for false-positive actor-injection replay inputs** (#3300),
+  the acceptance dimension PR #3271 closed out of #2927 as *unavailable*. New pure module
+  `robot_sf/benchmark/false_positive_injection_readiness.py` exposes
+  `check_false_positive_injection_readiness(spec)`, which validates a replay-condition spec's injected
+  actor inputs (reusing the canonical `ObservationPerturbationSpec` for shape rules rather than
+  re-deriving them) and its provenance fields (scenario, seed, planner mode, perturbation family,
+  execution mode). It returns an explicit `ready` / `not_available` / `blocked` verdict so a malformed
+  or unavailable false-positive condition fails closed with an actionable blocker list instead of
+  silently passing. A thin CLI `scripts/benchmark/check_false_positive_injection_readiness.py` runs the
+  check on a YAML/JSON spec and exits non-zero (3) when blocked. This is a bounded readiness/contract
+  slice only — it does not run a replay campaign, change sensor semantics, or make any benchmark or
+  safety claim.
+* Added a **fail-closed release-readiness / claim-audit preflight checklist** for research-package
+  releases (#3081). New module `robot_sf/benchmark/release_preflight.py` evaluates a declarative
+  checklist (`load_release_preflight_checklist` + `evaluate_release_preflight`) that maps issue
+  #3081's four acceptance criteria to concrete, mechanically checkable prerequisites: a reproduction
+  record (`artifact_present`), regenerated tables/figures bound to canonical-source digests
+  (`checksum_manifest`), promoted claim cards that exclude fallback/degraded/unavailable execution
+  modes (`claim_audit`), and a sprint-issue classification ledger (`issue_classification_ledger`).
+  Every check **fails closed** — a missing artifact, a checksum mismatch, a symlinked or
+  worktree-local `output/` path, a promoted claim resting on an excluded mode, or an unclassified
+  sprint issue all resolve to `blocked` with explicit gaps rather than silently passing. The
+  companion CLI `scripts/tools/release_preflight_check.py` renders a Markdown/JSON report with an
+  optional `--fail-on-blocked` gate, and the shipped checklist
+  `configs/benchmarks/releases/release_july_2026_preflight_issue_3081.yaml` honestly reports
+  `blocked` against the current checkout (the durable July-2026 artifacts do not exist yet). This is
+  a **preflight, not a release step**: it never publishes, tags, uploads, regenerates artifacts,
+  closes issues, edits claims, or *declares* readiness — a passing run only means no blocking gaps
+  were found among declared prerequisites, and a maintainer still owns the readiness decision. It
+  composes existing contracts (`release_protocol`, `benchmark_row_claim`) rather than duplicating
+  them, and is complementary to the package-level `research/package_registry` preflight (#3057).
+  Synthetic tests cover each fail-closed path plus a smoke check of the shipped checklist.
+* Added a **real-trajectory ingestion and artifact-staging contract** (#3065): a dataset-agnostic,
+  bring-your-own-dataset (BYO) manifest schema plus a fail-closed preflight checker. New package
+  `robot_sf/data_ingestion/` defines the JSON Schema
+  (`schemas/real_trajectory_ingestion_manifest.v1.json`) and `real_trajectory_contract.py`
+  (`load_manifest`, `validate_manifest_structure`, `run_preflight`). The manifest tracks dataset
+  metadata, license posture + supplier acknowledgment (the repo never redistributes raw data),
+  retrieval instructions, the canonical conversion shape, SHA-256 checksums, split naming, a
+  git-ignored staging dir, and an explicit durable-storage pointer. `run_preflight` enforces the
+  semantic gates the schema cannot: BYO license acknowledgment, git-ignored staging, a durable
+  boundary that is not the disposable `output/` root, and `benchmark_eligibility` that stays below
+  claim grade until availability is checksum-`validated`. Ships a copy-me template
+  (`configs/data/real_trajectory_manifest.example.yaml`) and a CLI
+  (`scripts/tools/check_real_trajectory_manifest.py`). Contract-only: no external dataset is
+  downloaded, copied, committed, or claimed as real-world validation. See
+  `docs/context/issue_3065_real_trajectory_ingestion_contract.md`.
+* Added a **read-only capability inventory / preflight** for the learned probabilistic graph
+  predictor v1 lane (#2844). New module
+  `robot_sf/benchmark/learned_predictor_capability_inventory.py` enumerates the *code-level*
+  prerequisites a v1 learned predictor would extend — the `ProbabilisticPredictor` protocol and
+  `ProbabilisticPrediction` container, the `BaselineProbabilisticPredictor` surface, the
+  `ForecastBatch.v1` contract, the forecast dataset recorder + split-manifest builder, the durable
+  model-artifact registry classifier, and the readiness evidence gate + contract doc — and reports
+  whether each hook is present in the checkout. CLI
+  `scripts/validation/inventory_learned_predictor_capability.py [--json]` prints the report and
+  exits non-zero only on a *missing wiring* hook. This is strictly a wiring/preflight surface: it
+  does **not** implement, train, or run a predictor, change planner behavior, or run any campaign,
+  and `unblocks_training` is always `False` — the lane unblock decision remains owned by the
+  evidence gate `scripts/validation/validate_learned_prediction_readiness.py`. A complete inventory
+  matches the 2026-06-23 readiness audit: the lane is blocked on *evidence*, not on missing hooks.
+* Added a presence-only **cross-benchmark comparison readiness** checker
+  (`scripts/tools/cross_benchmark_comparison_readiness.py`, #3287) for the downstream cross-suite
+  policy-comparison campaign. It inventories the four prerequisite families named by the issue —
+  scenario converter (#3285), metric wrappers (#3286), campaign policy metadata/manifest, and
+  external social-nav benchmark assets (#1456 / #1498 / #2414 / #3161 / #2918) — and reduces each to
+  a `ready` / `blocked` / `waived` state: `ready` when every expected local artifact is present,
+  `blocked` when an artifact is missing (the default for external assets, which are never staged
+  in-repo), and `waived` when a maintainer explicitly waives a family with a recorded reason
+  (mirroring the issue's "satisfied or explicitly waived" acceptance criterion). The report is
+  fail-closed: `campaign_authorized` is always `False` and `run_gates` lists the standing blockers,
+  so a "prerequisites ready" report can never be mistaken for authorization to run the campaign or
+  claim cross-suite equivalence. The tool does not access external assets, run a campaign, or assert
+  equivalence.
+* Added a **bring-your-own (BYO) staging preflight** for licensed Stanford Drone Dataset (SDD)
+  annotations (#1497). Under the BYO-dataset reframe (#3065) the repository never licenses, hosts,
+  or redistributes SDD; a contributor stages a copy they already have rights to. The canonical SDD
+  manifest (`configs/data/sdd_staging_manifest.yaml`) now carries an ordered `retrieval_recipe`
+  (concrete acquisition steps, no auto-download) and a `license_acknowledgment` opt-in
+  (`{required, acknowledged, statement}`, shipped `acknowledged: false` so the committed default
+  never implies redistribution rights). A new `sdd-preflight` command in
+  `scripts/tools/manage_external_data.py` (`build_sdd_preflight`) reports the two staging
+  prerequisites and the blocked-external-input state, and **fails closed** (CLI exit 2) until the
+  license acknowledgment is affirmed *and* the annotation files are present locally. Manifest
+  parsing also fails closed on a non-boolean acknowledgment, a malformed recipe, or a non-string
+  statement, and rejects `license_acknowledgment.required: false`, so the mandatory gate cannot be
+  bypassed by a typo or disabled by a locally edited manifest. This is staging-gate/provenance work
+  only: it does **not** download,
+  ingest, or transform any SDD data, run benchmarks, or edit any benchmark/paper claim. Scenario
+  curation against real annotations remains #1126.
+* Added a **fail-closed readiness/preflight checker for the predictive planner v2 same-seed
+  comparison** (#1490 umbrella, ego-conditioning child #1504). New module
+  `robot_sf/benchmark/predictive_v2_comparison_readiness.py` exposes
+  `validate_predictive_v2_comparison_readiness`, which validates the committed feature contract
+  `configs/training/predictive/predictive_ego_features_contract_v1.yaml` across four metadata stage
+  gates: variant completeness (baseline / obstacle-only / ego-only / combined with the expected
+  schema and input-dim), provenance (every referenced config and seed/scenario/grid manifest exists),
+  ego-obstacle conditioning metadata (ego variants declare a defined `ego_motion_channel_producer` and
+  share a single comparability key), and same-seed schedule (seed manifests, fixed seed, and forecast
+  vs. navigation metric separation). A fifth gate, `blocked_slurm_gate`, fails **closed**: the
+  four-way expansion (#1505/#1506/#1507) stays `blocked` behind the maintainer-selected revised
+  hypothesis and the same-seed coupling gate #2916, clearing only when an explicit `continue`
+  coupling-gate artifact and the maintainer-hypothesis acknowledgement are both supplied. A new CLI
+  `scripts/validation/validate_predictive_v2_comparison_readiness.py` exposes the check with
+  decision-coded exit status (`0` ready, `2` blocked/incomplete, `1` contract load error). Against the
+  committed contract the preflight reports metadata-complete-but-`blocked`, mirroring the recorded
+  #1490 decision. This is **coordination/preflight readiness only**: it does not train, evaluate, tune
+  planners, run benchmarks, or submit SLURM.
+* Added a **fail-closed campaign-readiness gate for the learned-risk model v1 Slurm campaign**
+  (#1472). New module `robot_sf/training/learned_risk_campaign_readiness.py` exposes
+  `evaluate_campaign_readiness`, which aggregates the two existing canonical owners — the
+  launch-packet validator (`validate_launch_packet`) and the durable trace-manifest validator
+  (`validate_trace_manifest`) — into a single campaign launch decision. The decision is
+  `campaign_launch_ready` only when **both** gates pass; an invalid launch packet, a structurally
+  invalid manifest, or unresolved durable artifact pointers all fold into a fail-closed
+  `campaign_blocked` result with the underlying per-gate blockers surfaced. A new CLI
+  `scripts/validation/check_learned_risk_campaign_readiness.py` defaults to the checked-in #1472
+  inputs and reports decision-coded exit status (`0` ready, `2` input file missing, `3` blocked).
+  This is **readiness/preflight only**: it submits no SLURM job, trains nothing, fetches nothing,
+  and promotes no artifacts — a ready decision means the checked-in contract is locally complete.
+  Against current `main` the campaign correctly reports `campaign_blocked` (the launch packet is
+  valid; the durable trace/baseline artifacts are still `:pending`).
+* Added a **durable trace-URI registry contract and validator** for oracle-imitation artifacts so
+  the downstream `training_ready` state is mechanically checkable (#2655). The new canonical module
+  `robot_sf/training/oracle_trace_uri_registry.py` (schema `oracle-trace-uri-registry.v1`) records,
+  per split, the durable trace URI, its SHA-256 checksum, the split/trace identity, the schema
+  version, and a `retrieval_status` (`resolvable`/`pending`/`blocked`); large traces stay out of git.
+  A fail-closed CLI (`scripts/validation/validate_oracle_trace_uri_registry.py --require-training-ready`)
+  and an example registry (`configs/training/ppo_imitation/oracle_trace_uri_registry_example.yaml`)
+  let the oracle-imitation lane leave `artifact_retrieval_blocked` only when every required split has
+  a concrete, durable, resolvable pointer with a valid checksum. This is the local registry/validator
+  slice only: it collects no traces, publishes no artifacts, submits no jobs, and makes no training
+  readiness claim (the checked-in example is intentionally not training-ready). See
+  `docs/context/issue_2655_oracle_trace_uri_registry.md`.
+
+* Added a **fail-closed curation readiness preflight** for SDD-derived benchmark scenarios (#1126).
+  Issue #1126 curates the first real Stanford Drone Dataset (SDD) benchmark scenario set, but stays
+  blocked on licensed external data (#1497/#2413). The new `scripts/tools/sdd_curation_preflight.py`
+  is a thin *curation-step* gate that composes the canonical owners — `resolve_sdd_scenario_prior_mode`
+  from `scripts/tools/manage_external_data.py` (staging gate) and `load_sdd_points` from
+  `scripts/tools/import_sdd_scenarios.py` (the importer's own parser) — to classify whether a
+  curation run may be promoted as benchmark evidence. `benchmark_promotion_allowed` is True **only**
+  when SDD is staged and checksum-validated (`dataset_backed_prior`) *and* the candidate annotation
+  satisfies the deterministic selection rule; a parseable fixture or unvalidated copy stays
+  `proxy_schema_smoke` and is never promoted. `--require-benchmark-ready` exits non-zero so callers
+  fail closed. This is readiness/schema preflight only: it does **not** download, ingest, or curate
+  real SDD data, write any scenario/map artifact, run a benchmark campaign, or assert any benchmark
+  result. Fixture-backed tests cover the blocked, proxy, and dataset-backed-candidate states.
+  Documented in `docs/context/issue_1126_sdd_curation_preflight.md`.
+
+* Added a read-only **ORCA-residual learned-policy lane readiness/preflight surface** (#1358).
+  New module `robot_sf/benchmark/orca_residual_lane_readiness.py` exposes `assess_lane_readiness`,
+  which inventories the lane's local prerequisites (behavior-cloning lineage packet, smoke/pretrain
+  config, the `orca_residual_guarded_ppo_v0` / `orca_residual_guarded_ppo_progress_v1` candidate
+  configs and their `training_required: true` registry entries, the policy-search runner, and the
+  grounding 2026-05-05 evidence report), the canonical command shapes (routes), and the declared
+  external blockers (child #1475 continue/revise/stop classification, `resource:slurm` training, and
+  pending durable dataset/checkpoint artifacts). The diagnostics contract and lineage-packet schema
+  are reused from `robot_sf/training/orca_residual_lineage_packet.py` (no fork). Status fails
+  **closed** to `prerequisites_incomplete` when any local surface is missing or the packet is
+  invalid, otherwise `blocked_on_followup` (scaffolding handoff-complete, lane still gated). A new
+  CLI `scripts/tools/orca_residual_lane_readiness.py` exposes the report (`--json`) with exit `0`
+  handoff-complete / `2` incomplete. This is **inventory/preflight only**: it does **not** submit
+  SLURM, train policies, alter planner behavior, run benchmarks, or assert any benchmark/paper
+  result. #1358 remains a parent/umbrella coordination issue gated by child #1475.
+* Added a read-only **oracle-imitation warm-start readiness preflight** for the downstream
+  warm-start training and benchmark comparison (#1496). Issue #1496 is the training step that
+  *consumes* the durable oracle-imitation dataset from #1470; safe shared-PC work is verifying
+  prerequisites, not launching training or data collection. The new
+  `check_warm_start_readiness` function in
+  `robot_sf/training/oracle_imitation_warm_start_readiness.py` and the
+  `scripts/validation/check_oracle_imitation_warm_start_readiness.py` CLI take a readiness
+  manifest, validate the referenced dataset launch packet via the canonical
+  `validate_launch_packet(..., require_training_ready=True)` checker, and confirm the
+  behaviour-cloning warm-start config, RL-only baseline config, optional PPO fine-tuning config,
+  and split/leakage contract all exist. They emit a compact readiness report (`ready`/`blocked`)
+  with an explicit blocker list and **fail closed** under `--require-ready`. This is
+  preflight/provenance hygiene only: it collects **no** data, trains nothing, submits no Slurm,
+  and asserts no benchmark result. The shipped manifest
+  (`configs/training/ppo_imitation/oracle_warm_start_readiness_issue_1496.yaml`) currently reports
+  `blocked` because the #1397 dataset packet is intentionally not training-ready until #1470 lands.
+* Added a **fail-closed SocNavBench map-conversion readiness preflight** for the ETH import batch
+  (#1134, parent #334). The batch validator
+  (`scripts/tools/validate_socnav_map_batch.py`) gains a `conversion_readiness()` function and a
+  `--preflight` CLI mode that layer a conversion *decision* on top of the existing raw
+  asset-existence report. Conversion is reported `ready` only when every `required_for_conversion`
+  source asset is staged; while the ETH traversible `data.pkl` (or mesh dir) is missing the verdict
+  is `blocked_pending_source_assets` with `conversion_ready: false`, a `next_action` naming the
+  missing source paths, and a non-zero exit code. When blocked, any pre-existing planned map
+  *artifact* (`map_svg`, `scenario_config`) is surfaced as `placeholder_risk` so a hand-authored or
+  inferred ETH-like SVG cannot be silently mistaken for an official conversion; the provenance note
+  is intentionally excluded because it is expected to exist during the blocked phase. This is
+  **preflight/readiness only**: it does not download assets, stage data, convert maps, run
+  simulations, or assert any benchmark result. Against the current repo state the preflight reports
+  `blocked_pending_source_assets`, matching the issue's blocked status.
+* Added a **read-only readiness preflight for the compact CARLA native↔aligned parity bundle**
+  (#1510). New module `robot_sf_carla_bridge/parity_bundle_preflight.py` exposes
+  `check_parity_bundle_readiness` (and the pure `evaluate_payload_metadata`), which checks — per
+  candidate scenario, fail-closed — that each T0 export manifest reads/validates, every referenced
+  export payload exists and is schema-valid, the scenario fixture certificate is present with an
+  eligible status, provenance carries a `robot_sf_commit`, and the recorded `trajectory_fields` are
+  non-empty, plus that the intended output directory is path-safe (never created). It composes the
+  canonical export readers (`resolve_export_manifest_payload_paths`, `read_export_payload`) and the
+  canonical parity metric list (`parity.DEFAULT_PARITY_METRICS`). CLI
+  `robot-sf-carla-parity-bundle-preflight` prints a JSON report and exits nonzero when not ready.
+  This is the **agent-executable local slice only**: it does **not** import CARLA, run a simulator,
+  execute a replay, or assert metric parity — a `ready` verdict means the static prerequisites are
+  staged, not that native↔aligned parity holds (runtime eligibility must be confirmed on a capable
+  CARLA host; see `docs/context/issue_1511_carla_native_aligned_parity_claim_boundary.md`).
+* Added a **coherence regression guard** for the real AMV command-response trace *acquisition*
+  issue (#2000). Issue #2000 is hard-blocked on external data (no realistic real-trace source,
+  <5% feasibility) and its only agent-executable action is to keep the acquisition path documented
+  and the downstream consumer (#2415 staging manifest) and proxy fallback (#1585) coherent. The
+  consumer manifest mechanism is already owned by #2415
+  (`robot_sf/research/amv_command_response_trace_manifest.py`); this change adds the missing test
+  (`tests/research/test_issue_2000_amv_acquisition_coherence.py`) that locks in #2000's acceptance
+  criteria so future edits cannot silently drop the #2000/#1585 cross-reference from the shipped
+  manifest, flip the still-blocked acquisition into a "ready"/"staged" state without a real source,
+  or let the preflight imply a calibrated/hardware realism claim. It also guards that the trace
+  declares the command/response/timing field classes #2000 names. This is a test-only guard: it
+  does **not** collect traces, calibrate any envelope value, copy private data, run a campaign, or
+  edit any paper/dissertation claim.
+
+* Added a **diagnostic readiness/preflight checker for AMV actuation-envelope calibration inputs**
+  (#1559). New module `robot_sf/benchmark/amv_calibration_readiness.py` exposes
+  `assess_amv_calibration_readiness` / `assess_amv_calibration_readiness_from_config`, which inspect a
+  candidate calibrated-actuation profile (e.g. the
+  `configs/benchmarks/issue_1586_calibrated_actuation_profile_skeleton_v0.yaml` skeleton) and report
+  `ready` vs `blocked`, **fail-closed**. It closes a real gap: the existing
+  `synthetic_actuation.validate_actuation_profile_claim_boundary` checks only that provenance fields
+  are *present and non-empty*, so the placeholder skeleton (`source_id: "pending-#1585"`,
+  `measurement_date: "pending"`, …) passes structural validation while remaining unfit for use. The
+  readiness checker additionally flags placeholder/pending provenance, missing fields, tracking-issue
+  `source_uri`s, synthetic-vs-calibrated conflation, and the proxy-vs-hardware source distinction. CLI
+  `scripts/benchmark/check_amv_calibration_readiness.py` prints a JSON report and exits non-zero when
+  blocked. **Claim boundary:** paper-facing AMV actuation use stays **blocked** — `paper_facing_allowed`
+  is True only for a hardware/official-spec source class (a real trace #2000 or official spec), never
+  for the accepted #1585 proxy. This change does **not** calibrate from data, tune envelope values, or
+  run any campaign.
+* Added a **durable learned-risk training trace manifest contract and fail-closed validator**
+  (#2312, parent #1472). New module `robot_sf/training/learned_risk_trace_manifest.py` exposes
+  `validate_trace_manifest`, which checks a `learned-risk-trace-manifest.v1` YAML (durable baseline
+  and per-slice trace artifact URIs, recorded SHA-256 checksums, scenario split ids, required
+  episode fields, a per-label availability table, and `retrieval_status`) and returns a
+  `training_readiness_decision`. The decision is `ready_for_training_handoff` only when every input
+  is locally contract-complete; any placeholder alias (`:pending`), missing checksum, absent label,
+  or missing slice fails **closed** to `artifact_retrieval_blocked` — never an implied training-ready
+  state. A new CLI `scripts/validation/validate_learned_risk_trace_manifest.py` exposes the check
+  with decision-coded exit status (`0` ready, `2` structurally invalid, `3` blocked). The tracked
+  manifest `configs/training/learned_risk_trace_manifest_issue_2312.yaml` records the honest current
+  `blocked` state. This is **manifest/preflight readiness only**: it does **not** materialize traces,
+  copy external data, run training, or submit SLURM (the trace bytes come from the #1472 / #2441
+  runs). Shared checksum logic was promoted to `sha256_file()` in
+  `robot_sf/training/learned_risk_launch_packet.py`. See
+  `docs/context/issue_2312_learned_risk_trace_manifest.md`.
+* Added a read-only **blocklist coverage audit** for local-only baseline model artifacts (#1764).
+  The local-artifact preflight blocklist
+  (`configs/baselines/local_model_artifact_blocklist.yaml`) names exact `(path, field, value)`
+  triples, but nothing previously detected entries left stale when a baseline config is retired,
+  removed, or migrated to a durable `model_id`. The new `audit_blocklist_coverage` function in
+  `robot_sf/benchmark/local_model_artifacts.py` and the `--audit-blocklist` mode of
+  `scripts/validation/check_local_model_artifacts.py` classify each blocklist entry as `active`,
+  `orphaned_config_missing` (config no longer exists), or `orphaned_reference_gone` (config
+  migrated/rewritten away from the blocked path), and **fail closed** (non-zero exit) when any
+  orphaned entry remains so the allowlist shrinks as configs are recovered or retired. This is
+  inventory/provenance hygiene only: it does **not** publish or recover any checkpoint artifact,
+  rewrite benchmark configs, change registry entries, or assert any benchmark result. On the
+  current tree all seven shipped entries report `active`.
+* Made the **SocNavBench control-pipeline asset readiness checker fail-closed against empty
+  placeholder directories** (#1456). `scripts/tools/prepare_socnav_assets.py` now classifies each
+  required asset as `available` (directory backed by real files), `placeholder` (directory exists
+  but is empty), `missing`, or `excluded` (not required for the selected `render_mode`). Both
+  `placeholder` and `missing` required assets are reported under `missing_required`, so an empty
+  `wayptnav_data/` shell can no longer pass as a restored asset — matching the non-empty directory
+  contract already used by `scripts/tools/manage_external_data.py`. This is asset-readiness
+  reporting only: it does not download external assets, change benchmark results, or count
+  fallback/degraded rows as evidence. Focused fixture tests cover the available, placeholder, and
+  excluded states. Docs updated in `docs/socnav_assets_setup.md`.
+* Added a **metadata-only staging-manifest preflight** for real AMV command-response actuation
+  traces routed through the `amv-calibration` external-data path (#2415). New schema
+  `robot_sf/research/schemas/amv_command_response_trace_manifest.v1.json` and checker
+  `robot_sf/research/amv_command_response_trace_manifest.py` validate, per candidate trace bundle,
+  the provenance/license, the command/response/timing channels the bundle would expose, and the
+  declared calibration targets — fail-closed against the canonical synthetic-actuation envelope
+  vocabulary (`robot_sf.benchmark.synthetic_actuation.actuation_variability_fields()`) so the
+  manifest cannot drift from what calibration can consume. CLI
+  `scripts/validation/check_amv_command_response_trace_manifest_issue_2415.py` prints a JSON report
+  and (with `--probe-live-staging`) reconciles each trace's declared staging status against a live
+  `manage_external_data.check_asset` presence probe. The shipped example manifest
+  (`configs/research/amv_command_response_trace_manifest_issue_2415.yaml`) is
+  `blocked-external-input` today, matching the maintainer decision on #2415 (2026-06-22) that no
+  realistic real-data source is currently available. This is **manifest-contract only**: it does
+  not ingest traces, run a calibration, or make a hardware-calibrated realism claim
+  (`evidence_boundary = manifest_contract_only_no_trace_ingest_no_calibration_run_no_calibrated_claim`).
 * Added an **opt-in, diagnostic-only closing-speed / time-to-collision (TTC) aware near-miss**
   surface (#3700). New module `robot_sf/benchmark/near_miss_ttc.py` exposes
   `near_miss_ttc_input_readiness` (a fail-closed validator of the timing/velocity inputs a TTC-aware
@@ -81,6 +420,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/context/forecast_heavy_model_study_2026-06-20.md`. Inventory slice only: trains no model,
   runs no inference, adds no dependency, runs no benchmark, and makes no model-quality claim
   (`evidence_tier` stays blocked → analysis_only).
+* Added a metadata-only staging/preflight checker for external pedestrian-prior extraction (#2918).
+  New module `robot_sf/benchmark/pedestrian_prior_extraction_manifest.py` exposes
+  `check_pedestrian_prior_extraction_manifest`, which validates a
+  `pedestrian_prior_extraction_manifest.v1` manifest (allowed external source type, the bounded
+  prior parameters the run will emit — walking speed, crossing angle, density, interaction
+  distance, stop/yield timing — provenance fields, and the authored-vs-dataset-backed separation)
+  and reports missing parameters, provenance/separation blockers, and whether a dataset-backed
+  prior claim is yet allowed. The checker **ingests no external data, stores no raw trajectories,
+  and makes no calibrated- or representative-prior claim** (`evidence_boundary:
+  prior_extraction_plan_only_no_calibrated_prior_claim`); a dataset-backed claim is gated behind
+  accepted provenance and a source family with a registered external-data staging contract, while
+  `blocked-external-input` (the default, matching issue #2918's external-data block) and
+  `proxy-only` manifests cannot assert a prior, and a `proxy-only` manifest declaring a
+  dataset-backed source is rejected as boundary conflation. The allowed source-type → external-data
+  asset-id map is cross-checked against the canonical `scripts/tools/manage_external_data.py`
+  registry. CLI: `scripts/tools/check_pedestrian_prior_extraction_manifest.py`; example manifest:
+  `configs/research/pedestrian_prior_extraction_manifest_issue_2918_example.yaml`; context note:
+  `docs/context/issue_2918_pedestrian_prior_extraction_preflight.md`.
 * Added a metadata-only staging-contract checker for dataset-backed scenario priors (#3161). New
   module `robot_sf/research/scenario_prior_staging_contract.py` exposes
   `check_scenario_prior_staging_contract`, which validates a `scenario_prior_staging_contract.v1`
@@ -115,6 +472,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence. CLI: `scripts/tools/check_amv_actuation_latency_measurement_manifest.py`; example
   manifest: `configs/benchmarks/issue_3283_amv_actuation_latency_measurement_manifest_example.yaml`;
   protocol note: `docs/context/issue_3283_amv_actuation_latency_measurement_protocol.md`.
+* Added a **diagnostic-only** inventory of SNQI per-term normalization status (#3699). New module
+  `robot_sf/benchmark/snqi/normalization_inventory.py` and CLI
+  `scripts/benchmark/snqi_normalization_inventory_report.py` enumerate each SNQI term's scaling
+  regime and surface that `compute_snqi` mixes *raw, unbounded* penalty terms (`time`, `comfort`)
+  with *baseline-normalized* `[0, 1]` terms (collisions, near-misses, force-exceed, jerk), which
+  makes the weight coefficients non-comparable as relative priorities. The report flags the
+  mixed-scale condition and any baseline-normalized term lacking median/p95 coverage, and can fail
+  closed (`--fail-on-mixed-scale`, `--fail-on-missing-baseline`). It does **not** change the SNQI
+  formula, weights, `normalize_metric`, or any emitted score, and does **not** choose between the
+  normalize vs. clip-and-document remedies (that remains `decision-required` on #3699). An anti-drift
+  test reconstructs the SNQI score from the inventory's term table and asserts it equals
+  `compute_snqi` exactly.
 * Added a fail-closed Package A readiness checker so a rank-stability / held-out-family transfer
   campaign can verify its input prerequisites before execution (#3078). New manifest
   `configs/benchmarks/issue_3078_package_a_readiness.yaml` declares the held-out-family scenario
@@ -166,6 +535,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inventory. This is the **assumption-and-artifact inventory** slice only: it implements **no**
   force law, changes **no** scenario behavior, runs **no** benchmark, and makes **no** realism
   claim (the force-model upgrade itself stays `evidence_tier: idea`).
+
 * Added a **dry-run Robot SF -> external-benchmark scenario converter** that emits a deterministic,
   schema-validated **intermediate representation (IR)** for Robot SF scenario-matrix entries (#3285).
   New pure module `robot_sf/benchmark/scenario_interop.py` exposes `convert_scenario_to_ir(scenario)`,
@@ -205,6 +575,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "prerequisites ready" result is not mistaken for "authorized to launch". It does not submit Slurm
   jobs, run the tournament, rank arms, or edit any claim. Text and `--json` reports; exit code 0 when
   local prerequisites are ready, 1 when blocked.
+* Tightened the **oracle-imitation dataset launch-packet preflight** to require a `collection_roots`
+  block before a collection job runs (#1470). The validator
+  (`robot_sf/training/oracle_imitation_launch_packet.py`,
+  `scripts/validation/validate_oracle_imitation_launch_packet.py`) now fails closed unless the packet
+  declares durable destinations for collection logs (`log_root`), raw trace output
+  (`dataset_output_root`), and the dataset manifest (`manifest_destination`). Each root must be a
+  durable artifact URI (a `:pending` alias is allowed because collection has not run yet) and may
+  never point at the gitignored worktree-local `output/` directory, which is not a safe shared
+  destination on a multi-agent host. The checked-in `#1397` packet now carries these `:pending`
+  destinations. This is a preflight-contract change only: it submits no jobs and collects no data.
 * Added a read-only **re-export readiness preflight** for stale dissertation table bundles
   (`scripts/tools/reexport_readiness_preflight.py`, #3203). It composes the existing
   `scripts/tools/stale_artifact_detector.py` freshness classifier with a required-input availability

@@ -464,6 +464,7 @@ def test_finalizer_manifest_bridge_captures_output_pointer_and_transition(tmp_pa
                 }
             ],
             "claim_boundary": "compact local",
+            "claim_decision": "keep diagnostic",
         },
     )
 
@@ -499,6 +500,7 @@ def test_finalizer_manifest_bridge_captures_output_pointer_and_transition(tmp_pa
     assert bridge_row["durable_pointer"] == "wandb-artifact://robot-sf/finalizer/job-901:latest"
     assert bridge_row["output_pointers"]
     assert bridge_row["artifact_status"] == "all_required_present"
+    assert bridge_row["claim_decision"] == "keep_diagnostic"
     assert bridge_row["source_path"] == str(finalizer)
 
 

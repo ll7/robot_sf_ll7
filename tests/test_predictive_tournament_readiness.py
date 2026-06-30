@@ -79,6 +79,27 @@ def test_missing_arm_path_reports_blocked_with_blockers(tmp_path: Path) -> None:
     assert report["prerequisites_status"] == "blocked"
     assert model["status"] == "blocked"
     assert missing.as_posix() in model["missing_paths"]
+    assert model["blockers"] == [
+        {"path": missing.as_posix(), "reason": "required prerequisite path is missing"}
+    ]
+
+
+def test_report_surfaces_expected_configs_and_output_paths(tmp_path: Path) -> None:
+    """Machine-readable report names per-arm configs and expected output paths."""
+    _stage_all_prerequisites(tmp_path)
+
+    report = evaluate_readiness(tmp_path)
+    shared = report["shared_protocol"]
+    selection = next(arm for arm in report["arms"] if arm["id"] == "selection")
+    model = next(arm for arm in report["arms"] if arm["id"] == "model")
+
+    assert "configs/benchmarks/predictive_sweep_planner_grid_v1.yaml" in shared["expected_configs"]
+    assert "configs/research/predictive_checkpoint_proxy_v1.yaml" in selection["expected_configs"]
+    assert (
+        "configs/training/predictive/predictive_retraining_readiness_issue_3214.yaml"
+        in model["expected_configs"]
+    )
+    assert selection["expected_output_paths"] == [selection["expected_output_path"]]
 
 
 def test_missing_shared_protocol_blocks_overall(tmp_path: Path) -> None:
@@ -120,6 +141,27 @@ def test_arms_cover_the_three_named_bets() -> None:
     """The portfolio must expose exactly the selection / authority / model bets."""
     assert {arm.arm_id for arm in ARMS} == {"selection", "authority", "model"}
     assert {arm.child_issue for arm in ARMS} == {3204, 3213, 3214}
+
+
+def test_model_arm_uses_frozen_weighted_training_config() -> None:
+    """Model arm follows #3215's #3214 -> #3254 frozen config handoff."""
+    model = next(arm for arm in ARMS if arm.arm_id == "model")
+
+    assert [path.as_posix() for path in model.required_paths] == [
+        "configs/training/predictive/predictive_retraining_readiness_issue_3214.yaml",
+        "configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml",
+    ]
+    assert model.child_issue == 3214
+    assert "#3254" in model.notes
+
+
+def test_run_gates_preserve_read_only_boundary_without_stale_budget_blocker() -> None:
+    """Live issue says budget was decided; helper still cannot submit compute."""
+    gate_text = "\n".join(RUN_GATES)
+
+    assert "pre-authorize" not in gate_text
+    assert "outside this read-only helper" in gate_text
+    assert "Autonomous Usage Stop Guard" in gate_text
 
 
 def test_render_text_runs_and_mentions_status(tmp_path: Path) -> None:

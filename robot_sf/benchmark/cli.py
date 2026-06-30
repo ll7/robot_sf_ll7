@@ -1275,6 +1275,8 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                     "/simulation_config/max_episode_steps",
                 )
 
+        metadata = scenario.get("metadata")
+        spawn_mode = metadata.get("spawn_mode") if isinstance(metadata, Mapping) else None
         density = sim_cfg.get("ped_density")
         if density is not None:
             try:
@@ -1286,14 +1288,15 @@ def _collect_scenario_warnings(  # noqa: PLR0912,PLR0915
                         f"ped_density must be >= 0 (got {density_val})",
                         "/simulation_config/ped_density",
                     )
-                if density_val == 0:
+                marker_placeholder_density = density_val == 0 and spawn_mode == "markers"
+                if density_val == 0 and not marker_placeholder_density:
                     warn(
                         idx,
                         scenario_id,
                         "ped_density=0.0 means no pedestrians spawn",
                         "/simulation_config/ped_density",
                     )
-                if not 0.02 <= density_val <= 0.08:
+                if not marker_placeholder_density and not 0.02 <= density_val <= 0.08:
                     warn(
                         idx,
                         scenario_id,
@@ -2602,6 +2605,11 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         )
         p.add_argument("--fail-on-missing-metric", action="store_true")
         p.add_argument(
+            "--decision-preflight",
+            action="store_true",
+            help="Enable fail-closed preflight for missing or invalid normalized inputs.",
+        )
+        p.add_argument(
             "--sample",
             type=int,
             default=None,
@@ -2678,12 +2686,28 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
             help="Evaluate external weights JSON mapping",
         )
         p.add_argument(
+            "--export-pareto-front",
+            action="store_true",
+            help="Export sampled Pareto frontier when strategy pareto is active.",
+        )
+        p.add_argument(
+            "--pareto-front-samples",
+            type=int,
+            default=600,
+            help="Number of Pareto frontier samples to draw when export is enabled.",
+        )
+        p.add_argument(
             "--missing-metric-max-list",
             type=int,
             default=5,
             help="Max example episode IDs per missing baseline metric",
         )
         p.add_argument("--fail-on-missing-metric", action="store_true")
+        p.add_argument(
+            "--decision-preflight",
+            action="store_true",
+            help="Enable fail-closed preflight for missing or invalid normalized inputs.",
+        )
         p.add_argument(
             "--sample",
             type=int,

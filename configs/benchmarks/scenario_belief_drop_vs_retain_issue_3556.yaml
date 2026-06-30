@@ -47,6 +47,41 @@ belief_modes:
     belief_mode: uncertain_dropped
     belief_fov_degrees: 120.0
 
+# Contract-only arm matrix. These entries are intentionally launch metadata, not
+# campaign results; they let tests prove the manifest can distinguish the three
+# ScenarioBelief arms before any paired-seed benchmark is run.
+runner_arms:
+  - arm_id: oracle
+    label: oracle_certain_all_agents
+    scenario_family: configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml
+    seed_set: issue_3635_s3_contract_only
+    algo: stream_gap
+    algo_config:
+      belief_mode: oracle
+      belief_fov_degrees: 120.0
+    expected_gate_enabled: false
+    expected_planner_visibility: all_agents_retained
+  - arm_id: uncertain_retained
+    label: out_of_view_low_confidence_retained
+    scenario_family: configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml
+    seed_set: issue_3635_s3_contract_only
+    algo: stream_gap
+    algo_config:
+      belief_mode: uncertain_retained
+      belief_fov_degrees: 120.0
+    expected_gate_enabled: false
+    expected_planner_visibility: low_confidence_agents_retained
+  - arm_id: uncertain_dropped
+    label: out_of_view_low_confidence_dropped
+    scenario_family: configs/scenarios/sets/issue_3635_near_safe_occlusion_bearing_crossing.yaml
+    seed_set: issue_3635_s3_contract_only
+    algo: stream_gap
+    algo_config:
+      belief_mode: uncertain_dropped
+      belief_fov_degrees: 120.0
+    expected_gate_enabled: true
+    expected_planner_visibility: low_confidence_agents_dropped
+
 belief_uncertainty_source:
   kind: field_of_view
   fov_degrees: 120.0

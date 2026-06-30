@@ -1,26 +1,109 @@
 # Bounded maneuver-authority sweep grid for issue #3213.
 #
 # This grid is consumed by scripts/validation/run_predictive_success_campaign.py.
-# It mirrors a minimal subset of the generated full algo configs under
-# configs/algos/hardcase_authority/ so the first local run can test the core
-# authority levers without launching the full nine-variant family.
+# The metadata below is preflight-only: it documents the authority lever for each
+# arm and the expected artifact paths without running or interpreting a sweep.
+schema_version: maneuver_authority_sweep_manifest.v1
+issue: 3213
+hard_seed_manifest: configs/benchmarks/predictive_hard_seeds_v1.yaml
+expected_output:
+  root: output/benchmarks/issue_3213_maneuver_authority
+  summary: output/benchmarks/issue_3213_maneuver_authority/campaign_summary.json
+  report: output/benchmarks/issue_3213_maneuver_authority/campaign_report.md
 variants:
   - name: baseline
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_baseline.yaml
+    expected_output:
+      hard_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/hard__baseline__<checkpoint-token>.jsonl
+      global_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/global__baseline__<checkpoint-token>.jsonl
+    authority_metadata:
+      action_lattice:
+        inherits_defaults: true
+        description: Baseline camera-ready candidate headings and speeds.
+      turn_authority:
+        inherits_defaults: true
+        max_angular_speed_rad_s: 1.2
+      kinematic_adapter:
+        mode: predictive_planner_default
+        config_source: configs/algos/hardcase_authority/prediction_planner_authority_baseline.yaml
+        changed_params: []
     params: {}
-
   - name: high_angular
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_high_angular.yaml
+    expected_output:
+      hard_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/hard__high_angular__<checkpoint-token>.jsonl
+      global_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/global__high_angular__<checkpoint-token>.jsonl
+    authority_metadata:
+      action_lattice:
+        candidate_heading_deltas_rad:
+          [-1.047198, -0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398, 1.047198]
+        candidate_speed_samples_m_s: inherits_defaults
+      turn_authority:
+        max_angular_speed_rad_s: 1.8
+      kinematic_adapter:
+        mode: predictive_planner_config_overrides
+        config_source: configs/algos/hardcase_authority/prediction_planner_authority_high_angular.yaml
+        changed_params:
+          - max_angular_speed
+          - predictive_candidate_heading_deltas
     params:
       max_angular_speed: 1.8
       predictive_candidate_heading_deltas:
         [-1.047198, -0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398, 1.047198]
-
   - name: dense_lattice
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_dense_lattice.yaml
+    expected_output:
+      hard_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/hard__dense_lattice__<checkpoint-token>.jsonl
+      global_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/global__dense_lattice__<checkpoint-token>.jsonl
+    authority_metadata:
+      action_lattice:
+        candidate_heading_deltas_rad:
+          [-1.047198, -0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398, 1.047198]
+        candidate_speed_samples_m_s: [0.0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0]
+      turn_authority:
+        inherits_defaults: true
+        max_angular_speed_rad_s: 1.2
+      kinematic_adapter:
+        mode: predictive_planner_config_overrides
+        config_source: configs/algos/hardcase_authority/prediction_planner_authority_dense_lattice.yaml
+        changed_params:
+          - predictive_candidate_heading_deltas
+          - predictive_candidate_speeds
     params:
       predictive_candidate_heading_deltas:
         [-1.047198, -0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398, 1.047198]
       predictive_candidate_speeds: [0.0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0]
-
   - name: nearfield_turn
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_nearfield_turn.yaml
+    expected_output:
+      hard_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/hard__nearfield_turn__<checkpoint-token>.jsonl
+      global_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/global__nearfield_turn__<checkpoint-token>.jsonl
+    authority_metadata:
+      action_lattice:
+        near_field_heading_deltas_rad:
+          [
+            -1.570796,
+            -1.047198,
+            -0.785398,
+            -0.523599,
+            -0.261799,
+            0.0,
+            0.261799,
+            0.523599,
+            0.785398,
+            1.047198,
+            1.570796,
+          ]
+        near_field_speed_cap_m_s: 0.8
+      turn_authority:
+        inherits_defaults: true
+        max_angular_speed_rad_s: 1.2
+      kinematic_adapter:
+        mode: predictive_near_field_adapter
+        config_source: configs/algos/hardcase_authority/prediction_planner_authority_nearfield_turn.yaml
+        changed_params:
+          - predictive_near_field_heading_deltas
+          - predictive_near_field_speed_cap
     params:
       predictive_near_field_heading_deltas:
         [
@@ -37,16 +120,47 @@ variants:
           1.570796,
         ]
       predictive_near_field_speed_cap: 0.8
-
   - name: combined_max_authority
+    algo_config: configs/algos/hardcase_authority/prediction_planner_authority_combined_max_authority.yaml
+    expected_output:
+      hard_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/hard__combined_max_authority__<checkpoint-token>.jsonl
+      global_jsonl_pattern: output/benchmarks/issue_3213_maneuver_authority/global__combined_max_authority__<checkpoint-token>.jsonl
+    authority_metadata:
+      action_lattice:
+        candidate_heading_deltas_rad:
+          [-1.047198, -0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398, 1.047198]
+        candidate_speed_samples_m_s: [0.0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0]
+        near_field_heading_deltas_rad:
+          [
+            -1.570796,
+            -1.047198,
+            -0.785398,
+            -0.523599,
+            -0.261799,
+            0.0,
+            0.261799,
+            0.523599,
+            0.785398,
+            1.047198,
+            1.570796,
+          ]
+        near_field_speed_cap_m_s: 0.8
+      turn_authority:
+        max_angular_speed_rad_s: 1.8
+      kinematic_adapter:
+        mode: combined_predictive_authority_overrides
+        config_source: configs/algos/hardcase_authority/prediction_planner_authority_combined_max_authority.yaml
+        changed_params:
+          - max_angular_speed
+          - predictive_candidate_heading_deltas
+          - predictive_candidate_speeds
+          - predictive_near_field_heading_deltas
+          - predictive_near_field_speed_cap
     params:
       max_angular_speed: 1.8
       predictive_candidate_heading_deltas:
         [-1.047198, -0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398, 1.047198]
       predictive_candidate_speeds: [0.0, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0]
-      predictive_sequence_segments: 4
-      predictive_sequence_branch_factor: 6
-      predictive_sequence_beam_width: 12
       predictive_near_field_heading_deltas:
         [
           -1.570796,

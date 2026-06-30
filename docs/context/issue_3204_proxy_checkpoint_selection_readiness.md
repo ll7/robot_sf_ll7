@@ -25,6 +25,11 @@ reusable check so the blocked state is machine-checkable and the revival conditi
   fail-closed boundary plus a pin on the live-registry blocked state.
 
 ## Current observed state (live registry)
+The readiness contract now includes a `known_blockers` list so the checker reports current blocker
+status and revival conditions even when no training summary artifact is supplied. The current
+configured blockers are missing durable predictive checkpoints and the degenerate
+`hardcase_proxy_probe_v1` summary.
+
 
 All 8 `predictive_*` registry entries resolve to absent, non-durable `output/tmp/...` paths in a
 clean checkout, so the preflight reports `blocked` with `resolvable_count = 0 < 6`. This matches the
@@ -46,6 +51,7 @@ paper/dissertation claim edits.
 ## Reproduce
 
 ```bash
-uv run python scripts/research/check_predictive_checkpoint_proxy_readiness.py --json
+uv run python scripts/research/check_predictive_checkpoint_proxy_readiness.py \
+  --config configs/research/predictive_checkpoint_proxy_v1.yaml --json
 uv run pytest tests/research/test_check_predictive_checkpoint_proxy_readiness.py -q
 ```

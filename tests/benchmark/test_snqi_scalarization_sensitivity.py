@@ -203,6 +203,19 @@ def test_preflight_malformed_for_non_finite_term() -> None:
     assert any(issue["code"] == "non_finite_required_term" for issue in report["issues"])
 
 
+def test_preflight_malformed_for_out_of_range_bounded_term() -> None:
+    """Out-of-range bounded SNQI terms are malformed, not merely blocked."""
+    records = _preflight_episodes()
+    records[0]["metrics"]["time_to_goal_norm"] = 1.6
+    report = classify_scalarization_sensitivity_inputs(
+        records,
+        weights=_weights(),
+        baseline=_baseline(),
+    )
+    assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "out_of_range_normalized_term" for issue in report["issues"])
+
+
 def test_preflight_malformed_for_non_mapping_baseline_value() -> None:
     """A baseline metric value that is not a mapping is classified malformed, not crashed."""
     baseline = _baseline()
@@ -294,6 +307,19 @@ def test_report_export_refuses_non_finite_normalized_time_term() -> None:
     records[0]["metrics"]["time_to_goal_norm"] = "nan"
 
     with pytest.raises(ValueError, match="non-finite required SNQI term 'time_to_goal_norm'"):
+        build_scalarization_sensitivity_report(
+            records,
+            weights=_weights(),
+            baseline=_baseline(),
+        )
+
+
+def test_report_export_refuses_out_of_range_normalized_time_term() -> None:
+    """Direct report export fails closed when normalized time input is outside [0, 1]."""
+    records = _episodes()
+    records[0]["metrics"]["time_to_goal_norm"] = 1.3
+
+    with pytest.raises(ValueError, match=r"outside \[0, 1\]"):
         build_scalarization_sensitivity_report(
             records,
             weights=_weights(),

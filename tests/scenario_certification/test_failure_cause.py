@@ -174,3 +174,20 @@ def test_evidence_report_keeps_claim_boundary_diagnostic_only() -> None:
     assert report["family_verdicts"][0]["failure_cause_verdict"]["cause"] == INDETERMINATE
     assert report["family_verdicts"][1]["family_id"] == "cross_trap"
     assert report["family_verdicts"][1]["failure_cause_verdict"]["cause"] == INFEASIBLE_ROUTE
+
+
+def test_oracle_failure_missing_extended_time_is_indeterminate() -> None:
+    """Oracle failure without extended-time evidence remains fail-closed."""
+
+    verdict = classify_failure_cause(
+        FamilyDiagnostics(
+            route_feasible=True,
+            actor_free_solved=True,
+            extended_time_solved=None,
+            oracle_solved=False,
+        )
+    )
+
+    assert verdict["cause"] == INDETERMINATE
+    assert verdict["evidence_complete"] is False
+    assert verdict["comparable_for_ranking"] is False

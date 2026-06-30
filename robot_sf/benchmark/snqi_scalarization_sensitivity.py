@@ -380,6 +380,7 @@ def build_scalarization_sensitivity_report(
         dominance, and Pareto-front rows.
     """
 
+    _validate_export_required_terms(records)
     grouped = _group_records(records, planner_key, fallback_planner_key)
     if len(grouped) < 2:
         raise ValueError("at least two planners are required for rank-sensitivity diagnostics")
@@ -725,6 +726,24 @@ def _group_records(
             raise ValueError(f"record {index} missing planner key {planner_key!r}")
         grouped.setdefault(str(planner), []).append(record)
     return grouped
+
+
+def _validate_export_required_terms(records: Sequence[Mapping[str, Any]]) -> None:
+    """Fail closed before export when required SNQI terms would otherwise default."""
+
+    for index, record in enumerate(records, start=1):
+        metrics = _metrics(record)
+        for metric in REQUIRED_SENSITIVITY_METRICS:
+            if metric not in metrics:
+                raise ValueError(
+                    f"record {index} missing required SNQI term {metric!r}; "
+                    "run scalarization-sensitivity preflight before export"
+                )
+            if not _is_finite_metric(metrics.get(metric)):
+                raise ValueError(
+                    f"record {index} non-finite required SNQI term {metric!r}; "
+                    "run scalarization-sensitivity preflight before export"
+                )
 
 
 def _planner_snqi_scores(

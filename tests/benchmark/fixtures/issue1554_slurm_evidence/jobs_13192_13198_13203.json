@@ -1,0 +1,68 @@
+{
+  "jobs": [
+    {
+      "job_id": 13192,
+      "campaign": "2026-06-issue1554-best-ppo-compare-run",
+      "config": "configs/benchmarks/paper_experiment_matrix_v1_best_ppo_compare.yaml",
+      "slurm_state": "COMPLETED",
+      "exit_code": "0:0",
+      "public_commit": "182a4ebb5b44165ffc3608a3c20580fbf9e8add6",
+      "finding": "Best-PPO comparison run completed and produced two ok planner rows with 144 episodes per planner. This is comparison evidence, not a paper/dissertation claim by itself.",
+      "evidence_role": "comparison_run",
+      "artifact_summary": {
+        "matrix_rows": 2,
+        "planner_rows": 2,
+        "planner_row_status_counts": {
+          "ok": 2
+        },
+        "warnings": []
+      },
+      "limitations": [
+        "Small comparison slice only; use for queue direction, not broad planner-ranking claims."
+      ]
+    },
+    {
+      "job_id": 13198,
+      "campaign": "2026-06-issue1554-s20-h500-split-mem180-run",
+      "config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml",
+      "slurm_state": "COMPLETED",
+      "exit_code": "0:0",
+      "public_commit": "12a188de7246aad3b9088ea76e6a25a20029f976",
+      "finding": "The 180 GB split planner-family S20/H500 run completed in 01:42:35 and produced nine ok planner rows with 960 episodes per planner.",
+      "evidence_role": "result_matrix",
+      "artifact_summary": {
+        "matrix_rows": 9,
+        "planner_rows": 9,
+        "planner_row_status_counts": {
+          "ok": 9
+        },
+        "warnings": [
+          "SNQI contract status=fail with snqi_contract.enforcement=warn; campaign marked soft contract warning."
+        ]
+      },
+      "limitations": [
+        "SNQI contract warning blocks paper-grade interpretation until analyzed.",
+        "Analyze this result before scheduling another duplicate S20/H500 planner-family run."
+      ]
+    },
+    {
+      "job_id": 13203,
+      "campaign": "2026-06-issue1554-current-main-smoke-preflight",
+      "config": "configs/benchmarks/camera_ready_smoke_all_planners.yaml",
+      "slurm_state": "COMPLETED",
+      "exit_code": "0:0",
+      "public_commit": "7c1e63997c724064468f64ace698731deacf201e",
+      "finding": "Current-main smoke/preflight completed in 26 seconds with workers=1, one scenario, and eight planners.",
+      "evidence_role": "smoke_preflight",
+      "artifact_summary": {
+        "scenario_count": 1,
+        "planner_count": 8,
+        "workers": 1,
+        "warnings": []
+      },
+      "limitations": [
+        "Smoke/preflight only; it proves launcher/config plumbing but does not replace result analysis."
+      ]
+    }
+  ]
+}

@@ -28,6 +28,7 @@ def test_weights_inventory_alias_reports_conflict_fail_closed(
         "camera_ready_v2",
         "camera_ready_v3",
     }
+    assert all(len(record["content_sha256"]) == 64 for record in payload["records"])
     assert any(
         conflict["kind"] == "canonical_direction_conflict"
         and conflict["severity"] == "error"

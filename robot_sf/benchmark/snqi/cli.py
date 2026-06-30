@@ -281,6 +281,7 @@ def cmd_inventory_weights(args: argparse.Namespace) -> int:
                         f"- {rec.name:18s} dominant={rec.dominant_term:14s} "
                         f"scale={rec.scale_class:18s} "
                         f"canonical={'yes' if rec.declares_canonical else 'no'} "
+                        f"sha256={(rec.content_sha256 or 'unknown')[:12]} "
                         f"({rec.relpath or 'code default'})"
                     )
                 else:

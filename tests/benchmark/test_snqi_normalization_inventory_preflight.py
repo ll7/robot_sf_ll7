@@ -112,6 +112,14 @@ def test_preflight_main_fails_closed_but_allows_inspection(tmp_path) -> None:
     assert payload["schema_version"] == "snqi_normalization_inventory_preflight.v1"
     assert payload["status"] == "failed"
     assert payload["blockers"][0]["kind"] == "mixed_normalization_basis"
+    checker = payload["normalization_checker"]
+    assert checker["normalization_contract_status"] is None
+    assert checker["weights_comparable"] is None
+    assert checker["raw_penalty_absolute_share"] is None
+    assert checker["baseline_normalized_penalty_absolute_share"] is None
+    assert checker["raw_penalty_terms"] is None
+    assert checker["baseline_normalized_penalty_terms"] is None
+    assert checker["weight_bound_exceedance_terms"] is None
 
     assert main(["--json", "--allow-mixed-basis"]) == 0
 

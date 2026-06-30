@@ -130,6 +130,13 @@ def build_normalization_preflight_report(
             "by issue #3978."
         ),
         "mixed_scale": inventory.mixed_scale,
+        "normalization_contract_status": None,
+        "weights_comparable": None,
+        "raw_penalty_absolute_share": None,
+        "baseline_normalized_penalty_absolute_share": None,
+        "raw_penalty_terms": None,
+        "baseline_normalized_penalty_terms": None,
+        "weight_bound_exceedance_terms": None,
     }
 
     if metrics is not None and weights is not None:

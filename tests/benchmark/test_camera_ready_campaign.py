@@ -15,6 +15,7 @@ import pytest
 import yaml
 from loguru import logger
 
+import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready._artifacts import (
@@ -67,6 +68,26 @@ from robot_sf.benchmark.synthetic_actuation import (
     validate_synthetic_actuation_variability_distribution,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+
+
+def test_camera_ready_campaign_reexports_package_artifact_helpers() -> None:
+    """Legacy camera_ready_campaign imports expose moved artifact helpers."""
+    helper_names = (
+        "_markdown_rows_from_mapping_rows",
+        "_write_actuation_envelope_artifacts",
+        "_write_amv_coverage_artifacts",
+        "_write_comparability_artifacts",
+        "_write_matrix_summary_artifacts",
+        "_write_seed_episode_rows_artifact",
+        "_write_seed_variability_artifacts",
+        "_write_snqi_diagnostics_artifacts",
+        "_write_statistical_sufficiency_artifact",
+    )
+
+    for helper_name in helper_names:
+        assert getattr(camera_ready_campaign_module, helper_name) is getattr(
+            camera_ready_artifacts_module, helper_name
+        )
 
 
 def test_scenario_with_kinematics_patches_copy_without_mutating_input() -> None:

@@ -37,6 +37,11 @@ REQUIRED_SENSITIVITY_METRICS = (
     "comfort_exposure",
 )
 OPTIONAL_SENSITIVITY_METRICS = ("force_exceed_events", "jerk_mean")
+BOUNDED_NORMALIZED_SENSITIVITY_METRICS = (
+    "success",
+    "time_to_goal_norm",
+    "comfort_exposure",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +254,15 @@ def _add_metric_preflight_issues(
                 "non_finite_required_term",
                 SENSITIVITY_PREFLIGHT_MALFORMED,
                 f"record {index} has non-finite SNQI term {metric!r}",
+            )
+
+        elif metric in BOUNDED_NORMALIZED_SENSITIVITY_METRICS and not _is_unit_interval(
+            metrics.get(metric)
+        ):
+            state.add_issue(
+                "out_of_range_normalized_term",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                f"record {index} normalized SNQI term {metric!r} outside [0, 1]",
             )
 
     for metric in OPTIONAL_SENSITIVITY_METRICS:
@@ -798,6 +812,13 @@ def _validate_export_required_terms(records: Sequence[Mapping[str, Any]]) -> Non
                     f"record {index} non-finite required SNQI term {metric!r}; "
                     "run scalarization-sensitivity preflight before export"
                 )
+            if metric in BOUNDED_NORMALIZED_SENSITIVITY_METRICS and not _is_unit_interval(
+                metrics.get(metric)
+            ):
+                raise ValueError(
+                    f"record {index} normalized SNQI term {metric!r} outside [0, 1]; "
+                    "run scalarization-sensitivity preflight before export"
+                )
 
 
 def _planner_snqi_scores(
@@ -1100,6 +1121,10 @@ def _is_finite_metric(value: Any) -> bool:
         return math.isfinite(float(value))
     except (TypeError, ValueError):
         return False
+
+
+def _is_unit_interval(value: Any) -> bool:
+    return 0.0 <= float(value) <= 1.0
 
 
 def _mean(values: Iterable[float]) -> float:

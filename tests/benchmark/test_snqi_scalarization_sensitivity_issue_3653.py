@@ -194,6 +194,24 @@ def test_preflight_malformed_non_finite_required_input() -> None:
     assert any(issue["code"] == "non_finite_required_term" for issue in preflight["issues"])
 
 
+def test_preflight_malformed_out_of_range_normalized_input() -> None:
+    """Finite normalized terms outside [0, 1] are malformed, not exportable."""
+
+    records = _valid_records()
+    metrics = records[0]["metrics"]
+    assert isinstance(metrics, dict)
+    metrics["time_to_goal_norm"] = 1.2
+
+    preflight = classify_scalarization_sensitivity_inputs(
+        records, weights=WEIGHTS, baseline=BASELINE
+    )
+
+    assert preflight["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "out_of_range_normalized_term" for issue in preflight["issues"])
+    with pytest.raises(ValueError, match=r"time_to_goal_norm.*outside \[0, 1\]"):
+        build_scalarization_sensitivity_report(records, weights=WEIGHTS, baseline=BASELINE)
+
+
 def test_cli_refuses_blocked_inputs_and_writes_only_preflight(tmp_path: Path) -> None:
     """Blocked inputs return exit code 2 and do not create export artifacts."""
 

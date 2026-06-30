@@ -37,6 +37,15 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "force_exceed": "baseline_normalized_bounded",
         "jerk": "baseline_normalized_bounded",
     }
+    contributions = report["normalization_contributions"]
+    assert contributions["schema_version"] == "snqi_normalization_contributions.v1"
+    assert contributions["diagnostic_only"] is True
+    assert contributions["mixed_basis"] is True
+    assert contributions["raw_penalty_terms_dominate"] is True
+    assert (
+        contributions["raw_penalty_absolute_share"]
+        > contributions["baseline_normalized_penalty_absolute_share"]
+    )
 
 
 def test_governance_main_fails_closed_but_allows_inspection(tmp_path: Path) -> None:
@@ -75,6 +84,8 @@ def test_governance_text_lists_per_term_normalization_status(
     assert "collisions (collisions, w_collisions): baseline_normalized_bounded" in out
     assert "basis=baseline-relative median/p95 clamped value" in out
     assert "jerk (jerk_mean, w_jerk): baseline_normalized_bounded" in out
+    assert "Contribution diagnostic:" in out
+    assert "raw_penalty_terms_dominate=True" in out
 
 
 def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> None:

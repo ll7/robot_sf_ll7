@@ -24,6 +24,7 @@ from robot_sf.benchmark.snqi.exit_codes import (
     EXIT_VALIDATION_ERROR,
 )
 from robot_sf.benchmark.snqi.normalization_inventory import (
+    build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
 )
 from robot_sf.benchmark.snqi.weights_inventory import build_inventory_report
@@ -34,6 +35,31 @@ CLAIM_BOUNDARY = (
     "change normalization, change compute_snqi output, or make SNQI a primary "
     "safety ranking."
 )
+
+CONTRIBUTION_DIAGNOSTIC_METRICS = {
+    "success": 1.0,
+    "time_to_goal_norm": 3.0,
+    "collisions": 9.0,
+    "near_misses": 9.0,
+    "comfort_exposure": 2.0,
+    "force_exceed_events": 9.0,
+    "jerk_mean": 9.0,
+}
+CONTRIBUTION_DIAGNOSTIC_WEIGHTS = {
+    "w_success": 1.0,
+    "w_time": 1.0,
+    "w_collisions": 1.0,
+    "w_near": 1.0,
+    "w_comfort": 1.0,
+    "w_force_exceed": 1.0,
+    "w_jerk": 1.0,
+}
+CONTRIBUTION_DIAGNOSTIC_BASELINE_STATS = {
+    "collisions": {"med": 0.0, "p95": 1.0},
+    "near_misses": {"med": 0.0, "p95": 1.0},
+    "force_exceed_events": {"med": 0.0, "p95": 1.0},
+    "jerk_mean": {"med": 0.0, "p95": 1.0},
+}
 
 
 def _load_baseline_stats(path: Path | None) -> dict[str, dict[str, float]] | None:
@@ -59,6 +85,11 @@ def build_governance_report(
     """Build a structured SNQI governance diagnostic report."""
     weights = build_inventory_report(repo_root)
     normalization = build_snqi_normalization_inventory(baseline_stats)
+    contribution_diagnostics = build_snqi_contribution_diagnostics(
+        CONTRIBUTION_DIAGNOSTIC_METRICS,
+        CONTRIBUTION_DIAGNOSTIC_WEIGHTS,
+        CONTRIBUTION_DIAGNOSTIC_BASELINE_STATS,
+    )
 
     blockers: list[dict[str, Any]] = []
     if weights.has_blocking_conflict:
@@ -115,6 +146,7 @@ def build_governance_report(
         "blockers": blockers,
         "weights": weights.to_dict(),
         "normalization": normalization.to_dict(),
+        "normalization_contributions": contribution_diagnostics,
     }
 
 
@@ -151,6 +183,14 @@ def _print_text_report(report: dict[str, Any]) -> None:
             f"{term['normalization_status']}; role={role}; "
             f"basis={term['measurement_basis']}; note={term['note']}"
         )
+    contributions = report["normalization_contributions"]
+    print(
+        "Contribution diagnostic: "
+        f"raw_penalty_share={contributions['raw_penalty_absolute_share']:.3f}; "
+        "baseline_normalized_penalty_share="
+        f"{contributions['baseline_normalized_penalty_absolute_share']:.3f}; "
+        f"raw_penalty_terms_dominate={contributions['raw_penalty_terms_dominate']}"
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:

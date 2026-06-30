@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 import torch
 
+from scripts.tools import probe_sonic_model_inference as probe_module
 from scripts.tools.probe_sonic_model_inference import (
     _extract_contract,
     _render_markdown,
@@ -84,12 +85,14 @@ def test_run_model_probe_reports_direct_and_shimmed_paths(
             return SimpleNamespace(Policy=FakePolicy)
         raise ModuleNotFoundError(name)
 
+    # Patch via the module objects (object-form setattr) rather than dotted strings.
+    # importlib is a shared singleton module, so dotted-string patching of
+    # importlib.import_module pollutes pytest's own monkeypatch path resolution,
+    # which breaks under pytest >= 9.1 (ModuleNotFoundError while resolving the
+    # next setattr target). Object-form setattr avoids that resolution entirely.
+    monkeypatch.setattr(probe_module.importlib, "import_module", fake_import_module)
     monkeypatch.setattr(
-        "scripts.tools.probe_sonic_model_inference.importlib.import_module", fake_import_module
-    )
-    monkeypatch.setattr(
-        "scripts.tools.probe_sonic_model_inference.torch.load",
-        lambda *_args, **_kwargs: {"weights": torch.tensor([1.0])},
+        probe_module.torch, "load", lambda *_args, **_kwargs: {"weights": torch.tensor([1.0])}
     )
 
     report = run_model_probe(repo_root=repo_root, model_name="SoNIC_GST", checkpoint="05207.pt")
@@ -251,12 +254,11 @@ def test_run_model_probe_restores_import_state(
             return SimpleNamespace(Policy=FakePolicy)
         raise ModuleNotFoundError(name)
 
+    # Object-form setattr (see test_run_model_probe_reports_direct_and_shimmed_paths)
+    # to avoid polluting pytest's dotted-path resolution under pytest >= 9.1.
+    monkeypatch.setattr(probe_module.importlib, "import_module", fake_import_module)
     monkeypatch.setattr(
-        "scripts.tools.probe_sonic_model_inference.importlib.import_module", fake_import_module
-    )
-    monkeypatch.setattr(
-        "scripts.tools.probe_sonic_model_inference.torch.load",
-        lambda *_args, **_kwargs: {"weights": torch.tensor([1.0])},
+        probe_module.torch, "load", lambda *_args, **_kwargs: {"weights": torch.tensor([1.0])}
     )
 
     run_model_probe(repo_root=repo_root, model_name="SoNIC_GST", checkpoint="05207.pt")

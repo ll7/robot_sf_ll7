@@ -83,6 +83,16 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "force_exceed": "baseline_normalized_bounded",
         "jerk": "baseline_normalized_bounded",
     }
+    assert blocker_3699["contribution_check"] == {
+        "schema_version": "snqi_normalization_contributions.v1",
+        "diagnostic_only": True,
+        "raw_penalty_absolute_share": pytest.approx(0.5),
+        "baseline_normalized_penalty_absolute_share": pytest.approx(0.4),
+        "raw_penalty_terms_dominate": True,
+        "weight_bound_exceedance_terms": ["time", "comfort"],
+        "normalization_contract_status": "mixed_unbounded_penalty_basis",
+        "weights_comparable": False,
+    }
     contributions = report["normalization_contributions"]
     assert contributions["schema_version"] == "snqi_normalization_contributions.v1"
     assert contributions["diagnostic_only"] is True
@@ -169,6 +179,7 @@ def test_governance_text_lists_per_term_normalization_status(
     assert "Contribution diagnostic:" in out
     assert "raw_penalty_terms_dominate=True" in out
     assert "has_weight_bound_exceedance=True" in out
+    assert "weight_bound_exceedance_terms=time, comfort" in out
 
 
 def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> None:

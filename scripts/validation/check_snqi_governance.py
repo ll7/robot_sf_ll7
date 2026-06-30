@@ -10,6 +10,7 @@ or promote SNQI to a primary safety ranking.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import sys
@@ -137,6 +138,32 @@ def build_governance_report(
                     "relative priorities."
                 ),
                 "mixed_inputs": mixed_inputs,
+                "contribution_check": {
+                    "schema_version": contribution_diagnostics["schema_version"],
+                    "diagnostic_only": contribution_diagnostics["diagnostic_only"],
+                    "raw_penalty_absolute_share": contribution_diagnostics[
+                        "raw_penalty_absolute_share"
+                    ],
+                    "baseline_normalized_penalty_absolute_share": contribution_diagnostics[
+                        "baseline_normalized_penalty_absolute_share"
+                    ],
+                    "raw_penalty_terms_dominate": contribution_diagnostics[
+                        "raw_penalty_terms_dominate"
+                    ],
+                    # Deep-copy the nested list so the blocker payload does not alias the
+                    # same list object returned under report["normalization_contributions"].
+                    "weight_bound_exceedance_terms": copy.deepcopy(
+                        contribution_diagnostics["normalization_contract"][
+                            "weight_bound_exceedance_terms"
+                        ]
+                    ),
+                    "normalization_contract_status": contribution_diagnostics[
+                        "normalization_contract"
+                    ]["status"],
+                    "weights_comparable": contribution_diagnostics["normalization_contract"][
+                        "weights_comparable"
+                    ],
+                },
             }
         )
     if baseline_stats is not None and normalization.missing_baseline_coverage:
@@ -244,7 +271,9 @@ def _print_text_report(report: dict[str, Any]) -> None:
         "baseline_normalized_penalty_share="
         f"{contributions['baseline_normalized_penalty_absolute_share']:.3f}; "
         f"raw_penalty_terms_dominate={contributions['raw_penalty_terms_dominate']}; "
-        f"has_weight_bound_exceedance={contributions['has_weight_bound_exceedance']}"
+        f"has_weight_bound_exceedance={contributions['has_weight_bound_exceedance']}; "
+        "weight_bound_exceedance_terms="
+        f"{', '.join(contributions['normalization_contract']['weight_bound_exceedance_terms']) or 'none'}"
     )
 
 

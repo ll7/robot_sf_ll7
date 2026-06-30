@@ -1021,7 +1021,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                         correlations[f"{n1}_vs_{n2}"] = recomputer.rank_correlation_analysis(
                             strategy_results[n1]["weights"], strategy_results[n2]["weights"]
                         )
-                    except Exception:
+                    except (KeyError, TypeError, ValueError, ZeroDivisionError):
                         logger.debug("Correlation %s vs %s failed", n1, n2)
             results["strategy_correlations"] = correlations
             if getattr(args, "decision_reversal_threshold", 0.0) > 0 and correlations:

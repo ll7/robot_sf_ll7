@@ -288,6 +288,12 @@ def test_artifact_writer_creates_report_ready_files(tmp_path: Path) -> None:
     disagreement_csv_text = artifacts.decision_disagreement_csv_path.read_text(encoding="utf-8")
     assert "comparison,left_order,right_order,pairwise_reversal_count" in disagreement_csv_text
     assert "base_snqi_vs_constraints_first" in disagreement_csv_text
+    # The order columns must be populated, not silently blank, so the table shows which
+    # planners' rankings disagree (not just the aggregate reversal count).
+    base_order = " > ".join(report["base_snqi_order"])
+    constraints_order = " > ".join(report["constraints_first_order"])
+    assert base_order in disagreement_csv_text
+    assert constraints_order in disagreement_csv_text
     markdown = artifacts.markdown_path.read_text(encoding="utf-8")
     assert "not benchmark evidence" in markdown
     svg = artifacts.svg_path.read_text(encoding="utf-8")

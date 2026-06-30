@@ -989,9 +989,9 @@ def _write_decision_disagreement_csv(path: Path, report: Mapping[str, Any]) -> N
         rows.append(
             {
                 "comparison": "base_snqi_vs_constraints_first",
-                "left_order": " > ".join(str(item) for item in disagreement.get("snqi_order", [])),
+                "left_order": " > ".join(str(item) for item in report.get("base_snqi_order", [])),
                 "right_order": " > ".join(
-                    str(item) for item in disagreement.get("constraints_first_order", [])
+                    str(item) for item in report.get("constraints_first_order", [])
                 ),
                 "pairwise_reversal_count": disagreement.get("pairwise_reversal_count", ""),
                 "pairwise_disagreement_rate": disagreement.get("pairwise_disagreement_rate", ""),

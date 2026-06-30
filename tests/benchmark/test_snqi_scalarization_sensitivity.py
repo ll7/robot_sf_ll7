@@ -301,6 +301,51 @@ def test_report_export_refuses_non_finite_normalized_time_term() -> None:
         )
 
 
+def test_preflight_blocks_missing_active_optional_normalized_term() -> None:
+    """Weighted optional normalized terms must be present before export."""
+
+    records = _preflight_episodes()
+    weights = _weights()
+    weights["w_jerk"] = 0.25
+
+    report = classify_scalarization_sensitivity_inputs(
+        records,
+        weights=weights,
+        baseline=_baseline(),
+    )
+
+    assert report["status"] == SENSITIVITY_PREFLIGHT_BLOCKED
+    assert any(issue["code"] == "missing_weighted_optional_term" for issue in report["issues"])
+
+
+def test_preflight_reports_non_mapping_weights_without_crashing() -> None:
+    """Non-mapping weights stay a graceful malformed report, not an AttributeError."""
+
+    report = classify_scalarization_sensitivity_inputs(
+        _preflight_episodes(),
+        weights=None,
+        baseline=_baseline(),
+    )
+
+    assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "weights_not_mapping" for issue in report["issues"])
+
+
+def test_report_export_refuses_missing_active_optional_normalized_term() -> None:
+    """Direct export fails closed instead of defaulting active optional terms to zero."""
+
+    records = _episodes()
+    weights = _weights()
+    weights["w_force_exceed"] = 0.5
+
+    with pytest.raises(ValueError, match="missing weighted SNQI term 'force_exceed_events'"):
+        build_scalarization_sensitivity_report(
+            records,
+            weights=weights,
+            baseline=_baseline(),
+        )
+
+
 def test_artifact_writer_creates_report_ready_files(tmp_path: Path) -> None:
     """Artifact writer emits report-ready JSON, CSV, Markdown, and SVG."""
 

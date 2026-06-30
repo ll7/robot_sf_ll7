@@ -260,6 +260,18 @@ def test_snqi_weight_recompute_cli_decision_preflight_invalid_normalized_metrics
                 "jerk_mean": 0.15,
             },
         },
+        {
+            "scenario_id": "s2",
+            "metrics": {
+                "success": 1.0,
+                "time_normalized": 0.5,
+                "collisions": 0,
+                "near_misses": 1,
+                "comfort_penalty": 0.3,
+                "force_exceed_events": "not-a-number",
+                "jerk_mean": 0.15,
+            },
+        },
     ]
     episodes_path.write_text("".join(json.dumps(ep) + "\n" for ep in episodes), encoding="utf-8")
 
@@ -288,4 +300,7 @@ def test_snqi_weight_recompute_cli_decision_preflight_invalid_normalized_metrics
     assert proc.returncode != 0
     data = json.loads(output_path.read_text(encoding="utf-8"))
     issues = data["issues"]["invalid_normalized_metrics"]
-    assert any(item["name"] == "force_exceed_events" for item in issues)
+    assert any(
+        item["name"] == "force_exceed_events" and item["episode_count_with_invalid"] == 2
+        for item in issues
+    )

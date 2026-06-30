@@ -549,6 +549,34 @@ def _check_proxy_summary(
     return STATUS_PASSED, [], payload
 
 
+def _gate_checkpoint_selector(
+    registry: Any,
+    selector: dict[str, Any],
+    repo_root: Path,
+) -> tuple[str, list[str], dict[str, Any]]:
+    """Coerce threshold fields and run _check_checkpoint_artifacts, fail-closed on invalid inputs."""
+    min_resolvable, min_errors = _coerce_positive_int(
+        selector.get("min_resolvable_checkpoints"),
+        field="min_resolvable_checkpoints",
+    )
+    if min_errors:
+        return STATUS_FAILED, [*min_errors], {}
+    min_group_per_run, group_errors = _coerce_positive_int(
+        selector.get("min_resolvable_training_run_checkpoints"),
+        field="min_resolvable_training_run_checkpoints",
+    )
+    if group_errors:
+        return STATUS_FAILED, [*group_errors], {}
+    return _check_checkpoint_artifacts(
+        registry,
+        registry_tag=str(selector.get("registry_tag", "")),
+        min_resolvable=min_resolvable or 0,
+        training_run_group_field=selector.get("training_run_group_field"),
+        min_resolvable_training_run_checkpoints=min_group_per_run,
+        repo_root=repo_root,
+    )
+
+
 def check_readiness(
     *,
     config_path: Path,
@@ -586,28 +614,9 @@ def check_readiness(
     if isinstance(selector, dict) and registry_path.exists():
         registry_module = _load_registry_module()
         registry = registry_module.load_registry(registry_path)
-        min_resolvable, _resolvable_messages = _coerce_positive_int(
-            selector.get("min_resolvable_checkpoints"),
-            field="min_resolvable_checkpoints",
+        ckpt_status, ckpt_messages, ckpt_mapping = _gate_checkpoint_selector(
+            registry, selector, repo_root
         )
-        if not _resolvable_messages:
-            ckpt_status, ckpt_messages, ckpt_mapping = _check_checkpoint_artifacts(
-                registry,
-                registry_tag=str(selector.get("registry_tag", "")),
-                min_resolvable=min_resolvable or 0,
-                training_run_group_field=selector.get("training_run_group_field"),
-                min_resolvable_training_run_checkpoints=_coerce_positive_int(
-                    selector.get("min_resolvable_training_run_checkpoints"),
-                    field="min_resolvable_training_run_checkpoints",
-                )[0],
-                repo_root=repo_root,
-            )
-        else:
-            ckpt_status, ckpt_messages, ckpt_mapping = (
-                STATUS_FAILED,
-                [*_resolvable_messages],
-                {},
-            )
     elif not registry_path.exists():
         ckpt_status, ckpt_messages, ckpt_mapping = (
             STATUS_BLOCKED,

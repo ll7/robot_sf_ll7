@@ -527,26 +527,25 @@ def _readiness_blocking_reasons(
     reasons: list[str] = []
     if not schema_ok:
         reasons.append(f"unexpected_schema_version:{schema_version!r}")
-    if stats.non_dict_count:
-        reasons.append(f"non_object_entries:{stats.non_dict_count}")
     if stats.entry_count < min_entries:
         reasons.append(f"too_few_entries:{stats.entry_count}<{min_entries}")
-    if stats.missing_archive_id:
-        reasons.append(f"entries_missing_archive_id:{stats.missing_archive_id}")
-    if stats.missing_seed:
-        reasons.append(f"entries_missing_scenario_seed:{stats.missing_seed}")
-    if stats.missing_attribution:
-        reasons.append(f"entries_missing_failure_attribution:{stats.missing_attribution}")
-    if stats.unknown_family:
-        reasons.append(f"entries_unknown_family:{stats.unknown_family}")
-    if stats.distinct_family_count < _MIN_DISJOINT_FAMILIES:
-        reasons.append(f"insufficient_scenario_families:{stats.distinct_family_count}")
-    if stats.scenario_family_overlap_count:
-        reasons.append(f"scenario_family_overlap:{stats.scenario_family_overlap_count}")
-    if stats.seed_overlap_count:
-        reasons.append(f"seed_overlap:{stats.seed_overlap_count}")
-    if stats.archive_id_overlap_count:
-        reasons.append(f"archive_id_overlap:{stats.archive_id_overlap_count}")
+    counted_blockers = (
+        ("non_object_entries", stats.non_dict_count),
+        ("entries_missing_archive_id", stats.missing_archive_id),
+        ("entries_missing_scenario_seed", stats.missing_seed),
+        ("entries_missing_failure_attribution", stats.missing_attribution),
+        ("entries_unknown_family", stats.unknown_family),
+        (
+            "insufficient_scenario_families",
+            stats.distinct_family_count
+            if stats.distinct_family_count < _MIN_DISJOINT_FAMILIES
+            else 0,
+        ),
+        ("scenario_family_overlap", stats.scenario_family_overlap_count),
+        ("seed_overlap", stats.seed_overlap_count),
+        ("archive_id_overlap", stats.archive_id_overlap_count),
+    )
+    reasons.extend(f"{name}:{count}" for name, count in counted_blockers if count)
     if not stats.disjoint_split_possible:
         reasons.append("no_disjoint_split_possible")
     return reasons
@@ -609,9 +608,7 @@ def assess_archive_readiness(
         and not stats.seed_overlap_count
         and not stats.archive_id_overlap_count
     )
-    null_test_prerequisites_ready = (
-        overlap_metadata_ready and not stats.missing_attribution
-    )
+    null_test_prerequisites_ready = overlap_metadata_ready and not stats.missing_attribution
 
     ready = not reasons
     return ArchiveReadinessReport(

@@ -149,7 +149,6 @@ def test_missing_scenario_seed_breaks_overlap_metadata() -> None:
     assert "entries_missing_scenario_seed:1" in report.blocking_reasons
 
 
-
 def test_seed_overlap_becomes_readiness_blocker() -> None:
     """Shared scenario seeds across families blocks overlap metadata readiness."""
     archive_entries = [
@@ -178,6 +177,7 @@ def test_archive_id_overlap_becomes_readiness_blocker() -> None:
     assert report.overlap_metadata_ready is False
     assert report.ready is False
     assert "archive_id_overlap:1" in report.blocking_reasons
+
 
 def test_missing_failure_attribution_breaks_null_test_prereq() -> None:
     """Missing failure_attribution blocks the null-test prerequisite."""

@@ -214,7 +214,37 @@ def test_preflight_malformed_for_non_mapping_baseline_value() -> None:
     )
 
     assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
-    assert any(issue["code"] == "pareto_prerequisite_error" for issue in report["issues"])
+    assert any(issue["code"] == "malformed_baseline_stats" for issue in report["issues"])
+
+
+def test_preflight_malformed_for_degenerate_baseline_range() -> None:
+    """Degenerate normalized baseline stats cannot support sensitivity export."""
+    baseline = _baseline()
+    baseline["collisions"] = {"med": 1.0, "p95": 1.0}
+
+    report = classify_scalarization_sensitivity_inputs(
+        _preflight_episodes(),
+        weights=_weights(),
+        baseline=baseline,
+    )
+
+    assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "degenerate_baseline_range" for issue in report["issues"])
+
+
+def test_preflight_malformed_for_non_finite_baseline_stats() -> None:
+    """Non-finite normalized baseline stats fail closed before export."""
+    baseline = _baseline()
+    baseline["near_misses"] = {"med": 0.0, "p95": float("nan")}
+
+    report = classify_scalarization_sensitivity_inputs(
+        _preflight_episodes(),
+        weights=_weights(),
+        baseline=baseline,
+    )
+
+    assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "non_finite_baseline_stats" for issue in report["issues"])
 
 
 def test_report_exports_decision_disagreement_and_weight_reversals() -> None:

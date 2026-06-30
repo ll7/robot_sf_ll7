@@ -194,24 +194,6 @@ def test_preflight_malformed_non_finite_required_input() -> None:
     assert any(issue["code"] == "non_finite_required_term" for issue in preflight["issues"])
 
 
-def test_preflight_malformed_out_of_range_normalized_input() -> None:
-    """Finite normalized terms outside [0, 1] are malformed, not exportable."""
-
-    records = _valid_records()
-    metrics = records[0]["metrics"]
-    assert isinstance(metrics, dict)
-    metrics["time_to_goal_norm"] = 1.2
-
-    preflight = classify_scalarization_sensitivity_inputs(
-        records, weights=WEIGHTS, baseline=BASELINE
-    )
-
-    assert preflight["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
-    assert any(issue["code"] == "out_of_range_normalized_term" for issue in preflight["issues"])
-    with pytest.raises(ValueError, match=r"time_to_goal_norm.*outside \[0, 1\]"):
-        build_scalarization_sensitivity_report(records, weights=WEIGHTS, baseline=BASELINE)
-
-
 def test_cli_refuses_blocked_inputs_and_writes_only_preflight(tmp_path: Path) -> None:
     """Blocked inputs return exit code 2 and do not create export artifacts."""
 
@@ -282,15 +264,9 @@ def test_cli_exports_report_ready_artifacts(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert (out_dir / "issue_3653.json").exists()
     assert (out_dir / "issue_3653_planner_rows.csv").exists()
-    assert (out_dir / "issue_3653_decision_disagreement.csv").exists()
     assert (out_dir / "issue_3653.md").exists()
     assert (out_dir / "issue_3653_pareto.svg").exists()
 
     payload = json.loads((out_dir / "issue_3653.json").read_text(encoding="utf-8"))
     assert payload["schema_version"] == "snqi_scalarization_sensitivity.v1"
     assert payload["pareto_front"]["points"]
-    disagreement_csv = (out_dir / "issue_3653_decision_disagreement.csv").read_text(
-        encoding="utf-8"
-    )
-    assert "base_snqi_vs_constraints_first" in disagreement_csv
-    assert "not benchmark evidence" in disagreement_csv

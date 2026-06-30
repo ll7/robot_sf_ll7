@@ -773,6 +773,7 @@ def _build_preflight_packet(
     args: argparse.Namespace,
     missing_info: dict[str, Any],
     baseline_issues: list[str],
+    invalid_normalized_issues: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return {
         "status": "failed",
@@ -780,6 +781,7 @@ def _build_preflight_packet(
         "issues": {
             "missing_baseline_metrics": missing_info["metrics"],
             "invalid_baseline_stats": baseline_issues,
+            "invalid_normalized_metrics": invalid_normalized_issues,
         },
         "_metadata": {
             "episodes_file": str(args.episodes),
@@ -788,6 +790,46 @@ def _build_preflight_packet(
             "invocation": "python " + " ".join(sys.argv),
         },
     }
+
+
+def _detect_invalid_normalized_metric_values(
+    episodes: list[dict[str, Any]], max_examples: int = 5
+) -> list[dict[str, Any]]:
+    """Collect episodes where normalized metrics are missing finite checks."""
+
+    issues: list[dict[str, Any]] = []
+
+    for metric in NORMALIZED_METRICS:
+        invalid_examples: list[str] = []
+        invalid_count = 0
+        for index, ep in enumerate(episodes):
+            metrics = ep.get("metrics", {}) or {}
+            if metric not in metrics:
+                continue
+
+            raw = metrics.get(metric)
+            try:
+                invalid = not np.isfinite(float(raw))
+            except (TypeError, ValueError):
+                invalid = True
+
+            if invalid:
+                invalid_count += 1
+                if len(invalid_examples) >= max_examples:
+                    continue
+                example_id = ep.get("scenario_id") or ep.get("id") or index
+                invalid_examples.append(str(example_id))
+
+        if invalid_examples:
+            issues.append(
+                {
+                    "name": metric,
+                    "episode_count_with_invalid": invalid_count,
+                    "example_episode_ids": invalid_examples,
+                }
+            )
+
+    return issues
 
 
 def _detect_missing_baseline_metrics(
@@ -892,11 +934,65 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
             threshold,
         )
 
+    results: dict[str, Any] = {}
+    phase_start = perf_counter()
+    missing_info = _detect_missing_baseline_metrics(
+        episodes,
+        baseline,
+        max_examples=args.missing_metric_max_list,
+    )
+    results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
+    baseline_issues = _normalize_stats_issues(baseline)
+    results.setdefault("diagnostics", {})["baseline_normalization_issues"] = baseline_issues
+    invalid_metric_issues = _detect_invalid_normalized_metric_values(
+        episodes,
+        max_examples=args.missing_metric_max_list,
+    )
+    results.setdefault("diagnostics", {})["invalid_normalized_metric_values"] = (
+        invalid_metric_issues
+    )
+    if missing_info["total_missing"]:
+        logger.warning(
+            "Baseline missing %d metric(s) present in episodes: %s",
+            missing_info["total_missing"],
+            ", ".join(m["name"] for m in missing_info["metrics"]),
+        )
+    if baseline_issues:
+        logger.warning(
+            "SNQI preflight detected %d baseline normalization issue(s)",
+            len(baseline_issues),
+        )
+    if invalid_metric_issues:
+        logger.warning(
+            "SNQI preflight detected %d invalid normalized metric value issue(s)",
+            len(invalid_metric_issues),
+        )
+    has_preflight_issues = bool(
+        missing_info["total_missing"] or baseline_issues or invalid_metric_issues
+    )
+    if getattr(args, "decision_preflight", False) and has_preflight_issues:
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(
+                _build_preflight_packet(
+                    args,
+                    missing_info,
+                    baseline_issues,
+                    invalid_metric_issues,
+                ),
+                f,
+                indent=2,
+            )
+        logger.error("Failing due to --decision-preflight input contract check.")
+        if invalid_metric_issues:
+            return EXIT_INPUT_ERROR
+        return EXIT_MISSING_METRIC_ERROR
+    phase_timings["missing_metric_detection"] = perf_counter() - phase_start
+
     try:
         recomputer = SNQIWeightRecomputer(episodes, baseline)
         recomputer.pareto_frontier_samples = max(
             1,
-            int(getattr(args, "pareto_front_samples", 600)),
+            int(getattr(args, "pareto_front_samples", recomputer.pareto_frontier_samples)),
         )
         recomputer.export_pareto_front = bool(getattr(args, "export_pareto_front", False))
         recomputer.simplex = bool(getattr(args, "simplex", False))
@@ -921,7 +1017,6 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
             logger.exception("Failed loading external weights: %s", e)
             return EXIT_INPUT_ERROR
 
-    results: dict[str, Any] = {}
     try:
         if args.compare_strategies:
             phase_start = perf_counter()
@@ -945,7 +1040,7 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                         correlations[f"{n1}_vs_{n2}"] = recomputer.rank_correlation_analysis(
                             strategy_results[n1]["weights"], strategy_results[n2]["weights"]
                         )
-                    except Exception:
+                    except (KeyError, TypeError, ValueError, ZeroDivisionError):
                         logger.debug("Correlation %s vs %s failed", n1, n2)
             results["strategy_correlations"] = correlations
             if getattr(args, "decision_reversal_threshold", 0.0) > 0 and correlations:
@@ -970,40 +1065,9 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
             results["recommended_strategy"] = single["strategy"]
             results["recommended_weights"] = single["weights"]
 
-        phase_start = perf_counter()
-        missing_info = _detect_missing_baseline_metrics(
-            episodes,
-            baseline,
-            max_examples=args.missing_metric_max_list,
-        )
-        results.setdefault("diagnostics", {})["baseline_missing_metrics"] = missing_info
-        baseline_issues = _normalize_stats_issues(baseline)
-        results.setdefault("diagnostics", {})["baseline_normalization_issues"] = baseline_issues
-        if missing_info["total_missing"]:
-            logger.warning(
-                "Baseline missing %d metric(s) present in episodes: %s",
-                missing_info["total_missing"],
-                ", ".join(m["name"] for m in missing_info["metrics"]),
-            )
-        if baseline_issues:
-            logger.warning(
-                "SNQI preflight detected %d baseline normalization issue(s)",
-                len(baseline_issues),
-            )
-        has_preflight_issues = bool(missing_info["total_missing"] or baseline_issues)
-        if args.decision_preflight and has_preflight_issues:
-            with open(args.output, "w", encoding="utf-8") as f:
-                json.dump(
-                    _build_preflight_packet(args, missing_info, baseline_issues),
-                    f,
-                    indent=2,
-                )
-            logger.error("Failing due to --decision-preflight input contract check.")
-            return EXIT_MISSING_METRIC_ERROR
         if missing_info["total_missing"] and args.fail_on_missing_metric:
             logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
             return EXIT_MISSING_METRIC_ERROR
-        phase_timings["diagnostics"] = perf_counter() - phase_start
 
         if args.compare_normalization:
             phase_start = perf_counter()

@@ -93,6 +93,8 @@ def build_governance_report(
 
     blockers: list[dict[str, Any]] = []
     if weights.has_blocking_conflict:
+        weight_report = weights.to_dict()
+        source_summary = weight_report["source_summary"]
         blockers.append(
             {
                 "issue": 3723,
@@ -101,6 +103,17 @@ def build_governance_report(
                     "More than one SNQI source currently declares or implies "
                     "canonical status while disagreeing on weight direction."
                 ),
+                "registered_sources": source_summary["registered_sources"],
+                "discovered_shipped_sources": source_summary["discovered_shipped_sources"],
+                "canonical_declaring_sources": source_summary["canonical_declaring_sources"],
+                "blocking_conflicts": [
+                    conflict
+                    for conflict in weight_report["conflicts"]
+                    if conflict["severity"] == "error"
+                ],
+                "code_default_shipped_direction_comparisons": source_summary[
+                    "code_default_shipped_direction_comparisons"
+                ],
             }
         )
     if normalization.mixed_scale:

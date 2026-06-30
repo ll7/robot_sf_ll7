@@ -43,7 +43,7 @@ claim_gate:
 # detection. Re-verify with: sha256sum <path>.
 runnable_config:
   config: configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml
-  config_sha256: 3bf75ebb05cc5523c33271e956b21b14749fc427fc9d986438c83d09eee8b75c
+  config_sha256: 249968670830c3b710e1407aecb2256d140cd1ba76294766421447bd89357f15
   scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
   scenario_matrix_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
   horizon_schedule: configs/policy_search/scenario_horizons_h500.yaml

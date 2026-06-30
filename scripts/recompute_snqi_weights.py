@@ -104,6 +104,7 @@ class SNQIWeightRecomputer:
         self.weight_names = WEIGHT_NAMES
         self.simplex = False  # toggled externally
         self.pareto_frontier_max = 10
+        self.pareto_frontier_samples = 600
 
     def _maybe_simplex(self, weights: dict[str, float], total: float = 10.0) -> dict[str, float]:
         """TODO docstring. Document this function.
@@ -854,7 +855,11 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
         rng = np.random.default_rng(args.seed if args.seed is not None else 1337)
         idx = rng.choice(len(episodes), size=args.sample, replace=False)
         episodes = [episodes[i] for i in sorted(idx.tolist())]
-        logger.info("Sampled %d/%d episodes (--sample) for recomputation", len(episodes), original_episode_count)
+        logger.info(
+            "Sampled %d/%d episodes (--sample) for recomputation",
+            len(episodes),
+            original_episode_count,
+        )
 
     used_episode_count = len(episodes)
     if args.seed is not None:
@@ -874,7 +879,6 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
     try:
         recomputer = SNQIWeightRecomputer(episodes, baseline)
         recomputer.pareto_frontier_samples = max(1, int(args.pareto_front_samples))
-        recomputer.pareto_frontier_max = max(1, int(args.pareto_front_samples))
         recomputer.export_pareto_front = bool(args.export_pareto_front)
         recomputer.simplex = bool(args.simplex)
     except Exception as e:
@@ -929,9 +933,11 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                 low_pairs = [
                     {"pair": pair, "correlation": corr}
                     for pair, corr in correlations.items()
-                    if abs(corr) < float(getattr(args, "decision_reversal_threshold"))
+                    if abs(corr) < float(args.decision_reversal_threshold)
                 ]
-                results.setdefault("decision_reversal_diagnostics", {})["low_correlations"] = low_pairs
+                results.setdefault("decision_reversal_diagnostics", {})["low_correlations"] = (
+                    low_pairs
+                )
             phase_timings["strategy_correlations"] = perf_counter() - phase_start
 
             recommended_name, recommended_weights = _select_recommended(strategy_results)
@@ -965,17 +971,18 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
                 "SNQI preflight detected %d baseline normalization issue(s)",
                 len(baseline_issues),
             )
-        if (missing_info["total_missing"] and args.fail_on_missing_metric) or args.decision_preflight:
-            if args.decision_preflight:
-                with open(args.output, "w", encoding="utf-8") as f:
-                    json.dump(
-                        _build_preflight_packet(args, missing_info, baseline_issues),
-                        f,
-                        indent=2,
-                    )
-                logger.error("Failing due to --decision-preflight input contract check.")
-            if args.fail_on_missing_metric:
-                logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
+        has_preflight_issues = bool(missing_info["total_missing"] or baseline_issues)
+        if args.decision_preflight and has_preflight_issues:
+            with open(args.output, "w", encoding="utf-8") as f:
+                json.dump(
+                    _build_preflight_packet(args, missing_info, baseline_issues),
+                    f,
+                    indent=2,
+                )
+            logger.error("Failing due to --decision-preflight input contract check.")
+            return EXIT_MISSING_METRIC_ERROR
+        if missing_info["total_missing"] and args.fail_on_missing_metric:
+            logger.error("Failing due to --fail-on-missing-metric (missing baseline metrics).")
             return EXIT_MISSING_METRIC_ERROR
         phase_timings["diagnostics"] = perf_counter() - phase_start
 
@@ -1042,7 +1049,9 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
             used_episode_count=used_episode_count,
         )
         results.setdefault("_metadata", {})["skipped_malformed_lines"] = skipped_lines
-        results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info["total_missing"]
+        results.setdefault("_metadata", {})["baseline_missing_metric_count"] = missing_info[
+            "total_missing"
+        ]
 
         _finalize_summary(results, args)
         if "summary" in results:
@@ -1070,7 +1079,6 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
         timing_lines = ["Phase timings (seconds):"] + [
             f"  {k}: {v:.4f}" for k, v in sorted(phase_timings.items())
         ]
-
 
         logger.info("\n%s", "\n".join(timing_lines))
         _print_summary(results, args, len(episodes))

@@ -39,6 +39,39 @@ SCALING_BASELINE_NORMALIZED = "baseline_normalized"
 NORMALIZED_LOWER = 0.0
 NORMALIZED_UPPER = 1.0
 
+SNQI_LEGACY_SCORE_VERSION = "SNQI-v0"
+SNQI_LEGACY_SCORE_STATUS = "legacy_mixed_basis_diagnostic_only"
+
+# Static SNQI score-version contract. All values are immutable scalars, so a
+# shallow copy is sufficient to isolate callers from mutating the shared source.
+_SNQI_VERSION_CONTRACT: dict[str, object] = {
+    "schema_version": "snqi_score_version_contract.v1",
+    "score_version": SNQI_LEGACY_SCORE_VERSION,
+    "status": SNQI_LEGACY_SCORE_STATUS,
+    "diagnostic_only": True,
+    "mixed_basis_preserved": True,
+    "score_semantics_changed": False,
+    "decision_required_issue": 3699,
+    "future_bounded_contract": "SNQI-v1",
+    "policy": (
+        "Historical SNQI-v0 keeps the mixed raw/baseline-normalized basis for "
+        "reproducibility and must not be used as a primary safety ranking."
+    ),
+}
+
+
+def build_snqi_version_contract() -> dict[str, object]:
+    """Return the current versioned SNQI normalization contract.
+
+    Issue #3699's current product decision preserves historical SNQI as a
+    legacy diagnostic while deferring any bounded/recalibrated score to a
+    separately versioned contract.
+
+    Returns a fresh shallow copy so callers cannot mutate the shared constant.
+    """
+
+    return _SNQI_VERSION_CONTRACT.copy()
+
 
 @dataclass(frozen=True)
 class TermScaling:
@@ -232,6 +265,11 @@ class TermContribution:
     signed_contribution: float
     absolute_share: float
 
+    @property
+    def exceeds_weight_bound(self) -> bool:
+        """Whether this term contributes more than its nominal weight magnitude."""
+        return abs(self.signed_contribution) > abs(self.weight)
+
     def to_dict(self) -> dict[str, object]:
         """Return JSON-serializable contribution diagnostics."""
         return {
@@ -245,9 +283,64 @@ class TermContribution:
             "weight": self.weight,
             "signed_contribution": self.signed_contribution,
             "absolute_share": self.absolute_share,
+            "exceeds_weight_bound": self.exceeds_weight_bound,
             "bounded": self.term.bounded,
             "measurement_basis": self.term.measurement_basis,
         }
+
+
+def _build_normalization_contract(
+    contributions: list[TermContribution],
+    *,
+    raw_penalty_share: float,
+    normalized_penalty_share: float,
+    weight_bound_exceedances: list[dict[str, object]],
+) -> dict[str, object]:
+    """Summarize whether weighted SNQI penalties are comparable as configured.
+
+    Returns:
+        JSON-serializable diagnostic contract status for this contribution row.
+    """
+    raw_penalties = [
+        c for c in contributions if c.term.is_penalty and c.term.scaling == SCALING_RAW
+    ]
+    normalized_penalties = [
+        c
+        for c in contributions
+        if c.term.is_penalty and c.term.scaling == SCALING_BASELINE_NORMALIZED
+    ]
+    raw_unbounded = [c for c in raw_penalties if not c.term.bounded]
+
+    comparable = not raw_unbounded and bool(normalized_penalties)
+    status = "comparable_weight_basis" if comparable else "mixed_unbounded_penalty_basis"
+
+    reasons: list[str] = []
+    if raw_unbounded:
+        reasons.append(
+            "Raw unbounded penalty terms bypass normalize_metric, so their weights are not "
+            "directly comparable with baseline-normalized penalty weights."
+        )
+    if raw_penalty_share > normalized_penalty_share:
+        reasons.append(
+            "Raw penalty terms contribute a larger absolute share than baseline-normalized "
+            "penalty terms for this diagnostic row."
+        )
+    if weight_bound_exceedances:
+        reasons.append("At least one weighted contribution exceeds its nominal weight magnitude.")
+
+    return {
+        "schema_version": "snqi_normalization_contract.v1",
+        "diagnostic_only": True,
+        "status": status,
+        "weights_comparable": comparable,
+        "raw_unbounded_penalty_terms": [c.term.term for c in raw_unbounded],
+        "baseline_normalized_penalty_terms": [c.term.term for c in normalized_penalties],
+        "raw_penalty_absolute_share": raw_penalty_share,
+        "baseline_normalized_penalty_absolute_share": normalized_penalty_share,
+        "weight_bound_exceedance_terms": [str(entry["term"]) for entry in weight_bound_exceedances],
+        "decision_required_issue": 3699 if not comparable else None,
+        "reasons": reasons,
+    }
 
 
 def build_snqi_contribution_diagnostics(
@@ -299,6 +392,17 @@ def build_snqi_contribution_diagnostics(
         for c in contributions
         if c.term.is_penalty and c.term.scaling == SCALING_BASELINE_NORMALIZED
     )
+    weight_bound_exceedances = [
+        contribution.to_dict()
+        for contribution in contributions
+        if contribution.term.is_penalty and contribution.exceeds_weight_bound
+    ]
+    normalization_contract = _build_normalization_contract(
+        contributions,
+        raw_penalty_share=raw_penalty_share,
+        normalized_penalty_share=normalized_penalty_share,
+        weight_bound_exceedances=weight_bound_exceedances,
+    )
     return {
         "schema_version": "snqi_normalization_contributions.v1",
         "diagnostic_only": True,
@@ -307,6 +411,10 @@ def build_snqi_contribution_diagnostics(
         "raw_penalty_absolute_share": raw_penalty_share,
         "baseline_normalized_penalty_absolute_share": normalized_penalty_share,
         "raw_penalty_terms_dominate": raw_penalty_share > normalized_penalty_share,
+        "weight_bound_exceedances": weight_bound_exceedances,
+        "has_weight_bound_exceedance": bool(weight_bound_exceedances),
+        "normalization_contract": normalization_contract,
+        "score_version_contract": build_snqi_version_contract(),
         "terms": [contribution.to_dict() for contribution in contributions],
     }
 
@@ -383,6 +491,7 @@ class NormalizationInventory:
             "unbounded_terms": [t.term for t in self.unbounded_terms],
             "missing_baseline_coverage": [t.metric_key for t in self.missing_baseline_coverage],
             "is_consistent": self.is_consistent,
+            "score_version_contract": build_snqi_version_contract(),
         }
 
 
@@ -425,6 +534,8 @@ def format_normalization_report(inventory: NormalizationInventory) -> str:
             f"{term.metric_key:<24}{term.measurement_basis}"
         )
     lines.append(f"  mixed_scale            : {inventory.mixed_scale}")
+    contract = build_snqi_version_contract()
+    lines.append(f"  score version          : {contract['score_version']} ({contract['status']})")
     lines.append(
         "  raw penalty terms      : "
         + (", ".join(t.term for t in inventory.raw_penalty_terms) or "<none>")
@@ -446,12 +557,15 @@ __all__ = [
     "NORMALIZED_UPPER",
     "SCALING_BASELINE_NORMALIZED",
     "SCALING_RAW",
+    "SNQI_LEGACY_SCORE_STATUS",
+    "SNQI_LEGACY_SCORE_VERSION",
     "SNQI_TERM_SCALING",
     "NormalizationInventory",
     "TermContribution",
     "TermScaling",
     "build_snqi_contribution_diagnostics",
     "build_snqi_normalization_inventory",
+    "build_snqi_version_contract",
     "format_normalization_report",
     "scaled_term_value",
 ]

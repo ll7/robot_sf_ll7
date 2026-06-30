@@ -43,7 +43,11 @@ _MIXED_BASIS_FIXTURE = {
 def test_preflight_reports_mixed_basis_without_changing_snqi_output() -> None:
     """Synthetic mixed-basis fixture fails closed while scoring remains unchanged."""
     before = compute_snqi(_MIXED_BASIS_FIXTURE, _WEIGHTS, _BASELINE_STATS)
-    report = build_normalization_preflight_report(_BASELINE_STATS)
+    report = build_normalization_preflight_report(
+        _BASELINE_STATS,
+        metrics=_MIXED_BASIS_FIXTURE,
+        weights=_WEIGHTS,
+    )
     after = compute_snqi(_MIXED_BASIS_FIXTURE, _WEIGHTS, _BASELINE_STATS)
 
     assert before == pytest.approx(after)
@@ -69,6 +73,13 @@ def test_preflight_reports_mixed_basis_without_changing_snqi_output() -> None:
     assert basis_by_term["time"] == "raw time-to-goal ratio"
     assert basis_by_term["comfort"] == "raw accumulated comfort-exposure value"
     assert basis_by_term["collisions"] == "baseline-relative median/p95 clamped value"
+    contributions = report["contributions"]
+    signed_total = sum(term["signed_contribution"] for term in contributions["terms"])
+    assert contributions["diagnostic_only"] is True
+    assert contributions["mixed_basis"] is True
+    assert contributions["normalization_contract"]["status"] == "mixed_unbounded_penalty_basis"
+    assert contributions["normalization_contract"]["weights_comparable"] is False
+    assert signed_total == pytest.approx(before)
 
 
 def test_preflight_main_fails_closed_but_allows_inspection(tmp_path) -> None:
@@ -97,6 +108,55 @@ def test_preflight_text_lists_each_term_status(capsys: pytest.CaptureFixture[str
     assert "collisions (collisions, w_collisions): baseline_normalized_bounded" in out
     assert "basis=baseline-relative median/p95 clamped value" in out
     assert "jerk (jerk_mean, w_jerk): baseline_normalized_bounded" in out
+
+
+def test_preflight_cli_writes_synthetic_fixture_contribution_report(tmp_path, capsys) -> None:
+    """CLI accepts a synthetic mixed-basis fixture and writes contribution diagnostics."""
+    baseline_path = tmp_path / "baseline_stats.json"
+    metrics_path = tmp_path / "metrics.json"
+    weights_path = tmp_path / "weights.json"
+    report_path = tmp_path / "normalization_report.json"
+    baseline_path.write_text(json.dumps(_BASELINE_STATS), encoding="utf-8")
+    metrics_path.write_text(json.dumps(_MIXED_BASIS_FIXTURE), encoding="utf-8")
+    weights_path.write_text(json.dumps(_WEIGHTS), encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "--baseline-stats",
+                str(baseline_path),
+                "--metrics",
+                str(metrics_path),
+                "--weights",
+                str(weights_path),
+                "--json-out",
+                str(report_path),
+                "--allow-mixed-basis",
+            ]
+        )
+        == 0
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert "Contribution contract: status=mixed_unbounded_penalty_basis" in captured.out
+    assert payload["status"] == "failed"
+    assert payload["contributions"]["normalization_contract"]["weights_comparable"] is False
+    signed_total = sum(term["signed_contribution"] for term in payload["contributions"]["terms"])
+    assert signed_total == pytest.approx(
+        compute_snqi(_MIXED_BASIS_FIXTURE, _WEIGHTS, _BASELINE_STATS)
+    )
+
+
+def test_preflight_requires_metrics_and_weights_together(tmp_path, capsys) -> None:
+    """Fixture diagnostics fail closed when metrics/weights are incomplete."""
+    metrics_path = tmp_path / "metrics.json"
+    metrics_path.write_text(json.dumps(_MIXED_BASIS_FIXTURE), encoding="utf-8")
+
+    assert main(["--metrics", str(metrics_path)]) == 1
+
+    captured = capsys.readouterr()
+    assert "metrics and weights must be provided together" in captured.err
 
 
 def test_preflight_reports_optional_missing_baseline_coverage(tmp_path) -> None:

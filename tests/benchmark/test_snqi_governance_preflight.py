@@ -76,6 +76,16 @@ def test_governance_text_lists_per_term_normalization_status(
     assert main(["--repo-root", str(REPO_ROOT), "--allow-current-blockers"]) == 0
 
     out = capsys.readouterr().out
+    assert "Weight sources:" in out
+    assert "code_default (code_default, <code default>): canonical=True" in out
+    assert "model_canonical_v1 (shipped_json, model/snqi_canonical_weights_v1.json)" in out
+    assert (
+        "camera_ready_v3 (shipped_json, configs/benchmarks/snqi_weights_camera_ready_v3.json)"
+    ) in out
+    assert "dominant=w_collisions; scale=raw; sha256=" in out
+    assert "dominant=w_near; scale=normalized_simplex; sha256=" in out
+    assert "Weight provenance conflicts:" in out
+    assert "error canonical_direction_conflict (code_default, model_canonical_v1)" in out
     assert "Term normalization status:" in out
     assert "time (time_to_goal_norm, w_time): raw_unbounded" in out
     assert "basis=raw time-to-goal ratio" in out

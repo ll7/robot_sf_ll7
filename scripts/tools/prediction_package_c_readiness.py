@@ -192,6 +192,29 @@ def _collect_seed_plan(repo_root: Path) -> list[int]:
     return sorted(seeds)
 
 
+def _missing_seed_contracts(repo_root: Path) -> list[str]:
+    """Return missing same-seed contract fields from coordination configs."""
+    missing: list[str] = []
+
+    open_loop = _load_yaml(repo_root / CONFIG_OPEN_LOOP)
+    open_loop_seeds = {seed for seed in open_loop.get("seeds", []) or [] if isinstance(seed, int)}
+    if not open_loop_seeds:
+        missing.append(f"{CONFIG_OPEN_LOOP}::seeds")
+
+    closed_loop = _load_yaml(repo_root / CONFIG_CLOSED_LOOP)
+    fixture = closed_loop.get("fixture", {})
+    closed_loop_seed = fixture.get("seed") if isinstance(fixture, dict) else None
+    if not isinstance(closed_loop_seed, int):
+        missing.append(f"{CONFIG_CLOSED_LOOP}::fixture.seed")
+    elif open_loop_seeds and closed_loop_seed not in open_loop_seeds:
+        missing.append(
+            f"{CONFIG_CLOSED_LOOP}::fixture.seed={closed_loop_seed} "
+            f"not declared in {CONFIG_OPEN_LOOP}::seeds"
+        )
+
+    return missing
+
+
 def _collect_output_roots(repo_root: Path) -> list[str]:
     """Return declared output/evidence roots from the coordination configs.
 
@@ -241,6 +264,8 @@ def assess_arm(
     required = list(REQUIRED_CONFIGS) + list(REQUIRED_CODE)
     present = [rel for rel in required if _exists(repo_root, rel)]
     missing = [rel for rel in required if not _exists(repo_root, rel)]
+    if not missing:
+        missing.extend(_missing_seed_contracts(repo_root))
 
     # The arm-specific deterministic baseline must be registered (control arm
     # has no baseline and is always satisfied).

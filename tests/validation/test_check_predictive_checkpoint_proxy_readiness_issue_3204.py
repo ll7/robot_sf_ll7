@@ -7,7 +7,12 @@ from pathlib import Path
 
 import yaml
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "research" / "check_predictive_checkpoint_proxy_readiness.py"
+SCRIPT = (
+    Path(__file__).resolve().parents[2]
+    / "scripts"
+    / "research"
+    / "check_predictive_checkpoint_proxy_readiness.py"
+)
 _SPEC = importlib.util.spec_from_file_location("_issue_3204_proxy_readiness", SCRIPT)
 assert _SPEC is not None
 assert _SPEC.loader is not None
@@ -170,7 +175,10 @@ def test_missing_checkpoint_lineage_blocks_with_fail_closed_blocker_message(tmp_
     )
 
     assert report["status"] == "blocked"
-    assert any("resolve locally" in message or "no registry entries carry tag" in message for message in report["errors"])
+    assert any(
+        "resolve locally" in message or "no registry entries carry tag" in message
+        for message in report["errors"]
+    )
     mapping = report["prerequisites"]["checkpoint_artifacts"]["mapping"]
     assert mapping["candidate_count"] == 1
     assert mapping["resolvable_count"] == 0

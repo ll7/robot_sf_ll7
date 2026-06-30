@@ -596,7 +596,7 @@ def check_readiness(
                 registry_tag=str(selector.get("registry_tag", "")),
                 min_resolvable=min_resolvable or 0,
                 training_run_group_field=selector.get("training_run_group_field"),
-                min_resolvable_training_run_checkpoints= _coerce_positive_int(
+                min_resolvable_training_run_checkpoints=_coerce_positive_int(
                     selector.get("min_resolvable_training_run_checkpoints"),
                     field="min_resolvable_training_run_checkpoints",
                 )[0],
@@ -605,7 +605,7 @@ def check_readiness(
         else:
             ckpt_status, ckpt_messages, ckpt_mapping = (
                 STATUS_FAILED,
-                [* _resolvable_messages],
+                [*_resolvable_messages],
                 {},
             )
     elif not registry_path.exists():

@@ -160,6 +160,20 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(isinstance(blocking_jobs, list), "blocking_jobs must be a list")
     _require(13175 in blocking_jobs, "job 13175 must block submit until reconciled")
 
+    live_issue_state = _require_mapping(launch_packet, "live_issue_state")
+    _require(
+        live_issue_state.get("required_label") == "state:running",
+        "live issue state must record state:running blocker",
+    )
+    _require(
+        live_issue_state.get("submit_blocker") is True,
+        "live issue state must block submit while running",
+    )
+    _require(
+        "reconciled" in str(live_issue_state.get("resolution_required_before_submit", "")),
+        "live issue state must require reconciliation before submit",
+    )
+
     ledger = _require_mapping(launch_packet, "ledger_reconciliation")
     _require(
         ledger.get("job_13175_state") == "requires_submit_host_refresh",
@@ -212,6 +226,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
             "target_host",
             "queue_summary_timestamp",
             "duplicate_status",
+            "live_issue_state",
             "job_13175_state",
             "route_id",
             "submit_wrapper_supports_target_host",
@@ -291,6 +306,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "blocking_jobs": blocking_jobs,
         "job_13175_state": ledger["job_13175_state"],
         "issue_3810_duplicate_status": ledger["issue_3810_duplicate_status"],
+        "live_issue_state": live_issue_state["required_label"],
         "go_no_go": go_no_go["recommendation"],
         "private_ops_dry_run": dry_run["current_public_status"],
     }

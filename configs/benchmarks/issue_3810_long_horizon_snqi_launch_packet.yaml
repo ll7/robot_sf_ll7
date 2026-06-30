@@ -220,6 +220,16 @@ launch_packet:
   target_host: imech039
   blocking_jobs:
     - 13175
+  live_issue_state:
+    checked_date: "2026-06-30"
+    source: gh_issue_view_3810_labels
+    required_label: "state:running"
+    submit_blocker: true
+    resolution_required_before_submit: >
+      Issue #3810 is still marked "state:running", so a submit-host go
+      decision must first prove the active run is reconciled or no longer
+      relevant. Public packet checks must keep this as a blocker until the
+      live issue state changes and the packet is refreshed.
   ledger_reconciliation:
     checked_date: "2026-06-29"
     source: private_ops_jobs_and_queue_read_only_needs_submit_host_refresh
@@ -259,6 +269,7 @@ launch_packet:
         - target_host
         - queue_summary_timestamp
         - duplicate_status
+        - live_issue_state
         - job_13175_state
         - route_id
         - submit_wrapper_supports_target_host

@@ -38,6 +38,7 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["blocking_jobs"] == [13175]
     assert summary["job_13175_state"] == "requires_submit_host_refresh"
     assert summary["issue_3810_duplicate_status"] == "requires_submit_host_refresh"
+    assert summary["live_issue_state"] == "state:running"
     assert summary["go_no_go"] == "blocked_pending_submit_host_route_and_reconciliation"
     assert summary["private_ops_dry_run"] == "route_unverified"
 
@@ -79,6 +80,32 @@ def test_issue_3810_packet_rejects_stale_job_13175_reconciliation() -> None:
         assert "job 13175 reconciliation must require submit-host refresh" in str(exc)
     else:
         raise AssertionError("packet should reject stale job 13175 reconciliation")
+
+
+def test_issue_3810_packet_rejects_nonblocking_live_issue_state() -> None:
+    """The live state:running label remains a submit blocker."""
+    packet = _load_packet()
+    packet["launch_packet"]["live_issue_state"]["submit_blocker"] = False
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "live issue state must block submit while running" in str(exc)
+    else:
+        raise AssertionError("packet should reject a nonblocking live issue state")
+
+
+def test_issue_3810_packet_rejects_stale_live_issue_label() -> None:
+    """A packet with changed live issue state must be refreshed before submit."""
+    packet = _load_packet()
+    packet["launch_packet"]["live_issue_state"]["required_label"] = "state:ready"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "live issue state must record state:running blocker" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale live issue label")
 
 
 def test_issue_3810_packet_rejects_missing_private_ops_dry_run() -> None:

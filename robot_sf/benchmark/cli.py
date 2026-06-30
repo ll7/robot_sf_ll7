@@ -2715,6 +2715,28 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
                 "(stability and CIs may be unreliable)."
             ),
         )
+        p.add_argument(
+            "--export-pareto-front",
+            action="store_true",
+            help="Export sampled Pareto frontier when strategy pareto is active.",
+        )
+        p.add_argument(
+            "--pareto-front-samples",
+            type=int,
+            default=600,
+            help="Number Pareto frontier samples draw when export enabled.",
+        )
+        p.add_argument(
+            "--decision-preflight",
+            action="store_true",
+            help="Enable fail-closed preflight missing/invalid normalized inputs.",
+        )
+        p.add_argument(
+            "--decision-reversal-threshold",
+            type=float,
+            default=0.0,
+            help="If >0 compare-strategies, flag correlation pairs below value.",
+        )
         p.set_defaults(cmd="snqi", snqi_cmd="recompute")
 
     _add_snqi_optimize(snqi_sub)

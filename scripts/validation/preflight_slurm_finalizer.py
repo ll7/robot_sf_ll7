@@ -34,6 +34,8 @@ What it checks (each maps to an acceptance criterion of #3425):
   required artifacts present before a durable pointer can unblock a claim.
 * ``claim_boundary_present`` — every finalizer carries a claim boundary so the
   downstream summary/claim decision stays inside an explicit boundary.
+* ``claim_decision_present`` — every finalizer records a bounded final decision
+  disposition: ``promote``, ``keep diagnostic``, ``block``, or ``stop``.
 * ``evidence_root_present`` — advisory: the compact evidence root exists so the
   reconciler can confirm preservation.
 
@@ -88,6 +90,7 @@ _DURABLE_POINTER_PREFIXES = (
     "gs://",
     "dvc://",
 )
+_ALLOWED_CLAIM_DECISIONS = {"promote", "keep_diagnostic", "block", "stop"}
 
 # The readiness gate makes no research claim; it only reports whether the inputs
 # for the vertical slice are present and provenance-complete.
@@ -546,6 +549,53 @@ def _check_claim_boundary(inputs: LoadedInputs) -> PreflightCheck:
     )
 
 
+def _check_claim_decision(inputs: LoadedInputs) -> PreflightCheck:
+    """Require every finalizer carry an explicit bounded claim decision."""
+    if not inputs.finalizers:
+        return PreflightCheck(
+            name="claim_decision_present",
+            status=_SKIPPED,
+            severity=_REQUIRED,
+            detail="no finalizer records to inspect",
+            remediation="resolve finalizer_manifests_present first",
+        )
+    missing = sorted(
+        finalizer.job_id for finalizer in inputs.finalizers if not finalizer.claim_decision
+    )
+    if missing:
+        return PreflightCheck(
+            name="claim_decision_present",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=f"finalizer(s) missing claim decision: {', '.join(missing)}",
+            remediation=(
+                "record finalizer claim_decision as one of promote, keep diagnostic, "
+                "block, or stop before claim handoff"
+            ),
+        )
+    invalid = sorted(
+        f"{finalizer.job_id}({finalizer.claim_decision})"
+        for finalizer in inputs.finalizers
+        if finalizer.claim_decision not in _ALLOWED_CLAIM_DECISIONS
+    )
+    if invalid:
+        return PreflightCheck(
+            name="claim_decision_present",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=f"finalizer(s) carry unsupported claim decision: {', '.join(invalid)}",
+            remediation=(
+                "use one bounded issue #3425 decision: promote, keep diagnostic, block, or stop"
+            ),
+        )
+    return PreflightCheck(
+        name="claim_decision_present",
+        status=_READY,
+        severity=_REQUIRED,
+        detail="every finalizer carries a bounded claim decision",
+    )
+
+
 def _check_evidence_root(evidence_root: Path | None) -> PreflightCheck:
     """Advisory: the compact evidence root should exist for preservation checks."""
     if evidence_root is None:
@@ -603,6 +653,7 @@ def preflight(
         _check_durable_pointer(inputs),
         _check_required_artifacts_complete(inputs),
         _check_claim_boundary(inputs),
+        _check_claim_decision(inputs),
         _check_evidence_root(evidence_root),
     ]
 

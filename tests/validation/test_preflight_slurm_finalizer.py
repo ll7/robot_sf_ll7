@@ -60,6 +60,7 @@ def _write_finalizer(
     artifact_status: str = "all_required_present",
     durable_uri: str | None = "wandb://entity/project/run",
     claim_boundary: str | None = "smoke evidence only",
+    claim_decision: str | None = "keep diagnostic",
 ) -> Path:
     """Write a finalizer manifest matching the finalization schema."""
     payload: dict = {
@@ -73,6 +74,8 @@ def _write_finalizer(
         payload["durable_uri"] = durable_uri
     if claim_boundary is not None:
         payload["claim_boundary"] = claim_boundary
+    if claim_decision is not None:
+        payload["claim_decision"] = claim_decision
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
@@ -108,6 +111,7 @@ def test_ready_when_all_inputs_present(tmp_path: Path) -> None:
     assert statuses["required_artifacts_complete"] == "ready"
     assert statuses["finalizer_manifest_linkage"] == "ready"
     assert statuses["claim_boundary_present"] == "ready"
+    assert statuses["claim_decision_present"] == "ready"
 
 
 def test_blocks_when_durable_pointer_missing(tmp_path: Path) -> None:
@@ -234,6 +238,30 @@ def test_blocks_when_claim_boundary_missing(tmp_path: Path) -> None:
     assert report["ready"] is False
     blocker_names = {blocker["check"] for blocker in report["blockers"]}
     assert "claim_boundary_present" in blocker_names
+
+
+def test_blocks_when_claim_decision_missing(tmp_path: Path) -> None:
+    """A finalizer without a bounded claim decision fails closed."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(tmp_path / "finalizer.json", claim_decision=None)
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "claim_decision_present")
+    assert "claim_decision" in blocker["remediation"]
+
+
+def test_blocks_when_claim_decision_unsupported(tmp_path: Path) -> None:
+    """A finalizer cannot invent dispositions outside the issue #3425 contract."""
+    inputs = _ready_inputs(tmp_path)
+    _write_finalizer(tmp_path / "finalizer.json", claim_decision="publish paper claim")
+
+    report = gate.preflight(**inputs)
+
+    assert report["ready"] is False
+    blocker = next(b for b in report["blockers"] if b["check"] == "claim_decision_present")
+    assert "unsupported claim decision" in blocker["detail"]
 
 
 def test_blocks_when_finalizer_manifest_absent(tmp_path: Path) -> None:

@@ -67,19 +67,23 @@ def main(argv: list[str] | None = None) -> int:
     weights = load_weight_mapping(args.weights)
     baseline = load_baseline_mapping(args.baseline)
 
+    preflight = classify_scalarization_sensitivity_inputs(
+        records,
+        weights=weights,
+        baseline=baseline,
+        planner_key=args.planner_key,
+        fallback_planner_key=args.fallback_planner_key,
+    )
     if args.preflight_only:
-        preflight = classify_scalarization_sensitivity_inputs(
-            records,
-            weights=weights,
-            baseline=baseline,
-            planner_key=args.planner_key,
-            fallback_planner_key=args.fallback_planner_key,
-        )
         print(json.dumps(preflight, indent=2))
         return 0 if preflight["status"] == SENSITIVITY_PREFLIGHT_READY else 2
 
     if args.output_dir is None:
         raise SystemExit("--output-dir is required unless --preflight-only is set")
+
+    if preflight["status"] != SENSITIVITY_PREFLIGHT_READY:
+        print(json.dumps(preflight, indent=2))
+        return 2
 
     report = build_scalarization_sensitivity_report(
         records,

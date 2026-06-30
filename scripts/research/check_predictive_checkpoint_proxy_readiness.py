@@ -41,6 +41,33 @@ STATUS_FAILED = "failed"
 STATUS_BLOCKED = "blocked"
 _KNOWN_BLOCKER_STATUSES = frozenset({STATUS_BLOCKED, "resolved", "diagnostic"})
 
+
+def _summarize_blocked_artifacts(
+    artifacts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build compact counts for blocked-artifact decision telemetry."""
+    if not artifacts:
+        return {
+            "total": 0,
+            "by_status": {},
+            "by_storage_scope": {},
+        }
+
+    by_status: dict[str, int] = {}
+    by_storage_scope: dict[str, int] = {}
+    for artifact in artifacts:
+        status = artifact.get("status", "unknown")
+        scope = artifact.get("storage_scope", "unknown")
+        by_status[str(status)] = by_status.get(str(status), 0) + 1
+        by_storage_scope[str(scope)] = by_storage_scope.get(str(scope), 0) + 1
+
+    return {
+        "total": len(artifacts),
+        "by_status": by_status,
+        "by_storage_scope": by_storage_scope,
+    }
+
+
 DEFAULT_CONFIG = Path("configs/research/predictive_checkpoint_proxy_v1.yaml")
 DEFAULT_REGISTRY = Path("model/registry.yaml")
 
@@ -671,6 +698,7 @@ def check_readiness(
             "status": artifact_status,
             "messages": artifact_messages,
             "artifacts": artifact_payload,
+            "summary": _summarize_blocked_artifacts(artifact_payload),
         }
 
         blocker_status, blocker_messages, blocker_payload = _check_known_blockers(cfg)

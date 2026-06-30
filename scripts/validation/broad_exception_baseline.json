@@ -64,7 +64,7 @@
       "scripts/generate_figures.py": 1,
       "scripts/multi_extractor_training.py": 2,
       "scripts/perf/baseline_factory_creation.py": 1,
-      "scripts/recompute_snqi_weights.py": 9,
+      "scripts/recompute_snqi_weights.py": 8,
       "scripts/run_social_navigation_benchmark.py": 5,
       "scripts/snqi_sensitivity_analysis.py": 1,
       "scripts/snqi_weight_optimization.py": 7,
@@ -126,7 +126,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 288
+    "total": 287
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -1683,7 +1683,7 @@
       "context": "_compute_strategy_set",
       "fingerprint": "e04ac3a5fa4142da",
       "handler": "Exception",
-      "lineno": 458,
+      "lineno": 459,
       "path": "scripts/recompute_snqi_weights.py",
       "source": "except Exception as e:"
     },
@@ -1692,7 +1692,7 @@
       "context": "_augment_metadata._git_commit",
       "fingerprint": "bf6887de78ca12b3",
       "handler": "Exception",
-      "lineno": 524,
+      "lineno": 525,
       "path": "scripts/recompute_snqi_weights.py",
       "source": "except Exception:"
     },
@@ -1701,7 +1701,7 @@
       "context": "run",
       "fingerprint": "7c1b8a6398489280",
       "handler": "Exception",
-      "lineno": 845,
+      "lineno": 903,
       "path": "scripts/recompute_snqi_weights.py",
       "source": "except Exception as e:"
     },
@@ -1710,7 +1710,7 @@
       "context": "run",
       "fingerprint": "5975436c0a67f23e",
       "handler": "Exception",
-      "lineno": 870,
+      "lineno": 928,
       "path": "scripts/recompute_snqi_weights.py",
       "source": "except Exception:"
     },
@@ -1719,7 +1719,7 @@
       "context": "run",
       "fingerprint": "7c1b8a6398489280",
       "handler": "Exception",
-      "lineno": 884,
+      "lineno": 999,
       "path": "scripts/recompute_snqi_weights.py",
       "source": "except Exception as e:"
     },
@@ -1728,25 +1728,16 @@
       "context": "run",
       "fingerprint": "7c1b8a6398489280",
       "handler": "Exception",
-      "lineno": 901,
+      "lineno": 1016,
       "path": "scripts/recompute_snqi_weights.py",
       "source": "except Exception as e:"
-    },
-    {
-      "col_offset": 20,
-      "context": "run",
-      "fingerprint": "5975436c0a67f23e",
-      "handler": "Exception",
-      "lineno": 929,
-      "path": "scripts/recompute_snqi_weights.py",
-      "source": "except Exception:"
     },
     {
       "col_offset": 12,
       "context": "run",
       "fingerprint": "7c1b8a6398489280",
       "handler": "Exception",
-      "lineno": 1026,
+      "lineno": 1109,
       "path": "scripts/recompute_snqi_weights.py",
       "source": "except Exception as e:"
     },
@@ -1755,7 +1746,7 @@
       "context": "run",
       "fingerprint": "7c1b8a6398489280",
       "handler": "Exception",
-      "lineno": 1086,
+      "lineno": 1169,
       "path": "scripts/recompute_snqi_weights.py",
       "source": "except Exception as e:"
     },

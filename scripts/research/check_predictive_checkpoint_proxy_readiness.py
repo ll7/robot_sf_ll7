@@ -28,6 +28,7 @@ import argparse
 import importlib.util
 import json
 import sys
+from math import ceil
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,28 @@ def _load_analyzer() -> Any:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _coerce_positive_int(value: Any, *, field: str) -> tuple[int | None, list[str]]:
+    """Parse a contract field as a non-negative integer threshold.
+
+    Issue #3204 allows small float-encoded thresholds from YAML (for example
+    ``1.0e-9``) in existing manifests. We keep fail-closed behavior while
+    accepting these manifest encodings by coercing to the next integer ceiling.
+    """
+    if value is None:
+        return None, []
+    if isinstance(value, bool):
+        return None, [f"{field} must be a number, not boolean"]
+    if isinstance(value, int):
+        if value < 0:
+            return None, [f"{field} must be >= 0"]
+        return value, []
+    if isinstance(value, float):
+        if value < 0:
+            return None, [f"{field} must be >= 0"]
+        return int(ceil(value)), []
+    return None, [f"{field} must be integer-like (int/float), got {type(value).__name__}"]
 
 
 def _load_yaml(path: Path) -> Any:
@@ -97,14 +120,27 @@ def _validate_checkpoint_selector_schema(selector: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if not selector.get("registry_tag"):
         errors.append("checkpoint_selector missing registry_tag")
-    if not isinstance(selector.get("min_resolvable_checkpoints"), int):
+    min_resolvable, min_resolvable_messages = _coerce_positive_int(
+        selector.get("min_resolvable_checkpoints"),
+        field="min_resolvable_checkpoints",
+    )
+    if min_resolvable is None and not min_resolvable_messages:
         errors.append("checkpoint_selector missing integer min_resolvable_checkpoints")
+    errors.extend(min_resolvable_messages)
     group_field = selector.get("training_run_group_field")
     if group_field is not None and (not isinstance(group_field, str) or not group_field):
         errors.append("checkpoint_selector training_run_group_field must be non-empty string")
     min_group = selector.get("min_resolvable_training_run_checkpoints")
-    if min_group is not None and not isinstance(min_group, int):
-        errors.append("checkpoint_selector min_resolvable_training_run_checkpoints must be integer")
+    if min_group is not None:
+        coerced, coercion_errors = _coerce_positive_int(
+            min_group,
+            field="min_resolvable_training_run_checkpoints",
+        )
+        errors.extend(coercion_errors)
+        if coerced is None:
+            errors.append(
+                "checkpoint_selector min_resolvable_training_run_checkpoints must be integer-like"
+            )
     return errors
 
 
@@ -548,16 +584,28 @@ def check_readiness(
     if isinstance(selector, dict) and registry_path.exists():
         registry_module = _load_registry_module()
         registry = registry_module.load_registry(registry_path)
-        ckpt_status, ckpt_messages, ckpt_mapping = _check_checkpoint_artifacts(
-            registry,
-            registry_tag=str(selector.get("registry_tag", "")),
-            min_resolvable=int(selector.get("min_resolvable_checkpoints", 0) or 0),
-            training_run_group_field=selector.get("training_run_group_field"),
-            min_resolvable_training_run_checkpoints=selector.get(
-                "min_resolvable_training_run_checkpoints"
-            ),
-            repo_root=repo_root,
+        min_resolvable, _resolvable_messages = _coerce_positive_int(
+            selector.get("min_resolvable_checkpoints"),
+            field="min_resolvable_checkpoints",
         )
+        if not _resolvable_messages:
+            ckpt_status, ckpt_messages, ckpt_mapping = _check_checkpoint_artifacts(
+                registry,
+                registry_tag=str(selector.get("registry_tag", "")),
+                min_resolvable=min_resolvable or 0,
+                training_run_group_field=selector.get("training_run_group_field"),
+                min_resolvable_training_run_checkpoints= _coerce_positive_int(
+                    selector.get("min_resolvable_training_run_checkpoints"),
+                    field="min_resolvable_training_run_checkpoints",
+                )[0],
+                repo_root=repo_root,
+            )
+        else:
+            ckpt_status, ckpt_messages, ckpt_mapping = (
+                STATUS_FAILED,
+                [* _resolvable_messages],
+                {},
+            )
     elif not registry_path.exists():
         ckpt_status, ckpt_messages, ckpt_mapping = (
             STATUS_BLOCKED,

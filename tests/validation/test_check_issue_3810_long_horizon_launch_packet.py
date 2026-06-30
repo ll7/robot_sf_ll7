@@ -34,7 +34,7 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["planner_count"] >= 10
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
-    assert summary["target_host"] == "imech039"
+    assert summary["target_host"] == "imech036"
     assert summary["blocking_jobs"] == [13175]
     assert summary["job_13175_state"] == "requires_submit_host_refresh"
     assert summary["issue_3810_duplicate_status"] == "requires_submit_host_refresh"
@@ -94,6 +94,47 @@ def test_issue_3810_packet_rejects_nonblocking_live_issue_state() -> None:
         assert "live issue state must block submit while running" in str(exc)
     else:
         raise AssertionError("packet should reject a nonblocking live issue state")
+
+
+def test_issue_3810_packet_rejects_stale_target_host() -> None:
+    """The launch-packet target host must match the requested Slurm decision host."""
+    packet = _load_packet()
+    packet["launch_packet"]["target_host"] = "imech039"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "target host must be imech036" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale target host")
+
+
+def test_issue_3810_packet_rejects_stale_dry_run_target_host() -> None:
+    """The private-ops dry-run target host is guarded independently of the packet host."""
+    packet = _load_packet()
+    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech039"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "private-ops dry run host mismatch" in str(exc)
+    else:
+        raise AssertionError("packet should reject a stale dry-run target host")
+
+
+def test_issue_3810_packet_rejects_decision_policy_without_target_host_gate() -> None:
+    """The dry-run decision policy must still gate on the requested host support."""
+    packet = _load_packet()
+    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["decision_policy"] = (
+        "submission remains blocked until route support is proven."
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "private-ops dry run must gate imech036 support" in str(exc)
+    else:
+        raise AssertionError("packet should reject a decision policy missing the host gate")
 
 
 def test_issue_3810_packet_rejects_stale_live_issue_label() -> None:

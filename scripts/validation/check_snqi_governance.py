@@ -161,6 +161,19 @@ def _print_text_report(report: dict[str, Any]) -> None:
     else:
         print("No blocking SNQI governance diagnostics detected.")
 
+    weight_records = report["weights"]["records"]
+    print("Weight sources:")
+    for record in weight_records:
+        relpath = record["relpath"] or "<code default>"
+        status = "available" if record["available"] else f"unavailable: {record['load_error']}"
+        fingerprint = record["content_sha256"] or "n/a"
+        print(
+            f"  - {record['name']} ({record['kind']}, {relpath}): "
+            f"canonical={record['declares_canonical']}; "
+            f"dominant={record['dominant_term']}; scale={record['scale_class']}; "
+            f"sha256={fingerprint}; {status}"
+        )
+
     weight_conflicts = report["weights"]["conflicts"]
     if weight_conflicts:
         print("Weight provenance conflicts:")

@@ -15,6 +15,32 @@ inputs:
   pipeline_config: configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml
   followup_issue: "#3254"
 
+data_prerequisites:
+  base_collection: pipeline_config.base_collection
+  hardcase_collection: pipeline_config.hardcase_collection
+  weighting_spec: inputs.weighting_spec
+  note: >-
+    Static public-repo preflight only. Dataset materialization remains out of scope until compute
+    submission is explicitly authorized.
+
+expected_checkpoint_lineage:
+  candidate_model_id: predictive_proxy_selected_v2_xl_ego
+  checkpoint_path: output/tmp/predictive_planner/pipeline/training/predictive_crossing_conflict_weighted_issue_3254_xl_ego/predictive_model.pt
+  checkpoint_provenance_path: output/tmp/predictive_planner/pipeline/training/predictive_crossing_conflict_weighted_issue_3254_xl_ego/checkpoint_provenance.json
+  registry_policy: promote only after checkpoint provenance and hard-seed evaluation evidence exist
+
+evaluation_config:
+  hard_seed_benchmark: configs/benchmarks/predictive_hard_seeds_v1.yaml
+  planner_grid: configs/benchmarks/predictive_sweep_planner_grid_v1.yaml
+  summary_path: output/tmp/predictive_planner/pipeline/evaluation/predictive_crossing_conflict_weighted_issue_3254_xl_ego_hard_seeds/summary.json
+  gate_note: keep trajectory validation metrics separate from closed-loop hard-seed benchmark gate
+
+output_roots:
+  pipeline_root: output/tmp/predictive_planner/pipeline
+  training_root: output/tmp/predictive_planner/pipeline/training
+  evaluation_root: output/tmp/predictive_planner/pipeline/evaluation
+  durable_policy: worktree-local output only until an explicit checkpoint promotion step
+
 prior_result:
   status: verified_negative
   evidence_status: diagnostic negative result only; not benchmark, leaderboard, or paper claim

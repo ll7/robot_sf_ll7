@@ -1,4 +1,4 @@
-"""Tests for predictive retraining readiness decision packets."""
+"""Tests predictive retraining readiness decision packets."""
 
 from __future__ import annotations
 
@@ -23,21 +23,95 @@ def _write_packet(tmp_path: Path, payload: dict[str, object]) -> Path:
     return packet
 
 
+def _write_pipeline_config(tmp_path: Path) -> Path:
+    scenario_dir = tmp_path / "configs"
+    scenario_dir.mkdir()
+    scenario_matrix = scenario_dir / "scenarios.yaml"
+    hard_seed_manifest = scenario_dir / "hard_seeds.yaml"
+    planner_grid = scenario_dir / "planner_grid.yaml"
+    for path in (scenario_matrix, hard_seed_manifest, planner_grid):
+        path.write_text("{}\n", encoding="utf-8")
+
+    pipeline_config = tmp_path / "pipeline.yaml"
+    pipeline_config.write_text(
+        yaml.safe_dump(
+            {
+                "experiment": {"run_id": "test"},
+                "output": {
+                    "root": "output/tmp/predictive_planner/pipeline",
+                    "provenance": {
+                        "status": "expected_missing_until_training",
+                        "checkpoint_path": (
+                            "output/tmp/predictive_planner/pipeline/training/test/"
+                            "predictive_model.pt"
+                        ),
+                        "checkpoint_provenance_path": (
+                            "output/tmp/predictive_planner/pipeline/training/test/"
+                            "checkpoint_provenance.json"
+                        ),
+                        "hard_seed_evaluation_summary": (
+                            "output/tmp/predictive_planner/pipeline/evaluation/test/summary.json"
+                        ),
+                    },
+                },
+                "scenarios": {
+                    "scenario_matrix": str(scenario_matrix),
+                    "hard_seed_manifest": str(hard_seed_manifest),
+                    "planner_grid": str(planner_grid),
+                },
+                "base_collection": {"max_steps": 10},
+                "hardcase_collection": {"max_steps": 10},
+                "training": {"model_id": "test_predictive_model"},
+                "evaluation": {
+                    "horizon": 120,
+                    "dt": 0.1,
+                    "workers": 1,
+                    "campaign_workers": 1,
+                },
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return pipeline_config
+
+
 def _complete_payload(tmp_path: Path) -> dict[str, object]:
     weighting_spec = tmp_path / "weighting.yaml"
-    pipeline_config = tmp_path / "pipeline.yaml"
+    pipeline_config = _write_pipeline_config(tmp_path)
     weighting_spec.write_text("profile_id: test\n", encoding="utf-8")
-    pipeline_config.write_text("experiment:\n  run_id: test\n", encoding="utf-8")
     return {
         "schema_version": "predictive-retraining-readiness.v1",
         "issue": "#3214",
         "candidate_id": "crossing_conflict_weighted_predictive_retraining",
         "claim_boundary": (
-            "No Slurm submission, no full benchmark campaign run, and no paper claim edit."
+            "No Slurm submission, no full benchmark campaign run, no paper claim edit."
         ),
         "inputs": {
             "weighting_spec": str(weighting_spec),
             "pipeline_config": str(pipeline_config),
+        },
+        "data_prerequisites": {
+            "base_collection": "pipeline_config.base_collection",
+            "hardcase_collection": "pipeline_config.hardcase_collection",
+            "weighting_spec": "inputs.weighting_spec",
+        },
+        "expected_checkpoint_lineage": {
+            "candidate_model_id": "test_predictive_model",
+            "checkpoint_path": "output/tmp/predictive_planner/pipeline/training/test/predictive_model.pt",
+            "checkpoint_provenance_path": (
+                "output/tmp/predictive_planner/pipeline/training/test/checkpoint_provenance.json"
+            ),
+        },
+        "evaluation_config": {
+            "hard_seed_benchmark": "configs/hard_seeds.yaml",
+            "planner_grid": "configs/planner_grid.yaml",
+            "summary_path": "output/tmp/predictive_planner/pipeline/evaluation/test/summary.json",
+        },
+        "output_roots": {
+            "pipeline_root": "output/tmp/predictive_planner/pipeline",
+            "training_root": "output/tmp/predictive_planner/pipeline/training",
+            "evaluation_root": "output/tmp/predictive_planner/pipeline/evaluation",
         },
         "prior_result": {
             "status": "verified_negative",
@@ -58,7 +132,7 @@ def _complete_payload(tmp_path: Path) -> dict[str, object]:
 
 
 def test_default_issue_3214_packet_is_complete_but_launch_blocked() -> None:
-    """Checked-in packet is complete but must not authorize blind retraining."""
+    """Checked-in packet complete but must not authorize blind retraining."""
 
     repo = Path(__file__).resolve().parents[2]
     report = evaluate_retraining_readiness(repo_root=repo)
@@ -75,7 +149,7 @@ def test_default_issue_3214_packet_is_complete_but_launch_blocked() -> None:
 def test_complete_negative_result_packet_blocks_without_missing_prerequisites(
     tmp_path: Path,
 ) -> None:
-    """A complete packet reports the negative-result decision instead of missing inputs."""
+    """A complete packet reports negative-result decision instead missing inputs."""
 
     packet = _write_packet(tmp_path, _complete_payload(tmp_path))
 
@@ -85,6 +159,66 @@ def test_complete_negative_result_packet_blocks_without_missing_prerequisites(
     assert report["launch_ready"] is False
     assert report["decision"] == DECISION_BLOCKED
     assert report["blockers"] == []
+
+
+def test_missing_launch_packet_sections_fail_closed(tmp_path: Path) -> None:
+    """Missing launch-packet sections surface as explicit blockers."""
+
+    payload = _complete_payload(tmp_path)
+    payload.pop("expected_checkpoint_lineage")
+    payload.pop("evaluation_config")
+    packet = _write_packet(tmp_path, payload)
+
+    report = evaluate_retraining_readiness(packet, repo_root=tmp_path)
+
+    assert report["packet_complete"] is False
+    assert report["launch_ready"] is False
+    assert any("expected_checkpoint_lineage" in blocker for blocker in report["blockers"])
+    assert any("evaluation_config" in blocker for blocker in report["blockers"])
+
+
+def test_missing_pipeline_retraining_prerequisites_fail_closed(tmp_path: Path) -> None:
+    """Missing data, evaluation, provenance, or output-root config blocks launch readiness."""
+
+    payload = _complete_payload(tmp_path)
+    pipeline_config = tmp_path / "pipeline.yaml"
+    pipeline = yaml.safe_load(pipeline_config.read_text(encoding="utf-8"))
+    pipeline.pop("hardcase_collection")
+    pipeline["scenarios"]["hard_seed_manifest"] = "missing_hard_seeds.yaml"
+    pipeline["output"]["root"] = "/tmp/not-a-repo-output"
+    pipeline["output"]["provenance"].pop("checkpoint_provenance_path")
+    pipeline["output"]["provenance"]["status"] = "ready"
+    pipeline["evaluation"].pop("horizon")
+    pipeline_config.write_text(yaml.safe_dump(pipeline, sort_keys=False), encoding="utf-8")
+    packet = _write_packet(tmp_path, payload)
+
+    report = evaluate_retraining_readiness(packet, repo_root=tmp_path)
+
+    assert report["packet_complete"] is False
+    assert report["launch_ready"] is False
+    assert any(
+        "pipeline_config.hardcase_collection must be mapping" in blocker
+        for blocker in report["blockers"]
+    )
+    assert any(
+        "pipeline_config.scenarios.hard_seed_manifest does not exist" in blocker
+        for blocker in report["blockers"]
+    )
+    assert any(
+        "pipeline_config.output.root must stay under output/" in blocker
+        for blocker in report["blockers"]
+    )
+    assert any(
+        "pipeline_config.output.provenance.checkpoint_provenance_path" in blocker
+        for blocker in report["blockers"]
+    )
+    assert any(
+        "pipeline_config.output.provenance.status" in blocker for blocker in report["blockers"]
+    )
+    assert any(
+        "pipeline_config.evaluation.horizon must be set" in blocker
+        for blocker in report["blockers"]
+    )
 
 
 def test_missing_retraining_prerequisites_fail_closed(tmp_path: Path) -> None:
@@ -108,7 +242,7 @@ def test_missing_retraining_prerequisites_fail_closed(tmp_path: Path) -> None:
 
 
 def test_missing_input_path_fails_closed(tmp_path: Path) -> None:
-    """Missing public config inputs are surfaced as blockers, not launch-ready state."""
+    """Missing public config inputs surfaced blockers, not launch-ready state."""
 
     payload = _complete_payload(tmp_path)
     payload["inputs"] = {
@@ -126,7 +260,7 @@ def test_missing_input_path_fails_closed(tmp_path: Path) -> None:
 
 
 def test_cli_require_launch_ready_exits_blocked(monkeypatch, tmp_path: Path, capsys) -> None:
-    """CLI can be used as a fail-closed launch gate when compute authorization exists later."""
+    """CLI can be used as fail-closed gate if compute authorization exists later."""
 
     packet = _write_packet(tmp_path, _complete_payload(tmp_path))
     monkeypatch.setattr(
@@ -151,5 +285,6 @@ def test_load_readiness_packet_rejects_non_mapping(tmp_path: Path) -> None:
     packet = tmp_path / "bad.yaml"
     packet.write_text("- not\n- mapping\n", encoding="utf-8")
 
-    with pytest.raises(PredictiveRetrainingReadinessError, match="must be a mapping"):
+    with pytest.raises(PredictiveRetrainingReadinessError) as exc_info:
         load_readiness_packet(packet)
+    assert "must be a mapping" in str(exc_info.value)

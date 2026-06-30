@@ -407,6 +407,9 @@ class ArchiveReadinessReport:
     entries_missing_scenario_seed: int
     entries_missing_failure_attribution: int
     entries_unknown_family: int
+    scenario_family_overlap_count: int
+    seed_overlap_count: int
+    archive_id_overlap_count: int
     archive_sha256: str | None = None
     blocking_reasons: list[str] = field(default_factory=list)
 
@@ -425,6 +428,9 @@ class ArchiveReadinessReport:
             "entries_missing_scenario_seed": self.entries_missing_scenario_seed,
             "entries_missing_failure_attribution": self.entries_missing_failure_attribution,
             "entries_unknown_family": self.entries_unknown_family,
+            "scenario_family_overlap_count": self.scenario_family_overlap_count,
+            "seed_overlap_count": self.seed_overlap_count,
+            "archive_id_overlap_count": self.archive_id_overlap_count,
             "archive_sha256": self.archive_sha256,
             "blocking_reasons": list(self.blocking_reasons),
         }
@@ -443,6 +449,9 @@ def _not_ready(status: str, *reasons: str, **fields: Any) -> ArchiveReadinessRep
         "entries_missing_scenario_seed": 0,
         "entries_missing_failure_attribution": 0,
         "entries_unknown_family": 0,
+        "scenario_family_overlap_count": 0,
+        "seed_overlap_count": 0,
+        "archive_id_overlap_count": 0,
         "archive_sha256": None,
     }
     defaults.update(fields)
@@ -471,6 +480,9 @@ class _EntryStats:
     unknown_family: int
     distinct_family_count: int
     disjoint_split_possible: bool
+    scenario_family_overlap_count: int
+    seed_overlap_count: int
+    archive_id_overlap_count: int
 
 
 def _collect_entry_stats(
@@ -487,6 +499,10 @@ def _collect_entry_stats(
         split = disjoint_family_split(dict_entries, eval_fraction=eval_fraction, seed=split_seed)
         disjoint_split_possible = split.is_disjoint_split
 
+    overlap = compute_overlap_provenance([], [])
+    if disjoint_split_possible:
+        overlap = compute_overlap_provenance(split.fit_entries, split.eval_entries)
+
     return _EntryStats(
         entry_count=len(dict_entries),
         non_dict_count=len(entries) - len(dict_entries),
@@ -498,6 +514,9 @@ def _collect_entry_stats(
         unknown_family=sum(1 for e in dict_entries if scenario_family_key(e) == "unknown_family"),
         distinct_family_count=len(distinct_families),
         disjoint_split_possible=disjoint_split_possible,
+        scenario_family_overlap_count=len(overlap["scenario_family_overlap"]),
+        seed_overlap_count=len(overlap["seed_overlap"]),
+        archive_id_overlap_count=len(overlap["archive_id_overlap"]),
     )
 
 
@@ -522,6 +541,12 @@ def _readiness_blocking_reasons(
         reasons.append(f"entries_unknown_family:{stats.unknown_family}")
     if stats.distinct_family_count < _MIN_DISJOINT_FAMILIES:
         reasons.append(f"insufficient_scenario_families:{stats.distinct_family_count}")
+    if stats.scenario_family_overlap_count:
+        reasons.append(f"scenario_family_overlap:{stats.scenario_family_overlap_count}")
+    if stats.seed_overlap_count:
+        reasons.append(f"seed_overlap:{stats.seed_overlap_count}")
+    if stats.archive_id_overlap_count:
+        reasons.append(f"archive_id_overlap:{stats.archive_id_overlap_count}")
     if not stats.disjoint_split_possible:
         reasons.append("no_disjoint_split_possible")
     return reasons
@@ -577,9 +602,16 @@ def assess_archive_readiness(
     # to compare. Null tests additionally need a non-empty eval side, which the
     # disjoint-split check guarantees.
     overlap_metadata_ready = (
-        stats.disjoint_split_possible and not stats.missing_archive_id and not stats.missing_seed
+        stats.disjoint_split_possible
+        and not stats.missing_archive_id
+        and not stats.missing_seed
+        and not stats.scenario_family_overlap_count
+        and not stats.seed_overlap_count
+        and not stats.archive_id_overlap_count
     )
-    null_test_prerequisites_ready = stats.disjoint_split_possible and not stats.missing_attribution
+    null_test_prerequisites_ready = (
+        overlap_metadata_ready and not stats.missing_attribution
+    )
 
     ready = not reasons
     return ArchiveReadinessReport(
@@ -595,6 +627,9 @@ def assess_archive_readiness(
         entries_missing_scenario_seed=stats.missing_seed,
         entries_missing_failure_attribution=stats.missing_attribution,
         entries_unknown_family=stats.unknown_family,
+        scenario_family_overlap_count=stats.scenario_family_overlap_count,
+        seed_overlap_count=stats.seed_overlap_count,
+        archive_id_overlap_count=stats.archive_id_overlap_count,
         archive_sha256=archive_hash,
         blocking_reasons=reasons,
     )

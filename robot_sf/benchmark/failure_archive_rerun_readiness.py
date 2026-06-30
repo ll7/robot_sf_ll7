@@ -69,6 +69,16 @@ _DIAGNOSTIC_STATUS_KEYS = (
     "result_classification",
     "status",
 )
+_NULL_TEST_REQUIRED_KEYS = (
+    "null_tests_reject_null",
+    "shuffled_outcome_null_test",
+    "ranking_permutation_test",
+)
+_NULL_TEST_CONTAINER_KEYS = (
+    "independent_evaluation",
+    "null_test_prerequisites",
+    "null_tests",
+)
 
 
 @dataclass(frozen=True)
@@ -87,6 +97,10 @@ class FailureArchiveRerunReadiness:
     missing_certification_archive_ids: list[str] = field(default_factory=list)
     invalid_certification_archive_ids: list[str] = field(default_factory=list)
     diagnostic_only_outputs: list[str] = field(default_factory=list)
+    null_test_prerequisite_source: str | None = None
+    null_test_prerequisite_status: str = "not_checked"
+    missing_null_test_prerequisites: list[str] = field(default_factory=list)
+    invalid_null_test_prerequisites: list[str] = field(default_factory=list)
     blockers: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -115,6 +129,10 @@ class FailureArchiveRerunReadiness:
             "missing_certification_archive_ids": list(self.missing_certification_archive_ids),
             "invalid_certification_archive_ids": list(self.invalid_certification_archive_ids),
             "diagnostic_only_outputs": list(self.diagnostic_only_outputs),
+            "null_test_prerequisite_source": self.null_test_prerequisite_source,
+            "null_test_prerequisite_status": self.null_test_prerequisite_status,
+            "missing_null_test_prerequisites": list(self.missing_null_test_prerequisites),
+            "invalid_null_test_prerequisites": list(self.invalid_null_test_prerequisites),
             "blockers": list(self.blockers),
             "warnings": list(self.warnings),
         }
@@ -125,6 +143,7 @@ def classify_failure_archive_rerun_readiness(
     rerun_archive: str | Path,
     *,
     rerun_output: str | Path | None = None,
+    null_test_prerequisites: str | Path | dict[str, Any] | None = None,
 ) -> FailureArchiveRerunReadiness:
     """Classify whether a proposal-model rerun archive is disjoint and certified.
 
@@ -133,6 +152,8 @@ def classify_failure_archive_rerun_readiness(
         rerun_archive: Separate archive intended for the rerun/evaluation slice.
         rerun_output: Optional rerun report JSON. Diagnostic-only markers cap the
             verdict at ``diagnostic_only`` when inputs otherwise pass.
+        null_test_prerequisites: Optional JSON path or payload containing the
+            null-test readiness fields expected before any held-out claim.
 
     Returns:
         A fail-closed readiness verdict. The function never runs planners,
@@ -158,20 +179,18 @@ def classify_failure_archive_rerun_readiness(
 
     overlap = compute_overlap_provenance(source_entries, rerun_entries)
     archive_id_overlap = list(overlap.get("archive_id_overlap", []))
-    if archive_id_overlap:
-        blockers.append(f"archive_id_overlap:{len(archive_id_overlap)}")
-    if overlap.get("scenario_family_overlap_count", 0):
-        blockers.append(f"scenario_family_overlap:{overlap['scenario_family_overlap_count']}")
-    if overlap.get("seed_overlap_count", 0):
-        blockers.append(f"seed_overlap:{overlap['seed_overlap_count']}")
+    blockers.extend(_overlap_blockers(overlap))
 
     missing_certification, invalid_certification = _certification_gaps(rerun_entries)
-    if missing_certification:
-        blockers.append(f"missing_certification_metadata:{len(missing_certification)}")
-    if invalid_certification:
-        blockers.append(f"invalid_certification_status:{len(invalid_certification)}")
+    blockers.extend(_count_blockers("missing_certification_metadata", missing_certification))
+    blockers.extend(_count_blockers("invalid_certification_status", invalid_certification))
 
     diagnostic_outputs = _diagnostic_only_outputs(Path(rerun_output) if rerun_output else None)
+    null_source, null_status, missing_nulls, invalid_nulls = _null_test_prerequisite_gaps(
+        null_test_prerequisites
+    )
+    blockers.extend(_count_blockers("missing_null_test_prerequisites", missing_nulls))
+    blockers.extend(_count_blockers("invalid_null_test_prerequisites", invalid_nulls))
     status = BLOCKED if blockers else READY
     if status == READY and diagnostic_outputs:
         status = DIAGNOSTIC_ONLY
@@ -189,6 +208,10 @@ def classify_failure_archive_rerun_readiness(
         missing_certification_archive_ids=missing_certification,
         invalid_certification_archive_ids=invalid_certification,
         diagnostic_only_outputs=diagnostic_outputs,
+        null_test_prerequisite_source=null_source,
+        null_test_prerequisite_status=null_status,
+        missing_null_test_prerequisites=missing_nulls,
+        invalid_null_test_prerequisites=invalid_nulls,
         blockers=blockers,
         warnings=warnings,
     )
@@ -230,6 +253,27 @@ def _archive_entries(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(entries, list):
         return []
     return [entry for entry in entries if isinstance(entry, dict)]
+
+
+def _overlap_blockers(overlap: dict[str, Any]) -> list[str]:
+    """Return blocker tokens from overlap provenance."""
+
+    blockers: list[str] = []
+    for key, blocker in (
+        ("archive_id_overlap_count", "archive_id_overlap"),
+        ("scenario_family_overlap_count", "scenario_family_overlap"),
+        ("seed_overlap_count", "seed_overlap"),
+    ):
+        count = overlap.get(key, 0)
+        if count:
+            blockers.append(f"{blocker}:{count}")
+    return blockers
+
+
+def _count_blockers(blocker: str, values: list[str]) -> list[str]:
+    """Return a single count blocker when values are present."""
+
+    return [f"{blocker}:{len(values)}"] if values else []
 
 
 def _certification_gaps(entries: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
@@ -283,6 +327,77 @@ def _certification_status(value: Any) -> str | None:
                 return "failed"
         return "certified" if value else None
     return None
+
+
+def _null_test_prerequisite_gaps(
+    payload_or_path: str | Path | dict[str, Any] | None,
+) -> tuple[str | None, str, list[str], list[str]]:
+    """Return fail-closed gaps for optional null-test prerequisite metadata."""
+
+    if payload_or_path is None:
+        return None, "not_checked", [], []
+    if isinstance(payload_or_path, dict):
+        source = "inline_payload"
+        payload: dict[str, Any] | None = payload_or_path
+        load_gap = None
+    else:
+        path = Path(payload_or_path)
+        source = str(path)
+        payload, load_gap = _load_json_object(path)
+    if load_gap is not None:
+        return source, "blocked", [], [load_gap]
+
+    prerequisites = _null_test_container(payload)
+    missing = [
+        key
+        for key in _NULL_TEST_REQUIRED_KEYS
+        if key not in prerequisites or prerequisites.get(key) in (None, "", [])
+    ]
+    invalid: list[str] = []
+    if prerequisites.get("null_tests_reject_null") is not True:
+        invalid.append("null_tests_reject_null_not_true")
+    for key in ("shuffled_outcome_null_test", "ranking_permutation_test"):
+        value = prerequisites.get(key)
+        if not isinstance(value, dict):
+            continue
+        if value.get("status") != "complete":
+            invalid.append(f"{key}_status_not_complete")
+        if "p_value" not in value:
+            invalid.append(f"{key}_missing_p_value")
+    status = "ready" if not missing and not invalid else "blocked"
+    return source, status, missing, invalid
+
+
+def _load_json_object(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    """Load a JSON object, returning a compact fail-closed reason on failure.
+
+    Returns:
+        ``(payload, reason)`` with ``reason`` populated only when loading fails.
+    """
+
+    if not path.exists():
+        return None, f"null_test_prerequisites_missing:{path}"
+    if path.stat().st_size == 0:
+        return None, f"null_test_prerequisites_empty:{path}"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return None, f"null_test_prerequisites_unreadable:{exc}"
+    if not isinstance(payload, dict):
+        return None, "null_test_prerequisites_not_object"
+    return payload, None
+
+
+def _null_test_container(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Return the nested null-test prerequisite object from a report payload."""
+
+    if not isinstance(payload, dict):
+        return {}
+    for key in _NULL_TEST_CONTAINER_KEYS:
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return payload
 
 
 def _diagnostic_only_outputs(path: Path | None) -> list[str]:

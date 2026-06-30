@@ -75,3 +75,31 @@ def test_cli_json_single_fixture() -> None:
     payload = json.loads(completed.stdout)
     assert set(payload["fixtures"]) == {"opening"}
     assert payload["fixtures"]["opening"]["diagnostic_status"] == "no-approaching-pairs"
+
+
+def test_cli_json_output_path_writes_packet(tmp_path: Path) -> None:
+    """CLI can materialize a deterministic packet for review handoff."""
+    output_path = tmp_path / "nested" / "ttc_packet.json"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--fixture",
+            "missing-timing",
+            "--format",
+            "json",
+            "--output",
+            str(output_path),
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == ""
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert set(payload["fixtures"]) == {"missing-timing"}
+    assert payload["fixtures"]["missing-timing"]["diagnostic_status"] == "unsupported-inputs"

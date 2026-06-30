@@ -9,8 +9,8 @@ blocked_until_run/diagnostic classification when the seed budget is insufficient
 from __future__ import annotations
 
 import importlib.util
-import sys
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -65,9 +65,11 @@ def _report(rows: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
     Returns:
         The report payload mapping.
     """
+    job_evidence = overrides.pop("job_evidence", None)
     defaults = {
         "metrics": ("snqi",),
         "rank_metric": "snqi",
+        "rank_profile": "snqi_diagnostic",
         "higher_is_better": True,
         "bootstrap_samples": 100,
         "confidence": 0.95,
@@ -77,7 +79,13 @@ def _report(rows: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
     }
     defaults.update(overrides)
     config = mod.ReportConfig(**defaults)
-    return mod.build_report(rows, config, campaign=None, rows_path="synthetic")
+    return mod.build_report(
+        rows,
+        config,
+        campaign=None,
+        rows_path="synthetic",
+        job_evidence=job_evidence,
+    )
 
 
 def test_per_cell_ci_reuses_canonical_seed_variance():
@@ -283,62 +291,519 @@ def test_adjacent_rank_claims_mark_ci_separable() -> None:
     assert claim["decision"] == "ci_separable"
 
 
-def test_main_supports_dry_run_and_writes_report(tmp_path: Path) -> None:
-    out_dir = tmp_path / "dry_run_report"
+def test_decision_packet_blocks_small_seed_manifest_table_update() -> None:
+    """Small-seed rows are not ready for manuscript table review."""
 
-    code = mod.main(
+    rows = [
+        _cell_row("merging", "best", {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94]}),
+        _cell_row("merging", "worst", {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10]}),
+    ]
+
+    packet = _report(rows)["decision_packet"]
+
+    assert packet["manuscript_table_status"] == "blocked"
+    assert packet["s30_decision_status"] == "needs_review"
+    assert "missing_increased_seed_budget" in packet["manuscript_blockers"]
+    assert "minimum_seed_count_below_s20" in packet["s30_reasons"]
+
+
+def test_decision_packet_keeps_s30_review_open_for_adjacent_overlap() -> None:
+    """S20 rows with adjacent CI overlap require claim downgrade or more data review."""
+
+    rows = [
+        _cell_row(
+            "bottleneck",
+            "hybrid_a",
+            {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48] * 4},
+        ),
+        _cell_row(
+            "bottleneck",
+            "hybrid_b",
+            {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53] * 4},
+        ),
+    ]
+
+    packet = _report(rows)["decision_packet"]
+
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "needs_review"
+    assert packet["adjacent_overlap_count"] == 1
+    assert "adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data" in packet["s30_reasons"]
+
+
+def test_decision_packet_can_clear_s30_by_local_preflight_only() -> None:
+    """S20 separable/stable fixture records no local S30 blocker."""
+
+    rows = [
+        _cell_row(
+            "merging",
+            "best",
+            {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4},
+        ),
+        _cell_row(
+            "merging",
+            "worst",
+            {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4},
+        ),
+    ]
+
+    packet = _report(rows)["decision_packet"]
+
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "not_required_by_local_preflight"
+    assert packet["s30_reasons"] == []
+    assert "no manuscript or paper claim is promoted" in packet["claim_boundary"]
+
+
+def test_invalid_rank_metric_blocks_adjacent_claims_and_table_review() -> None:
+    """Known SNQI contract invalidity blocks planner-order statements fail-closed."""
+
+    rows = [
+        _cell_row(
+            "merging",
+            "best",
+            {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4},
+        ),
+        _cell_row(
+            "merging",
+            "worst",
+            {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4},
+        ),
+    ]
+
+    report = _report(rows, invalid_rank_metric_reason="SNQI contract status fail")
+
+    claim = report["adjacent_rank_claims"][0]
+    assert claim["decision"] == "blocked_invalid_metric"
+    assert "SNQI contract status fail" in claim["rationale"]
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "blocked"
+    assert packet["s30_decision_status"] == "needs_review"
+    assert packet["invalid_metric_claim_count"] == 1
+    assert "invalid_rank_metric_contract" in packet["manuscript_blockers"]
+    assert "rank_metric_contract_invalid" in packet["s30_reasons"]
+
+
+def test_dry_run_fixture_stays_diagnostic_and_fail_closed() -> None:
+    """Built-in dry-run rows exercise CI/rank paths without paper-claim promotion."""
+
+    rows = mod._dry_run_rows()
+    report = _report(rows)
+
+    assert report["classification"] == "diagnostic"
+    assert report["inputs"]["excluded_cells"] == 1
+    assert any(cell["planner_key"] == "excluded_degraded" for cell in report["cells"])
+    degraded = next(cell for cell in report["cells"] if cell["planner_key"] == "excluded_degraded")
+    assert degraded["counted"] is False
+    assert "degraded" in degraded["exclusion_reason"]
+    assert len(report["rank_stability"]) == 2
+    assert any(
+        claim["decision"] == "not_statistically_distinguishable_budget"
+        for claim in report["adjacent_rank_claims"]
+    )
+
+
+def test_dry_run_cli_writes_report_without_rows_file(tmp_path) -> None:
+    """CLI dry-run does not require a rows path or campaign artifact."""
+
+    out_dir = tmp_path / "report"
+
+    exit_code = mod.main(
         [
             "--dry-run",
-            "--output-dir",
-            str(out_dir),
             "--bootstrap-samples",
             "0",
             "--rank-resamples",
-            "1",
+            "25",
+            "--output-dir",
+            str(out_dir),
         ]
     )
 
-    assert code == 0
-    assert (out_dir / "result.json").exists()
-    assert (out_dir / "report.md").exists()
+    assert exit_code == 0
+    result = out_dir / "result.json"
+    markdown = out_dir / "report.md"
+    assert result.is_file()
+    assert markdown.is_file()
+    assert "builtin://issue3216-dry-run" in result.read_text(encoding="utf-8")
+    assert "**Classification**: `diagnostic`" in markdown.read_text(encoding="utf-8")
 
 
-def test_main_fail_on_decision_blocker_for_local_blocker_rows(tmp_path: Path) -> None:
+def test_dry_run_cli_can_fail_closed_invalid_rank_metric(tmp_path) -> None:
+    """CLI records invalid-rank-metric decision state in deterministic dry-run."""
+
+    out_dir = tmp_path / "invalid_metric_report"
+
+    exit_code = mod.main(
+        [
+            "--dry-run",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--invalid-rank-metric-reason",
+            "SNQI normalization contract warning",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    result_text = (out_dir / "result.json").read_text(encoding="utf-8")
+    markdown_text = (out_dir / "report.md").read_text(encoding="utf-8")
+    assert '"decision": "blocked_invalid_metric"' in result_text
+    assert '"invalid_metric_claim_count": 3' in result_text
+    assert "SNQI normalization contract warning" in result_text
+    assert "**Rank metric contract**: `invalid`" in markdown_text
+
+
+def test_cli_decision_blocker_gate_fails_after_writing_report(tmp_path) -> None:
+    """Dry-run preflight can be used as a hard gate while preserving artifacts."""
+
+    out_dir = tmp_path / "blocked_report"
+
+    exit_code = mod.main(
+        [
+            "--dry-run",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--fail-on-decision-blocker",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 4
+    result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
+    assert mod.decision_packet_has_blocker(result["decision_packet"]) is True
+    assert result["decision_packet"]["s30_decision_status"] == "needs_review"
+    assert (out_dir / "report.md").is_file()
+
+
+def test_cli_decision_blocker_gate_passes_clear_local_preflight(tmp_path) -> None:
+    """S20 separable/stable fixture passes the local blocker gate."""
+
+    rows = [
+        _cell_row(
+            "merging",
+            "best",
+            {
+                "success": [0.90, 0.91, 0.92, 0.93, 0.94] * 4,
+                "collisions": [0.02, 0.01, 0.02, 0.01, 0.02] * 4,
+                "near_misses": [0.04, 0.03, 0.04, 0.03, 0.04] * 4,
+                "snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4,
+            },
+        ),
+        _cell_row(
+            "merging",
+            "worst",
+            {
+                "success": [0.10, 0.11, 0.09, 0.12, 0.10] * 4,
+                "collisions": [0.80, 0.82, 0.81, 0.83, 0.80] * 4,
+                "near_misses": [0.70, 0.72, 0.71, 0.73, 0.70] * 4,
+                "snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4,
+            },
+        ),
+    ]
+    rows_path = tmp_path / "rows.json"
+    rows_path.write_text(json.dumps(rows), encoding="utf-8")
+    out_dir = tmp_path / "clear_report"
+
+    exit_code = mod.main(
+        [
+            "--rows",
+            str(rows_path),
+            "--metrics",
+            "success",
+            "collisions",
+            "near_misses",
+            "snqi",
+            "--rank-profile",
+            "constraints_first",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--fail-on-decision-blocker",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
+    assert mod.decision_packet_has_blocker(result["decision_packet"]) is False
+    assert result["decision_packet"]["s30_decision_status"] == "not_required_by_local_preflight"
+
+
+def test_decision_packet_blocks_only_s30_overlap_without_manuscript_blocker() -> None:
+    """S30 overlap downgrades still fail local blockers when manuscript table is clear."""
+    rows = [
+        _cell_row("bottleneck", "best", {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48] * 4}),
+        _cell_row("bottleneck", "mid", {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53] * 4}),
+    ]
+    report = _report(
+        rows,
+        metrics=("snqi",),
+        bootstrap_samples=1000,
+        rank_metric="snqi",
+        rank_profile="snqi_diagnostic",
+        resamples=200,
+    )
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "needs_review"
+    assert "adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data" in packet["s30_reasons"]
+    assert mod.decision_packet_has_blocker(packet) is True
+
+
+def test_cli_fail_on_blocker_triggers_when_only_s30_needs_review(tmp_path: Path) -> None:
+    """S30-only overlap downgrade in local preflight exits with blocker code."""
     rows = [
         {
-            "scenario_family": "merging",
-            "planner_key": "a",
-            "row_status": "fallback",
-            "execution_mode": "degraded",
+            "scenario_family": "bottleneck",
+            "planner_key": "best",
+            "row_status": "successful_evidence",
+            "execution_mode": "nominal",
             "per_seed": [
-                {"seed": 111, "metrics": {"snqi": 0.50}},
+                {"seed": 100 + idx, "metrics": {"snqi": [0.50, 0.51, 0.49, 0.52, 0.48][idx % 5]}}
+                for idx in range(20)
             ],
         },
         {
-            "scenario_family": "merging",
-            "planner_key": "b",
-            "row_status": "fallback",
-            "execution_mode": "degraded",
+            "scenario_family": "bottleneck",
+            "planner_key": "mid",
+            "row_status": "successful_evidence",
+            "execution_mode": "nominal",
             "per_seed": [
-                {"seed": 111, "metrics": {"snqi": 0.49}},
+                {
+                    "seed": 200 + idx,
+                    "metrics": {"snqi": [0.49, 0.50, 0.48, 0.51, 0.49][idx % 5]},
+                }
+                for idx in range(20)
             ],
         },
     ]
     rows_path = tmp_path / "rows.json"
     rows_path.write_text(json.dumps(rows), encoding="utf-8")
-
-    code = mod.main(
+    out_dir = tmp_path / "s30_blocker"
+    exit_code = mod.main(
         [
             "--rows",
             str(rows_path),
-            "--output-dir",
-            str(tmp_path / "blocker_report"),
+            "--metrics",
+            "snqi",
             "--bootstrap-samples",
             "0",
             "--rank-resamples",
-            "1",
+            "200",
             "--fail-on-decision-blocker",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+    assert exit_code == 4
+    packet = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))["decision_packet"]
+    assert packet["s30_decision_status"] == "needs_review"
+    assert mod.decision_packet_has_blocker(packet) is True
+
+
+def _job_13198_packet(tmp_path) -> Path:
+    """Write a compact deterministic job-13198 evidence packet fixture."""
+
+    packet = {
+        "schema_version": "issue1554-slurm-evidence-packet.v1",
+        "issue": 1554,
+        "evidence": [
+            {
+                "job": 13198,
+                "campaign": "2026-06-issue1554-s20-h500-split-mem180-run",
+                "config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml",
+                "role": "result_matrix",
+                "slurm_state": "COMPLETED",
+                "exit_code": "0:0",
+                "public_commit": "12a188de7246aad3b9088ea76e6a25a20029f976",
+                "artifact_summary": {
+                    "matrix_rows": 9,
+                    "planner_rows": 9,
+                    "planner_row_status_counts": {"ok": 9},
+                    "warnings": ["SNQI contract status=fail with snqi_contract.enforcement=warn."],
+                },
+                "limitations": [
+                    "SNQI contract warning blocks paper-grade interpretation until analyzed."
+                ],
+            }
+        ],
+    }
+    path = tmp_path / "packet.json"
+    path.write_text(json.dumps(packet), encoding="utf-8")
+    return path
+
+
+def test_job_13198_packet_auto_blocks_snqi_rank_claims(tmp_path) -> None:
+    """Bound job evidence turns SNQI warning into fail-closed rank decisions."""
+
+    packet_path = _job_13198_packet(tmp_path)
+    rows = [
+        _cell_row("merging", "best", {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4}),
+        _cell_row("merging", "worst", {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4}),
+    ]
+
+    rows_path = tmp_path / "rows.json"
+    rows_path.write_text(json.dumps(rows), encoding="utf-8")
+    out_dir = tmp_path / "snqi_report"
+    exit_code = mod.main(
+        [
+            "--rows",
+            str(rows_path),
+            "--evidence-packet",
+            str(packet_path),
+            "--job-id",
+            "13198",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--output-dir",
+            str(out_dir),
         ]
     )
 
-    assert code == 4
+    assert exit_code == 0
+    result = json.loads((out_dir / "result.json").read_text(encoding="utf-8"))
+    packet = result["decision_packet"]
+    assert result["job_evidence"]["job"] == 13198
+    assert result["inputs"]["rank_metric"] == "snqi"
+    assert packet["snqi_contract_warning"] is True
+    assert packet["invalid_metric_claim_count"] == 1
+    assert "rank_metric_contract_invalid" in packet["s30_reasons"]
+    assert "**SNQI evidence status**: `diagnostic_only_contract_warning`" in (
+        out_dir / "report.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_constraints_first_profile_keeps_snqi_warning_diagnostic_only(tmp_path) -> None:
+    """Constraints-first profile binds job warning without using SNQI as rank metric."""
+
+    job_evidence = mod.load_job_evidence_packet(_job_13198_packet(tmp_path), job_id=13198)
+    rows = [
+        _cell_row(
+            "merging",
+            "best",
+            {
+                "success": [0.90, 0.91, 0.92, 0.93, 0.94] * 4,
+                "collisions": [0.02, 0.01, 0.02, 0.01, 0.02] * 4,
+                "near_misses": [0.04, 0.03, 0.04, 0.03, 0.04] * 4,
+                "snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4,
+            },
+        ),
+        _cell_row(
+            "merging",
+            "worst",
+            {
+                "success": [0.40, 0.41, 0.39, 0.42, 0.40] * 4,
+                "collisions": [0.30, 0.32, 0.31, 0.33, 0.30] * 4,
+                "near_misses": [0.20, 0.22, 0.21, 0.23, 0.20] * 4,
+                "snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4,
+            },
+        ),
+    ]
+
+    report = _report(
+        rows,
+        metrics=("success", "collisions", "near_misses", "snqi"),
+        rank_metric="success",
+        rank_profile="constraints_first",
+        job_evidence=job_evidence,
+    )
+
+    packet = report["decision_packet"]
+    assert report["inputs"]["rank_profile"] == "constraints_first"
+    assert packet["constraints_first_metric_gaps"] == []
+    assert packet["snqi_contract_warning"] is True
+    assert "snqi_contract_warning_diagnostic_only" in packet["s30_reasons"]
+    assert "rank_metric_contract_invalid" not in packet["s30_reasons"]
+
+
+def test_constraints_first_profile_blocks_missing_required_metrics(tmp_path) -> None:
+    """Constraints-first profile cannot rank headline rows lacking safety metrics."""
+
+    report = _report(
+        [
+            _cell_row("merging", "best", {"success": [0.9, 0.91, 0.92] * 7}),
+            _cell_row("merging", "worst", {"success": [0.1, 0.11, 0.12] * 7}),
+        ],
+        metrics=("success",),
+        rank_metric="success",
+        rank_profile="constraints_first",
+    )
+
+    packet = report["decision_packet"]
+    assert packet["constraints_first_metric_gaps"] == ["collisions", "near_misses"]
+    assert "constraints_first_metrics_missing" in packet["manuscript_blockers"]
+    assert "constraints_first_metric_gap" in packet["s30_reasons"]
+
+
+def test_constraints_first_profile_flags_partial_metric_coverage(tmp_path) -> None:
+    """A metric missing from any counted cell is a gap (fail-closed all-cells rule)."""
+
+    report = _report(
+        [
+            _cell_row(
+                "merging",
+                "best",
+                {
+                    "success": [0.90, 0.91, 0.92] * 7,
+                    "collisions": [0.02, 0.01, 0.02] * 7,
+                    "near_misses": [0.04, 0.03, 0.04] * 7,
+                },
+            ),
+            # Second counted cell omits the safety metrics, so cross-cell
+            # constraint comparison is incomplete: collisions/near_misses are gaps.
+            _cell_row("merging", "worst", {"success": [0.10, 0.11, 0.12] * 7}),
+        ],
+        metrics=("success", "collisions", "near_misses"),
+        rank_metric="success",
+        rank_profile="constraints_first",
+    )
+
+    packet = report["decision_packet"]
+    assert packet["constraints_first_metric_gaps"] == ["collisions", "near_misses"]
+    assert "constraints_first_metrics_missing" in packet["manuscript_blockers"]
+    assert "constraints_first_metric_gap" in packet["s30_reasons"]
+
+
+def test_decision_packet_s20_high_overlap_clears_s30_local_preflight() -> None:
+    """S20-budget high-overlap rows clear the S30 local preflight gate (no S30 reasons, no blocker)."""
+    rows = [
+        _cell_row(
+            "squeeze",
+            "planner_a",
+            {
+                "snqi": [0.50, 0.51, 0.49, 0.52, 0.50] * 4,
+            },
+        ),
+        _cell_row(
+            "squeeze",
+            "planner_b",
+            {
+                "snqi": [0.49, 0.50, 0.48, 0.51, 0.49] * 4,
+            },
+        ),
+    ]
+    report = _report(
+        rows,
+        metrics=("snqi",),
+        bootstrap_samples=1000,
+        rank_metric="snqi",
+        rank_profile="snqi_diagnostic",
+        resamples=300,
+    )
+    packet = report["decision_packet"]
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "not_required_by_local_preflight"
+    assert packet["min_seed_count"] == 20
+    assert packet["s30_reasons"] == []
+    assert not mod.decision_packet_has_blocker(packet)

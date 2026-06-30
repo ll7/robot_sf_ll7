@@ -184,6 +184,83 @@ def test_diagnostic_only_output_caps_otherwise_ready_inputs(tmp_path: Path) -> N
     assert readiness.diagnostic_only_outputs == ["result_classification:diagnostic_only"]
 
 
+def test_null_test_prerequisites_can_be_checked_from_report(tmp_path: Path) -> None:
+    """Complete null-test prerequisite metadata keeps otherwise ready inputs ready."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    prerequisites = tmp_path / "prerequisites.json"
+    prerequisites.write_text(
+        json.dumps(
+            {
+                "schema_version": "adversarial_proposal_comparison.v1",
+                "null_tests": {
+                    "null_tests_reject_null": True,
+                    "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
+                    "ranking_permutation_test": {"status": "complete", "p_value": 0.02},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=prerequisites,
+    )
+
+    assert readiness.status == READY
+    assert readiness.null_test_prerequisite_source == str(prerequisites)
+    assert readiness.null_test_prerequisite_status == READY
+    assert readiness.missing_null_test_prerequisites == []
+    assert readiness.invalid_null_test_prerequisites == []
+
+
+def test_missing_null_test_prerequisites_block_readiness(tmp_path: Path) -> None:
+    """Incomplete null-test prerequisite metadata fails closed."""
+
+    source = _archive(
+        tmp_path / "source.json",
+        [_entry("source_0000", family="family_a", seed=1)],
+    )
+    rerun = _archive(
+        tmp_path / "rerun.json",
+        [_entry("rerun_0000", family="family_b", seed=101)],
+    )
+    prerequisites = tmp_path / "prerequisites.json"
+    prerequisites.write_text(
+        json.dumps(
+            {
+                "null_tests": {
+                    "null_tests_reject_null": False,
+                    "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.5},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    readiness = classify_failure_archive_rerun_readiness(
+        source,
+        rerun,
+        null_test_prerequisites=prerequisites,
+    )
+
+    assert readiness.status == BLOCKED
+    assert readiness.null_test_prerequisite_status == BLOCKED
+    assert readiness.missing_null_test_prerequisites == ["ranking_permutation_test"]
+    assert "null_tests_reject_null_not_true" in readiness.invalid_null_test_prerequisites
+    assert "missing_null_test_prerequisites:1" in readiness.blockers
+    assert "invalid_null_test_prerequisites:1" in readiness.blockers
+
+
 def test_cli_exit_codes_and_writes_report(tmp_path: Path, capsys) -> None:
     """CLI returns 0 for ready inputs and writes the JSON payload."""
 
@@ -196,6 +273,17 @@ def test_cli_exit_codes_and_writes_report(tmp_path: Path, capsys) -> None:
         [_entry("rerun_0000", family="family_b", seed=101)],
     )
     output = tmp_path / "readiness.json"
+    prerequisites = tmp_path / "prerequisites.json"
+    prerequisites.write_text(
+        json.dumps(
+            {
+                "null_tests_reject_null": True,
+                "shuffled_outcome_null_test": {"status": "complete", "p_value": 0.01},
+                "ranking_permutation_test": {"status": "complete", "p_value": 0.02},
+            }
+        ),
+        encoding="utf-8",
+    )
 
     exit_code = readiness_cli_main(
         [
@@ -203,11 +291,16 @@ def test_cli_exit_codes_and_writes_report(tmp_path: Path, capsys) -> None:
             str(source),
             "--rerun-archive",
             str(rerun),
+            "--null-test-prerequisites",
+            str(prerequisites),
             "--output",
             str(output),
         ]
     )
 
     assert exit_code == 0
-    assert json.loads(output.read_text(encoding="utf-8"))["status"] == READY
-    assert json.loads(capsys.readouterr().out)["status"] == READY
+    output_payload = json.loads(output.read_text(encoding="utf-8"))
+    stdout_payload = json.loads(capsys.readouterr().out)
+    assert output_payload["status"] == READY
+    assert output_payload["null_test_prerequisite_status"] == READY
+    assert stdout_payload["status"] == READY

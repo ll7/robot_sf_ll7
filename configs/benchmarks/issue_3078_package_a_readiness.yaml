@@ -76,8 +76,22 @@ command_contracts:
     allowed_in_readiness_check: true
     executes_benchmark_campaign: false
     required_paths:
-    - scripts/tools/validate_heldout_transfer_partitions.py
-    - configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
+      - scripts/tools/validate_heldout_transfer_partitions.py
+      - configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
+  - id: package_a_decision_packet
+    stage: readiness_probe
+    command: >
+      uv run python scripts/validation/check_package_a_readiness.py
+      --decision-packet --json
+      --heldout-partition-manifest
+      configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
+    allowed_in_readiness_check: true
+    executes_benchmark_campaign: false
+    required_paths:
+      - scripts/validation/check_package_a_readiness.py
+      - scripts/tools/campaign_result_store.py
+      - scripts/tools/validate_heldout_transfer_partitions.py
+      - configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
   - id: future_package_a_campaign
     stage: future_campaign_execution
     command: >

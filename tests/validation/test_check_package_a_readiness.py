@@ -251,3 +251,74 @@ def test_shipped_manifest_is_ready_against_repo() -> None:
         "missing_paths": report.missing_paths,
         "issues": report.issues,
     }
+
+
+def test_decision_packet_blocks_without_evidence_surfaces() -> None:
+    """Shipped readiness alone is not Package A benchmark evidence."""
+    packet = checker.build_decision_packet(SHIPPED_MANIFEST, repo_root=REPO_ROOT)
+    payload = packet.to_dict()
+    assert payload["classification"] == "blocked_pending_package_a_evidence"
+    assert "no canonical campaign result store supplied" in payload["reasons"]
+    assert "no seed-sufficiency analysis report supplied" in payload["reasons"]
+    assert "no held-out-family partition manifest supplied" in payload["reasons"]
+    assert payload["forbidden_actions_confirmed"]["compute_submit"] is False
+    assert payload["forbidden_actions_confirmed"]["ranking_claim_promotion"] is False
+
+
+def test_decision_packet_accepts_valid_local_evidence_packet(tmp_path: Path) -> None:
+    """Valid local evidence surfaces become diagnostic-review-ready, not a claim promotion."""
+    from scripts.tools.campaign_result_store import write_result_store
+
+    result_store = tmp_path / "result-store"
+    write_result_store(
+        result_store,
+        [
+            {
+                "run_id": "package-a-smoke",
+                "episode_id": "package-a-smoke-001",
+                "planner": "orca",
+                "scenario_id": "crossing",
+                "scenario_family": "crossing",
+                "seed": 111,
+                "row_status": "diagnostic_only",
+                "artifact_uri": "wandb://robot-sf/package-a-smoke/episodes/001.jsonl",
+                "artifact_sha256": "a" * 64,
+            }
+        ],
+        study_id="issue-3078-package-a-smoke",
+        command="uv run python scripts/tools/run_camera_ready_benchmark.py --config ...",
+        source_commit="testcommit",
+    )
+    seed_report = tmp_path / "seed_sufficiency_analysis.json"
+    seed_report.write_text(
+        json.dumps(
+            {
+                "schema_version": "seed_sufficiency_analysis.v1",
+                "headline_rank_stability_contract": {
+                    "label": "diagnostic_only",
+                    "promotion_allowed": False,
+                },
+                "rank_stability": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    packet = checker.build_decision_packet(
+        SHIPPED_MANIFEST,
+        repo_root=REPO_ROOT,
+        result_stores=[result_store],
+        seed_analysis_reports=[seed_report],
+        heldout_partition_manifests=[
+            REPO_ROOT
+            / "configs"
+            / "benchmarks"
+            / "issue_2128_heldout_family_transfer_partitions.yaml"
+        ],
+    )
+
+    payload = packet.to_dict()
+    assert payload["classification"] == "diagnostic_review_ready"
+    assert payload["reasons"] == []
+    assert payload["forbidden_actions_confirmed"]["benchmark_campaign_run"] is False
+    assert payload["forbidden_actions_confirmed"]["paper_claim_edits"] is False

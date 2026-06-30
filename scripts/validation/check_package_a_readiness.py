@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 SCHEMA_VERSION = "package_a_readiness_report.v1"
+DECISION_PACKET_SCHEMA_VERSION = "package_a_decision_packet.v1"
 
 REQUIRED_SECTIONS = (
     "package",
@@ -64,6 +65,41 @@ class ReadinessReport:
             "checked_commands": self.checked_commands,
             "missing_paths": self.missing_paths,
             "issues": self.issues,
+        }
+
+
+@dataclass
+class DecisionPacket:
+    """Fail-closed Package A evidence-boundary decision packet."""
+
+    manifest_path: str
+    package_id: str
+    readiness_status: str
+    classification: str
+    reasons: list[str] = field(default_factory=list)
+    result_stores: list[dict[str, Any]] = field(default_factory=list)
+    seed_analysis_reports: list[dict[str, Any]] = field(default_factory=list)
+    heldout_partition_manifests: list[dict[str, Any]] = field(default_factory=list)
+    schema_version: str = DECISION_PACKET_SCHEMA_VERSION
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize packet JSON-friendly mapping."""
+        return {
+            "schema_version": self.schema_version,
+            "package_id": self.package_id,
+            "manifest_path": self.manifest_path,
+            "readiness_status": self.readiness_status,
+            "classification": self.classification,
+            "reasons": self.reasons,
+            "result_stores": self.result_stores,
+            "seed_analysis_reports": self.seed_analysis_reports,
+            "heldout_partition_manifests": self.heldout_partition_manifests,
+            "forbidden_actions_confirmed": {
+                "benchmark_campaign_run": False,
+                "compute_submit": False,
+                "ranking_claim_promotion": False,
+                "paper_claim_edits": False,
+            },
         }
 
 
@@ -294,6 +330,151 @@ def check_readiness(manifest_path: Path, *, repo_root: Path | None = None) -> Re
     return report
 
 
+def build_decision_packet(
+    manifest_path: Path,
+    *,
+    repo_root: Path | None = None,
+    result_stores: list[Path] | None = None,
+    seed_analysis_reports: list[Path] | None = None,
+    heldout_partition_manifests: list[Path] | None = None,
+) -> DecisionPacket:
+    """Build fail-closed Package A decision packet from supplied evidence surfaces."""
+    repo_root = repo_root or _repo_root()
+    readiness = check_readiness(manifest_path, repo_root=repo_root)
+    packet = DecisionPacket(
+        manifest_path=str(manifest_path),
+        package_id=readiness.package_id,
+        readiness_status=readiness.status,
+        classification="diagnostic_review_ready",
+    )
+
+    if readiness.status != "ready":
+        packet.reasons.extend(
+            [f"readiness missing path: {path}" for path in readiness.missing_paths]
+        )
+        packet.reasons.extend(readiness.issues)
+
+    packet.result_stores = [
+        _validate_result_store_path(repo_root, path) for path in (result_stores or [])
+    ]
+    packet.seed_analysis_reports = [
+        _validate_seed_analysis_report(repo_root, path) for path in (seed_analysis_reports or [])
+    ]
+    packet.heldout_partition_manifests = [
+        _validate_heldout_partition_manifest(repo_root, path)
+        for path in (heldout_partition_manifests or [])
+    ]
+
+    if not packet.result_stores:
+        packet.reasons.append("no canonical campaign result store supplied")
+    if not packet.seed_analysis_reports:
+        packet.reasons.append("no seed-sufficiency analysis report supplied")
+    if not packet.heldout_partition_manifests:
+        packet.reasons.append("no held-out-family partition manifest supplied")
+
+    for surface_name in (
+        "result_stores",
+        "seed_analysis_reports",
+        "heldout_partition_manifests",
+    ):
+        for checked in getattr(packet, surface_name):
+            packet.reasons.extend(checked.get("errors", []))
+
+    packet.classification = (
+        "diagnostic_review_ready" if not packet.reasons else "blocked_pending_package_a_evidence"
+    )
+    return packet
+
+
+def _resolve_repo_path(repo_root: Path, path: Path) -> Path:
+    """Resolve absolute or repository-relative path without requiring existence."""
+    return path if path.is_absolute() else repo_root / path
+
+
+def _display_path(repo_root: Path, path: Path) -> str:
+    """Return path relative to repo root when possible."""
+    try:
+        return str(path.relative_to(repo_root))
+    except ValueError:
+        return str(path)
+
+
+def _validate_result_store_path(repo_root: Path, path: Path) -> dict[str, Any]:
+    """Validate one canonical campaign result store path."""
+    from scripts.tools.campaign_result_store import validate_result_store
+
+    resolved = _resolve_repo_path(repo_root, path)
+    if not resolved.exists():
+        return {
+            "path": _display_path(repo_root, resolved),
+            "ok": False,
+            "errors": [f"result store does not exist: {_display_path(repo_root, resolved)}"],
+        }
+    validation = validate_result_store(resolved)
+    return {
+        "path": _display_path(repo_root, resolved),
+        "ok": validation.ok,
+        "errors": validation.errors,
+    }
+
+
+def _validate_seed_analysis_report(repo_root: Path, path: Path) -> dict[str, Any]:
+    """Validate one seed-sufficiency analysis JSON report."""
+    resolved = _resolve_repo_path(repo_root, path)
+    if not resolved.is_file():
+        return {
+            "path": _display_path(repo_root, resolved),
+            "ok": False,
+            "errors": [
+                f"seed-sufficiency analysis report does not exist: "
+                f"{_display_path(repo_root, resolved)}"
+            ],
+        }
+    try:
+        payload = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "path": _display_path(repo_root, resolved),
+            "ok": False,
+            "errors": [f"seed-sufficiency analysis report is unreadable: {exc}"],
+        }
+
+    errors: list[str] = []
+    if payload.get("schema_version") != "seed_sufficiency_analysis.v1":
+        errors.append("seed-sufficiency analysis report schema_version must be v1")
+    if not isinstance(payload.get("headline_rank_stability_contract"), dict):
+        errors.append("seed-sufficiency analysis report missing headline rank-stability contract")
+    if not isinstance(payload.get("rank_stability"), list):
+        errors.append("seed-sufficiency analysis report missing rank_stability rows")
+    return {
+        "path": _display_path(repo_root, resolved),
+        "ok": not errors,
+        "errors": errors,
+    }
+
+
+def _validate_heldout_partition_manifest(repo_root: Path, path: Path) -> dict[str, Any]:
+    """Validate one held-out-family partition manifest."""
+    from scripts.tools.validate_heldout_transfer_partitions import validate_partition_manifest
+
+    resolved = _resolve_repo_path(repo_root, path)
+    if not resolved.is_file():
+        return {
+            "path": _display_path(repo_root, resolved),
+            "ok": False,
+            "errors": [
+                f"held-out-family partition manifest does not exist: "
+                f"{_display_path(repo_root, resolved)}"
+            ],
+        }
+    errors = validate_partition_manifest(resolved)
+    return {
+        "path": _display_path(repo_root, resolved),
+        "ok": not errors,
+        "errors": errors,
+    }
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -308,6 +489,32 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit readiness report as JSON on stdout.",
     )
+    parser.add_argument(
+        "--decision-packet",
+        action="store_true",
+        help="Emit Package A evidence-boundary decision packet.",
+    )
+    parser.add_argument(
+        "--result-store",
+        action="append",
+        type=Path,
+        default=[],
+        help="Canonical campaign result-store directory to validate.",
+    )
+    parser.add_argument(
+        "--seed-analysis-report",
+        action="append",
+        type=Path,
+        default=[],
+        help="seed_sufficiency_analysis.v1 JSON file to validate.",
+    )
+    parser.add_argument(
+        "--heldout-partition-manifest",
+        action="append",
+        type=Path,
+        default=[],
+        help="Held-out-family transfer partition manifest to validate.",
+    )
     return parser
 
 
@@ -315,6 +522,22 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _build_parser().parse_args(argv)
     try:
+        if args.decision_packet:
+            packet = build_decision_packet(
+                args.manifest,
+                result_stores=args.result_store,
+                seed_analysis_reports=args.seed_analysis_report,
+                heldout_partition_manifests=args.heldout_partition_manifest,
+            )
+            payload = packet.to_dict()
+            if args.as_json:
+                print(json.dumps(payload, indent=2))
+            else:
+                print(f"Package A decision packet: {payload['classification']}")
+                for reason in payload["reasons"]:
+                    print(f" reason: {reason}")
+            return 0 if packet.classification == "diagnostic_review_ready" else 1
+
         report = check_readiness(args.manifest)
     except ManifestError as exc:
         if args.as_json:

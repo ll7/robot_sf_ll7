@@ -1,0 +1,34 @@
+schema_version: issue-3808-ttc-near-miss-decision-packet.v1
+name: issue_3808_ttc_near_miss_diagnostic_decision_packet
+issue: 3808
+purpose: >
+  Prepare deterministic, read-only TTC near-miss diagnostic decision packet for issue
+  #3808. No benchmark campaign, compute submission, or claim promotion is performed.
+claim_boundary: >
+  diagnostic-only; no full benchmark campaign run, no SLURM/GPU submission, and
+  no paper/dissertation claim is established in this slice.
+execution_boundary:
+  run_benchmark: false
+  compute_submit_authorized: false
+  slurm_job_id: not_submitted
+renderer:
+  script: scripts/validation/render_ttc_near_miss_decision_packet.py
+  args:
+    - --fixture
+    - all
+    - --format
+    - json
+  threshold_s: 2.0
+expected_fixtures:
+  closing:
+    diagnostic_status: ok
+    evidence_status: ready_for_decision
+  opening:
+    diagnostic_status: no-approaching-pairs
+    evidence_status: ready_for_decision
+  missing-timing:
+    diagnostic_status: unsupported-inputs
+    evidence_status: ready_for_decision
+  unsupported-trajectory:
+    diagnostic_status: unsupported-inputs
+    evidence_status: ready_for_decision

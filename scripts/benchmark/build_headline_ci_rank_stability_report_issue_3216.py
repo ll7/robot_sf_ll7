@@ -1079,6 +1079,17 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def decision_packet_has_blocker(decision_packet: Mapping[str, Any]) -> bool:
+    """Return whether a decision packet should fail a local preflight.
+
+    The report itself is still useful when this returns ``True``; the non-zero
+    CLI mode is for automation that wants a hard gate before table or S30 work.
+    """
+    return decision_packet.get("manuscript_table_status") == "blocked" or decision_packet.get(
+        "s30_decision_status"
+    ) in {"blocked", "needs_review"}
+
+
 def _append_decision_packet_markdown(lines: list[str], decision_packet: Mapping[str, Any]) -> None:
     """Append the manuscript/S30 decision packet markdown section."""
     lines.append("## Manuscript/S30 decision packet")
@@ -1251,6 +1262,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="output/issue_3216_headline_ci/report",
         help="Directory for result.json and report.md.",
     )
+    parser.add_argument(
+        "--fail-on-decision-blocker",
+        action="store_true",
+        help=(
+            "Return exit code 4 after writing outputs when the local decision "
+            "packet still blocks manuscript-table or S30 decisions."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -1326,6 +1345,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"counted={report['inputs']['counted_cells']} "
         f"excluded={report['inputs']['excluded_cells']} -> {out_dir}"
     )
+    if args.fail_on_decision_blocker and decision_packet_has_blocker(report["decision_packet"]):
+        packet = report["decision_packet"]
+        print(
+            "decision_blocker=true "
+            f"manuscript_table_status={packet['manuscript_table_status']} "
+            f"s30_decision_status={packet['s30_decision_status']}",
+            file=sys.stderr,
+        )
+        return 4
     return 0
 
 

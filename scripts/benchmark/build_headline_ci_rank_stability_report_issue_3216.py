@@ -649,6 +649,77 @@ def classify(
     )
 
 
+def build_decision_packet(
+    cells: Sequence[CellResult],
+    rank_stability: Sequence[ScenarioRankStability],
+    adjacent_rank_claims: Sequence[AdjacentRankClaim],
+) -> dict[str, Any]:
+    """Build a conservative manuscript/S30 decision packet."""
+    counted = [cell for cell in cells if cell.counted]
+    excluded = [cell for cell in cells if not cell.counted]
+    identifiable = [entry for entry in rank_stability if entry.rank_identifiable]
+    unstable_rank_scenarios = [
+        entry.scenario_id
+        for entry in identifiable
+        if entry.top1_stable is False
+        or (entry.rank_flip_rate is not None and entry.rank_flip_rate > 0.0)
+    ]
+    overlap_claims = [
+        claim
+        for claim in adjacent_rank_claims
+        if claim.decision == "not_statistically_distinguishable_budget"
+    ]
+
+    min_seed_count = min((cell.seed_count for cell in counted), default=0)
+    manuscript_blockers: list[str] = []
+    s30_reasons: list[str] = []
+
+    if not counted:
+        manuscript_blockers.append("no_counted_cells")
+        s30_reasons.append("missing_counted_headline_rows")
+    if excluded:
+        manuscript_blockers.append("non_promotable_cells_present")
+        s30_reasons.append("resolve_or_disclose_excluded_cells")
+    if min_seed_count < PAPER_GRADE_MIN_SEEDS:
+        manuscript_blockers.append("missing_increased_seed_budget")
+        s30_reasons.append("minimum_seed_count_below_s20")
+    if not identifiable:
+        manuscript_blockers.append("no_identifiable_rankings")
+        s30_reasons.append("rank_stability_not_identifiable")
+    if overlap_claims:
+        s30_reasons.append("adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data")
+    if unstable_rank_scenarios:
+        s30_reasons.append("rank_resampling_instability_present")
+
+    if manuscript_blockers:
+        manuscript_table_status = "blocked"
+    else:
+        manuscript_table_status = "ready_for_table_review_no_claim_promotion"
+
+    if min_seed_count < PAPER_GRADE_MIN_SEEDS or unstable_rank_scenarios or overlap_claims:
+        s30_decision_status = "needs_review"
+    elif not counted or excluded or not identifiable:
+        s30_decision_status = "blocked"
+    else:
+        s30_decision_status = "not_required_by_local_preflight"
+
+    return {
+        "manuscript_table_status": manuscript_table_status,
+        "manuscript_blockers": manuscript_blockers,
+        "s30_decision_status": s30_decision_status,
+        "s30_reasons": s30_reasons,
+        "min_seed_count": min_seed_count,
+        "paper_grade_min_seeds": PAPER_GRADE_MIN_SEEDS,
+        "excluded_cell_count": len(excluded),
+        "identifiable_scenario_count": len(identifiable),
+        "unstable_rank_scenarios": unstable_rank_scenarios,
+        "adjacent_overlap_count": len(overlap_claims),
+        "claim_boundary": (
+            "Decision packet is local preflight only; no manuscript or paper claim is promoted."
+        ),
+    }
+
+
 def build_report(
     rows: Sequence[Mapping[str, Any]],
     config: ReportConfig | None = None,
@@ -687,6 +758,7 @@ def build_report(
         rank_metric=rank_metric,
         higher_is_better=higher_is_better,
     )
+    decision_packet = build_decision_packet(cells, rank_stability, adjacent_rank_claims)
     classification, rationale = classify(cells, rank_stability)
     counted = [cell for cell in cells if cell.counted]
     excluded = [cell for cell in cells if not cell.counted]
@@ -728,6 +800,7 @@ def build_report(
         "cells": [cell.to_dict() for cell in cells],
         "rank_stability": [r.to_dict() for r in rank_stability],
         "adjacent_rank_claims": [claim.to_dict() for claim in adjacent_rank_claims],
+        "decision_packet": decision_packet,
         "excluded_cell_reasons": [
             {
                 "scenario_id": cell.scenario_id,
@@ -805,6 +878,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             f"| {claim['lower_rank_planner']} | {claim['rank_metric']} "
             f"| {claim['decision']} | {claim['rationale']} |"
         )
+    _append_decision_packet_markdown(lines, report["decision_packet"])
     if report["excluded_cell_reasons"]:
         lines.append("")
         lines.append("## Excluded cells (fail-closed)")
@@ -818,6 +892,25 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             )
     lines.append("")
     return "\n".join(lines)
+
+
+def _append_decision_packet_markdown(lines: list[str], decision_packet: Mapping[str, Any]) -> None:
+    """Append the manuscript/S30 decision packet markdown section."""
+    lines.append("## Manuscript/S30 decision packet")
+    lines.append("")
+    lines.append(f"- **Manuscript table status**: `{decision_packet['manuscript_table_status']}`")
+    lines.append(f"- **S30 decision status**: `{decision_packet['s30_decision_status']}`")
+    lines.append(f"- **Minimum seed count**: {decision_packet['min_seed_count']}")
+    lines.append(
+        f"- **Adjacent CI-overlap downgrades**: {decision_packet['adjacent_overlap_count']}"
+    )
+    if decision_packet["manuscript_blockers"]:
+        blockers = ", ".join(decision_packet["manuscript_blockers"])
+        lines.append(f"- **Manuscript blockers**: {blockers}")
+    if decision_packet["s30_reasons"]:
+        reasons = ", ".join(decision_packet["s30_reasons"])
+        lines.append(f"- **S30 reasons**: {reasons}")
+    lines.append(f"- **Packet boundary**: {decision_packet['claim_boundary']}")
 
 
 def _dry_run_rows() -> list[dict[str, Any]]:

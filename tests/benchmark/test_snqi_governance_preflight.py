@@ -39,6 +39,39 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "camera_ready_v3",
         "model_canonical_v1",
     ]
+    # Assert the raw source sequence (order + length) before keying by name so a
+    # duplicate-name regression cannot be masked by later entries overwriting earlier
+    # ones in the dict comprehension below.
+    expected_source_names = [
+        "code_default",
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    discovered_sources = blocker_3723["discovered_weight_sources"]
+    assert [source["name"] for source in discovered_sources] == expected_source_names
+    discovered_by_name = {source["name"]: source for source in discovered_sources}
+    records_by_name = {record["name"]: record for record in report["weights"]["records"]}
+    assert list(discovered_by_name) == expected_source_names
+    assert discovered_by_name["code_default"] == {
+        "name": "code_default",
+        "kind": "code_default",
+        "relpath": None,
+        "versioned_id": "snqi_weights_code_default_v1",
+        "declares_canonical": True,
+        "available": True,
+        "dominant_term": "w_collisions",
+        "scale_class": "raw",
+        "content_sha256": records_by_name["code_default"]["content_sha256"],
+        "load_error": None,
+    }
+    model_source = discovered_by_name["model_canonical_v1"]
+    assert model_source["relpath"] == "model/snqi_canonical_weights_v1.json"
+    assert model_source["versioned_id"] == "snqi_weights_model_canonical_v1"
+    assert model_source["declares_canonical"] is True
+    assert model_source["dominant_term"] == "w_jerk"
+    assert model_source["content_sha256"]
     assert blocker_3723["canonical_declaring_sources"] == [
         "code_default",
         "model_canonical_v1",

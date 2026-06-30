@@ -14,7 +14,7 @@
 # this config as retire-pending and not benchmark evidence until issue #1764
 # recovers a checksummed durable artifact or retires/rewrites the config.
 
-model_path: output/slurm/issue791-reward-curriculum-job-12223/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_best.zip
+model_id: retired_ppo_issue_856_all_scenarios_12223_local_only
 
 device: auto
 deterministic: true

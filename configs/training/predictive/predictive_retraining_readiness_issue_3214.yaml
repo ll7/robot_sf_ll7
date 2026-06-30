@@ -1,0 +1,75 @@
+# Issue #3214 hard-case predictive retraining readiness decision packet.
+#
+# Scope boundary: public static readiness only. This packet does not submit Slurm/GPU compute,
+# run a full benchmark campaign, publish a retrained checkpoint, or edit paper/dissertation claims.
+schema_version: predictive-retraining-readiness.v1
+issue: "#3214"
+candidate_id: crossing_conflict_weighted_predictive_retraining
+scope: decision_packet_only
+claim_boundary: >
+  Public decision packet only: no Slurm or GPU submission, no full benchmark campaign run, no
+  retrained checkpoint publication, and no paper or dissertation claim edit.
+
+inputs:
+  weighting_spec: configs/training/predictive/predictive_crossing_conflict_hardcase_mixing_issue_3214.yaml
+  pipeline_config: configs/training/predictive/predictive_crossing_conflict_weighted_issue_3254.yaml
+  followup_issue: "#3254"
+
+data_prerequisites:
+  base_collection: pipeline_config.base_collection
+  hardcase_collection: pipeline_config.hardcase_collection
+  weighting_spec: inputs.weighting_spec
+  note: >-
+    Static public-repo preflight only. Dataset materialization remains out of scope until compute
+    submission is explicitly authorized.
+
+expected_checkpoint_lineage:
+  candidate_model_id: predictive_proxy_selected_v2_xl_ego
+  checkpoint_path: output/tmp/predictive_planner/pipeline/training/predictive_crossing_conflict_weighted_issue_3254_xl_ego/predictive_model.pt
+  checkpoint_provenance_path: output/tmp/predictive_planner/pipeline/training/predictive_crossing_conflict_weighted_issue_3254_xl_ego/checkpoint_provenance.json
+  registry_policy: promote only after checkpoint provenance and hard-seed evaluation evidence exist
+
+evaluation_config:
+  hard_seed_benchmark: configs/benchmarks/predictive_hard_seeds_v1.yaml
+  planner_grid: configs/benchmarks/predictive_sweep_planner_grid_v1.yaml
+  summary_path: output/tmp/predictive_planner/pipeline/evaluation/predictive_crossing_conflict_weighted_issue_3254_xl_ego_hard_seeds/summary.json
+  gate_note: keep trajectory validation metrics separate from closed-loop hard-seed benchmark gate
+
+output_roots:
+  pipeline_root: output/tmp/predictive_planner/pipeline
+  training_root: output/tmp/predictive_planner/pipeline/training
+  evaluation_root: output/tmp/predictive_planner/pipeline/evaluation
+  durable_policy: worktree-local output only until an explicit checkpoint promotion step
+
+prior_result:
+  status: verified_negative
+  evidence_status: diagnostic negative result only; not benchmark, leaderboard, or paper claim
+  source_issue: "#3254"
+  source_pr: "#3515"
+  observed_success_rate: 0.087
+  gate_min_success_rate: 0.30
+  conclusion: >
+    The crossing-conflict weighted predictive retrain improved trajectory-prediction accuracy but
+    did not clear closed-loop policy gates. Treat further same-packet retraining as blocked until a
+    public control-law-side change exists.
+
+launch_decision:
+  state: blocked_until_control_law_change
+  compute_submit_allowed: false
+  fail_closed_on_missing: true
+  required_before_rerun:
+    - control_law_change_config
+    - updated_public_config_or_pr
+    - checkpoint_provenance_plan
+    - hard_seed_evaluation_plan
+
+commands:
+  local_readiness_check: >
+    uv run python scripts/training/check_predictive_retraining_readiness.py
+    --packet configs/training/predictive/predictive_retraining_readiness_issue_3214.yaml
+
+out_of_scope:
+  - full benchmark campaign run
+  - Slurm or GPU submission
+  - model checkpoint promotion
+  - paper or dissertation claim edits

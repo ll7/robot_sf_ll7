@@ -1,9 +1,7 @@
 """Tests for the Package A readiness checker (issue #3078).
 
-These tests use synthetic on-disk fixtures so they never execute the benchmark, touch
-Slurm, or interpret ranks. They prove the checker fails closed on missing prerequisites
-and passes only when every declared input exists. One smoke test exercises the real
-shipped manifest against the live repository tree.
+Tests use synthetic on-disk fixtures and never execute a benchmark, submit
+compute, or interpret planner ranks.
 """
 
 from __future__ import annotations
@@ -25,7 +23,7 @@ import check_package_a_readiness as checker  # noqa: E402
 
 
 def _synthetic_manifest(root: Path, *, create_inputs: bool = True) -> Path:
-    """Write a self-contained manifest plus (optionally) all its input files."""
+    """Write self-contained manifest plus, optionally, all input files."""
     inputs = {
         "heldout_family_inputs": [
             "experiments/heldout_pilot.yaml",
@@ -40,49 +38,131 @@ def _synthetic_manifest(root: Path, *, create_inputs: bool = True) -> Path:
             "configs/suite.yaml",
             "scripts/tools/result_store.py",
         ],
+        "command_contracts": [
+            "scripts/tools/analyze_seed_sufficiency.py",
+            "scripts/tools/run_camera_ready_benchmark.py",
+        ],
     }
     if create_inputs:
         for rel_paths in inputs.values():
-            for rel in rel_paths:
-                target = root / rel
+            for rel_path in rel_paths:
+                target = root / rel_path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text("# fixture\n", encoding="utf-8")
 
     manifest = {
-        "schema_version": "package-a-readiness.v0.1",
+        "schema_version": "package-a-readiness.v0.2",
         "package": {"id": "synthetic_package_a", "issue": 3078},
-        "heldout_family_inputs": {"required_paths": inputs["heldout_family_inputs"]},
+        "heldout_family_inputs": {
+            "required_paths": inputs["heldout_family_inputs"],
+            "leakage_audit_tool": "scripts/tools/analyze_seed_sufficiency.py",
+        },
         "seed_plan": {
-            "mode": "seed-sufficiency-gated",
-            "min_seeds": 5,
-            "rank_metric": "kendall_tau",
             "required_paths": inputs["seed_plan"],
             "required_metadata": ["mode", "min_seeds", "rank_metric"],
+            "mode": "seed_sufficiency_then_rank_stability",
+            "min_seeds": 10,
+            "rank_metric": "snqi",
         },
         "frozen_protocol": {"required_paths": inputs["frozen_protocol"]},
-        "outputs": {"local_root": "output/benchmarks/synthetic", "disposable": True},
+        "command_contracts": {
+            "contracts": [
+                {
+                    "id": "seed_surface",
+                    "stage": "readiness_probe",
+                    "command": "uv run python scripts/tools/analyze_seed_sufficiency.py --help",
+                    "allowed_in_readiness_check": True,
+                    "executes_benchmark_campaign": False,
+                    "required_paths": ["scripts/tools/analyze_seed_sufficiency.py"],
+                },
+                {
+                    "id": "future_campaign",
+                    "stage": "future_campaign_execution",
+                    "command": "uv run python scripts/tools/run_camera_ready_benchmark.py --config x",
+                    "allowed_in_readiness_check": False,
+                    "executes_benchmark_campaign": True,
+                    "required_paths": ["scripts/tools/run_camera_ready_benchmark.py"],
+                },
+            ]
+        },
+        "outputs": {
+            "local_root": "output/benchmarks/synthetic_package_a",
+            "disposable": True,
+        },
+        "durable_evidence": {
+            "plan": {
+                "path": "docs/context/evidence/synthetic_package_a",
+                "required_before_claim": True,
+            }
+        },
+        "readiness_decision": {
+            "benchmark_campaign_run": False,
+            "compute_submit_authorized": False,
+            "ranking_claim_promotion": False,
+            "paper_claim_edits": False,
+            "fallback_degraded_success_allowed": False,
+            "result_classification_required": True,
+        },
     }
     manifest_path = root / "manifest.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
     return manifest_path
 
 
-def test_ready_when_all_inputs_present(tmp_path: Path) -> None:
-    """A manifest whose declared inputs all exist reports ready."""
+def test_ready_when_all_declared_inputs_exist(tmp_path: Path) -> None:
+    """Synthetic fixture is ready when every declared prerequisite exists."""
     manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
     report = checker.check_readiness(manifest_path, repo_root=tmp_path)
     assert report.status == "ready"
     assert report.missing_paths == []
     assert report.issues == []
+    assert {command["id"] for command in report.checked_commands} == {
+        "seed_surface",
+        "future_campaign",
+    }
 
 
-def test_fails_closed_on_missing_input(tmp_path: Path) -> None:
-    """A missing held-out-family input makes the verdict not_ready."""
+def test_fails_closed_on_missing_heldout_input(tmp_path: Path) -> None:
+    """A missing held-out-family input makes verdict not_ready."""
     manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
     (tmp_path / "configs" / "sets" / "eval_set.yaml").unlink()
     report = checker.check_readiness(manifest_path, repo_root=tmp_path)
     assert report.status == "not_ready"
     assert "configs/sets/eval_set.yaml" in report.missing_paths
+
+
+def test_fails_closed_on_invalid_heldout_partition_contract(tmp_path: Path) -> None:
+    """Package A readiness validates held-out transfer output roles."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    partition_relpath = "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+    tool_relpath = "scripts/tools/validate_heldout_transfer_partitions.py"
+    partition_path = tmp_path / partition_relpath
+    partition_path.parent.mkdir(parents=True, exist_ok=True)
+    partition_data = yaml.safe_load((REPO_ROOT / partition_relpath).read_text(encoding="utf-8"))
+    partition_data["planned_outputs"] = [
+        output
+        for output in partition_data["planned_outputs"]
+        if output.get("evidence_role") != "transfer_delta_figure"
+    ]
+    partition_path.write_text(yaml.safe_dump(partition_data, sort_keys=False), encoding="utf-8")
+    tool_path = tmp_path / tool_relpath
+    tool_path.parent.mkdir(parents=True, exist_ok=True)
+    tool_path.write_text("# fixture\n", encoding="utf-8")
+    data["command_contracts"]["contracts"].append(
+        {
+            "id": "heldout_family_leakage_audit",
+            "stage": "readiness_probe",
+            "command": "uv run python scripts/tools/validate_heldout_transfer_partitions.py x",
+            "allowed_in_readiness_check": True,
+            "executes_benchmark_campaign": False,
+            "required_paths": [tool_relpath, partition_relpath],
+        }
+    )
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any("transfer_delta_figure" in issue for issue in report.issues)
 
 
 def test_fails_closed_on_missing_seed_metadata(tmp_path: Path) -> None:
@@ -96,8 +176,19 @@ def test_fails_closed_on_missing_seed_metadata(tmp_path: Path) -> None:
     assert any("rank_metric" in issue for issue in report.issues)
 
 
+def test_fails_closed_when_campaign_command_allowed_in_readiness(tmp_path: Path) -> None:
+    """Campaign execution commands cannot be marked runnable by this checker."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["command_contracts"]["contracts"][1]["allowed_in_readiness_check"] = True
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any("cannot both execute benchmark campaign" in issue for issue in report.issues)
+
+
 def test_rejects_unsafe_output_root(tmp_path: Path) -> None:
-    """An output root outside output/ or not disposable is flagged as an issue."""
+    """An output root outside output/ is flagged."""
     manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
     data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     data["outputs"]["local_root"] = "docs/benchmarks/leak"
@@ -107,16 +198,72 @@ def test_rejects_unsafe_output_root(tmp_path: Path) -> None:
     assert any("output/" in issue for issue in report.issues)
 
 
+def test_rejects_durable_evidence_under_output(tmp_path: Path) -> None:
+    """Durable evidence plan cannot point into disposable output."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["durable_evidence"]["plan"]["path"] = "output/leaky_evidence"
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any("durable_evidence.plan.path" in issue for issue in report.issues)
+
+
+def test_rejects_claim_or_compute_enabled_decision(tmp_path: Path) -> None:
+    """Readiness packet fails closed if compute or claim promotion is enabled."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["readiness_decision"]["compute_submit_authorized"] = True
+    data["readiness_decision"]["ranking_claim_promotion"] = True
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any("compute_submit_authorized" in issue for issue in report.issues)
+    assert any("ranking_claim_promotion" in issue for issue in report.issues)
+
+
 def test_manifest_error_on_missing_section(tmp_path: Path) -> None:
-    """A manifest missing a required section raises ManifestError."""
+    """A manifest missing required sections raises ManifestError."""
     manifest_path = tmp_path / "bad.yaml"
     manifest_path.write_text(yaml.safe_dump({"package": {"id": "x"}}), encoding="utf-8")
     with pytest.raises(checker.ManifestError):
         checker.check_readiness(manifest_path, repo_root=tmp_path)
 
 
+def test_fails_closed_on_null_durable_evidence_path(tmp_path: Path) -> None:
+    """A null durable-evidence path must not be coerced to a valid string."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["durable_evidence"]["plan"]["path"] = None
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any("durable_evidence.plan.path is required" in issue for issue in report.issues)
+
+
+def test_fails_closed_on_null_contract_id(tmp_path: Path) -> None:
+    """A null command-contract id must not be coerced to the string 'None'."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["command_contracts"]["contracts"][0]["id"] = None
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    report = checker.check_readiness(manifest_path, repo_root=tmp_path)
+    assert report.status == "not_ready"
+    assert any(".id is required" in issue for issue in report.issues)
+
+
+def test_manifest_error_on_non_mapping_section(tmp_path: Path) -> None:
+    """A required section that is not a mapping fails closed with ManifestError."""
+    manifest_path = _synthetic_manifest(tmp_path, create_inputs=True)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    data["seed_plan"] = ["not", "a", "mapping"]
+    manifest_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    with pytest.raises(checker.ManifestError):
+        checker.check_readiness(manifest_path, repo_root=tmp_path)
+
+
 def test_cli_json_exit_code_not_ready(tmp_path: Path) -> None:
-    """CLI returns exit 1 and JSON status not_ready when a prerequisite is missing."""
+    """CLI returns exit 1 JSON status not_ready when prerequisites are missing."""
     manifest_path = _synthetic_manifest(tmp_path, create_inputs=False)
     completed = subprocess.run(
         [sys.executable, str(CHECKER), "--manifest", str(manifest_path), "--json"],
@@ -132,9 +279,75 @@ def test_cli_json_exit_code_not_ready(tmp_path: Path) -> None:
 
 
 def test_shipped_manifest_is_ready_against_repo() -> None:
-    """The shipped Package A manifest's declared inputs exist in the live repo tree."""
+    """The shipped Package A manifest's declared inputs exist in the repo tree."""
     report = checker.check_readiness(SHIPPED_MANIFEST, repo_root=REPO_ROOT)
     assert report.status == "ready", {
         "missing_paths": report.missing_paths,
         "issues": report.issues,
     }
+
+
+def test_decision_packet_blocks_without_evidence_surfaces() -> None:
+    """Shipped readiness alone is not Package A benchmark evidence."""
+    packet = checker.build_decision_packet(SHIPPED_MANIFEST, repo_root=REPO_ROOT)
+    payload = packet.to_dict()
+    assert payload["classification"] == "blocked_pending_package_a_evidence"
+    assert "no canonical campaign result store supplied" in payload["reasons"]
+    assert "no seed-sufficiency analysis report supplied" in payload["reasons"]
+    assert "no held-out-family partition manifest supplied" in payload["reasons"]
+    assert payload["forbidden_actions_confirmed"]["compute_submit"] is False
+    assert payload["forbidden_actions_confirmed"]["ranking_claim_promotion"] is False
+
+
+def test_decision_packet_accepts_valid_local_evidence_packet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Valid local evidence surfaces become diagnostic-review-ready, not a claim promotion."""
+    result_store = tmp_path / "result-store"
+    result_store.mkdir()
+
+    def _valid_result_store(repo_root: Path, path: Path) -> dict[str, object]:
+        return {
+            "path": str(path),
+            "ok": True,
+            "errors": [],
+        }
+
+    monkeypatch.setattr(
+        checker,
+        "_validate_result_store_path",
+        _valid_result_store,
+    )
+    seed_report = tmp_path / "seed_sufficiency_analysis.json"
+    seed_report.write_text(
+        json.dumps(
+            {
+                "schema_version": "seed_sufficiency_analysis.v1",
+                "headline_rank_stability_contract": {
+                    "label": "diagnostic_only",
+                    "promotion_allowed": False,
+                },
+                "planner_rank_stability": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    packet = checker.build_decision_packet(
+        SHIPPED_MANIFEST,
+        repo_root=REPO_ROOT,
+        result_stores=[result_store],
+        seed_analysis_reports=[seed_report],
+        heldout_partition_manifests=[
+            REPO_ROOT
+            / "configs"
+            / "benchmarks"
+            / "issue_2128_heldout_family_transfer_partitions.yaml"
+        ],
+    )
+
+    payload = packet.to_dict()
+    assert payload["classification"] == "diagnostic_review_ready"
+    assert payload["reasons"] == []
+    assert payload["forbidden_actions_confirmed"]["benchmark_campaign_run"] is False
+    assert payload["forbidden_actions_confirmed"]["paper_claim_edits"] is False

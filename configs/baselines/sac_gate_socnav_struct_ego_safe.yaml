@@ -5,7 +5,7 @@
 # retire-pending and not benchmark evidence until issue #1764 recovers a
 # checksummed durable artifact or retires/rewrites the config.
 
-model_path: output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip
+model_id: retired_sac_gate_socnav_struct_ego_safe_local_only
 
 device: auto
 deterministic: true

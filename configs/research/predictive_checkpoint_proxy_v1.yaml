@@ -52,6 +52,35 @@ proxy_summary_contract:
   # success spread strictly greater than this counts as non-degenerate.
   min_success_spread: 1.0e-9
 
+# Structured blocked-artifact inventory for the readiness checker. These entries are not evidence
+# and are not hydrated by the preflight; they make missing or degenerate proxy inputs explicit before
+# any checkpoint-selection run is treated as ready.
+blocked_artifacts:
+  - id: missing_durable_predictive_checkpoints
+    artifact_type: checkpoint_set
+    status: blocked
+    storage_scope: worktree_local_output
+    path_pattern: model/registry.yaml predictive local_path entries
+    required_metadata:
+      - local_path
+      - proxy_training_run_id
+      - durable checksum or public release metadata
+    revival_condition: >
+      Promote or hydrate at least six predictive checkpoints from one real training run into
+      durable, locally resolvable registry local_path entries.
+  - id: degenerate_hardcase_proxy_probe_v1
+    artifact_type: proxy_training_summary
+    status: blocked
+    storage_scope: worktree_local_output
+    path_pattern: output/tmp/**/hardcase_proxy_probe_v1*/**/training_summary.json
+    required_metadata:
+      - proxy.enabled=true
+      - proxy.history epoch records
+      - non-degenerate hard-seed success_rate spread
+    revival_condition: >
+      Provide a proxy.enabled training summary with at least six usable proxy epochs and
+      non-degenerate hard-seed success spread from plateau-breaking lineage.
+
 # Current issue #3204 blocker map. The preflight does not hydrate artifacts or
 # run training, but unresolved entries keep the report fail-closed until the
 # contract is updated with durable evidence.

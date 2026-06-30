@@ -40,6 +40,7 @@ import argparse
 import json
 import math
 import subprocess
+import sys
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -65,6 +66,9 @@ DEFAULT_ISSUE = 3216
 #: is the rank metric; the rest are reported with CIs only.
 DEFAULT_METRICS = ("success", "collisions", "near_misses", "snqi")
 DEFAULT_RANK_METRIC = "snqi"
+CONSTRAINTS_FIRST_RANK_METRIC = "success"
+CONSTRAINTS_FIRST_REQUIRED_METRICS = ("success", "collisions", "near_misses")
+SNQI_WARNING_MARKERS = ("snqi contract", "snqi_contract")
 
 #: Planner execution modes that fail closed (never counted as successful cells).
 _NON_SUCCESS_MODES = frozenset({"fallback", "degraded", "not_available"})
@@ -110,6 +114,7 @@ class ReportConfig:
 
     metrics: tuple[str, ...] = DEFAULT_METRICS
     rank_metric: str = DEFAULT_RANK_METRIC
+    rank_profile: str = "snqi_diagnostic"
     higher_is_better: bool = True
     bootstrap_samples: int = DEFAULT_BOOTSTRAP_SAMPLES
     confidence: float = DEFAULT_CONFIDENCE
@@ -329,6 +334,17 @@ def _coerce_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return result if math.isfinite(result) else None
+
+
+def _optional_int(value: Any) -> int | None:
+    """Coerce a value to int, returning ``None`` for null/non-integer inputs."""
+
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def build_cell_results(
@@ -656,12 +672,113 @@ def classify(
     )
 
 
+def load_job_evidence_packet(path: str | Path, *, job_id: int) -> dict[str, Any]:
+    """Load the compact #1554/#3216 Slurm-evidence packet entry for one job.
+
+    The packet is provenance only. It does not provide headline rows by itself,
+    but it can carry warnings that must downgrade local rank claims.
+    """
+
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    target_job = _optional_int(job_id)
+    matches = [
+        item
+        for item in payload.get("evidence", [])
+        if isinstance(item, Mapping)
+        and target_job is not None
+        and _optional_int(item.get("job")) == target_job
+    ]
+    if not matches:
+        return {
+            "status": "missing_job",
+            "job": int(job_id),
+            "packet_path": str(path),
+            "snqi_contract_warning": False,
+            "warnings": [],
+            "limitations": [f"job {job_id} not found in evidence packet"],
+        }
+
+    item = dict(matches[0])
+    artifact_summary = item.get("artifact_summary") or {}
+    warnings = [str(value) for value in artifact_summary.get("warnings", [])]
+    limitations = [str(value) for value in item.get("limitations", [])]
+    warning_text = " ".join(warnings + limitations).lower()
+    snqi_warning = any(marker in warning_text for marker in SNQI_WARNING_MARKERS)
+    return {
+        "status": "bound",
+        "job": int(job_id),
+        "packet_path": str(path),
+        "campaign": item.get("campaign"),
+        "config": item.get("config"),
+        "role": item.get("role"),
+        "slurm_state": item.get("slurm_state"),
+        "exit_code": item.get("exit_code"),
+        "public_commit": item.get("public_commit"),
+        "planner_row_status_counts": artifact_summary.get("planner_row_status_counts", {}),
+        "matrix_rows": artifact_summary.get("matrix_rows"),
+        "planner_rows": artifact_summary.get("planner_rows"),
+        "warnings": warnings,
+        "limitations": limitations,
+        "snqi_contract_warning": snqi_warning,
+    }
+
+
+def _constraints_first_metric_gaps(cells: Sequence[CellResult]) -> list[str]:
+    """Return required constraints-first metrics missing from counted cells.
+
+    Constraints-first ranking compares the safety constraint metrics across the
+    full headline matrix, so a metric is only "present" when *every* counted
+    cell reports it. If a single counted cell is missing a required metric (for
+    example due to a logging failure) the cross-cell constraint comparison is
+    incomplete and the metric is flagged as a gap. With no counted cells, all
+    required metrics are gaps. This is the conservative, fail-closed reading.
+    """
+
+    counted = [cell for cell in cells if cell.counted]
+    if not counted:
+        return list(CONSTRAINTS_FIRST_REQUIRED_METRICS)
+    gaps: list[str] = []
+    for metric in CONSTRAINTS_FIRST_REQUIRED_METRICS:
+        if all(_metric_stats(cell, metric) is not None for cell in counted):
+            continue
+        gaps.append(metric)
+    return gaps
+
+
+def _append_packet_reasons(
+    manuscript_blockers: list[str],
+    s30_reasons: list[str],
+    *,
+    overlap_claims: Sequence[AdjacentRankClaim],
+    invalid_rank_metric: bool,
+    metric_gaps: Sequence[str],
+    snqi_contract_warning: bool,
+    unstable_rank_scenarios: Sequence[str],
+) -> None:
+    """Append downgrade/blocker reasons derived from rank-profile checks."""
+
+    if overlap_claims:
+        s30_reasons.append("adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data")
+    if invalid_rank_metric:
+        manuscript_blockers.append("invalid_rank_metric_contract")
+        s30_reasons.append("rank_metric_contract_invalid")
+    if metric_gaps:
+        manuscript_blockers.append("constraints_first_metrics_missing")
+        s30_reasons.append("constraints_first_metric_gap")
+    if snqi_contract_warning:
+        s30_reasons.append("snqi_contract_warning_diagnostic_only")
+    if unstable_rank_scenarios:
+        s30_reasons.append("rank_resampling_instability_present")
+
+
 def build_decision_packet(
     cells: Sequence[CellResult],
     rank_stability: Sequence[ScenarioRankStability],
     adjacent_rank_claims: Sequence[AdjacentRankClaim],
     *,
+    rank_profile: str = "snqi_diagnostic",
     invalid_rank_metric_reason: str | None = None,
+    job_evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a conservative manuscript/S30 decision packet."""
     counted = [cell for cell in cells if cell.counted]
@@ -682,6 +799,10 @@ def build_decision_packet(
         claim for claim in adjacent_rank_claims if claim.decision == "blocked_invalid_metric"
     ]
     invalid_rank_metric = bool(invalid_rank_metric_reason or invalid_metric_claims)
+    metric_gaps = (
+        _constraints_first_metric_gaps(cells) if rank_profile == "constraints_first" else []
+    )
+    snqi_contract_warning = bool(job_evidence and job_evidence.get("snqi_contract_warning"))
 
     min_seed_count = min((cell.seed_count for cell in counted), default=0)
     manuscript_blockers: list[str] = []
@@ -699,12 +820,15 @@ def build_decision_packet(
     if not identifiable:
         manuscript_blockers.append("no_identifiable_rankings")
         s30_reasons.append("rank_stability_not_identifiable")
-    if overlap_claims:
-        s30_reasons.append("adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data")
-    manuscript_blockers.extend(["invalid_rank_metric_contract"] if invalid_rank_metric else [])
-    s30_reasons.extend(["rank_metric_contract_invalid"] if invalid_rank_metric else [])
-    if unstable_rank_scenarios:
-        s30_reasons.append("rank_resampling_instability_present")
+    _append_packet_reasons(
+        manuscript_blockers,
+        s30_reasons,
+        overlap_claims=overlap_claims,
+        invalid_rank_metric=invalid_rank_metric,
+        metric_gaps=metric_gaps,
+        snqi_contract_warning=snqi_contract_warning,
+        unstable_rank_scenarios=unstable_rank_scenarios,
+    )
 
     if manuscript_blockers:
         manuscript_table_status = "blocked"
@@ -736,6 +860,12 @@ def build_decision_packet(
         "adjacent_overlap_count": len(overlap_claims),
         "invalid_metric_claim_count": len(invalid_metric_claims),
         "invalid_rank_metric_reason": invalid_rank_metric_reason,
+        "rank_profile": rank_profile,
+        "constraints_first_required_metrics": list(CONSTRAINTS_FIRST_REQUIRED_METRICS),
+        "constraints_first_metric_gaps": metric_gaps,
+        "job_evidence_status": (job_evidence or {}).get("status"),
+        "job_id": (job_evidence or {}).get("job"),
+        "snqi_contract_warning": snqi_contract_warning,
         "claim_boundary": (
             "Decision packet is local preflight only; no manuscript or paper claim is promoted."
         ),
@@ -748,6 +878,7 @@ def build_report(
     *,
     campaign: str | None = None,
     rows_path: str | None = None,
+    job_evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the full report payload.
 
@@ -785,7 +916,9 @@ def build_report(
         cells,
         rank_stability,
         adjacent_rank_claims,
+        rank_profile=config.rank_profile,
         invalid_rank_metric_reason=config.invalid_rank_metric_reason,
+        job_evidence=job_evidence,
     )
     classification, rationale = classify(cells, rank_stability)
     counted = [cell for cell in cells if cell.counted]
@@ -806,6 +939,7 @@ def build_report(
             "excluded_cells": len(excluded),
             "metrics": list(metrics),
             "rank_metric": rank_metric,
+            "rank_profile": config.rank_profile,
             "higher_is_better": higher_is_better,
             "invalid_rank_metric_reason": config.invalid_rank_metric_reason,
         },
@@ -815,10 +949,12 @@ def build_report(
             "bootstrap_seed": config.bootstrap_seed,
             "rank_resamples": config.resamples,
             "rank_seed": config.rank_seed,
+            "rank_profile": config.rank_profile,
             "invalid_rank_metric_reason": config.invalid_rank_metric_reason,
             "paper_grade_min_seeds": PAPER_GRADE_MIN_SEEDS,
             "nominal_min_seeds": NOMINAL_MIN_SEEDS,
         },
+        "job_evidence": dict(job_evidence or {}),
         "canonical_owners_reused": [
             "robot_sf.benchmark.seed_variance._stats_for_vals",
             "robot_sf.benchmark.seed_variance._bootstrap_mean_ci",
@@ -843,6 +979,19 @@ def build_report(
     }
 
 
+def _append_job_evidence_markdown(lines: list[str], job_evidence: Mapping[str, Any]) -> None:
+    """Append compact job-evidence provenance lines to markdown."""
+
+    if not job_evidence:
+        return
+    lines.append(
+        f"- **Job evidence**: `{job_evidence.get('status')}` job "
+        f"`{job_evidence.get('job')}` campaign `{job_evidence.get('campaign')}`"
+    )
+    if job_evidence.get("snqi_contract_warning"):
+        lines.append("- **SNQI evidence status**: `diagnostic_only_contract_warning`")
+
+
 def render_markdown(report: Mapping[str, Any]) -> str:
     """Render a markdown summary of the report.
 
@@ -862,10 +1011,12 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"{inputs['excluded_cells']} excluded (of {inputs['row_count']} rows)"
     )
     lines.append(f"- **Rank metric**: `{inputs['rank_metric']}`")
+    lines.append(f"- **Rank profile**: `{inputs['rank_profile']}`")
     if inputs.get("invalid_rank_metric_reason"):
         lines.append(
             f"- **Rank metric contract**: `invalid` - {inputs['invalid_rank_metric_reason']}"
         )
+    _append_job_evidence_markdown(lines, report.get("job_evidence") or {})
     lines.append("")
     lines.append("## Canonical owners reused (not reinvented)")
     lines.append("")
@@ -926,6 +1077,17 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             )
     lines.append("")
     return "\n".join(lines)
+
+
+def decision_packet_has_blocker(decision_packet: Mapping[str, Any]) -> bool:
+    """Return whether a decision packet should fail a local preflight.
+
+    The report itself is still useful when this returns ``True``; the non-zero
+    CLI mode is for automation that wants a hard gate before table or S30 work.
+    """
+    return decision_packet.get("manuscript_table_status") == "blocked" or decision_packet.get(
+        "s30_decision_status"
+    ) in {"blocked", "needs_review"}
 
 
 def _append_decision_packet_markdown(lines: list[str], decision_packet: Mapping[str, Any]) -> None:
@@ -1055,6 +1217,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--rank-metric", type=str, default=DEFAULT_RANK_METRIC, help="Metric used for ranking."
     )
     parser.add_argument(
+        "--rank-profile",
+        choices=("snqi_diagnostic", "constraints_first"),
+        default="snqi_diagnostic",
+        help=(
+            "Ranking interpretation profile. constraints_first ranks by success "
+            "unless --rank-metric overrides it and treats SNQI as diagnostic."
+        ),
+    )
+    parser.add_argument(
         "--lower-is-better",
         action="store_true",
         help="Treat the rank metric as lower-is-better (default higher-is-better).",
@@ -1074,10 +1245,30 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--evidence-packet",
+        type=str,
+        default=None,
+        help="Optional compact Slurm evidence packet JSON to bind job provenance/warnings.",
+    )
+    parser.add_argument(
+        "--job-id",
+        type=int,
+        default=None,
+        help="Job id to bind from --evidence-packet, for example 13198.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default="output/issue_3216_headline_ci/report",
         help="Directory for result.json and report.md.",
+    )
+    parser.add_argument(
+        "--fail-on-decision-blocker",
+        action="store_true",
+        help=(
+            "Return exit code 4 after writing outputs when the local decision "
+            "packet still blocks manuscript-table or S30 decisions."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -1104,19 +1295,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     rows_path = _resolve_rows_path(args)
     rows = _dry_run_rows() if args.dry_run else load_rows_json(rows_path)
+    if bool(args.evidence_packet) != bool(args.job_id):
+        sys.stderr.write("--evidence-packet and --job-id must be supplied together\n")
+        return 2
+    job_evidence = (
+        load_job_evidence_packet(args.evidence_packet, job_id=args.job_id)
+        if args.evidence_packet
+        else None
+    )
+    rank_metric = args.rank_metric
+    if args.rank_profile == "constraints_first" and args.rank_metric == DEFAULT_RANK_METRIC:
+        rank_metric = CONSTRAINTS_FIRST_RANK_METRIC
+    invalid_rank_metric_reason = args.invalid_rank_metric_reason
+    if (
+        invalid_rank_metric_reason is None
+        and rank_metric == "snqi"
+        and job_evidence
+        and job_evidence.get("snqi_contract_warning")
+    ):
+        invalid_rank_metric_reason = "SNQI contract warning in bound job evidence packet"
     config = ReportConfig(
         metrics=tuple(args.metrics),
-        rank_metric=args.rank_metric,
+        rank_metric=rank_metric,
+        rank_profile=args.rank_profile,
         higher_is_better=not args.lower_is_better,
         bootstrap_samples=args.bootstrap_samples,
         confidence=args.confidence,
         bootstrap_seed=args.bootstrap_seed,
         resamples=args.rank_resamples,
         rank_seed=args.rank_seed,
-        invalid_rank_metric_reason=args.invalid_rank_metric_reason,
+        invalid_rank_metric_reason=invalid_rank_metric_reason,
     )
     campaign = "dry-run" if args.dry_run else args.campaign
-    report = build_report(rows, config, campaign=campaign, rows_path=rows_path)
+    report = build_report(
+        rows,
+        config,
+        campaign=campaign,
+        rows_path=rows_path,
+        job_evidence=job_evidence,
+    )
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "result.json").write_text(
@@ -1128,6 +1345,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"counted={report['inputs']['counted_cells']} "
         f"excluded={report['inputs']['excluded_cells']} -> {out_dir}"
     )
+    if args.fail_on_decision_blocker and decision_packet_has_blocker(report["decision_packet"]):
+        packet = report["decision_packet"]
+        print(
+            "decision_blocker=true "
+            f"manuscript_table_status={packet['manuscript_table_status']} "
+            f"s30_decision_status={packet['s30_decision_status']}",
+            file=sys.stderr,
+        )
+        return 4
     return 0
 
 

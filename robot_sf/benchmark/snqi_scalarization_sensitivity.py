@@ -37,6 +37,10 @@ REQUIRED_SENSITIVITY_METRICS = (
     "comfort_exposure",
 )
 OPTIONAL_SENSITIVITY_METRICS = ("force_exceed_events", "jerk_mean")
+OPTIONAL_WEIGHTED_SENSITIVITY_METRICS = {
+    "force_exceed_events": "w_force_exceed",
+    "jerk_mean": "w_jerk",
+}
 BOUNDED_NORMALIZED_SENSITIVITY_METRICS = (
     "success",
     "time_to_goal_norm",
@@ -119,7 +123,7 @@ def classify_scalarization_sensitivity_inputs(
     state = _SensitivityPreflightState.empty()
     records = _validate_preflight_inputs(state, records, weights, baseline)
     _collect_preflight_records(
-        state, records, planner_key, fallback_planner_key, scenario_key, horizon_key
+        state, records, weights, planner_key, fallback_planner_key, scenario_key, horizon_key
     )
     missing_cells = _add_global_preflight_issues(state, records, min_planners)
     _add_pareto_preflight_issues(state, weights, baseline, min_planners)
@@ -166,6 +170,7 @@ def _validate_preflight_inputs(
 def _collect_preflight_records(
     state: _SensitivityPreflightState,
     records: Sequence[Mapping[str, Any]],
+    weights: Mapping[str, float],
     planner_key: str,
     fallback_planner_key: str,
     scenario_key: str,
@@ -183,6 +188,7 @@ def _collect_preflight_records(
             state,
             index,
             record,
+            weights,
             planner_key,
             fallback_planner_key,
             scenario_key,
@@ -194,6 +200,7 @@ def _collect_preflight_record(
     state: _SensitivityPreflightState,
     index: int,
     record: Mapping[str, Any],
+    weights: Mapping[str, float],
     planner_key: str,
     fallback_planner_key: str,
     scenario_key: str,
@@ -220,7 +227,7 @@ def _collect_preflight_record(
         )
         return
 
-    _add_metric_preflight_issues(state, index, _metrics(record))
+    _add_metric_preflight_issues(state, index, _metrics(record), weights)
     planner_name = str(planner)
     scenario_horizon = (str(scenario), str(horizon))
     state.grouped.setdefault(planner_name, []).append(record)
@@ -240,7 +247,10 @@ def _preflight_planner(
 
 
 def _add_metric_preflight_issues(
-    state: _SensitivityPreflightState, index: int, metrics: Mapping[str, Any]
+    state: _SensitivityPreflightState,
+    index: int,
+    metrics: Mapping[str, Any],
+    weights: Mapping[str, float],
 ) -> None:
     for metric in REQUIRED_SENSITIVITY_METRICS:
         if metric not in metrics:
@@ -266,7 +276,14 @@ def _add_metric_preflight_issues(
             )
 
     for metric in OPTIONAL_SENSITIVITY_METRICS:
-        if metric in metrics and not _is_finite_metric(metrics.get(metric)):
+        if metric not in metrics:
+            if _is_active_optional_weight(weights, metric):
+                state.add_issue(
+                    "missing_weighted_optional_term",
+                    SENSITIVITY_PREFLIGHT_BLOCKED,
+                    f"record {index} missing weighted SNQI term {metric!r}",
+                )
+        elif not _is_finite_metric(metrics.get(metric)):
             state.add_issue(
                 "non_finite_optional_term",
                 SENSITIVITY_PREFLIGHT_MALFORMED,
@@ -433,7 +450,7 @@ def build_scalarization_sensitivity_report(
         dominance, and Pareto-front rows.
     """
 
-    _validate_export_required_terms(records)
+    _validate_export_required_terms(records, weights)
     grouped = _group_records(records, planner_key, fallback_planner_key)
     if len(grouped) < 2:
         raise ValueError("at least two planners are required for rank-sensitivity diagnostics")
@@ -796,7 +813,9 @@ def _group_records(
     return grouped
 
 
-def _validate_export_required_terms(records: Sequence[Mapping[str, Any]]) -> None:
+def _validate_export_required_terms(
+    records: Sequence[Mapping[str, Any]], weights: Mapping[str, float]
+) -> None:
     """Fail closed before export when required SNQI terms would otherwise default."""
 
     for index, record in enumerate(records, start=1):
@@ -817,6 +836,18 @@ def _validate_export_required_terms(records: Sequence[Mapping[str, Any]]) -> Non
             ):
                 raise ValueError(
                     f"record {index} normalized SNQI term {metric!r} outside [0, 1]; "
+                    "run scalarization-sensitivity preflight before export"
+                )
+        for metric in OPTIONAL_SENSITIVITY_METRICS:
+            if metric not in metrics:
+                if _is_active_optional_weight(weights, metric):
+                    raise ValueError(
+                        f"record {index} missing weighted SNQI term {metric!r}; "
+                        "run scalarization-sensitivity preflight before export"
+                    )
+            elif not _is_finite_metric(metrics.get(metric)):
+                raise ValueError(
+                    f"record {index} non-finite optional SNQI term {metric!r}; "
                     "run scalarization-sensitivity preflight before export"
                 )
 
@@ -1125,6 +1156,31 @@ def _is_finite_metric(value: Any) -> bool:
 
 def _is_unit_interval(value: Any) -> bool:
     return 0.0 <= float(value) <= 1.0
+
+
+def _is_active_weight(value: Any) -> bool:
+    try:
+        weight = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(weight) and weight != 0.0
+
+
+def _is_active_optional_weight(weights: Any, metric: str) -> bool:
+    """Whether ``metric``'s SNQI weight is present and active in ``weights``.
+
+    Returns:
+        ``True`` when ``weights`` is a mapping carrying an active (finite,
+        nonzero) weight for ``metric``. Returns ``False`` when ``weights`` is
+        not a mapping, so malformed-weight inputs are reported by the dedicated
+        ``weights_not_mapping`` check instead of crashing the preflight/export
+        guards with ``AttributeError``.
+    """
+
+    if not isinstance(weights, Mapping):
+        return False
+    weight_name = OPTIONAL_WEIGHTED_SENSITIVITY_METRICS[metric]
+    return _is_active_weight(weights.get(weight_name, 0.0))
 
 
 def _mean(values: Iterable[float]) -> float:

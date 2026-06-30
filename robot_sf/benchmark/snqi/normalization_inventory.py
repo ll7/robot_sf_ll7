@@ -39,6 +39,39 @@ SCALING_BASELINE_NORMALIZED = "baseline_normalized"
 NORMALIZED_LOWER = 0.0
 NORMALIZED_UPPER = 1.0
 
+SNQI_LEGACY_SCORE_VERSION = "SNQI-v0"
+SNQI_LEGACY_SCORE_STATUS = "legacy_mixed_basis_diagnostic_only"
+
+# Static SNQI score-version contract. All values are immutable scalars, so a
+# shallow copy is sufficient to isolate callers from mutating the shared source.
+_SNQI_VERSION_CONTRACT: dict[str, object] = {
+    "schema_version": "snqi_score_version_contract.v1",
+    "score_version": SNQI_LEGACY_SCORE_VERSION,
+    "status": SNQI_LEGACY_SCORE_STATUS,
+    "diagnostic_only": True,
+    "mixed_basis_preserved": True,
+    "score_semantics_changed": False,
+    "decision_required_issue": 3699,
+    "future_bounded_contract": "SNQI-v1",
+    "policy": (
+        "Historical SNQI-v0 keeps the mixed raw/baseline-normalized basis for "
+        "reproducibility and must not be used as a primary safety ranking."
+    ),
+}
+
+
+def build_snqi_version_contract() -> dict[str, object]:
+    """Return the current versioned SNQI normalization contract.
+
+    Issue #3699's current product decision preserves historical SNQI as a
+    legacy diagnostic while deferring any bounded/recalibrated score to a
+    separately versioned contract.
+
+    Returns a fresh shallow copy so callers cannot mutate the shared constant.
+    """
+
+    return _SNQI_VERSION_CONTRACT.copy()
+
 
 @dataclass(frozen=True)
 class TermScaling:
@@ -381,6 +414,7 @@ def build_snqi_contribution_diagnostics(
         "weight_bound_exceedances": weight_bound_exceedances,
         "has_weight_bound_exceedance": bool(weight_bound_exceedances),
         "normalization_contract": normalization_contract,
+        "score_version_contract": build_snqi_version_contract(),
         "terms": [contribution.to_dict() for contribution in contributions],
     }
 
@@ -457,6 +491,7 @@ class NormalizationInventory:
             "unbounded_terms": [t.term for t in self.unbounded_terms],
             "missing_baseline_coverage": [t.metric_key for t in self.missing_baseline_coverage],
             "is_consistent": self.is_consistent,
+            "score_version_contract": build_snqi_version_contract(),
         }
 
 
@@ -499,6 +534,8 @@ def format_normalization_report(inventory: NormalizationInventory) -> str:
             f"{term.metric_key:<24}{term.measurement_basis}"
         )
     lines.append(f"  mixed_scale            : {inventory.mixed_scale}")
+    contract = build_snqi_version_contract()
+    lines.append(f"  score version          : {contract['score_version']} ({contract['status']})")
     lines.append(
         "  raw penalty terms      : "
         + (", ".join(t.term for t in inventory.raw_penalty_terms) or "<none>")
@@ -520,12 +557,15 @@ __all__ = [
     "NORMALIZED_UPPER",
     "SCALING_BASELINE_NORMALIZED",
     "SCALING_RAW",
+    "SNQI_LEGACY_SCORE_STATUS",
+    "SNQI_LEGACY_SCORE_VERSION",
     "SNQI_TERM_SCALING",
     "NormalizationInventory",
     "TermContribution",
     "TermScaling",
     "build_snqi_contribution_diagnostics",
     "build_snqi_normalization_inventory",
+    "build_snqi_version_contract",
     "format_normalization_report",
     "scaled_term_value",
 ]

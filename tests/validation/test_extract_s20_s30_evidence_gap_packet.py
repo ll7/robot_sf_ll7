@@ -255,6 +255,8 @@ def test_tracked_packet_rejects_claim_promoting_review_file(tmp_path: Path) -> N
         assert "promotable review file promoted a claim" in str(exc)
     else:
         raise AssertionError("claim-promoting review file should fail closed")
+
+
 def test_packet_output_argument_writes_compact_json(tmp_path: Path) -> None:
     """Packet write path keeps manifest generation machine-readable and local."""
     root = _write_complete_artifact_root(tmp_path / "13175")

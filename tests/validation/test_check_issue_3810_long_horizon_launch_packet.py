@@ -41,6 +41,7 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["live_issue_state"] == "state:running"
     assert summary["go_no_go"] == "blocked_pending_submit_host_route_and_reconciliation"
     assert summary["private_ops_dry_run"] == "route_unverified"
+    assert summary["interpretation_gate"] == "blocked_pending_active_run_retention_reconciliation"
 
 
 def test_issue_3810_packet_rejects_authorized_submit() -> None:
@@ -119,6 +120,49 @@ def test_issue_3810_packet_rejects_missing_private_ops_dry_run() -> None:
         assert "private_ops_dry_run must be a mapping" in str(exc)
     else:
         raise AssertionError("packet should reject missing private-ops dry run")
+
+
+def test_issue_3810_packet_rejects_unblocked_interpretation_gate() -> None:
+    """The active run must stay analysis-blocking until retention reconciles."""
+    packet = _load_packet()
+    packet["launch_packet"]["interpretation_gate"]["status"] = "ready_for_claims"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "interpretation gate must stay blocked" in str(exc)
+    else:
+        raise AssertionError("packet should reject an unblocked interpretation gate")
+
+
+def test_issue_3810_packet_rejects_missing_interpretation_evidence() -> None:
+    """Report interpretation requires retained evidence and analysis inputs."""
+    packet = _load_packet()
+    packet["launch_packet"]["interpretation_gate"]["required_evidence"].remove(
+        "external_artifact_pointer"
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "interpretation gate evidence missing" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing interpretation evidence")
+
+
+def test_issue_3810_packet_rejects_claim_promotion_policy() -> None:
+    """Passing the public packet must not imply benchmark claim promotion."""
+    packet = _load_packet()
+    packet["launch_packet"]["interpretation_gate"]["decision_policy"] = (
+        "Reports may be promoted after the local public packet passes."
+    )
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "interpretation gate must block claim promotion" in str(exc)
+    else:
+        raise AssertionError("packet should reject weak interpretation policy")
 
 
 def test_issue_3810_packet_rejects_missing_go_no_go_status() -> None:

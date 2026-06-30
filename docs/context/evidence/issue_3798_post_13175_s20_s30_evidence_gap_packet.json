@@ -3,7 +3,7 @@
   "job_id": "13175",
   "status": "diagnostic_only",
   "claim_boundary": "diagnostic-only evidence-gap packet; no full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim edits, and no S20/S30 claim promotion",
-  "artifact_root": "/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-l40s-mem180/13175",
+  "artifact_root": "output/issue1554-s20-h500-l40s-mem180/13175",
   "retrieved_artifacts": {
     "file_count": 56,
     "total_bytes": 185111675,
@@ -122,6 +122,10 @@
     {
       "command": "uv run python scripts/validation/check_s20_s30_archive_readiness.py --json",
       "purpose": "Fail-closed archive-readiness check; remains the claim gate for a canonical result store."
+    },
+    {
+      "command": "uv run python scripts/validation/extract_s20_s30_evidence_gap_packet.py --artifact-root output/issue1554-s20-h500-l40s-mem180/13175 --job-id 13175 --packet-output /tmp/issue_3798_packet.json",
+      "purpose": "Persist compact diagnostic packet JSON without promoting artifacts."
     }
   ],
   "next_slurm_go_no_go": {

@@ -13,9 +13,9 @@ This report is **diagnostic only**: it inventories each term's scaling regime,
 flags the mixed-scale condition and any baseline-normalized term lacking
 median/p95 coverage, prints a human-readable summary, and optionally writes a
 JSON payload. It does **not** change the SNQI formula, the weights,
-``normalize_metric``, or any emitted score, and it does **not** choose between
-the normalize vs. clip-and-document remedies (that remains ``decision-required``
-on issue #3699).
+``normalize_metric``, or any emitted score. Issue #3699 freezes this legacy
+mixed-basis score as ``SNQI-v0``; bounded/recalibrated scoring belongs to
+successor ``SNQI-v1`` redesign in issue #3978.
 
 With ``--fail-on-mixed-scale`` the command exits non-zero while penalty terms
 span both scales (fail-closed), so it can gate a preflight that must stay aware
@@ -52,7 +52,8 @@ CLAIM_BOUNDARY = (
     "diagnostic_only: inventories the per-term scaling of compute_snqi and flags where raw, "
     "unbounded terms (time, comfort) are mixed with baseline-normalized terms, making the "
     "weights non-comparable. It does not change the SNQI formula, weights, normalize_metric, or "
-    "any emitted score, and does not choose a remedy (decision-required, issue #3699)."
+    "any emitted score. SNQI-v0 preserves the mixed-basis diagnostic contract; "
+    "SNQI-v1 redesign is tracked by issue #3978."
 )
 
 
@@ -170,7 +171,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             "Normalization contract: "
             f"status={contract['status']}; "
             f"weights_comparable={contract['weights_comparable']}; "
-            f"decision_required_issue={contract['decision_required_issue']}"
+            f"decision_issue={contract['decision_issue']}; "
+            f"successor_issue={contract['successor_issue']}"
         )
 
     if args.json_out is not None:

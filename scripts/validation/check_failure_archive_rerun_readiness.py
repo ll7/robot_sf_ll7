@@ -52,6 +52,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional rerun report JSON; diagnostic-only markers cap the verdict.",
     )
     parser.add_argument(
+        "--null-test-prerequisites",
+        type=Path,
+        default=None,
+        help="Optional null-test prerequisite JSON/report required before held-out claims.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -68,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         args.source_archive,
         args.rerun_archive,
         rerun_output=args.rerun_output,
+        null_test_prerequisites=args.null_test_prerequisites,
     )
     payload = readiness.to_payload()
     rendered = json.dumps(payload, indent=2, sort_keys=True)

@@ -1,0 +1,7 @@
+{
+  "collisions": {"med": 1.0, "p95": 3.0},
+  "near_misses": {"med": 2.0, "p95": 5.0},
+  "comfort_exposure": {"med": 0.2, "p95": 0.8},
+  "force_exceed_events": {"med": 1.0, "p95": 4.0},
+  "jerk_mean": {"med": 0.2, "p95": 0.7}
+}

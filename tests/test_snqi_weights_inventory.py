@@ -152,6 +152,18 @@ def test_repo_code_default_is_reported_distinct_from_shipped_canonical_model():
         conflict.severity == "error" and conflict.sources == ["code_default", "model_canonical_v1"]
         for conflict in canonical_conflicts
     )
+    shipped_mismatches = [
+        conflict
+        for conflict in report.conflicts
+        if conflict.kind == "code_default_shipped_direction_mismatch"
+    ]
+    assert sorted(conflict.sources[1] for conflict in shipped_mismatches) == [
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    assert all(conflict.severity == "warning" for conflict in shipped_mismatches)
     assert report.has_blocking_conflict
 
 
@@ -166,6 +178,16 @@ def test_conflicting_canonical_sources_detected_fail_closed(tmp_path):
     assert summary["unregistered_shipped_source_count"] == 0
     assert summary["canonical_declaring_sources"] == ["code_default", "model_canonical_v1"]
     assert summary["blocking_conflict_kinds"] == ["canonical_direction_conflict"]
+    shipped_mismatches = [
+        c for c in report.conflicts if c.kind == "code_default_shipped_direction_mismatch"
+    ]
+    assert sorted(c.sources for c in shipped_mismatches) == [
+        ["code_default", "camera_ready_v1"],
+        ["code_default", "camera_ready_v2"],
+        ["code_default", "camera_ready_v3"],
+        ["code_default", "model_canonical_v1"],
+    ]
+    assert all(c.severity == "warning" for c in shipped_mismatches)
 
     direction_conflicts = [c for c in report.conflicts if c.kind == "canonical_direction_conflict"]
     assert direction_conflicts, "expected a canonical direction conflict"
@@ -276,6 +298,44 @@ def test_zero_sum_shipped_source_reports_comparison_unavailable_reason():
     assert comparison.relationship == "unavailable"
     assert comparison.available is False
     assert comparison.load_error == "no_comparable_direction"
+
+
+def test_zero_sum_canonical_source_fails_closed_as_uncomparable_direction():
+    """Canonical-labeled source must be comparable, not merely loadable."""
+    code_default = WeightSetRecord(
+        name="code_default",
+        kind="code_default",
+        relpath=None,
+        versioned_id="snqi_weights_code_default_v1",
+        declares_canonical=True,
+        available=True,
+        weights=dict.fromkeys(WEIGHT_NAMES, 1.0),
+        weight_sum=float(len(WEIGHT_NAMES)),
+        dominant_term="w_success",
+        scale_class="raw",
+    )
+    zero_sum = WeightSetRecord(
+        name="model_canonical_zero",
+        kind="shipped_json",
+        relpath="model/snqi_canonical_zero.json",
+        versioned_id="snqi_weights_model_canonical_zero",
+        declares_canonical=True,
+        available=True,
+        weights=dict.fromkeys(WEIGHT_NAMES, 0.0),
+        weight_sum=0.0,
+        dominant_term=None,
+        scale_class=None,
+        load_error=None,
+    )
+
+    conflicts = detect_conflicts([code_default, zero_sum])
+
+    uncomparable = [
+        conflict for conflict in conflicts if conflict.kind == "canonical_uncomparable_direction"
+    ]
+    assert len(uncomparable) == 1
+    assert uncomparable[0].severity == "error"
+    assert uncomparable[0].sources == ["model_canonical_zero"]
 
 
 def test_no_blocking_conflict_when_canonical_sources_agree(tmp_path):

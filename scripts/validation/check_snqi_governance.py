@@ -10,6 +10,7 @@ or promote SNQI to a primary safety ranking.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import sys
@@ -103,6 +104,21 @@ def build_governance_report(
                     "More than one SNQI source currently declares or implies "
                     "canonical status while disagreeing on weight direction."
                 ),
+                "discovered_weight_sources": [
+                    {
+                        "name": record["name"],
+                        "kind": record["kind"],
+                        "relpath": record["relpath"],
+                        "versioned_id": record["versioned_id"],
+                        "declares_canonical": record["declares_canonical"],
+                        "available": record["available"],
+                        "dominant_term": record["dominant_term"],
+                        "scale_class": record["scale_class"],
+                        "content_sha256": record["content_sha256"],
+                        "load_error": record["load_error"],
+                    }
+                    for record in weight_report["records"]
+                ],
                 "registered_sources": source_summary["registered_sources"],
                 "discovered_shipped_sources": source_summary["discovered_shipped_sources"],
                 "canonical_declaring_sources": source_summary["canonical_declaring_sources"],
@@ -137,6 +153,32 @@ def build_governance_report(
                     "relative priorities."
                 ),
                 "mixed_inputs": mixed_inputs,
+                "contribution_check": {
+                    "schema_version": contribution_diagnostics["schema_version"],
+                    "diagnostic_only": contribution_diagnostics["diagnostic_only"],
+                    "raw_penalty_absolute_share": contribution_diagnostics[
+                        "raw_penalty_absolute_share"
+                    ],
+                    "baseline_normalized_penalty_absolute_share": contribution_diagnostics[
+                        "baseline_normalized_penalty_absolute_share"
+                    ],
+                    "raw_penalty_terms_dominate": contribution_diagnostics[
+                        "raw_penalty_terms_dominate"
+                    ],
+                    # Deep-copy the nested list so the blocker payload does not alias the
+                    # same list object returned under report["normalization_contributions"].
+                    "weight_bound_exceedance_terms": copy.deepcopy(
+                        contribution_diagnostics["normalization_contract"][
+                            "weight_bound_exceedance_terms"
+                        ]
+                    ),
+                    "normalization_contract_status": contribution_diagnostics[
+                        "normalization_contract"
+                    ]["status"],
+                    "weights_comparable": contribution_diagnostics["normalization_contract"][
+                        "weights_comparable"
+                    ],
+                },
             }
         )
     if baseline_stats is not None and normalization.missing_baseline_coverage:
@@ -152,6 +194,38 @@ def build_governance_report(
             }
         )
 
+    score_version_contract = normalization.score_version_contract
+    normalization_checker = {
+        "issue": 3699,
+        "successor_issue": score_version_contract["successor_issue"],
+        "score_version": score_version_contract["score_version"],
+        "status": score_version_contract["status"],
+        "diagnostic_only": score_version_contract["diagnostic_only"],
+        "decision_recorded": True,
+        "score_semantics_changed": score_version_contract["score_semantics_changed"],
+        "assumption": (
+            "No score semantics changed; SNQI-v0 intentionally preserves the "
+            "mixed-basis diagnostic contract while SNQI-v1 redesign is tracked "
+            "by issue #3978."
+        ),
+        "mixed_scale": normalization.mixed_scale,
+        "weights_comparable": contribution_diagnostics["normalization_contract"][
+            "weights_comparable"
+        ],
+        "normalization_contract_status": contribution_diagnostics["normalization_contract"][
+            "status"
+        ],
+        "raw_penalty_absolute_share": contribution_diagnostics["raw_penalty_absolute_share"],
+        "baseline_normalized_penalty_absolute_share": contribution_diagnostics[
+            "baseline_normalized_penalty_absolute_share"
+        ],
+        "raw_penalty_terms_dominate": contribution_diagnostics["raw_penalty_terms_dominate"],
+        "has_weight_bound_exceedance": contribution_diagnostics["has_weight_bound_exceedance"],
+        "weight_bound_exceedance_terms": contribution_diagnostics["normalization_contract"][
+            "weight_bound_exceedance_terms"
+        ],
+    }
+
     return {
         "schema_version": "snqi_governance_preflight.v1",
         "claim_boundary": CLAIM_BOUNDARY,
@@ -160,6 +234,7 @@ def build_governance_report(
         "weights": weights.to_dict(),
         "normalization": normalization.to_dict(),
         "normalization_contributions": contribution_diagnostics,
+        "normalization_checker": normalization_checker,
     }
 
 
@@ -167,6 +242,13 @@ def _print_text_report(report: dict[str, Any]) -> None:
     """Print a compact human-readable report."""
     print(CLAIM_BOUNDARY)
     print(f"SNQI governance status: {report['status']}")
+    canonical_decision = report["weights"]["source_summary"]["canonical_decision"]
+    print(
+        "Canonical SNQI weight decision: "
+        f"{canonical_decision['status']}; "
+        f"selected_versioned_id={canonical_decision['selected_versioned_id']}; "
+        f"ambiguous_label={canonical_decision['ambiguous_unversioned_label']}"
+    )
     if report["blockers"]:
         print("Blocking diagnostics:")
         for blocker in report["blockers"]:
@@ -215,6 +297,13 @@ def _print_text_report(report: dict[str, Any]) -> None:
         f"raw_penalty_terms={', '.join(normalization['raw_penalty_terms']) or 'none'}; "
         f"unbounded_terms={', '.join(normalization['unbounded_terms']) or 'none'}"
     )
+    version_contract = normalization["score_version_contract"]
+    print(
+        "Score version contract: "
+        f"{version_contract['score_version']}; "
+        f"status={version_contract['status']}; "
+        f"diagnostic_only={version_contract['diagnostic_only']}"
+    )
     print("Term normalization status:")
     for term in normalization["terms"]:
         role = "penalty" if term["is_penalty"] else "reward"
@@ -230,7 +319,18 @@ def _print_text_report(report: dict[str, Any]) -> None:
         "baseline_normalized_penalty_share="
         f"{contributions['baseline_normalized_penalty_absolute_share']:.3f}; "
         f"raw_penalty_terms_dominate={contributions['raw_penalty_terms_dominate']}; "
-        f"has_weight_bound_exceedance={contributions['has_weight_bound_exceedance']}"
+        f"has_weight_bound_exceedance={contributions['has_weight_bound_exceedance']}; "
+        "weight_bound_exceedance_terms="
+        f"{', '.join(contributions['normalization_contract']['weight_bound_exceedance_terms']) or 'none'}"
+    )
+    checker = report["normalization_checker"]
+    print(
+        "Normalization checker: "
+        f"issue={checker['issue']} successor_issue={checker['successor_issue']} "
+        f"score_version={checker['score_version']} diagnostic_only={checker['diagnostic_only']} "
+        f"decision_recorded={checker['decision_recorded']} "
+        f"weights_comparable={checker['weights_comparable']} mixed_scale={checker['mixed_scale']} "
+        f"status={checker['status']} assumption='{checker['assumption']}'"
     )
 
 

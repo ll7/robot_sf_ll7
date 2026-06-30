@@ -57,7 +57,7 @@ def build_packet(artifact_root: Path, *, job_id: str = DEFAULT_JOB_ID) -> dict[s
         "schema_version": SCHEMA_VERSION,
         "status": "blocked_missing_retrieved_metadata" if missing_files else "diagnostic_only",
         "job_id": str(job_id),
-        "artifact_root": str(root),
+        "artifact_root": _display_path(root),
         "claim_boundary": CLAIM_BOUNDARY,
         "campaign": _campaign_metadata(manifest, run_meta),
         "retrieved_artifacts": {
@@ -113,6 +113,14 @@ def build_packet(artifact_root: Path, *, job_id: str = DEFAULT_JOB_ID) -> dict[s
         ],
     }
     return packet
+
+
+def _display_path(path: Path) -> str:
+    """Return a stable repository-relative path when possible."""
+    try:
+        return path.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def load_packet_fixture(packet_fixture: Path) -> dict[str, Any]:
@@ -394,6 +402,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Tracked compact packet JSON used when ignored raw artifacts are unavailable.",
     )
     parser.add_argument("--job-id", default=DEFAULT_JOB_ID)
+    parser.add_argument(
+        "--packet-output",
+        type=Path,
+        help="Write compact packet JSON artifact to this path.",
+    )
     parser.add_argument("--markdown", action="store_true", help="Print a Markdown packet.")
     parser.add_argument("--json", action="store_true", help="Print the packet JSON.")
     parser.add_argument("--output", type=Path, help="Optional output path for the rendered packet.")
@@ -417,6 +430,12 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_text(rendered, encoding="utf-8")
     else:
         print(rendered, end="")
+    if args.packet_output is not None:
+        args.packet_output.parent.mkdir(parents=True, exist_ok=True)
+        args.packet_output.write_text(
+            json.dumps(packet, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     return 1 if packet["status"] == "blocked_missing_retrieved_metadata" else 0
 
 

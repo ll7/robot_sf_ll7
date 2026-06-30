@@ -273,11 +273,7 @@ launch_packet:
     checksum_policy: checksum_pin_before_claim
     comparison_rule: within_regime_only_no_cross_regime_absolute_snqi_claim
   horizon_sensitivity_report:
-    command: >
-      uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py
-      --long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi
-      --short-campaign-reference docs/context/evidence/prior_scoped_h100_reference
-      --output-dir output/benchmarks/issue_3810_comprehensive_h600_snqi/reports
+    command: uv run python scripts/benchmark/build_horizon_timestep_denominator_report.py --long-campaign output/benchmarks/issue_3810_comprehensive_h600_snqi --short-campaign-reference docs/context/evidence/prior_scoped_h100_reference --output-dir output/benchmarks/issue_3810_comprehensive_h600_snqi/reports
     required_fields:
       - timeout_rate
       - max_steps_share
@@ -286,8 +282,14 @@ launch_packet:
       - rank_inversion_persistence
       - comparison_scope_caveat
     required_caveat: prior_scoped_short_horizon_vs_new_comprehensive_long_horizon_not_horizon_only
+    required_outputs:
+      - reports/horizon_sensitivity_report.json
+      - reports/horizon_sensitivity_report.md
   wait_it_out_guard:
     diagnostic_name: interaction_exposure
+    command: uv run python scripts/analysis/interaction_exposure_report.py --campaign output/benchmarks/issue_3810_comprehensive_h600_snqi --output output/benchmarks/issue_3810_comprehensive_h600_snqi/reports/interaction_exposure_diagnostics.json
+    required_outputs:
+      - reports/interaction_exposure_diagnostics.json
     required_episode_fields:
       - interaction_exposure_share
       - robot_motion_share_before_first_clearance

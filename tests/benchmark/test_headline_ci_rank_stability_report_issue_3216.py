@@ -280,3 +280,48 @@ def test_adjacent_rank_claims_mark_ci_separable() -> None:
     assert claim["higher_rank_planner"] == "best"
     assert claim["lower_rank_planner"] == "worst"
     assert claim["decision"] == "ci_separable"
+
+
+def test_dry_run_fixture_stays_diagnostic_and_fail_closed() -> None:
+    """Built-in dry-run rows exercise CI/rank paths without paper-claim promotion."""
+
+    rows = mod._dry_run_rows()
+    report = _report(rows)
+
+    assert report["classification"] == "diagnostic"
+    assert report["inputs"]["excluded_cells"] == 1
+    assert any(cell["planner_key"] == "excluded_degraded" for cell in report["cells"])
+    degraded = next(cell for cell in report["cells"] if cell["planner_key"] == "excluded_degraded")
+    assert degraded["counted"] is False
+    assert "degraded" in degraded["exclusion_reason"]
+    assert len(report["rank_stability"]) == 2
+    assert any(
+        claim["decision"] == "not_statistically_distinguishable_budget"
+        for claim in report["adjacent_rank_claims"]
+    )
+
+
+def test_dry_run_cli_writes_report_without_rows_file(tmp_path) -> None:
+    """CLI dry-run does not require a rows path or campaign artifact."""
+
+    out_dir = tmp_path / "report"
+
+    exit_code = mod.main(
+        [
+            "--dry-run",
+            "--bootstrap-samples",
+            "0",
+            "--rank-resamples",
+            "25",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    result = out_dir / "result.json"
+    markdown = out_dir / "report.md"
+    assert result.is_file()
+    assert markdown.is_file()
+    assert "builtin://issue3216-dry-run" in result.read_text(encoding="utf-8")
+    assert "**Classification**: `diagnostic`" in markdown.read_text(encoding="utf-8")

@@ -464,6 +464,27 @@ def test_baseline_loader_refuses_missing_normalized_fixture_input(tmp_path: Path
         load_baseline_mapping(baseline_path)
 
 
+@pytest.mark.parametrize(
+    ("entry", "match"),
+    [
+        ({"med": 0.0}, "must provide finite med/p95 values"),
+        ({"med": 0.0, "p95": "nan"}, "has non-finite med/p95 values"),
+        ({"med": 1.0, "p95": 1.0}, "must satisfy p95 > med"),
+    ],
+)
+def test_baseline_loader_refuses_invalid_normalized_stats(
+    tmp_path: Path, entry: dict[str, float | str], match: str
+) -> None:
+    """Baseline fixture loader validates normalized-stat shape and range."""
+    baseline = _baseline()
+    baseline["near_misses"] = entry
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=match):
+        load_baseline_mapping(baseline_path)
+
+
 def test_cli_refuses_malformed_baseline_without_writing_artifacts(tmp_path: Path, capsys) -> None:
     """CLI refuses malformed normalized baseline fixtures before artifacts exist."""
     episodes_path = tmp_path / "episodes.jsonl"

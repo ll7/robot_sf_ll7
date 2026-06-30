@@ -281,6 +281,7 @@ def cmd_inventory_weights(args: argparse.Namespace) -> int:
                         f"- {rec.name:18s} dominant={rec.dominant_term:14s} "
                         f"scale={rec.scale_class:18s} "
                         f"canonical={'yes' if rec.declares_canonical else 'no'} "
+                        f"sha256={(rec.content_sha256 or 'unknown')[:12]} "
                         f"({rec.relpath or 'code default'})"
                     )
                 else:
@@ -383,6 +384,7 @@ def create_parser() -> argparse.ArgumentParser:
     # Weight-set provenance inventory subcommand (read-only diagnostic)
     inventory_parser = subparsers.add_parser(
         "inventory",
+        aliases=["weights-inventory"],
         help="Inventory SNQI weight sets and report provenance conflicts (read-only)",
     )
     inventory_parser.add_argument(
@@ -424,7 +426,7 @@ def main() -> int:
         return cmd_recompute_weights(args)
     elif args.command == "ablation":
         return cmd_ablation_analysis(args)
-    elif args.command == "inventory":
+    elif args.command in {"inventory", "weights-inventory"}:
         return cmd_inventory_weights(args)
     else:
         return 1

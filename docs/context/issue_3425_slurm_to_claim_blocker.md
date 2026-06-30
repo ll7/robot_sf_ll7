@@ -105,6 +105,10 @@ the smallest external action to unblock it; exit `2` means an input could not be
 reuses the canonical loaders in `scripts/tools/reconcile_slurm_evidence.py`, so it evaluates exactly
 the inputs the real reconciliation consumes.
 
+Successful finalizers must point at durable artifact storage (`wandb`, `http(s)`, `s3`, `gs`,
+or `dvc`). Worktree-local paths such as `output/...` are blocked because `output/` is not durable
+across machines or worktrees.
+
 ## Current Decision
 
 `block`: no SLURM job was submitted, no finalizer manifest was produced, no durable pointer was

@@ -7,15 +7,19 @@ distance-based ``near_misses`` metric is left untouched (backward compatibility)
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.metrics import EpisodeData
+from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 from robot_sf.benchmark.near_miss_ttc import (
     DIAGNOSTIC_TTC_THRESHOLD_S,
     NearMissTtcInputError,
+    build_ttc_near_miss_decision_packet,
     compute_ttc_near_miss_diagnostic,
     near_miss_ttc_input_readiness,
+    render_ttc_near_miss_decision_packet_markdown,
 )
 
 
@@ -222,3 +226,162 @@ def test_canonical_near_misses_metric_unchanged():
 
     assert before == after
     assert before > 0.0  # sanity: the canonical metric actually fired here
+
+
+def test_compute_all_metrics_omits_ttc_metric_by_default():
+    """TTC near-miss count is opt-in; default metrics keep legacy surface."""
+    data = _fast_head_on_episode()
+
+    metrics = compute_all_metrics(data, horizon=data.robot_pos.shape[0])
+
+    assert metrics["near_misses"] == 0.0
+    assert "near_misses_ttc" not in metrics
+    assert "near_miss_ttc__count" not in metrics
+
+
+def test_compute_all_metrics_emits_opt_in_ttc_count_and_keeps_legacy_metric():
+    """Opt-in TTC count flags fast approach while distance near_misses stays unchanged."""
+    data = _fast_head_on_episode()
+
+    metrics = compute_all_metrics(
+        data,
+        horizon=data.robot_pos.shape[0],
+        experimental_near_miss_ttc=True,
+        near_miss_ttc_threshold_s=1.0,
+    )
+
+    assert metrics["near_misses"] == 0.0
+    assert metrics["near_misses_ttc"] > 0.0
+    assert metrics["near_misses_ttc_status"] == "ok"
+    assert metrics["near_misses_ttc_threshold_s"] == 1.0
+    assert metrics["near_miss_ttc__count"] == metrics["near_misses_ttc"]
+
+
+def test_compute_all_metrics_ttc_contrasts_fast_and_slow_at_equal_clearance():
+    """Same sampled clearance but different timing separates closing-speed risk."""
+    robot_pos = np.column_stack([np.linspace(0.0, 2.0, 6), np.zeros(6)])
+    peds_pos = np.zeros((6, 1, 2))
+    peds_pos[:, 0, 0] = 4.0
+
+    fast = _make_episode(robot_pos=robot_pos, peds_pos=peds_pos, dt=0.1)
+    slow = _make_episode(robot_pos=robot_pos, peds_pos=peds_pos, dt=1.0)
+
+    fast_metrics = compute_all_metrics(
+        fast,
+        horizon=fast.robot_pos.shape[0],
+        experimental_near_miss_ttc=True,
+        near_miss_ttc_threshold_s=1.0,
+    )
+    slow_metrics = compute_all_metrics(
+        slow,
+        horizon=slow.robot_pos.shape[0],
+        experimental_near_miss_ttc=True,
+        near_miss_ttc_threshold_s=1.0,
+    )
+
+    assert fast_metrics["near_misses"] == slow_metrics["near_misses"] == 0.0
+    assert fast_metrics["near_misses_ttc"] > 0.0
+    assert slow_metrics["near_misses_ttc"] == 0.0
+    assert (
+        fast_metrics["near_miss_ttc__max_closing_speed_mps"]
+        > slow_metrics["near_miss_ttc__max_closing_speed_mps"]
+    )
+
+
+def test_compute_all_metrics_ttc_fails_closed_on_unsupported_inputs():
+    """Invalid TTC inputs expose unsupported status instead of false zero count."""
+    data = _fast_head_on_episode()
+    data.dt = 0.0
+
+    metrics = compute_all_metrics(
+        data,
+        horizon=data.robot_pos.shape[0],
+        experimental_near_miss_ttc=True,
+    )
+
+    assert metrics["near_misses"] == 0.0
+    assert "near_misses_ttc" not in metrics
+    assert metrics["near_misses_ttc_status"] == "unsupported-inputs"
+    assert any("dt" in reason for reason in metrics["near_misses_ttc_unsupported_reasons"])
+
+
+# --- Issue #3808 read-only decision packet -------------------------------------
+
+
+def test_decision_packet_summarizes_closing_case():
+    """Closing trajectories produce diagnostic-only packet values, not claims."""
+    data = _fast_head_on_episode()
+    packet = build_ttc_near_miss_decision_packet(data, t_thr=1.0)
+
+    assert packet.evidence_status == "diagnostic-only"
+    assert packet.diagnostic_status == "ok"
+    assert packet.diagnostic["near_miss_ttc__count"] > 0
+    assert any("canonical near-miss metric replacement" in item for item in packet.cannot_claim)
+    assert any("robot position" in item for item in packet.available_inputs)
+
+
+def test_decision_packet_summarizes_opening_case_as_unsupported_for_ttc_counts():
+    """Opening trajectories are available inputs but unsupported TTC count evidence."""
+    data = _slow_opening_episode()
+    packet = build_ttc_near_miss_decision_packet(data, t_thr=5.0)
+
+    assert packet.diagnostic_status == "no-approaching-pairs"
+    assert packet.diagnostic["near_miss_ttc__count"] == 0.0
+    assert any("opening or non-converging pairs" in item for item in packet.unsupported_cases)
+
+
+def test_decision_packet_fails_closed_on_missing_timing():
+    """Missing/invalid timing stays unsupported instead of becoming zero evidence."""
+    data = _fast_head_on_episode()
+    data.dt = float("nan")
+
+    packet = build_ttc_near_miss_decision_packet(data)
+
+    assert packet.diagnostic_status == "unsupported-inputs"
+    assert packet.diagnostic == {}
+    assert any("dt" in item for item in packet.unsupported_cases)
+
+
+def test_decision_packet_fails_closed_on_unsupported_trajectory_shape():
+    """Malformed trajectory arrays are listed as unsupported packet inputs."""
+    data = _fast_head_on_episode()
+    data.peds_pos = np.zeros((data.robot_pos.shape[0], 2))
+
+    packet = build_ttc_near_miss_decision_packet(data)
+
+    assert packet.diagnostic_status == "unsupported-inputs"
+    assert any("peds_pos" in item for item in packet.unsupported_cases)
+
+
+def test_decision_packet_renders_markdown_and_json_safe_dict():
+    """Decision packet can be emitted as generated Markdown/JSON-like payload."""
+    packet = build_ttc_near_miss_decision_packet(_slow_opening_episode(), t_thr=1.0)
+
+    payload = packet.to_dict()
+    markdown = render_ttc_near_miss_decision_packet_markdown(packet)
+
+    json.dumps(payload, allow_nan=False)
+    assert payload["issue"] == "#3808"
+    assert payload["evidence_status"] == "diagnostic-only"
+    assert payload["diagnostic"]["near_miss_ttc__status"] == "no-approaching-pairs"
+    assert payload["diagnostic"]["near_miss_ttc__min_ttc_s"] is None
+    assert "# TTC Near-Miss Diagnostic Decision Packet" in markdown
+    assert "Cannot Claim Before Canonical Metric Change" in markdown
+    assert "no planner comparison, benchmark ranking, or paper/dissertation claim" in markdown
+
+
+def test_decision_packet_json_safe_dict_handles_numpy_scalars():
+    """Decision packet JSON conversion handles NumPy scalar values."""
+    packet = build_ttc_near_miss_decision_packet(_slow_opening_episode(), t_thr=1.0)
+    packet.diagnostic["numpy_nan"] = np.float32(np.nan)
+    packet.diagnostic["numpy_float"] = np.float64(1.25)
+    packet.diagnostic["numpy_int"] = np.int64(3)
+    packet.diagnostic["bool_flag"] = True
+
+    payload = packet.to_dict()
+
+    json.dumps(payload, allow_nan=False)
+    assert payload["diagnostic"]["numpy_nan"] is None
+    assert payload["diagnostic"]["numpy_float"] == 1.25
+    assert payload["diagnostic"]["numpy_int"] == 3
+    assert payload["diagnostic"]["bool_flag"] is True

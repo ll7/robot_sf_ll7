@@ -32,6 +32,9 @@ METRIC_ALIASES = {
     "near_misses": ("near_misses", "near_miss"),
     "time_to_goal_norm": ("time_to_goal_norm", "time_to_goal"),
 }
+EXPECTED_CLAIM_STATUS = "to_be_confirmed_by_maintainer"
+EXPECTED_SEED_MODE = "seed-set"
+EXPECTED_SEED_TIER = "s20_then_s30_if_rankflip"
 CLAIM_BOUNDARY = (
     "archive-readiness only; no full benchmark campaign run, no SLURM/GPU submission, "
     "no evidence promotion, and no paper/dissertation claim established"
@@ -45,10 +48,14 @@ class PacketContract:
     campaign_id: str
     target_claim: str
     claim_status: str
+    no_claim_statement: str
     required_metrics: tuple[str, ...]
     planner_rows: tuple[str, ...]
+    seed_mode: str
+    seed_tier: str
     primary_seed_set: str
     escalation_seed_set: str
+    escalate_to_s30_when: str
     seed_sets_path: Path
     result_store: Path
     required_result_store_files: tuple[str, ...]
@@ -78,6 +85,7 @@ def load_packet(packet_path: Path) -> dict[str, Any]:
         )
     if payload.get("no_benchmark_result_claim") is not True:
         raise ValueError(f"{packet_path} must keep no_benchmark_result_claim: true")
+    _required_str(payload, "no_claim_statement")
     return payload
 
 
@@ -107,10 +115,14 @@ def parse_contract(
         campaign_id=campaign_id,
         target_claim=str(claim_gate["target_claim"]),
         claim_status=_required_str(claim_gate, "status"),
+        no_claim_statement=_required_str(payload, "no_claim_statement"),
         required_metrics=tuple(required_metrics),
         planner_rows=tuple(planner_rows),
+        seed_mode=_required_str(seed_policy, "mode"),
+        seed_tier=_required_str(claim_gate, "seed_tier"),
         primary_seed_set=_required_str(seed_policy, "primary_seed_set"),
         escalation_seed_set=_required_str(seed_policy, "escalation_seed_set"),
+        escalate_to_s30_when=_required_str(seed_policy, "escalate_to_s30_when"),
         seed_sets_path=_resolve_repo_path(repo_root, _required_str(seed_policy, "seed_sets_path")),
         result_store=_resolve_repo_path(repo_root, raw_store),
         required_result_store_files=tuple(raw_files),
@@ -135,6 +147,7 @@ def build_report(
     primary_seeds, escalation_seeds = _load_seed_tiers(contract)
 
     diagnostics: list[str] = []
+    diagnostics.extend(_contract_metadata_diagnostics(contract))
     diagnostics.extend(_execution_boundary_diagnostics(contract))
     result_store_files = _result_store_file_status(contract)
     missing_files = [path for path, present in result_store_files.items() if not present]
@@ -176,6 +189,8 @@ def build_report(
         "target_claim_metadata": {
             "target_claim": contract.target_claim,
             "status": contract.claim_status,
+            "expected_status": EXPECTED_CLAIM_STATUS,
+            "no_claim_statement": contract.no_claim_statement,
             "why_s10_insufficient_present": True,
         },
         "planner_rows": list(contract.planner_rows),
@@ -184,6 +199,9 @@ def build_report(
             "primary_seed_count": len(primary_seeds),
             "escalation_seed_set": contract.escalation_seed_set,
             "escalation_seed_count": len(escalation_seeds),
+            "mode": contract.seed_mode,
+            "claim_gate_seed_tier": contract.seed_tier,
+            "escalate_to_s30_when": contract.escalate_to_s30_when,
             "primary_seed_set_ready_required": True,
             "s30_configured_as_escalation": True,
         },
@@ -220,6 +238,33 @@ def _load_seed_tiers(contract: PacketContract) -> tuple[tuple[int, ...], tuple[i
             "without reordering primary seeds"
         )
     return tuple(primary), tuple(escalation)
+
+
+def _contract_metadata_diagnostics(contract: PacketContract) -> list[str]:
+    """Report claim-gate metadata drift without treating it as archive evidence."""
+
+    diagnostics: list[str] = []
+    if contract.claim_status != EXPECTED_CLAIM_STATUS:
+        diagnostics.append(
+            "claim_map_gate.status must remain "
+            f"{EXPECTED_CLAIM_STATUS!r} for archive-readiness; got {contract.claim_status!r}"
+        )
+    if contract.seed_mode != EXPECTED_SEED_MODE:
+        diagnostics.append(
+            f"seed_policy.mode must remain {EXPECTED_SEED_MODE!r}; got {contract.seed_mode!r}"
+        )
+    if contract.seed_tier != EXPECTED_SEED_TIER:
+        diagnostics.append(
+            "claim_map_gate.seed_tier must remain "
+            f"{EXPECTED_SEED_TIER!r}; got {contract.seed_tier!r}"
+        )
+    if contract.escalation_seed_set == contract.primary_seed_set:
+        diagnostics.append("seed_policy.escalation_seed_set must differ from primary_seed_set")
+    if "rank" not in contract.escalate_to_s30_when.lower():
+        diagnostics.append(
+            "seed_policy.escalate_to_s30_when must describe rank-flip escalation diagnostics"
+        )
+    return diagnostics
 
 
 def _int_seed_list(payload: dict[str, Any], key: str, *, expected_count: int) -> list[int]:

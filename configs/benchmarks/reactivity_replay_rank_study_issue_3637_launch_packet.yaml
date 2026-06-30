@@ -80,7 +80,28 @@ replay:
 min_planners: 3
 min_seeds: 20
 
+# Machine-checked post-run analysis contract. This is metadata only: it does not run or interpret
+# the benchmark, and it does not promote a paper/dissertation claim.
+rank_stability_analysis:
+  paired_seed_resampling: true
+  required_metrics:
+    - collision_rate
+    - near_miss_rate
+    - min_separation_m
+  rank_metric: collision_rate
+  seed_sufficiency_gate_command: >-
+    uv run python scripts/tools/seed_sufficiency_gate.py --input-json <frozen_gate_input.json>
+  replay_limitation_required: true
+  claim_boundary: >-
+    No paper-facing claim until post-run seed-sufficiency gate and claim-card review confirm
+    rank-stability evidence with the replay force-off limitation.
+
 # After preflight passes, the run + post-run analysis (OUT OF SCOPE for #3637 implementation slice):
+out_of_scope:
+- no_full_benchmark_campaign
+- no_slurm_gpu_submission
+- no_paper_dissertation_claim_edits
+
 run_command: |
   # Paired reactive-vs-replay campaign across the declared planners + seeds (real runner).
   uv run python scripts/benchmark/run_reactivity_ablation_campaign_issue_3573.py \

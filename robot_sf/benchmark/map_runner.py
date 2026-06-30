@@ -120,6 +120,7 @@ from robot_sf.benchmark.map_runner_observations import (
 )
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
+from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptive_proxemic_builder
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
@@ -181,6 +182,10 @@ from robot_sf.benchmark.scenario_belief_policy_hook import (
 )
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
+from robot_sf.benchmark.tracking_precision_contract import (
+    normalize_tracking_precision_spec,
+    tracking_precision_hash,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -189,10 +194,6 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.planner.adaptive_proxemic_selector import (
-    AdaptiveProxemicSelectorAdapter,
-    build_adaptive_proxemic_selector_config,
-)
 from robot_sf.planner.gap_prediction import (
     GapAwarePredictionAdapter,
     build_gap_prediction_config,
@@ -1012,6 +1013,10 @@ _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
         _adapter_policy_builders.LIDAR_SOCIAL_FORCE_KEYS,
         _adapter_policy_builders.build_lidar_social_force,
     ),
+    **dict.fromkeys(
+        _adaptive_proxemic_builder.ADAPTIVE_PROXEMIC_SELECTOR_KEYS,
+        _adaptive_proxemic_builder.build,
+    ),
     **dict.fromkeys(_safety_barrier_builder.ADAPTER_ALGO_KEYS, _safety_barrier_builder.build),
 }
 
@@ -1114,38 +1119,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
-        )
-
-    if algo_key in {"adaptive_proxemic_selector_v0", "adaptive_proxemic_selector_v1"}:
-        selector_algo_config = dict(algo_config)
-        selector_algo_config.setdefault(
-            "selector_version",
-            "v1" if algo_key == "adaptive_proxemic_selector_v1" else "v0",
-        )
-        selector_config = build_adaptive_proxemic_selector_config(selector_algo_config)
-        adapter = AdaptiveProxemicSelectorAdapter(config=selector_config)
-        meta["adaptive_proxemic_selector"] = {
-            "status": "enabled",
-            "selector_version": selector_config.selector_version,
-            "diagnostic_only": bool(selector_config.diagnostic_only),
-            "claim_boundary": selector_config.claim_boundary,
-            "profile_sources": [
-                selector_config.profiles[name].source_candidate
-                for name in ("conservative", "neutral", "open")
-            ],
-        }
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=selector_algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="AdaptiveProxemicSelectorAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations=(
-                "diagnostic-only selector over fixed proxemic profiles; "
-                "not benchmark or comfort evidence"
-            ),
         )
 
     if algo_key == "topology_guided_hybrid_rule_v0":
@@ -2261,6 +2234,7 @@ def _run_map_episode(  # noqa: PLR0913
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
@@ -2293,6 +2267,7 @@ def _run_map_episode(  # noqa: PLR0913
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
         observation_noise=observation_noise,
+        tracking_precision=tracking_precision,
         synthetic_actuation_profile=synthetic_actuation_profile,
         latency_stress_profile=latency_stress_profile,
         record_planner_decision_trace=record_planner_decision_trace,
@@ -2351,6 +2326,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_simulation_step_trace: bool = False,
@@ -2383,6 +2359,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     suite_key = _suite_key(scenario_path)
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
+    tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
+    tracking_precision_spec_hash = tracking_precision_hash(tracking_precision_spec)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
     latency_profile = _load_latency_stress_profile(latency_stress_profile)
     latency_metadata_dt = float(dt) if dt is not None and float(dt) > 0.0 else 0.1
@@ -2588,6 +2566,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "preflight": preflight,
             "observation_noise": noise_spec,
             "observation_noise_hash": noise_hash,
+            "tracking_precision": tracking_precision_spec,
+            "tracking_precision_hash": tracking_precision_spec_hash,
             "metrics": summarize_collision_metrics([]),
             "latency_stress_profile": (
                 latency_profile.to_metadata(dt=latency_metadata_dt)
@@ -2668,6 +2648,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     benchmark_track=benchmark_track,
                     track_schema_version=track_schema_version,
                     observation_noise=noise_spec,
+                    tracking_precision=tracking_precision_spec,
                     synthetic_actuation_profile=(
                         actuation_profile.to_metadata() if actuation_profile is not None else None
                     ),
@@ -2697,6 +2678,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ped_impact_radius_m=ped_impact_radius_m,
         ped_impact_window_steps=ped_impact_window_steps,
         noise_spec=noise_spec,
+        tracking_precision_spec=tracking_precision_spec,
         batch_observation_mode=batch_observation_mode,
         observation_level=observation_level,
         benchmark_track=benchmark_track,
@@ -2764,6 +2746,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         benchmark_profile=benchmark_profile,
         noise_spec=noise_spec,
         noise_hash=noise_hash,
+        tracking_precision_spec=tracking_precision_spec,
+        tracking_precision_hash=tracking_precision_spec_hash,
         active_observation_mode=active_observation_mode,
         active_observation_level=active_observation_level,
         actuation_profile_metadata=(

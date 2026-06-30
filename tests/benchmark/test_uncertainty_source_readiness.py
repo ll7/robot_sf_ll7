@@ -27,6 +27,17 @@ def test_default_inventory_payload_and_legacy_inventory_contract(monkeypatch) ->
     assert readiness.VISIBILITY_OCCLUSION in payload["blocked_sources"]
     assert "does not claim" in payload["claim_boundary"]
     assert payload["sources"][0]["condition_builder"]["present"] is True
+    source_rows = {row["source"]: row for row in payload["sources"]}
+    for source in (
+        readiness.VISIBILITY_OCCLUSION,
+        readiness.COVARIANCE_INFLATION,
+        readiness.CLASS_PROBABILITY_AMBIGUITY,
+    ):
+        assert source_rows[source]["status"] == readiness.MISSING_SCENARIO_HOOK
+        assert source_rows[source]["condition_builder"]["present"] is True
+        assert source_rows[source]["scenario_hook"]["present"] is False
+    assert source_rows[readiness.TRACKING_NOISE]["status"] == readiness.MISSING_CONDITION_BUILDER
+    assert source_rows[readiness.TRACKING_NOISE]["condition_builder"]["present"] is False
 
     monkeypatch.setattr(readiness, "_discover_condition_builders", lambda: frozenset({"builder"}))
     monkeypatch.setattr(readiness, "_discover_scenario_hooks", lambda: frozenset({"hook"}))

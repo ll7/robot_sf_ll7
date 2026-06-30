@@ -120,6 +120,27 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_1554_slurm_evidence_2026-06-30/`: queue-decision packet over completed #1554
+Slurm jobs 13192, 13198, and 13203. Classifies job 13198 as the completed S20/H500
+result matrix to analyze before any duplicate rerun, preserves its soft SNQI contract
+warning as a paper-claim blocker, and confirms no Slurm/GPU submission, artifact
+deletion, or paper/dissertation claim edit.
+
+- `issue_3798_post_13175_s20_s30_evidence_gap_packet.{md,json}`: diagnostic-only packet over
+retrieved job 13175 S20/H500 artifacts for the post-#1554 evidence gap. Names the compact
+reviewable metadata files, records that S30 remains an unexecuted escalation path, and preserves
+the no-submit/no-claim boundary for paper or dissertation use.
+
+- `issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/`: checker packet over
+  the merged #3207 bounded actual fidelity-sensitivity slice. Classifies the current evidence as
+  `no_claim` / `not_benchmark_evidence` because the slice is not full fixed scope and rank evidence
+  is non-identifiable (`primary_metric_zero_variance`). Does not run a simulator study or promote a
+  simulator-dependence, simulator-realism, sim-to-real, paper-facing, or dissertation claim.
+- `issue_2557_replica_readiness_packet_2026-06-29/`: diagnostic-only
+  fixed-seed queue-fill replica readiness packet for Issue #2557. It records the
+  public tracked completed/running status, retrieved compact evidence, remaining
+  artifact-promotion gap, no-new-Slurm recommendation, cost/risk, and exact
+  local packet command without promoting benchmark or paper-facing claims.
 - `issue_3484_feasibility_diagnostics/`: reserved location for small dry-run
   manifests and follow-up summaries for universally-failing scenario-family
   feasibility diagnostics. Outputs from

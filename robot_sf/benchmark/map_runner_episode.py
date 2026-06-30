@@ -17,6 +17,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     infer_execution_mode_from_counts,
     resolve_learned_checkpoint_observation_contract,
 )
+from robot_sf.benchmark.ammv_feasibility import evaluate_artifact_command_feasibility
 from robot_sf.benchmark.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
 from robot_sf.benchmark.map_runner_actions import (
@@ -115,6 +116,14 @@ from robot_sf.benchmark.termination_reason import (
     status_from_termination_reason,
 )
 from robot_sf.benchmark.thresholds import ensure_metric_parameters
+from robot_sf.benchmark.tracking_precision_contract import (
+    apply_speed_contract,
+    apply_tracking_precision_spec,
+    make_tracking_precision_rng,
+    minimum_separation,
+    normalize_tracking_precision_spec,
+    tracking_precision_hash,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     _git_hash_fallback,
@@ -167,6 +176,48 @@ def _observed_pedestrian_positions(obs: Any) -> np.ndarray | None:
     if "ped_positions" in obs:
         return _normalize_xy_rows(obs.get("ped_positions"))
     return None
+
+
+def _write_observed_pedestrian_positions(obs: Any, positions: np.ndarray) -> bool:
+    """Update planner-facing pedestrian positions when observation exposes them.
+
+    Returns:
+        True when a supported observation position field was updated.
+    """
+    if not isinstance(obs, dict):
+        return False
+    pedestrians = obs.get("pedestrians")
+    if isinstance(pedestrians, dict) and "positions" in pedestrians:
+        pedestrians["positions"] = positions.tolist()
+        pedestrians["count"] = int(positions.shape[0])
+        return True
+    if "pedestrian_positions" in obs:
+        obs["pedestrian_positions"] = positions.tolist()
+        return True
+    if "ped_positions" in obs:
+        obs["ped_positions"] = positions.tolist()
+        return True
+    return False
+
+
+def _apply_tracking_precision_to_observation(
+    obs: dict[str, Any],
+    spec: dict[str, Any],
+    rng: np.random.Generator,
+) -> tuple[dict[str, Any], np.ndarray | None]:
+    """Apply default-off MOTP drift mask to planner-facing tracked actors.
+
+    Returns:
+        Observation plus the planner-facing positions used for corrupted-distance metrics.
+    """
+    positions = _observed_pedestrian_positions(obs)
+    if positions is None:
+        return obs, None
+    if not bool(spec.get("enabled", False)):
+        return obs, positions
+    corrupted = apply_tracking_precision_spec(positions, spec, rng)
+    _write_observed_pedestrian_positions(obs, corrupted)
+    return obs, corrupted
 
 
 def _visibility_evidence_for_step(
@@ -380,6 +431,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
@@ -410,6 +462,14 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_rng = make_observation_noise_rng(noise_spec, seed=seed, scenario_id=scenario_id)
     noise_stats = new_observation_noise_stats()
+    tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
+    tracking_precision_rng = make_tracking_precision_rng(
+        tracking_precision_spec,
+        seed=seed,
+        scenario_id=scenario_id,
+    )
+    tracking_precision_records: list[dict[str, Any]] = []
+    min_separation_corrupted_values: list[float] = []
     config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
@@ -556,10 +616,21 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         previous_trace_ped_pos: np.ndarray | None = None
         previous_trace_heading = _observation_heading(obs)
         robot_headings: list[float] = []
+        ammv_command_actions: list[dict[str, Any]] = []
         view_integrity: dict[str, Any] | None = None
         for step_idx in range(horizon_val):
             policy_obs, step_noise_stats = apply_observation_noise(obs, noise_spec, noise_rng)
             merge_observation_noise_stats(noise_stats, step_noise_stats)
+            policy_obs, corrupted_ped_positions = _apply_tracking_precision_to_observation(
+                policy_obs,
+                tracking_precision_spec,
+                tracking_precision_rng,
+            )
+            robot_reference = np.asarray(env.simulator.robot_pos[0], dtype=float)
+            if corrupted_ped_positions is not None:
+                min_separation_corrupted_values.append(
+                    minimum_separation(corrupted_ped_positions, robot_reference)
+                )
             policy_command = policy_fn(policy_obs)
             if view_integrity is None:
                 # Runtime fail-closed guard (#3634): probe the planner's effective observation view
@@ -609,6 +680,25 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 )
                 policy_command = actuation_step.applied_command
                 current_command = actuation_step.applied_command
+            if (
+                bool(tracking_precision_spec.get("enabled", False))
+                and not step_is_native
+                and isinstance(policy_command, (tuple, list, np.ndarray))
+                and len(policy_command) >= 2
+            ):
+                applied_linear, tracking_record = apply_speed_contract(
+                    float(policy_command[0]),
+                    float(tracking_precision_spec["target_motp_m"]),
+                    tracking_precision_spec,
+                )
+                policy_command = (
+                    applied_linear,
+                    float(policy_command[1]),
+                    *tuple(policy_command[2:]),
+                )
+                tracking_precision_records.append(tracking_record)
+            selected_action_payload = _command_action_payload(policy_command)
+            ammv_command_actions.append(selected_action_payload)
             if step_is_native:
                 # Policy already outputs native env actions (e.g. delta velocities);
                 # skip the absolute→delta conversion done by _policy_command_to_env_action.
@@ -658,7 +748,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 )
                 planner_payload: dict[str, Any] = {
                     "event": "step",
-                    "selected_action": _command_action_payload(policy_command),
+                    "selected_action": selected_action_payload,
                 }
                 if actuation_step is not None:
                     planner_payload["amv"] = {
@@ -953,6 +1043,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             impact["status"] = "not_applicable"
             impact["adapter_fraction"] = 0.0
     _finalize_feasibility_metadata(algo_meta)
+    algo_meta["ammv_feasibility"] = evaluate_artifact_command_feasibility(ammv_command_actions)
     if isinstance(planner_runtime_snapshot, dict):
         algo_meta["planner_runtime"] = planner_runtime_snapshot
     if record_planner_decision_trace:
@@ -976,6 +1067,37 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             ped_forces=ped_forces_arr if record_forces else None,
             dt=float(config.sim_config.time_per_step_in_secs),
         )
+    tracking_precision_summary: dict[str, Any] = {
+        "spec": tracking_precision_spec,
+        "hash": tracking_precision_hash(tracking_precision_spec),
+        "step_count": len(tracking_precision_records),
+        "min_separation_corrupted_m": (
+            float(min(min_separation_corrupted_values))
+            if min_separation_corrupted_values
+            else float("inf")
+        ),
+        "contract_honored": (
+            all(
+                bool(record.get("contract_honored", False)) for record in tracking_precision_records
+            )
+            if tracking_precision_records
+            else True
+        ),
+        "contract_honored_rate": (
+            float(
+                sum(
+                    bool(record.get("contract_honored", False))
+                    for record in tracking_precision_records
+                )
+            )
+            / float(len(tracking_precision_records))
+            if tracking_precision_records
+            else 1.0
+        ),
+    }
+    if tracking_precision_records:
+        tracking_precision_summary["last_step"] = dict(tracking_precision_records[-1])
+    algo_meta["tracking_precision"] = tracking_precision_summary
     intent_summary = _intent_conditioned_behavior_summary(
         scenario,
         single_pedestrian_intent_metadata,
@@ -1033,6 +1155,12 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
             }:
                 continue
             metrics[metric_name] = metric_value
+    metrics["min_separation_corrupted_m"] = tracking_precision_summary["min_separation_corrupted_m"]
+    metrics["tracking_contract_honored"] = bool(tracking_precision_summary["contract_honored"])
+    metrics["tracking_contract_honored_rate"] = float(
+        tracking_precision_summary["contract_honored_rate"]
+    )
+    metrics["tracking_target_motp_m"] = float(tracking_precision_spec["target_motp_m"])
 
     ts_end = datetime.now(UTC).isoformat()
     scenario_params = _scenario_identity_payload(
@@ -1047,6 +1175,7 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
         observation_noise=noise_spec,
+        tracking_precision=tracking_precision_spec,
         synthetic_actuation_profile=(
             actuation_profile.to_metadata() if actuation_profile is not None else None
         ),
@@ -1099,6 +1228,8 @@ def run_map_episode(  # noqa: C901,PLR0912,PLR0913,PLR0915
         "observation_noise": noise_spec,
         "observation_noise_hash": observation_noise_hash(noise_spec),
         "observation_noise_stats": noise_stats,
+        "tracking_precision": tracking_precision_spec,
+        "tracking_precision_hash": tracking_precision_hash(tracking_precision_spec),
         "algo": algo,
         "observation_mode": active_observation_mode,
         "observation_level": active_observation_level,

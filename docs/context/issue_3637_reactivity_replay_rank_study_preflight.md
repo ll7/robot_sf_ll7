@@ -24,6 +24,7 @@ campaign so under-powered or mislabeled runs are caught **before** any compute i
   - `seed_budget` — ≥ `MIN_RANK_STABILITY_SEEDS` (20, the S20 floor) and > the #3573 diagnostic
     matrix (4 seeds);
   - `horizon` — ≥ 150 steps (the contrast is near-null below this on the diagnostic family);
+  - `scenario_set_sha256` — when supplied, the named scenario-set file must match the packet digest;
   - `replay_limitation` — present, and `is_trajectory_playback` is `False`.
 - `scripts/benchmark/preflight_reactivity_replay_rank_study_issue_3637.py` — thin CPU-only CLI over
   the checker. Exit `0` ready / `1` blocked / `2` usage error.

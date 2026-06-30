@@ -68,6 +68,22 @@ REQUIRED_CANDIDATE_IDS = (
 
 CANDIDATE_REGISTRY_PATH = "docs/context/policy_search/candidate_registry.yaml"
 
+ISSUE_1475_REQUIRED_SMOKE_EVIDENCE_FIELDS = (
+    "residual_clipping_rate",
+    "guard_veto_rate",
+    "fallback_degraded_status",
+    "artifact_pointer_status",
+)
+
+ISSUE_1475_LOCAL_PREFLIGHT_COMMANDS = (
+    (
+        "LOGURU_LEVEL=WARNING uv run python "
+        "scripts/validation/validate_orca_residual_lineage_packet.py "
+        "--config configs/training/orca_residual/orca_residual_bc_issue_1428.yaml --json"
+    ),
+    "scripts/dev/sbatch_orca_residual_bc_issue1475.sh --dry-run --no-status",
+)
+
 
 @dataclass(frozen=True)
 class LanePrerequisite:
@@ -319,6 +335,53 @@ def _validate_lineage_packet(repo_root: Path) -> list[str]:
     return []
 
 
+def _build_issue_1475_decision_packet(
+    *,
+    overall_status: str,
+    errors: list[str],
+) -> dict[str, Any]:
+    """Build the read-only #1475 smoke/nominal readiness packet.
+
+    Returns:
+        JSON-serializable packet describing local readiness, no-submit scope,
+        required smoke evidence, and nominal-escalation gates.
+    """
+    local_ready = overall_status == "blocked_on_followup"
+    return {
+        "issue": 1475,
+        "task_class": "orca_residual_bc_smoke_decision_packet",
+        "decision_status": (
+            "ready_for_single_smoke_handoff" if local_ready else "local_packet_incomplete"
+        ),
+        "submission_allowed_from_this_checker": False,
+        "run_nominal": False,
+        "claim_boundary": (
+            "Read-only launch/readiness packet only. This checker does not submit SLURM, "
+            "does not run training, does not run a full benchmark campaign, and does not "
+            "promote paper or dissertation claims."
+        ),
+        "local_preflight_commands": list(ISSUE_1475_LOCAL_PREFLIGHT_COMMANDS),
+        "smoke_submission_command_shape": (
+            "scripts/dev/sbatch_orca_residual_bc_issue1475.sh --episodes 3 "
+            '--seeds "111:112:113" --no-status'
+        ),
+        "nominal_escalation_gate": {
+            "allowed_by_packet": False,
+            "required_before_nominal": [
+                "single bounded smoke job completed on an approved SLURM worker",
+                "summary.json and smoke JSONL present for the ORCA-residual candidate",
+                "success_rate > 0.0 with no timeout_low_progress stop classification",
+                "collision_rate == 0.0",
+                "required smoke evidence fields present",
+                "fallback_degraded_status excludes fallback/degraded success evidence",
+                "artifact_pointer_status records durable retrieval or explicit non-durable status",
+            ],
+        },
+        "required_smoke_evidence_fields": list(ISSUE_1475_REQUIRED_SMOKE_EVIDENCE_FIELDS),
+        "local_blockers": errors,
+    }
+
+
 def assess_lane_readiness(
     repo_root: Path,
     *,
@@ -400,12 +463,18 @@ def assess_lane_readiness(
             {"key": r.key, "description": r.description, "command_shape": r.command_shape}
             for r in LANE_ROUTES
         ],
+        "issue_1475_decision_packet": _build_issue_1475_decision_packet(
+            overall_status=overall_status,
+            errors=errors,
+        ),
         "errors": errors,
     }
 
 
 __all__ = [
     "CANDIDATE_REGISTRY_PATH",
+    "ISSUE_1475_LOCAL_PREFLIGHT_COMMANDS",
+    "ISSUE_1475_REQUIRED_SMOKE_EVIDENCE_FIELDS",
     "LANE_BLOCKERS",
     "LANE_ROUTES",
     "LINEAGE_PACKET_PATH",

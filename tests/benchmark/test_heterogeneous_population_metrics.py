@@ -9,6 +9,7 @@ import pytest
 from robot_sf.benchmark.heterogeneous_population_metrics import (
     HETEROGENEOUS_POPULATION_METRICS_SCHEMA,
     PedestrianMetric,
+    assess_control_trace_readiness,
     cvar,
     mean_matched_heterogeneity_effect,
     pedestrian_metric_observations_from_control_trace,
@@ -154,6 +155,59 @@ def test_per_archetype_metrics_from_control_trace_normalizes_metric_key_provenan
     )
 
     assert report["metric_key"] == "speed_m_s"
+
+
+def test_control_trace_readiness_reports_trace_field_coverage() -> None:
+    """Complete traces produce a compact readiness packet before metric aggregation."""
+
+    readiness = assess_control_trace_readiness(_control_trace(), " speed_m_s ")
+
+    assert readiness.ready
+    assert readiness.to_dict() == {
+        "schema_version": HETEROGENEOUS_POPULATION_METRICS_SCHEMA,
+        "source": "pedestrian_control_trace",
+        "metric_key": "speed_m_s",
+        "status": "ready",
+        "ready": True,
+        "pedestrian_count": 3,
+        "step_count": 9,
+        "archetype_counts": {"cautious": 2, "hurried": 1},
+        "blockers": [],
+    }
+
+
+def test_control_trace_readiness_blocks_missing_metric_field() -> None:
+    """Missing per-step fields are visible before the harness consumes the trace."""
+
+    trace = _control_trace()
+    del trace["pedestrians"][1]["steps"][2]["speed_m_s"]
+
+    readiness = assess_control_trace_readiness(trace, "speed_m_s")
+
+    assert not readiness.ready
+    assert readiness.status == "blocked"
+    assert readiness.pedestrian_count == 3
+    assert readiness.step_count == 6
+    assert readiness.archetype_counts == {"cautious": 2, "hurried": 1}
+    assert readiness.blockers == ("control_trace.pedestrians[1].steps[2] missing 'speed_m_s'",)
+
+
+def test_control_trace_readiness_blocks_empty_trace_without_raising() -> None:
+    """Missing trace inputs become fail-closed diagnostics, not partial metrics."""
+
+    readiness = assess_control_trace_readiness({"pedestrians": []}, "speed_m_s")
+
+    assert readiness.to_dict() == {
+        "schema_version": HETEROGENEOUS_POPULATION_METRICS_SCHEMA,
+        "source": "pedestrian_control_trace",
+        "metric_key": "speed_m_s",
+        "status": "blocked",
+        "ready": False,
+        "pedestrian_count": 0,
+        "step_count": 0,
+        "archetype_counts": {},
+        "blockers": ["control_trace.pedestrians must be non-empty"],
+    }
 
 
 def test_control_trace_extraction_supports_final_step_reducer() -> None:

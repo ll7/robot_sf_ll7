@@ -1,0 +1,39 @@
+{
+  "schema_version": "issue_3482_release_0_0_2_collision_count_boundary.v1",
+  "issue": 3482,
+  "release_tag": "0.0.2",
+  "generated_on": "2026-06-30",
+  "purpose": "Machine-readable claim boundary for release 0.0.2 collision-count metrics after EpisodeEventLedger.v1 exact/derived reconciliation surfaced a discrepancy.",
+  "source": {
+    "type": "issue_comment_summary",
+    "url": "https://github.com/ll7/robot_sf_ll7/issues/3482#issuecomment-4835303925",
+    "artifact_status": "diagnostic_summary_only_not_committed_release_bundle",
+    "release_bundle": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2"
+  },
+  "diagnostic_summary": {
+    "total_episodes": 987,
+    "exact_collision_events": 241,
+    "derived_collision_count_positive_episodes": 0,
+    "reconciliation_violations": 241,
+    "violation": "exact collision event requires collision metric > 0"
+  },
+  "claim_boundaries": {
+    "exact_collision_outcome_status": "usable_with_event_ledger_boundary",
+    "collision_count_metric_status": "blocked_pending_artifact_promotion_and_table_annotation",
+    "open_gates": [
+      "committed_0_0_2_reconciliation_bundle",
+      "paper_table_collision_count_annotation"
+    ]
+  },
+  "forbidden_claims_until_gates_close": [
+    "Do not use release 0.0.2 total_collision_count or collision-count-derived tables as paper-ready evidence.",
+    "Do not treat zero positive derived collision counts as evidence that release 0.0.2 had zero collisions.",
+    "Do not close issue #3482 solely from this manifest; it records a boundary, not the durable 0.0.2 reconciliation bundle."
+  ],
+  "allowed_uses": [
+    "Preserve the exact-vs-derived discrepancy as a fail-closed evidence boundary.",
+    "Use exact collision outcomes through EpisodeEventLedger.v1 with the documented boundary.",
+    "Route remaining work to artifact promotion and table annotation without rerunning benchmarks from this checker."
+  ],
+  "validator": "scripts/validation/check_release_0_0_2_collision_count_boundary.py"
+}

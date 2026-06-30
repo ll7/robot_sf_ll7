@@ -32,17 +32,14 @@ def _write_blocklist(path: Path, entries: str) -> None:
     )
 
 
-def test_checked_in_baseline_local_paths_are_explicitly_blocked() -> None:
+def test_checked_in_baseline_configs_have_no_local_output_model_paths() -> None:
     """Tracked baseline local model paths should be visible blockers, not silent dependencies."""
     rows = check_local_model_artifacts([Path("configs/baselines")])
 
-    assert rows
-    assert {row.status for row in rows} == {"blocked"}
-    assert {row.availability for row in rows} == {"unavailable"}
-    assert {row.decision for row in rows} == {
-        "unavailable_recover_or_retire",
-        "unavailable_retire_or_rewrite",
-    }
+    assert rows == []
+    assert {row.status for row in rows} == set()
+    assert {row.availability for row in rows} == set()
+    assert {row.decision for row in rows} == set()
     assert {
         "configs/baselines/ppo_15m_grid_socnav_holonomic.yaml",
         "configs/baselines/ppo_issue_576_br06_v2_15m.yaml",
@@ -66,7 +63,7 @@ def test_default_cli_paths_are_stable_from_subdirectory(
 
     assert main() == 0
     stdout = capsys.readouterr().out
-    assert "configs/baselines/" in stdout
+    assert stdout == "OK: no local output model_path/resume_from references found.\n"
     assert "../configs" not in stdout
 
 
@@ -273,7 +270,7 @@ def test_cli_json_reports_rows(
     assert rows[0]["status"] == "unblocked"
 
 
-def test_fail_on_blocked_returns_nonzero_for_explicit_blockers(
+def test_fail_on_blocked_is_zero_when_shipped_baselines_are_retired(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -287,16 +284,16 @@ def test_fail_on_blocked_returns_nonzero_for_explicit_blockers(
         ],
     )
 
-    assert main() == 1
-    assert "BLOCKED:" in capsys.readouterr().out
+    assert main() == 0
+    assert "OK: no local output" in capsys.readouterr().out
 
 
-def test_checked_in_blocklist_entries_are_all_active() -> None:
+def test_checked_in_blocklist_is_empty_after_retirement() -> None:
     """Every shipped blocklist entry should still cover a present local reference."""
     entries = audit_blocklist_coverage(DEFAULT_BLOCKLIST, repo_root=REPO_ROOT)
 
-    assert entries
-    assert {entry.status for entry in entries} == {BLOCKLIST_ACTIVE}
+    assert entries == []
+    assert {entry.status for entry in entries} == set()
 
 
 def test_audit_flags_retired_config_as_orphan(tmp_path: Path) -> None:
@@ -396,7 +393,7 @@ def test_audit_helper_uses_default_blocklist() -> None:
     """The script-level helper should audit the shipped blocklist by default."""
     entries = audit_blocklist()
 
-    assert entries
+    assert entries == []
     assert all(entry.status == BLOCKLIST_ACTIVE for entry in entries)
 
 

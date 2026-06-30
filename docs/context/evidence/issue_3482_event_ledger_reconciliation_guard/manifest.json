@@ -1,0 +1,30 @@
+{
+  "schema_version": "issue_3482_event_ledger_reconciliation_guard_manifest.v1",
+  "issue": 3482,
+  "generated_on": "2026-06-30",
+  "purpose": "Small checked-in evidence bundle for the EpisodeEventLedger.v1 exact/derived reconciliation guard.",
+  "source_fixtures": [
+    "tests/benchmark/fixtures/event_ledger_reconciliation/reconciled_episodes.jsonl",
+    "tests/benchmark/fixtures/event_ledger_reconciliation/violating_exact_collision_zero_count.jsonl"
+  ],
+  "generator": "scripts/benchmark/export_event_ledger_reconciliation.py",
+  "guard_wrapper": "scripts/dev/check_event_ledger_reconciliation_guard.sh",
+  "ci_entrypoint": "scripts/dev/ci_driver.sh test",
+  "artifacts": [
+    {
+      "path": "docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/reconciled_fixture_reconciliation.jsonl",
+      "sha256": "3e8f25296486ddaaa84e2926486f201b3e589d526c67199a156900905a7213d2",
+      "rows": 2,
+      "expected_exit_code_with_fail_on_violations": 0,
+      "interpretation": "Reconciled fixture rows pass the event-ledger reconciliation guard."
+    },
+    {
+      "path": "docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/violating_fixture_reconciliation.jsonl",
+      "sha256": "4f4e6bffe8ec47ff6708dbceb2b2d9a00147f6f5c3c9e10c13ea01be0b6c4a30",
+      "rows": 1,
+      "expected_exit_code_with_fail_on_violations": 1,
+      "interpretation": "Violating fixture row records the exact collision event plus zero collision count disagreement and exits fail-closed."
+    }
+  ],
+  "claim_boundary": "Fixture-level regression evidence only; not a full benchmark campaign rerun, not a Slurm/GPU submission, and not a paper or dissertation claim edit."
+}

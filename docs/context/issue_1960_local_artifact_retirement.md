@@ -15,7 +15,25 @@ The target configs now carry human-visible comments, and
 action next to each exact blocked local path. The executable preflight remains fail-closed: these
 configs are still blocked until #1764 recovers durable artifacts or retires/rewrites them.
 
-## Current Decisions
+## Issue #1764 Update (2026-06-29)
+
+Issue #1764 retired the seven remaining local-only baseline config references from executable
+`model_path` fields. The configs now point at explicit `local_only: true` registry ids, and
+`configs/baselines/local_model_artifact_blocklist.yaml` is empty. This remains metadata-only:
+the retired ids are not benchmark evidence and must not be used for benchmark claims unless a
+durable artifact pointer and checksum are recovered later.
+
+Current expected checks:
+
+```bash
+LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/validation/check_local_model_artifacts.py --fail-on-blocked configs/baselines --json
+LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/tools/plan_model_artifact_promotion.py scan --json
+```
+
+Expected state after issue #1764: local-artifact preflight reports `[]`, and the promotion planner
+reports seven `retired_local_only` rows for the historical target configs.
+
+## Historical Decisions
 
 | Config | Status | Decision | Next action |
 | --- | --- | --- | --- |

@@ -1,0 +1,73 @@
+# Issue #3425 empirical vertical-slice smoke.
+#
+# Plain-language summary: run a small baseline-safe planner comparison on
+# explicit Francis 2023 single-pedestrian scenarios so the SLURM-to-claim
+# finalizer path has a concrete, bounded campaign to execute.
+#
+# Evidence boundary: this config is a launch/readiness slice. Outputs are at
+# most smoke evidence until the run completes on an approved SLURM-capable
+# host, finalizer manifests link back to the submission manifest, durable
+# pointers are present, and open metric prerequisites are resolved or caveated.
+name: issue_3425_empirical_vertical_slice_smoke
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+scenario_candidates:
+  - francis2023_blind_corner
+  - francis2023_intersection_no_gesture
+  - francis2023_pedestrian_obstruction
+
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+workers: 1
+horizon: 100
+dt: 0.1
+record_forces: true
+resume: true
+stop_on_failure: true
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: diagnostic-smoke
+
+planners:
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast

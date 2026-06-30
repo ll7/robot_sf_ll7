@@ -5,7 +5,7 @@
 - Git head: `2ff5e07df`
 - Git worktree dirty at generation: `False`
 - Raw rows: `ignored_output/fidelity_sensitivity/issue_3207_actual_slice_2026-06-23/episode_rows.jsonl`
-- Claim boundary: bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF episodes for a compact two-planner local fidelity-sensitivity slice. It measures internal sensitivity on this slice only; it is not simulator-realism, sim-to-real, paper-facing planner-ranking, or full #3207 acceptance evidence.
+- Claim boundary: bounded_actual_campaign_slice_no_claim: executes real Robot SF episodes for a compact two-planner local fidelity-sensitivity slice. It measures internal sensitivity on this slice only; it is not benchmark evidence, not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence.
 
 ## Scope
 
@@ -34,4 +34,4 @@
 | `clearance_radius__radius_0_30` | `non-identifiable: primary_metric_zero_variance` | NA | NA | NA |
 
 This evidence measures internal simulator-fidelity sensitivity for the bounded local slice only.
-It must not be cited as simulator-realism, sim-to-real, full benchmark, or paper-facing ranking evidence.
+It must not be cited as benchmark evidence, simulator-realism evidence, sim-to-real evidence, or paper-facing evidence.

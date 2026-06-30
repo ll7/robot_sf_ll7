@@ -54,9 +54,14 @@ def _derive_spawn_mode(scenario: dict) -> str:
     metadata = scenario.get("metadata", {}) or {}
     density = sim_cfg.get("ped_density")
     advisory = metadata.get("density_advisory")
+    explicit_spawn_mode = metadata.get("spawn_mode")
+    if explicit_spawn_mode == "markers":
+        return "markers"
     has_scripted = bool(scenario.get("single_pedestrians"))
     if density == 0.0 and advisory == ZERO_DENSITY_ADVISORY:
-        return "markers"
+        raise AssertionError(
+            f"{scenario['name']}: marker spawning must use metadata.spawn_mode=markers"
+        )
     if has_scripted and density:
         return "scripted_and_route_density"
     return "route_density"
@@ -152,14 +157,16 @@ def test_in_matrix_flag_matches_includes() -> None:
 def test_marker_spawn_density_zero_semantics() -> None:
     """Every ``markers`` tier encodes the overloaded ped_density=0.0 placeholder."""
     marker_tiers = 0
-    for entry in _index_entries_by_config().values():
+    config_facts = {path.name: _derive_config_facts(path) for path in _classic_config_paths()}
+    for config_name, entry in _index_entries_by_config().items():
         if entry["spawn_mode"] != "markers":
             continue
+        assert config_facts[config_name]["spawn_mode"] == "markers", config_name
         for tier in entry["tiers"]:
             assert tier["ped_density"] == 0.0, entry["config"]
             assert tier["density_advisory"] == ZERO_DENSITY_ADVISORY, entry["config"]
             marker_tiers += 1
-    assert marker_tiers > 0, "expected at least one marker-spawn tier"
+    assert marker_tiers > 0, "expected at least one marker-spawn tier in the density index"
 
 
 def test_summary_counts_match_recomputation() -> None:

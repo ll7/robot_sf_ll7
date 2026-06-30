@@ -17,6 +17,38 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+  - path: docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/packet.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_release_0_0_2_collision_count_boundary/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_release_0_0_2_collision_count_boundary/manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/manifest.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/reconciled_fixture_reconciliation.jsonl
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3482_event_ledger_reconciliation_guard/violating_fixture_reconciliation.jsonl
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3372_occluder_timing_pilot_2026-06-22/README.md
     status: evidence
     freshness: evidence
@@ -1162,6 +1194,10 @@ entries:
     status: proposal
     freshness: maintained
     area: adversarial_search
+  - path: docs/context/issue_3293_evidence_integration_contract_inventory.md
+    status: proposal
+    freshness: maintained
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2468/adversarial_generation_roadmap.yaml
     status: proposal
     freshness: evidence
@@ -2338,6 +2374,18 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_fidelity_sensitivity_actual_slice_2026-06-23/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_3207_simulator_dependence_validity_boundary_packet_2026-06-29/decision_packet.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_3207_fidelity_sensitivity_launch_packet_2026-06-20/README.md
     status: evidence
     freshness: evidence
@@ -2485,6 +2533,14 @@ entries:
     status: evidence
     freshness: evidence
     area: benchmark_evidence
+  - path: docs/context/evidence/issue_2557_replica_readiness_packet_2026-06-29/README.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+  - path: docs/context/evidence/issue_2557_replica_readiness_packet_2026-06-29/packet.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
   - path: docs/context/evidence/issue_2749_observation_noise_diagnostics
     status: evidence
     freshness: evidence
@@ -2537,6 +2593,10 @@ entries:
     freshness: evidence
     area: benchmark_evidence
     legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3800_snqi_governance_disposition
+    status: evidence
+    freshness: evidence
+    area: evidence_policy
   - path: docs/context/evidence/issue_3300_false_positive_actor_injection/README.md
     status: evidence
     freshness: evidence
@@ -2568,6 +2628,16 @@ entries:
     area: learned_policy
     legacy_dirty_evidence: true
   - path: docs/context/evidence/issue_3142_fast_pysf_force_optimization_summary.json
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.md
+    status: evidence
+    freshness: evidence
+    area: benchmark_evidence
+    legacy_dirty_evidence: true
+  - path: docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json
     status: evidence
     freshness: evidence
     area: benchmark_evidence

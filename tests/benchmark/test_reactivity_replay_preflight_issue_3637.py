@@ -6,6 +6,7 @@ and the thin CLI. No benchmark execution, no rank-stability interpretation.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -18,6 +19,9 @@ from robot_sf.benchmark.reactivity_replay_preflight import (
     DIAGNOSTIC_SEED_COUNT,
     MIN_RANK_STABILITY_SEEDS,
     PREFLIGHT_SCHEMA,
+    RANK_STABILITY_GATE_COMMAND,
+    REQUIRED_OUT_OF_SCOPE,
+    REQUIRED_RANK_STABILITY_METRICS,
     ReactivityReplayRunPlan,
     build_preflight_manifest,
     check_run_plan,
@@ -45,6 +49,27 @@ def _ready_seeds() -> tuple[int, ...]:
     return tuple(range(101, 101 + MIN_RANK_STABILITY_SEEDS))
 
 
+def _rank_stability_analysis() -> dict[str, object]:
+    """Return required post-run analysis-contract metadata."""
+    return {
+        "paired_seed_resampling": True,
+        "required_metrics": list(REQUIRED_RANK_STABILITY_METRICS),
+        "rank_metric": REQUIRED_RANK_STABILITY_METRICS[0],
+        "seed_sufficiency_gate_command": (
+            f"uv run python {RANK_STABILITY_GATE_COMMAND} --input-json <frozen_gate_input.json>"
+        ),
+        "replay_limitation_required": True,
+        "claim_boundary": (
+            "No paper-facing claim until post-run seed-sufficiency gate and claim-card review."
+        ),
+    }
+
+
+def _out_of_scope() -> list[str]:
+    """Return the required non-execution / non-claim exclusions."""
+    return list(REQUIRED_OUT_OF_SCOPE)
+
+
 def _ready_plan(**overrides) -> ReactivityReplayRunPlan:
     """A plan that passes every precondition unless overridden."""
     seeds = _ready_seeds()
@@ -53,6 +78,7 @@ def _ready_plan(**overrides) -> ReactivityReplayRunPlan:
         "arm_seeds": dict.fromkeys(REACTIVITY_ARMS, seeds),
         "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
         "horizon": 300,
+        "rank_stability_analysis": _rank_stability_analysis(),
     }
     base.update(overrides)
     return ReactivityReplayRunPlan(**base)
@@ -80,6 +106,20 @@ def test_manifest_always_carries_replay_limitation():
     assert limitation["is_trajectory_playback"] is False
     assert "not pre-recorded trajectory playback" in limitation["note"].lower()
     assert "rank stability" in manifest["claim_boundary"].lower()
+    assert manifest["plan"]["rank_stability_analysis"]["paired_seed_resampling"] is True
+    assert manifest["out_of_scope"] == list(REQUIRED_OUT_OF_SCOPE)
+    assert manifest["plan"]["out_of_scope"] == list(REQUIRED_OUT_OF_SCOPE)
+
+
+def test_missing_out_of_scope_metadata_blocks():
+    """Packets must state the non-execution / non-claim boundary explicitly."""
+    assert _checks_by_name(_ready_plan(out_of_scope=()))["out_of_scope"] is False
+
+
+def test_weakened_out_of_scope_metadata_blocks():
+    """Dropping any required exclusion prevents ready preflight."""
+    plan = _ready_plan(out_of_scope=("no_full_benchmark_campaign", "no_slurm_gpu_submission"))
+    assert _checks_by_name(plan)["out_of_scope"] is False
 
 
 def test_too_few_planners_blocks():
@@ -132,6 +172,40 @@ def test_missing_limitation_note_blocks():
     assert _checks_by_name(plan)["replay_limitation"] is False
 
 
+def test_missing_rank_stability_analysis_blocks():
+    """Missing post-run analysis contract blocks the preflight."""
+    plan = _ready_plan(rank_stability_analysis={})
+    assert _checks_by_name(plan)["rank_stability_analysis"] is False
+
+
+def test_incomplete_rank_stability_analysis_blocks():
+    """Analysis contract must name metrics, gate command, replay caveat, and claim boundary."""
+    analysis = _rank_stability_analysis()
+    analysis["required_metrics"] = ["collision_rate"]
+    analysis["paired_seed_resampling"] = False
+    plan = _ready_plan(rank_stability_analysis=analysis)
+    assert _checks_by_name(plan)["rank_stability_analysis"] is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("required_metrics", ["collision_rate"]),
+        ("rank_metric", "unlisted_metric"),
+        ("paired_seed_resampling", False),
+        ("seed_sufficiency_gate_command", "uv run python scripts/tools/some_other_gate.py"),
+        ("replay_limitation_required", False),
+        ("claim_boundary", "rank stability looks good"),
+    ],
+)
+def test_each_rank_stability_field_fails_closed(field, value):
+    """Breaking any single fail-closed analysis field blocks the preflight."""
+    analysis = _rank_stability_analysis()
+    analysis[field] = value
+    plan = _ready_plan(rank_stability_analysis=analysis)
+    assert _checks_by_name(plan)["rank_stability_analysis"] is False
+
+
 def test_short_horizon_blocks():
     """A horizon below the contrast-registration floor blocks."""
     assert _checks_by_name(_ready_plan(horizon=50))["horizon"] is False
@@ -144,6 +218,8 @@ def test_run_plan_from_packet_shared_seeds_are_paired():
         "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
         "horizon": 300,
         "seeds": list(range(101, 121)),
+        "rank_stability_analysis": _rank_stability_analysis(),
+        "out_of_scope": _out_of_scope(),
     }
     plan = run_plan_from_packet(packet)
     assert set(plan.arm_seeds) == set(REACTIVITY_ARMS)
@@ -160,6 +236,7 @@ def test_run_plan_from_packet_explicit_arm_seeds():
         "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
         "horizon": 300,
         "arm_seeds": {"reactive": seeds, "replay": seeds},
+        "out_of_scope": _out_of_scope(),
     }
     plan = run_plan_from_packet(packet)
     assert plan.arm_seeds["reactive"] == tuple(seeds)
@@ -182,11 +259,52 @@ def test_run_plan_from_packet_rejects_malformed(packet):
         run_plan_from_packet(packet)
 
 
+def test_packet_missing_out_of_scope_blocks_gracefully():
+    """A packet omitting out_of_scope fails closed via the check, not a raw ValueError."""
+    packet = {
+        "planners": list(_ready_plan().planners),
+        "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
+        "horizon": 300,
+        "seeds": list(range(101, 121)),
+        "rank_stability_analysis": _rank_stability_analysis(),
+    }
+    manifest = build_preflight_manifest(run_plan_from_packet(packet))
+    assert manifest["status"] == "blocked"
+    assert manifest["plan"]["out_of_scope"] == []
+    assert _checks_by_name(run_plan_from_packet(packet))["out_of_scope"] is False
+
+
 def test_shipped_packet_preflights_ready():
     """Regression guard: the canonical shipped launch packet must preflight as ready."""
     packet = yaml.safe_load(SHIPPED_PACKET.read_text(encoding="utf-8"))
     manifest = build_preflight_manifest(run_plan_from_packet(packet))
     assert manifest["status"] == "ready", manifest["blocking_issues"]
+    assert packet["out_of_scope"] == list(REQUIRED_OUT_OF_SCOPE)
+    assert manifest["out_of_scope"] == list(REQUIRED_OUT_OF_SCOPE)
+
+
+def test_scenario_set_checksum_mismatch_blocks(tmp_path):
+    """A supplied scenario-set checksum fails closed when the file drifts."""
+    scenario_set = tmp_path / "scenario_set.yaml"
+    scenario_set.write_text("scenarios: []\n", encoding="utf-8")
+
+    manifest = build_preflight_manifest(
+        _ready_plan(scenario_set=str(scenario_set), scenario_set_sha256="0" * 64)
+    )
+
+    assert manifest["status"] == "blocked"
+    assert any(issue.startswith("scenario_set_sha256:") for issue in manifest["blocking_issues"])
+
+
+def test_scenario_set_checksum_match_passes(tmp_path):
+    """A supplied scenario-set checksum passes when it matches the named file."""
+    scenario_set = tmp_path / "scenario_set.yaml"
+    scenario_set.write_text("scenarios: []\n", encoding="utf-8")
+    digest = hashlib.sha256(scenario_set.read_bytes()).hexdigest()
+
+    checks = check_run_plan(_ready_plan(scenario_set=str(scenario_set), scenario_set_sha256=digest))
+
+    assert {c.name: c.passed for c in checks}["scenario_set_sha256"] is True
 
 
 def test_shipped_packet_checksum_matches_scenario_set():
@@ -219,6 +337,7 @@ def test_cli_blocked_packet_exit_one(tmp_path):
                 "scenario_set": "configs/scenarios/sets/classic_crossing_subset.yaml",
                 "horizon": 300,
                 "seeds": list(range(101, 121)),
+                "out_of_scope": _out_of_scope(),
             }
         ),
         encoding="utf-8",

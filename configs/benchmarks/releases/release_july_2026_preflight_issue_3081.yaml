@@ -1,0 +1,74 @@
+# Release-readiness / claim-audit preflight checklist for the July 2026 research
+# package (issue #3081).
+#
+# This is a FAIL-CLOSED checklist, not a publication step. Each item maps one of
+# issue #3081's acceptance criteria to a concrete, mechanically checkable
+# prerequisite. The evaluator
+# (`robot_sf/benchmark/release_preflight.py`) reports each item as `complete`
+# only when its declared durable artifact / manifest / ledger is present and
+# valid; any missing or invalid prerequisite resolves to `blocked`.
+#
+# IMPORTANT: The durable release artifacts below do not exist yet — issue #3081
+# is `state:blocked` pending at least one completed primary package with durable
+# artifacts. Running the preflight against the current checkout therefore
+# correctly reports `blocked` for the unfinished prerequisites. That is the
+# intended behaviour: the checklist surfaces exactly what is still missing and
+# never declares the release ready. As the durable evidence lands under the
+# tracked paths below (compact evidence under `docs/context/evidence/`, per
+# repository artifact policy), the corresponding items flip to `complete`.
+
+schema_version: release_preflight_checklist.v1
+release_id: research_package_july_2026
+description: >-
+  Claim-audit / release-readiness preflight for the July 2026 research package
+  (issue #3081). Composes existing release-manifest, claim, and result-store
+  contracts into a single fail-closed checklist keyed to the issue's acceptance
+  criteria.
+
+items:
+  # Acceptance criterion: "Independent reproduction of at least one principal
+  # result succeeds or records an explicit blocker."
+  - item_id: reproduction_record
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Clean-worktree reproduction record for >=1 principal result (commands,
+      commit, environment, seeds, and outcome or explicit blocker).
+    path: docs/context/evidence/release_july_2026/reproduction_record.md
+
+  # Acceptance criterion: "All tables and figures regenerate from canonical
+  # rows, not analyst-local derived files." The checksum manifest pins each
+  # regenerated table/figure to a digest so a stale or hand-edited file is
+  # caught.
+  - item_id: tables_figures_manifest
+    criterion: tables_figures
+    check: checksum_manifest
+    description: >-
+      Checksum manifest binding every regenerated table/figure to its canonical
+      source digest (regenerated from the result store, not analyst-local files).
+    path: docs/context/evidence/release_july_2026/tables_figures_manifest.json
+
+  # Acceptance criterion: "Claim cards pass validation and exclude
+  # degraded/fallback rows from promoted claims."
+  - item_id: claim_card_audit
+    criterion: claim_audit
+    check: claim_audit
+    description: >-
+      Promoted claim cards for the release; every promoted claim must rely on a
+      native/adapter execution mode (no fallback/degraded/unavailable rows).
+    path: docs/context/evidence/release_july_2026/claim_cards.yaml
+
+  # Acceptance criterion: "Every sprint issue is closed or classified continue,
+  # revise, stop, negative_result, invalid, or blocked_external."
+  - item_id: sprint_issue_ledger
+    criterion: sprint_issue_closure
+    check: issue_classification_ledger
+    description: >-
+      Classification ledger asserting every sprint issue is closed or carries an
+      allowed terminal classification.
+    path: docs/context/evidence/release_july_2026/sprint_issue_ledger.yaml
+    required_issues:
+      - 3078
+      - 3079
+      - 3080
+      - 3081

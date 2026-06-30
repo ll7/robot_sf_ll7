@@ -1,0 +1,132 @@
+# Issue #3813 sustained-flow scenario scaffold v0.
+#
+# This opt-in family records the first runnable scenario-matrix surface for
+# continuous-spawn sustained-flow work. It is not benchmark evidence yet:
+# current runner support still needs a real respawn process before these rows
+# can structurally close the wait-it-out exploit.
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+  - name: issue_3813_sustained_flow_t_intersection_light
+    map_file: ../../../maps/svg_maps/classic_t_intersection.svg
+    simulation_config:
+      max_episode_steps: 600
+      ped_density: 0.02
+      robot_config: {}
+    metadata:
+      archetype: sustained_flow_t_intersection
+      density: light
+      flow: continuous_crossing
+      pack_id: issue_3813_sustained_flow_scaffold_v0
+      status: pre_benchmark_scaffold
+      enabled_by_default: false
+      benchmark_evidence: false
+      claim_boundary: >-
+        Opt-in scenario-matrix scaffold only. Do not cite as sustained-flow
+        benchmark evidence until runtime continuous spawn, progress metrics,
+        and interaction-exposure diagnostics are implemented and validated.
+      continuous_spawn:
+        required_before_benchmark_use: true
+        intended_process: poisson_respawn
+        spawn_rate_per_min: 6.0
+        target_density_tier: light
+        current_runtime_support: metadata_only
+      success_metric:
+        id: sustained_progress_rate_m_per_s
+        definition: >-
+          Net robot path progress toward the route goal divided by simulated
+          episode seconds under non-clearing pedestrian demand.
+        wait_policy_expectation: zero_or_near_zero_progress
+      termination:
+        mode: time_bounded
+        max_episode_steps: 600
+        goal_reach_is_not_primary_success: true
+      requires_before_benchmark_use:
+        - continuous pedestrian respawn runtime support
+        - progress-rate metric implementation
+        - interaction-exposure diagnostic sanity check
+        - scenario_cert.v1 eligibility review
+    seeds: [381301, 381302, 381303]
+
+  - name: issue_3813_sustained_flow_t_intersection_medium
+    map_file: ../../../maps/svg_maps/classic_t_intersection.svg
+    simulation_config:
+      max_episode_steps: 600
+      ped_density: 0.05
+      robot_config: {}
+    metadata:
+      archetype: sustained_flow_t_intersection
+      density: medium
+      flow: continuous_crossing
+      pack_id: issue_3813_sustained_flow_scaffold_v0
+      status: pre_benchmark_scaffold
+      enabled_by_default: false
+      benchmark_evidence: false
+      claim_boundary: >-
+        Opt-in scenario-matrix scaffold only. Do not cite as sustained-flow
+        benchmark evidence until runtime continuous spawn, progress metrics,
+        and interaction-exposure diagnostics are implemented and validated.
+      continuous_spawn:
+        required_before_benchmark_use: true
+        intended_process: poisson_respawn
+        spawn_rate_per_min: 12.0
+        target_density_tier: medium
+        current_runtime_support: metadata_only
+      success_metric:
+        id: sustained_progress_rate_m_per_s
+        definition: >-
+          Net robot path progress toward the route goal divided by simulated
+          episode seconds under non-clearing pedestrian demand.
+        wait_policy_expectation: zero_or_near_zero_progress
+      termination:
+        mode: time_bounded
+        max_episode_steps: 600
+        goal_reach_is_not_primary_success: true
+      requires_before_benchmark_use:
+        - continuous pedestrian respawn runtime support
+        - progress-rate metric implementation
+        - interaction-exposure diagnostic sanity check
+        - scenario_cert.v1 eligibility review
+    seeds: [381311, 381312, 381313]
+
+  - name: issue_3813_sustained_flow_t_intersection_heavy
+    map_file: ../../../maps/svg_maps/classic_t_intersection.svg
+    simulation_config:
+      max_episode_steps: 600
+      ped_density: 0.08
+      robot_config: {}
+    metadata:
+      archetype: sustained_flow_t_intersection
+      density: heavy
+      flow: continuous_crossing
+      pack_id: issue_3813_sustained_flow_scaffold_v0
+      status: pre_benchmark_scaffold
+      enabled_by_default: false
+      benchmark_evidence: false
+      claim_boundary: >-
+        Opt-in scenario-matrix scaffold only. Do not cite as sustained-flow
+        benchmark evidence until runtime continuous spawn, progress metrics,
+        and interaction-exposure diagnostics are implemented and validated.
+      continuous_spawn:
+        required_before_benchmark_use: true
+        intended_process: poisson_respawn
+        spawn_rate_per_min: 18.0
+        target_density_tier: heavy
+        current_runtime_support: metadata_only
+      success_metric:
+        id: sustained_progress_rate_m_per_s
+        definition: >-
+          Net robot path progress toward the route goal divided by simulated
+          episode seconds under non-clearing pedestrian demand.
+        wait_policy_expectation: zero_or_near_zero_progress
+      termination:
+        mode: time_bounded
+        max_episode_steps: 600
+        goal_reach_is_not_primary_success: true
+      requires_before_benchmark_use:
+        - continuous pedestrian respawn runtime support
+        - progress-rate metric implementation
+        - interaction-exposure diagnostic sanity check
+        - scenario_cert.v1 eligibility review
+    seeds: [381321, 381322, 381323]
+map_search_paths:
+  - ../../../maps/svg_maps

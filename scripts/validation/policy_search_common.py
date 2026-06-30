@@ -31,6 +31,24 @@ def _metrics(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return metrics if isinstance(metrics, Mapping) else {}
 
 
+def _has_safety_near_miss(metrics: Mapping[str, Any]) -> bool:
+    """Return true for benchmark safety near-miss semantics."""
+    near_misses = _as_float(metrics.get("near_misses")) or 0.0
+    if near_misses > 0.0:
+        return True
+    min_clearance = _as_float(metrics.get("min_clearance"))
+    return min_clearance is not None and 0.0 <= min_clearance < NEAR_MISS_DIST
+
+
+def _has_center_distance_near_miss_diagnostic(metrics: Mapping[str, Any]) -> bool:
+    """Return true for legacy geometric center-distance near-miss diagnostics."""
+    diagnostic = _as_float(metrics.get("center_distance_near_miss_diagnostic")) or 0.0
+    if diagnostic > 0.0:
+        return True
+    min_distance = _as_float(metrics.get("min_distance"))
+    return min_distance is not None and COLLISION_DIST <= min_distance < NEAR_MISS_DIST
+
+
 def normalize_scenario_exclusion(row: Mapping[str, Any]) -> dict[str, Any] | None:
     """Return a validated invalid/impossible-scenario exclusion, if explicitly present.
 
@@ -129,8 +147,6 @@ def classify_failure_mode(  # noqa: C901
     reason = str(row.get("termination_reason", "")).strip().lower()
     metrics = _metrics(row)
     scenario_id = str(row.get("scenario_id", "")).strip().lower()
-    min_distance = _as_float(metrics.get("min_distance"))
-    near_misses = _as_float(metrics.get("near_misses")) or 0.0
     avg_speed = _as_float(metrics.get("avg_speed"))
     jerky_turns = _as_float(metrics.get("angular_speed_sign_changes"))
     progress = _as_float(metrics.get("goal_progress"))
@@ -142,10 +158,10 @@ def classify_failure_mode(  # noqa: C901
         ped_count = _count_configured_pedestrians(row)
         return "static_collision" if ped_count <= 0 else "pedestrian_collision"
 
-    if near_misses > 0.0:
+    if _has_safety_near_miss(metrics):
         return "near_miss_intrusive"
-    if min_distance is not None and COLLISION_DIST <= min_distance < NEAR_MISS_DIST:
-        return "near_miss_intrusive"
+    if _has_center_distance_near_miss_diagnostic(metrics):
+        return "center_distance_near_miss_diagnostic"
 
     if jerky_turns is not None and jerky_turns >= 6.0:
         return "oscillation"
@@ -177,6 +193,7 @@ def summarize_policy_search_records(  # noqa: C901
     failure_counts = Counter()
     family_groups: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     near_miss_count = 0
+    center_distance_near_miss_diagnostic_count = 0
     min_distance_values: list[float] = []
     avg_speed_values: list[float] = []
     actuation_metric_values: dict[str, list[float]] = {
@@ -197,7 +214,6 @@ def summarize_policy_search_records(  # noqa: C901
                 failure_counts[failure_mode] += 1
 
         metrics = _metrics(row)
-        near_misses = _as_float(metrics.get("near_misses")) or 0.0
         min_distance = _as_float(metrics.get("min_distance"))
         avg_speed = _as_float(metrics.get("avg_speed"))
         for metric_name, values in actuation_metric_values.items():
@@ -205,10 +221,10 @@ def summarize_policy_search_records(  # noqa: C901
             if metric_value is not None:
                 values.append(metric_value)
 
-        if near_misses > 0.0:
+        if _has_safety_near_miss(metrics):
             near_miss_count += 1
-        elif min_distance is not None and COLLISION_DIST <= min_distance < NEAR_MISS_DIST:
-            near_miss_count += 1
+        if _has_center_distance_near_miss_diagnostic(metrics):
+            center_distance_near_miss_diagnostic_count += 1
 
         if min_distance is not None:
             min_distance_values.append(min_distance)
@@ -233,11 +249,7 @@ def summarize_policy_search_records(  # noqa: C901
         near_misses_local = 0
         for row in rows:
             metrics = _metrics(row)
-            near_misses = _as_float(metrics.get("near_misses")) or 0.0
-            min_distance = _as_float(metrics.get("min_distance"))
-            if near_misses > 0.0:
-                near_misses_local += 1
-            elif min_distance is not None and COLLISION_DIST <= min_distance < NEAR_MISS_DIST:
+            if _has_safety_near_miss(metrics):
                 near_misses_local += 1
         denom = float(episodes) if episodes > 0 else 1.0
         return {
@@ -259,6 +271,10 @@ def summarize_policy_search_records(  # noqa: C901
         "success_rate": termination_counts.get("success", 0) / denom if total > 0 else 0.0,
         "collision_rate": termination_counts.get("collision", 0) / denom if total > 0 else 0.0,
         "near_miss_rate": near_miss_count / denom if total > 0 else 0.0,
+        "near_miss_semantics": "surface_clearance_safety_metric",
+        "center_distance_near_miss_diagnostic_rate": (
+            center_distance_near_miss_diagnostic_count / denom if total > 0 else 0.0
+        ),
         "termination_reason_counts": dict(termination_counts),
         "failure_mode_counts": dict(failure_counts),
         "scenario_exclusions": {

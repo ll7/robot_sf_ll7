@@ -39,6 +39,7 @@ def accumulate_batch_metadata(
     """
     impact_meta = (rec.get("algorithm_metadata") or {}).get("adapter_impact") or {}
     feasibility_meta = (rec.get("algorithm_metadata") or {}).get("kinematics_feasibility") or {}
+    ammv_meta = (rec.get("algorithm_metadata") or {}).get("ammv_feasibility") or {}
     adapter_requested_seen = False
     adapter_native_steps = 0
     adapter_adapted_steps = 0
@@ -69,6 +70,28 @@ def accumulate_batch_metadata(
             float(feasibility_totals["max_abs_delta_angular"]),
             _float_metadata_value(feasibility_meta.get("max_abs_delta_angular")),
         )
+    if isinstance(ammv_meta, dict):
+        feasibility_totals.setdefault("ammv_episode_count", 0)
+        feasibility_totals.setdefault("ammv_commands_evaluated", 0)
+        feasibility_totals.setdefault("ammv_curvature_violation_count", 0)
+        feasibility_totals.setdefault("ammv_feasible_episode_count", 0)
+        feasibility_totals.setdefault("ammv_tip_over_episode_count", 0)
+        feasibility_totals.setdefault("ammv_min_stability_margin", float("inf"))
+        feasibility_totals["ammv_episode_count"] += 1
+        feasibility_totals["ammv_commands_evaluated"] += int(ammv_meta.get("n_commands", 0) or 0)
+        feasibility_totals["ammv_curvature_violation_count"] += int(
+            ammv_meta.get("n_curvature_violations", 0) or 0
+        )
+        if bool(ammv_meta.get("feasible", False)):
+            feasibility_totals["ammv_feasible_episode_count"] += 1
+        if bool(ammv_meta.get("tip_over_violation", False)):
+            feasibility_totals["ammv_tip_over_episode_count"] += 1
+        margin = ammv_meta.get("min_stability_margin")
+        if margin is not None:
+            feasibility_totals["ammv_min_stability_margin"] = min(
+                float(feasibility_totals["ammv_min_stability_margin"]),
+                float(margin),
+            )
     return adapter_requested_seen, adapter_native_steps, adapter_adapted_steps
 
 
@@ -203,6 +226,8 @@ def build_completed_batch_summary(  # noqa: PLR0913
     benchmark_profile: str,
     noise_spec: dict[str, Any],
     noise_hash: str,
+    tracking_precision_spec: dict[str, Any],
+    tracking_precision_hash: str,
     active_observation_mode: str | None,
     active_observation_level: str | None,
     actuation_profile_metadata: dict[str, Any] | None,
@@ -296,6 +321,25 @@ def build_completed_batch_summary(  # noqa: PLR0913
         "max_abs_delta_linear": float(feasibility_totals["max_abs_delta_linear"]),
         "max_abs_delta_angular": float(feasibility_totals["max_abs_delta_angular"]),
     }
+    ammv_episode_count = int(feasibility_totals.get("ammv_episode_count", 0))
+    ammv_margin = float(feasibility_totals.get("ammv_min_stability_margin", float("inf")))
+    algo_contract["ammv_feasibility"] = {
+        "schema_version": "ammv_feasibility.v1",
+        "proxy_kind": "internal_non_hardware",
+        "episode_count": ammv_episode_count,
+        "commands_evaluated": int(feasibility_totals.get("ammv_commands_evaluated", 0)),
+        "min_stability_margin": (
+            ammv_margin if ammv_episode_count > 0 and ammv_margin != float("inf") else None
+        ),
+        "tip_over_violation": bool(
+            int(feasibility_totals.get("ammv_tip_over_episode_count", 0)) > 0
+        ),
+        "n_curvature_violations": int(feasibility_totals.get("ammv_curvature_violation_count", 0)),
+        "feasible": bool(
+            ammv_episode_count > 0
+            and int(feasibility_totals.get("ammv_feasible_episode_count", 0)) == ammv_episode_count
+        ),
+    }
 
     summary = {
         "total_jobs": total_jobs,
@@ -317,6 +361,8 @@ def build_completed_batch_summary(  # noqa: PLR0913
         "preflight": preflight,
         "observation_noise": noise_spec,
         "observation_noise_hash": noise_hash,
+        "tracking_precision": tracking_precision_spec,
+        "tracking_precision_hash": tracking_precision_hash,
         "observation_level": active_observation_level,
         "metrics": summarize_collision_metrics(episode_records),
         "synthetic_actuation_profile": actuation_profile_metadata,

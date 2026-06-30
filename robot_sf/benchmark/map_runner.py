@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
@@ -120,6 +120,7 @@ from robot_sf.benchmark.map_runner_observations import (
 )
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
+from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptive_proxemic_builder
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
@@ -181,6 +182,10 @@ from robot_sf.benchmark.scenario_belief_policy_hook import (
 )
 from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
+from robot_sf.benchmark.tracking_precision_contract import (
+    normalize_tracking_precision_spec,
+    tracking_precision_hash,
+)
 from robot_sf.benchmark.utils import (
     _config_hash,
     attach_track_metadata,
@@ -189,14 +194,6 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
-from robot_sf.planner.adaptive_proxemic_selector import (
-    AdaptiveProxemicSelectorAdapter,
-    build_adaptive_proxemic_selector_config,
-)
-from robot_sf.planner.crowdnav_height import (
-    CrowdNavHeightAdapter,
-    build_crowdnav_height_config,
-)
 from robot_sf.planner.gap_prediction import (
     GapAwarePredictionAdapter,
     build_gap_prediction_config,
@@ -282,10 +279,6 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
     TrivialReferencePlannerAdapter,
 )
-from robot_sf.planner.sonic_crowdnav import (
-    SonicCrowdNavAdapter,
-    build_sonic_crowdnav_config,
-)
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, build_stream_gap_config
 from robot_sf.planner.topology_guided_local_policy import (
     TopologyGuidedHybridRulePlannerAdapter,
@@ -295,6 +288,126 @@ from robot_sf.training.scenario_loader import load_scenarios
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+@dataclass(frozen=True)
+class _CrowdNavHeightConfigFallback:
+    """Lightweight config used when tests monkeypatch the optional adapter."""
+
+    repo_root: Path = Path("output/repos/CrowdNav_HEIGHT")
+    model_dir: Path = Path("output/external_checkpoints/crowdnav_height_extracted/HEIGHT/HEIGHT")
+    checkpoint_name: str = "237800.pt"
+    device: str = "cpu"
+    max_linear_speed: float = 0.5
+    max_angular_speed: float = 1.0
+
+
+@dataclass(frozen=True)
+class _SonicCrowdNavConfigFallback:
+    """Lightweight config used when tests monkeypatch the optional adapter."""
+
+    repo_root: Path = Path("output/repos/SoNIC-Social-Nav")
+    model_name: str = "SoNIC_GST"
+    checkpoint_name: str = "05207.pt"
+    device: str = "cpu"
+    max_linear_speed: float = 1.0
+    max_angular_speed: float = 1.0
+
+
+CrowdNavHeightAdapter: Any | None = None
+build_crowdnav_height_config: Any | None = None
+SonicCrowdNavAdapter: Any | None = None
+build_sonic_crowdnav_config: Any | None = None
+
+
+def _fallback_crowdnav_height_config(data: dict[str, Any] | None) -> _CrowdNavHeightConfigFallback:
+    """Build config without importing torch-backed CrowdNav module.
+
+    Returns:
+        _CrowdNavHeightConfigFallback: Minimal adapter config.
+    """
+
+    payload = data or {}
+    max_linear_speed = float(payload.get("max_linear_speed", 0.5))
+    max_angular_speed = float(payload.get("max_angular_speed", 1.0))
+    if max_linear_speed < 0.0 or max_angular_speed < 0.0:
+        raise ValueError("max_linear_speed and max_angular_speed must be non-negative")
+    return _CrowdNavHeightConfigFallback(
+        repo_root=Path(str(payload.get("repo_root", _CrowdNavHeightConfigFallback.repo_root))),
+        model_dir=Path(str(payload.get("model_dir", _CrowdNavHeightConfigFallback.model_dir))),
+        checkpoint_name=str(
+            payload.get("checkpoint_name", _CrowdNavHeightConfigFallback.checkpoint_name)
+        ),
+        device=str(payload.get("device", "cpu")).strip() or "cpu",
+        max_linear_speed=max_linear_speed,
+        max_angular_speed=max_angular_speed,
+    )
+
+
+def _crowdnav_height_symbols() -> tuple[Any, Any]:
+    """Return CrowdNav HEIGHT adapter/config builder, importing torch-backed code lazily."""
+
+    global CrowdNavHeightAdapter, build_crowdnav_height_config
+    if CrowdNavHeightAdapter is None:
+        from robot_sf.planner.crowdnav_height import (  # noqa: PLC0415
+            CrowdNavHeightAdapter as _CrowdNavHeightAdapter,
+        )
+        from robot_sf.planner.crowdnav_height import (  # noqa: PLC0415
+            build_crowdnav_height_config as _build_crowdnav_height_config,
+        )
+
+        CrowdNavHeightAdapter = _CrowdNavHeightAdapter
+        build_crowdnav_height_config = _build_crowdnav_height_config
+    builder = build_crowdnav_height_config or _fallback_crowdnav_height_config
+    return CrowdNavHeightAdapter, builder
+
+
+def _fallback_sonic_crowdnav_config(data: dict[str, Any] | None) -> _SonicCrowdNavConfigFallback:
+    """Build SoNIC config without importing the torch-backed module.
+
+    Returns:
+        _SonicCrowdNavConfigFallback: Minimal adapter config.
+    """
+
+    payload = data or {}
+    max_linear_speed = float(payload.get("max_linear_speed", 1.0))
+    max_angular_speed = float(payload.get("max_angular_speed", 1.0))
+    if max_linear_speed < 0.0 or max_angular_speed < 0.0:
+        raise ValueError("max_linear_speed and max_angular_speed must be non-negative")
+    return _SonicCrowdNavConfigFallback(
+        repo_root=Path(str(payload.get("repo_root", _SonicCrowdNavConfigFallback.repo_root))),
+        model_name=str(payload.get("model_name", _SonicCrowdNavConfigFallback.model_name)).strip()
+        or _SonicCrowdNavConfigFallback.model_name,
+        checkpoint_name=str(
+            payload.get("checkpoint_name", _SonicCrowdNavConfigFallback.checkpoint_name)
+        ).strip()
+        or _SonicCrowdNavConfigFallback.checkpoint_name,
+        device=str(payload.get("device", "cpu")).strip() or "cpu",
+        max_linear_speed=max_linear_speed,
+        max_angular_speed=max_angular_speed,
+    )
+
+
+def _sonic_crowdnav_symbols() -> tuple[Any, Any]:
+    """Return SoNIC adapter/config builder, importing torch-backed code lazily.
+
+    Returns:
+        tuple[Any, Any]: Adapter class and config-builder callable.
+    """
+
+    global SonicCrowdNavAdapter, build_sonic_crowdnav_config
+    if SonicCrowdNavAdapter is None:
+        from robot_sf.planner.sonic_crowdnav import (  # noqa: PLC0415
+            SonicCrowdNavAdapter as _SonicCrowdNavAdapter,
+        )
+        from robot_sf.planner.sonic_crowdnav import (  # noqa: PLC0415
+            build_sonic_crowdnav_config as _build_sonic_crowdnav_config,
+        )
+
+        SonicCrowdNavAdapter = _SonicCrowdNavAdapter
+        build_sonic_crowdnav_config = _build_sonic_crowdnav_config
+    builder = build_sonic_crowdnav_config or _fallback_sonic_crowdnav_config
+    return SonicCrowdNavAdapter, builder
 
 
 _SOCNAV_ALGO_KEYS = {
@@ -900,6 +1013,10 @@ _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
         _adapter_policy_builders.LIDAR_SOCIAL_FORCE_KEYS,
         _adapter_policy_builders.build_lidar_social_force,
     ),
+    **dict.fromkeys(
+        _adaptive_proxemic_builder.ADAPTIVE_PROXEMIC_SELECTOR_KEYS,
+        _adaptive_proxemic_builder.build,
+    ),
     **dict.fromkeys(_safety_barrier_builder.ADAPTER_ALGO_KEYS, _safety_barrier_builder.build),
 }
 
@@ -1002,38 +1119,6 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             adapter_name="HybridRuleLocalPlannerAdapter",
             robot_kinematics=robot_kinematics,
             normalized_robot_command_mode=normalized_robot_command_mode,
-        )
-
-    if algo_key in {"adaptive_proxemic_selector_v0", "adaptive_proxemic_selector_v1"}:
-        selector_algo_config = dict(algo_config)
-        selector_algo_config.setdefault(
-            "selector_version",
-            "v1" if algo_key == "adaptive_proxemic_selector_v1" else "v0",
-        )
-        selector_config = build_adaptive_proxemic_selector_config(selector_algo_config)
-        adapter = AdaptiveProxemicSelectorAdapter(config=selector_config)
-        meta["adaptive_proxemic_selector"] = {
-            "status": "enabled",
-            "selector_version": selector_config.selector_version,
-            "diagnostic_only": bool(selector_config.diagnostic_only),
-            "claim_boundary": selector_config.claim_boundary,
-            "profile_sources": [
-                selector_config.profiles[name].source_candidate
-                for name in ("conservative", "neutral", "open")
-            ],
-        }
-        return _build_adapter_policy(
-            algo_key=algo_key,
-            algo_config=selector_algo_config,
-            meta=meta,
-            adapter=adapter,
-            adapter_name="AdaptiveProxemicSelectorAdapter",
-            robot_kinematics=robot_kinematics,
-            normalized_robot_command_mode=normalized_robot_command_mode,
-            limitations=(
-                "diagnostic-only selector over fixed proxemic profiles; "
-                "not benchmark or comfort evidence"
-            ),
         )
 
     if algo_key == "topology_guided_hybrid_rule_v0":
@@ -1657,8 +1742,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             if algo_key in guarded_root
             else str(algo_config.get("model_name", "GST_predictor_rand"))
         )
-        sonic_adapter = SonicCrowdNavAdapter(
-            config=build_sonic_crowdnav_config(
+        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+        sonic_adapter = sonic_adapter_cls(
+            config=sonic_config_builder(
                 {
                     **algo_config,
                     "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
@@ -1820,12 +1906,15 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
             )
         )
     elif algo_key in {"crowdnav_height"}:
-        adapter = CrowdNavHeightAdapter(config=build_crowdnav_height_config(algo_config))
+        crowdnav_adapter_cls, crowdnav_config_builder = _crowdnav_height_symbols()
+        adapter = crowdnav_adapter_cls(config=crowdnav_config_builder(algo_config))
     elif algo_key in {"sonic_crowdnav", "sonic_gst"}:
-        adapter = SonicCrowdNavAdapter(config=build_sonic_crowdnav_config(algo_config))
+        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+        adapter = sonic_adapter_cls(config=sonic_config_builder(algo_config))
     elif algo_key in {"gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"}:
-        adapter = SonicCrowdNavAdapter(
-            config=build_sonic_crowdnav_config(
+        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+        adapter = sonic_adapter_cls(
+            config=sonic_config_builder(
                 {
                     **algo_config,
                     "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
@@ -1839,8 +1928,9 @@ def _build_policy(  # noqa: C901, PLR0912, PLR0915
         "gensafe_gst_predictor_rand",
         "gst_predictor_rand",
     }:
-        adapter = SonicCrowdNavAdapter(
-            config=build_sonic_crowdnav_config(
+        sonic_adapter_cls, sonic_config_builder = _sonic_crowdnav_symbols()
+        adapter = sonic_adapter_cls(
+            config=sonic_config_builder(
                 {
                     **algo_config,
                     "repo_root": algo_config.get("repo_root", "output/repos/GenSafeNav"),
@@ -2144,6 +2234,7 @@ def _run_map_episode(  # noqa: PLR0913
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
@@ -2176,6 +2267,7 @@ def _run_map_episode(  # noqa: PLR0913
         benchmark_track=benchmark_track,
         track_schema_version=track_schema_version,
         observation_noise=observation_noise,
+        tracking_precision=tracking_precision,
         synthetic_actuation_profile=synthetic_actuation_profile,
         latency_stress_profile=latency_stress_profile,
         record_planner_decision_trace=record_planner_decision_trace,
@@ -2234,6 +2326,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     benchmark_track: str | None = None,
     track_schema_version: str | None = None,
     observation_noise: dict[str, Any] | None = None,
+    tracking_precision: dict[str, Any] | None = None,
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     record_simulation_step_trace: bool = False,
@@ -2266,6 +2359,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     suite_key = _suite_key(scenario_path)
     noise_spec = normalize_observation_noise_spec(observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
+    tracking_precision_spec = normalize_tracking_precision_spec(tracking_precision)
+    tracking_precision_spec_hash = tracking_precision_hash(tracking_precision_spec)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
     latency_profile = _load_latency_stress_profile(latency_stress_profile)
     latency_metadata_dt = float(dt) if dt is not None and float(dt) > 0.0 else 0.1
@@ -2471,6 +2566,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             "preflight": preflight,
             "observation_noise": noise_spec,
             "observation_noise_hash": noise_hash,
+            "tracking_precision": tracking_precision_spec,
+            "tracking_precision_hash": tracking_precision_spec_hash,
             "metrics": summarize_collision_metrics([]),
             "latency_stress_profile": (
                 latency_profile.to_metadata(dt=latency_metadata_dt)
@@ -2551,6 +2648,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     benchmark_track=benchmark_track,
                     track_schema_version=track_schema_version,
                     observation_noise=noise_spec,
+                    tracking_precision=tracking_precision_spec,
                     synthetic_actuation_profile=(
                         actuation_profile.to_metadata() if actuation_profile is not None else None
                     ),
@@ -2580,6 +2678,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ped_impact_radius_m=ped_impact_radius_m,
         ped_impact_window_steps=ped_impact_window_steps,
         noise_spec=noise_spec,
+        tracking_precision_spec=tracking_precision_spec,
         batch_observation_mode=batch_observation_mode,
         observation_level=observation_level,
         benchmark_track=benchmark_track,
@@ -2647,6 +2746,8 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         benchmark_profile=benchmark_profile,
         noise_spec=noise_spec,
         noise_hash=noise_hash,
+        tracking_precision_spec=tracking_precision_spec,
+        tracking_precision_hash=tracking_precision_spec_hash,
         active_observation_mode=active_observation_mode,
         active_observation_level=active_observation_level,
         actuation_profile_metadata=(

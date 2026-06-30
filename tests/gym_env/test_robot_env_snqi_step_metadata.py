@@ -27,7 +27,7 @@ def test_compute_snqi_step_proxies_emits_non_default_terms(
     d_coll = 0.2
     d_near = 0.6
     comfort_threshold = 1.4
-    near_distance = (d_coll + d_near) / 2.0
+    near_distance = 1.0 + 0.4 + (d_near / 2.0)
     sim = _FakeSimulator()
     sim.ped_pos = np.array([[near_distance, 0.0], [4.0, 4.0]], dtype=float)
     sim.last_ped_forces = np.array(
@@ -42,6 +42,8 @@ def test_compute_snqi_step_proxies_emits_non_default_terms(
 
     first = compute_snqi_step_proxies(simulator=sim, dt=0.1, proxy_state=proxy.state)
     assert first["near_misses"] == 1.0
+    assert first["min_clearance"] == pytest.approx(d_near / 2.0)
+    assert first["center_distance_near_miss_diagnostic"] == 0.0
     assert first["force_exceed_events"] == 1.0
     assert first["comfort_exposure"] == 0.5
     assert first["jerk_mean"] == 0.0

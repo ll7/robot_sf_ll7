@@ -24,7 +24,14 @@ _spec.loader.exec_module(mod)
 _HARD_SEED_FIXTURE = "configs/benchmarks/predictive_hard_seeds_v1.yaml"
 
 
-def _write_config(root: Path, *, min_resolvable: int = 2, min_epochs: int = 4, min_success_spread: float = 1.0e-9) -> Path:
+def _write_config(
+    root: Path,
+    *,
+    min_resolvable: int = 2,
+    min_epochs: int = 4,
+    min_success_spread: float = 1.0e-9,
+    known_blockers: list[dict[str, str]] | None = None,
+) -> Path:
     """Write a minimal but valid readiness contract pointing at the real hard-seed fixture."""
     config = {
         "schema_version": "predictive-checkpoint-proxy-readiness.v1",
@@ -32,6 +39,8 @@ def _write_config(root: Path, *, min_resolvable: int = 2, min_epochs: int = 4, m
         "checkpoint_selector": {
             "registry_tag": "predictive",
             "min_resolvable_checkpoints": min_resolvable,
+            "training_run_group_field": "proxy_training_run_id",
+            "min_resolvable_training_run_checkpoints": min_resolvable,
         },
         "proxy_summary_contract": {
             "require_enabled": True,
@@ -39,6 +48,8 @@ def _write_config(root: Path, *, min_resolvable: int = 2, min_epochs: int = 4, m
             "min_success_spread": min_success_spread,
         },
     }
+    if known_blockers is not None:
+        config["known_blockers"] = known_blockers
     path = root / "proxy_config.yaml"
     path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     return path
@@ -51,7 +62,12 @@ def _write_registry(root: Path, present_count: int, absent_count: int) -> Path:
         ckpt = root / f"present_{i}.pt"
         ckpt.write_text("x", encoding="utf-8")
         models.append(
-            {"model_id": f"predictive_present_{i}", "local_path": str(ckpt), "tags": ["predictive"]}
+            {
+                "model_id": f"predictive_present_{i}",
+                "local_path": str(ckpt),
+                "tags": ["predictive"],
+                "proxy_training_run_id": "synthetic_run_a",
+            }
         )
     for i in range(absent_count):
         models.append(
@@ -59,6 +75,7 @@ def _write_registry(root: Path, present_count: int, absent_count: int) -> Path:
                 "model_id": f"predictive_absent_{i}",
                 "local_path": str(root / "missing" / f"absent_{i}.pt"),
                 "tags": ["predictive"],
+                "proxy_training_run_id": "synthetic_run_a",
             }
         )
     # A non-predictive entry that must be ignored by the selector.
@@ -94,6 +111,114 @@ def test_blocked_when_config_missing(tmp_path):
     assert report["prerequisites"]["readiness_config"]["status"] == "blocked"
 
 
+def test_failed_when_config_not_a_mapping(tmp_path):
+    """A config YAML whose top-level document is not a mapping reports a clean failed status."""
+    registry = _write_registry(tmp_path, present_count=6, absent_count=0)
+    bad_config = tmp_path / "proxy_config.yaml"
+    bad_config.write_text(yaml.safe_dump([1, 2, 3]), encoding="utf-8")
+    report = mod.check_readiness(
+        config_path=bad_config, registry_path=registry, repo_root=_REPO_ROOT
+    )
+    assert report["status"] == "blocked"
+    cfg_check = report["prerequisites"]["readiness_config"]
+    assert cfg_check["status"] == "failed"
+    assert any("must be a mapping" in m for m in cfg_check["messages"])
+
+
+def test_blocked_when_checkpoint_local_path_is_directory(tmp_path):
+    """A predictive local_path pointing at a directory must not count as a resolvable checkpoint."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    ckpt_dir = tmp_path / "predictive_dir"
+    ckpt_dir.mkdir()
+    models = [{"model_id": "predictive_dir_0", "local_path": str(ckpt_dir), "tags": ["predictive"]}]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    assert ckpt["status"] == "blocked"
+    assert ckpt["mapping"]["resolvable_count"] == 0
+    assert ckpt["mapping"]["blocked_by_status"] == {"not_checkpoint_file": 1}
+    assert ckpt["mapping"]["candidates"][0]["status"] == "not_checkpoint_file"
+    assert ckpt["mapping"]["candidates"][0]["reason"] == "local_path resolves to a directory"
+    assert report["status"] == "blocked"
+
+
+def test_blocked_mapping_classifies_invalid_local_path(tmp_path):
+    """A predictive registry entry without local_path is an explicit blocked mapping row."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    models = [{"model_id": "predictive_missing_path", "tags": ["predictive"]}]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    assert report["status"] == "blocked"
+    assert ckpt["mapping"]["blocked_by_status"] == {"invalid_local_path": 1}
+    assert ckpt["mapping"]["candidates"][0]["status"] == "invalid_local_path"
+    assert ckpt["mapping"]["candidates"][0]["artifact_scope"] == "invalid"
+
+
+def test_blocked_mapping_classifies_worktree_local_output_artifact(tmp_path):
+    """A missing output/ checkpoint is reported as worktree-local, not durable evidence."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    models = [
+        {
+            "model_id": "predictive_output_tmp",
+            "local_path": "output/tmp/predictive/run/checkpoint.pt",
+            "tags": ["predictive"],
+        }
+    ]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    candidate = ckpt["mapping"]["candidates"][0]
+    assert report["status"] == "blocked"
+    assert ckpt["mapping"]["blocked_by_status"] == {"missing_local_path": 1}
+    assert candidate["status"] == "missing_local_path"
+    assert candidate["artifact_scope"] == "worktree_local_output"
+    assert candidate["resolved_path"].endswith("output/tmp/predictive/run/checkpoint.pt")
+
+
+def test_blocked_mapping_surfaces_public_release_metadata(tmp_path):
+    """A release-backed checkpoint remains blocked until local, but provenance is mapped."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    models = [
+        {
+            "model_id": "predictive_release_backed",
+            "local_path": "output/tmp/predictive/run/checkpoint.pt",
+            "tags": ["predictive"],
+            "github_release": {
+                "repo": "ll7/robot_sf_ll7",
+                "tag": "artifact/models-2026-05-registry-v1",
+                "asset_name": "predictive_release_backed.pt",
+                "url": "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.pt",
+                "sha256": "a" * 64,
+                "size_bytes": 123,
+                "metadata_asset": "predictive_release_backed-metadata.json",
+            },
+        }
+    ]
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    candidate = ckpt["mapping"]["candidates"][0]
+    public_artifact = candidate["public_artifact"]
+    assert report["status"] == "blocked"
+    assert ckpt["mapping"]["public_artifacts_by_status"] == {"declared": 1}
+    assert candidate["status"] == "missing_local_path"
+    assert public_artifact["status"] == "declared"
+    assert public_artifact["source"] == "github_release"
+    assert public_artifact["asset_name"] == "predictive_release_backed.pt"
+    assert public_artifact["sha256"] == "a" * 64
+
+
 def test_blocked_when_too_few_checkpoints_resolve(tmp_path):
     """Fewer locally-resolvable checkpoints than the minimum fails closed (mapping metadata)."""
     config = _write_config(tmp_path, min_resolvable=6)
@@ -105,8 +230,67 @@ def test_blocked_when_too_few_checkpoints_resolve(tmp_path):
     mapping = ckpt["mapping"]
     assert mapping["candidate_count"] == 6  # the ppo entry is excluded
     assert mapping["resolvable_count"] == 2
+    assert mapping["blocked_by_status"] == {"missing_local_path": 4}
     # Absent checkpoints are surfaced by model_id for actionable triage.
     assert any("predictive_absent_0" in m for m in ckpt["messages"])
+
+
+def test_blocked_when_resolvable_checkpoints_missing_training_run_group(tmp_path):
+    """Resolved checkpoints without lineage metadata cannot satisfy one-real-run contract."""
+    config = _write_config(tmp_path, min_resolvable=2)
+    models = []
+    for index in range(2):
+        checkpoint = tmp_path / f"present_without_group_{index}.pt"
+        checkpoint.write_text("x", encoding="utf-8")
+        models.append(
+            {
+                "model_id": f"predictive_without_group_{index}",
+                "local_path": str(checkpoint),
+                "tags": ["predictive"],
+            }
+        )
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    mapping = ckpt["mapping"]
+    assert report["status"] == "blocked"
+    assert ckpt["status"] == "blocked"
+    assert mapping["resolvable_count"] == 2
+    assert mapping["missing_training_run_group_metadata"] == 2
+    assert mapping["resolvable_by_training_run_group"] == {}
+    assert "training run group field" in ckpt["messages"][0]
+
+
+def test_blocked_when_resolvable_checkpoints_split_across_training_runs(tmp_path):
+    """Enough files still fail closed when no single run contributes enough checkpoints."""
+    config = _write_config(tmp_path, min_resolvable=4)
+    models = []
+    for index, group in enumerate(["run_a", "run_a", "run_b", "run_b"]):
+        checkpoint = tmp_path / f"present_{index}.pt"
+        checkpoint.write_text("x", encoding="utf-8")
+        models.append(
+            {
+                "model_id": f"predictive_present_{index}",
+                "local_path": str(checkpoint),
+                "tags": ["predictive"],
+                "proxy_training_run_id": group,
+            }
+        )
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(yaml.safe_dump({"version": 1, "models": models}), encoding="utf-8")
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    mapping = ckpt["mapping"]
+    assert report["status"] == "blocked"
+    assert ckpt["status"] == "blocked"
+    assert mapping["resolvable_count"] == 4
+    assert mapping["resolvable_by_training_run_group"] == {"run_a": 2, "run_b": 2}
+    assert "need >= 4" in ckpt["messages"][0]
 
 
 def test_blocked_when_proxy_summary_degenerate(tmp_path):
@@ -128,10 +312,8 @@ def test_blocked_when_proxy_summary_degenerate(tmp_path):
     assert summary_check["summary"]["verdict"] == "inconclusive"
 
 
-
-
 def test_blocked_when_proxy_summary_spread_below_contract(tmp_path):
-    """Summary spread below configured minimum fails closed."""
+    """A summary with insufficient hard-success spread fails closed."""
     config = _write_config(
         tmp_path,
         min_resolvable=2,
@@ -171,6 +353,136 @@ def test_blocked_when_proxy_disabled(tmp_path):
     assert any(
         "proxy.enabled" in m for m in report["prerequisites"]["proxy_training_summary"]["messages"]
     )
+
+
+def test_blocked_when_summary_not_a_mapping(tmp_path):
+    """A training summary whose JSON is not an object fails closed without crashing."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    bad_summary = tmp_path / "summary.json"
+    bad_summary.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=bad_summary,
+    )
+    assert report["status"] == "blocked"
+    summary_check = report["prerequisites"]["proxy_training_summary"]
+    assert summary_check["status"] == "failed"
+    assert any("JSON object" in m for m in summary_check["messages"])
+
+
+def test_blocked_when_known_blocker_configured(tmp_path):
+    """Configured known blockers are surfaced and keep preflight fail-closed."""
+    config = _write_config(
+        tmp_path,
+        min_resolvable=2,
+        min_epochs=2,
+        known_blockers=[
+            {
+                "id": "degenerate_hardcase_proxy_probe_v1",
+                "status": "blocked",
+                "revival_condition": "provide a non-degenerate proxy summary",
+            }
+        ],
+    )
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    summary = _write_summary(tmp_path, enabled=True, pairs=[(1.0, 0.1), (0.8, 0.4)])
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=summary,
+    )
+    blockers = report["prerequisites"]["known_blockers"]
+    assert report["status"] == "blocked"
+    assert blockers["status"] == "blocked"
+    assert blockers["blockers"][0]["id"] == "degenerate_hardcase_proxy_probe_v1"
+
+
+def test_ready_when_known_blocker_resolved(tmp_path):
+    """Resolved known blockers stay in the map without blocking readiness."""
+    config = _write_config(
+        tmp_path,
+        min_resolvable=2,
+        min_epochs=2,
+        known_blockers=[
+            {
+                "id": "degenerate_hardcase_proxy_probe_v1",
+                "status": "resolved",
+                "revival_condition": "non-degenerate proxy summary supplied",
+            }
+        ],
+    )
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    summary = _write_summary(tmp_path, enabled=True, pairs=[(1.0, 0.1), (0.8, 0.4)])
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=summary,
+    )
+    blockers = report["prerequisites"]["known_blockers"]
+    assert report["status"] == "ready"
+    assert blockers["status"] == "passed"
+    assert blockers["blockers"][0]["status"] == "resolved"
+
+
+def test_blocked_when_artifact_inventory_has_blocked_state(tmp_path):
+    """Configured blocked artifacts surface separately from known blocker prose."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "degenerate_hardcase_proxy_probe_v1",
+            "artifact_type": "proxy_training_summary",
+            "status": "blocked",
+            "storage_scope": "worktree_local_output",
+            "path_pattern": "output/tmp/**/hardcase_proxy_probe_v1*/**/training_summary.json",
+            "required_metadata": ["proxy.enabled=true", "proxy.history"],
+            "revival_condition": "provide non-degenerate proxy summary",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    summary = _write_summary(tmp_path, enabled=True, pairs=[(1.0, 0.1), (0.8, 0.4)])
+
+    report = mod.check_readiness(
+        config_path=config,
+        registry_path=registry,
+        repo_root=_REPO_ROOT,
+        training_summary=summary,
+    )
+
+    artifacts = report["prerequisites"]["blocked_artifacts"]
+    assert report["status"] == "blocked"
+    assert artifacts["status"] == "blocked"
+    assert artifacts["artifacts"][0]["artifact_type"] == "proxy_training_summary"
+    assert any("blocked artifact" in message for message in artifacts["messages"])
+
+
+def test_failed_when_blocked_artifact_metadata_malformed(tmp_path):
+    """Artifact inventory missing required metadata fails closed before readiness claims."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "missing_status",
+            "artifact_type": "checkpoint_set",
+            "storage_scope": "worktree_local_output",
+            "revival_condition": "hydrate checkpoints",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    config_check = report["prerequisites"]["readiness_config"]
+    assert report["status"] == "blocked"
+    assert config_check["status"] == "failed"
+    assert any("blocked_artifacts[0]" in message for message in config_check["messages"])
 
 
 def test_ready_when_inputs_present_and_summary_has_spread(tmp_path):
@@ -243,21 +555,71 @@ def test_real_registry_predictive_checkpoints_blocked():
     assert report["status"] == "blocked"
 
 
-def test_blocked_artifacts_payload_tracks_missing_candidates(tmp_path):
-    config = _write_config(tmp_path, min_resolvable=2)
-    registry = _write_registry(tmp_path, present_count=1, absent_count=2)
+def test_blocked_artifact_path_pattern_required(tmp_path):
+    """Blocked-artifact entry requires a path pattern to stay actionable."""
+    config = _write_config(tmp_path, min_resolvable=2, min_epochs=2)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["blocked_artifacts"] = [
+        {
+            "id": "missing_path_pattern",
+            "artifact_type": "checkpoint_set",
+            "status": "blocked",
+            "storage_scope": "worktree_local_output",
+            "revival_condition": "add path pattern for blocked artifact",
+        }
+    ]
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    registry = _write_registry(tmp_path, present_count=2, absent_count=0)
+    report = mod.check_readiness(config_path=config, registry_path=registry, repo_root=_REPO_ROOT)
+
+    config_check = report["prerequisites"]["readiness_config"]
+    assert report["status"] == "blocked"
+    assert config_check["status"] == "failed"
+    assert any("missing path_pattern" in message for message in config_check["messages"])
+
+
+def test_checkpoint_mapping_surfaces_incomplete_public_metadata(tmp_path):
+    """Missing public release metadata stays visible in checkpoint mapping output."""
+    config = _write_config(tmp_path, min_resolvable=1)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["known_blockers"] = [
+        {
+            "id": "degenerate_hardcase_proxy_probe_v1",
+            "status": "resolved",
+            "revival_condition": "non-degenerate proxy summary supplied",
+        }
+    ]
+    data["blocked_artifacts"] = []
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    incomplete = [
+        {
+            "model_id": "predictive_incomplete_release",
+            "local_path": str(tmp_path / "present_incomplete.pt"),
+            "tags": ["predictive"],
+            "proxy_training_run_id": "run_a",
+            "github_release": {
+                "repo": "ll7/robot_sf_ll7",
+                "tag": "artifact/models-2026-05-registry-v1",
+                "asset_name": "predictive_incomplete_release.pt",
+            },
+        }
+    ]
+    registry = tmp_path / "registry.yaml"
+    (tmp_path / "present_incomplete.pt").write_text("x", encoding="utf-8")
+    registry.write_text(yaml.safe_dump({"version": 1, "models": incomplete}), encoding="utf-8")
+
     report = mod.check_readiness(
         config_path=config,
         registry_path=registry,
         repo_root=_REPO_ROOT,
     )
-    blocked_artifacts = report["prerequisites"]["checkpoint_artifacts"]["mapping"][
-        "blocked_artifacts"
-    ]
-    assert len(blocked_artifacts) == 2
-    assert {item["model_id"] for item in blocked_artifacts} == {
-        "predictive_absent_0",
-        "predictive_absent_1",
-    }
-    assert all(item["missing_reason"] == "local_path_not_resolvable" for item in blocked_artifacts)
-    assert all(item["expected_local_path"] for item in blocked_artifacts)
+
+    ckpt = report["prerequisites"]["checkpoint_artifacts"]
+    candidate = ckpt["mapping"]["candidates"][0]
+    public_artifact = candidate["public_artifact"]
+
+    assert ckpt["status"] == "passed"
+    assert public_artifact["status"] == "incomplete"
+    assert "sha256" in public_artifact["missing_fields"]

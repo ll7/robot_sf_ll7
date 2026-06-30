@@ -147,16 +147,6 @@ class PPOPlanner:
                 self.config.model_path,
                 owner="PPOPlannerConfig",
             )
-        if PPO is None:  # pragma: no cover - missing sb3 at runtime
-            warn_soft_degrade(
-                "PPO",
-                "stable_baselines3 not installed",
-                "will use fallback-to-goal if enabled",
-            )
-            self._model = None
-            self._status = "fallback"
-            self._fallback_reason = "sb3_missing"
-            return
         try:
             mp = (
                 resolve_model_path(self.config.model_id)
@@ -191,6 +181,23 @@ class PPOPlanner:
                 f"Place model at '{mp}' or check available models in model/ directory. "
                 "Download from releases or train with scripts/training/train_ppo.py --config ...",
             )
+        if PPO is None:  # pragma: no cover - missing sb3 at runtime
+            if self.config.fallback_to_goal:
+                warn_soft_degrade(
+                    "PPO",
+                    "stable_baselines3 not installed",
+                    "will use fallback-to-goal navigation",
+                )
+                self._model = None
+                self._status = "fallback"
+                self._fallback_reason = "sb3_missing"
+                return
+            raise_fatal_with_remedy(
+                "stable_baselines3 not installed; PPO model cannot be loaded",
+                "Install project training dependencies with `uv sync --all-extras`, "
+                "or enable fallback_to_goal for diagnostic runs.",
+            )
+
         try:
             # Avoid printing system info in CI/test logs
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)

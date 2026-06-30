@@ -15,6 +15,8 @@ import pytest
 import yaml
 from loguru import logger
 
+import robot_sf.benchmark.camera_ready._artifacts as camera_ready_artifacts_module
+import robot_sf.benchmark.camera_ready._run_state as camera_ready_run_state_module
 import robot_sf.benchmark.camera_ready_campaign as camera_ready_campaign_module
 from robot_sf.benchmark.artifact_publication import PublicationBundleResult
 from robot_sf.benchmark.camera_ready._artifacts import (
@@ -38,6 +40,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _build_actuation_envelope_summary,
     _build_breakdown_rows,
     _build_scenario_amv_lookup,
+    _campaign_success_counters,
     _extract_amv_taxonomy,
     _jsonable_repo_relative,
     _load_campaign_scenarios,
@@ -67,6 +70,63 @@ from robot_sf.benchmark.synthetic_actuation import (
     validate_synthetic_actuation_variability_distribution,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+
+
+def test_camera_ready_campaign_reexports_package_artifact_helpers() -> None:
+    """Legacy camera_ready_campaign imports expose moved artifact helpers."""
+    helper_names = (
+        "_markdown_rows_from_mapping_rows",
+        "_write_actuation_envelope_artifacts",
+        "_write_amv_coverage_artifacts",
+        "_write_comparability_artifacts",
+        "_write_matrix_summary_artifacts",
+        "_write_seed_episode_rows_artifact",
+        "_write_seed_variability_artifacts",
+        "_write_snqi_diagnostics_artifacts",
+        "_write_statistical_sufficiency_artifact",
+    )
+
+    for helper_name in helper_names:
+        assert getattr(camera_ready_campaign_module, helper_name) is getattr(
+            camera_ready_artifacts_module, helper_name
+        )
+
+
+def test_camera_ready_campaign_reexports_package_run_state_helpers() -> None:
+    """Legacy camera_ready_campaign imports expose moved run-state helpers."""
+    helper_names = (
+        "_campaign_id",
+        "_campaign_success_counters",
+        "_git_context",
+        "_resolve_campaign_id",
+        "_resolve_execution_mode",
+        "_resolve_observation_noise",
+        "_resolve_path",
+        "_sanitize_git_remote",
+    )
+
+    for helper_name in helper_names:
+        assert getattr(camera_ready_campaign_module, helper_name) is getattr(
+            camera_ready_run_state_module, helper_name
+        )
+
+
+def test_campaign_success_counters_core_success_ignores_experimental_failure() -> None:
+    """Campaign success is anchored on complete successful core planners when present."""
+    counters = _campaign_success_counters(
+        [
+            {"status": "ok", "planner": {"planner_group": "core"}},
+            {"status": "not_available", "planner": {"planner_group": "experimental"}},
+        ],
+        expected_core_runs=1,
+    )
+
+    assert counters["benchmark_success"] is True
+    assert counters["benchmark_success_basis"] == "core"
+    assert counters["total_runs"] == 2
+    assert counters["successful_runs"] == 1
+    assert counters["core_total_runs"] == 1
+    assert counters["core_successful_runs"] == 1
 
 
 def test_scenario_with_kinematics_patches_copy_without_mutating_input() -> None:
@@ -5468,3 +5528,91 @@ def _get_comparability_path() -> str:
     repo_root = get_repository_root()
     path = repo_root / "configs" / "benchmarks" / "alyassi_comparability_map_v1.yaml"
     return path.as_posix()
+
+
+def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Missing normalized SNQI metric should fail sensitivity preflight."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_snqi_missing_metric.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: snqi_missing_metric_campaign",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "paper_facing: true",
+                "paper_profile_version: paper-matrix-v1",
+                "comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "snqi_contract:",
+                "  enabled: true",
+                "  enforcement: error",
+                "  rank_alignment_warn_threshold: 1.2",
+                "  rank_alignment_fail_threshold: 1.1",
+                "  outcome_separation_warn_threshold: 1.2",
+                "  outcome_separation_fail_threshold: 1.1",
+                "  calibration_seed: 123",
+                "  calibration_trials: 10",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        del args
+        out_path = Path(kwargs["out_path"])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "episode_id": "e-goal-0",
+                    "scenario_id": "mock",
+                    "seed": 111,
+                    "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
+                    "metrics": {
+                        "success": 0.0,
+                        "collisions": 1.0,
+                        "near_misses": 2.0,
+                        "time_to_goal_norm": 1.0,
+                        "comfort_exposure": 0.8,
+                        "force_exceed_events": 3.0,
+                    },
+                    "algorithm_metadata": {"algorithm": "goal", "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+            "algorithm_readiness": {
+                "name": "goal",
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    with pytest.raises(RuntimeError, match="SNQI sensitivity preflight failed"):
+        run_campaign(cfg, output_root=tmp_path / "campaign_out", label="snqi_missing_metric")

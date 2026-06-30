@@ -1,0 +1,133 @@
+# Scenario contract for issue #3813 sustained-flow scaffold.
+#
+# This records authored intent and metric boundaries only. It does not add
+# runtime continuous spawn, certify feasibility, run a benchmark, or change
+# paper/dissertation claims.
+contracts:
+  - schema_version: scenario_contract.v1
+    id: issue_3813_sustained_flow_t_intersection_contract
+    scenario_ref:
+      source: configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml
+      scenario_name: issue_3813_sustained_flow_t_intersection_medium
+      scenario_family: sustained_flow_t_intersection
+    odd:
+      environment_type: indoor_corridor
+      map_family: classic_t_intersection
+      density: mixed
+      flow: continuous_crossing
+      assumptions:
+        - Pedestrian demand should be non-clearing within each time-bounded episode.
+        - Current YAML rows are opt-in scaffolds until runtime respawn support exists.
+        - The family targets structural wait-it-out prevention, not a planner ranking claim.
+    actors:
+      - id: robot
+        kind: robot
+        count:
+          minimum: 1
+          maximum: 1
+        motion_model: configured_robot_policy
+        assumptions:
+          - Robot behavior comes from the selected planner and is not changed by the contract.
+      - id: sustained_flow_pedestrians
+        kind: pedestrian_group
+        count:
+          minimum: 1
+          maximum: 64
+        motion_model: continuous_spawn_social_force_candidate
+        assumptions:
+          - Candidate runtime should respawn pedestrians to maintain target flow.
+          - Spawn process and target density must be recorded before benchmark interpretation.
+    invariants:
+      - id: non_clearing_demand_required
+        scope: runtime
+        severity: required
+        description: >-
+          Pedestrian demand must not drop to an empty scene long enough for a
+          wait-it-out policy to convert waiting into nominal success.
+      - id: progress_not_goal_binary
+        scope: post_run
+        severity: required
+        description: >-
+          Success interpretation must use sustained progress or throughput,
+          not only terminal goal reach within horizon.
+      - id: metadata_only_until_runtime_spawn
+        scope: pre_run
+        severity: required
+        description: >-
+          These rows remain pre-benchmark scaffolds until continuous-spawn
+          runtime support and diagnostics are validated.
+    observables:
+      - id: sustained_progress_rate
+        metric: sustained_progress_rate_m_per_s
+        source: benchmark_metric_future
+        required: true
+        interpretation: >-
+          Net robot route progress per simulated second; pure waiting should
+          produce zero or near-zero progress under sustained pedestrian demand.
+      - id: interaction_exposure_sanity
+        metric: interaction_exposure_share
+        source: issue_3810_diagnostic
+        required: true
+        interpretation: >-
+          The sustained-flow family should report high interaction exposure by
+          construction; low exposure means the scenario still permits avoidance.
+      - id: clearance_under_load
+        metric: min_clearance_m
+        source: benchmark_metric_existing_or_future
+        required: true
+        interpretation: >-
+          Minimum robot-to-pedestrian clearance remains a safety caveat for any
+          progress-rate improvement.
+    termination_conditions:
+      - id: fixed_simulated_time
+        reason: max_steps
+        source: benchmark_runner
+        description: Time-bounded episodes end after 600 simulation steps.
+      - id: no_goal_reach_success_shortcut
+        reason: unknown
+        source: scenario_contract
+        description: >-
+          Reaching a goal may be reported, but it is not the primary success
+          criterion for a non-clearing sustained-flow scene.
+    certification:
+      schema_version: scenario_cert.v1
+      required_before_benchmark_claim: true
+      expected_eligibility: unknown
+      notes: >-
+        scenario_contract.v1 records authored intent only; scenario_cert.v1
+        and runtime proof remain required before benchmark use.
+    benchmark_eligibility:
+      intended_use: exploratory
+      requires_certification: true
+      claim_boundary: >-
+        Use this contract to review issue #3813 sustained-flow intent,
+        progress-metric semantics, and fail-closed evidence boundaries only.
+        Do not cite as benchmark evidence that wait-it-out has been
+        structurally closed.
+      eligibility_hooks:
+        - continuous spawn runtime support maintains non-clearing demand
+        - sustained_progress_rate_m_per_s metric implemented and tested
+        - issue #3810 interaction-exposure diagnostic runs high across the family
+        - pure wait baseline yields no success/progress under the metric
+    provenance:
+      source_issue: https://github.com/ll7/robot_sf_ll7/issues/3813
+      authored_by: robot_sf_ll7
+      source_files:
+        - configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml
+        - configs/scenarios/perturbations/issue_1610_intersection_wait_phase_grid_v1.yaml
+        - docs/scenario_contracts.md
+      notes: >-
+        First bounded slice: opt-in matrix plus contract for the structural
+        sustained-flow fix; no Slurm, no full campaign, no dissertation claim edit.
+    extensions:
+      sustained_flow.v1:
+        status: pre_benchmark_scaffold
+        benchmark_evidence: false
+        demand_tiers:
+          - light
+          - medium
+          - heavy
+        intended_spawn_process: poisson_respawn
+        current_runtime_support: metadata_only
+        primary_success_metric: sustained_progress_rate_m_per_s
+        wait_policy_expected_result: zero_or_near_zero_progress

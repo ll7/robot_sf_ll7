@@ -181,6 +181,7 @@ def test_map_batch_plan_builds_worker_fixed_params(tmp_path: Path) -> None:
         ped_impact_radius_m=1.5,
         ped_impact_window_steps=4,
         noise_spec={"enabled": False},
+        tracking_precision_spec={"enabled": True, "target_motp_m": 3.0},
         batch_observation_mode="socnav_state",
         observation_level="tracked_agents_no_noise",
         benchmark_track="grid",
@@ -200,6 +201,7 @@ def test_map_batch_plan_builds_worker_fixed_params(tmp_path: Path) -> None:
     assert fixed_params["ped_impact_radius_m"] == pytest.approx(1.5)
     assert fixed_params["ped_impact_window_steps"] == 4
     assert fixed_params["observation_noise"] == {"enabled": False}
+    assert fixed_params["tracking_precision"] == {"enabled": True, "target_motp_m": 3.0}
     assert fixed_params["observation_mode"] == "socnav_state"
     assert fixed_params["observation_level"] == "tracked_agents_no_noise"
     assert fixed_params["benchmark_track"] == "grid"
@@ -234,16 +236,29 @@ def test_parse_algo_config_rejects_local_output_model_path(tmp_path: Path) -> No
         _parse_algo_config(str(cfg_path))
 
 
-def test_parse_algo_config_reports_blocked_local_artifact_follow_up() -> None:
-    """Known blockers should fail with the artifact-promotion follow-up visible."""
-    with pytest.raises(ValueError) as exc_info:
-        _parse_algo_config("configs/baselines/drl_vo_default.yaml")
+def test_retired_local_only_baseline_config_parses_and_fails_closed_at_resolution() -> None:
+    """Retired local-only baselines (issue #1764) parse but resolve fail-closed.
 
-    message = str(exc_info.value)
-    assert "https://github.com/ll7/robot_sf_ll7/issues/1764" in message
-    assert "DRL-VO default checkpoint" in message
-    assert "unavailable local artifact" in message
-    assert "decision=unavailable_recover_or_retire" in message
+    After issue #1764 the DRL-VO default baseline no longer carries a local
+    ``model_path``; it points at an explicit ``local_only: true`` registry id.
+    Config parsing must therefore succeed (the local-artifact preflight no longer
+    flags it), while the local-only registry entry keeps benchmark use fail-closed
+    by design: it declares a ``not_for_benchmark`` claim boundary and resolves to a
+    machine-local path that is absent in clean worktrees and CI.
+    """
+    from robot_sf.models.registry import get_registry_entry, resolve_model_path
+
+    config = _parse_algo_config("configs/baselines/drl_vo_default.yaml")
+    model_id = config["model_id"]
+    assert model_id == "retired_drl_vo_default_local_only"
+    assert "model_path" not in config
+
+    entry = get_registry_entry(model_id)
+    assert entry.get("local_only") is True
+    assert entry["benchmark_promotion"]["claim_boundary"] == "not_for_benchmark"
+
+    with pytest.raises(FileNotFoundError, match="local-only"):
+        resolve_model_path(model_id, allow_download=False)
 
 
 def test_build_policy_rejects_sac_default_local_output_model_path() -> None:
@@ -2690,6 +2705,140 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(feasibility, dict)
     assert "projection_rate" in feasibility
     assert "infeasible_rate" in feasibility
+    ammv_feasibility = algo_md.get("ammv_feasibility")
+    assert isinstance(ammv_feasibility, dict)
+    assert ammv_feasibility["schema_version"] == "ammv_feasibility.v1"
+    assert ammv_feasibility["proxy_kind"] == "internal_non_hardware"
+    assert ammv_feasibility["min_stability_margin"] is not None
+    assert isinstance(ammv_feasibility["tip_over_violation"], bool)
+    assert ammv_feasibility["n_curvature_violations"] >= 0
+    assert isinstance(ammv_feasibility["feasible"], bool)
+
+
+def test_run_map_episode_tracking_precision_clamps_and_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Enabled tracking-precision spec corrupts planner obs and clamps speed."""
+
+    actions: list[np.ndarray] = []
+    seen_observations: list[dict[str, Any]] = []
+
+    class _DummySim:
+        """Simulator stub tracking-precision episode tests."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((1, 2), dtype=float)
+
+        def iter_obstacle_segments(self):
+            """Return no obstacle segments."""
+            return []
+
+    class _DummyEnv:
+        """Environment stub tracking-precision episode tests."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            """Return planner-facing tracked pedestrian observation."""
+            _ = seed
+            return (
+                {
+                    "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+                    "goal": {"current": [2.0, 0.0]},
+                    "pedestrians": {
+                        "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                        "velocities": np.zeros((1, 2), dtype=np.float32),
+                        "radius": np.array([0.4], dtype=np.float32),
+                        "count": np.array([1.0], dtype=np.float32),
+                    },
+                },
+                {},
+            )
+
+        def step(self, action):
+            """Record the command converted to an environment action."""
+            actions.append(np.asarray(action, dtype=float))
+            obs, _ = self.reset()
+            return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            """Accept cleanup."""
+            return None
+
+    def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        seen_observations.append(obs)
+        return 1.5, 0.0
+
+    dummy_config = SimpleNamespace(
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
+        robot_config=DifferentialDriveSettings(max_linear_speed=2.0),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_episode._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_episode.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_episode.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_episode.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_episode.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_episode.sample_obstacle_points",
+        lambda *args: None,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner_episode._policy_command_to_env_action",
+        lambda env, config, command: np.asarray(command, dtype=np.float32),
+    )
+
+    record = map_runner_episode.run_map_episode(
+        {"name": "tracking_precision", "simulation_config": {"max_episode_steps": 1}},
+        seed=7,
+        horizon=None,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=Path("."),
+        tracking_precision={
+            "target_motp_m": 3.0,
+            "speed_contract": {"defensive_speed": 0.5, "mode": "clamp"},
+        },
+        policy_builder=lambda *args, **kwargs: (
+            _policy,
+            {"algorithm": "goal", "status": "ok"},
+        ),
+    )
+
+    assert actions[0][0] == pytest.approx(0.5)
+    corrupted = np.asarray(seen_observations[0]["pedestrians"]["positions"], dtype=float)
+    assert not np.allclose(corrupted, np.array([[1.2, 0.0]], dtype=float))
+    assert record["metrics"]["tracking_contract_honored"] is True
+    assert record["metrics"]["tracking_contract_honored_rate"] == pytest.approx(1.0)
+    assert record["metrics"]["tracking_target_motp_m"] == pytest.approx(3.0)
+    assert record["metrics"]["min_separation_corrupted_m"] == pytest.approx(
+        float(np.linalg.norm(corrupted[0]))
+    )
+    tracking = record["algorithm_metadata"]["tracking_precision"]
+    assert tracking["last_step"]["contract_mode"] == "clamp"
+    assert tracking["last_step"]["applied_speed_cap"] == pytest.approx(0.5)
 
 
 def test_run_map_episode_closes_env_when_reset_fails(monkeypatch: pytest.MonkeyPatch) -> None:

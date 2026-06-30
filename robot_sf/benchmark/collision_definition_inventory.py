@@ -1,8 +1,7 @@
-"""Diagnostic inventory for the two collision / near-miss definitions.
+"""Diagnostic inventory for the collision / near-miss definition split.
 
-The benchmark codebase classifies collision and near-miss events two
-mathematically different ways depending on the code path (see GitHub issue
-#3724):
+The benchmark codebase keeps two mathematically different classifications
+visible for auditability (see GitHub issue #3724):
 
 * **Clearance regime** (the benchmark metric,
   ``robot_sf/benchmark/metrics.py``): events use radius-aware *clearance*
@@ -14,10 +13,8 @@ mathematically different ways depending on the code path (see GitHub issue
   This is the regime encoded by
   :func:`robot_sf.benchmark.thresholds.default_threshold_profile`.
 
-* **Center-distance regime** (the SNQI proxy and policy-search validation,
-  ``robot_sf/gym_env/snqi_proxy.py`` and
-  ``scripts/validation/policy_search_common.py``): events use the *raw center
-  distance* against the named constants directly.
+* **Center-distance regime** (legacy geometric diagnostic): events use the
+  *raw center distance* against the named constants directly.
 
   - collision  : ``center_distance < collision_dist``
   - near-miss   : ``collision_dist <= center_distance < near_miss_dist``
@@ -31,10 +28,9 @@ while the center-distance regime's sits at ``0.25 m`` -- a ~5x gap. The two
 regimes therefore label the *same* geometry differently across a wide band.
 
 This module is **diagnostic only**. It does not change any threshold, metric,
-proxy, or validation behavior, and it deliberately does **not** choose a
-canonical definition (that decision is tracked as ``decision-required`` on
-issue #3724). It exists to make the divergence explicit and machine-checkable
-so the inconsistency cannot silently drift further or be assumed away.
+proxy, or validation behavior. It exists to keep the legacy center-distance
+regime explicit and machine-checkable so future reports do not accidentally
+present it as the safety-facing clearance metric.
 """
 
 from __future__ import annotations

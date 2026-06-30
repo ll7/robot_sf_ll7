@@ -109,6 +109,9 @@ validation_command: >
   --rows output/campaign_result_store/s20_s30_h500_social_navigation
   --output-dir output/issue_1554_s20_s30
 
+archive_readiness_command: >
+  uv run python scripts/validation/check_s20_s30_archive_readiness.py --json
+
 durable_storage_plan:
   checkpoints_in_git: false
   raw_logs_in_git: false

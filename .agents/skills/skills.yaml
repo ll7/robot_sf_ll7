@@ -643,6 +643,27 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
+  pr-hindsight-review:
+    description: Review merged PRs after the fact to decide whether autonomous routing produced useful progress, partial coverage, duplicate coverage, or a successor slice.
+    category: github-pr
+    kind: analysis
+    phase: analysis
+    requires_write: false
+    requires_slurm: false
+    requires_benchmark_artifacts: false
+    writes:
+      git: false
+      github_issue: false
+      github_project: false
+      github_pr: false
+      filesystem: false
+    requires:
+      - gh
+      - git
+    delegates_to: []
+    output_schema: skill_run_summary.v1
+    aliases:
+      - pr-retrospective
   goal-autopilot:
     description: Continuous goal autopilot; orchestrates implement, review, merge, and discover cycles
       with preflight validation and delegation failure recovery.

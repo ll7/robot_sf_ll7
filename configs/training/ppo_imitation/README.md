@@ -20,6 +20,12 @@ This directory hosts configuration files used by the expert-policy, trajectory c
   Downstream imitation training must use the stricter gate:
   `uv run python scripts/validation/validate_oracle_imitation_launch_packet.py --config configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml --json --require-training-ready`.
   That gate intentionally fails while Issue #2620 remains `artifact_retrieval_blocked`.
+* `oracle_trace_uri_registry_issue_1470.yaml` – issue #1470 artifact-promotion readiness packet
+  for oracle-imitation trace evidence. Validate
+  `uv run python scripts/validation/validate_oracle_trace_uri_registry.py --config configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml --json`.
+  The strict downstream gate intentionally fails closed until every split has a concrete durable
+  raw-trace URI:
+  `uv run python scripts/validation/validate_oracle_trace_uri_registry.py --config configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml --json --require-training-ready`.
 * Additional files describe scenario coverage manifests referenced by trajectory collection commands.
 
 ## Usage Notes

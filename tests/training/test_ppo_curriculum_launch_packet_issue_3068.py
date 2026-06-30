@@ -63,7 +63,7 @@ def test_no_training_result_claim(packet: dict[str, object]) -> None:
     assert packet["evidence_status"] == "proposal"
     assert "no_claim_statement" in packet
     assert packet["execution_boundary"]["full_training_in_this_issue"] is False
-    assert packet["execution_boundary"]["submit_slurm_from_this_issue"] is True
+    assert packet["execution_boundary"]["submit_slurm_from_this_issue"] is False
 
 
 def test_referenced_configs_exist_and_checksums_match(packet: dict[str, object]) -> None:
@@ -195,11 +195,13 @@ def test_context_doc_links_packet() -> None:
 
 
 def test_queue_hint_points_to_launchable_issue_3068_scout(packet: dict[str, object]) -> None:
-    """Ready queue hint must reference a real #3068 PPO training config."""
+    """Queue hint must reference a real #3068 PPO training config without submitting."""
     hint = packet["queue_hint"]
     config_path = _REPO_ROOT / hint["config"]
     assert hint["public_issue"] == "ll7/robot_sf_ll7#3068"
-    assert hint["submit_ready"] is True
+    assert packet["execution_boundary"]["submit_slurm_from_this_issue"] is False
+    assert hint["submit_ready"] is False
+    assert hint["state"] == "no_submit_preflight_ready"
     assert hint["job_class"] == "robot_sf_gpu_training_small"
     assert config_path.is_file()
 
@@ -209,3 +211,53 @@ def test_queue_hint_points_to_launchable_issue_3068_scout(packet: dict[str, obje
     assert config["total_timesteps"] == 12000000
     assert config["tracking"]["wandb"]["enabled"] is True
     assert "issue-3068" in config["tracking"]["wandb"]["tags"]
+
+
+def test_queue_hint_declares_route_script_preflight_resources_and_outputs(
+    packet: dict[str, object],
+) -> None:
+    """Issue #3807 requires the #3068 route decision surface, not a Slurm submit."""
+    hint = packet["queue_hint"]
+
+    assert hint["route_id"] == "imech192:a30"
+    assert hint["cluster"] == "imech192"
+    assert hint["partition"] == "a30"
+    assert hint["qos"] == "a30-gpu"
+    assert hint["script"].endswith("issue_791_reward_curriculum.sl")
+    assert "ISSUE791_TRAIN_CONFIG=" in hint["submit_args"]
+
+    resources = hint["resources"]
+    assert resources == {
+        "cpus": 20,
+        "gpus": 1,
+        "mem_gb": 120,
+        "estimated_elapsed_sec": 43200,
+    }
+
+    preflight = hint["preflight_proof"]
+    assert preflight["local_only"] is True
+    assert preflight["requires_slurm_submit"] is False
+    required_checks = preflight["required_checks"]
+    assert set(required_checks) == {"missing_script", "missing_config", "packet_contract"}
+    assert required_checks["missing_script"]["command"].startswith("test -f ")
+    assert required_checks["missing_config"]["command"].startswith("test -f configs/training/")
+    assert (
+        required_checks["packet_contract"]["command"]
+        == "uv run pytest tests/training/test_ppo_curriculum_launch_packet_issue_3068.py -q"
+    )
+
+    expected_outputs = hint["expected_outputs"]
+    assert expected_outputs["remote_results"] == "output/slurm/issue3068-ppo-curriculum"
+    assert expected_outputs["local_results"] == "output/issue3068-ppo-curriculum"
+    assert expected_outputs["wandb_group"] == "issue-3068-ppo-curriculum"
+    assert set(expected_outputs["required_files"]) == {
+        "train_curve_metrics.csv",
+        "checkpoint_manifest.json",
+        "run_summary.json",
+    }
+
+    validation_commands = hint["validation_commands"]
+    assert validation_commands == [
+        "uv run python -c \"import yaml; d=yaml.safe_load(open('configs/training/ppo_curriculum_issue_3068_launch_packet.yaml')); assert d['execution_boundary']['submit_slurm_from_this_issue'] is False; assert d['queue_hint']['submit_ready'] is False; print('no-submit', d['campaign_id'])\"",
+        "uv run pytest tests/training/test_ppo_curriculum_launch_packet_issue_3068.py -q",
+    ]

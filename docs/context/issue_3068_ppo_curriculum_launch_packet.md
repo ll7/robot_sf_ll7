@@ -83,6 +83,27 @@ uv run python -c "import yaml; d=yaml.safe_load(open('configs/training/ppo_curri
 uv run pytest tests/training/test_ppo_curriculum_launch_packet_issue_3068.py -q
 ```
 
+## No-Submit Route And Preflight Fields
+
+Issue #3807 completes the #3068 launch-packet decision surface without submitting a
+SLURM job. The packet now sets `execution_boundary.submit_slurm_from_this_issue:
+false`, `queue_hint.submit_ready: false`, and `queue_hint.state:
+no_submit_preflight_ready`.
+
+Route and resource fields are explicit under `queue_hint`:
+
+- `route_id`: `imech192:a30`
+- `cluster`: `imech192`
+- `partition`: `a30`
+- `qos`: `a30-gpu`
+- `script`: `/home/luttkule/git/robot_sf_ll7-private-ops/auxme/SLURM/issue_791_reward_curriculum.sl`
+- `resources`: 20 CPUs, 1 GPU, 120 GB memory, 43,200 second estimate
+
+The packet also records local-only preflight proof commands for the private script
+path, public training config, and packet contract test. Expected outputs are
+grouped under `queue_hint.expected_outputs`, and exact no-submit validation
+commands are listed under `queue_hint.validation_commands`.
+
 ## Durable Artifact Policy
 
 Checkpoints and raw logs stay in the durable W&B backend, not in git. Before training, the

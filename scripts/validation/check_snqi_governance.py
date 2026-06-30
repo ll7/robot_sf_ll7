@@ -167,6 +167,13 @@ def _print_text_report(report: dict[str, Any]) -> None:
     """Print a compact human-readable report."""
     print(CLAIM_BOUNDARY)
     print(f"SNQI governance status: {report['status']}")
+    canonical_decision = report["weights"]["source_summary"]["canonical_decision"]
+    print(
+        "Canonical SNQI weight decision: "
+        f"{canonical_decision['status']}; "
+        f"selected_versioned_id={canonical_decision['selected_versioned_id']}; "
+        f"ambiguous_label={canonical_decision['ambiguous_unversioned_label']}"
+    )
     if report["blockers"]:
         print("Blocking diagnostics:")
         for blocker in report["blockers"]:

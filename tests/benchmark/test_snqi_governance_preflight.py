@@ -131,6 +131,9 @@ def test_governance_text_lists_per_term_normalization_status(
     assert main(["--repo-root", str(REPO_ROOT), "--allow-current-blockers"]) == 0
 
     out = capsys.readouterr().out
+    assert "Canonical SNQI weight decision: unresolved_decision_required" in out
+    assert "selected_versioned_id=None" in out
+    assert "ambiguous_label=canonical" in out
     assert "Weight sources:" in out
     assert "code_default (code_default, <code default>): canonical=True" in out
     assert "versioned_id=snqi_weights_code_default_v1" in out

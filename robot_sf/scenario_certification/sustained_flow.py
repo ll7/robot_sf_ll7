@@ -73,6 +73,69 @@ def iter_expected_sustained_flow_variant_specs() -> tuple[SustainedFlowVariantSp
     )
 
 
+def generate_expected_sustained_flow_scenarios() -> list[dict[str, Any]]:
+    """Generate full metadata-only scenario rows for the sustained-flow scaffold.
+
+    This helper deliberately materializes only the pre-benchmark scenario-matrix
+    rows. It does not implement continuous pedestrian respawn or promote the
+    family to benchmark evidence.
+
+    Returns:
+        Scenario-matrix rows in deterministic light, medium, heavy order.
+    """
+
+    scenarios: list[dict[str, Any]] = []
+    for spec in iter_expected_sustained_flow_variant_specs():
+        scenarios.append(
+            {
+                "name": spec.name,
+                "map_file": spec.map_file,
+                "simulation_config": {
+                    "max_episode_steps": spec.max_episode_steps,
+                    "ped_density": spec.ped_density,
+                    "robot_config": {},
+                },
+                "metadata": {
+                    "archetype": _SUSTAINED_FLOW_FAMILY,
+                    "density": spec.density_tier,
+                    "flow": "continuous_crossing",
+                    "pack_id": "issue_3813_sustained_flow_scaffold_v0",
+                    "status": "pre_benchmark_scaffold",
+                    "enabled_by_default": False,
+                    "benchmark_evidence": False,
+                    "claim_boundary": (
+                        "Opt-in scenario-matrix scaffold only. Do not cite as sustained-flow "
+                        "benchmark evidence until runtime continuous spawn, progress metrics, "
+                        "and interaction-exposure diagnostics are implemented and validated."
+                    ),
+                    "continuous_spawn": {
+                        "required_before_benchmark_use": True,
+                        "intended_process": "poisson_respawn",
+                        "spawn_rate_per_min": spec.spawn_rate_per_min,
+                        "target_density_tier": spec.density_tier,
+                        "current_runtime_support": "metadata_only",
+                    },
+                    "success_metric": {
+                        "id": "sustained_progress_rate_m_per_s",
+                        "definition": (
+                            "Net robot path progress toward the route goal divided by simulated "
+                            "episode seconds under non-clearing pedestrian demand."
+                        ),
+                        "wait_policy_expectation": "zero_or_near_zero_progress",
+                    },
+                    "termination": {
+                        "mode": "time_bounded",
+                        "max_episode_steps": spec.max_episode_steps,
+                        "goal_reach_is_not_primary_success": True,
+                    },
+                    "requires_before_benchmark_use": list(REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE),
+                },
+                "seeds": list(spec.seeds),
+            }
+        )
+    return scenarios
+
+
 @dataclass(frozen=True)
 class SustainedFlowVariant:
     """Validated sustained-flow scaffold variant summary."""

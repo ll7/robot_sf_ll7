@@ -304,6 +304,7 @@ def _add_pareto_preflight_issues(
     baseline: Mapping[str, Mapping[str, float]],
     min_planners: int,
 ) -> None:
+    _add_normalization_preflight_issues(state, baseline)
     if len(state.grouped) < min_planners or state.malformed:
         return
     try:
@@ -330,6 +331,43 @@ def _add_pareto_preflight_issues(
             SENSITIVITY_PREFLIGHT_MALFORMED,
             f"could not derive Pareto prerequisites: {exc}",
         )
+
+
+def _add_normalization_preflight_issues(
+    state: _SensitivityPreflightState, baseline: Mapping[str, Mapping[str, float]]
+) -> None:
+    for metric in ("collisions", "near_misses", "force_exceed_events", "jerk_mean"):
+        stats = baseline.get(metric)
+        if not isinstance(stats, Mapping):
+            state.add_issue(
+                "malformed_baseline_stats",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                f"baseline metric {metric!r} must provide med/p95 mapping",
+            )
+            continue
+        try:
+            med = float(stats["med"])
+            p95 = float(stats["p95"])
+        except (KeyError, TypeError, ValueError) as exc:
+            state.add_issue(
+                "malformed_baseline_stats",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                f"baseline metric {metric!r} must provide finite med/p95 values: {exc}",
+            )
+            continue
+        if not math.isfinite(med) or not math.isfinite(p95):
+            state.add_issue(
+                "non_finite_baseline_stats",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                f"baseline metric {metric!r} has non-finite med/p95 values",
+            )
+            continue
+        if p95 <= med:
+            state.add_issue(
+                "degenerate_baseline_range",
+                SENSITIVITY_PREFLIGHT_MALFORMED,
+                f"baseline metric {metric!r} must satisfy p95 > med",
+            )
 
 
 def _format_preflight_report(

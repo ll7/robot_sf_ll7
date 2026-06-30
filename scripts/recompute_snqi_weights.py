@@ -881,6 +881,21 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()
     phase_timings: dict[str, float] = {}
+    optional_defaults = {
+        "compare_normalization": False,
+        "compare_strategies": False,
+        "decision_preflight": False,
+        "decision_reversal_threshold": 0.0,
+        "export_pareto_front": False,
+        "external_weights_file": None,
+        "fail_on_missing_metric": False,
+        "missing_metric_max_list": 5,
+        "pareto_front_samples": 600,
+        "simplex": False,
+    }
+    for name, default in optional_defaults.items():
+        if not hasattr(args, name):
+            setattr(args, name, default)
 
     try:
         episodes, skipped_lines = load_episodes_data(args.episodes)

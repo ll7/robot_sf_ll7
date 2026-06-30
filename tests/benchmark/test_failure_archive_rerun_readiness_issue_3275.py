@@ -120,9 +120,10 @@ def test_scenario_family_and_seed_overlap_is_reported_as_blockers(tmp_path: Path
     assert "scenario_family_overlap:1" in readiness.blockers
     assert "seed_overlap:1" in readiness.blockers
     assert len(readiness.overlap_provenance["scenario_family_overlap"]) == 1
-    assert json.loads(readiness.overlap_provenance["scenario_family_overlap"][0]) == _entry(
-        "_", family="family_a", seed=0
-    )["cluster_key"]
+    assert (
+        json.loads(readiness.overlap_provenance["scenario_family_overlap"][0])
+        == _entry("_", family="family_a", seed=0)["cluster_key"]
+    )
     assert readiness.overlap_provenance["seed_overlap"] == [42]
 
 
@@ -138,7 +139,9 @@ def test_missing_archive_payload_blocks_ready_path(tmp_path: Path) -> None:
     readiness = classify_failure_archive_rerun_readiness(source, missing)
 
     assert readiness.status == BLOCKED
-    assert any(blocker.startswith("rerun_archive_blocked:path_missing") for blocker in readiness.blockers)
+    assert any(
+        blocker.startswith("rerun_archive_blocked:path_missing") for blocker in readiness.blockers
+    )
     assert not any(blocker.startswith("source_archive_blocked") for blocker in readiness.blockers)
 
 
@@ -156,8 +159,7 @@ def test_malformed_archive_payload_fails_closed(tmp_path: Path) -> None:
 
     assert readiness.status == BLOCKED
     assert any(
-        blocker.startswith("rerun_archive_blocked:unreadable")
-        for blocker in readiness.blockers
+        blocker.startswith("rerun_archive_blocked:unreadable") for blocker in readiness.blockers
     )
 
 

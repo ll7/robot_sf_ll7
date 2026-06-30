@@ -207,9 +207,7 @@ def test_preflight_malformed_out_of_range_normalized_input() -> None:
     )
 
     assert preflight["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
-    assert any(
-        issue["code"] == "out_of_range_normalized_term" for issue in preflight["issues"]
-    )
+    assert any(issue["code"] == "out_of_range_normalized_term" for issue in preflight["issues"])
     with pytest.raises(ValueError, match=r"time_to_goal_norm.*outside \[0, 1\]"):
         build_scalarization_sensitivity_report(records, weights=WEIGHTS, baseline=BASELINE)
 

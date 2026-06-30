@@ -44,6 +44,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -181,6 +182,44 @@ class ScenarioRankStability:
             "kendall_tau_min": self.kendall_tau_min,
             "rank_flip_rate": self.rank_flip_rate,
             "top1_stable": self.top1_stable,
+        }
+
+
+@dataclass(frozen=True)
+class AdjacentRankClaim:
+    """Adjacent-rank CI overlap decision for one scenario ranking."""
+
+    scenario_id: str
+    rank_metric: str
+    higher_is_better: bool
+    higher_rank_planner: str
+    lower_rank_planner: str
+    higher_rank_mean: float
+    lower_rank_mean: float
+    higher_rank_ci_low: float
+    higher_rank_ci_high: float
+    lower_rank_ci_low: float
+    lower_rank_ci_high: float
+    decision: str
+    rationale: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return JSON-safe adjacent-rank claim decision."""
+
+        return {
+            "scenario_id": self.scenario_id,
+            "rank_metric": self.rank_metric,
+            "higher_is_better": self.higher_is_better,
+            "higher_rank_planner": self.higher_rank_planner,
+            "lower_rank_planner": self.lower_rank_planner,
+            "higher_rank_mean": self.higher_rank_mean,
+            "lower_rank_mean": self.lower_rank_mean,
+            "higher_rank_ci_low": self.higher_rank_ci_low,
+            "higher_rank_ci_high": self.higher_rank_ci_high,
+            "lower_rank_ci_low": self.lower_rank_ci_low,
+            "lower_rank_ci_high": self.lower_rank_ci_high,
+            "decision": self.decision,
+            "rationale": self.rationale,
         }
 
 
@@ -479,6 +518,89 @@ def build_rank_stability(
     return out
 
 
+def _metric_stats(cell: CellResult, metric: str) -> dict[str, float] | None:
+    """Return complete metric statistics for CI decisions."""
+
+    stats = cell.metrics.get(metric)
+    if not stats:
+        return None
+    required = ("mean", "ci_low", "ci_high")
+    if any(_coerce_float(stats.get(key)) is None for key in required):
+        return None
+    return stats
+
+
+def _ci_overlap(a: dict[str, float], b: dict[str, float]) -> bool:
+    """Return whether two confidence intervals overlap."""
+
+    return max(float(a["ci_low"]), float(b["ci_low"])) <= min(
+        float(a["ci_high"]),
+        float(b["ci_high"]),
+    )
+
+
+def build_adjacent_rank_claims(
+    cells: Sequence[CellResult],
+    rank_stability: Sequence[ScenarioRankStability],
+    *,
+    rank_metric: str,
+    higher_is_better: bool,
+) -> list[AdjacentRankClaim]:
+    """Build adjacent-rank downgrade decisions from per-cell CIs.
+
+    Adjacent planners with overlapping confidence intervals are downgraded to
+    ``not_statistically_distinguishable_budget`` so the packet cannot be read
+    as support for a strict paper-facing ordering.
+    """
+
+    cell_by_key = {
+        (cell.scenario_id, cell.planner_key): cell
+        for cell in cells
+        if cell.counted and _metric_stats(cell, rank_metric) is not None
+    }
+    claims: list[AdjacentRankClaim] = []
+    for stability in rank_stability:
+        ranking = stability.point_ranking
+        if len(ranking) < 2:
+            continue
+        for higher_planner, lower_planner in pairwise(ranking):
+            higher_cell = cell_by_key.get((stability.scenario_id, higher_planner))
+            lower_cell = cell_by_key.get((stability.scenario_id, lower_planner))
+            if higher_cell is None or lower_cell is None:
+                continue
+            higher_stats = _metric_stats(higher_cell, rank_metric)
+            lower_stats = _metric_stats(lower_cell, rank_metric)
+            if higher_stats is None or lower_stats is None:
+                continue
+            if _ci_overlap(higher_stats, lower_stats):
+                decision = "not_statistically_distinguishable_budget"
+                rationale = (
+                    "Adjacent-rank confidence intervals overlap; downgrade any strict "
+                    "planner-beats-planner claim at this seed budget."
+                )
+            else:
+                decision = "ci_separable"
+                rationale = "Adjacent-rank confidence intervals do not overlap."
+            claims.append(
+                AdjacentRankClaim(
+                    scenario_id=stability.scenario_id,
+                    rank_metric=rank_metric,
+                    higher_is_better=higher_is_better,
+                    higher_rank_planner=higher_planner,
+                    lower_rank_planner=lower_planner,
+                    higher_rank_mean=float(higher_stats["mean"]),
+                    lower_rank_mean=float(lower_stats["mean"]),
+                    higher_rank_ci_low=float(higher_stats["ci_low"]),
+                    higher_rank_ci_high=float(higher_stats["ci_high"]),
+                    lower_rank_ci_low=float(lower_stats["ci_low"]),
+                    lower_rank_ci_high=float(lower_stats["ci_high"]),
+                    decision=decision,
+                    rationale=rationale,
+                )
+            )
+    return claims
+
+
 def classify(
     cells: Sequence[CellResult],
     rank_stability: Sequence[ScenarioRankStability],
@@ -559,6 +681,12 @@ def build_report(
         resamples=config.resamples,
         rng_seed=config.rank_seed,
     )
+    adjacent_rank_claims = build_adjacent_rank_claims(
+        cells,
+        rank_stability,
+        rank_metric=rank_metric,
+        higher_is_better=higher_is_better,
+    )
     classification, rationale = classify(cells, rank_stability)
     counted = [cell for cell in cells if cell.counted]
     excluded = [cell for cell in cells if not cell.counted]
@@ -599,6 +727,7 @@ def build_report(
         ],
         "cells": [cell.to_dict() for cell in cells],
         "rank_stability": [r.to_dict() for r in rank_stability],
+        "adjacent_rank_claims": [claim.to_dict() for claim in adjacent_rank_claims],
         "excluded_cell_reasons": [
             {
                 "scenario_id": cell.scenario_id,
@@ -662,6 +791,19 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             f"| {entry['resamples']} | {_fmt(entry['kendall_tau_mean'])} "
             f"| {_fmt(entry['kendall_tau_min'])} | {_fmt(entry['rank_flip_rate'])} "
             f"| {entry['top1_stable']} |"
+        )
+    lines.append("")
+    lines.append("## Adjacent-rank claim downgrades")
+    lines.append("")
+    lines.append(
+        "| scenario | higher-rank planner | lower-rank planner | metric | decision | rationale |"
+    )
+    lines.append("| --- | --- | --- | --- | --- | --- |")
+    for claim in report["adjacent_rank_claims"]:
+        lines.append(
+            f"| {claim['scenario_id']} | {claim['higher_rank_planner']} "
+            f"| {claim['lower_rank_planner']} | {claim['rank_metric']} "
+            f"| {claim['decision']} | {claim['rationale']} |"
         )
     if report["excluded_cell_reasons"]:
         lines.append("")

@@ -302,6 +302,47 @@ def test_cli_refuses_blocked_inputs_and_writes_only_preflight(tmp_path: Path) ->
     assert not out_dir.exists()
 
 
+def test_cli_exports_report_ready_artifacts_from_fixture_files(tmp_path: Path) -> None:
+    """Valid fixture files pass preflight and emit all diagnostic artifacts."""
+    episodes, baseline, weights = _write_fixture_inputs_from_fixtures(
+        tmp_path,
+        episodes_file="valid_episodes.jsonl",
+    )
+    out_dir = tmp_path / "artifacts"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/snqi_scalarization_sensitivity_export.py",
+            "--episodes",
+            str(episodes),
+            "--baseline",
+            str(baseline),
+            "--weights",
+            str(weights),
+            "--output-dir",
+            str(out_dir),
+            "--stem",
+            "issue_3653_fixture",
+        ],
+        check=False,
+        cwd=Path(__file__).resolve().parents[2],
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (out_dir / "issue_3653_fixture.json").exists()
+    assert (out_dir / "issue_3653_fixture_planner_rows.csv").exists()
+    assert (out_dir / "issue_3653_fixture_decision_disagreement.csv").exists()
+    assert (out_dir / "issue_3653_fixture.md").exists()
+    assert (out_dir / "issue_3653_fixture_pareto.svg").exists()
+
+    payload = json.loads((out_dir / "issue_3653_fixture.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "snqi_scalarization_sensitivity.v1"
+    assert payload["pareto_front"]["points"]
+    assert payload["decision_disagreement"]["pairwise_reversal_count"] >= 0
+
+
 def test_cli_refuses_malformed_normalized_inputs_and_writes_preflight(tmp_path: Path) -> None:
     """Malformed normalized SNQI terms remain export artifacts off, preflight only."""
     records = _valid_records()

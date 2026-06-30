@@ -19,6 +19,7 @@ campaign:
   scenario_suite:
     matrix_path: configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml
     contract_path: configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml
+    preflight_helper: robot_sf.benchmark.sustained_flow_preflight.preflight_sustained_flow_matrix
     scope: opt_in_sustained_flow_t_intersection_scaffold
     scenario_ids:
       - issue_3813_sustained_flow_t_intersection_light

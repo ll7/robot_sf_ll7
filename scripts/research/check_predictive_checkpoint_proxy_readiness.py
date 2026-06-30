@@ -85,6 +85,7 @@ def _check_config(config: Any, config_path: Path) -> tuple[str, list[str]]:
     summary_contract = config.get("proxy_summary_contract")
     if summary_contract is not None and not isinstance(summary_contract, dict):
         errors.append("proxy_summary_contract must be mapping when provided")
+    errors.extend(_validate_blocked_artifact_schema(config.get("blocked_artifacts")))
     errors.extend(_validate_known_blocker_schema(config.get("known_blockers")))
     if errors:
         return STATUS_FAILED, errors
@@ -128,6 +129,71 @@ def _validate_known_blocker_schema(known_blockers: Any) -> list[str]:
                 f"known_blockers[{index}] status must be one of {sorted(_KNOWN_BLOCKER_STATUSES)}"
             )
     return errors
+
+
+def _validate_blocked_artifact_schema(blocked_artifacts: Any) -> list[str]:
+    """Validate optional blocked-artifact inventory in the readiness contract."""
+    if blocked_artifacts is None:
+        return []
+    if not isinstance(blocked_artifacts, list):
+        return ["blocked_artifacts must be a list when provided"]
+
+    errors: list[str] = []
+    required_fields = ("id", "artifact_type", "status", "storage_scope", "revival_condition")
+    for index, artifact in enumerate(blocked_artifacts):
+        if not isinstance(artifact, dict):
+            errors.append(f"blocked_artifacts[{index}] must be a mapping")
+            continue
+        for field_name in required_fields:
+            value = artifact.get(field_name)
+            if not isinstance(value, str) or not value:
+                errors.append(f"blocked_artifacts[{index}] missing {field_name}")
+        artifact_status = artifact.get("status")
+        if artifact_status not in _KNOWN_BLOCKER_STATUSES:
+            errors.append(
+                f"blocked_artifacts[{index}] status must be one of "
+                f"{sorted(_KNOWN_BLOCKER_STATUSES)}"
+            )
+        metadata = artifact.get("required_metadata", [])
+        if metadata is not None and (
+            not isinstance(metadata, list)
+            or any(not isinstance(item, str) or not item for item in metadata)
+        ):
+            errors.append(f"blocked_artifacts[{index}] required_metadata must be a list of strings")
+    return errors
+
+
+def _check_blocked_artifacts(config: dict[str, Any]) -> tuple[str, list[str], list[dict[str, Any]]]:
+    """Expose blocked input artifacts as a fail-closed report section."""
+    artifacts = config.get("blocked_artifacts") or []
+    if not isinstance(artifacts, list):
+        return STATUS_FAILED, ["blocked_artifacts must be a list"], []
+
+    normalized: list[dict[str, Any]] = []
+    messages: list[str] = []
+    failed = False
+    blocked = False
+    for index, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            failed = True
+            messages.append(f"blocked_artifacts[{index}] must be a mapping")
+            continue
+        artifact_id = str(artifact.get("id", "unnamed"))
+        status = artifact.get("status")
+        if status not in _KNOWN_BLOCKER_STATUSES:
+            failed = True
+            messages.append(f"blocked_artifacts[{index}] has unsupported status: {status}")
+            continue
+        normalized.append(dict(artifact))
+        if status == STATUS_BLOCKED:
+            blocked = True
+            messages.append(f"blocked artifact remains blocked: {artifact_id}")
+
+    if failed:
+        return STATUS_FAILED, messages, normalized
+    if blocked:
+        return STATUS_BLOCKED, messages, normalized
+    return STATUS_PASSED, messages, normalized
 
 
 def _check_known_blockers(config: dict[str, Any]) -> tuple[str, list[str], list[dict[str, Any]]]:
@@ -521,6 +587,13 @@ def check_readiness(
         }
 
     if cfg:
+        artifact_status, artifact_messages, artifact_payload = _check_blocked_artifacts(cfg)
+        prerequisites["blocked_artifacts"] = {
+            "status": artifact_status,
+            "messages": artifact_messages,
+            "artifacts": artifact_payload,
+        }
+
         blocker_status, blocker_messages, blocker_payload = _check_known_blockers(cfg)
         prerequisites["known_blockers"] = {
             "status": blocker_status,

@@ -18,7 +18,6 @@ from robot_sf.scenario_certification.sustained_flow import (
 )
 from robot_sf.training.scenario_loader import load_scenarios
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -42,7 +41,10 @@ def test_issue_3813_sustained_flow_scenarios_enumerate_expected_tiers() -> None:
         assert scenario["name"] == f"issue_3813_sustained_flow_t_intersection_{tier}"
         assert scenario["simulation_config"]["max_episode_steps"] == 600
         assert scenario["simulation_config"]["ped_density"] == expected[tier]["ped_density"]
-        assert scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"] == expected[tier]["spawn_rate_per_min"]
+        assert (
+            scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"]
+            == expected[tier]["spawn_rate_per_min"]
+        )
         assert scenario["seeds"] == expected[tier]["seeds"]
 
 
@@ -109,10 +111,12 @@ def test_issue_3813_sustained_flow_variants_are_stable_and_ordered() -> None:
     assert tuple(scenario["name"] for scenario in generated) == tuple(
         f"issue_3813_sustained_flow_t_intersection_{tier}" for tier in expected_tiers
     )
-    assert tuple(
-        scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"]
-        for scenario in generated
-    ) == expected_spawn_rates
-    assert tuple(tuple(scenario["metadata"]["requires_before_benchmark_use"]) for scenario in generated) == tuple(
-        [REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE for _ in expected_tiers]
+    assert (
+        tuple(
+            scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"] for scenario in generated
+        )
+        == expected_spawn_rates
     )
+    assert tuple(
+        tuple(scenario["metadata"]["requires_before_benchmark_use"]) for scenario in generated
+    ) == tuple(REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE for _ in expected_tiers)

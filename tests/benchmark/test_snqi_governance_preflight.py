@@ -231,6 +231,7 @@ def test_governance_report_checks_optional_baseline_coverage(tmp_path: Path) -> 
     assert missing
     assert set(missing[0]["metrics"]) == {"force_exceed_events", "jerk_mean"}
 
+
 def test_governance_checker_payload_is_referenced_in_report() -> None:
     """Normalization checker packet is included in machine-parseable report."""
     report = build_governance_report(repo_root=REPO_ROOT)

@@ -206,21 +206,15 @@ def build_governance_report(
             "weights_comparable"
         ],
         "status": contribution_diagnostics["normalization_contract"]["status"],
-        "raw_penalty_absolute_share": contribution_diagnostics[
-            "raw_penalty_absolute_share"
-        ],
+        "raw_penalty_absolute_share": contribution_diagnostics["raw_penalty_absolute_share"],
         "baseline_normalized_penalty_absolute_share": contribution_diagnostics[
             "baseline_normalized_penalty_absolute_share"
         ],
-        "raw_penalty_terms_dominate": contribution_diagnostics[
-            "raw_penalty_terms_dominate"
+        "raw_penalty_terms_dominate": contribution_diagnostics["raw_penalty_terms_dominate"],
+        "has_weight_bound_exceedance": contribution_diagnostics["has_weight_bound_exceedance"],
+        "weight_bound_exceedance_terms": contribution_diagnostics["normalization_contract"][
+            "weight_bound_exceedance_terms"
         ],
-        "has_weight_bound_exceedance": contribution_diagnostics[
-            "has_weight_bound_exceedance"
-        ],
-        "weight_bound_exceedance_terms": contribution_diagnostics[
-            "normalization_contract"
-        ]["weight_bound_exceedance_terms"],
     }
 
     return {

@@ -547,6 +547,33 @@ def _canonical_load_error_conflicts(
     ]
 
 
+def _canonical_uncomparable_direction_conflicts(
+    loaded_canonical: list[WeightSetRecord],
+) -> list[WeightProvenanceConflict]:
+    """Fail closed when canonical sources load but have no comparable direction.
+
+    Returns:
+        One ``canonical_uncomparable_direction`` (error) conflict per source
+        whose weights cannot be normalized into a direction for provenance
+        comparison.
+    """
+    return [
+        WeightProvenanceConflict(
+            kind="canonical_uncomparable_direction",
+            severity="error",
+            sources=[r.name],
+            detail=(
+                f"canonical-declaring source '{r.name}' "
+                f"({r.relpath or 'code default'}) loaded but has no comparable "
+                "weight direction; provenance inventory cannot decide whether "
+                "it matches another canonical source."
+            ),
+        )
+        for r in loaded_canonical
+        if r.normalized_direction() is None
+    ]
+
+
 def _canonical_direction_conflicts(
     loaded_canonical: list[WeightSetRecord],
 ) -> list[WeightProvenanceConflict]:
@@ -688,6 +715,9 @@ def detect_conflicts(records: list[WeightSetRecord]) -> list[WeightProvenanceCon
 
     * ``canonical_load_error`` (error): a canonical-declaring source failed to
       load. Inventory cannot certify provenance, so this fails closed.
+    * ``canonical_uncomparable_direction`` (error): a canonical-declaring
+      source loaded but has no scale-independent direction for provenance
+      comparison.
     * ``canonical_direction_conflict`` (error): two canonical-declaring sources
       disagree on their (scale-independent) weight direction — i.e. the same
       "canonical" label yields different rankings.
@@ -707,6 +737,7 @@ def detect_conflicts(records: list[WeightSetRecord]) -> list[WeightProvenanceCon
 
     conflicts: list[WeightProvenanceConflict] = []
     conflicts += _canonical_load_error_conflicts(canonical)
+    conflicts += _canonical_uncomparable_direction_conflicts(loaded_canonical)
     conflicts += _canonical_direction_conflicts(loaded_canonical)
     conflicts += _unregistered_weight_source_conflicts(records)
     conflicts += _code_default_shipped_direction_conflicts(records)

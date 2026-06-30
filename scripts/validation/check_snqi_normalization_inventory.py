@@ -115,12 +115,19 @@ def build_normalization_preflight_report(
         "normalization": inventory.to_dict(),
     }
 
+    score_version_contract = inventory.score_version_contract
     decision_packet = {
         "issue": 3699,
-        "decision_required": inventory.mixed_scale,
+        "successor_issue": score_version_contract["successor_issue"],
+        "score_version": score_version_contract["score_version"],
+        "status": score_version_contract["status"],
+        "diagnostic_only": score_version_contract["diagnostic_only"],
+        "decision_recorded": True,
+        "score_semantics_changed": score_version_contract["score_semantics_changed"],
         "assumption": (
-            "No score semantics changed; this report only exposes mixed-basis "
-            "normalization diagnostics and baseline-coverage gaps for issue #3699."
+            "No score semantics changed; SNQI-v0 intentionally preserves the "
+            "mixed-basis diagnostic contract while SNQI-v1 redesign is tracked "
+            "by issue #3978."
         ),
         "mixed_scale": inventory.mixed_scale,
     }
@@ -138,7 +145,9 @@ def build_normalization_preflight_report(
                 "normalization_contract_status": contract["status"],
                 "weights_comparable": contract["weights_comparable"],
                 "raw_penalty_absolute_share": contract["raw_penalty_absolute_share"],
-                "baseline_normalized_penalty_absolute_share": contract["baseline_normalized_penalty_absolute_share"],
+                "baseline_normalized_penalty_absolute_share": contract[
+                    "baseline_normalized_penalty_absolute_share"
+                ],
                 "raw_penalty_terms": contract["raw_unbounded_penalty_terms"],
                 "baseline_normalized_penalty_terms": contract["baseline_normalized_penalty_terms"],
                 "weight_bound_exceedance_terms": contract["weight_bound_exceedance_terms"],

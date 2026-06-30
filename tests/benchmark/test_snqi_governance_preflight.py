@@ -139,7 +139,8 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     }
     assert contributions["normalization_contract"]["status"] == "mixed_unbounded_penalty_basis"
     assert contributions["normalization_contract"]["weights_comparable"] is False
-    assert contributions["normalization_contract"]["decision_required_issue"] == 3699
+    assert contributions["normalization_contract"]["decision_issue"] == 3699
+    assert contributions["normalization_contract"]["successor_issue"] == 3978
     assert (
         contributions["raw_penalty_absolute_share"]
         > contributions["baseline_normalized_penalty_absolute_share"]
@@ -237,14 +238,20 @@ def test_governance_checker_payload_is_referenced_in_report() -> None:
     report = build_governance_report(repo_root=REPO_ROOT)
     checker = report["normalization_checker"]
     assert checker["issue"] == 3699
-    assert checker["decision_required"] is True
+    assert checker["successor_issue"] == 3978
+    assert checker["score_version"] == "SNQI-v0"
+    assert checker["status"] == "legacy_mixed_basis_diagnostic_only"
+    assert checker["diagnostic_only"] is True
+    assert checker["decision_recorded"] is True
+    assert checker["score_semantics_changed"] is False
     assert checker["assumption"] == (
-        "No score semantics changed; this report only surfaces mixed-basis "
-        "diagnostics and baseline coverage gaps for issue #3699."
+        "No score semantics changed; SNQI-v0 intentionally preserves the "
+        "mixed-basis diagnostic contract while SNQI-v1 redesign is tracked "
+        "by issue #3978."
     )
     assert checker["mixed_scale"] is True
     assert checker["weights_comparable"] is False
-    assert checker["status"] == "mixed_unbounded_penalty_basis"
+    assert checker["normalization_contract_status"] == "mixed_unbounded_penalty_basis"
     assert checker["raw_penalty_terms_dominate"] is True
     assert checker["has_weight_bound_exceedance"] is True
     contributions = report["normalization_contributions"]
@@ -275,4 +282,9 @@ def test_governance_report_json_exports_normalization_checker(tmp_path: Path) ->
     checker = payload["normalization_checker"]
     assert isinstance(checker["assumption"], str)
     assert "No score semantics changed" in checker["assumption"]
-    assert checker["decision_required"] is True
+    assert checker["successor_issue"] == 3978
+    assert checker["score_version"] == "SNQI-v0"
+    assert checker["status"] == "legacy_mixed_basis_diagnostic_only"
+    assert checker["diagnostic_only"] is True
+    assert checker["decision_recorded"] is True
+    assert checker["score_semantics_changed"] is False

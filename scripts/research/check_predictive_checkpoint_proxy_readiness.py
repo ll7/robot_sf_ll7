@@ -28,7 +28,7 @@ import argparse
 import importlib.util
 import json
 import sys
-from math import ceil
+from math import ceil, isfinite
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +72,8 @@ def _coerce_positive_int(value: Any, *, field: str) -> tuple[int | None, list[st
             return None, [f"{field} must be >= 0"]
         return value, []
     if isinstance(value, float):
+        if not isfinite(value):
+            return None, [f"{field} must be a finite number, got {value}"]
         if value < 0:
             return None, [f"{field} must be >= 0"]
         return ceil(value), []
@@ -137,7 +139,7 @@ def _validate_checkpoint_selector_schema(selector: dict[str, Any]) -> list[str]:
             field="min_resolvable_training_run_checkpoints",
         )
         errors.extend(coercion_errors)
-        if coerced is None:
+        if coerced is None and not coercion_errors:
             errors.append(
                 "checkpoint_selector min_resolvable_training_run_checkpoints must be integer-like"
             )

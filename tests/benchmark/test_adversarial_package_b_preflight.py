@@ -320,6 +320,69 @@ def test_preflight_blocks_example_command_seed_drift(tmp_path: Path) -> None:
     assert any("example_command --seed values" in blocker for blocker in result.blockers)
 
 
+def test_preflight_blocks_missing_package_b_budget_grid_flag(tmp_path: Path) -> None:
+    """Package-B command must select the fixed issue #3079 budget grid."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--seed 1101 --seed 2202 --seed 3303 "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["example_command_uses_package_b_grid"] is False
+    assert any("exactly one --package-b-budget-grid" in blocker for blocker in result.blockers)
+
+
+def test_preflight_blocks_duplicate_package_b_budget_grid_flag(tmp_path: Path) -> None:
+    """Duplicate fixed-grid flags are treated as command drift."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--package-b-budget-grid --package-b-budget-grid "
+        "--seed 1101 --seed 2202 --seed 3303 "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["example_command_uses_package_b_grid"] is False
+    assert any("exactly one --package-b-budget-grid" in blocker for blocker in result.blockers)
+
+
+def test_preflight_blocks_package_b_budget_overrides(tmp_path: Path) -> None:
+    """Package-B command cannot mix fixed grid mode with explicit budget overrides."""
+    manifest = _base_manifest(tmp_path)
+    payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+    payload["example_command"] = (
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--package-b-budget-grid --budget 16 --budget=32 "
+        "--seed 1101 --seed 2202 --seed 3303 "
+        "--output-dir output/adversarial/issue_3079_package_b "
+        "--out-json output/adversarial/issue_3079_package_b/report.json"
+    )
+    manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    result = preflight_package_b_manifest(manifest, repo_root=tmp_path)
+
+    assert result.ready is False
+    assert result.blocked is True
+    assert result.checks["example_command_uses_package_b_grid"] is True
+    assert result.checks["example_command_has_no_budget_overrides"] is False
+    assert any("explicit --budget overrides" in blocker for blocker in result.blockers)
+
+
 def test_preflight_accepts_equals_form_example_command_seed_args(tmp_path: Path) -> None:
     """The seed parser should mirror argparse's --seed=value spelling."""
     manifest = _base_manifest(tmp_path)

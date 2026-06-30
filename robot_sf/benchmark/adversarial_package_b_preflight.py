@@ -174,6 +174,30 @@ def _extract_option_values(command: str, option: str) -> tuple[tuple[str, ...], 
     return tuple(values), warnings
 
 
+def _extract_budget_grid_flags(command: str) -> tuple[int, tuple[str, ...], list[str]]:
+    """Return Package-B grid flag count and explicit budget overrides."""
+    warnings: list[str] = []
+    try:
+        tokens = shlex.split(command)
+    except ValueError as exc:
+        warnings.append(f"example_command could not be parsed by shlex: {exc}")
+        return 0, (), warnings
+
+    budget_values: list[str] = []
+    grid_flag_count = 0
+    for index, token in enumerate(tokens):
+        if token == "--package-b-budget-grid":
+            grid_flag_count += 1
+        elif token == "--budget":
+            if index + 1 >= len(tokens):
+                warnings.append("example_command has --budget without value")
+                continue
+            budget_values.append(tokens[index + 1])
+        elif token.startswith("--budget="):
+            budget_values.append(token.removeprefix("--budget="))
+    return grid_flag_count, tuple(budget_values), warnings
+
+
 def _under_output_prefix(path: Path | None, repo_root: Path) -> bool:
     if path is None:
         return False
@@ -460,9 +484,19 @@ def preflight_package_b_manifest(  # noqa: C901, PLR0912, PLR0915
     if forbidden_hits:
         blockers.append(f"example_command includes forbidden action tokens: {forbidden_hits}")
 
-    checks["example_command_uses_package_b_grid"] = "--package-b-budget-grid" in example_command
+    budget_grid_flag_count, command_budget_values, budget_warnings = _extract_budget_grid_flags(
+        example_command
+    )
+    warnings.extend(budget_warnings)
+    checks["example_command_uses_package_b_grid"] = budget_grid_flag_count == 1
     if not checks["example_command_uses_package_b_grid"]:
-        blockers.append("example_command must use --package-b-budget-grid")
+        blockers.append("example_command must use exactly one --package-b-budget-grid")
+    checks["example_command_has_no_budget_overrides"] = not command_budget_values
+    if not checks["example_command_has_no_budget_overrides"]:
+        blockers.append(
+            "example_command must not mix --package-b-budget-grid with explicit "
+            f"--budget overrides: {list(command_budget_values)}"
+        )
 
     for seed in seeds:
         checks[f"example_command_seed_{seed}"] = (

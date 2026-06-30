@@ -1,0 +1,76 @@
+"""Tests issue #3813 sustained-flow scenario variant preflight."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+from robot_sf.scenario_certification import sustained_flow
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCENARIO_SET = REPO_ROOT / "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"
+PREFLIGHT_SCRIPT = REPO_ROOT / "scripts/validation/preflight_sustained_flow_scenarios_issue_3813.py"
+
+
+def test_expected_variants_enumerate_deterministically() -> None:
+    """Generator emits light/medium/heavy in deterministic order."""
+    generated = sustained_flow.generate_expected_sustained_flow_scenarios()
+    assert len(generated) == 3
+
+    tiers = [scenario["metadata"]["density"] for scenario in generated]
+    assert tiers == ["light", "medium", "heavy"]
+
+    spawn_rates = [
+        scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"]
+        for scenario in generated
+    ]
+    assert spawn_rates == [6.0, 12.0, 18.0]
+
+
+def test_preflight_conforms_for_commit_scaffold() -> None:
+    """Current scaffold set satisfies fail-closed sustained-flow preflight."""
+    report = sustained_flow.preflight_sustained_flow_scenario_set(SCENARIO_SET)
+
+    assert report.conforms
+    assert len(report.variants) == 3
+    assert report.runtime_support == "metadata_only"
+    assert report.benchmark_evidence is False
+    assert [variant.density_tier for variant in report.variants] == ["light", "medium", "heavy"]
+    assert [variant.spawn_rate_per_min for variant in report.variants] == [6.0, 12.0, 18.0]
+
+
+def test_preflight_rejects_truncated_variant_set(tmp_path: Path) -> None:
+    """Truncating variants must fail closed with an expected-count error."""
+    payload = yaml.safe_load(SCENARIO_SET.read_text(encoding="utf-8"))
+    payload["scenarios"] = payload["scenarios"][:2]
+
+    truncated = tmp_path / "issue_3813_sustained_flow_scaffold_truncated.yaml"
+    truncated.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    report = sustained_flow.preflight_sustained_flow_scenario_set(truncated)
+    assert not report.conforms
+    assert any("expected 3 sustained-flow variants" in error for error in report.errors)
+
+
+def test_preflight_cli_outputs_json_payload() -> None:
+    """Validation script emits JSON payload for automation consumers."""
+    command = [
+        sys.executable,
+        str(PREFLIGHT_SCRIPT),
+        "--scenario-set",
+        str(SCENARIO_SET),
+        "--json",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode == 0
+
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == sustained_flow.SUSTAINED_FLOW_PREFLIGHT_SCHEMA_VERSION
+    assert payload["conforms"] is True
+    assert payload["variant_count"] == 3
+    assert payload["scenario_set"] == "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"

@@ -86,10 +86,13 @@ def test_governance_text_lists_per_term_normalization_status(
     out = capsys.readouterr().out
     assert "Weight sources:" in out
     assert "code_default (code_default, <code default>): canonical=True" in out
+    assert "versioned_id=snqi_weights_code_default_v1" in out
     assert "model_canonical_v1 (shipped_json, model/snqi_canonical_weights_v1.json)" in out
+    assert "versioned_id=snqi_weights_model_canonical_v1" in out
     assert (
         "camera_ready_v3 (shipped_json, configs/benchmarks/snqi_weights_camera_ready_v3.json)"
     ) in out
+    assert "versioned_id=snqi_weights_camera_ready_v3" in out
     assert "dominant=w_collisions; scale=raw; sha256=" in out
     assert "dominant=w_near; scale=normalized_simplex; sha256=" in out
     assert "Code-default vs shipped JSON directions:" in out

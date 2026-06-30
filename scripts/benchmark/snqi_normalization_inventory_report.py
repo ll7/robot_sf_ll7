@@ -40,6 +40,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.snqi.normalization_inventory import (
+    build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
     format_normalization_report,
 )
@@ -71,6 +72,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional path to write the JSON inventory payload.",
     )
     parser.add_argument(
+        "--metrics",
+        type=pathlib.Path,
+        default=None,
+        help="Optional episode metrics JSON for contribution diagnostics.",
+    )
+    parser.add_argument(
+        "--weights",
+        type=pathlib.Path,
+        default=None,
+        help="Optional SNQI weights JSON for contribution diagnostics.",
+    )
+    parser.add_argument(
         "--fail-on-mixed-scale",
         action="store_true",
         help="Exit non-zero while penalty terms span raw and normalized scales (fail-closed).",
@@ -86,7 +99,30 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _load_contribution_inputs(
+    metrics_path: pathlib.Path | None,
+    weights_path: pathlib.Path | None,
+) -> tuple[int, dict[str, float | int | bool] | None, dict[str, float] | None]:
+    """Load optional metrics/weights JSON for contribution diagnostics."""
+    if metrics_path is None and weights_path is None:
+        return 0, None, None
+    if metrics_path is None or weights_path is None:
+        print("--metrics and --weights must be provided together", file=sys.stderr)
+        return 2, None, None
+    if not metrics_path.exists():
+        print(f"metrics file not found: {metrics_path}", file=sys.stderr)
+        return 2, None, None
+    if not weights_path.exists():
+        print(f"weights file not found: {weights_path}", file=sys.stderr)
+        return 2, None, None
+    return (
+        0,
+        json.loads(metrics_path.read_text(encoding="utf-8")),
+        json.loads(weights_path.read_text(encoding="utf-8")),
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     """Run the preflight normalization inventory report.
 
     Returns:
@@ -101,13 +137,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         baseline_stats = json.loads(args.baseline_stats.read_text(encoding="utf-8"))
 
+    input_exit_code, metrics, weights = _load_contribution_inputs(args.metrics, args.weights)
+    if input_exit_code:
+        return input_exit_code
+
     inventory = build_snqi_normalization_inventory(baseline_stats)
+    contribution_payload = None
+    if metrics is not None and weights is not None:
+        contribution_payload = build_snqi_contribution_diagnostics(
+            metrics,
+            weights,
+            baseline_stats or {},
+        )
 
     print(CLAIM_BOUNDARY)
     print(format_normalization_report(inventory))
+    if contribution_payload is not None:
+        print("Contribution diagnostics:")
+        for term in contribution_payload["terms"]:
+            print(
+                f" - {term['term']}: scaled={term['scaled_value']}; "
+                f"weight={term['weight']}; signed={term['signed_contribution']}; "
+                f"absolute_share={term['absolute_share']}"
+            )
 
     if args.json_out is not None:
         payload = {"claim_boundary": CLAIM_BOUNDARY, "inventory": inventory.to_dict()}
+        if contribution_payload is not None:
+            payload["contributions"] = contribution_payload
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(f"wrote {args.json_out}")

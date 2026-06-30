@@ -214,3 +214,55 @@ def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():
     assert by_term["collisions"]["scaled_value"] == pytest.approx(1.0)
     assert by_term["time"]["normalization_status"] == "raw_unbounded"
     assert by_term["collisions"]["normalization_status"] == "baseline_normalized_bounded"
+
+
+def test_report_cli_writes_contribution_diagnostics(tmp_path, capsys):
+    """Report CLI can attach per-term contribution diagnostics to JSON output."""
+    import importlib.util
+    import json
+    import pathlib
+
+    script_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "benchmark"
+        / "snqi_normalization_inventory_report.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "snqi_normalization_inventory_report", script_path
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    metrics_path = tmp_path / "metrics.json"
+    weights_path = tmp_path / "weights.json"
+    baseline_path = tmp_path / "baseline.json"
+    output_path = tmp_path / "inventory.json"
+    metrics_path.write_text(json.dumps(_METRICS), encoding="utf-8")
+    weights_path.write_text(json.dumps(_WEIGHTS), encoding="utf-8")
+    baseline_path.write_text(json.dumps(_BASELINE_STATS), encoding="utf-8")
+
+    exit_code = module.main(
+        [
+            "--baseline-stats",
+            str(baseline_path),
+            "--metrics",
+            str(metrics_path),
+            "--weights",
+            str(weights_path),
+            "--json-out",
+            str(output_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "Contribution diagnostics:" in captured.out
+    assert payload["contributions"]["diagnostic_only"] is True
+    assert payload["contributions"]["mixed_basis"] is True
+    signed_total = sum(term["signed_contribution"] for term in payload["contributions"]["terms"])
+    assert signed_total == pytest.approx(compute_snqi(_METRICS, _WEIGHTS, _BASELINE_STATS))

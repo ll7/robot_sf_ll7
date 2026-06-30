@@ -101,6 +101,7 @@ def test_inventory_discovers_all_registered_sources(tmp_path):
 
     code = next(r for r in records if r.name == "code_default")
     assert code.available
+    assert code.versioned_id == "snqi_weights_code_default_v1"
     assert code.weights == _CODE_DEFAULT
     assert code.dominant_term == "w_collisions"
     assert code.scale_class == "raw"
@@ -219,6 +220,22 @@ def test_code_default_vs_shipped_direction_matrix(tmp_path):
         "camera_ready_v3",
         "model_canonical_v1",
     ]
+    summary = report.to_dict()["source_summary"]
+    assert summary["canonical_decision"] == {
+        "status": "unresolved_decision_required",
+        "issue": 3723,
+        "selected_versioned_id": None,
+        "ambiguous_unversioned_label": "canonical",
+        "message": (
+            "No SNQI weight source is promoted as benchmark-canonical by this "
+            "diagnostic inventory; reports should name a versioned_id explicitly."
+        ),
+    }
+    assert summary["canonical_declaring_versioned_ids"] == [
+        "snqi_weights_code_default_v1",
+        "snqi_weights_model_canonical_v1",
+    ]
+    assert "snqi_weights_camera_ready_v3" in summary["discovered_shipped_versioned_ids"]
 
 
 def test_zero_sum_shipped_source_reports_comparison_unavailable_reason():
@@ -232,6 +249,7 @@ def test_zero_sum_shipped_source_reports_comparison_unavailable_reason():
         name="code_default",
         kind="code_default",
         relpath=None,
+        versioned_id="snqi_weights_code_default_v1",
         declares_canonical=False,
         available=True,
         weights=dict.fromkeys(WEIGHT_NAMES, 1.0),
@@ -243,6 +261,7 @@ def test_zero_sum_shipped_source_reports_comparison_unavailable_reason():
         name="camera_ready_zero",
         kind="shipped_json",
         relpath="configs/benchmarks/snqi_weights_camera_ready_zero.json",
+        versioned_id="snqi_weights_camera_ready_zero",
         declares_canonical=False,
         available=True,  # the file loaded fine
         weights=dict.fromkeys(WEIGHT_NAMES, 0.0),
@@ -342,6 +361,10 @@ def test_unregistered_shipped_weight_file_reported_fail_closed(tmp_path):
     unregistered = [r for r in report.records if r.kind == "unregistered_shipped_json"]
     assert len(unregistered) == 1
     assert unregistered[0].relpath == "configs/benchmarks/snqi_weights_experimental_v9.json"
+    assert (
+        unregistered[0].versioned_id
+        == "unregistered_configs_benchmarks_snqi_weights_experimental_v9"
+    )
     assert unregistered[0].available
     assert (
         unregistered[0].content_sha256

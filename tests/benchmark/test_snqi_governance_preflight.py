@@ -64,6 +64,11 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     assert comparisons_by_source["model_canonical_v1"]["source_dominant_term"] == "w_jerk"
     assert comparisons_by_source["camera_ready_v3"]["relationship"] == "different_direction"
     assert comparisons_by_source["camera_ready_v3"]["source_dominant_term"] == "w_near"
+    assert report["normalization"]["score_version_contract"]["score_version"] == "SNQI-v0"
+    assert (
+        report["normalization"]["score_version_contract"]["status"]
+        == "legacy_mixed_basis_diagnostic_only"
+    )
     blocker_3699 = next(
         blocker for blocker in report["blockers"] if blocker["kind"] == "mixed_normalization_basis"
     )
@@ -84,6 +89,7 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
     assert contributions["mixed_basis"] is True
     assert contributions["raw_penalty_terms_dominate"] is True
     assert contributions["has_weight_bound_exceedance"] is True
+    assert contributions["score_version_contract"]["score_semantics_changed"] is False
     assert {term["term"] for term in contributions["weight_bound_exceedances"]} == {
         "time",
         "comfort",
@@ -144,6 +150,10 @@ def test_governance_text_lists_per_term_normalization_status(
     assert "Weight provenance conflicts:" in out
     assert "error canonical_direction_conflict (code_default, model_canonical_v1)" in out
     assert "Term normalization status:" in out
+    assert (
+        "Score version contract: SNQI-v0; "
+        "status=legacy_mixed_basis_diagnostic_only; diagnostic_only=True"
+    ) in out
     assert "time (time_to_goal_norm, w_time): raw_unbounded" in out
     assert "basis=raw time-to-goal ratio" in out
     assert "comfort (comfort_exposure, w_comfort): raw_unbounded" in out

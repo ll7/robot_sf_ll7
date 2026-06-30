@@ -109,17 +109,22 @@ def _load_contribution_inputs(
     if metrics_path is None or weights_path is None:
         print("--metrics and --weights must be provided together", file=sys.stderr)
         return 2, None, None
-    if not metrics_path.exists():
+    if not metrics_path.is_file():
         print(f"metrics file not found: {metrics_path}", file=sys.stderr)
         return 2, None, None
-    if not weights_path.exists():
+    if not weights_path.is_file():
         print(f"weights file not found: {weights_path}", file=sys.stderr)
         return 2, None, None
-    return (
-        0,
-        json.loads(metrics_path.read_text(encoding="utf-8")),
-        json.loads(weights_path.read_text(encoding="utf-8")),
-    )
+    try:
+        metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+        weights = json.loads(weights_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"invalid contribution input JSON: {exc}", file=sys.stderr)
+        return 2, None, None
+    if not isinstance(metrics, dict) or not isinstance(weights, dict):
+        print("--metrics and --weights must each contain a JSON object", file=sys.stderr)
+        return 2, None, None
+    return 0, metrics, weights
 
 
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901

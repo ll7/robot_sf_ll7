@@ -1,4 +1,4 @@
-"""Tests for issue #3484 scenario-failure cause classification."""
+"""Compatibility tests for benchmark scenario failure-cause imports."""
 
 from __future__ import annotations
 
@@ -16,149 +16,56 @@ from robot_sf.benchmark.scenario_failure_cause import (
     classify_scenario_failure_cause,
     diagnostics_from_mapping,
 )
-
-
-def test_route_clearance_failure_classifies_infeasible_route() -> None:
-    """Route-clearance failure is not treated as planner-ranking evidence."""
-
-    verdict = classify_scenario_failure_cause(
-        ScenarioFailureDiagnostics(family="bottleneck", route_feasible=False)
-    )
-
-    assert verdict.schema_version == SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION
-    assert verdict.verdict == VERDICT_INFEASIBLE_ROUTE
-    assert verdict.comparable_for_ranking is False
-    assert verdict.missing_diagnostics == ()
-
-
-def test_actor_free_failure_classifies_vehicle_infeasible() -> None:
-    """A route-feasible but actor-free-unsolved family is vehicle infeasible."""
-
-    verdict = classify_scenario_failure_cause(
-        ScenarioFailureDiagnostics(
-            family="head_on_corridor",
-            route_feasible=True,
-            actor_free_solved=False,
-        )
-    )
-
-    assert verdict.verdict == VERDICT_VEHICLE_INFEASIBLE
-    assert verdict.comparable_for_ranking is False
-
-
-def test_extended_time_success_classifies_time_limited() -> None:
-    """Extended-time success separates horizon limits from planner limits."""
-
-    verdict = classify_scenario_failure_cause(
-        ScenarioFailureDiagnostics(
-            family="cross_trap",
-            route_feasible=True,
-            actor_free_solved=True,
-            extended_time_solved=True,
-            oracle_solved=True,
-        )
-    )
-
-    assert verdict.verdict == VERDICT_TIME_LIMITED
-    assert verdict.comparable_for_ranking is False
-
-
-def test_oracle_success_without_planner_success_classifies_planner_limited() -> None:
-    """Only planner-limited rows are comparable for planner ranking."""
-
-    verdict = classify_scenario_failure_cause(
-        ScenarioFailureDiagnostics(
-            family="cross_trap",
-            route_feasible=True,
-            actor_free_solved=True,
-            extended_time_solved=False,
-            oracle_solved=True,
-            any_planner_succeeded=False,
-        )
-    )
-
-    assert verdict.verdict == VERDICT_PLANNER_LIMITED
-    assert verdict.comparable_for_ranking is True
-
-
-def test_oracle_failure_after_route_and_actor_free_checks_classifies_dynamic_blocking() -> None:
-    """Actor-related failures remain diagnostic rather than ranking evidence."""
-
-    verdict = classify_scenario_failure_cause(
-        ScenarioFailureDiagnostics(
-            family="bottleneck",
-            route_feasible=True,
-            actor_free_solved=True,
-            extended_time_solved=False,
-            oracle_solved=False,
-        )
-    )
-
-    assert verdict.verdict == VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK
-    assert verdict.comparable_for_ranking is False
-
-
-@pytest.mark.parametrize(
-    ("diagnostics", "missing"),
-    [
-        (ScenarioFailureDiagnostics(family="bottleneck"), ("route_feasible",)),
-        (
-            ScenarioFailureDiagnostics(family="bottleneck", route_feasible=True),
-            ("actor_free_solved",),
-        ),
-        (
-            ScenarioFailureDiagnostics(
-                family="bottleneck",
-                route_feasible=True,
-                actor_free_solved=True,
-            ),
-            ("oracle_solved", "extended_time_solved"),
-        ),
-        (
-            ScenarioFailureDiagnostics(
-                family="bottleneck",
-                route_feasible=True,
-                actor_free_solved=True,
-                extended_time_solved=None,
-                oracle_solved=False,
-            ),
-            ("extended_time_solved",),
-        ),
-    ],
+from robot_sf.scenario_certification.failure_cause import (
+    FAILURE_CAUSE_SCHEMA,
+    INDETERMINATE,
+    FamilyDiagnostics,
+    classify_failure_cause,
 )
-def test_missing_required_diagnostics_fail_closed(
-    diagnostics: ScenarioFailureDiagnostics,
-    missing: tuple[str, ...],
-) -> None:
-    """Missing upstream diagnostics produce an indeterminate verdict."""
-
-    verdict = classify_scenario_failure_cause(diagnostics)
-
-    assert verdict.verdict == VERDICT_INDETERMINATE
-    assert verdict.comparable_for_ranking is False
-    assert verdict.missing_diagnostics == missing
 
 
-def test_mapping_input_accepts_scenario_family_alias_and_serializes() -> None:
-    """Benchmark summaries can feed mapping payloads directly."""
+def test_benchmark_imports_use_canonical_schema_and_verdicts() -> None:
+    """Benchmark compatibility names must not create a divergent schema."""
+
+    assert SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION == FAILURE_CAUSE_SCHEMA
+    assert VERDICT_INFEASIBLE_ROUTE == "infeasible_route"
+    assert VERDICT_VEHICLE_INFEASIBLE == "vehicle_infeasible"
+    assert VERDICT_TIME_LIMITED == "time_limited"
+    assert VERDICT_PLANNER_LIMITED == "planner_limited"
+    assert VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK == "dynamic_blocking_or_deadlock"
+    assert VERDICT_INDETERMINATE == INDETERMINATE
+    assert ScenarioFailureDiagnostics is FamilyDiagnostics
+
+
+def test_benchmark_classifier_matches_canonical_owner() -> None:
+    """Benchmark import surface delegates classification to the canonical owner."""
+
+    diagnostics = ScenarioFailureDiagnostics(
+        route_feasible=True,
+        actor_free_solved=True,
+        extended_time_solved=False,
+        oracle_solved=False,
+    )
+
+    assert classify_scenario_failure_cause(diagnostics) == classify_failure_cause(diagnostics)
+
+
+def test_benchmark_mapping_adapter_accepts_scenario_family_alias() -> None:
+    """Benchmark summaries can still use the historic ``scenario_family`` key."""
 
     verdict = classify_scenario_failure_cause(
         {
-            "scenario_family": " bottleneck ",
+            "scenario_family": "bottleneck",
             "route_feasible": True,
             "actor_free_solved": True,
-            "extended_time_solved": False,
-            "oracle_solved": True,
-            "evidence_refs": ["output/diagnostics/summary.json"],
-            "notes": ["diagnostic-only"],
+            "extended_time_solved": None,
+            "oracle_solved": False,
         }
     )
-    payload = verdict.as_dict()
 
-    assert verdict.family == "bottleneck"
-    assert payload["schema_version"] == SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION
-    assert payload["diagnostics"]["evidence_refs"] == ["output/diagnostics/summary.json"]
-    assert payload["diagnostics"]["notes"] == ["diagnostic-only"]
+    assert verdict["schema_version"] == SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION
+    assert verdict["cause"] == VERDICT_INDETERMINATE
+    assert verdict["inputs"]["oracle_solved"] is False
 
 
 @pytest.mark.parametrize(
@@ -166,12 +73,10 @@ def test_mapping_input_accepts_scenario_family_alias_and_serializes() -> None:
     [
         {"family": "bottleneck", "route_feasible": "yes"},
         {"family": "bottleneck", "any_planner_succeeded": 1},
-        {"family": "bottleneck", "evidence_refs": [" "]},
-        {"family": "bottleneck", "notes": [1]},
-        {"route_feasible": True},
+        {"family": 3484},
     ],
 )
-def test_mapping_input_rejects_ambiguous_payloads(payload: dict[str, object]) -> None:
+def test_mapping_adapter_rejects_ambiguous_payloads(payload: dict[str, object]) -> None:
     """Inputs fail closed instead of coercing ambiguous diagnostic values."""
 
     with pytest.raises(ValueError):

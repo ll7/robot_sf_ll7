@@ -1,231 +1,83 @@
-"""Classify universally failing scenario-family diagnostics.
+"""Compatibility exports for scenario failure-cause classification.
 
-The classifier is intentionally pure: simulator and ledger runners can produce
-the diagnostic booleans later, while this module fixes the versioned verdict
-contract those runners should consume.
+The canonical classifier lives in
+``robot_sf.scenario_certification.failure_cause``.  Keep this module as a thin
+benchmark-facing import surface so benchmark callers cannot drift into a
+second ``scenario_failure_cause.v1`` semantic contract.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field, replace
-from typing import Any, Literal
+from collections.abc import Mapping
+from typing import Any
 
-SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION = "scenario_failure_cause.v1"
+from robot_sf.scenario_certification.failure_cause import (
+    DYNAMIC_BLOCKING_OR_DEADLOCK as VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK,
+)
+from robot_sf.scenario_certification.failure_cause import (
+    FAILURE_CAUSE_SCHEMA as SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION,
+)
+from robot_sf.scenario_certification.failure_cause import (
+    INDETERMINATE as VERDICT_INDETERMINATE,
+)
+from robot_sf.scenario_certification.failure_cause import (
+    INFEASIBLE_ROUTE as VERDICT_INFEASIBLE_ROUTE,
+)
+from robot_sf.scenario_certification.failure_cause import (
+    PLANNER_LIMITED as VERDICT_PLANNER_LIMITED,
+)
+from robot_sf.scenario_certification.failure_cause import (
+    TIME_LIMITED as VERDICT_TIME_LIMITED,
+)
+from robot_sf.scenario_certification.failure_cause import (
+    VEHICLE_INFEASIBLE as VERDICT_VEHICLE_INFEASIBLE,
+)
+from robot_sf.scenario_certification.failure_cause import (
+    FamilyDiagnostics as ScenarioFailureDiagnostics,
+)
+from robot_sf.scenario_certification.failure_cause import classify_failure_cause
 
-VERDICT_INFEASIBLE_ROUTE = "infeasible_route"
-VERDICT_VEHICLE_INFEASIBLE = "vehicle_infeasible"
-VERDICT_TIME_LIMITED = "time_limited"
-VERDICT_PLANNER_LIMITED = "planner_limited"
-VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK = "dynamic_blocking_or_deadlock"
-VERDICT_INDETERMINATE = "indeterminate"
-
-ScenarioFailureVerdict = Literal[
-    "infeasible_route",
-    "vehicle_infeasible",
-    "time_limited",
-    "planner_limited",
-    "dynamic_blocking_or_deadlock",
-    "indeterminate",
-]
-
-
-@dataclass(frozen=True, slots=True)
-class ScenarioFailureDiagnostics:
-    """Diagnostic outcomes for one universally failing scenario family."""
-
-    family: str
-    route_feasible: bool | None = None
-    actor_free_solved: bool | None = None
-    extended_time_solved: bool | None = None
-    oracle_solved: bool | None = None
-    any_planner_succeeded: bool = False
-    evidence_refs: tuple[str, ...] = field(default_factory=tuple)
-    notes: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True, slots=True)
-class ScenarioFailureCause:
-    """Versioned failure-cause verdict for one scenario family."""
-
-    family: str
-    verdict: ScenarioFailureVerdict
-    comparable_for_ranking: bool
-    rationale: str
-    missing_diagnostics: tuple[str, ...] = field(default_factory=tuple)
-    diagnostics: ScenarioFailureDiagnostics | None = None
-    schema_version: str = SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION
-
-    def as_dict(self) -> dict[str, Any]:
-        """Return a JSON/YAML-friendly verdict payload."""
-
-        payload = asdict(self)
-        payload["missing_diagnostics"] = list(self.missing_diagnostics)
-        diagnostics = payload.get("diagnostics")
-        if isinstance(diagnostics, dict) and self.diagnostics is not None:
-            diagnostics["evidence_refs"] = list(self.diagnostics.evidence_refs)
-            diagnostics["notes"] = list(self.diagnostics.notes)
-        if diagnostics is None:
-            payload.pop("diagnostics")
-        return payload
+ScenarioFailureCause = dict[str, Any]
 
 
 def diagnostics_from_mapping(payload: Mapping[str, Any]) -> ScenarioFailureDiagnostics:
-    """Normalize a mapping into typed scenario-failure diagnostics.
-
-    ``scenario_family`` is accepted as an alias for ``family`` because benchmark
-    summaries commonly use that field name.
+    """Normalize benchmark-style mapping payloads to canonical diagnostics.
 
     Returns:
-        Typed diagnostic outcomes.
+        Canonical failure-cause diagnostics.
     """
 
     family = payload.get("family", payload.get("scenario_family"))
-    if not isinstance(family, str) or not family.strip():
-        raise ValueError("scenario failure diagnostics require non-empty family")
-
+    if family is not None and not isinstance(family, str):
+        raise ValueError("scenario failure diagnostics family must be a string")
+    if "scenario_family" in payload and "family" not in payload:
+        payload = {**payload, "family": family}
     return ScenarioFailureDiagnostics(
-        family=family.strip(),
+        any_planner_succeeded=_required_bool(payload, "any_planner_succeeded", default=False),
         route_feasible=_optional_bool(payload, "route_feasible"),
         actor_free_solved=_optional_bool(payload, "actor_free_solved"),
         extended_time_solved=_optional_bool(payload, "extended_time_solved"),
         oracle_solved=_optional_bool(payload, "oracle_solved"),
-        any_planner_succeeded=_required_bool(payload, "any_planner_succeeded", default=False),
-        evidence_refs=_string_tuple(payload.get("evidence_refs", ()), field_name="evidence_refs"),
-        notes=_string_tuple(payload.get("notes", ()), field_name="notes"),
     )
 
 
 def classify_scenario_failure_cause(
     diagnostics: ScenarioFailureDiagnostics | Mapping[str, Any],
 ) -> ScenarioFailureCause:
-    """Classify one scenario family from route, actor-free, time, and oracle diagnostics.
+    """Classify benchmark diagnostics with the canonical owner semantics.
 
     Returns:
-        Versioned failure-cause verdict.
+        Canonical failure-cause verdict payload.
     """
 
     normalized = (
         diagnostics_from_mapping(diagnostics) if isinstance(diagnostics, Mapping) else diagnostics
     )
-    if not isinstance(normalized, ScenarioFailureDiagnostics):
-        raise TypeError("diagnostics must be ScenarioFailureDiagnostics or mapping")
-    if not isinstance(normalized.family, str) or not normalized.family.strip():
-        raise ValueError("scenario failure diagnostics require non-empty family")
-    if normalized.family != normalized.family.strip():
-        normalized = replace(normalized, family=normalized.family.strip())
-
-    verdict, rationale, missing = _classify_verdict(normalized)
-    return ScenarioFailureCause(
-        family=normalized.family,
-        verdict=verdict,
-        comparable_for_ranking=verdict == VERDICT_PLANNER_LIMITED,
-        rationale=rationale,
-        missing_diagnostics=tuple(missing),
-        diagnostics=normalized,
-    )
-
-
-def _classify_verdict(
-    diagnostics: ScenarioFailureDiagnostics,
-) -> tuple[ScenarioFailureVerdict, str, list[str]]:
-    """Return deterministic verdict, rationale, and missing diagnostic names.
-
-    Returns:
-        Verdict string, human-readable rationale, and missing diagnostic names.
-    """
-
-    if diagnostics.any_planner_succeeded:
-        return (
-            VERDICT_PLANNER_LIMITED,
-            "At least one evaluated planner succeeded, so the row is not universally failing.",
-            [],
-        )
-
-    if diagnostics.route_feasible is None:
-        return _indeterminate("route clearance has not been certified", ["route_feasible"])
-    if diagnostics.route_feasible is False:
-        return (
-            VERDICT_INFEASIBLE_ROUTE,
-            "Route-clearance diagnostic found no collision-free vehicle-footprint path.",
-            [],
-        )
-
-    if diagnostics.actor_free_solved is None:
-        return _indeterminate(
-            "actor-free vehicle feasibility has not been checked",
-            ["actor_free_solved"],
-        )
-    if diagnostics.actor_free_solved is False:
-        return (
-            VERDICT_VEHICLE_INFEASIBLE,
-            "Vehicle could not reach the goal even with pedestrians removed.",
-            [],
-        )
-
-    return _classify_after_feasibility(diagnostics)
-
-
-def _classify_after_feasibility(
-    diagnostics: ScenarioFailureDiagnostics,
-) -> tuple[ScenarioFailureVerdict, str, list[str]]:
-    """Classify the time/oracle stage after route and actor-free checks pass.
-
-    Returns:
-        Verdict string, human-readable rationale, and missing diagnostic names.
-    """
-
-    if diagnostics.extended_time_solved is True:
-        return (
-            VERDICT_TIME_LIMITED,
-            "The scenario solved only when the time horizon was extended.",
-            [],
-        )
-
-    if diagnostics.oracle_solved is None:
-        missing = ["oracle_solved"]
-        if diagnostics.extended_time_solved is None:
-            missing.append("extended_time_solved")
-        return _indeterminate(
-            "oracle trajectory diagnostic is required after route and actor-free checks pass",
-            missing,
-        )
-
-    if diagnostics.oracle_solved:
-        return (
-            VERDICT_PLANNER_LIMITED,
-            "Privileged/oracle trajectory solved the family while evaluated planners did not.",
-            [],
-        )
-
-    if diagnostics.extended_time_solved is None:
-        return _indeterminate(
-            "extended-time diagnostic is required to separate a deadlock from a time-limited row "
-            "when the oracle does not solve with actors",
-            ["extended_time_solved"],
-        )
-
-    return (
-        VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK,
-        "Route and actor-free checks pass, but privileged execution does not solve with actors.",
-        [],
-    )
-
-
-def _indeterminate(
-    reason: str, missing: list[str]
-) -> tuple[ScenarioFailureVerdict, str, list[str]]:
-    """Return a fail-closed indeterminate verdict.
-
-    Returns:
-        Indeterminate verdict tuple.
-    """
-
-    return VERDICT_INDETERMINATE, reason, missing
+    return classify_failure_cause(normalized)
 
 
 def _optional_bool(payload: Mapping[str, Any], key: str) -> bool | None:
-    """Read an optional boolean field without coercing strings or integers.
+    """Read optional boolean field without coercing strings or integers.
 
     Returns:
         Boolean value or ``None`` when absent.
@@ -239,10 +91,10 @@ def _optional_bool(payload: Mapping[str, Any], key: str) -> bool | None:
 
 
 def _required_bool(payload: Mapping[str, Any], key: str, *, default: bool) -> bool:
-    """Read a required/defaulted boolean field without lossy coercion.
+    """Read required/defaulted boolean field without lossy coercion.
 
     Returns:
-        Boolean value.
+        Boolean field value.
     """
 
     value = payload.get(key, default)
@@ -251,26 +103,16 @@ def _required_bool(payload: Mapping[str, Any], key: str, *, default: bool) -> bo
     raise ValueError(f"{key} must be boolean")
 
 
-def _string_tuple(raw: object, *, field_name: str) -> tuple[str, ...]:
-    """Normalize optional string sequences for provenance fields.
-
-    Returns:
-        Tuple of non-empty strings.
-    """
-
-    if raw is None:
-        return ()
-    if isinstance(raw, str):
-        values: Sequence[object] = (raw,)
-    elif isinstance(raw, Sequence):
-        values = raw
-    else:
-        raise ValueError(f"{field_name} must be a string sequence")
-
-    if any(not isinstance(value, str) for value in values):
-        raise ValueError(f"{field_name} entries must be strings")
-
-    normalized = tuple(value.strip() for value in values)
-    if any(not value for value in normalized):
-        raise ValueError(f"{field_name} must not contain empty strings")
-    return normalized
+__all__ = [
+    "SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION",
+    "VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK",
+    "VERDICT_INDETERMINATE",
+    "VERDICT_INFEASIBLE_ROUTE",
+    "VERDICT_PLANNER_LIMITED",
+    "VERDICT_TIME_LIMITED",
+    "VERDICT_VEHICLE_INFEASIBLE",
+    "ScenarioFailureCause",
+    "ScenarioFailureDiagnostics",
+    "classify_scenario_failure_cause",
+    "diagnostics_from_mapping",
+]

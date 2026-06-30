@@ -337,9 +337,7 @@ def test_cli_exports_report_ready_artifacts_from_fixture_files(tmp_path: Path) -
     assert (out_dir / "issue_3653_fixture.md").exists()
     assert (out_dir / "issue_3653_fixture_pareto.svg").exists()
 
-    payload = json.loads(
-        (out_dir / "issue_3653_fixture.json").read_text(encoding="utf-8")
-    )
+    payload = json.loads((out_dir / "issue_3653_fixture.json").read_text(encoding="utf-8"))
     assert payload["schema_version"] == "snqi_scalarization_sensitivity.v1"
     assert payload["pareto_front"]["points"]
     assert payload["decision_disagreement"]["pairwise_reversal_count"] >= 0

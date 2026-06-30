@@ -7,8 +7,9 @@ import argparse
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import yaml
 
@@ -20,6 +21,7 @@ EXPECTED_FIXTURE_STATUS = {
     "missing-timing": "unsupported-inputs",
     "unsupported-trajectory": "unsupported-inputs",
 }
+EXPECTED_EVIDENCE_STATUS = "ready_for_decision"
 
 
 class PacketError(ValueError):
@@ -92,13 +94,14 @@ def validate_packet(packet: Mapping[str, Any], repo_root: Path | None = None) ->
 
     claim_boundary = str(packet.get("claim_boundary", "")).lower()
     _require(
-        "full benchmark campaign run" in claim_boundary
-        and "paper/dissertation" in claim_boundary,
+        "full benchmark campaign run" in claim_boundary and "paper/dissertation" in claim_boundary,
         "claim_boundary must explicitly reject benchmark campaign and paper/dissertation claim",
     )
 
     execution = _require_mapping(packet, "execution_boundary")
-    _require(execution.get("run_benchmark") is False, "execution_boundary.run_benchmark must be false")
+    _require(
+        execution.get("run_benchmark") is False, "execution_boundary.run_benchmark must be false"
+    )
     _require(
         execution.get("compute_submit_authorized") is False,
         "execution_boundary.compute_submit_authorized must be false",
@@ -109,11 +112,19 @@ def validate_packet(packet: Mapping[str, Any], repo_root: Path | None = None) ->
     )
 
     expected = _require_mapping(packet, "expected_fixtures")
+    _require(
+        set(expected) == set(EXPECTED_FIXTURE_STATUS),
+        "expected_fixtures must exactly match issue #3808 fixture set",
+    )
     for name in EXPECTED_FIXTURE_STATUS:
         entry = _require_mapping(expected, name)
         _require(
             entry.get("diagnostic_status") == EXPECTED_FIXTURE_STATUS[name],
             f"expected_fixtures[{name}].diagnostic_status must be {EXPECTED_FIXTURE_STATUS[name]}",
+        )
+        _require(
+            entry.get("evidence_status") == EXPECTED_EVIDENCE_STATUS,
+            f"expected_fixtures[{name}].evidence_status must be {EXPECTED_EVIDENCE_STATUS}",
         )
 
     rendered = _run_renderer(packet, repo_root)
@@ -160,6 +171,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the issue #3808 packet checker CLI."""
     args = _build_parser().parse_args(argv)
     packet_path = args.packet
 

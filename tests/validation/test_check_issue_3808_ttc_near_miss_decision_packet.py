@@ -50,7 +50,7 @@ def test_issue_3808_check_rejects_broadened_fixture_contract(tmp_path: Path) -> 
         check=False,
     )
     assert completed.returncode == 2
-    assert "opening must be a mapping" in completed.stderr + completed.stdout
+    assert "expected_fixtures must exactly match" in completed.stderr + completed.stdout
 
 
 def test_issue_3808_check_cli_json() -> None:

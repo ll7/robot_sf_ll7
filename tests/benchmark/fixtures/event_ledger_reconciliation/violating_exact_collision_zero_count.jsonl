@@ -1,0 +1,1 @@
+{"version":"v1","episode_id":"ci-guard-violating-collision","scenario_id":"ci-guard-scenario","seed":3482,"algo":"goal","git_hash":"ci-guard","metrics":{"success":0.0,"total_collision_count":0.0},"termination_reason":"collision","outcome":{"route_complete":false,"collision_event":true,"timeout_event":false}}

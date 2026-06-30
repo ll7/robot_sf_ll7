@@ -19,6 +19,7 @@ campaign:
   scenario_suite:
     matrix_path: configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml
     contract_path: configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml
+    preflight_helper: robot_sf.benchmark.sustained_flow_preflight.preflight_sustained_flow_matrix
     scope: opt_in_sustained_flow_t_intersection_scaffold
     scenario_ids:
       - issue_3813_sustained_flow_t_intersection_light
@@ -37,6 +38,10 @@ campaign:
       Sustained progress or throughput under non-clearing pedestrian demand,
       not binary terminal goal reach.
   row_status_policy:
+    # Forward-looking row-status vocabulary for a future submitted campaign.
+    # With no_submit: true and evidence_tier launch-packet-only, this packet
+    # produces no rows and asserts no successful_evidence today.
+    applies_when: future_submitted_campaign_only
     allowed_values:
       - successful_evidence
       - diagnostic_only

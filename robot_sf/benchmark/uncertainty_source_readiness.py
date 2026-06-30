@@ -32,6 +32,7 @@ MISSING_SCENARIO_HOOK = "missing_scenario_hook"
 MISSING_SURROGATE_OUTPUT = "missing_surrogate_output"
 
 _ISSUE_3471_HARNESS = "scripts.validation.run_scenario_belief_episode_safety_issue_3471"
+_ISSUE_2546_DIAGNOSTIC = "scripts.analysis.run_scenario_belief_uncertainty_diagnostic_issue_2546"
 _GENERALIZATION_LAYER = "robot_sf.representation.uncertainty_source_generalization"
 
 EXPECTED_SURROGATE_OUTPUTS = (
@@ -173,19 +174,19 @@ DEFAULT_SOURCE_SPECS = (
     ),
     SourceReadinessSpec(
         source=VISIBILITY_OCCLUSION,
-        condition_builder_owner=None,
+        condition_builder_owner=f"{_ISSUE_2546_DIAGNOSTIC}:_condition_visibility_limited",
         scenario_hook_owner=None,
         surrogate_output_owner=f"{_GENERALIZATION_LAYER}:SourceContrast",
     ),
     SourceReadinessSpec(
         source=COVARIANCE_INFLATION,
-        condition_builder_owner=None,
+        condition_builder_owner=f"{_ISSUE_2546_DIAGNOSTIC}:_condition_covariance_inflated",
         scenario_hook_owner=None,
         surrogate_output_owner=f"{_GENERALIZATION_LAYER}:SourceContrast",
     ),
     SourceReadinessSpec(
         source=CLASS_PROBABILITY_AMBIGUITY,
-        condition_builder_owner=None,
+        condition_builder_owner=f"{_ISSUE_2546_DIAGNOSTIC}:_condition_class_probability",
         scenario_hook_owner=None,
         surrogate_output_owner=f"{_GENERALIZATION_LAYER}:SourceContrast",
     ),

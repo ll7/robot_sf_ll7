@@ -184,6 +184,7 @@ class FinalizerReport:
     job_id: str
     classification: str
     artifact_status: str
+    claim_decision: str | None
     claim_boundary: str | None
     durable_pointer: str | None
     output_pointers: tuple[str, ...]
@@ -325,6 +326,15 @@ def _extract_claim_boundary(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_claim_decision(payload: dict[str, Any]) -> str | None:
+    """Extract final claim-decision/disposition field if present."""
+    for key in ("claim_decision", "claim-decision", "decision", "disposition"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return _normalize_status(value).replace(" ", "_")
+    return None
+
+
 def _extract_finalizer_durable_pointer(payload: dict[str, Any]) -> str | None:
     """Extract a durable pointer from finalization payload fields."""
     for key in FINALIZER_DURABLE_POINTER_KEYS:
@@ -419,6 +429,7 @@ def _load_finalizer_report(path: Path) -> list[FinalizerReport]:
             job_id=job_id,
             classification=_normalize_status(payload.get("classification")),
             artifact_status=_normalize_status(payload.get("artifact_status")),
+            claim_decision=_extract_claim_decision(payload),
             claim_boundary=_extract_claim_boundary(payload),
             durable_pointer=_extract_finalizer_durable_pointer(payload),
             output_pointers=_extract_finalizer_output_pointers(payload),
@@ -741,6 +752,7 @@ def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
                 "queue_id": queue_id,
                 "seeds": list(seeds),
                 "artifact_status": finalizer.artifact_status,
+                "claim_decision": finalizer.claim_decision,
                 "claim_boundary": finalizer.claim_boundary,
                 "durable_pointer": finalizer.durable_pointer,
                 "output_pointers": list(finalizer.output_pointers),

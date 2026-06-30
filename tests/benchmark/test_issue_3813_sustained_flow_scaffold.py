@@ -12,6 +12,10 @@ from robot_sf.benchmark.scenario_contract import (
     load_scenario_contracts,
     validate_scenario_contract_references,
 )
+from robot_sf.benchmark.sustained_flow_preflight import (
+    RUNTIME_SUPPORTED_VALUE,
+    preflight_sustained_flow_matrix,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -29,9 +33,10 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
     """The opt-in family is a valid scenario matrix for existing runner tooling."""
 
     rc = cli_main(["validate-config", "--matrix", str(SCENARIO_SET)])
-    report = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
 
-    assert rc == 0
+    assert rc == 0, captured.out + captured.err
+    report = json.loads(captured.out)
     assert report["num_scenarios"] == 3
     assert report["source"]["schema_version"] == "robot_sf.scenario_matrix.v1"
     assert report["summary"]["archetypes"] == {"sustained_flow_t_intersection": 3}
@@ -47,6 +52,11 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
         0.05,
         0.08,
     ]
+    # spawn_rate_per_min is the demand-parameterization knob that spans the
+    # light/medium/heavy tiers, so pin it alongside ped_density.
+    assert [
+        scenario["metadata"]["continuous_spawn"]["spawn_rate_per_min"] for scenario in scenarios
+    ] == [6.0, 12.0, 18.0]
 
     for scenario in scenarios:
         metadata = scenario["metadata"]
@@ -60,6 +70,36 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
         assert metadata["success_metric"]["id"] == "sustained_progress_rate_m_per_s"
         assert metadata["termination"]["mode"] == "time_bounded"
         assert metadata["termination"]["goal_reach_is_not_primary_success"] is True
+
+
+def test_sustained_flow_preflight_enumerates_variants_and_fails_closed() -> None:
+    """The generator preflight enumerates variants without claiming benchmark eligibility."""
+
+    preflight = preflight_sustained_flow_matrix(SCENARIO_SET)
+    payload = preflight.to_payload()
+
+    assert payload["schema_version"] == "sustained_flow_preflight.v1"
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 3
+    assert [variant["density_tier"] for variant in payload["variants"]] == [
+        "light",
+        "medium",
+        "heavy",
+    ]
+    assert [variant["spawn_rate_per_min"] for variant in payload["variants"]] == [
+        6.0,
+        12.0,
+        18.0,
+    ]
+    assert [variant["ped_density"] for variant in payload["variants"]] == [
+        0.02,
+        0.05,
+        0.08,
+    ]
+    assert all(
+        f"expected {RUNTIME_SUPPORTED_VALUE!r}" in reason for reason in payload["blocking_reasons"]
+    )
 
 
 def test_sustained_flow_contract_defines_progress_metric_and_reference() -> None:

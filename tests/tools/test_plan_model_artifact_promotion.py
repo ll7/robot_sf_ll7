@@ -46,6 +46,8 @@ profile: experimental
     )
     registered_config = tmp_path / "configs" / "baselines" / "registered.yaml"
     _write(registered_config, "model_id: durable_model\n")
+    local_only_config = tmp_path / "configs" / "baselines" / "local_only.yaml"
+    _write(local_only_config, "model_id: local_only_model\n")
     source_only_config = tmp_path / "configs" / "baselines" / "source_only.yaml"
     _write(source_only_config, "model_id: source_only_model\n")
     run_id_only_config = tmp_path / "configs" / "baselines" / "run_id_only.yaml"
@@ -95,6 +97,10 @@ models:
     public_artifact_source: github_release
   - model_id: run_id_only_model
     wandb_run_id: abc123
+  - model_id: local_only_model
+    local_path: output/model_cache/local_only/model.zip
+    local_only: true
+    replacement_model_id: durable_model
 """.strip()
         + "\n",
     )
@@ -114,6 +120,7 @@ promoted_configs:
         "present_config": present_config,
         "missing_config": missing_config,
         "registered_config": registered_config,
+        "local_only_config": local_only_config,
         "source_only_config": source_only_config,
         "run_id_only_config": run_id_only_config,
         "promoted_config": promoted_config,
@@ -135,6 +142,7 @@ def test_plan_classifies_present_missing_registered_and_promoted_local_configs(
             paths["present_config"],
             paths["missing_config"],
             paths["registered_config"],
+            paths["local_only_config"],
             paths["source_only_config"],
             paths["run_id_only_config"],
             paths["promoted_config"],
@@ -165,6 +173,11 @@ def test_plan_classifies_present_missing_registered_and_promoted_local_configs(
     assert registered["classification"] == "already_registered"
     assert registered["model_id"] == "durable_model"
     assert registered["registry_entry"]["public_artifact_source"] == "github_release"
+
+    local_only = rows["configs/baselines/local_only.yaml"]
+    assert local_only["classification"] == "retired_local_only"
+    assert local_only["decision"] == "retired_until_durable_artifact_recovered"
+    assert local_only["registry_entry"]["replacement_model_id"] == "durable_model"
 
     source_only = rows["configs/baselines/source_only.yaml"]
     assert source_only["classification"] == "manual_decision_required"
@@ -241,4 +254,4 @@ def test_initial_issue_config_list_gets_one_row_per_config() -> None:
         path.as_posix() for path in plan_model_artifact_promotion.INITIAL_TARGET_CONFIGS
     ]
     assert all(row["claim_boundary"] for row in report["rows"])
-    assert {row["availability"] for row in report["rows"]} == {"unavailable"}
+    assert {row["classification"] for row in report["rows"]} == {"retired_local_only"}

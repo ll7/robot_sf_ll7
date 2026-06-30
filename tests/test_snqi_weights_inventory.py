@@ -7,6 +7,7 @@ does not change any current scoring behavior.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import TYPE_CHECKING
 
@@ -102,6 +103,20 @@ def test_inventory_discovers_all_registered_sources(tmp_path):
     assert code.weights == _CODE_DEFAULT
     assert code.dominant_term == "w_collisions"
     assert code.scale_class == "raw"
+    assert (
+        code.content_sha256
+        == hashlib.sha256(
+            json.dumps(_CODE_DEFAULT, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
+
+    available_records = [r for r in records if r.available]
+    assert all(r.content_sha256 for r in available_records)
+    model = next(r for r in records if r.name == "model_canonical_v1")
+    assert (
+        model.content_sha256
+        == hashlib.sha256((repo / "model/snqi_canonical_weights_v1.json").read_bytes()).hexdigest()
+    )
 
 
 def test_code_default_matches_recompute_canonical(tmp_path):
@@ -116,6 +131,13 @@ def test_conflicting_canonical_sources_detected_fail_closed(tmp_path):
     """Code default (collision) vs model canonical (jerk) raises fail-closed preflight."""
     repo = _make_fixture_repo(tmp_path, model_jerk_dominant=True)
     report = build_inventory_report(repo)
+
+    summary = report.to_dict()["source_summary"]
+    assert summary["registered_source_count"] == 5
+    assert summary["discovered_shipped_source_count"] == 4
+    assert summary["unregistered_shipped_source_count"] == 0
+    assert summary["canonical_declaring_sources"] == ["code_default", "model_canonical_v1"]
+    assert summary["blocking_conflict_kinds"] == ["canonical_direction_conflict"]
 
     direction_conflicts = [c for c in report.conflicts if c.kind == "canonical_direction_conflict"]
     assert direction_conflicts, "expected a canonical direction conflict"
@@ -210,3 +232,42 @@ def test_detect_conflicts_is_deterministic(tmp_path):
     severities = [c.severity for c in detect_conflicts(records)]
     # errors must precede warnings/info
     assert severities == sorted(severities, key={"error": 0, "warning": 1, "info": 2}.get)
+
+
+def test_unregistered_shipped_weight_file_reported_fail_closed(tmp_path):
+    """Bounded discovery reports shipped SNQI weight files missing from the registry."""
+    repo = _make_fixture_repo(tmp_path)
+    _write_weights(
+        tmp_path / "configs/benchmarks/snqi_weights_experimental_v9.json",
+        _CODE_DEFAULT,
+    )
+
+    report = build_inventory_report(repo)
+    unregistered = [r for r in report.records if r.kind == "unregistered_shipped_json"]
+    assert len(unregistered) == 1
+    assert unregistered[0].relpath == "configs/benchmarks/snqi_weights_experimental_v9.json"
+    assert unregistered[0].available
+    assert (
+        unregistered[0].content_sha256
+        == hashlib.sha256(
+            (repo / "configs/benchmarks/snqi_weights_experimental_v9.json").read_bytes()
+        ).hexdigest()
+    )
+
+    summary = report.to_dict()["source_summary"]
+    assert summary["registered_source_count"] == 5
+    assert summary["discovered_shipped_source_count"] == 5
+    assert summary["unregistered_shipped_source_count"] == 1
+    assert summary["unregistered_shipped_sources"] == [unregistered[0].name]
+    assert summary["blocking_conflict_kinds"] == [
+        "canonical_direction_conflict",
+        "unregistered_shipped_weight_source",
+    ]
+
+    conflicts = [c for c in report.conflicts if c.kind == "unregistered_shipped_weight_source"]
+    assert conflicts
+    assert conflicts[0].severity == "error"
+    assert conflicts[0].sources == [unregistered[0].name]
+    assert report.has_blocking_conflict
+    with pytest.raises(SNQIWeightProvenanceError, match="unregistered_shipped_weight_source"):
+        preflight_snqi_weight_sets(repo, strict=True)

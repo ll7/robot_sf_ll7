@@ -35,8 +35,10 @@ scaling split is tracked separately in #3699.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -50,6 +52,13 @@ if TYPE_CHECKING:
 _SIMPLEX_TOL = 1e-3
 # Tolerance when comparing normalized weight *directions* across sources.
 _DIRECTION_TOL = 1e-6
+
+# Bounded shipped-file discovery. Keep this intentionally narrow so generated
+# reports or unrelated schemas do not become provenance inputs.
+_SHIPPED_WEIGHT_FILE_GLOBS = (
+    "model/*snqi*weight*.json",
+    "configs/**/*snqi*weight*.json",
+)
 
 
 @dataclass(frozen=True)
@@ -107,6 +116,47 @@ WEIGHT_SOURCES: tuple[WeightSourceSpec, ...] = (
 )
 
 
+def _source_name_from_relpath(relpath: str) -> str:
+    """Build a stable diagnostic source name for an unregistered shipped file.
+
+    Returns:
+        Source name safe for JSON reports and deterministic comparisons.
+    """
+    stem = relpath.removesuffix(".json")
+    return "unregistered_" + re.sub(r"[^a-zA-Z0-9]+", "_", stem).strip("_").lower()
+
+
+def discover_shipped_weight_source_specs(repo_root: Path) -> list[WeightSourceSpec]:
+    """Discover shipped SNQI weight JSON files under bounded source directories.
+
+    Registered files keep their explicit names and canonical declarations. Matching files that are
+    not in :data:`WEIGHT_SOURCES` are returned as ``unregistered_shipped_json`` records so the
+    inventory reports every discovered shipped weight file instead of silently relying on the static
+    registry.
+
+    Returns:
+        Shipped JSON source specs, including registered files and any unregistered matches.
+    """
+    registered_by_path = {spec.relpath: spec for spec in WEIGHT_SOURCES if spec.relpath is not None}
+    discovered: dict[str, WeightSourceSpec] = dict(registered_by_path)
+
+    for pattern in _SHIPPED_WEIGHT_FILE_GLOBS:
+        for path in repo_root.glob(pattern):
+            if not path.is_file():
+                continue
+            relpath = path.relative_to(repo_root).as_posix()
+            if relpath in discovered:
+                continue
+            discovered[relpath] = WeightSourceSpec(
+                name=_source_name_from_relpath(relpath),
+                kind="unregistered_shipped_json",
+                relpath=relpath,
+                declares_canonical="canonical" in relpath.lower(),
+            )
+
+    return [discovered[relpath] for relpath in sorted(discovered)]
+
+
 @dataclass
 class WeightSetRecord:
     """A single discovered SNQI weight set with derived provenance facts."""
@@ -120,6 +170,7 @@ class WeightSetRecord:
     weight_sum: float | None = None
     dominant_term: str | None = None
     scale_class: str | None = None
+    content_sha256: str | None = None
     load_error: str | None = None
 
     def normalized_direction(self) -> dict[str, float] | None:
@@ -162,13 +213,39 @@ class WeightInventoryReport:
         """True if any conflict is severe enough to fail a preflight."""
         return any(c.severity == "error" for c in self.conflicts)
 
+    @property
+    def source_summary(self) -> dict[str, object]:
+        """Summarize discovery/provenance surface for preflight consumers."""
+        shipped_records = [r for r in self.records if r.relpath is not None]
+        registered_records = [r for r in self.records if r.kind in {"code_default", "shipped_json"}]
+        unregistered_records = [r for r in self.records if r.kind == "unregistered_shipped_json"]
+        canonical_records = [r for r in self.records if r.declares_canonical]
+        unavailable_records = [r for r in self.records if not r.available]
+        blocking_conflicts = [c for c in self.conflicts if c.severity == "error"]
+        return {
+            "registered_source_count": len(WEIGHT_SOURCES),
+            "discovered_shipped_source_count": len(shipped_records),
+            "unregistered_shipped_source_count": len(unregistered_records),
+            "canonical_declaring_source_count": len(canonical_records),
+            "unavailable_source_count": len(unavailable_records),
+            "blocking_conflict_count": len(blocking_conflicts),
+            "registered_sources": [r.name for r in registered_records],
+            "discovered_shipped_sources": [r.name for r in shipped_records],
+            "unregistered_shipped_sources": [r.name for r in unregistered_records],
+            "canonical_declaring_sources": [r.name for r in canonical_records],
+            "unavailable_sources": [r.name for r in unavailable_records],
+            "blocking_conflict_kinds": [c.kind for c in blocking_conflicts],
+        }
+
     def to_dict(self) -> dict:
         """Build a JSON-serializable representation of the report.
 
         Returns:
-            A dict with ``records``, ``conflicts``, and ``has_blocking_conflict``.
+            A dict with ``source_summary``, ``records``, ``conflicts``, and
+            ``has_blocking_conflict``.
         """
         return {
+            "source_summary": self.source_summary,
             "records": [
                 {
                     "name": r.name,
@@ -180,6 +257,7 @@ class WeightInventoryReport:
                     "weight_sum": r.weight_sum,
                     "dominant_term": r.dominant_term,
                     "scale_class": r.scale_class,
+                    "content_sha256": r.content_sha256,
                     "load_error": r.load_error,
                 }
                 for r in self.records
@@ -248,6 +326,12 @@ def _finalize_record(record: WeightSetRecord) -> None:
     )
 
 
+def _weights_content_sha256(weights: dict[str, float]) -> str:
+    """Return stable fingerprint for synthetic/code-defined weight mappings."""
+    payload = json.dumps(weights, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
     """Load a single source into a :class:`WeightSetRecord` (never raises).
 
@@ -269,6 +353,7 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
         # empty baseline stats because the "canonical" method ignores them.
         weights = dict(recompute_snqi_weights({}, method="canonical").weights)
         record.weights = {k: float(weights[k]) for k in WEIGHT_NAMES}
+        record.content_sha256 = _weights_content_sha256(record.weights)
         record.available = True
         _finalize_record(record)
         return record
@@ -279,7 +364,9 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
         record.load_error = "file not found"
         return record
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw_bytes = path.read_bytes()
+        record.content_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+        raw = json.loads(raw_bytes.decode("utf-8"))
         record.weights = _extract_weights(raw)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         record.load_error = str(exc)
@@ -290,20 +377,23 @@ def _build_record(spec: WeightSourceSpec, repo_root: Path) -> WeightSetRecord:
 
 
 def inventory_weight_sets(repo_root: Path | None = None) -> list[WeightSetRecord]:
-    """Discover and load every registered SNQI weight set.
+    """Discover and load registered and bounded shipped SNQI weight sets.
 
     Args:
         repo_root: Repository root used to resolve shipped JSON paths. Defaults
             to :func:`get_repository_root`.
 
     Returns:
-        One :class:`WeightSetRecord` per entry in :data:`WEIGHT_SOURCES`, in
-        registry order. Sources that fail to load are returned with
+        One :class:`WeightSetRecord` per registered or discovered shipped source, with the
+        code-default source first and shipped files in path order. Sources that fail to load are
+        returned with
         ``available=False`` and a populated ``load_error`` (fail-closed: a
         missing/broken file is surfaced, not silently skipped).
     """
     root = (repo_root or get_repository_root()).resolve()
-    return [_build_record(spec, root) for spec in WEIGHT_SOURCES]
+    shipped = discover_shipped_weight_source_specs(root)
+    specs = [spec for spec in WEIGHT_SOURCES if spec.relpath is None] + shipped
+    return [_build_record(spec, root) for spec in specs]
 
 
 def _directions_disagree(a: dict[str, float], b: dict[str, float]) -> bool:
@@ -420,6 +510,30 @@ def _duplicate_label_conflicts(
     return conflicts
 
 
+def _unregistered_weight_source_conflicts(
+    records: list[WeightSetRecord],
+) -> list[WeightProvenanceConflict]:
+    """Fail closed when shipped SNQI weight files are absent from the provenance registry.
+
+    Returns:
+        Error conflict when unregistered shipped weight sources are present, otherwise empty list.
+    """
+    unregistered = [r for r in records if r.kind == "unregistered_shipped_json"]
+    if not unregistered:
+        return []
+    return [
+        WeightProvenanceConflict(
+            kind="unregistered_shipped_weight_source",
+            severity="error",
+            sources=[r.name for r in unregistered],
+            detail=(
+                "discovered shipped SNQI weight JSON files not listed in WEIGHT_SOURCES; "
+                "register or explicitly exclude them before treating provenance inventory complete."
+            ),
+        )
+    ]
+
+
 def detect_conflicts(records: list[WeightSetRecord]) -> list[WeightProvenanceConflict]:
     """Detect provenance conflicts among discovered weight sets.
 
@@ -447,6 +561,7 @@ def detect_conflicts(records: list[WeightSetRecord]) -> list[WeightProvenanceCon
     conflicts: list[WeightProvenanceConflict] = []
     conflicts += _canonical_load_error_conflicts(canonical)
     conflicts += _canonical_direction_conflicts(loaded_canonical)
+    conflicts += _unregistered_weight_source_conflicts(records)
     conflicts += _scale_split_conflicts(loaded)
     conflicts += _duplicate_label_conflicts(loaded)
 
@@ -504,6 +619,7 @@ __all__ = [
     "WeightSourceSpec",
     "build_inventory_report",
     "detect_conflicts",
+    "discover_shipped_weight_source_specs",
     "inventory_weight_sets",
     "preflight_snqi_weight_sets",
 ]

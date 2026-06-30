@@ -7,15 +7,11 @@ bundle for archival/release pipelines.
 
 from __future__ import annotations
 
-import json
 import math
-import subprocess
 import time
 from dataclasses import asdict
-from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit, urlunsplit
+from typing import Any
 
 import yaml
 from loguru import logger
@@ -25,9 +21,18 @@ from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
 from robot_sf.benchmark.artifact_publication import export_publication_bundle
 from robot_sf.benchmark.camera_ready._artifacts import (  # noqa: F401 - re-exported for back-compat
     _escape_markdown_cell,
+    _markdown_rows_from_mapping_rows,
+    _write_actuation_envelope_artifacts,
+    _write_amv_coverage_artifacts,
+    _write_comparability_artifacts,
     _write_csv,
     _write_json,
     _write_markdown_table,
+    _write_matrix_summary_artifacts,
+    _write_seed_episode_rows_artifact,
+    _write_seed_variability_artifacts,
+    _write_snqi_diagnostics_artifacts,
+    _write_statistical_sufficiency_artifact,
     _write_table_artifacts,
 )
 from robot_sf.benchmark.camera_ready._config import (  # noqa: F401 - re-exported for back-compat
@@ -91,6 +96,16 @@ from robot_sf.benchmark.camera_ready._route_clearance import (  # noqa: F401 - r
 from robot_sf.benchmark.camera_ready._route_clearance import (
     _build_route_clearance_warnings as _build_route_clearance_warnings_impl,
 )
+from robot_sf.benchmark.camera_ready._run_state import (  # noqa: F401 - re-exported for back-compat
+    _campaign_id,
+    _campaign_success_counters,
+    _git_context,
+    _resolve_campaign_id,
+    _resolve_execution_mode,
+    _resolve_observation_noise,
+    _resolve_path,
+    _sanitize_git_remote,
+)
 from robot_sf.benchmark.camera_ready._summaries import (  # noqa: F401 - re-exported for back-compat
     _ACTUATION_REPORT_METRICS,
     _SEED_VARIABILITY_METRICS,
@@ -135,16 +150,12 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_campaign_outcome,
     summarize_campaign_status_axes,
 )
-from robot_sf.benchmark.fallback_policy import (
-    resolve_execution_mode as _resolve_benchmark_execution_mode,
-)
 from robot_sf.benchmark.latency_stress import (
     load_latency_stress_profile,
     not_available_latency_metrics,
     validate_latency_stress_profile,
 )
 from robot_sf.benchmark.observation_noise import (
-    load_observation_noise_spec,
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
@@ -152,7 +163,6 @@ from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
 from robot_sf.benchmark.runner import run_batch
 from robot_sf.benchmark.seed_variance import (
     build_seed_episode_rows,
-    build_seed_variability_csv_rows,
 )
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
@@ -168,7 +178,6 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     resolve_weight_mapping,
     sanitize_baseline_stats,
 )
-from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES
 from robot_sf.benchmark.synthetic_actuation import (
     SYNTHETIC_ACTUATION_CLAIM_SCOPE,
     SyntheticActuationProfile,
@@ -177,7 +186,6 @@ from robot_sf.benchmark.synthetic_actuation import (
 )
 from robot_sf.benchmark.utils import (
     _config_hash,
-    _git_hash_fallback,
     load_optional_json,
 )
 from robot_sf.common.artifact_paths import (
@@ -187,52 +195,9 @@ from robot_sf.common.artifact_paths import (
 )
 from robot_sf.nav.svg_map_parser import convert_map
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
-
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 _normalized_kinematics_matrix = _kinematics_matrix_or_default
-
-
-def _campaign_success_counters(
-    run_entries: Sequence[Mapping[str, Any]], *, expected_core_runs: int | None = None
-) -> dict[str, Any]:
-    """Return campaign success counters, anchoring success on core planners when present."""
-    total_runs = 0
-    successful_runs = 0
-    core_total_runs = 0
-    core_successful_runs = 0
-
-    for entry in run_entries:
-        total_runs += 1
-        is_ok = str(entry.get("status", "")) == "ok"
-        if is_ok:
-            successful_runs += 1
-
-        planner_group = str((entry.get("planner") or {}).get("planner_group", "")).strip().lower()
-        if planner_group == "core":
-            core_total_runs += 1
-            if is_ok:
-                core_successful_runs += 1
-
-    if expected_core_runs is None:
-        expected_core_runs = core_total_runs
-
-    if core_total_runs:
-        success_basis = "core"
-        benchmark_success = core_successful_runs == core_total_runs == expected_core_runs
-    else:
-        success_basis = "all"
-        benchmark_success = total_runs > 0 and successful_runs == total_runs
-    return {
-        "benchmark_success": benchmark_success,
-        "benchmark_success_basis": success_basis,
-        "successful_runs": successful_runs,
-        "total_runs": total_runs,
-        "core_successful_runs": core_successful_runs,
-        "core_total_runs": core_total_runs,
-    }
 
 
 def _build_route_clearance_warnings(
@@ -260,135 +225,6 @@ def _build_route_clearance_warnings(
         )
     finally:
         _route_clearance_module.convert_map = original_convert_map
-
-
-def _resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
-    """Resolve execution mode from algorithm metadata payload with legacy fallbacks.
-
-    Returns:
-        Resolved execution mode string, or ``"unknown"`` when unavailable.
-    """
-    return _resolve_benchmark_execution_mode(algorithm_metadata_contract)
-
-
-def _sanitize_git_remote(remote: str) -> str:
-    """Remove credentials from git remote URLs before persisting provenance metadata.
-
-    Returns:
-        Credential-free remote URL when parseable, otherwise original input.
-    """
-    if not remote or "://" not in remote:
-        return remote
-    try:
-        parsed = urlsplit(remote)
-    except ValueError:
-        return remote
-    if not parsed.hostname:
-        return remote
-    netloc = parsed.hostname
-    if parsed.port is not None:
-        netloc = f"{netloc}:{parsed.port}"
-    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
-
-
-def _git_context() -> dict[str, str]:
-    """Collect lightweight git metadata for campaign provenance.
-
-    Returns:
-        Mapping with ``commit``, ``branch``, and ``remote`` fields.
-    """
-
-    def _run(args: list[str]) -> str:
-        """Run a git command and degrade to ``unknown`` when provenance is unavailable.
-
-        Returns:
-            str: Decoded command output, or ``"unknown"`` on command failure.
-        """
-        try:
-            out = subprocess.check_output(args, stderr=subprocess.DEVNULL)
-            return out.decode("utf-8", errors="replace").strip()
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-            return "unknown"
-
-    return {
-        "commit": _git_hash_fallback(),
-        "branch": _run(["git", "rev-parse", "--abbrev-ref", "HEAD"]),
-        "remote": _sanitize_git_remote(_run(["git", "config", "--get", "remote.origin.url"])),
-    }
-
-
-def _campaign_id(cfg: CampaignConfig, *, label: str | None = None) -> str:
-    """Build a unique campaign identifier from config name and wall-clock timestamp.
-
-    Returns:
-        Campaign identifier used for output directories and manifests.
-    """
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = _sanitize_name(cfg.name)
-    if label:
-        suffix = _sanitize_name(label)
-        return f"{base}_{suffix}_{stamp}"
-    return f"{base}_{stamp}"
-
-
-def _resolve_campaign_id(
-    cfg: CampaignConfig,
-    *,
-    label: str | None = None,
-    campaign_id: str | None = None,
-) -> str:
-    """Resolve the output campaign identifier.
-
-    Returns:
-        Explicit sanitized campaign id when provided, otherwise a timestamped id.
-    """
-    if campaign_id is not None:
-        normalized = _sanitize_name(campaign_id)
-        if not normalized:
-            raise ValueError("campaign_id must contain at least one alphanumeric character")
-        return normalized
-    return _campaign_id(cfg, label=label)
-
-
-def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
-    """Resolve optional paths relative to ``base_dir``.
-
-    Returns:
-        Absolute resolved path, or ``None`` when no path was provided.
-    """
-    if not raw_path:
-        return None
-    path = Path(raw_path)
-    if path.is_absolute():
-        return path
-
-    candidate = (base_dir / path).resolve()
-    if candidate.exists():
-        return candidate
-
-    repo_candidate = (get_repository_root() / path).resolve()
-    if repo_candidate.exists():
-        return repo_candidate
-
-    return candidate
-
-
-def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | None:
-    """Resolve an optional inline or file-backed observation-noise config.
-
-    Returns:
-        Normalized noise spec, or ``None`` when no profile is configured.
-    """
-    if raw is None:
-        return None
-    if isinstance(raw, dict):
-        return normalize_observation_noise_spec(raw)
-    if isinstance(raw, str) and raw.strip():
-        path = _resolve_path(raw, base_dir=base_dir)
-        if path is None or not path.is_file():
-            raise FileNotFoundError(f"Could not resolve observation_noise '{raw}'")
-        return load_observation_noise_spec(path)
-    raise ValueError("observation_noise must be a mapping or YAML file path")
 
 
 def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912, PLR0915
@@ -867,414 +703,6 @@ def load_campaign_config(path: Path) -> CampaignConfig:  # noqa: C901, PLR0912, 
     )
     _validate_campaign_config(cfg)
     return cfg
-
-
-def _write_matrix_summary_artifacts(
-    reports_dir: Path,
-    rows: list[dict[str, Any]],
-) -> tuple[Path, Path]:
-    """Write matrix-definition summary artifacts.
-
-    Returns:
-        Tuple of ``(matrix_summary_json_path, matrix_summary_csv_path)``.
-    """
-    json_path = reports_dir / "matrix_summary.json"
-    csv_path = reports_dir / "matrix_summary.csv"
-    payload = {
-        "schema_version": "benchmark-matrix-summary.v1",
-        "rows": rows,
-    }
-    _write_json(json_path, payload)
-    _write_csv(csv_path, rows)
-    return json_path, csv_path
-
-
-def _write_seed_variability_artifacts(
-    reports_dir: Path,
-    payload: dict[str, Any],
-) -> tuple[Path, Path]:
-    """Write paper-facing seed-variability JSON and CSV artifacts.
-
-    Returns:
-        Tuple of ``(json_path, csv_path)`` for the generated artifacts.
-    """
-    json_path = reports_dir / "seed_variability_by_scenario.json"
-    csv_path = reports_dir / "seed_variability_by_scenario.csv"
-    _write_json(json_path, payload)
-    csv_rows = build_seed_variability_csv_rows(
-        payload.get("rows") or [],
-        metrics=payload.get("metrics") or [],
-    )
-    _write_csv(csv_path, csv_rows)
-    return json_path, csv_path
-
-
-def _write_seed_episode_rows_artifact(
-    reports_dir: Path,
-    rows: list[dict[str, Any]],
-) -> Path:
-    """Write flat planner-aware per-episode seed traceability CSV.
-
-    Returns:
-        Path to the generated CSV artifact.
-    """
-    csv_path = reports_dir / "seed_episode_rows.csv"
-    _write_csv(csv_path, rows)
-    return csv_path
-
-
-def _write_statistical_sufficiency_artifact(
-    reports_dir: Path,
-    payload: dict[str, Any],
-) -> Path:
-    """Write statistical sufficiency JSON artifact.
-
-    Returns:
-        Path to the generated JSON artifact.
-    """
-    json_path = reports_dir / "statistical_sufficiency.json"
-    _write_json(json_path, payload)
-    return json_path
-
-
-def _write_amv_coverage_artifacts(
-    reports_dir: Path,
-    summary: dict[str, Any],
-) -> tuple[Path, Path]:
-    """Write AMV coverage summary JSON + Markdown artifacts.
-
-    Returns:
-        tuple[Path, Path]: Output paths ``(json_path, markdown_path)``.
-    """
-    json_path = reports_dir / "amv_coverage_summary.json"
-    md_path = reports_dir / "amv_coverage_summary.md"
-    _write_json(json_path, summary)
-
-    lines = [
-        "# AMV Coverage Summary",
-        "",
-        f"- Status: `{summary.get('status', 'unknown')}`",
-        f"- Profile: `{summary.get('profile_name', 'unknown')}`",
-        f"- Contract version: `{summary.get('contract_version', 'unknown')}`",
-        f"- Enforcement: `{summary.get('coverage_enforcement', 'warn')}`",
-        f"- Scenario count: `{summary.get('scenario_count', 0)}`",
-        "",
-        "| Dimension | Required | Observed | Missing |",
-        "|---|---|---|---|",
-    ]
-    required = summary.get("required_dimensions", {})
-    observed = summary.get("observed_dimensions", {})
-    missing = summary.get("missing_dimensions", {})
-    for dimension in _AMV_DIMENSIONS:
-        required_values = ", ".join(required.get(dimension, [])) or "-"
-        observed_values = ", ".join(observed.get(dimension, [])) or "-"
-        missing_values = ", ".join(missing.get(dimension, [])) or "-"
-        lines.append(
-            "| "
-            f"{_escape_markdown_cell(dimension)} | "
-            f"{_escape_markdown_cell(required_values)} | "
-            f"{_escape_markdown_cell(observed_values)} | "
-            f"{_escape_markdown_cell(missing_values)} |"
-        )
-    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return json_path, md_path
-
-
-def _write_actuation_envelope_artifacts(
-    reports_dir: Path,
-    payload: dict[str, Any],
-) -> tuple[Path, Path]:
-    """Write synthetic actuation-envelope JSON and Markdown artifacts.
-
-    Returns:
-        Paths to the JSON and Markdown artifacts.
-    """
-    json_path = reports_dir / "actuation_envelope_summary.json"
-    md_path = reports_dir / "actuation_envelope_summary.md"
-    _write_json(json_path, payload)
-    lines = [
-        "# Synthetic Actuation Envelope Summary",
-        "",
-        f"- Campaign ID: `{payload.get('campaign_id', 'unknown')}`",
-        f"- Claim boundary: {payload.get('claim_boundary', '')}",
-        "",
-        "## Profile",
-        "",
-    ]
-    profile = payload.get("synthetic_actuation_profile")
-    if isinstance(profile, dict):
-        for key, value in profile.items():
-            lines.append(f"- {key}: `{value}`")
-    lines.append(f"- AMV coverage status: `{payload.get('amv_coverage_status', 'unknown')}`")
-    scenario_rows = payload.get("scenario_amv_rows")
-    if isinstance(scenario_rows, list) and scenario_rows:
-        lines.extend(["", "## Scenario AMV Rows", ""])
-        for row in scenario_rows:
-            if not isinstance(row, dict):
-                continue
-            lines.append(
-                "- "
-                f"{row.get('name', 'unknown')} ({row.get('scenario_family', 'unknown')}): "
-                f"{json.dumps(row.get('amv', {}), sort_keys=True)}"
-            )
-    rows = payload.get("rows")
-    if isinstance(rows, list) and rows:
-        lines.extend(["", "## Planner Rows", ""])
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            saturation = row.get("saturation_metrics")
-            if not isinstance(saturation, dict):
-                saturation = {}
-            lines.append(
-                "- "
-                f"{row.get('planner_key', 'unknown')} ({row.get('algo', 'unknown')}, "
-                f"{row.get('kinematics', 'unknown')}): status={row.get('status', 'unknown')}, "
-                f"projection={row.get('projection_policy', 'unknown')}, "
-                f"planner_cmd={row.get('planner_command_space', 'unknown')}, "
-                f"benchmark_cmd={row.get('benchmark_command_space', 'unknown')}, "
-                f"clip={saturation.get('command_clip_fraction', 'not_available')}, "
-                f"yaw_sat={saturation.get('yaw_rate_saturation_fraction', 'not_available')}, "
-                f"braking_peak={saturation.get('signed_braking_peak_m_s2', 'not_available')}"
-            )
-    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return json_path, md_path
-
-
-def _markdown_rows_from_mapping_rows(
-    rows: list[dict[str, Any]],
-    columns: tuple[str, ...],
-) -> list[str]:
-    """Render Markdown table rows from mapping rows and column order.
-
-    Returns:
-        list[str]: Markdown table rows in ``| a | b |`` form.
-    """
-    output: list[str] = []
-    for row in rows:
-        cells = [_escape_markdown_cell(row.get(column)) for column in columns]
-        output.append("| " + " | ".join(cells) + " |")
-    return output
-
-
-def _write_comparability_artifacts(
-    reports_dir: Path,
-    summary: dict[str, Any],
-) -> tuple[Path, Path]:
-    """Write comparability summary JSON + Markdown artifacts.
-
-    Returns:
-        tuple[Path, Path]: Output paths ``(json_path, markdown_path)``.
-    """
-    json_path = reports_dir / "comparability_matrix.json"
-    md_path = reports_dir / "comparability_matrix.md"
-    _write_json(json_path, summary)
-    lines = [
-        "# Alyassi Comparability Summary",
-        "",
-        f"- Mapping path: `{summary.get('mapping_path', 'unknown')}`",
-        f"- Mapping version: `{summary.get('mapping_version', 'unknown')}`",
-        f"- Mapping hash: `{summary.get('mapping_hash', 'unknown')}`",
-        "",
-        "## Coverage Overlap Matrix",
-        "",
-        "| Robot SF Family | Scenario Count | Alyassi Category | Overlap |",
-        "|---|---:|---|---|",
-    ]
-    lines.extend(
-        _markdown_rows_from_mapping_rows(
-            list(summary.get("coverage_overlap_rows", [])),
-            ("robot_sf_family", "scenario_count", "alyassi_category", "overlap"),
-        )
-    )
-    lines.extend(
-        [
-            "",
-            "## Metric Comparability",
-            "",
-            "| Metric | Classification | Alyassi Metric | Rationale |",
-            "|---|---|---|---|",
-        ]
-    )
-    lines.extend(
-        _markdown_rows_from_mapping_rows(
-            list(summary.get("metric_comparability_rows", [])),
-            ("metric", "classification", "alyassi_metric", "rationale"),
-        )
-    )
-    lines.extend(["", "## AMV-Specific Extensions", ""])
-    extensions = summary.get("amv_specific_extensions", [])
-    if extensions:
-        for extension in extensions:
-            lines.append(f"- {_escape_markdown_cell(extension)}")
-    else:
-        lines.append("- none")
-    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return json_path, md_path
-
-
-def _write_snqi_diagnostics_artifacts(  # noqa: C901
-    reports_dir: Path,
-    payload: dict[str, Any],
-) -> tuple[Path, Path, Path]:
-    """Write SNQI diagnostics JSON/Markdown and sensitivity CSV artifacts.
-
-    Returns:
-        Tuple of ``(json_path, markdown_path, csv_path)``.
-    """
-    json_path = reports_dir / "snqi_diagnostics.json"
-    md_path = reports_dir / "snqi_diagnostics.md"
-    csv_path = reports_dir / "snqi_sensitivity.csv"
-    _write_json(json_path, payload)
-
-    lines = [
-        "# SNQI Diagnostics",
-        "",
-        f"- Contract status: `{payload.get('contract_status', 'unknown')}`",
-        f"- Rank alignment (Spearman): `{payload.get('rank_alignment_spearman', 0.0):.4f}`",
-        f"- Outcome separation: `{payload.get('outcome_separation', 0.0):.4f}`",
-        f"- Objective score: `{payload.get('objective_score', 0.0):.4f}`",
-        f"- Dominant component: `{payload.get('dominant_component', 'unknown')}`",
-        f"- Dominant component mean |contribution|: `{payload.get('dominant_component_mean_abs', 0.0):.4f}`",
-        "",
-        "## SNQI Assets",
-        "",
-        f"- Weights path: `{payload.get('weights_path', 'derived')}`",
-        f"- Weights version: `{payload.get('weights_version', 'unknown')}`",
-        f"- Weights SHA-256: `{payload.get('weights_sha256', 'unknown')}`",
-        f"- Baseline path: `{payload.get('baseline_path', 'derived')}`",
-        f"- Baseline version: `{payload.get('baseline_version', 'unknown')}`",
-        f"- Baseline SHA-256: `{payload.get('baseline_sha256', 'unknown')}`",
-        "",
-        "## Baseline Normalization",
-        "",
-        f"- Source: `{payload.get('baseline_source', 'unknown')}`",
-        f"- Degeneracy adjustments: `{payload.get('baseline_adjustments', 0)}`",
-        "",
-        "## Positioning",
-        "",
-        f"- Recommendation: `{payload.get('positioning', {}).get('recommendation', 'unknown')}`",
-        f"- Claim scope: `{payload.get('positioning', {}).get('claim_scope', 'unknown')}`",
-        f"- Aligned variable metrics: `{payload.get('positioning', {}).get('aligned_metric_count', 0)}` / `{payload.get('positioning', {}).get('variable_metric_count', 0)}`",
-        "",
-        "## Planner Ordering",
-        "",
-        "| Rank | Planner | Kinematics | Mean SNQI | Episodes |",
-        "|---:|---|---|---:|---:|",
-    ]
-    ordering = payload.get("planner_ordering")
-    if isinstance(ordering, list):
-        for row in ordering:
-            lines.append(
-                "| {rank} | {planner_key} | {kinematics} | {mean_snqi:.6f} | {episode_count} |".format(
-                    rank=int(row.get("rank", 0) or 0),
-                    planner_key=str(row.get("planner_key", "unknown")),
-                    kinematics=str(row.get("kinematics", "unknown")),
-                    mean_snqi=float(row.get("mean_snqi", 0.0) or 0.0),
-                    episode_count=int(row.get("episode_count", 0) or 0),
-                )
-            )
-    lines.extend(
-        [
-            "",
-            "## Component Correlations",
-            "",
-            "| Metric | Direction | Spearman | Variable | Aligned |",
-            "|---|---|---:|---|---|",
-        ]
-    )
-    correlations = payload.get("component_correlations")
-    if isinstance(correlations, dict):
-        for metric_name, row in sorted(correlations.items()):
-            spearman = row.get("spearman")
-            spearman_text = "n/a" if spearman is None else f"{float(spearman):.6f}"
-            aligned = row.get("aligned_with_expected_direction")
-            aligned_text = "n/a" if aligned is None else ("yes" if aligned else "no")
-            lines.append(
-                "| {metric} | {direction} | {spearman} | {variable} | {aligned} |".format(
-                    metric=_escape_markdown_cell(str(metric_name)),
-                    direction=_escape_markdown_cell(str(row.get("direction", "unknown"))),
-                    spearman=spearman_text,
-                    variable="yes" if bool(row.get("variable")) else "no",
-                    aligned=aligned_text,
-                )
-            )
-    lines.extend(
-        [
-            "",
-            "## Component Dominance (mean absolute contribution)",
-            "",
-            "| Component | Mean |",
-            "|---|---:|",
-        ]
-    )
-    dominance = payload.get("component_dominance")
-    if isinstance(dominance, dict):
-        for key, value in sorted(dominance.items()):
-            lines.append(f"| {_escape_markdown_cell(key)} | {float(value):.6f} |")
-    caveats = payload.get("positioning", {}).get("caveats")
-    if isinstance(caveats, list) and caveats:
-        lines.extend(["", "## Caveats", ""])
-        for caveat in caveats:
-            lines.append(f"- {_escape_markdown_cell(str(caveat))}")
-    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    calibrated = payload.get("calibrated_weights")
-    headers = (
-        "component",
-        "metric_name",
-        "configured_weight",
-        "configured_weight_share",
-        "calibrated_weight",
-        "delta",
-        "mean_abs_contribution",
-        "mean_abs_score_delta_if_ablated",
-        "episode_rank_correlation_if_ablated",
-        "planner_rank_correlation_if_ablated",
-        "planner_order_changed_if_ablated",
-        "sensitivity_rank",
-    )
-    rows: list[dict[str, Any]] = []
-    sensitivity_rows = payload.get("weight_sensitivity")
-    sensitivity_by_component = (
-        {str(row.get("weight_name")): row for row in sensitivity_rows if isinstance(row, dict)}
-        if isinstance(sensitivity_rows, list)
-        else {}
-    )
-    if isinstance(calibrated, dict):
-        configured = payload.get("configured_weights", {})
-        for name in WEIGHT_NAMES:
-            configured_value = float((configured or {}).get(name, 1.0))
-            calibrated_value = float(calibrated.get(name, configured_value))
-            sensitivity = sensitivity_by_component.get(name, {})
-            rows.append(
-                {
-                    "component": name,
-                    "metric_name": sensitivity.get("metric_name", ""),
-                    "configured_weight": configured_value,
-                    "configured_weight_share": float(
-                        sensitivity.get("configured_weight_share", 0.0)
-                    ),
-                    "calibrated_weight": calibrated_value,
-                    "delta": calibrated_value - configured_value,
-                    "mean_abs_contribution": float(sensitivity.get("mean_abs_contribution", 0.0)),
-                    "mean_abs_score_delta_if_ablated": float(
-                        sensitivity.get("mean_abs_score_delta_if_ablated", 0.0)
-                    ),
-                    "episode_rank_correlation_if_ablated": float(
-                        sensitivity.get("episode_rank_correlation_if_ablated", 1.0)
-                    ),
-                    "planner_rank_correlation_if_ablated": float(
-                        sensitivity.get("planner_rank_correlation_if_ablated", 1.0)
-                    ),
-                    "planner_order_changed_if_ablated": bool(
-                        sensitivity.get("planner_order_changed_if_ablated")
-                    ),
-                    "sensitivity_rank": int(sensitivity.get("sensitivity_rank", 0) or 0),
-                }
-            )
-    _write_csv(csv_path, [{key: row.get(key) for key in headers} for row in rows])
-    return json_path, md_path, csv_path
 
 
 def prepare_campaign_preflight(

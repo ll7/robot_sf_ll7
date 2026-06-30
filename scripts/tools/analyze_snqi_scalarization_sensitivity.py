@@ -15,7 +15,10 @@ from pathlib import Path
 
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     DEFAULT_SWEEP_FACTORS,
+    SENSITIVITY_PREFLIGHT_READY,
     build_scalarization_sensitivity_report,
+    classify_scalarization_sensitivity_inputs,
+    input_file_provenance,
     load_baseline_mapping,
     load_jsonl,
     load_weight_mapping,
@@ -28,7 +31,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--episodes", type=Path, required=True, help="Episode JSONL input.")
     parser.add_argument("--weights", type=Path, default=None, help="Optional SNQI weights JSON.")
     parser.add_argument("--baseline", type=Path, default=None, help="Optional SNQI baseline JSON.")
-    parser.add_argument("--output-dir", type=Path, required=True, help="Directory for artifacts.")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Directory for artifacts. Required unless --preflight-only is set.",
+    )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="Classify input readiness without writing scalarization artifacts.",
+    )
     parser.add_argument("--planner-key", default="planner_key", help="Dotted planner key.")
     parser.add_argument(
         "--fallback-planner-key", default="planner", help="Fallback dotted planner key."
@@ -49,15 +62,37 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Process exit code.
     """
-
     args = _parse_args(argv)
+    records = load_jsonl(args.episodes)
+    weights = load_weight_mapping(args.weights)
+    baseline = load_baseline_mapping(args.baseline)
+
+    if args.preflight_only:
+        preflight = classify_scalarization_sensitivity_inputs(
+            records,
+            weights=weights,
+            baseline=baseline,
+            planner_key=args.planner_key,
+            fallback_planner_key=args.fallback_planner_key,
+        )
+        print(json.dumps(preflight, indent=2))
+        return 0 if preflight["status"] == SENSITIVITY_PREFLIGHT_READY else 2
+
+    if args.output_dir is None:
+        raise SystemExit("--output-dir is required unless --preflight-only is set")
+
     report = build_scalarization_sensitivity_report(
-        load_jsonl(args.episodes),
-        weights=load_weight_mapping(args.weights),
-        baseline=load_baseline_mapping(args.baseline),
+        records,
+        weights=weights,
+        baseline=baseline,
         planner_key=args.planner_key,
         fallback_planner_key=args.fallback_planner_key,
         sweep_factors=args.sweep_factors,
+        input_provenance={
+            "episodes": input_file_provenance(args.episodes),
+            "weights": input_file_provenance(args.weights),
+            "baseline": input_file_provenance(args.baseline),
+        },
     )
     artifacts = write_diagnostic_artifacts(report, args.output_dir)
     print(

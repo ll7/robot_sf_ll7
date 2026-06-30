@@ -304,6 +304,22 @@ def test_missing_output_root_fails(tmp_path: Path) -> None:
         validate_retrain_preflight(path, repo_root=tmp_path)
 
 
+def test_provenance_paths_must_stay_under_output_root(tmp_path: Path) -> None:
+    """Expected checkpoint lineage cannot escape the declared output root."""
+    config = _base_config(tmp_path)
+    config["provenance"]["checkpoint_path"] = (
+        "output/tmp/other_predictive_pipeline/training/demo/predictive_model.pt"
+    )
+    path = _write_config(tmp_path, config)
+
+    with pytest.raises(PredictiveRetrainPreflightError) as exc_info:
+        validate_retrain_preflight(path, repo_root=tmp_path)
+
+    message = str(exc_info.value)
+    assert "provenance.checkpoint_path" in message
+    assert "must resolve under output.root" in message
+
+
 def test_aggregates_multiple_errors(tmp_path: Path) -> None:
     """All independent failures surface in one error message."""
     config = _base_config(tmp_path)

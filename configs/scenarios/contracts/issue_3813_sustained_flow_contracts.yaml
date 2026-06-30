@@ -14,7 +14,7 @@ contracts:
       environment_type: indoor_corridor
       map_family: classic_t_intersection
       density: mixed
-      flow: sustained_crossing
+      flow: continuous_crossing
       assumptions:
         - Pedestrian demand should be non-clearing within each time-bounded episode.
         - Current YAML rows are opt-in scaffolds until runtime respawn support exists.

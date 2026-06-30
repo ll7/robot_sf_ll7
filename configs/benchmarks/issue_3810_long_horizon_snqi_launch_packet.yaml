@@ -2,8 +2,9 @@
 #
 # This is a no-submit decision packet, not benchmark evidence. It converts the
 # live issue decisions into a reviewable Slurm launch, analysis, and retention
-# contract. Do not submit from this packet until the private Slurm decision
-# packet is marked go and job 13175 has been reconciled.
+# contract. Do not submit from this packet on a non-Slurm machine. A
+# Slurm-capable submit host must refresh live queue state, duplicate status,
+# and worktree cleanliness before invoking the private submit wrapper.
 schema_version: research-campaign-manifest.v0.1
 campaign:
   id: issue_3810_comprehensive_h600_snqi_recalibration
@@ -213,11 +214,39 @@ validation:
   dry_run: required
 
 launch_packet:
-  decision: blocked_until_private_slurm_go
+  decision: ready_after_live_queue_and_duplicate_check
   compute_submit_authorized: false
   slurm_job_id: not_submitted
-  blocking_jobs:
-    - 13175
+  blocking_jobs: []
+  ledger_reconciliation:
+    checked_date: "2026-06-29"
+    source: private_ops_jobs_and_queue_read_only
+    job_13175_state: analyzed
+    job_13175_campaign: 2026-06-issue1554-s20-h500-l40s-mem180
+    job_13175_relevance: >
+      Completed and analyzed #1554 lane; not a #3810 blocker after read-only
+      private-ops reconciliation.
+    running_related_jobs:
+      - job_id: 13198
+        state: running
+        campaign: 2026-06-issue1554-s20-h500-split-mem180-run
+        relevance: >
+          Separate #1554 evidence-yield lane, not a #3810 duplicate. A
+          Slurm-capable submit host must still refresh live queue pressure
+          before any #3810 submission.
+    issue_3810_duplicate_status: none_found
+  go_no_go:
+    recommendation: go_after_submit_host_live_checks
+    local_submission_status: no_submit_current_machine
+    exact_local_decision_command: >-
+      uv run python scripts/validation/check_issue_3810_long_horizon_launch_packet.py
+      --packet configs/benchmarks/issue_3810_long_horizon_snqi_launch_packet.yaml
+      --json
+    slurm_command_status: >
+      Not safe to freeze in this public packet without live submit-host queue
+      pressure, duplicate check, clean-worktree proof, and private route
+      selection. Use the private submit wrapper named below only after those
+      checks return go.
   route:
     private_ops_repo: /home/luttkule/git/robot_sf_ll7-private-ops  # allow-abs-path: private-ops routing (machine-local, non-portable)
     queue_summary_command: /home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/scripts/queue_summary.sh  # allow-abs-path: private-ops routing (machine-local, non-portable)
@@ -242,8 +271,9 @@ launch_packet:
       --output output/benchmarks/issue_3810_comprehensive_h600_snqi/preflight/private_ops_route_dry_run.json
     no_submit_guard: >
       Private preflight and route checks may run read-only. The submit wrapper
-      must not be invoked until issue #3810 has an explicit go decision and job
-      13175 has been reconciled.
+      must not be invoked from this machine. It may be invoked only on a
+      Slurm-capable host after live queue, duplicate, branch, commit, and
+      cleanliness checks return go.
   materialized_config:
     # The runnable h600 campaign config does not exist yet and is intentionally
     # not added by this launch-packet PR. It is generated downstream by applying

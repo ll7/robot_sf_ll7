@@ -113,6 +113,21 @@ def test_complete_metadata_is_blocked_by_default(tmp_path: Path) -> None:
     ):
         assert report["stages"][stage]["status"] == "passed"
     assert report["stages"]["blocked_slurm_gate"]["status"] == "blocked"
+    packet = report["decision_packet"]
+    assert packet["decision"] == "no_go"
+    assert packet["candidate_queue_entry"]["current_state"] == "deferred_blocked"
+    assert packet["candidate_queue_entry"]["submission_authorized_by_this_packet"] is False
+    assert packet["exact_command_if_go"] is None
+    assert packet["exact_readiness_command_to_clear_gate"].startswith(
+        "uv run python scripts/validation/validate_predictive_v2_comparison_readiness.py"
+    )
+    assert {item["issue"] for item in packet["completed_or_running_jobs"]} >= {
+        "#1543",
+        "#1897",
+        "#2275",
+        "#2916",
+    }
+    assert packet["evidence_gap"]["status"] == "open"
 
 
 def test_gate_clears_only_with_continue_and_hypothesis(tmp_path: Path) -> None:
@@ -124,6 +139,11 @@ def test_gate_clears_only_with_continue_and_hypothesis(tmp_path: Path) -> None:
     ready = _run(contract_path, tmp_path, coupling_gate_path=gate, revised_hypothesis_recorded=True)
     assert ready["status"] == "ready"
     assert ready["stages"]["blocked_slurm_gate"]["status"] == "passed"
+    packet = ready["decision_packet"]
+    assert packet["decision"] == "go"
+    assert packet["candidate_queue_entry"]["current_state"] == "ready_for_bounded_launch"
+    assert packet["exact_command_if_go"] is not None
+    assert "--revised-hypothesis-recorded" in packet["exact_command_if_go"]
 
     # Missing maintainer acknowledgement keeps it blocked.
     still_blocked = _run(contract_path, tmp_path, coupling_gate_path=gate)

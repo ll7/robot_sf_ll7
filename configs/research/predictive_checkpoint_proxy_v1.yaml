@@ -22,9 +22,17 @@ hard_seed_fixture: configs/benchmarks/predictive_hard_seeds_v1.yaml
 # -> present/absent) without downloading.
 checkpoint_selector:
   registry_tag: predictive
+  # The readiness checker maps declared public artifact metadata (release asset,
+  # checksum, size) but does not hydrate or download it. Local checkpoint
+  # resolution remains the fail-closed gate.
   # Minimum distinct, locally-resolvable checkpoints required by the issue's
   # claim contract (">= 6 checkpoints from >= 1 real training run").
   min_resolvable_checkpoints: 6
+  # The six checkpoints must map to one real training run lineage. This field is
+  # manifest metadata only: the preflight reports missing values as blocked and
+  # does not infer lineage from model_id, path names, or release assets.
+  training_run_group_field: proxy_training_run_id
+  min_resolvable_training_run_checkpoints: 6
 
 # Candidate rollout-derived proxy signals under evaluation (documentation of
 # intent only; the analyzer consumes whatever the training summary recorded).
@@ -43,6 +51,32 @@ proxy_summary_contract:
   min_proxy_epochs: 6
   # success spread strictly greater than this counts as non-degenerate.
   min_success_spread: 1.0e-9
+
+# Current issue #3204 blocker map. The preflight does not hydrate artifacts or
+# run training, but unresolved entries keep the report fail-closed until the
+# contract is updated with durable evidence.
+known_blockers:
+  - id: missing_durable_predictive_checkpoints
+    status: blocked
+    evidence: >
+      model/registry.yaml predictive local_path entries currently point at
+      output/tmp or output/model_cache paths that do not resolve in a clean
+      checkout. Some entries declare public release metadata, but the readiness
+      slice does not hydrate those assets and still gates on locally resolvable
+      checkpoint files.
+    revival_condition: >
+      Promote or hydrate at least six predictive checkpoints from one real
+      training run into durable, locally resolvable registry local_path entries.
+  - id: degenerate_hardcase_proxy_probe_v1
+    status: blocked
+    evidence: >
+      The known hardcase_proxy_probe_v1 summary records no hard-seed success
+      spread, so the merged analyzer reports an inconclusive proxy-vs-ADE
+      comparison.
+    revival_condition: >
+      Provide a proxy.enabled training summary with at least six usable proxy
+      epochs and non-degenerate hard-seed success spread from a plateau-breaking
+      lineage.
 
 # Baseline selector this study compares against.
 ade_baseline:

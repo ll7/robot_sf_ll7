@@ -155,6 +155,15 @@ def test_to_dict_is_json_serializable_and_self_consistent():
     assert encoded["mixed_scale"] is True
     assert set(encoded["raw_penalty_terms"]) == {"time", "comfort"}
     assert encoded["is_consistent"] is False
+    status_by_term = {term["term"]: term["normalization_status"] for term in encoded["terms"]}
+    assert status_by_term["success"] == "raw_bounded"
+    assert status_by_term["time"] == "raw_unbounded"
+    assert status_by_term["comfort"] == "raw_unbounded"
+    assert status_by_term["collisions"] == "baseline_normalized_bounded"
+    basis_by_term = {term["term"]: term["measurement_basis"] for term in encoded["terms"]}
+    assert basis_by_term["time"] == "raw time-to-goal ratio"
+    assert basis_by_term["comfort"] == "raw accumulated comfort-exposure value"
+    assert basis_by_term["collisions"] == "baseline-relative median/p95 clamped value"
 
 
 def test_format_report_is_human_readable():
@@ -162,5 +171,8 @@ def test_format_report_is_human_readable():
     inv = build_snqi_normalization_inventory(_BASELINE_STATS)
     text = format_normalization_report(inv)
     assert "issue #3699" in text
+    assert "basis" in text
+    assert "raw time-to-goal ratio" in text
+    assert "baseline-relative median/p95 clamped value" in text
     for term in SNQI_TERM_SCALING:
         assert term.term in text

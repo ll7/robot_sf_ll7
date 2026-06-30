@@ -247,3 +247,36 @@ def test_both_input_shapes_supported(shape: str):
         [row], metrics=["snqi"], bootstrap_samples=0, confidence=0.95, bootstrap_seed=1
     )
     assert cells[0].metrics["snqi"]["count"] == 3.0
+
+
+def test_adjacent_rank_claims_downgrade_overlapping_ci() -> None:
+    """Adjacent planners with overlapping CIs are not strict headline claims."""
+
+    rows = [
+        _cell_row("bottleneck", "a", {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48]}),
+        _cell_row("bottleneck", "b", {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53]}),
+    ]
+
+    report = _report(rows)
+
+    assert len(report["adjacent_rank_claims"]) == 1
+    claim = report["adjacent_rank_claims"][0]
+    assert claim["decision"] == "not_statistically_distinguishable_budget"
+    assert "overlap" in claim["rationale"]
+
+
+def test_adjacent_rank_claims_mark_ci_separable() -> None:
+    """Well-separated adjacent planner CIs are labeled separable."""
+
+    rows = [
+        _cell_row("merging", "best", {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94]}),
+        _cell_row("merging", "worst", {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10]}),
+    ]
+
+    report = _report(rows)
+
+    assert len(report["adjacent_rank_claims"]) == 1
+    claim = report["adjacent_rank_claims"][0]
+    assert claim["higher_rank_planner"] == "best"
+    assert claim["lower_rank_planner"] == "worst"
+    assert claim["decision"] == "ci_separable"

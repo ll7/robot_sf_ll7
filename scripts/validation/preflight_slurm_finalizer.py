@@ -26,10 +26,16 @@ What it checks (each maps to an acceptance criterion of #3425):
   and carries the expected finalization schema and a job id.
 * ``finalizer_manifest_linkage`` — every finalizer ``job_id`` resolves to a
   submission-manifest job (the "manifest linkage missing" fail-closed case).
+* ``issue_traceability_matches`` — queue/finalizer issue numbers agree for
+  public issue/PR traceability and, by default, match issue ``3425``.
 * ``durable_pointer_present`` — every *successful* finalizer carries a durable
   pointer (the "durable pointers missing" fail-closed case).
+* ``required_artifacts_complete`` — every *successful* finalizer reports all
+  required artifacts present before a durable pointer can unblock a claim.
 * ``claim_boundary_present`` — every finalizer carries a claim boundary so the
   downstream summary/claim decision stays inside an explicit boundary.
+* ``claim_decision_present`` — every finalizer records a bounded final decision
+  disposition: ``promote``, ``keep diagnostic``, ``block``, or ``stop``.
 * ``evidence_root_present`` — advisory: the compact evidence root exists so the
   reconciler can confirm preservation.
 
@@ -65,6 +71,7 @@ from scripts.tools.reconcile_slurm_evidence import (  # noqa: E402
     FinalizerReport,
     ManifestJob,
     QueueEntry,
+    _coerce_seed,
     _load_finalizer_report,
     load_queue,
     load_submission_manifests,
@@ -75,6 +82,15 @@ SCHEMA_VERSION = "slurm-finalizer-preflight.v1"
 # Finalizer classifications that mean the job produced final artifacts and is
 # therefore expected to carry a durable pointer before a claim can be made.
 _SUCCESS_CLASSIFICATIONS = {"success"}
+_DURABLE_POINTER_PREFIXES = (
+    "wandb://",
+    "https://",
+    "http://",
+    "s3://",
+    "gs://",
+    "dvc://",
+)
+_ALLOWED_CLAIM_DECISIONS = {"promote", "keep_diagnostic", "block", "stop"}
 
 # The readiness gate makes no research claim; it only reports whether the inputs
 # for the vertical slice are present and provenance-complete.
@@ -326,6 +342,77 @@ def _check_finalizer_linkage(inputs: LoadedInputs) -> PreflightCheck:
     )
 
 
+def _check_issue_traceability(
+    inputs: LoadedInputs, *, expected_issue: int | None
+) -> PreflightCheck:
+    """Require queue and finalizer issue numbers to agree when both are present."""
+    # Normalize via the canonical coercion so the gate reads issue numbers
+    # exactly as the reconciler does. ``QueueEntry.issue`` is ``str | int | None``
+    # (a queue may record ``issue: "3425"``); ``_coerce_seed`` maps both forms to
+    # an int and drops bools/blanks, keeping this check consistent with
+    # ``reconcile_slurm_evidence`` instead of over-blocking string-encoded issues.
+    queue_issues = sorted(
+        {coerced for entry in inputs.queue if (coerced := _coerce_seed(entry.issue)) is not None}
+    )
+    finalizer_issues = sorted(
+        {
+            coerced
+            for finalizer in inputs.finalizers
+            if (coerced := _coerce_seed(finalizer.issue_number)) is not None
+        }
+    )
+
+    if not inputs.queue or not inputs.finalizers:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_SKIPPED,
+            severity=_REQUIRED,
+            detail="queue or finalizer records missing",
+            remediation="resolve queue_present and finalizer_manifests_present first",
+        )
+    if not queue_issues:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail="queue entries do not record an issue number",
+            remediation="record issue number in submission queue entries before public handoff",
+        )
+    if not finalizer_issues:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail="finalizer records do not record an issue number",
+            remediation="record issue_number in finalizer manifest before public handoff",
+        )
+    if queue_issues != finalizer_issues:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=f"queue issue(s) {queue_issues} differ from finalizer issue(s) {finalizer_issues}",
+            remediation="align queue and finalizer issue numbers before claim decision handoff",
+        )
+    if expected_issue is not None and queue_issues != [expected_issue]:
+        return PreflightCheck(
+            name="issue_traceability_matches",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=f"queue/finalizer issue(s) {queue_issues} do not match expected issue {expected_issue}",
+            remediation=(
+                "pass --issue for the intended handoff issue or regenerate queue/finalizer "
+                "metadata for the correct issue before public claim handoff"
+            ),
+        )
+    return PreflightCheck(
+        name="issue_traceability_matches",
+        status=_READY,
+        severity=_REQUIRED,
+        detail=f"queue/finalizer issue traceability matches issue(s) {queue_issues}",
+    )
+
+
 def _check_durable_pointer(inputs: LoadedInputs) -> PreflightCheck:
     """Require every successful finalizer to carry a durable pointer."""
     successful = [
@@ -363,11 +450,83 @@ def _check_durable_pointer(inputs: LoadedInputs) -> PreflightCheck:
                 "record the durable URI in the finalizer manifest before claiming"
             ),
         )
+    local_only = sorted(
+        f"{finalizer.job_id}: {finalizer.durable_pointer}"
+        for finalizer in successful
+        if finalizer.durable_pointer is not None
+        and not finalizer.durable_pointer.startswith(_DURABLE_POINTER_PREFIXES)
+    )
+    if local_only:
+        return PreflightCheck(
+            name="durable_pointer_present",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=(
+                "successful finalizer(s) use non-durable or local artifact pointer(s): "
+                f"{', '.join(local_only)}"
+            ),
+            remediation=(
+                "replace worktree-local artifact paths with durable wandb, http(s), s3, gs, "
+                "or dvc URI before claim decision handoff"
+            ),
+        )
     return PreflightCheck(
         name="durable_pointer_present",
         status=_READY,
         severity=_REQUIRED,
         detail=f"{len(successful)} successful finalizer(s) carry a durable pointer",
+    )
+
+
+def _check_required_artifacts_complete(inputs: LoadedInputs) -> PreflightCheck:
+    """Require successful finalizers to report complete required artifacts."""
+    successful = [
+        finalizer
+        for finalizer in inputs.finalizers
+        if finalizer.classification in _SUCCESS_CLASSIFICATIONS
+    ]
+    if not inputs.finalizers:
+        return PreflightCheck(
+            name="required_artifacts_complete",
+            status=_SKIPPED,
+            severity=_REQUIRED,
+            detail="no finalizer records to inspect",
+            remediation="resolve finalizer_manifests_present first",
+        )
+    if not successful:
+        return PreflightCheck(
+            name="required_artifacts_complete",
+            status=_READY,
+            severity=_REQUIRED,
+            detail="no successful finalizers require complete artifact status yet",
+        )
+
+    incomplete = sorted(
+        f"{finalizer.job_id}({finalizer.artifact_status})"
+        for finalizer in successful
+        if finalizer.artifact_status != "all_required_present"
+    )
+    if incomplete:
+        return PreflightCheck(
+            name="required_artifacts_complete",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=(
+                "successful finalizer(s) do not report all required artifacts present: "
+                f"{', '.join(incomplete)}"
+            ),
+            remediation=(
+                "rerun or repair the finalizer inputs until successful records carry "
+                "artifact_status=all_required_present, or reclassify the job as blocked/"
+                "incomplete before claim handoff"
+            ),
+        )
+
+    return PreflightCheck(
+        name="required_artifacts_complete",
+        status=_READY,
+        severity=_REQUIRED,
+        detail="every successful finalizer reports all required artifacts present",
     )
 
 
@@ -400,6 +559,53 @@ def _check_claim_boundary(inputs: LoadedInputs) -> PreflightCheck:
         status=_READY,
         severity=_REQUIRED,
         detail="every finalizer carries a claim boundary",
+    )
+
+
+def _check_claim_decision(inputs: LoadedInputs) -> PreflightCheck:
+    """Require every finalizer carry an explicit bounded claim decision."""
+    if not inputs.finalizers:
+        return PreflightCheck(
+            name="claim_decision_present",
+            status=_SKIPPED,
+            severity=_REQUIRED,
+            detail="no finalizer records to inspect",
+            remediation="resolve finalizer_manifests_present first",
+        )
+    missing = sorted(
+        finalizer.job_id for finalizer in inputs.finalizers if not finalizer.claim_decision
+    )
+    if missing:
+        return PreflightCheck(
+            name="claim_decision_present",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=f"finalizer(s) missing claim decision: {', '.join(missing)}",
+            remediation=(
+                "record finalizer claim_decision as one of promote, keep diagnostic, "
+                "block, or stop before claim handoff"
+            ),
+        )
+    invalid = sorted(
+        f"{finalizer.job_id}({finalizer.claim_decision})"
+        for finalizer in inputs.finalizers
+        if finalizer.claim_decision not in _ALLOWED_CLAIM_DECISIONS
+    )
+    if invalid:
+        return PreflightCheck(
+            name="claim_decision_present",
+            status=_BLOCKED,
+            severity=_REQUIRED,
+            detail=f"finalizer(s) carry unsupported claim decision: {', '.join(invalid)}",
+            remediation=(
+                "use one bounded issue #3425 decision: promote, keep diagnostic, block, or stop"
+            ),
+        )
+    return PreflightCheck(
+        name="claim_decision_present",
+        status=_READY,
+        severity=_REQUIRED,
+        detail="every finalizer carries a bounded claim decision",
     )
 
 
@@ -437,6 +643,7 @@ def preflight(
     submission_manifests: list[Path],
     finalizer_manifests: list[Path],
     evidence_root: Path | None = None,
+    expected_issue: int | None = 3425,
     generated_at: str | None = None,
 ) -> dict:
     """Evaluate readiness of the SLURM-to-claim finalizer slice inputs.
@@ -456,8 +663,11 @@ def preflight(
         _check_submission_manifests(submission_manifests, inputs),
         _check_finalizer_present(finalizer_manifests, inputs),
         _check_finalizer_linkage(inputs),
+        _check_issue_traceability(inputs, expected_issue=expected_issue),
         _check_durable_pointer(inputs),
+        _check_required_artifacts_complete(inputs),
         _check_claim_boundary(inputs),
+        _check_claim_decision(inputs),
         _check_evidence_root(evidence_root),
     ]
 
@@ -483,6 +693,7 @@ def preflight(
             "submission_manifests": sorted(str(path) for path in submission_manifests),
             "finalizer_manifests": sorted(str(path) for path in finalizer_manifests),
             "evidence_root": str(evidence_root) if evidence_root is not None else None,
+            "expected_issue": expected_issue,
         },
         "checks": [asdict(check) for check in checks],
         "blockers": blockers,
@@ -560,6 +771,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional compact evidence root directory (advisory check).",
     )
     parser.add_argument(
+        "--issue",
+        type=int,
+        default=3425,
+        help="Expected public issue number for queue/finalizer traceability.",
+    )
+    parser.add_argument(
         "--generated-at",
         default=None,
         help="Optional stable generated_at timestamp for reproducible machine output.",
@@ -576,6 +793,7 @@ def main(argv: list[str] | None = None) -> int:
         submission_manifests=list(args.submission_manifest),
         finalizer_manifests=list(args.finalizer_manifest),
         evidence_root=args.evidence_root,
+        expected_issue=args.issue,
         generated_at=args.generated_at,
     )
 

@@ -73,6 +73,16 @@ def build_governance_report(
             }
         )
     if normalization.mixed_scale:
+        mixed_inputs = [
+            {
+                "term": term.term,
+                "metric_key": term.metric_key,
+                "weight_name": term.weight_name,
+                "normalization_status": term.normalization_status,
+                "measurement_basis": term.measurement_basis,
+            }
+            for term in normalization.penalty_terms
+        ]
         blockers.append(
             {
                 "issue": 3699,
@@ -82,6 +92,7 @@ def build_governance_report(
                     "baseline-normalized terms, so weights are not comparable "
                     "relative priorities."
                 ),
+                "mixed_inputs": mixed_inputs,
             }
         )
     if baseline_stats is not None and normalization.missing_baseline_coverage:
@@ -132,6 +143,14 @@ def _print_text_report(report: dict[str, Any]) -> None:
         f"raw_penalty_terms={', '.join(normalization['raw_penalty_terms']) or 'none'}; "
         f"unbounded_terms={', '.join(normalization['unbounded_terms']) or 'none'}"
     )
+    print("Term normalization status:")
+    for term in normalization["terms"]:
+        role = "penalty" if term["is_penalty"] else "reward"
+        print(
+            f"  - {term['term']} ({term['metric_key']}, {term['weight_name']}): "
+            f"{term['normalization_status']}; role={role}; "
+            f"basis={term['measurement_basis']}; note={term['note']}"
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:

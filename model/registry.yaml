@@ -125,6 +125,102 @@ models:
     metadata_asset: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417-metadata.json
     published_at_utc: '2026-05-24T05:32:03+00:00'
   public_artifact_source: github_release
+- model_id: retired_ppo_issue_791_horizon100_12178_local_only
+  display_name: Retired local-only PPO issue-791 horizon-100 candidate
+  local_path: output/model_cache/ppo_expert_issue_791_horizon100_20260429T155453/model.zip
+  config_path: configs/training/ppo/ablations/expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml
+  commit: ''
+  wandb_run_id: h746lfsd
+  wandb_run_path: ll7/robot_sf/h746lfsd
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  local_only: true
+  replacement_model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+  benchmark_promotion:
+    claim_boundary: not_for_benchmark
+    non_benchmark_reason: Retired issue 1764 baseline config because no durable artifact checksum or release pointer was available for the local output checkpoint path.
+  notes:
+  - Retired from runnable baseline configs by issue 1764 on 2026-06-29.
+  - Recover only by adding a durable artifact pointer and checksum; otherwise use the canonical PPO baseline.
+- model_id: retired_ppo_issue_856_all_scenarios_12223_local_only
+  display_name: Retired local-only PPO issue-856 all-scenarios candidate
+  local_path: output/slurm/issue791-reward-curriculum-job-12223/benchmarks/expert_policies/checkpoints/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity/ppo_expert_issue_791_all_scenarios_10m_env22_large_capacity_best.zip
+  config_path: configs/training/ppo/ablations/expert_ppo_issue_791_all_scenarios_10m_env22_large_capacity.yaml
+  commit: ''
+  wandb_run_id: ateif3c8
+  wandb_run_path: ll7/robot_sf/ateif3c8
+  wandb_entity: ll7
+  wandb_project: robot_sf
+  wandb_file: model.zip
+  local_only: true
+  replacement_model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+  benchmark_promotion:
+    claim_boundary: not_for_benchmark
+    non_benchmark_reason: Retired issue 1764 comparison config because the checkpoint was recorded only as a local SLURM output path.
+  notes:
+  - Retired from runnable baseline configs by issue 1764 on 2026-06-29.
+  - Recover only by adding a durable artifact pointer and checksum; otherwise use the canonical PPO baseline.
+- model_id: retired_sac_gate_socnav_struct_local_only
+  display_name: Retired local-only SAC gate socnav struct checkpoint
+  local_path: output/models/sac/sac_gate_socnav_struct_v1.zip
+  config_path: configs/baselines/sac_gate_socnav_struct.yaml
+  commit: ''
+  local_only: true
+  replacement_model_id: ''
+  benchmark_promotion:
+    claim_boundary: not_for_benchmark
+    non_benchmark_reason: Retired issue 1764 experimental SAC config because no durable artifact checksum or release pointer was available.
+  notes:
+  - Retired from runnable baseline configs by issue 1764 on 2026-06-29.
+- model_id: retired_sac_gate_socnav_struct_ego_local_only
+  display_name: Retired local-only SAC gate socnav struct ego checkpoint
+  local_path: output/models/sac/sac_gate_socnav_struct_ego_v1.zip
+  config_path: configs/baselines/sac_gate_socnav_struct_ego.yaml
+  commit: ''
+  local_only: true
+  replacement_model_id: ''
+  benchmark_promotion:
+    claim_boundary: not_for_benchmark
+    non_benchmark_reason: Retired issue 1764 experimental SAC config because no durable artifact checksum or release pointer was available.
+  notes:
+  - Retired from runnable baseline configs by issue 1764 on 2026-06-29.
+- model_id: retired_sac_gate_socnav_struct_ego_multi_local_only
+  display_name: Retired local-only SAC gate socnav struct ego multi checkpoint
+  local_path: output/models/sac/sac_gate_socnav_struct_ego_multi_v1.zip
+  config_path: configs/baselines/sac_gate_socnav_struct_ego_multi.yaml
+  commit: ''
+  local_only: true
+  replacement_model_id: ''
+  benchmark_promotion:
+    claim_boundary: not_for_benchmark
+    non_benchmark_reason: Retired issue 1764 experimental SAC config because no durable artifact checksum or release pointer was available.
+  notes:
+  - Retired from runnable baseline configs by issue 1764 on 2026-06-29.
+- model_id: retired_sac_gate_socnav_struct_ego_safe_local_only
+  display_name: Retired local-only SAC gate socnav struct ego safe checkpoint
+  local_path: output/models/sac/sac_gate_socnav_struct_ego_safe_v1.zip
+  config_path: configs/baselines/sac_gate_socnav_struct_ego_safe.yaml
+  commit: ''
+  local_only: true
+  replacement_model_id: ''
+  benchmark_promotion:
+    claim_boundary: not_for_benchmark
+    non_benchmark_reason: Retired issue 1764 experimental SAC config because no durable artifact checksum or release pointer was available.
+  notes:
+  - Retired from runnable baseline configs by issue 1764 on 2026-06-29.
+- model_id: retired_drl_vo_default_local_only
+  display_name: Retired local-only DRL-VO default checkpoint
+  local_path: output/model_cache/drl_vo_default.pt
+  config_path: configs/baselines/drl_vo_default.yaml
+  commit: ''
+  local_only: true
+  replacement_model_id: ''
+  benchmark_promotion:
+    claim_boundary: not_for_benchmark
+    non_benchmark_reason: Retired issue 1764 DRL-VO config because no durable artifact checksum or release pointer was available.
+  notes:
+  - Retired from runnable baseline configs by issue 1764 on 2026-06-29.
 - model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
   display_name: PPO BR-06 v3 all-maps randomized (2026-03-04, issue-576 closeout)
   local_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip

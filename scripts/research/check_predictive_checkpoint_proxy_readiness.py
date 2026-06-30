@@ -38,6 +38,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 STATUS_PASSED = "passed"
 STATUS_FAILED = "failed"
 STATUS_BLOCKED = "blocked"
+_KNOWN_BLOCKER_STATUSES = frozenset({STATUS_BLOCKED, "resolved", "diagnostic"})
 
 DEFAULT_CONFIG = Path("configs/research/predictive_checkpoint_proxy_v1.yaml")
 DEFAULT_REGISTRY = Path("model/registry.yaml")
@@ -64,29 +65,102 @@ def _load_yaml(path: Path) -> Any:
 
 
 def _check_config(config: Any, config_path: Path) -> tuple[str, list[str]]:
-    """Verify the readiness contract exists and declares the required keys."""
+    """Verify readiness contract exists and declares required keys."""
     if config is None:
         return STATUS_BLOCKED, [f"readiness config not found or unreadable: {config_path}"]
     if not isinstance(config, dict):
         return STATUS_FAILED, ["readiness config must be a mapping"]
+
     errors: list[str] = []
     hard_seed = config.get("hard_seed_fixture")
     if not isinstance(hard_seed, str) or not hard_seed:
         errors.append("readiness config missing or invalid hard_seed_fixture")
+
     selector = config.get("checkpoint_selector")
     if not isinstance(selector, dict):
         errors.append("readiness config missing checkpoint_selector mapping")
     else:
-        if not selector.get("registry_tag"):
-            errors.append("checkpoint_selector missing registry_tag")
-        if not isinstance(selector.get("min_resolvable_checkpoints"), int):
-            errors.append("checkpoint_selector missing integer min_resolvable_checkpoints")
+        errors.extend(_validate_checkpoint_selector_schema(selector))
+
     summary_contract = config.get("proxy_summary_contract")
     if summary_contract is not None and not isinstance(summary_contract, dict):
-        errors.append("proxy_summary_contract must be a mapping when provided")
+        errors.append("proxy_summary_contract must be mapping when provided")
+    errors.extend(_validate_known_blocker_schema(config.get("known_blockers")))
     if errors:
         return STATUS_FAILED, errors
     return STATUS_PASSED, []
+
+
+def _validate_checkpoint_selector_schema(selector: dict[str, Any]) -> list[str]:
+    """Validate checkpoint-selector metadata without resolving artifacts."""
+    errors: list[str] = []
+    if not selector.get("registry_tag"):
+        errors.append("checkpoint_selector missing registry_tag")
+    if not isinstance(selector.get("min_resolvable_checkpoints"), int):
+        errors.append("checkpoint_selector missing integer min_resolvable_checkpoints")
+    group_field = selector.get("training_run_group_field")
+    if group_field is not None and (not isinstance(group_field, str) or not group_field):
+        errors.append("checkpoint_selector training_run_group_field must be non-empty string")
+    min_group = selector.get("min_resolvable_training_run_checkpoints")
+    if min_group is not None and not isinstance(min_group, int):
+        errors.append("checkpoint_selector min_resolvable_training_run_checkpoints must be integer")
+    return errors
+
+
+def _validate_known_blocker_schema(known_blockers: Any) -> list[str]:
+    """Validate optional known-blocker metadata in the readiness contract."""
+    if known_blockers is None:
+        return []
+    if not isinstance(known_blockers, list):
+        return ["known_blockers must be a list when provided"]
+
+    errors: list[str] = []
+    for index, blocker in enumerate(known_blockers):
+        if not isinstance(blocker, dict):
+            errors.append(f"known_blockers[{index}] must be a mapping")
+            continue
+        blocker_id = blocker.get("id")
+        blocker_status = blocker.get("status")
+        if not isinstance(blocker_id, str) or not blocker_id:
+            errors.append(f"known_blockers[{index}] missing id")
+        if blocker_status not in _KNOWN_BLOCKER_STATUSES:
+            errors.append(
+                f"known_blockers[{index}] status must be one of {sorted(_KNOWN_BLOCKER_STATUSES)}"
+            )
+    return errors
+
+
+def _check_known_blockers(config: dict[str, Any]) -> tuple[str, list[str], list[dict[str, Any]]]:
+    """Expose configured known blocker status as a fail-closed report section."""
+    blockers = config.get("known_blockers") or []
+    if not isinstance(blockers, list):
+        return STATUS_FAILED, ["known_blockers must be a list"], []
+
+    normalized: list[dict[str, Any]] = []
+    messages: list[str] = []
+    failed = False
+    blocked = False
+    for index, blocker in enumerate(blockers):
+        if not isinstance(blocker, dict):
+            failed = True
+            messages.append(f"known_blockers[{index}] must be a mapping")
+            continue
+        blocker_id = str(blocker.get("id", "unnamed"))
+        status = blocker.get("status")
+        if status not in _KNOWN_BLOCKER_STATUSES:
+            failed = True
+            messages.append(f"known_blockers[{index}] has unsupported status: {status}")
+            continue
+        normalized.append(dict(blocker))
+        if status == STATUS_BLOCKED:
+            blocked = True
+            messages.append(f"known blocker remains blocked: {blocker_id}")
+
+    if failed:
+        return STATUS_FAILED, messages, normalized
+    if blocked:
+        return STATUS_BLOCKED, messages, normalized
+    return STATUS_PASSED, messages, normalized
 
 
 def _check_hard_seed_fixture(fixture_path: Path) -> tuple[str, list[str]]:
@@ -109,19 +183,143 @@ def _resolve_local_path(local_path: Any, repo_root: Path) -> Path | None:
     return candidate
 
 
+def _artifact_scope(local_path: Any, resolved: Path | None, repo_root: Path) -> str:
+    """Classify whether a registry path names durable or worktree-local storage."""
+    if not isinstance(local_path, str) or not local_path:
+        return "invalid"
+
+    path = Path(local_path)
+    if path.parts and path.parts[0] == "output":
+        return "worktree_local_output"
+
+    if resolved is not None:
+        try:
+            relative = resolved.resolve().relative_to(repo_root.resolve())
+        except ValueError:
+            return "external_or_absolute"
+        if relative.parts and relative.parts[0] == "output":
+            return "worktree_local_output"
+        return "repo_relative"
+
+    return "unknown"
+
+
+def _public_artifact_metadata(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return durable public artifact metadata declared in the model registry."""
+    release = entry.get("github_release")
+    if not isinstance(release, dict):
+        return {"status": "missing", "source": None}
+
+    required = ("repo", "tag", "asset_name", "url", "sha256", "size_bytes")
+    missing = [key for key in required if release.get(key) in (None, "")]
+    return {
+        "status": "declared" if not missing else "incomplete",
+        "source": "github_release",
+        "repo": release.get("repo"),
+        "tag": release.get("tag"),
+        "asset_name": release.get("asset_name"),
+        "url": release.get("url"),
+        "sha256": release.get("sha256"),
+        "size_bytes": release.get("size_bytes"),
+        "metadata_asset": release.get("metadata_asset"),
+        "missing_fields": missing,
+    }
+
+
+def _training_run_group(entry: dict[str, Any], group_field: str | None) -> str | None:
+    """Return declared training-run grouping metadata, if the contract asks for it."""
+    if not group_field:
+        return None
+    value = entry.get(group_field)
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _checkpoint_mapping_entry(
+    model_id: str, entry: dict[str, Any], repo_root: Path, training_run_group_field: str | None
+) -> dict[str, Any]:
+    """Build one fail-closed checkpoint mapping row without selecting any checkpoint."""
+    local_path = entry.get("local_path")
+    resolved = _resolve_local_path(local_path, repo_root)
+    scope = _artifact_scope(local_path, resolved, repo_root)
+    training_run_group = _training_run_group(entry, training_run_group_field)
+
+    if resolved is None:
+        status = "invalid_local_path"
+        reason = "local_path missing or not a non-empty string"
+    elif resolved.is_file():
+        status = "present"
+        reason = "regular file resolves locally"
+    elif resolved.is_dir():
+        status = "not_checkpoint_file"
+        reason = "local_path resolves to a directory"
+    else:
+        status = "missing_local_path"
+        reason = "local_path does not resolve to a regular file"
+
+    return {
+        "model_id": model_id,
+        "local_path": local_path,
+        "resolved_path": str(resolved) if resolved is not None else None,
+        "artifact_scope": scope,
+        "public_artifact": _public_artifact_metadata(entry),
+        "training_run_group": training_run_group,
+        "training_run_group_field": training_run_group_field,
+        "status": status,
+        "reason": reason,
+        "present": status == "present",
+    }
+
+
+def _training_run_group_summary(
+    resolvable: list[dict[str, Any]], training_run_group_field: str | None
+) -> tuple[dict[str, int], int]:
+    """Count locally-resolved checkpoints by declared training-run lineage."""
+    grouped_resolvable: dict[str, int] = {}
+    missing_group_metadata = 0
+    if not training_run_group_field:
+        return grouped_resolvable, missing_group_metadata
+
+    for candidate in resolvable:
+        group = candidate.get("training_run_group")
+        if isinstance(group, str) and group:
+            grouped_resolvable[group] = grouped_resolvable.get(group, 0) + 1
+        else:
+            missing_group_metadata += 1
+    return grouped_resolvable, missing_group_metadata
+
+
+def _training_run_group_blocker(
+    mapping: dict[str, Any], *, registry_tag: str, min_resolvable: int
+) -> list[str]:
+    """Return fail-closed blocker when no single training run has enough checkpoints."""
+    group_field = mapping.get("training_run_group_field")
+    if not group_field:
+        return []
+    min_group = mapping.get("min_resolvable_training_run_checkpoints") or min_resolvable
+    grouped = mapping.get("resolvable_by_training_run_group") or {}
+    max_group = max(grouped.values(), default=0)
+    if max_group >= min_group:
+        return []
+    return [
+        f"only {max_group} locally-resolvable '{registry_tag}' checkpoints share "
+        f"training run group field '{group_field}'; need >= {min_group}. "
+        f"Resolvable by group: {grouped}; "
+        f"missing group metadata: {mapping.get('missing_training_run_group_metadata', 0)}"
+    ]
+
+
 def _check_checkpoint_artifacts(
     registry: dict[str, dict[str, Any]],
     *,
     registry_tag: str,
     min_resolvable: int,
+    training_run_group_field: str | None,
+    min_resolvable_training_run_checkpoints: int | None,
     repo_root: Path,
 ) -> tuple[str, list[str], dict[str, Any]]:
-    """Map tagged checkpoint candidates to on-disk presence and gate on the minimum count.
-
-    Returns:
-        tuple[str, list[str], dict[str, Any]]: status, messages, and a mapping payload
-        recording, per candidate, its ``local_path`` and resolved presence.
-    """
+    """Map tagged checkpoint candidates and gate on local presence and lineage count."""
     tag = registry_tag.strip().lower()
     candidates: list[dict[str, Any]] = []
     for model_id, entry in registry.items():
@@ -130,45 +328,60 @@ def _check_checkpoint_artifacts(
         tags = {str(t).strip().lower() for t in (entry.get("tags") or [])}
         if tag not in tags:
             continue
-        local_path = entry.get("local_path")
-        resolved = _resolve_local_path(local_path, repo_root)
-        # Only a regular file counts as a resolvable checkpoint: a mis-registered local_path
-        # pointing at a directory must not let the preflight report ready (fail-closed).
-        present = bool(resolved and resolved.is_file())
         candidates.append(
-            {
-                "model_id": model_id,
-                "local_path": local_path,
-                "present": present,
-            }
+            _checkpoint_mapping_entry(model_id, entry, repo_root, training_run_group_field)
         )
 
     candidates.sort(key=lambda item: str(item["model_id"]))
     resolvable = [c for c in candidates if c["present"]]
+    grouped_resolvable, missing_group_metadata = _training_run_group_summary(
+        resolvable, training_run_group_field
+    )
+    blocked_by_status: dict[str, int] = {}
+    public_artifacts_by_status: dict[str, int] = {}
+    for candidate in candidates:
+        artifact_status = str(candidate["public_artifact"]["status"])
+        public_artifacts_by_status[artifact_status] = (
+            public_artifacts_by_status.get(artifact_status, 0) + 1
+        )
+        if candidate["present"]:
+            continue
+        blocked_by_status[candidate["status"]] = blocked_by_status.get(candidate["status"], 0) + 1
+
     mapping = {
         "registry_tag": registry_tag,
         "min_resolvable_checkpoints": min_resolvable,
         "candidate_count": len(candidates),
         "resolvable_count": len(resolvable),
+        "training_run_group_field": training_run_group_field,
+        "min_resolvable_training_run_checkpoints": min_resolvable_training_run_checkpoints,
+        "resolvable_by_training_run_group": grouped_resolvable,
+        "missing_training_run_group_metadata": missing_group_metadata,
+        "blocked_by_status": blocked_by_status,
+        "public_artifacts_by_status": public_artifacts_by_status,
         "candidates": candidates,
     }
 
     if not candidates:
-        return (
-            STATUS_BLOCKED,
-            [f"no registry entries carry tag '{registry_tag}'"],
-            mapping,
-        )
+        return STATUS_BLOCKED, [f"no registry entries carry tag '{registry_tag}'"], mapping
+
     if len(resolvable) < min_resolvable:
-        absent = [c["model_id"] for c in candidates if not c["present"]]
+        absent = [f"{c['model_id']} ({c['status']})" for c in candidates if not c["present"]]
         return (
             STATUS_BLOCKED,
             [
-                f"only {len(resolvable)} of {len(candidates)} '{registry_tag}' checkpoints resolve "
-                f"locally; need >= {min_resolvable}. Absent local_path for: {', '.join(absent)}"
+                f"only {len(resolvable)} of {len(candidates)} '{registry_tag}' checkpoints "
+                f"resolve locally; need >= {min_resolvable}. Blocked local_path entries: "
+                f"{', '.join(absent)}"
             ],
             mapping,
         )
+
+    group_messages = _training_run_group_blocker(
+        mapping, registry_tag=registry_tag, min_resolvable=min_resolvable
+    )
+    if group_messages:
+        return STATUS_BLOCKED, group_messages, mapping
     return STATUS_PASSED, [], mapping
 
 
@@ -266,6 +479,10 @@ def check_readiness(
             registry,
             registry_tag=str(selector.get("registry_tag", "")),
             min_resolvable=int(selector.get("min_resolvable_checkpoints", 0) or 0),
+            training_run_group_field=selector.get("training_run_group_field"),
+            min_resolvable_training_run_checkpoints=selector.get(
+                "min_resolvable_training_run_checkpoints"
+            ),
             repo_root=repo_root,
         )
     elif not registry_path.exists():
@@ -301,6 +518,14 @@ def check_readiness(
             "status": summary_status,
             "messages": summary_messages,
             "summary": summary_payload,
+        }
+
+    if cfg:
+        blocker_status, blocker_messages, blocker_payload = _check_known_blockers(cfg)
+        prerequisites["known_blockers"] = {
+            "status": blocker_status,
+            "messages": blocker_messages,
+            "blockers": blocker_payload,
         }
 
     errors: list[str] = []

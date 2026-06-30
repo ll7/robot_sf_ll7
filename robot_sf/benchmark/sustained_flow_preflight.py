@@ -17,6 +17,31 @@ RUNTIME_SUPPORTED_VALUE = "runtime_continuous_spawn"
 
 
 @dataclass(frozen=True, slots=True)
+class SustainedFlowRuntimeReadiness:
+    """Structured runtime-readiness verdict for sustained-flow candidates."""
+
+    status: str
+    expected_runtime_support: str
+    observed_runtime_support: tuple[str, ...]
+
+    @property
+    def supported(self) -> bool:
+        """Whether every variant advertises real continuous-spawn runtime support."""
+
+        return self.status == "supported"
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return JSON/YAML friendly representation."""
+
+        return {
+            "status": self.status,
+            "supported": self.supported,
+            "expected_runtime_support": self.expected_runtime_support,
+            "observed_runtime_support": list(self.observed_runtime_support),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SustainedFlowVariant:
     """Resolved continuous-spawn variant from a scenario matrix row."""
 
@@ -45,13 +70,14 @@ class SustainedFlowPreflight:
     matrix_path: str
     variant_count: int
     variants: tuple[SustainedFlowVariant, ...]
+    runtime_readiness: SustainedFlowRuntimeReadiness
     blocking_reasons: tuple[str, ...]
 
     @property
     def benchmark_eligible(self) -> bool:
         """Whether the matrix may be interpreted as benchmark evidence."""
 
-        return self.status == "available"
+        return self.status == "available" and self.runtime_readiness.supported
 
     def to_payload(self) -> dict[str, Any]:
         """Return a JSON/YAML friendly representation."""
@@ -62,6 +88,7 @@ class SustainedFlowPreflight:
             "benchmark_eligible": self.benchmark_eligible,
             "matrix_path": self.matrix_path,
             "variant_count": self.variant_count,
+            "runtime_readiness": self.runtime_readiness.to_payload(),
             "variants": [variant.to_payload() for variant in self.variants],
             "blocking_reasons": list(self.blocking_reasons),
         }
@@ -93,6 +120,7 @@ def preflight_sustained_flow_matrix(matrix_path: str | Path) -> SustainedFlowPre
         blocking_reasons.append("spawn_rate_per_min must increase across density tiers")
     if variants and not _strictly_increasing_ped_density(variants):
         blocking_reasons.append("ped_density must increase across density tiers")
+    runtime_readiness = _runtime_readiness(variants)
 
     status = "available" if not blocking_reasons else "not_available"
     return SustainedFlowPreflight(
@@ -101,6 +129,7 @@ def preflight_sustained_flow_matrix(matrix_path: str | Path) -> SustainedFlowPre
         matrix_path=path.as_posix(),
         variant_count=len(variants),
         variants=variants,
+        runtime_readiness=runtime_readiness,
         blocking_reasons=tuple(blocking_reasons),
     )
 
@@ -156,6 +185,18 @@ def _variant_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, 
     return tuple(blockers)
 
 
+def _runtime_readiness(
+    variants: tuple[SustainedFlowVariant, ...],
+) -> SustainedFlowRuntimeReadiness:
+    observed = tuple(dict.fromkeys(variant.current_runtime_support for variant in variants))
+    status = "supported" if variants and observed == (RUNTIME_SUPPORTED_VALUE,) else "not_supported"
+    return SustainedFlowRuntimeReadiness(
+        status=status,
+        expected_runtime_support=RUNTIME_SUPPORTED_VALUE,
+        observed_runtime_support=observed,
+    )
+
+
 def _strictly_increasing_spawn_rates(variants: tuple[SustainedFlowVariant, ...]) -> bool:
     rates = [variant.spawn_rate_per_min for variant in variants]
     return all(left < right for left, right in pairwise(rates))
@@ -201,6 +242,7 @@ __all__ = [
     "RUNTIME_SUPPORTED_VALUE",
     "SustainedFlowPreflight",
     "SustainedFlowPreflightError",
+    "SustainedFlowRuntimeReadiness",
     "SustainedFlowVariant",
     "preflight_sustained_flow_matrix",
 ]

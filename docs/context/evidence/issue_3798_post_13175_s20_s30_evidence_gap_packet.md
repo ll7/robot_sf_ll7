@@ -18,7 +18,7 @@ This packet summarizes retrieved S20 (20-seed) job artifacts for issue #1554, ke
 
 ## Retrieved Artifacts
 
-- Artifact root: `/home/luttkule/git/robot_sf_ll7/output/issue1554-s20-h500-l40s-mem180/13175`
+- Artifact root: `output/issue1554-s20-h500-l40s-mem180/13175`
 - File count: 56
 - Total bytes: 185111675
 - Missing required metadata files: none

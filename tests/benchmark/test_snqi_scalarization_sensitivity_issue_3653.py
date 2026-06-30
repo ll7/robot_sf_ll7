@@ -1,8 +1,9 @@
-"""Tests for the issue #3653 SNQI scalarization-sensitivity export wrapper."""
+"""Tests issue #3653 SNQI scalarization-sensitivity export wrapper."""
 
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +35,13 @@ BASELINE = {
     "force_exceed_events": {"med": 1.0, "p95": 4.0},
     "jerk_mean": {"med": 0.2, "p95": 0.7},
 }
+
+_FIXTURE_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "benchmark"
+    / "fixtures"
+    / "snqi_scalarization_sensitivity_issue_3653"
+)
 
 
 def _record(planner: str, scenario: str, values: dict[str, float]) -> dict[str, object]:
@@ -128,15 +136,32 @@ def _write_fixture_inputs(
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
     weights = tmp_path / "weights.json"
+
     episodes.write_text("\n".join(json.dumps(record) for record in records), encoding="utf-8")
     baseline.write_text(json.dumps(BASELINE), encoding="utf-8")
     weights.write_text(json.dumps(WEIGHTS), encoding="utf-8")
     return episodes, baseline, weights
 
 
-def test_ready_preflight_and_report_exports_pareto_disagreement() -> None:
-    """Valid fixtures produce diagnostic disagreement and Pareto report fields."""
+def _write_fixture_inputs_from_fixtures(
+    tmp_path: Path,
+    *,
+    episodes_file: str,
+    baseline_file: str = "baseline.json",
+    weights_file: str = "weights.json",
+) -> tuple[Path, Path, Path]:
+    episodes = tmp_path / "episodes.jsonl"
+    baseline = tmp_path / "baseline.json"
+    weights = tmp_path / "weights.json"
 
+    shutil.copyfile(_FIXTURE_DIR / episodes_file, episodes)
+    shutil.copyfile(_FIXTURE_DIR / baseline_file, baseline)
+    shutil.copyfile(_FIXTURE_DIR / weights_file, weights)
+    return episodes, baseline, weights
+
+
+def test_ready_preflight_and_report_exports_pareto_disagreement() -> None:
+    """Valid fixtures produce diagnostic disagreement Pareto report fields."""
     records = _valid_records()
 
     preflight = classify_scalarization_sensitivity_inputs(
@@ -161,26 +186,70 @@ def test_ready_preflight_and_report_exports_pareto_disagreement() -> None:
 
 
 def test_preflight_blocks_missing_required_normalized_input() -> None:
-    """Missing normalized time input blocks preflight and direct export."""
-
+    """Missing normalized SNQI terms block preflight before export."""
     records = _valid_records()
     metrics = records[0]["metrics"]
     assert isinstance(metrics, dict)
     del metrics["time_to_goal_norm"]
 
     preflight = classify_scalarization_sensitivity_inputs(
-        records, weights=WEIGHTS, baseline=BASELINE
+        records,
+        weights=WEIGHTS,
+        baseline=BASELINE,
     )
-
     assert preflight["status"] == SENSITIVITY_PREFLIGHT_BLOCKED
     assert any(issue["code"] == "missing_required_term" for issue in preflight["issues"])
+
     with pytest.raises(ValueError, match="time_to_goal_norm"):
-        build_scalarization_sensitivity_report(records, weights=WEIGHTS, baseline=BASELINE)
+        build_scalarization_sensitivity_report(
+            records,
+            weights=WEIGHTS,
+            baseline=BASELINE,
+        )
+
+
+def test_preflight_blocks_missing_required_normalized_input_from_fixtures(
+    tmp_path: Path,
+) -> None:
+    """Missing normalized term in a fixture must refuse export artifacts."""
+    episodes, baseline, weights = _write_fixture_inputs_from_fixtures(
+        tmp_path,
+        episodes_file="missing_time_to_goal_norm.jsonl",
+    )
+    out_dir = tmp_path / "artifacts"
+    preflight_out = tmp_path / "preflight.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/snqi_scalarization_sensitivity_export.py",
+            "--episodes",
+            str(episodes),
+            "--baseline",
+            str(baseline),
+            "--weights",
+            str(weights),
+            "--output-dir",
+            str(out_dir),
+            "--preflight-out",
+            str(preflight_out),
+        ],
+        check=False,
+        cwd=Path(__file__).resolve().parents[2],
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 2
+    assert preflight_out.exists()
+    assert json.loads(preflight_out.read_text(encoding="utf-8"))["status"] == (
+        SENSITIVITY_PREFLIGHT_BLOCKED
+    )
+    assert not out_dir.exists()
 
 
 def test_preflight_malformed_non_finite_required_input() -> None:
-    """Non-finite required metric values are malformed, not exportable evidence."""
-
+    """Non-finite required metric values are malformed and not exportable."""
     records = _valid_records()
     metrics = records[1]["metrics"]
     assert isinstance(metrics, dict)
@@ -189,18 +258,17 @@ def test_preflight_malformed_non_finite_required_input() -> None:
     preflight = classify_scalarization_sensitivity_inputs(
         records, weights=WEIGHTS, baseline=BASELINE
     )
-
     assert preflight["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
     assert any(issue["code"] == "non_finite_required_term" for issue in preflight["issues"])
 
 
 def test_cli_refuses_blocked_inputs_and_writes_only_preflight(tmp_path: Path) -> None:
     """Blocked inputs return exit code 2 and do not create export artifacts."""
-
     records = _valid_records()
     metrics = records[0]["metrics"]
     assert isinstance(metrics, dict)
     del metrics["time_to_goal_norm"]
+
     episodes, baseline, weights = _write_fixture_inputs(tmp_path, records)
     out_dir = tmp_path / "artifacts"
     preflight_out = tmp_path / "preflight.json"
@@ -235,7 +303,7 @@ def test_cli_refuses_blocked_inputs_and_writes_only_preflight(tmp_path: Path) ->
 
 
 def test_cli_refuses_malformed_normalized_inputs_and_writes_preflight(tmp_path: Path) -> None:
-    """Malformed normalized SNQI terms remain exported artifacts off, preflight only."""
+    """Malformed normalized SNQI terms remain export artifacts off, preflight only."""
     records = _valid_records()
     metrics = records[0]["metrics"]
     assert isinstance(metrics, dict)
@@ -265,6 +333,45 @@ def test_cli_refuses_malformed_normalized_inputs_and_writes_preflight(tmp_path: 
         text=True,
         capture_output=True,
     )
+
+    assert result.returncode == 2
+    assert preflight_out.exists()
+    payload = json.loads(preflight_out.read_text(encoding="utf-8"))
+    assert payload["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "out_of_range_normalized_term" for issue in payload["issues"])
+    assert not out_dir.exists()
+
+
+def test_cli_refuses_malformed_normalized_inputs_from_fixtures(tmp_path: Path) -> None:
+    """Fixture malformed normalized term remains preflight only."""
+    episodes, baseline, weights = _write_fixture_inputs_from_fixtures(
+        tmp_path,
+        episodes_file="out_of_range_time_to_goal_norm.jsonl",
+    )
+    out_dir = tmp_path / "artifacts"
+    preflight_out = tmp_path / "preflight.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark/snqi_scalarization_sensitivity_export.py",
+            "--episodes",
+            str(episodes),
+            "--baseline",
+            str(baseline),
+            "--weights",
+            str(weights),
+            "--output-dir",
+            str(out_dir),
+            "--preflight-out",
+            str(preflight_out),
+        ],
+        check=False,
+        cwd=Path(__file__).resolve().parents[2],
+        text=True,
+        capture_output=True,
+    )
+
     assert result.returncode == 2
     assert preflight_out.exists()
     payload = json.loads(preflight_out.read_text(encoding="utf-8"))
@@ -274,8 +381,7 @@ def test_cli_refuses_malformed_normalized_inputs_and_writes_preflight(tmp_path: 
 
 
 def test_cli_exports_report_ready_artifacts(tmp_path: Path) -> None:
-    """Ready inputs write JSON, CSV, Markdown, and SVG diagnostic artifacts."""
-
+    """Ready inputs write JSON, CSV, Markdown, SVG diagnostic artifacts."""
     episodes, baseline, weights = _write_fixture_inputs(tmp_path, _valid_records())
     out_dir = tmp_path / "artifacts"
 
@@ -302,6 +408,7 @@ def test_cli_exports_report_ready_artifacts(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert (out_dir / "issue_3653.json").exists()
+    assert (out_dir / "issue_3653_decision_disagreement.csv").exists()
     assert (out_dir / "issue_3653_planner_rows.csv").exists()
     assert (out_dir / "issue_3653.md").exists()
     assert (out_dir / "issue_3653_pareto.svg").exists()

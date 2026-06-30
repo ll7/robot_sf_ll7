@@ -100,7 +100,7 @@ def test_issue_3810_packet_rejects_nonblocking_live_issue_state() -> None:
 def test_issue_3810_packet_rejects_stale_target_host() -> None:
     """The launch-packet target host must match the requested Slurm decision host."""
     packet = _load_packet()
-    packet["launch_packet"]["target_host"] = "imech156-u"
+    packet["launch_packet"]["target_host"] = "imech036"
 
     try:
         _MODULE.validate_packet(packet)
@@ -113,7 +113,7 @@ def test_issue_3810_packet_rejects_stale_target_host() -> None:
 def test_issue_3810_packet_rejects_stale_dry_run_target_host() -> None:
     """The private-ops dry-run target host is guarded independently of the packet host."""
     packet = _load_packet()
-    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech156-u"
+    packet["launch_packet"]["go_no_go"]["private_ops_dry_run"]["target_host"] = "imech036"
 
     try:
         _MODULE.validate_packet(packet)

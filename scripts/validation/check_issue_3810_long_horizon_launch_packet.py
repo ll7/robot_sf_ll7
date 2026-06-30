@@ -146,8 +146,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
 
     _require(
-        launch_packet.get("decision") == "ready_after_live_queue_and_duplicate_check",
-        "decision must require live queue and duplicate checks",
+        launch_packet.get("decision") == "blocked_pending_submit_host_route_and_reconciliation",
+        "decision must stay blocked pending submit-host route and reconciliation",
     )
     _require(
         launch_packet.get("compute_submit_authorized") is False, "compute submit must be false"
@@ -155,18 +155,19 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         launch_packet.get("slurm_job_id") == "not_submitted", "slurm job must be not_submitted"
     )
+    _require(launch_packet.get("target_host") == "imech039", "target host must be imech039")
     blocking_jobs = launch_packet.get("blocking_jobs")
     _require(isinstance(blocking_jobs, list), "blocking_jobs must be a list")
-    _require(13175 not in blocking_jobs, "analyzed job 13175 must not remain blocking")
+    _require(13175 in blocking_jobs, "job 13175 must block submit until reconciled")
 
     ledger = _require_mapping(launch_packet, "ledger_reconciliation")
     _require(
-        ledger.get("job_13175_state") == "analyzed",
-        "job 13175 reconciliation must be analyzed",
+        ledger.get("job_13175_state") == "requires_submit_host_refresh",
+        "job 13175 reconciliation must require submit-host refresh",
     )
     _require(
-        ledger.get("issue_3810_duplicate_status") == "none_found",
-        "issue #3810 duplicate status must be none_found",
+        ledger.get("issue_3810_duplicate_status") == "requires_submit_host_refresh",
+        "issue #3810 duplicate status must require submit-host refresh",
     )
     running_related_jobs = ledger.get("running_related_jobs")
     _require(
@@ -176,8 +177,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
     go_no_go = _require_mapping(launch_packet, "go_no_go")
     _require(
-        go_no_go.get("recommendation") == "go_after_submit_host_live_checks",
-        "go/no-go recommendation must require submit-host live checks",
+        go_no_go.get("recommendation") == "blocked_pending_submit_host_route_and_reconciliation",
+        "go/no-go recommendation must remain blocked",
     )
     _require(
         go_no_go.get("local_submission_status") == "no_submit_current_machine",
@@ -193,6 +194,37 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         "Not safe to freeze" in (str(slurm_status) if slurm_status is not None else ""),
         "slurm command status must explain why final submit command is not frozen",
+    )
+    _require(
+        "job 13175" in (str(slurm_status) if slurm_status is not None else ""),
+        "go/no-go must mention job 13175 reconciliation",
+    )
+    dry_run = _require_mapping(go_no_go, "private_ops_dry_run")
+    _require(dry_run.get("required_before_submit") is True, "private-ops dry run required")
+    _require(dry_run.get("target_host") == "imech039", "private-ops dry run host mismatch")
+    _require(
+        dry_run.get("current_public_status") == "route_unverified",
+        "private-ops dry run must be route_unverified in public packet",
+    )
+    dry_run_fields = set(dry_run.get("required_fields") or [])
+    _require(
+        {
+            "target_host",
+            "queue_summary_timestamp",
+            "duplicate_status",
+            "job_13175_state",
+            "route_id",
+            "submit_wrapper_supports_target_host",
+            "owning_worktree",
+            "owning_worktree_clean",
+            "decision",
+        }
+        <= dry_run_fields,
+        "private-ops dry run fields missing",
+    )
+    _require(
+        "imech039 support" in str(dry_run.get("decision_policy", "")),
+        "private-ops dry run must gate imech039 support",
     )
 
     route = _require_mapping(launch_packet, "route")
@@ -255,10 +287,12 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "planner_count": len(planner_rows),
         "compute_submit_authorized": launch_packet["compute_submit_authorized"],
         "slurm_job_id": launch_packet["slurm_job_id"],
+        "target_host": launch_packet["target_host"],
         "blocking_jobs": blocking_jobs,
         "job_13175_state": ledger["job_13175_state"],
         "issue_3810_duplicate_status": ledger["issue_3810_duplicate_status"],
         "go_no_go": go_no_go["recommendation"],
+        "private_ops_dry_run": dry_run["current_public_status"],
     }
 
 

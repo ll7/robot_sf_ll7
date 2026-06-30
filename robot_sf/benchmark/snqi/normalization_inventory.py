@@ -256,6 +256,60 @@ class TermContribution:
         }
 
 
+def _build_normalization_contract(
+    contributions: list[TermContribution],
+    *,
+    raw_penalty_share: float,
+    normalized_penalty_share: float,
+    weight_bound_exceedances: list[dict[str, object]],
+) -> dict[str, object]:
+    """Summarize whether weighted SNQI penalties are comparable as configured.
+
+    Returns:
+        JSON-serializable diagnostic contract status for this contribution row.
+    """
+    raw_penalties = [
+        c for c in contributions if c.term.is_penalty and c.term.scaling == SCALING_RAW
+    ]
+    normalized_penalties = [
+        c
+        for c in contributions
+        if c.term.is_penalty and c.term.scaling == SCALING_BASELINE_NORMALIZED
+    ]
+    raw_unbounded = [c for c in raw_penalties if not c.term.bounded]
+
+    comparable = not raw_unbounded and bool(normalized_penalties)
+    status = "comparable_weight_basis" if comparable else "mixed_unbounded_penalty_basis"
+
+    reasons: list[str] = []
+    if raw_unbounded:
+        reasons.append(
+            "Raw unbounded penalty terms bypass normalize_metric, so their weights are not "
+            "directly comparable with baseline-normalized penalty weights."
+        )
+    if raw_penalty_share > normalized_penalty_share:
+        reasons.append(
+            "Raw penalty terms contribute a larger absolute share than baseline-normalized "
+            "penalty terms for this diagnostic row."
+        )
+    if weight_bound_exceedances:
+        reasons.append("At least one weighted contribution exceeds its nominal weight magnitude.")
+
+    return {
+        "schema_version": "snqi_normalization_contract.v1",
+        "diagnostic_only": True,
+        "status": status,
+        "weights_comparable": comparable,
+        "raw_unbounded_penalty_terms": [c.term.term for c in raw_unbounded],
+        "baseline_normalized_penalty_terms": [c.term.term for c in normalized_penalties],
+        "raw_penalty_absolute_share": raw_penalty_share,
+        "baseline_normalized_penalty_absolute_share": normalized_penalty_share,
+        "weight_bound_exceedance_terms": [str(entry["term"]) for entry in weight_bound_exceedances],
+        "decision_required_issue": 3699 if not comparable else None,
+        "reasons": reasons,
+    }
+
+
 def build_snqi_contribution_diagnostics(
     metrics: dict[str, float | int | bool],
     weights: dict[str, float],
@@ -310,6 +364,12 @@ def build_snqi_contribution_diagnostics(
         for contribution in contributions
         if contribution.term.is_penalty and contribution.exceeds_weight_bound
     ]
+    normalization_contract = _build_normalization_contract(
+        contributions,
+        raw_penalty_share=raw_penalty_share,
+        normalized_penalty_share=normalized_penalty_share,
+        weight_bound_exceedances=weight_bound_exceedances,
+    )
     return {
         "schema_version": "snqi_normalization_contributions.v1",
         "diagnostic_only": True,
@@ -320,6 +380,7 @@ def build_snqi_contribution_diagnostics(
         "raw_penalty_terms_dominate": raw_penalty_share > normalized_penalty_share,
         "weight_bound_exceedances": weight_bound_exceedances,
         "has_weight_bound_exceedance": bool(weight_bound_exceedances),
+        "normalization_contract": normalization_contract,
         "terms": [contribution.to_dict() for contribution in contributions],
     }
 

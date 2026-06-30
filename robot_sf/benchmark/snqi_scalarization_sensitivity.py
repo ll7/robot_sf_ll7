@@ -598,13 +598,24 @@ def load_baseline_mapping(path: Path | None) -> dict[str, dict[str, float]]:
     if not isinstance(raw, Mapping):
         raise ValueError("baseline file must contain a JSON object")
     baseline: dict[str, dict[str, float]] = {}
+    for metric in ("collisions", "near_misses", "force_exceed_events", "jerk_mean"):
+        if metric not in raw:
+            raise ValueError(f"baseline file missing required normalized metric {metric!r}")
     for metric, entry in raw.items():
         if not isinstance(entry, Mapping):
-            continue
-        baseline[str(metric)] = {
-            "med": float(entry.get("med", 0.0)),
-            "p95": float(entry.get("p95", entry.get("med", 1.0))),
-        }
+            raise ValueError(f"baseline metric {metric!r} must provide med/p95 mapping")
+        try:
+            med = float(entry["med"])
+            p95 = float(entry["p95"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"baseline metric {metric!r} must provide finite med/p95 values"
+            ) from exc
+        if not math.isfinite(med) or not math.isfinite(p95):
+            raise ValueError(f"baseline metric {metric!r} has non-finite med/p95 values")
+        if p95 <= med:
+            raise ValueError(f"baseline metric {metric!r} must satisfy p95 > med")
+        baseline[str(metric)] = {"med": med, "p95": p95}
     return baseline
 
 

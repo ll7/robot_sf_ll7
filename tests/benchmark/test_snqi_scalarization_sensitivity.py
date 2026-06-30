@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     SCALARIZATION_SENSITIVITY_SCHEMA,
     SENSITIVITY_PREFLIGHT_BLOCKED,
@@ -238,6 +240,34 @@ def test_report_exports_decision_disagreement_and_weight_reversals() -> None:
         "fast-risky",
         "safe-slow",
     }
+
+
+def test_report_export_refuses_missing_normalized_time_term() -> None:
+    """Direct report export fails closed when normalized time input is absent."""
+
+    records = _episodes()
+    del records[0]["metrics"]["time_to_goal_norm"]
+
+    with pytest.raises(ValueError, match="missing required SNQI term 'time_to_goal_norm'"):
+        build_scalarization_sensitivity_report(
+            records,
+            weights=_weights(),
+            baseline=_baseline(),
+        )
+
+
+def test_report_export_refuses_non_finite_normalized_time_term() -> None:
+    """Direct report export fails closed when normalized time input is invalid."""
+
+    records = _episodes()
+    records[0]["metrics"]["time_to_goal_norm"] = "nan"
+
+    with pytest.raises(ValueError, match="non-finite required SNQI term 'time_to_goal_norm'"):
+        build_scalarization_sensitivity_report(
+            records,
+            weights=_weights(),
+            baseline=_baseline(),
+        )
 
 
 def test_artifact_writer_creates_report_ready_files(tmp_path: Path) -> None:

@@ -2660,7 +2660,11 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
         sp: argparse._SubParsersAction[argparse.ArgumentParser],
     ) -> None:
         """Register the SNQI recompute subcommand parser."""
-        p = sp.add_parser("recompute", help="Recompute SNQI weights via predefined strategies")
+        p = sp.add_parser(
+            "recompute",
+            help="Recompute SNQI weights via predefined strategies",
+            conflict_handler="resolve",
+        )
         p.add_argument("--episodes", type=Path, required=True, help="Episodes JSONL file")
         p.add_argument("--baseline", type=Path, required=True, help="Baseline stats JSON file")
         p.add_argument(
@@ -2735,6 +2739,28 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:  # noqa: 
                 "Warn when the number of episodes used is below this threshold "
                 "(stability and CIs may be unreliable)."
             ),
+        )
+        p.add_argument(
+            "--export-pareto-front",
+            action="store_true",
+            help="Export sampled Pareto frontier when strategy pareto is active.",
+        )
+        p.add_argument(
+            "--pareto-front-samples",
+            type=int,
+            default=600,
+            help="Number Pareto frontier samples draw when export enabled.",
+        )
+        p.add_argument(
+            "--decision-preflight",
+            action="store_true",
+            help="Enable fail-closed preflight missing/invalid normalized inputs.",
+        )
+        p.add_argument(
+            "--decision-reversal-threshold",
+            type=float,
+            default=0.0,
+            help="If >0 compare-strategies, flag correlation pairs below value.",
         )
         p.set_defaults(cmd="snqi", snqi_cmd="recompute")
 

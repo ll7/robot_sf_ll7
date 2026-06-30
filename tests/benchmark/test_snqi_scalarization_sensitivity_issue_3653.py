@@ -264,9 +264,15 @@ def test_cli_exports_report_ready_artifacts(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert (out_dir / "issue_3653.json").exists()
     assert (out_dir / "issue_3653_planner_rows.csv").exists()
+    assert (out_dir / "issue_3653_decision_disagreement.csv").exists()
     assert (out_dir / "issue_3653.md").exists()
     assert (out_dir / "issue_3653_pareto.svg").exists()
 
     payload = json.loads((out_dir / "issue_3653.json").read_text(encoding="utf-8"))
     assert payload["schema_version"] == "snqi_scalarization_sensitivity.v1"
     assert payload["pareto_front"]["points"]
+    disagreement_csv = (out_dir / "issue_3653_decision_disagreement.csv").read_text(
+        encoding="utf-8"
+    )
+    assert "base_snqi_vs_constraints_first" in disagreement_csv
+    assert "not benchmark evidence" in disagreement_csv

@@ -194,7 +194,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(
         launch_packet.get("slurm_job_id") == "not_submitted", "slurm job must be not_submitted"
     )
-    _require(launch_packet.get("target_host") == "imech036", "target host must be imech036")
+    _require(launch_packet.get("target_host") == "imech156-u", "target host must be imech156-u")
     blocking_jobs = launch_packet.get("blocking_jobs")
     _require(isinstance(blocking_jobs, list), "blocking_jobs must be a list")
     _require(13175 in blocking_jobs, "job 13175 must block submit until reconciled")
@@ -254,7 +254,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     )
     dry_run = _require_mapping(go_no_go, "private_ops_dry_run")
     _require(dry_run.get("required_before_submit") is True, "private-ops dry run required")
-    _require(dry_run.get("target_host") == "imech036", "private-ops dry run host mismatch")
+    _require(dry_run.get("target_host") == "imech156-u", "private-ops dry run host mismatch")
     _require(
         dry_run.get("current_public_status") == "route_unverified",
         "private-ops dry run must be route_unverified in public packet",
@@ -277,8 +277,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         "private-ops dry run fields missing",
     )
     _require(
-        "imech036 support" in str(dry_run.get("decision_policy", "")),
-        "private-ops dry run must gate imech036 support",
+        "imech156-u support" in str(dry_run.get("decision_policy", "")),
+        "private-ops dry run must gate imech156-u support",
     )
 
     interpretation_gate = _require_mapping(launch_packet, "interpretation_gate")

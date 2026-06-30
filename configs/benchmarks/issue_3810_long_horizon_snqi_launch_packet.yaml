@@ -200,7 +200,7 @@ durable_evidence:
   machine_local_paths:
     status: non_portable_private_ops_route_hints
     reason: >
-      Absolute /home/luttkule private-ops paths below are machine-local
+      Absolute $HOME/git/robot_sf_ll7-private-ops paths below are machine-local
       submit-routing references only. They are not canonical benchmark inputs
       and must be refreshed on the Slurm-capable submit host before any submit
       wrapper is invoked.

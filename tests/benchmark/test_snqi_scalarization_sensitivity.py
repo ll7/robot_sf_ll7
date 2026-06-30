@@ -318,6 +318,19 @@ def test_preflight_blocks_missing_active_optional_normalized_term() -> None:
     assert any(issue["code"] == "missing_weighted_optional_term" for issue in report["issues"])
 
 
+def test_preflight_reports_non_mapping_weights_without_crashing() -> None:
+    """Non-mapping weights stay a graceful malformed report, not an AttributeError."""
+
+    report = classify_scalarization_sensitivity_inputs(
+        _preflight_episodes(),
+        weights=None,
+        baseline=_baseline(),
+    )
+
+    assert report["status"] == SENSITIVITY_PREFLIGHT_MALFORMED
+    assert any(issue["code"] == "weights_not_mapping" for issue in report["issues"])
+
+
 def test_report_export_refuses_missing_active_optional_normalized_term() -> None:
     """Direct export fails closed instead of defaulting active optional terms to zero."""
 

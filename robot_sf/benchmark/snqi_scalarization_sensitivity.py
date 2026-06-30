@@ -277,8 +277,7 @@ def _add_metric_preflight_issues(
 
     for metric in OPTIONAL_SENSITIVITY_METRICS:
         if metric not in metrics:
-            weight_name = OPTIONAL_WEIGHTED_SENSITIVITY_METRICS[metric]
-            if _is_active_weight(weights.get(weight_name, 0.0)):
+            if _is_active_optional_weight(weights, metric):
                 state.add_issue(
                     "missing_weighted_optional_term",
                     SENSITIVITY_PREFLIGHT_BLOCKED,
@@ -841,8 +840,7 @@ def _validate_export_required_terms(
                 )
         for metric in OPTIONAL_SENSITIVITY_METRICS:
             if metric not in metrics:
-                weight_name = OPTIONAL_WEIGHTED_SENSITIVITY_METRICS[metric]
-                if _is_active_weight(weights.get(weight_name, 0.0)):
+                if _is_active_optional_weight(weights, metric):
                     raise ValueError(
                         f"record {index} missing weighted SNQI term {metric!r}; "
                         "run scalarization-sensitivity preflight before export"
@@ -1165,7 +1163,24 @@ def _is_active_weight(value: Any) -> bool:
         weight = float(value)
     except (TypeError, ValueError):
         return False
-    return math.isfinite(weight) and not math.isclose(weight, 0.0)
+    return math.isfinite(weight) and weight != 0.0
+
+
+def _is_active_optional_weight(weights: Any, metric: str) -> bool:
+    """Whether ``metric``'s SNQI weight is present and active in ``weights``.
+
+    Returns:
+        ``True`` when ``weights`` is a mapping carrying an active (finite,
+        nonzero) weight for ``metric``. Returns ``False`` when ``weights`` is
+        not a mapping, so malformed-weight inputs are reported by the dedicated
+        ``weights_not_mapping`` check instead of crashing the preflight/export
+        guards with ``AttributeError``.
+    """
+
+    if not isinstance(weights, Mapping):
+        return False
+    weight_name = OPTIONAL_WEIGHTED_SENSITIVITY_METRICS[metric]
+    return _is_active_weight(weights.get(weight_name, 0.0))
 
 
 def _mean(values: Iterable[float]) -> float:

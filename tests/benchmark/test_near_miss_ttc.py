@@ -258,14 +258,13 @@ def test_compute_all_metrics_emits_opt_in_ttc_count_and_keeps_legacy_metric():
 
 
 def test_compute_all_metrics_ttc_contrasts_fast_and_slow_at_equal_clearance():
-    """Equal static clearance can produce different TTC risk when closing speed differs."""
-    fast = _fast_head_on_episode()
-    slow = _make_episode(
-        robot_pos=np.column_stack([np.arange(6) * 0.01, np.zeros(6)]),
-        peds_pos=np.zeros((6, 1, 2)),
-        dt=0.1,
-    )
-    slow.peds_pos[:, 0, 0] = 4.0 - np.arange(6) * 0.01
+    """Same sampled clearance but different timing separates closing-speed risk."""
+    robot_pos = np.column_stack([np.linspace(0.0, 2.0, 6), np.zeros(6)])
+    peds_pos = np.zeros((6, 1, 2))
+    peds_pos[:, 0, 0] = 4.0
+
+    fast = _make_episode(robot_pos=robot_pos, peds_pos=peds_pos, dt=0.1)
+    slow = _make_episode(robot_pos=robot_pos, peds_pos=peds_pos, dt=1.0)
 
     fast_metrics = compute_all_metrics(
         fast,
@@ -283,6 +282,10 @@ def test_compute_all_metrics_ttc_contrasts_fast_and_slow_at_equal_clearance():
     assert fast_metrics["near_misses"] == slow_metrics["near_misses"] == 0.0
     assert fast_metrics["near_misses_ttc"] > 0.0
     assert slow_metrics["near_misses_ttc"] == 0.0
+    assert (
+        fast_metrics["near_miss_ttc__max_closing_speed_mps"]
+        > slow_metrics["near_miss_ttc__max_closing_speed_mps"]
+    )
 
 
 def test_compute_all_metrics_ttc_fails_closed_on_unsupported_inputs():

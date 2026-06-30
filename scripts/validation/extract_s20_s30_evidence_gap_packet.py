@@ -118,7 +118,7 @@ def build_packet(artifact_root: Path, *, job_id: str = DEFAULT_JOB_ID) -> dict[s
 def _display_path(path: Path) -> str:
     """Return a stable repository-relative path when possible."""
     try:
-        return path.relative_to(Path.cwd()).as_posix()
+        return path.relative_to(Path.cwd().resolve()).as_posix()
     except ValueError:
         return path.as_posix()
 

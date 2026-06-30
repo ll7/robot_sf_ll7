@@ -282,6 +282,70 @@ def test_adjacent_rank_claims_mark_ci_separable() -> None:
     assert claim["decision"] == "ci_separable"
 
 
+def test_decision_packet_blocks_small_seed_manifest_table_update() -> None:
+    """Small-seed rows are not ready for manuscript table review."""
+
+    rows = [
+        _cell_row("merging", "best", {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94]}),
+        _cell_row("merging", "worst", {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10]}),
+    ]
+
+    packet = _report(rows)["decision_packet"]
+
+    assert packet["manuscript_table_status"] == "blocked"
+    assert packet["s30_decision_status"] == "needs_review"
+    assert "missing_increased_seed_budget" in packet["manuscript_blockers"]
+    assert "minimum_seed_count_below_s20" in packet["s30_reasons"]
+
+
+def test_decision_packet_keeps_s30_review_open_for_adjacent_overlap() -> None:
+    """S20 rows with adjacent CI overlap require claim downgrade or more data review."""
+
+    rows = [
+        _cell_row(
+            "bottleneck",
+            "hybrid_a",
+            {"snqi": [0.50, 0.55, 0.45, 0.52, 0.48] * 4},
+        ),
+        _cell_row(
+            "bottleneck",
+            "hybrid_b",
+            {"snqi": [0.51, 0.46, 0.54, 0.49, 0.53] * 4},
+        ),
+    ]
+
+    packet = _report(rows)["decision_packet"]
+
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "needs_review"
+    assert packet["adjacent_overlap_count"] == 1
+    assert "adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data" in packet["s30_reasons"]
+
+
+def test_decision_packet_can_clear_s30_by_local_preflight_only() -> None:
+    """S20 separable/stable fixture records no local S30 blocker."""
+
+    rows = [
+        _cell_row(
+            "merging",
+            "best",
+            {"snqi": [0.90, 0.91, 0.92, 0.93, 0.94] * 4},
+        ),
+        _cell_row(
+            "merging",
+            "worst",
+            {"snqi": [0.10, 0.11, 0.09, 0.12, 0.10] * 4},
+        ),
+    ]
+
+    packet = _report(rows)["decision_packet"]
+
+    assert packet["manuscript_table_status"] == "ready_for_table_review_no_claim_promotion"
+    assert packet["s30_decision_status"] == "not_required_by_local_preflight"
+    assert packet["s30_reasons"] == []
+    assert "no manuscript or paper claim is promoted" in packet["claim_boundary"]
+
+
 def test_dry_run_fixture_stays_diagnostic_and_fail_closed() -> None:
     """Built-in dry-run rows exercise CI/rank paths without paper-claim promotion."""
 

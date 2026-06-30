@@ -56,15 +56,58 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _write_output_manifest(output_path: Path, report: dict[str, Any]) -> None:
-    output_path = output_path.expanduser().resolve()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
+def _decision_manifest_payload(report: dict[str, Any]) -> dict[str, Any]:
+    """Build the stable machine-readable decision manifest wrapper."""
+    return {
         "issue": 1496,
         "schema": "oracle-imitation-warm-start-readiness-decision.v1",
         "report": report,
     }
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _write_output_manifest(output_path: Path, report: dict[str, Any]) -> None:
+    """Write a readiness decision manifest, creating parent directories as needed."""
+    output_path = output_path.expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(_decision_manifest_payload(report), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def _print_report(report: dict[str, Any], *, json_output: bool) -> None:
+    """Print a human or JSON readiness report."""
+    if json_output:
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return
+
+    print(
+        f"oracle-imitation warm-start readiness: {report['status']} "
+        f"({report['experiment_id']}, {len(report['blockers'])} blockers)"
+    )
+    for blocker in report["blockers"]:
+        print(f" - {blocker}")
+
+
+def _print_require_ready_failure(report: dict[str, Any], *, json_output: bool) -> None:
+    """Print the fail-closed launch-gate message without losing structured report details."""
+    message = "prerequisites not ready\n- " + "\n- ".join(report["blockers"])
+    if json_output:
+        print(json.dumps({"status": "blocked", "error": message}, indent=2, sort_keys=True))
+    else:
+        print(message)
+
+
+def _error_report(status: str, error: str) -> dict[str, Any]:
+    """Build a minimal decision report when the input cannot produce a full report."""
+    return {
+        "status": status,
+        "schema_version": "unknown",
+        "experiment_id": "unknown",
+        "prerequisites": {},
+        "blockers": [error] if status == "blocked" else [],
+        "error": error,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -87,46 +130,27 @@ def main(argv: list[str] | None = None) -> int:
             _write_output_manifest(args.output, report)
 
         if args.require_ready and report["status"] != "ready":
-            raise PrerequisitesNotReadyError(
-                "prerequisites not ready\n- " + "\n- ".join(report["blockers"])
-            )
+            _print_require_ready_failure(report, json_output=args.json)
+            return 1
 
-        if args.json:
-            print(json.dumps(report, indent=2, sort_keys=True))
-        else:
-            print(
-                f"oracle-imitation warm-start readiness: {report['status']} "
-                f"({report['experiment_id']}, {len(report['blockers'])} blockers)"
-            )
-            for blocker in report["blockers"]:
-                print(f" - {blocker}")
-
+        _print_report(report, json_output=args.json)
         return 0 if report["status"] == "ready" else 1
 
     except PrerequisitesNotReadyError as exc:
         # Keep a stable, explicit blocker manifest for machine review.
+        report = _error_report("blocked", str(exc))
         if args.output:
-            report = {
-                "status": "blocked",
-                "schema_version": "unknown",
-                "experiment_id": "unknown",
-                "prerequisites": {},
-                "blockers": [str(exc)],
-            }
             _write_output_manifest(args.output, report)
 
         if args.json:
-            print(json.dumps({"status": "blocked", "error": str(exc)} , indent=2, sort_keys=True))
+            print(json.dumps({"status": "blocked", "error": str(exc)}, indent=2, sort_keys=True))
         else:
             print(str(exc))
         return 1
     except WarmStartReadinessError as exc:
+        report = _error_report("invalid", str(exc))
         if args.output:
-            payload = {
-                "status": "invalid",
-                "error": str(exc),
-            }
-            _write_output_manifest(args.output, payload)
+            _write_output_manifest(args.output, report)
 
         if args.json:
             print(json.dumps({"status": "invalid", "error": str(exc)}, indent=2, sort_keys=True))

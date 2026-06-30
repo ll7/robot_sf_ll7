@@ -23,7 +23,7 @@ readme = "README.md"
 dev = [
     "black>=24.0.0",
     "jupyter>=1.0.0",
-    "pytest>=8.3.3",
+    "pytest>=9.1.1",
     "pylint>=3.3.1",
 ]
 plot = [

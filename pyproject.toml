@@ -610,7 +610,7 @@ markers = [
 [dependency-groups]
 dev = [
     # Development tools
-    "pytest>=8.3.3",
+    "pytest>=9.1.1",
     "pytest-cov>=6.0.0",
     "scalene>=1.5.48",
     "ruff==0.15.12",

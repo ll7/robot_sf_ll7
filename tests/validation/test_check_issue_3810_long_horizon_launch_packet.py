@@ -34,10 +34,12 @@ def test_issue_3810_packet_passes_fail_closed_contract() -> None:
     assert summary["planner_count"] >= 10
     assert summary["compute_submit_authorized"] is False
     assert summary["slurm_job_id"] == "not_submitted"
-    assert summary["blocking_jobs"] == []
-    assert summary["job_13175_state"] == "analyzed"
-    assert summary["issue_3810_duplicate_status"] == "none_found"
-    assert summary["go_no_go"] == "go_after_submit_host_live_checks"
+    assert summary["target_host"] == "imech039"
+    assert summary["blocking_jobs"] == [13175]
+    assert summary["job_13175_state"] == "requires_submit_host_refresh"
+    assert summary["issue_3810_duplicate_status"] == "requires_submit_host_refresh"
+    assert summary["go_no_go"] == "blocked_pending_submit_host_route_and_reconciliation"
+    assert summary["private_ops_dry_run"] == "route_unverified"
 
 
 def test_issue_3810_packet_rejects_authorized_submit() -> None:
@@ -53,17 +55,43 @@ def test_issue_3810_packet_rejects_authorized_submit() -> None:
         raise AssertionError("packet should reject compute submission authorization")
 
 
-def test_issue_3810_packet_rejects_stale_analyzed_job_blocker() -> None:
-    """A reconciled analyzed job must not stay as a submission blocker."""
+def test_issue_3810_packet_rejects_missing_job_13175_blocker() -> None:
+    """Job 13175 stays a blocker until submit-host reconciliation is recorded."""
     packet = _load_packet()
-    packet["launch_packet"]["blocking_jobs"] = [13175]
+    packet["launch_packet"]["blocking_jobs"] = []
 
     try:
         _MODULE.validate_packet(packet)
     except _MODULE.PacketError as exc:
-        assert "13175" in str(exc)
+        assert "job 13175 must block submit" in str(exc)
     else:
-        raise AssertionError("packet should reject stale job 13175 blocker")
+        raise AssertionError("packet should reject missing job 13175 blocker")
+
+
+def test_issue_3810_packet_rejects_stale_job_13175_reconciliation() -> None:
+    """Stale analyzed state cannot unlock the public launch packet."""
+    packet = _load_packet()
+    packet["launch_packet"]["ledger_reconciliation"]["job_13175_state"] = "analyzed"
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "job 13175 reconciliation must require submit-host refresh" in str(exc)
+    else:
+        raise AssertionError("packet should reject stale job 13175 reconciliation")
+
+
+def test_issue_3810_packet_rejects_missing_private_ops_dry_run() -> None:
+    """The packet must name the submit-host dry-run evidence contract."""
+    packet = _load_packet()
+    packet["launch_packet"]["go_no_go"].pop("private_ops_dry_run")
+
+    try:
+        _MODULE.validate_packet(packet)
+    except _MODULE.PacketError as exc:
+        assert "private_ops_dry_run must be a mapping" in str(exc)
+    else:
+        raise AssertionError("packet should reject missing private-ops dry run")
 
 
 def test_issue_3810_packet_rejects_missing_go_no_go_status() -> None:

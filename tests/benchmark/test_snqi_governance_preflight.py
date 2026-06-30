@@ -39,17 +39,21 @@ def test_governance_report_marks_current_blockers_secondary_diagnostic() -> None
         "camera_ready_v3",
         "model_canonical_v1",
     ]
-    discovered_by_name = {
-        source["name"]: source for source in blocker_3723["discovered_weight_sources"]
-    }
-    records_by_name = {record["name"]: record for record in report["weights"]["records"]}
-    assert list(discovered_by_name) == [
+    # Assert the raw source sequence (order + length) before keying by name so a
+    # duplicate-name regression cannot be masked by later entries overwriting earlier
+    # ones in the dict comprehension below.
+    expected_source_names = [
         "code_default",
         "camera_ready_v1",
         "camera_ready_v2",
         "camera_ready_v3",
         "model_canonical_v1",
     ]
+    discovered_sources = blocker_3723["discovered_weight_sources"]
+    assert [source["name"] for source in discovered_sources] == expected_source_names
+    discovered_by_name = {source["name"]: source for source in discovered_sources}
+    records_by_name = {record["name"]: record for record in report["weights"]["records"]}
+    assert list(discovered_by_name) == expected_source_names
     assert discovered_by_name["code_default"] == {
         "name": "code_default",
         "kind": "code_default",

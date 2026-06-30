@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
+import sys
 from typing import TYPE_CHECKING
 
 from scripts.validation import extract_s20_s30_evidence_gap_packet as extractor
@@ -166,6 +168,29 @@ def test_tracked_packet_fixture_renders_without_raw_artifacts(capsys) -> None:
     assert "File count: 56" in captured.out
     assert "requiring ignored output" in captured.out
     assert "no paper/dissertation claim edits" in captured.out
+
+
+def test_tracked_packet_dry_run_command_executes_without_submission() -> None:
+    """Published dry-run command prints the tracked packet without raw output artifacts."""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/validation/extract_s20_s30_evidence_gap_packet.py",
+            "--packet-fixture",
+            "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json",
+            "--markdown",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "Status: `diagnostic_only`" in completed.stdout
+    assert "claim_promotion: `no_go`" in completed.stdout
+    assert "without submitting Slurm" in completed.stdout
+    assert "no paper/dissertation claim edits" in completed.stdout
+    assert "Traceback" not in completed.stderr
 
 
 def test_tracked_packet_rejects_claim_promotion_go(tmp_path: Path) -> None:

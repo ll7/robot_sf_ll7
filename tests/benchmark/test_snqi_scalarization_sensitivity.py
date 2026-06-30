@@ -16,6 +16,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     classify_scalarization_sensitivity_inputs,
     format_pareto_svg,
     input_file_provenance,
+    load_baseline_mapping,
     load_jsonl,
     write_diagnostic_artifacts,
 )
@@ -382,7 +383,6 @@ def test_svg_renderer_marks_pareto_points() -> None:
 
 def test_cli_writes_scalarization_artifacts(tmp_path: Path, capsys) -> None:
     """CLI writes the same report-ready artifact family."""
-
     episodes_path = tmp_path / "episodes.jsonl"
     episodes_path.write_text(
         "\n".join(json.dumps(record) for record in _episodes()) + "\n",
@@ -451,3 +451,47 @@ def test_cli_preflight_only_blocks_invalid_inputs(tmp_path: Path, capsys) -> Non
     stdout = json.loads(capsys.readouterr().out)
     assert stdout["status"] == SENSITIVITY_PREFLIGHT_BLOCKED
     assert any(issue["code"] == "missing_scenario_horizon" for issue in stdout["issues"])
+
+
+def test_baseline_loader_refuses_missing_normalized_fixture_input(tmp_path: Path) -> None:
+    """Baseline fixture loader fails closed before export on missing normalized stats."""
+    baseline = _baseline()
+    baseline.pop("jerk_mean")
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing required normalized metric 'jerk_mean'"):
+        load_baseline_mapping(baseline_path)
+
+
+def test_cli_refuses_malformed_baseline_without_writing_artifacts(tmp_path: Path, capsys) -> None:
+    """CLI refuses malformed normalized baseline fixtures before artifacts exist."""
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text(
+        "\n".join(json.dumps(record) for record in _episodes()) + "\n",
+        encoding="utf-8",
+    )
+    weights_path = tmp_path / "weights.json"
+    weights_path.write_text(json.dumps(_weights()), encoding="utf-8")
+    baseline = _baseline()
+    baseline["collisions"] = 1.0
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(ValueError, match="baseline metric 'collisions' must provide med/p95"):
+        scalarization_cli_main(
+            [
+                "--episodes",
+                str(episodes_path),
+                "--weights",
+                str(weights_path),
+                "--baseline",
+                str(baseline_path),
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+
+    capsys.readouterr()
+    assert not output_dir.exists()

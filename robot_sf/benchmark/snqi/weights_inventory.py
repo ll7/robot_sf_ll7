@@ -211,13 +211,39 @@ class WeightInventoryReport:
         """True if any conflict is severe enough to fail a preflight."""
         return any(c.severity == "error" for c in self.conflicts)
 
+    @property
+    def source_summary(self) -> dict[str, object]:
+        """Summarize discovery/provenance surface for preflight consumers."""
+        shipped_records = [r for r in self.records if r.relpath is not None]
+        registered_records = [r for r in self.records if r.kind in {"code_default", "shipped_json"}]
+        unregistered_records = [r for r in self.records if r.kind == "unregistered_shipped_json"]
+        canonical_records = [r for r in self.records if r.declares_canonical]
+        unavailable_records = [r for r in self.records if not r.available]
+        blocking_conflicts = [c for c in self.conflicts if c.severity == "error"]
+        return {
+            "registered_source_count": len(WEIGHT_SOURCES),
+            "discovered_shipped_source_count": len(shipped_records),
+            "unregistered_shipped_source_count": len(unregistered_records),
+            "canonical_declaring_source_count": len(canonical_records),
+            "unavailable_source_count": len(unavailable_records),
+            "blocking_conflict_count": len(blocking_conflicts),
+            "registered_sources": [r.name for r in registered_records],
+            "discovered_shipped_sources": [r.name for r in shipped_records],
+            "unregistered_shipped_sources": [r.name for r in unregistered_records],
+            "canonical_declaring_sources": [r.name for r in canonical_records],
+            "unavailable_sources": [r.name for r in unavailable_records],
+            "blocking_conflict_kinds": [c.kind for c in blocking_conflicts],
+        }
+
     def to_dict(self) -> dict:
         """Build a JSON-serializable representation of the report.
 
         Returns:
-            A dict with ``records``, ``conflicts``, and ``has_blocking_conflict``.
+            A dict with ``source_summary``, ``records``, ``conflicts``, and
+            ``has_blocking_conflict``.
         """
         return {
+            "source_summary": self.source_summary,
             "records": [
                 {
                     "name": r.name,

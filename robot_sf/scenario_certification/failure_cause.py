@@ -142,7 +142,8 @@ def classify_failure_cause(diagnostics: FamilyDiagnostics) -> dict[str, Any]:
     5. ``oracle_solved is True`` → ``planner_limited`` (valid scenario; the gap is planner
        capability — the only cause that is fair for comparative ranking);
     6. ``oracle_solved is False`` with a feasible route and actor-free success →
-       ``dynamic_blocking_or_deadlock`` (reciprocal deadlock / unrealistic blocking);
+       ``dynamic_blocking_or_deadlock`` when extended-time evidence is present
+       (reciprocal deadlock / unrealistic blocking);
     7. otherwise → ``indeterminate`` (insufficient diagnostics).
 
     Returns:
@@ -419,7 +420,12 @@ def _decide(d: FamilyDiagnostics) -> tuple[str, str]:
             PLANNER_LIMITED,
             "A privileged controller solves it within limits; the gap is planner capability.",
         )
-    if d.oracle_solved is False and d.route_feasible is True and d.actor_free_solved is True:
+    if (
+        d.oracle_solved is False
+        and d.route_feasible is True
+        and d.actor_free_solved is True
+        and d.extended_time_solved is not None
+    ):
         return (
             DYNAMIC_BLOCKING_OR_DEADLOCK,
             "Route and actor-free runs succeed but even an oracle fails with reactive "

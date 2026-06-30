@@ -9,12 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from robot_sf.benchmark.snqi.compute import (
     WEIGHT_NAMES,
@@ -23,7 +20,9 @@ from robot_sf.benchmark.snqi.compute import (
 )
 from robot_sf.benchmark.snqi.weights_inventory import (
     SNQIWeightProvenanceError,
+    WeightSetRecord,
     build_inventory_report,
+    compare_code_default_to_shipped_sources,
     detect_conflicts,
     inventory_weight_sets,
     preflight_snqi_weight_sets,
@@ -39,6 +38,8 @@ _CODE_DEFAULT = {
     "w_force_exceed": 1.5,
     "w_jerk": 0.3,
 }
+
+REPO_ROOT = Path(__file__).parents[1]
 
 
 def _write_weights(path: Path, weights: dict[str, float], *, nested: bool = False) -> None:
@@ -100,6 +101,7 @@ def test_inventory_discovers_all_registered_sources(tmp_path):
 
     code = next(r for r in records if r.name == "code_default")
     assert code.available
+    assert code.versioned_id == "snqi_weights_code_default_v1"
     assert code.weights == _CODE_DEFAULT
     assert code.dominant_term == "w_collisions"
     assert code.scale_class == "raw"
@@ -127,6 +129,44 @@ def test_code_default_matches_recompute_canonical(tmp_path):
     assert code.weights == {k: float(canonical[k]) for k in WEIGHT_NAMES}
 
 
+def test_repo_code_default_is_reported_distinct_from_shipped_canonical_model():
+    """Guard the issue #3723 decision state without choosing canonical weights."""
+    report = build_inventory_report(REPO_ROOT)
+    records = {record.name: record for record in report.records}
+    code_default = records["code_default"]
+    model_canonical = records["model_canonical_v1"]
+
+    assert code_default.available
+    assert model_canonical.available
+    assert code_default.declares_canonical
+    assert model_canonical.declares_canonical
+    assert code_default.weights == _CODE_DEFAULT
+    assert code_default.dominant_term == "w_collisions"
+    assert model_canonical.dominant_term == "w_jerk"
+    assert code_default.normalized_direction() != model_canonical.normalized_direction()
+
+    canonical_conflicts = [
+        conflict for conflict in report.conflicts if conflict.kind == "canonical_direction_conflict"
+    ]
+    assert any(
+        conflict.severity == "error" and conflict.sources == ["code_default", "model_canonical_v1"]
+        for conflict in canonical_conflicts
+    )
+    shipped_mismatches = [
+        conflict
+        for conflict in report.conflicts
+        if conflict.kind == "code_default_shipped_direction_mismatch"
+    ]
+    assert sorted(conflict.sources[1] for conflict in shipped_mismatches) == [
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    assert all(conflict.severity == "warning" for conflict in shipped_mismatches)
+    assert report.has_blocking_conflict
+
+
 def test_conflicting_canonical_sources_detected_fail_closed(tmp_path):
     """Code default (collision) vs model canonical (jerk) raises fail-closed preflight."""
     repo = _make_fixture_repo(tmp_path, model_jerk_dominant=True)
@@ -138,6 +178,16 @@ def test_conflicting_canonical_sources_detected_fail_closed(tmp_path):
     assert summary["unregistered_shipped_source_count"] == 0
     assert summary["canonical_declaring_sources"] == ["code_default", "model_canonical_v1"]
     assert summary["blocking_conflict_kinds"] == ["canonical_direction_conflict"]
+    shipped_mismatches = [
+        c for c in report.conflicts if c.kind == "code_default_shipped_direction_mismatch"
+    ]
+    assert sorted(c.sources for c in shipped_mismatches) == [
+        ["code_default", "camera_ready_v1"],
+        ["code_default", "camera_ready_v2"],
+        ["code_default", "camera_ready_v3"],
+        ["code_default", "model_canonical_v1"],
+    ]
+    assert all(c.severity == "warning" for c in shipped_mismatches)
 
     direction_conflicts = [c for c in report.conflicts if c.kind == "canonical_direction_conflict"]
     assert direction_conflicts, "expected a canonical direction conflict"
@@ -161,6 +211,131 @@ def test_duplicate_weights_distinct_label_reported(tmp_path):
     report = build_inventory_report(repo)
     dups = [c for c in report.conflicts if c.kind == "duplicate_weights_distinct_label"]
     assert any(set(c.sources) == {"model_canonical_v1", "camera_ready_v1"} for c in dups)
+
+
+def test_code_default_vs_shipped_direction_matrix(tmp_path):
+    """Every shipped source is compared against the code default."""
+    repo = _make_fixture_repo(tmp_path)
+    report = build_inventory_report(repo)
+
+    comparisons = compare_code_default_to_shipped_sources(report.records)
+    by_source = {comparison.source: comparison for comparison in comparisons}
+
+    assert set(by_source) == {
+        "model_canonical_v1",
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+    }
+    assert by_source["model_canonical_v1"].relationship == "different_direction"
+    assert by_source["model_canonical_v1"].source_dominant_term == "w_jerk"
+    assert by_source["camera_ready_v1"].relationship == "different_direction"
+    assert by_source["camera_ready_v2"].relationship == "different_direction"
+    assert by_source["camera_ready_v3"].relationship == "different_direction"
+
+    summary_comparisons = report.to_dict()["source_summary"][
+        "code_default_shipped_direction_comparisons"
+    ]
+    assert [entry["source"] for entry in summary_comparisons] == [
+        "camera_ready_v1",
+        "camera_ready_v2",
+        "camera_ready_v3",
+        "model_canonical_v1",
+    ]
+    summary = report.to_dict()["source_summary"]
+    assert summary["canonical_decision"] == {
+        "status": "unresolved_decision_required",
+        "issue": 3723,
+        "selected_versioned_id": None,
+        "ambiguous_unversioned_label": "canonical",
+        "message": (
+            "No SNQI weight source is promoted as benchmark-canonical by this "
+            "diagnostic inventory; reports should name a versioned_id explicitly."
+        ),
+    }
+    assert summary["canonical_declaring_versioned_ids"] == [
+        "snqi_weights_code_default_v1",
+        "snqi_weights_model_canonical_v1",
+    ]
+    assert "snqi_weights_camera_ready_v3" in summary["discovered_shipped_versioned_ids"]
+
+
+def test_zero_sum_shipped_source_reports_comparison_unavailable_reason():
+    """A loaded-but-zero-sum source is unavailable for comparison, with a reason.
+
+    Guards that comparison availability is kept distinct from source-load state:
+    a source can load successfully yet have no comparable direction (zero-sum
+    weights), and the comparison must not surface an unexplained ``unavailable``.
+    """
+    code_default = WeightSetRecord(
+        name="code_default",
+        kind="code_default",
+        relpath=None,
+        versioned_id="snqi_weights_code_default_v1",
+        declares_canonical=False,
+        available=True,
+        weights=dict.fromkeys(WEIGHT_NAMES, 1.0),
+        weight_sum=float(len(WEIGHT_NAMES)),
+        dominant_term="w_success",
+        scale_class="raw",
+    )
+    zero_sum = WeightSetRecord(
+        name="camera_ready_zero",
+        kind="shipped_json",
+        relpath="configs/benchmarks/snqi_weights_camera_ready_zero.json",
+        versioned_id="snqi_weights_camera_ready_zero",
+        declares_canonical=False,
+        available=True,  # the file loaded fine
+        weights=dict.fromkeys(WEIGHT_NAMES, 0.0),
+        weight_sum=0.0,
+        dominant_term=None,
+        scale_class=None,
+        load_error=None,  # no source-load failure
+    )
+
+    [comparison] = compare_code_default_to_shipped_sources([code_default, zero_sum])
+
+    assert comparison.relationship == "unavailable"
+    assert comparison.available is False
+    assert comparison.load_error == "no_comparable_direction"
+
+
+def test_zero_sum_canonical_source_fails_closed_as_uncomparable_direction():
+    """Canonical-labeled source must be comparable, not merely loadable."""
+    code_default = WeightSetRecord(
+        name="code_default",
+        kind="code_default",
+        relpath=None,
+        versioned_id="snqi_weights_code_default_v1",
+        declares_canonical=True,
+        available=True,
+        weights=dict.fromkeys(WEIGHT_NAMES, 1.0),
+        weight_sum=float(len(WEIGHT_NAMES)),
+        dominant_term="w_success",
+        scale_class="raw",
+    )
+    zero_sum = WeightSetRecord(
+        name="model_canonical_zero",
+        kind="shipped_json",
+        relpath="model/snqi_canonical_zero.json",
+        versioned_id="snqi_weights_model_canonical_zero",
+        declares_canonical=True,
+        available=True,
+        weights=dict.fromkeys(WEIGHT_NAMES, 0.0),
+        weight_sum=0.0,
+        dominant_term=None,
+        scale_class=None,
+        load_error=None,
+    )
+
+    conflicts = detect_conflicts([code_default, zero_sum])
+
+    uncomparable = [
+        conflict for conflict in conflicts if conflict.kind == "canonical_uncomparable_direction"
+    ]
+    assert len(uncomparable) == 1
+    assert uncomparable[0].severity == "error"
+    assert uncomparable[0].sources == ["model_canonical_zero"]
 
 
 def test_no_blocking_conflict_when_canonical_sources_agree(tmp_path):
@@ -246,6 +421,10 @@ def test_unregistered_shipped_weight_file_reported_fail_closed(tmp_path):
     unregistered = [r for r in report.records if r.kind == "unregistered_shipped_json"]
     assert len(unregistered) == 1
     assert unregistered[0].relpath == "configs/benchmarks/snqi_weights_experimental_v9.json"
+    assert (
+        unregistered[0].versioned_id
+        == "unregistered_configs_benchmarks_snqi_weights_experimental_v9"
+    )
     assert unregistered[0].available
     assert (
         unregistered[0].content_sha256

@@ -12,12 +12,17 @@ from robot_sf.benchmark.scenario_contract import (
     load_scenario_contracts,
     validate_scenario_contract_references,
 )
+from robot_sf.benchmark.sustained_flow_preflight import (
+    RUNTIME_SUPPORTED_VALUE,
+    preflight_sustained_flow_matrix,
+)
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCENARIO_SET = REPO_ROOT / "configs/scenarios/sets/issue_3813_sustained_flow_scaffold_v0.yaml"
 CONTRACTS = REPO_ROOT / "configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml"
 LAUNCH_PACKET = REPO_ROOT / "configs/benchmarks/issue_3813_sustained_flow_launch_packet.yaml"
+PREFLIGHT_SCRIPT = REPO_ROOT / "scripts/validation/preflight_sustained_flow_scenarios_issue_3813.py"
 
 
 def _load_yaml(path: Path) -> dict:
@@ -68,6 +73,36 @@ def test_sustained_flow_scenario_set_is_runner_loadable(capsys) -> None:
         assert metadata["termination"]["goal_reach_is_not_primary_success"] is True
 
 
+def test_sustained_flow_preflight_enumerates_variants_and_fails_closed() -> None:
+    """The generator preflight enumerates variants without claiming benchmark eligibility."""
+
+    preflight = preflight_sustained_flow_matrix(SCENARIO_SET)
+    payload = preflight.to_payload()
+
+    assert payload["schema_version"] == "sustained_flow_preflight.v1"
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 3
+    assert [variant["density_tier"] for variant in payload["variants"]] == [
+        "light",
+        "medium",
+        "heavy",
+    ]
+    assert [variant["spawn_rate_per_min"] for variant in payload["variants"]] == [
+        6.0,
+        12.0,
+        18.0,
+    ]
+    assert [variant["ped_density"] for variant in payload["variants"]] == [
+        0.02,
+        0.05,
+        0.08,
+    ]
+    assert all(
+        f"expected {RUNTIME_SUPPORTED_VALUE!r}" in reason for reason in payload["blocking_reasons"]
+    )
+
+
 def test_sustained_flow_contract_defines_progress_metric_and_reference() -> None:
     """The scenario contract points at the scaffold and keeps evidence boundaries explicit."""
 
@@ -113,6 +148,13 @@ def test_launch_packet_keeps_no_submit_and_fail_closed_boundaries() -> None:
     assert campaign["scenario_suite"]["contract_path"] == (
         "configs/scenarios/contracts/issue_3813_sustained_flow_contracts.yaml"
     )
+    assert campaign["scenario_suite"]["preflight_helper"] == (
+        "robot_sf.benchmark.sustained_flow_preflight.preflight_sustained_flow_matrix"
+    )
+    assert campaign["scenario_suite"]["preflight_command"] == (
+        "uv run python scripts/validation/preflight_sustained_flow_scenarios_issue_3813.py --json"
+    )
+    assert PREFLIGHT_SCRIPT.is_file()
     assert campaign["metrics"]["success_boundary"].startswith("Sustained progress")
     assert (
         "missing continuous-spawn runtime support"

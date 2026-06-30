@@ -16,8 +16,12 @@ from robot_sf.benchmark.snqi.compute import compute_snqi
 from robot_sf.benchmark.snqi.normalization_inventory import (
     SCALING_BASELINE_NORMALIZED,
     SCALING_RAW,
+    SNQI_LEGACY_SCORE_STATUS,
+    SNQI_LEGACY_SCORE_VERSION,
     SNQI_TERM_SCALING,
+    build_snqi_contribution_diagnostics,
     build_snqi_normalization_inventory,
+    build_snqi_version_contract,
     format_normalization_report,
     scaled_term_value,
 )
@@ -164,6 +168,21 @@ def test_to_dict_is_json_serializable_and_self_consistent():
     assert basis_by_term["time"] == "raw time-to-goal ratio"
     assert basis_by_term["comfort"] == "raw accumulated comfort-exposure value"
     assert basis_by_term["collisions"] == "baseline-relative median/p95 clamped value"
+    assert encoded["score_version_contract"] == build_snqi_version_contract()
+
+
+def test_score_version_contract_preserves_legacy_snqi_v0_as_diagnostic_only():
+    """Issue #3699 checker labels current SNQI semantics without changing scores."""
+
+    contract = build_snqi_version_contract()
+
+    assert contract["score_version"] == SNQI_LEGACY_SCORE_VERSION == "SNQI-v0"
+    assert contract["status"] == SNQI_LEGACY_SCORE_STATUS
+    assert contract["diagnostic_only"] is True
+    assert contract["mixed_basis_preserved"] is True
+    assert contract["score_semantics_changed"] is False
+    assert contract["future_bounded_contract"] == "SNQI-v1"
+    assert contract["decision_required_issue"] == 3699
 
 
 def test_format_report_is_human_readable():
@@ -172,7 +191,194 @@ def test_format_report_is_human_readable():
     text = format_normalization_report(inv)
     assert "issue #3699" in text
     assert "basis" in text
+    assert "SNQI-v0 (legacy_mixed_basis_diagnostic_only)" in text
     assert "raw time-to-goal ratio" in text
     assert "baseline-relative median/p95 clamped value" in text
     for term in SNQI_TERM_SCALING:
         assert term.term in text
+
+
+def test_contribution_diagnostics_reconstruct_snqi_and_flag_raw_dominance():
+    """Contribution checker exposes mixed-basis dominance without changing score."""
+    metrics = {
+        "success": 1.0,
+        "time_to_goal_norm": 3.0,
+        "collisions": 9.0,
+        "near_misses": 9.0,
+        "comfort_exposure": 2.0,
+        "force_exceed_events": 9.0,
+        "jerk_mean": 9.0,
+    }
+    weights = {term.weight_name: 1.0 for term in SNQI_TERM_SCALING}
+    baseline_stats = {
+        "collisions": {"med": 0.0, "p95": 1.0},
+        "near_misses": {"med": 0.0, "p95": 1.0},
+        "force_exceed_events": {"med": 0.0, "p95": 1.0},
+        "jerk_mean": {"med": 0.0, "p95": 1.0},
+    }
+
+    diagnostics = build_snqi_contribution_diagnostics(metrics, weights, baseline_stats)
+    signed_total = sum(term["signed_contribution"] for term in diagnostics["terms"])
+
+    assert diagnostics["diagnostic_only"] is True
+    assert diagnostics["mixed_basis"] is True
+    assert diagnostics["raw_penalty_terms_dominate"] is True
+    assert diagnostics["raw_penalty_absolute_share"] == pytest.approx(0.5)
+    assert diagnostics["baseline_normalized_penalty_absolute_share"] == pytest.approx(0.4)
+    assert diagnostics["has_weight_bound_exceedance"] is True
+    assert {term["term"] for term in diagnostics["weight_bound_exceedances"]} == {"time", "comfort"}
+    assert signed_total == pytest.approx(compute_snqi(metrics, weights, baseline_stats))
+
+    contract = diagnostics["normalization_contract"]
+    version_contract = diagnostics["score_version_contract"]
+    assert contract["schema_version"] == "snqi_normalization_contract.v1"
+    assert contract["diagnostic_only"] is True
+    assert contract["status"] == "mixed_unbounded_penalty_basis"
+    assert contract["weights_comparable"] is False
+    assert contract["decision_required_issue"] == 3699
+    assert contract["raw_unbounded_penalty_terms"] == ["time", "comfort"]
+    assert contract["baseline_normalized_penalty_terms"] == [
+        "collisions",
+        "near",
+        "force_exceed",
+        "jerk",
+    ]
+    assert contract["raw_penalty_absolute_share"] == pytest.approx(0.5)
+    assert contract["baseline_normalized_penalty_absolute_share"] == pytest.approx(0.4)
+    assert contract["weight_bound_exceedance_terms"] == ["time", "comfort"]
+    assert "bypass normalize_metric" in contract["reasons"][0]
+    assert version_contract["score_version"] == "SNQI-v0"
+    assert version_contract["score_semantics_changed"] is False
+
+    by_term = {term["term"]: term for term in diagnostics["terms"]}
+    assert by_term["time"]["scaled_value"] == pytest.approx(3.0)
+    assert by_term["time"]["exceeds_weight_bound"] is True
+    assert by_term["comfort"]["scaled_value"] == pytest.approx(2.0)
+    assert by_term["comfort"]["exceeds_weight_bound"] is True
+    assert by_term["collisions"]["scaled_value"] == pytest.approx(1.0)
+    assert by_term["collisions"]["exceeds_weight_bound"] is False
+    assert by_term["time"]["normalization_status"] == "raw_unbounded"
+    assert by_term["collisions"]["normalization_status"] == "baseline_normalized_bounded"
+
+
+def test_report_cli_writes_contribution_diagnostics(tmp_path, capsys):
+    """Report CLI can attach per-term contribution diagnostics to JSON output."""
+    import importlib.util
+    import json
+    import pathlib
+
+    script_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "benchmark"
+        / "snqi_normalization_inventory_report.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "snqi_normalization_inventory_report", script_path
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    metrics_path = tmp_path / "metrics.json"
+    weights_path = tmp_path / "weights.json"
+    baseline_path = tmp_path / "baseline.json"
+    output_path = tmp_path / "inventory.json"
+    metrics_path.write_text(json.dumps(_METRICS), encoding="utf-8")
+    weights_path.write_text(json.dumps(_WEIGHTS), encoding="utf-8")
+    baseline_path.write_text(json.dumps(_BASELINE_STATS), encoding="utf-8")
+
+    exit_code = module.main(
+        [
+            "--baseline-stats",
+            str(baseline_path),
+            "--metrics",
+            str(metrics_path),
+            "--weights",
+            str(weights_path),
+            "--json-out",
+            str(output_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 0
+    assert "Contribution diagnostics:" in captured.out
+    assert "Normalization contract: status=mixed_unbounded_penalty_basis" in captured.out
+    assert payload["contributions"]["diagnostic_only"] is True
+    assert payload["contributions"]["mixed_basis"] is True
+    assert payload["contributions"]["normalization_contract"]["weights_comparable"] is False
+    signed_total = sum(term["signed_contribution"] for term in payload["contributions"]["terms"])
+    assert signed_total == pytest.approx(compute_snqi(_METRICS, _WEIGHTS, _BASELINE_STATS))
+
+
+def _load_report_module():
+    """Import the report CLI script as a module for direct ``main()`` testing."""
+    import importlib.util
+    import pathlib
+
+    script_path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "scripts"
+        / "benchmark"
+        / "snqi_normalization_inventory_report.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "snqi_normalization_inventory_report", script_path
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    ("metrics_text", "expected_stderr"),
+    [
+        ("{not valid json", "invalid contribution input JSON"),
+        ("[1, 2, 3]", "must each contain a JSON object"),
+    ],
+)
+def test_report_cli_rejects_bad_contribution_inputs(
+    tmp_path, capsys, metrics_text, expected_stderr
+):
+    """Malformed or non-object contribution JSON fails closed with exit code 2.
+
+    Without hardening these inputs escaped as tracebacks (JSONDecodeError) or
+    crashed inside ``build_snqi_contribution_diagnostics`` (non-mapping payload)
+    instead of returning the CLI's intended input-error exit code.
+    """
+    import json
+
+    module = _load_report_module()
+    metrics_path = tmp_path / "metrics.json"
+    weights_path = tmp_path / "weights.json"
+    metrics_path.write_text(metrics_text, encoding="utf-8")
+    weights_path.write_text(json.dumps(_WEIGHTS), encoding="utf-8")
+
+    exit_code = module.main(["--metrics", str(metrics_path), "--weights", str(weights_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert expected_stderr in captured.err
+
+
+def test_report_cli_rejects_directory_contribution_input(tmp_path, capsys):
+    """A directory passed as a metrics path fails closed instead of erroring out."""
+    import json
+
+    module = _load_report_module()
+    metrics_dir = tmp_path / "metrics_dir"
+    metrics_dir.mkdir()
+    weights_path = tmp_path / "weights.json"
+    weights_path.write_text(json.dumps(_WEIGHTS), encoding="utf-8")
+
+    exit_code = module.main(["--metrics", str(metrics_dir), "--weights", str(weights_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "metrics file not found" in captured.err

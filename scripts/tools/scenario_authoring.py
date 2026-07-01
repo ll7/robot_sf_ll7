@@ -96,8 +96,11 @@ def build_scenario_payload(
         )
     scenario_name = _validate_output_name(name)
     seed_values = _validate_seed_tuple(seeds)
+    effective_source_issue = source_issue
     physical_params = None
     if normalized_template == "parameterized":
+        if source_issue == DEFAULT_SOURCE_ISSUE:
+            effective_source_issue = "#3970"
         physical_params = normalize_parameterized_scenario_parameters(parameterized_profile or {})
         generation = derive_generation_parameters_from_physical_slice(physical_params)
         generation = normalize_generation_parameters(
@@ -167,7 +170,7 @@ def build_scenario_payload(
                         "status": "draft",
                         "template": normalized_template,
                         "template_version": AUTHORING_SCHEMA_VERSION,
-                        "source_issue": source_issue,
+                        "source_issue": effective_source_issue,
                         "generated_by": "scripts/tools/create_scenario.py",
                         "benchmark_evidence": False,
                         "promotion_note": (

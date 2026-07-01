@@ -108,6 +108,8 @@ def test_parameterized_physical_slice_defaults_and_thresholds() -> None:
         ({"sidewalk_width": 2.0, "bottleneck_width": 3.0}, "bottleneck_width"),
         ({"crossing_angle": 181.0}, "crossing_angle"),
         ({"occlusion_probability": -0.1}, "occlusion_probability"),
+        ({"sidewalk_width": float("nan")}, "sidewalk_width must be finite"),
+        ({"pedestrian_density": float("inf")}, "pedestrian_density must be finite"),
     ],
 )
 def test_parameterized_physical_slice_rejects_invalid_inputs(raw, message: str) -> None:
@@ -157,9 +159,19 @@ def test_parameterized_template_is_deterministic_and_loader_consumable(tmp_path)
     assert scenario["map_id"] == "classic_bottleneck_high"
     assert scenario["simulation_config"]["ped_density"] == 0.18
     assert scenario["metadata"]["authoring"]["benchmark_evidence"] is False
+    assert scenario["metadata"]["authoring"]["source_issue"] == "#3970"
     assert (
         scenario["metadata"]["parameterized_profile"]["schema_version"]
         == PARAMETERIZED_SCENARIO_PARAMS_SCHEMA_VERSION
     )
     assert scenario["metadata"]["parameterized_profile"]["parameters"] == params
     assert loaded[0]["name"] == "issue_3970_dense_bottleneck"
+
+
+def test_parameterized_template_defaults_to_issue_3970_provenance() -> None:
+    """Parameterized authoring defaults to the issue that owns the template."""
+
+    payload = build_scenario_payload(template="parameterized", name="issue_3970_default_source")
+    scenario = payload["scenarios"][0]
+
+    assert scenario["metadata"]["authoring"]["source_issue"] == "#3970"

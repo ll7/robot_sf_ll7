@@ -36,6 +36,7 @@ Notes:
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -221,7 +222,7 @@ def normalize_generation_parameters(  # noqa: C901, PLR0912
     }
 
 
-def normalize_parameterized_scenario_parameters(  # noqa: C901
+def normalize_parameterized_scenario_parameters(  # noqa: C901, PLR0912
     raw: Mapping[str, Any] | None = None,
 ) -> dict[str, float]:
     """Normalize the physical parameter slice used by draft scenario authoring.
@@ -258,7 +259,10 @@ def normalize_parameterized_scenario_parameters(  # noqa: C901
     values = dict(PARAMETERIZED_SCENARIO_PARAMETER_DEFAULTS)
     for key, value in source.items():
         if value is not None:
-            values[key] = float(value)
+            normalized_value = float(value)
+            if not math.isfinite(normalized_value):
+                raise ValueError(f"{key} must be finite: {value}")
+            values[key] = normalized_value
 
     sidewalk_width = values["sidewalk_width"]
     obstacle_density = values["obstacle_density"]

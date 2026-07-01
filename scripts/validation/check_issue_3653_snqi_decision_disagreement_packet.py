@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -270,6 +271,66 @@ def _require_export_report_fields(packet: Mapping[str, Any], report: Mapping[str
     missing = sorted(field for field in required if field not in report)
     if missing:
         raise PacketError(f"export report missing required fields: {missing}")
+    _require_populated_export_report(report)
+
+
+def _require_populated_export_report(report: Mapping[str, Any]) -> None:
+    """Require usable Pareto and decision-disagreement payloads before export success."""
+
+    _require_populated_pareto_front(report)
+    _require_populated_decision_disagreement(report)
+
+
+def _require_populated_pareto_front(report: Mapping[str, Any]) -> None:
+    """Require non-empty finite Pareto-front points."""
+
+    pareto = _require_mapping(report, "pareto_front")
+    points = pareto.get("points")
+    if not isinstance(points, Sequence) or isinstance(points, (str, bytes)) or not points:
+        raise PacketError("export report pareto_front.points must be a non-empty sequence")
+    for index, point in enumerate(points, start=1):
+        if not isinstance(point, Mapping):
+            raise PacketError(f"export report pareto_front point {index} must be a mapping")
+        for field in ("planner", "constraints_first_score", "snqi_mean"):
+            if field not in point:
+                raise PacketError(
+                    f"export report pareto_front point {index} missing field {field!r}"
+                )
+        for field in ("constraints_first_score", "snqi_mean"):
+            try:
+                value = float(point[field])
+            except (TypeError, ValueError) as exc:
+                raise PacketError(
+                    f"export report pareto_front point {index} non-numeric field {field!r}"
+                ) from exc
+            if not math.isfinite(value):
+                raise PacketError(
+                    f"export report pareto_front point {index} non-finite field {field!r}"
+                )
+
+
+def _require_populated_decision_disagreement(report: Mapping[str, Any]) -> None:
+    """Require finite decision-disagreement summary values."""
+
+    disagreement = _require_mapping(report, "decision_disagreement")
+    for field in (
+        "snqi_winner",
+        "constraints_first_winner",
+        "winner_disagreement",
+        "pairwise_disagreement_rate",
+        "pairwise_reversal_count",
+    ):
+        if field not in disagreement:
+            raise PacketError(f"export report decision_disagreement missing field {field!r}")
+    try:
+        disagreement_rate = float(disagreement["pairwise_disagreement_rate"])
+        reversal_count = int(disagreement["pairwise_reversal_count"])
+    except (TypeError, ValueError) as exc:
+        raise PacketError("export report decision_disagreement numeric fields are invalid") from exc
+    if not math.isfinite(disagreement_rate) or not 0.0 <= disagreement_rate <= 1.0:
+        raise PacketError("export report decision_disagreement rate must be finite in [0, 1]")
+    if reversal_count < 0:
+        raise PacketError("export report decision_disagreement reversal count must be non-negative")
 
 
 def export_if_ready(

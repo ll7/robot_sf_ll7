@@ -199,6 +199,70 @@ def test_issue_3653_export_report_contract_rejects_missing_required_field() -> N
         raise AssertionError("missing report fields should fail closed")
 
 
+def test_issue_3653_export_report_contract_rejects_empty_pareto_points() -> None:
+    """Application export success requires populated Pareto-front evidence."""
+
+    packet = _load_packet()
+    report = {
+        "decision_disagreement": {
+            "snqi_winner": "planner_a",
+            "constraints_first_winner": "planner_b",
+            "winner_disagreement": True,
+            "pairwise_disagreement_rate": 0.5,
+            "pairwise_reversal_count": 1,
+        },
+        "pareto_front": {"x": "constraints_first_score", "y": "snqi_mean", "points": []},
+        "planner_rows": [{"planner": "planner_a"}],
+        "weight_zero_ablation": {"w_success": {}},
+        "weight_sweep": {"w_success": []},
+        "term_dominance": [{"component": "success"}],
+    }
+
+    try:
+        _MODULE._require_export_report_fields(packet, report)
+    except _MODULE.PacketError as exc:
+        assert "pareto_front.points" in str(exc)
+    else:
+        raise AssertionError("empty Pareto-front export should fail closed")
+
+
+def test_issue_3653_export_report_contract_rejects_invalid_decision_rate() -> None:
+    """Application export success requires finite decision-disagreement values."""
+
+    packet = _load_packet()
+    report = {
+        "decision_disagreement": {
+            "snqi_winner": "planner_a",
+            "constraints_first_winner": "planner_b",
+            "winner_disagreement": True,
+            "pairwise_disagreement_rate": 1.5,
+            "pairwise_reversal_count": 1,
+        },
+        "pareto_front": {
+            "x": "constraints_first_score",
+            "y": "snqi_mean",
+            "points": [
+                {
+                    "planner": "planner_a",
+                    "constraints_first_score": 0.4,
+                    "snqi_mean": 0.2,
+                }
+            ],
+        },
+        "planner_rows": [{"planner": "planner_a"}],
+        "weight_zero_ablation": {"w_success": {}},
+        "weight_sweep": {"w_success": []},
+        "term_dominance": [{"component": "success"}],
+    }
+
+    try:
+        _MODULE._require_export_report_fields(packet, report)
+    except _MODULE.PacketError as exc:
+        assert "decision_disagreement rate" in str(exc)
+    else:
+        raise AssertionError("invalid decision-disagreement rate should fail closed")
+
+
 def test_issue_3653_export_if_ready_writes_required_artifacts(tmp_path: Path) -> None:
     """Ready campaign-shaped inputs run through preflight and emit the packet artifact set."""
 

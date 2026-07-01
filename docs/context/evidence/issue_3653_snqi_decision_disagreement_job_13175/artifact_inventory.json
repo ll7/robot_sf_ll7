@@ -1,0 +1,71 @@
+{
+  "bundle_dir": "docs/context/evidence/issue_3653_snqi_decision_disagreement_job_13175",
+  "claim_boundary": "Diagnostic-only application on checksum-pinned job 13175; no benchmark, safety-ranking, scenario-horizon, dissertation, or paper claim promoted.",
+  "files": [
+    {
+      "kind": "narrative_boundary",
+      "path": "README.md",
+      "sha256": "92aba3fab085f0ab9545de527bc038404d096a226c623184a0135105b4f38c1f",
+      "size_bytes": 2239
+    },
+    {
+      "kind": "machine_packet",
+      "path": "packet.json",
+      "sha256": "8bda21d9c3f3c52e13190791b5a03c886335e357730b5298b053d41107b7f862",
+      "size_bytes": 5447
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "sha256": "e50b9f5ced5eec62b195adf458d22580db6f7c17d2ef9fd9bc1771207ad4cac8",
+      "size_bytes": 3769
+    },
+    {
+      "kind": "preflight",
+      "path": "preflight.json",
+      "sha256": "8509d07a05decaac3beda46bed7d504d383aa83ea200994739b372c0e8f4b8eb",
+      "size_bytes": 635
+    },
+    {
+      "kind": "snqi_report",
+      "path": "snqi_scalarization_sensitivity.json",
+      "sha256": "29487caf05208b1bebd4ef59b8da9c64e7cbcb1410b8fc4e0d0fb1da7efa612f",
+      "size_bytes": 37270
+    },
+    {
+      "kind": "planner_rows",
+      "path": "snqi_scalarization_sensitivity_planner_rows.csv",
+      "sha256": "198c31da9878317e056afbc54034c9f0caeeeb7cf4a3fc24bfd40d2ccc2e449c",
+      "size_bytes": 1148
+    },
+    {
+      "kind": "decision_disagreement",
+      "path": "snqi_scalarization_sensitivity_decision_disagreement.csv",
+      "sha256": "534c0bd09af1550d5b7cb9a7ebbb3ef89c6e361e843d7542020ae69d5a219f2d",
+      "size_bytes": 597
+    },
+    {
+      "kind": "markdown_report",
+      "path": "snqi_scalarization_sensitivity.md",
+      "sha256": "77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1",
+      "size_bytes": 1615
+    },
+    {
+      "kind": "pareto_svg",
+      "path": "snqi_scalarization_sensitivity_pareto.svg",
+      "sha256": "45596a65dca42f94a17481abd1ff077a71d8e6ae48ace5e89a59b961ac93ccb1",
+      "size_bytes": 1990
+    }
+  ],
+  "forbidden_action_confirmations": {
+    "benchmark_claim_promoted": false,
+    "compute_submit": false,
+    "dissertation_claim_promoted": false,
+    "new_slurm_run": false,
+    "paper_claim_promoted": false,
+    "raw_output_committed": false,
+    "safety_ranking_claim_promoted": false,
+    "scenario_horizon_claim_promoted": false
+  },
+  "schema_version": "issue-3653-snqi-decision-disagreement-inventory.v1"
+}

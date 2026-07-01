@@ -1,0 +1,71 @@
+schema_version: issue-3653-snqi-decision-disagreement-application-packet.v1
+name: issue_3653_snqi_decision_disagreement_application_packet
+issue: 3653
+purpose: >
+  Prepare a fail-closed application packet for running the existing SNQI
+  scalarization-sensitivity Pareto-front export on the valid S20/h500 campaign
+  evidence surface once the campaign episode JSONL is available.
+claim_boundary: >
+  Diagnostic application packet only. This slice does not run a full benchmark
+  campaign, does not submit Slurm/GPU work, does not edit paper/dissertation
+  claims, and does not establish SNQI as a primary safety ranking.
+execution_boundary:
+  run_benchmark: false
+  compute_submit_authorized: false
+  local_submission_allowed: false
+  slurm_job_id: not_submitted
+  target_host: imech039
+  current_status: blocked_missing_valid_campaign_episodes
+source_campaign:
+  parent_issue: 1554
+  campaign_id: issue1554_s20_h500_l40s_mem180_20260628
+  source_job_id: 13175
+  scenario_horizon: h500
+  seed_budget: S20
+  planner_count: 9
+  expected_episode_count: 8640
+  evidence_packet: docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json
+  evidence_packet_sha256: 7da1d5607536bc35d82d482029e150c3cf6442f586ac05e06c925fa9d9e2850c
+  artifact_root: output/issue1554-s20-h500-l40s-mem180/13175
+  provenance_status: needs_raw_episode_artifact
+inputs:
+  episodes_jsonl: output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
+  baseline_path: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+  baseline_sha256: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
+  weights_path: configs/benchmarks/snqi_weights_camera_ready_v3.json
+  weights_sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
+  input_status: blocked_until_episode_jsonl_promoted_or_hydratable
+export:
+  script: scripts/benchmark/snqi_scalarization_sensitivity_export.py
+  command_template:
+    - uv
+    - run
+    - python
+    - scripts/benchmark/snqi_scalarization_sensitivity_export.py
+    - --episodes
+    - output/issue1554-s20-h500-l40s-mem180/13175/reports/episodes.jsonl
+    - --baseline
+    - configs/benchmarks/snqi_baseline_camera_ready_v3.json
+    - --weights
+    - configs/benchmarks/snqi_weights_camera_ready_v3.json
+    - --output-dir
+    - output/benchmarks/issue_3653_snqi_decision_disagreement
+    - --preflight-out
+    - output/benchmarks/issue_3653_snqi_decision_disagreement/preflight.json
+  required_artifacts:
+    - snqi_scalarization_sensitivity.json
+    - snqi_scalarization_sensitivity_planner_rows.csv
+    - snqi_scalarization_sensitivity_decision_disagreement.csv
+    - snqi_scalarization_sensitivity.md
+    - snqi_scalarization_sensitivity_pareto.svg
+success_criteria:
+  preflight_status: ready
+  min_planners: 2
+  required_report_fields:
+    - decision_disagreement
+    - planner_rows
+    - term_dominance
+    - weight_zero_ablation
+    - weight_sweep
+    - pareto_front
+  blocked_status_when_inputs_missing: blocked_missing_valid_campaign_episodes

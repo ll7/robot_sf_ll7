@@ -6,8 +6,8 @@
     {
       "kind": "narrative_boundary",
       "path": "README.md",
-      "sha256": "3df712c1248f0a25a1403c2dd7bd8558a43b3334974fe861a714132d56eaca19",
-      "size_bytes": 4462
+      "sha256": "e1cca1f419d725475597a2574d72f03dc0e837b53839a0e547f707d045aa7f0e",
+      "size_bytes": 4412
     },
     {
       "kind": "machine_packet",

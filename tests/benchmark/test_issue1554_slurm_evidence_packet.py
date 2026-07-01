@@ -115,8 +115,9 @@ def test_job13198_constraints_first_artifact_bundle_is_boundary_only() -> None:
         for source in packet["input_sources"]
         if source["status"] == "missing_on_worker"
     }
-    assert "/home/luttkule/git/robot_sf_ll7-private-ops/ops/jobs/metrics/13198.json" in (
-        missing_inputs
+    assert any(
+        path.endswith("robot_sf_ll7-private-ops/ops/jobs/metrics/13198.json")
+        for path in missing_inputs
     )
     assert any(
         claim["classification"] == "fail_closed_snqi_contract_warning"

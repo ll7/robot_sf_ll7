@@ -8,7 +8,7 @@ The check is readiness/leakage evidence only. It does not run benchmark campaign
 
 ## Implementation
 
-- `robot_sf/benchmark/failure_archive_rerun_readiness.py` loads source archive and rerun archive inputs, checks archive-ID leakage, records family/seed overlap provenance, blocks missing overlap metadata (`archive_id`, scenario family, `candidate.scenario_seed`), blocks duplicate archive IDs within either archive, requires top-level archive lineage in `config.source_manifests`, blocks shared source-manifest lineage across source and rerun archives, requires passing certification metadata on source and rerun archive entries, and requires valid null-test prerequisite metadata.
+- `robot_sf/benchmark/failure_archive_rerun_readiness.py` loads source archive and rerun archive inputs, checks archive-ID leakage, records family/seed overlap provenance, blocks missing overlap metadata (`archive_id`, scenario family, `candidate.scenario_seed`), blocks duplicate archive IDs within either archive, requires top-level archive lineage in `config.source_manifests`, blocks shared source-manifest lineage across source and rerun archives, requires passing certification metadata on source and rerun archive entries, and requires valid null-test prerequisite metadata tied to the checked source/rerun archive SHA-256 pair.
 - `scripts/validation/check_failure_archive_rerun_readiness.py` exposes the check as a fail-closed JSON CLI, including optional `--null-test-prerequisites` input.
 - Diagnostic-only rerun reports cap the verdict at `diagnostic_only` rather than `ready`.
 
@@ -24,5 +24,5 @@ Focused tests cover:
 - missing or failed source archive certification metadata blocking readiness;
 - missing or failed rerun archive certification metadata blocking readiness;
 - complete null-test prerequisite metadata staying ready;
-- missing, absent, or invalid null-test prerequisite metadata blocking readiness;
+- missing, absent, invalid, or archive-pair-mismatched null-test prerequisite metadata blocking readiness;
 - diagnostic-only rerun outputs staying diagnostic-only.

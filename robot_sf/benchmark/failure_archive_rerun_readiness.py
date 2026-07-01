@@ -262,7 +262,9 @@ def classify_failure_archive_rerun_readiness(
 
     diagnostic_outputs = _diagnostic_only_outputs(Path(rerun_output) if rerun_output else None)
     null_source, null_status, missing_nulls, invalid_nulls = _null_test_prerequisite_gaps(
-        null_test_prerequisites
+        null_test_prerequisites,
+        expected_source_archive_sha256=source_hash,
+        expected_rerun_archive_sha256=rerun_hash,
     )
     blockers.extend(_count_blockers("missing_null_test_prerequisites", missing_nulls))
     blockers.extend(_count_blockers("invalid_null_test_prerequisites", invalid_nulls))
@@ -562,6 +564,9 @@ def _lineage_value_present(raw_value: Any) -> bool:
 
 def _null_test_prerequisite_gaps(
     payload_or_path: str | Path | dict[str, Any] | None,
+    *,
+    expected_source_archive_sha256: str | None,
+    expected_rerun_archive_sha256: str | None,
 ) -> tuple[str | None, str, list[str], list[str]]:
     """Return fail-closed gaps for optional null-test prerequisite metadata."""
 
@@ -585,6 +590,20 @@ def _null_test_prerequisite_gaps(
         if key not in prerequisites or prerequisites.get(key) in (None, "", [])
     ]
     invalid: list[str] = []
+    _check_expected_archive_hash(
+        prerequisites,
+        key="source_archive_sha256",
+        expected=expected_source_archive_sha256,
+        missing=missing,
+        invalid=invalid,
+    )
+    _check_expected_archive_hash(
+        prerequisites,
+        key="rerun_archive_sha256",
+        expected=expected_rerun_archive_sha256,
+        missing=missing,
+        invalid=invalid,
+    )
     if prerequisites.get("null_tests_reject_null") is not True:
         invalid.append("null_tests_reject_null_not_true")
     for key in ("shuffled_outcome_null_test", "ranking_permutation_test"):
@@ -599,6 +618,42 @@ def _null_test_prerequisite_gaps(
             invalid.append(f"{key}_invalid_p_value")
     status = "ready" if not missing and not invalid else "blocked"
     return source, status, missing, invalid
+
+
+def _check_expected_archive_hash(
+    prerequisites: dict[str, Any],
+    *,
+    key: str,
+    expected: str | None,
+    missing: list[str],
+    invalid: list[str],
+) -> None:
+    """Require null-test prerequisites to identify the checked archive pair."""
+
+    if expected is None:
+        invalid.append(f"{key}_expected_hash_unavailable")
+        return
+    observed = _archive_hash_prerequisite(prerequisites, key)
+    if observed is None:
+        missing.append(key)
+    elif observed != expected:
+        invalid.append(f"{key}_mismatch")
+
+
+def _archive_hash_prerequisite(prerequisites: dict[str, Any], key: str) -> str | None:
+    """Return archive hash from supported null-test prerequisite metadata shapes."""
+
+    direct_value = prerequisites.get(key)
+    if isinstance(direct_value, str) and direct_value.strip():
+        return direct_value.strip()
+    for container_key in ("archive_pair", "input_archives", "inputs"):
+        container = prerequisites.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        value = container.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 def _valid_probability(value: Any) -> bool:

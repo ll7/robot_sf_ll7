@@ -264,6 +264,14 @@ def _packet_preflight_output_path(packet: Mapping[str, Any]) -> Path | None:
     return _repo_relative_path(value, "export.command_template.--preflight-out")
 
 
+def _require_export_report_fields(packet: Mapping[str, Any], report: Mapping[str, Any]) -> None:
+    success = _require_mapping(packet, "success_criteria")
+    required = {str(item) for item in _require_sequence(success, "required_report_fields")}
+    missing = sorted(field for field in required if field not in report)
+    if missing:
+        raise PacketError(f"export report missing required fields: {missing}")
+
+
 def export_if_ready(
     packet: Mapping[str, Any],
     *,
@@ -328,6 +336,7 @@ def export_if_ready(
         preflight_output.write_text(json.dumps(preflight, indent=2, sort_keys=True) + "\n")
 
     report = build_scalarization_sensitivity_report(records, weights=weights, baseline=baseline)
+    _require_export_report_fields(packet, report)
     artifacts = write_diagnostic_artifacts(report, resolved_output_dir)
     artifact_paths = {
         "json": artifacts.json_path,

@@ -180,6 +180,25 @@ def test_issue_3653_export_if_ready_blocks_missing_campaign_input() -> None:
         raise AssertionError("export_if_ready should block missing raw campaign episodes")
 
 
+def test_issue_3653_export_report_contract_rejects_missing_required_field() -> None:
+    """Application export success requires configured decision/Pareto report sections."""
+
+    packet = _load_packet()
+    report = {
+        field: {}
+        for field in packet["success_criteria"]["required_report_fields"]
+        if field != "decision_disagreement"
+    }
+
+    try:
+        _MODULE._require_export_report_fields(packet, report)
+    except _MODULE.PacketError as exc:
+        assert "export report missing required fields" in str(exc)
+        assert "decision_disagreement" in str(exc)
+    else:
+        raise AssertionError("missing report fields should fail closed")
+
+
 def test_issue_3653_export_if_ready_writes_required_artifacts(tmp_path: Path) -> None:
     """Ready campaign-shaped inputs run through preflight and emit the packet artifact set."""
 

@@ -246,11 +246,14 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
         active_submission.get("public_commit") == "c49a78e6622eb305a3438d9a6f11a43edb385ff4",
         "active submission public commit mismatch",
     )
-    active_submission_boundary = active_submission.get("boundary")
+    active_submission_boundary_value = active_submission.get("boundary")
+    active_submission_boundary = (
+        str(active_submission_boundary_value)
+        if active_submission_boundary_value is not None
+        else ""
+    )
     _require(
-        (
-            str(active_submission_boundary) if active_submission_boundary is not None else ""
-        ).startswith("Submission evidence only"),
+        active_submission_boundary.startswith("Submission evidence only"),
         "active submission boundary must forbid benchmark evidence",
     )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -86,3 +87,34 @@ def test_cli_checker_fails_closed_on_invalid_manifest(
 
     assert exc_info.value.code == 2
     assert "FAIL:" in capsys.readouterr().err
+
+
+def test_cli_checker_fails_closed_on_partial_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Partial result manifests are not valid complete provenance records."""
+
+    manifest_path = _write_valid_manifest(tmp_path)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["campaign_identity"]["total_jobs"] = 2
+    payload["campaign_identity"]["written"] = 1
+    payload["completeness"] = {
+        "status": "partial",
+        "reason": "partial_batch_failure",
+    }
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["check_benchmark_result_provenance.py", "--manifest", str(manifest_path)],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        check_benchmark_result_provenance.main()
+
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "FAIL:" in stderr
+    assert "partial" in stderr

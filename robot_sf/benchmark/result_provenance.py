@@ -15,7 +15,7 @@ import platform
 import shlex
 import sys
 import uuid
-from collections.abc import Mapping  # noqa: TC003
+from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -374,6 +374,16 @@ def validate_result_provenance_manifest(payload: Mapping[str, Any]) -> None:
             field in campaign,
             f"campaign_identity.{field} is missing",
         )
+
+    completeness = payload.get("completeness", {})
+    _require(
+        isinstance(completeness, Mapping),
+        "completeness must be dict",
+    )
+    _require(
+        completeness.get("status") != "partial",
+        "completeness.status partial is not a valid complete provenance manifest",
+    )
 
     raw_artifacts = payload.get("raw_artifacts", [])
     has_episodes = any(

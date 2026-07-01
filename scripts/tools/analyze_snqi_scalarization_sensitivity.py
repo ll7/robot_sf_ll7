@@ -22,6 +22,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping,
     load_jsonl,
     load_weight_mapping,
+    missing_input_preflight,
     write_diagnostic_artifacts,
 )
 
@@ -53,6 +54,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=list(DEFAULT_SWEEP_FACTORS),
         help="Multipliers applied one SNQI weight at a time.",
     )
+    parser.add_argument(
+        "--application-packet",
+        type=Path,
+        default=None,
+        help="Optional tracked packet proving the campaign application surface being gated.",
+    )
+    parser.add_argument(
+        "--preflight-out",
+        type=Path,
+        default=None,
+        help="Optional JSON path for the readiness preflight payload.",
+    )
     return parser.parse_args(argv)
 
 
@@ -63,9 +76,28 @@ def main(argv: list[str] | None = None) -> int:
         Process exit code.
     """
     args = _parse_args(argv)
+    if not args.episodes.exists():
+        preflight = missing_input_preflight(
+            args.episodes,
+            input_kind="episodes",
+            application_packet=args.application_packet,
+        )
+        if args.preflight_out is not None:
+            args.preflight_out.parent.mkdir(parents=True, exist_ok=True)
+            args.preflight_out.write_text(json.dumps(preflight, indent=2), encoding="utf-8")
+        print(json.dumps(preflight, indent=2), file=sys.stderr)
+        return 2
+
     records = load_jsonl(args.episodes)
     weights = load_weight_mapping(args.weights)
     baseline = load_baseline_mapping(args.baseline)
+    provenance = {
+        "episodes": input_file_provenance(args.episodes),
+        "weights": input_file_provenance(args.weights),
+        "baseline": input_file_provenance(args.baseline),
+    }
+    if args.application_packet is not None:
+        provenance["application_packet"] = input_file_provenance(args.application_packet)
 
     preflight = classify_scalarization_sensitivity_inputs(
         records,
@@ -74,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
         planner_key=args.planner_key,
         fallback_planner_key=args.fallback_planner_key,
     )
+    if args.preflight_out is not None:
+        args.preflight_out.parent.mkdir(parents=True, exist_ok=True)
+        args.preflight_out.write_text(json.dumps(preflight, indent=2), encoding="utf-8")
     if args.preflight_only:
         print(json.dumps(preflight, indent=2))
         return 0 if preflight["status"] == SENSITIVITY_PREFLIGHT_READY else 2
@@ -92,11 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         planner_key=args.planner_key,
         fallback_planner_key=args.fallback_planner_key,
         sweep_factors=args.sweep_factors,
-        input_provenance={
-            "episodes": input_file_provenance(args.episodes),
-            "weights": input_file_provenance(args.weights),
-            "baseline": input_file_provenance(args.baseline),
-        },
+        input_provenance=provenance,
     )
     artifacts = write_diagnostic_artifacts(report, args.output_dir)
     print(

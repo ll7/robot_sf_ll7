@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -25,6 +26,42 @@ def _load_packet() -> dict:
     payload = yaml.safe_load(PACKET.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _write_ready_episode_fixture(path: Path) -> None:
+    planners = [
+        "goal",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca",
+        "ppo",
+        "prediction_planner",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v1",
+        "social_force",
+        "socnav_sampling",
+    ]
+    rows = []
+    for planner_index, planner in enumerate(planners):
+        for episode_index in range(960):
+            rows.append(
+                {
+                    "scenario_id": "crossing",
+                    "horizon": 500,
+                    "planner_key": planner,
+                    "metrics": {
+                        "success": 1,
+                        "time_to_goal_norm": min(0.95, 0.05 + planner_index * 0.08),
+                        "collisions": 1 if planner_index == 0 else 0,
+                        "near_misses": planner_index % 3,
+                        "comfort_exposure": 0.01 * planner_index,
+                        "force_exceed_events": float(planner_index + 1),
+                        "jerk_mean": 0.08 + planner_index * 0.01,
+                    },
+                    "episode_index": episode_index,
+                }
+            )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
 
 def test_issue_3653_packet_passes_fail_closed_contract() -> None:
@@ -129,3 +166,36 @@ def test_issue_3653_check_cli_json() -> None:
     assert payload["status"] == "ok"
     assert payload["issue"] == 3653
     assert payload["current_status"] == "blocked_missing_valid_campaign_episodes"
+
+
+def test_issue_3653_export_if_ready_blocks_missing_campaign_input() -> None:
+    """The executable handoff refuses to export when job 13175 JSONL is absent."""
+
+    try:
+        _MODULE.export_if_ready(_load_packet())
+    except _MODULE.PacketError as exc:
+        assert "episodes_jsonl missing" in str(exc)
+        assert "blocked_missing_valid_campaign_episodes" in str(exc)
+    else:
+        raise AssertionError("export_if_ready should block missing raw campaign episodes")
+
+
+def test_issue_3653_export_if_ready_writes_required_artifacts(tmp_path: Path) -> None:
+    """Ready campaign-shaped inputs run through preflight and emit the packet artifact set."""
+
+    packet = _load_packet()
+    episodes = tmp_path / "episodes.jsonl"
+    output_dir = tmp_path / "export"
+    _write_ready_episode_fixture(episodes)
+    packet["inputs"]["episodes_jsonl"] = os.path.relpath(episodes, REPO_ROOT)
+    command_template = packet["export"]["command_template"]
+    command_template[command_template.index("--episodes") + 1] = packet["inputs"]["episodes_jsonl"]
+
+    summary = _MODULE.export_if_ready(packet, output_dir=output_dir)
+
+    assert summary["status"] == "exported"
+    assert summary["preflight_status"] == "ready"
+    assert summary["decision_disagreement_rate"] >= 0.0
+    assert (output_dir / "preflight.json").is_file()
+    for artifact in packet["export"]["required_artifacts"]:
+        assert (output_dir / artifact).is_file()

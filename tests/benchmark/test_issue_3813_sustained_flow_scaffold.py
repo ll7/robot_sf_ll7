@@ -177,6 +177,26 @@ def test_sustained_flow_preflight_rejects_wrong_spawn_process(tmp_path: Path) ->
     )
 
 
+def test_sustained_flow_preflight_rejects_wrong_spawn_definition(tmp_path: Path) -> None:
+    """Continuous-spawn variants must keep the non-clearing demand definition."""
+    matrix = _load_yaml(SCENARIO_SET)
+    matrix["scenarios"][0]["metadata"]["continuous_spawn"]["definition"]["clearing_policy"] = (
+        "allow_empty_scene_wait_success"
+    )
+
+    wrong_definition_matrix = tmp_path / "wrong_spawn_definition_sustained_flow.yaml"
+    wrong_definition_matrix.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+    payload = preflight_sustained_flow_matrix(wrong_definition_matrix).to_payload()
+
+    assert payload["status"] == "not_available"
+    assert payload["benchmark_eligible"] is False
+    assert payload["variant_count"] == 0
+    assert any(
+        "continuous_spawn.definition must match non-clearing demand contract" in reason
+        for reason in payload["blocking_reasons"]
+    )
+
+
 def test_sustained_flow_contract_defines_progress_metric_and_reference() -> None:
     """The scenario contract points at the scaffold and keeps evidence boundaries explicit."""
 

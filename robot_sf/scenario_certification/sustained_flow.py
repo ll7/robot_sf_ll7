@@ -31,6 +31,13 @@ REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE: tuple[str, ...] = (
     "interaction-exposure diagnostic sanity check",
     "scenario_cert.v1 eligibility review",
 )
+EXPECTED_CONTINUOUS_SPAWN_DEFINITION: dict[str, object] = {
+    "demand_model": "non_clearing_poisson_flow",
+    "respawn_trigger": "pedestrian_exits_route_corridor",
+    "spawn_budget": "time_bounded_episode",
+    "minimum_active_pedestrians": 1,
+    "clearing_policy": "disallow_empty_scene_wait_success",
+}
 _SUSTAINED_FLOW_FAMILY = "sustained_flow_t_intersection"
 _SUSTAINED_FLOW_MAP_FILE = "../../../maps/svg_maps/classic_t_intersection.svg"
 _SUSTAINED_FLOW_MAX_EPISODE_STEPS = 600
@@ -116,6 +123,7 @@ def generate_expected_sustained_flow_scenarios(
                     "continuous_spawn": {
                         "required_before_benchmark_use": True,
                         "intended_process": "poisson_respawn",
+                        "definition": dict(EXPECTED_CONTINUOUS_SPAWN_DEFINITION),
                         "spawn_rate_per_min": spec.spawn_rate_per_min,
                         "target_density_tier": spec.density_tier,
                         "current_runtime_support": current_runtime_support,
@@ -165,6 +173,7 @@ class SustainedFlowVariant:
     density_tier: str
     ped_density: float
     spawn_rate_per_min: float
+    spawn_definition: dict[str, object]
     seeds: tuple[int, ...]
     map_file: str
 
@@ -258,6 +267,13 @@ def _check_continuous_spawn(
         "continuous_spawn.intended_process",
         continuous_spawn.get("intended_process"),
         "poisson_respawn",
+    )
+    _require_equal(
+        errors,
+        name,
+        "continuous_spawn.definition",
+        continuous_spawn.get("definition"),
+        EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     )
     _require_equal(
         errors,
@@ -405,6 +421,7 @@ def _validate_variant(
             density_tier=tier,
             ped_density=ped_density,
             spawn_rate_per_min=expected_spawn_rate,
+            spawn_definition=dict(EXPECTED_CONTINUOUS_SPAWN_DEFINITION),
             seeds=seeds,
             map_file=map_file,
         ),
@@ -501,6 +518,7 @@ def sustained_flow_preflight_to_dict(report: SustainedFlowPreflightReport) -> di
                 "density_tier": variant.density_tier,
                 "ped_density": variant.ped_density,
                 "spawn_rate_per_min": variant.spawn_rate_per_min,
+                "spawn_definition": dict(variant.spawn_definition),
                 "seeds": list(variant.seeds),
                 "map_file": variant.map_file,
             }

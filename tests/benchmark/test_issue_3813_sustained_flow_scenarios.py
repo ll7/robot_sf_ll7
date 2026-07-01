@@ -10,6 +10,7 @@ import yaml
 
 from robot_sf.scenario_certification.sustained_flow import (
     DEFAULT_SUSTAINED_FLOW_SCENARIO_SET,
+    EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
     EXPECTED_SUSTAINED_FLOW_TIERS,
     REQUIRED_BLOCKERS_BEFORE_BENCHMARK_USE,
     generate_expected_sustained_flow_scenarios,
@@ -45,6 +46,7 @@ def test_issue_3813_sustained_flow_scenarios_enumerate_expected_tiers() -> None:
         assert scenario["simulation_config"]["max_episode_steps"] == 600
         assert scenario["simulation_config"]["ped_density"] == expected[tier]["ped_density"]
         assert scenario["seeds"] == expected[tier]["seeds"]
+        assert metadata["continuous_spawn"]["definition"] == EXPECTED_CONTINUOUS_SPAWN_DEFINITION
         assert (
             metadata["continuous_spawn"]["spawn_rate_per_min"]
             == expected[tier]["spawn_rate_per_min"]
@@ -69,6 +71,7 @@ def test_issue_3813_sustained_flow_scenarios_fail_closed_for_benchmark_use() -> 
         assert metadata["continuous_spawn"] == {
             "required_before_benchmark_use": True,
             "intended_process": "poisson_respawn",
+            "definition": EXPECTED_CONTINUOUS_SPAWN_DEFINITION,
             "spawn_rate_per_min": metadata["continuous_spawn"]["spawn_rate_per_min"],
             "target_density_tier": metadata["density"],
             "current_runtime_support": "metadata_only",
@@ -118,6 +121,9 @@ def test_issue_3813_sustained_flow_preflight_cli_json() -> None:
     assert payload["variant_count"] == 3
     assert payload["benchmark_evidence"] is False
     assert payload["runtime_support"] == "metadata_only"
+    assert {
+        variant["density_tier"]: variant["spawn_definition"] for variant in payload["variants"]
+    } == {tier: EXPECTED_CONTINUOUS_SPAWN_DEFINITION for tier, *_ in EXPECTED_SUSTAINED_FLOW_TIERS}
 
 
 def test_issue_3813_checked_in_matrix_matches_generated_variant_specs() -> None:

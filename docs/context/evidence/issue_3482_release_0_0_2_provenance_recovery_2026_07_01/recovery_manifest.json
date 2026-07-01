@@ -80,6 +80,21 @@
     "recover raw episode-level records with exact-event fields",
     "explicitly downgrade or withdraw release 0.0.2 collision-count claims"
   ],
+  "recommended_next_actions": [
+    "verify imech156 or imech156-u host identity and scratch retention through an authoritative source",
+    "audit paper-facing and dissertation-facing release 0.0.2 tables that rely on total_collision_count or collision-count-derived claims",
+    "avoid additional broad storage searches unless a new host, archive, or artifact pointer is identified"
+  ],
+  "defensible_close_paths": [
+    {
+      "close_mode": "completed",
+      "condition": "original artifacts or raw exact-event records are recovered, promoted, hash-validated, and used to annotate affected table claims"
+    },
+    {
+      "close_mode": "not_planned_or_not_recoverable",
+      "condition": "exact-event provenance is judged permanently unavailable and release 0.0.2 collision-count claims are explicitly downgraded or withdrawn"
+    }
+  ],
   "must_not_claim": [
     "release 0.0.2 total_collision_count is paper-ready",
     "the public release bundle alone proves 241 exact collision outcomes",

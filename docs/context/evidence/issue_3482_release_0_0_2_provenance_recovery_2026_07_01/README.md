@@ -36,3 +36,13 @@ Valid follow-up paths are:
   input/output hashes and commands;
 - explicitly downgrade or withdraw release `0.0.2` collision-count claims if the
   exact-event provenance is permanently unavailable.
+
+Recommended next actions:
+
+- verify the host identity and scratch retention status for `imech156` /
+  `imech156-u` through an authoritative source before attempting SSH recovery;
+- audit paper-facing and dissertation-facing release `0.0.2` result tables that
+  rely on `total_collision_count` or collision-count-derived claims;
+- keep #3482 blocked unless exact-event provenance is recovered, or close it only
+  as not recoverable after the affected release `0.0.2` collision-count claims
+  are explicitly downgraded or withdrawn.

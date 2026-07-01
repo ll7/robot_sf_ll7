@@ -79,7 +79,7 @@ def test_issue1554_packet_json_is_serializable() -> None:
 
 
 def test_job13198_constraints_first_artifact_bundle_is_boundary_only() -> None:
-    """The job 13198 bundle records blockers without promoting claims."""
+    """The job 13198 bundle preserves bounded claims without paper-grade promotion."""
     bundle = (
         Path(__file__).parents[2]
         / "docs"
@@ -88,18 +88,29 @@ def test_job13198_constraints_first_artifact_bundle_is_boundary_only() -> None:
         / "issue_1554_job_13198_constraints_first_analysis"
     )
     packet = json.loads((bundle / "packet.json").read_text(encoding="utf-8"))
+    inventory = json.loads((bundle / "artifact_inventory.json").read_text(encoding="utf-8"))
 
-    assert packet["accepted_packet_id"] == "issue1554-job13198-constraints-artifact-20260701"
+    assert packet["schema_version"] == "issue1554-job13198-constraints-first-analysis.v1"
+    assert inventory["accepted_packet_id"] == (
+        "issue1554-job13198-constraints-first-analysis-20260701"
+    )
     assert packet["job_id"] == 13198
     assert packet["campaign"] == "2026-06-issue1554-s20-h500-split-mem180-run"
-    assert packet["expected_provenance_anchor"]["public_commit"] == (
-        "12a188de7246aad3b9088ea76e6a25a20029f976"
-    )
-    assert packet["claim_boundary"]["claim_promoted"] is False
-    assert packet["more_seed_budget_compute_justified"] is False
-    assert packet["forbidden_actions_confirmed"] == {
-        "compute_submit": False,
+    assert packet["public_commit"] == "12a188de7246aad3b9088ea76e6a25a20029f976"
+    assert packet["row_status"]["benchmark_row_status"] == "successful_evidence"
+    assert packet["row_status"]["planner_rows"] == 9
+    assert packet["row_status"]["episode_rows"] == 8640
+    assert packet["claim_counts"] == {
+        "ci_separable": 5,
+        "diagnostic_only": 8,
+        "not_statistically_distinguishable_budget": 3,
+    }
+    assert packet["decision"]["more_seed_budget_compute"] == "conditional"
+    assert packet["snqi"]["contract_status"] == "fail"
+    assert packet["snqi"]["decision_role"] == "explanatory_only"
+    assert inventory["forbidden_actions_confirmed"] == {
         "artifact_deletion": False,
+        "compute_submit": False,
         "paper_or_dissertation_claim_edits": False,
     }
     assert {
@@ -107,20 +118,5 @@ def test_job13198_constraints_first_artifact_bundle_is_boundary_only() -> None:
         "packet.json",
         "constraints_first_metrics.csv",
         "adjacent_rank_claims.csv",
-        "artifact_inventory.json",
-    }.issubset(set(packet["artifact_files"]))
-
-    missing_inputs = {
-        source["path"]
-        for source in packet["input_sources"]
-        if source["status"] == "missing_on_worker"
-    }
-    assert any(
-        path.endswith("robot_sf_ll7-private-ops/ops/jobs/metrics/13198.json")
-        for path in missing_inputs
-    )
-    assert any(
-        claim["classification"] == "fail_closed_snqi_contract_warning"
-        and claim["claim_promoted"] is False
-        for claim in packet["adjacent_rank_classifications"]
-    )
+        "claim_decision.md",
+    }.issubset({artifact["path"] for artifact in inventory["files"]})

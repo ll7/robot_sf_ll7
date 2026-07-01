@@ -77,6 +77,8 @@ def _write_ready_episode_fixture(
         rows[0]["metrics"].pop(missing_metric)
     if malformed_metric is not None:
         metric, value = malformed_metric
+        if metric not in rows[0]["metrics"]:
+            raise KeyError(f"fixture metric not found: {metric}")
         rows[0]["metrics"][metric] = value
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")

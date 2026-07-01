@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* Tightened the proxy checkpoint-selection readiness preflight (#3204) so registry entries with
+  declared-but-incomplete public release metadata fail closed before they can be treated as ready
+  checkpoint inputs.
 * Added a machine-readable known-blocker map to the proxy checkpoint-selection readiness preflight
   (#3204). The checker now reports configured blocker IDs and revival conditions as a fail-closed
   prerequisite without running training, selecting a checkpoint, or promoting benchmark evidence.
